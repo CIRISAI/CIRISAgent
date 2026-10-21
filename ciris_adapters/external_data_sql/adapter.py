@@ -137,6 +137,7 @@ class ExternalDataSQLAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("External Data SQL adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

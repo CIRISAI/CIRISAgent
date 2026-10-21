@@ -1,0 +1,73 @@
+# CIRIS Agent - Ethical AI Platform
+
+> Production: agents.ciris.ai | Discord moderation + REST API
+> Target: 4GB RAM, offline-capable, edge deployment
+
+## Quick Context
+
+CIRIS is an ethical AI agent framework with:
+- 22 core services, 6 message buses
+- Ed25519 signed audit trails for every action
+- Multi-stage DMA pipeline with conscience checks
+- SQLite-first with graph memory abstraction
+
+## Key Documentation
+
+- CLAUDE.md - Development guidance (primary for AI assistants)
+- docs/OVERVIEW.md - Architecture overview
+- docs/TRACE_FORMAT.md - Covenant trace specification
+- docs/QUICKSTART.md - Getting started
+- docs/API_SPEC.md - API documentation
+
+## Philosophy
+
+- No Untyped Dicts - All data uses Pydantic models
+- No Bypass Patterns - Every component follows consistent rules
+- No Exceptions - No special cases or emergency overrides
+
+## Directory Structure
+
+ciris_engine/     - Core engine (logic/, protocols/, schemas/)
+ciris_adapters/   - Platform adapters (discord/, api/, cli/)
+docs/             - Documentation (65+ markdown files)
+FSD/              - Functional specifications
+tools/            - Development tools (Grace, QA runner)
+tests/            - Test suite (pytest, 80% coverage target)
+
+## Decision Pipeline
+
+Input -> CSDMA -> DSDMA -> PDMA -> IDMA -> ASPDMA -> Conscience -> Action
+         (common) (domain) (practical) (identity) (selection) (ethics)
+
+## Cognitive States
+
+WAKEUP -> WORK -> SHUTDOWN (active states)
+PLAY, SOLITUDE, DREAM (planned, not yet enabled)
+
+## Service Categories
+
+Graph (7): memory, consent, config, telemetry, audit, incident, tsdb
+Infrastructure (4): auth, resource_monitor, db_maintenance, secrets
+Lifecycle (4): init, shutdown, time, task_scheduler
+Governance (4): wise_authority, adaptive_filter, visibility, self_observation
+Runtime (2): llm, runtime_control
+Tool (1): secrets_tool
+
+## Message Buses
+
+MemoryBus - Graph backends (SQLite, Neo4j, ArangoDB)
+LLMBus - LLM providers (OpenAI, Anthropic, Llama)
+ToolBus - Tool execution
+CommunicationBus - Adapters (Discord, API, CLI)
+WiseBus - Ethical guidance
+RuntimeControlBus - System control
+
+## Trace Levels (Covenant Metrics)
+
+generic - Numeric scores only (default, ~1.7KB)
+detailed - Adds identifiers and lists (~2.7KB)
+full_traces - Complete reasoning + user content (requires consent)
+
+## Quick Start
+
+python main.py --adapter api --mock-llm --port 8000

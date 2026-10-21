@@ -11,9 +11,7 @@ import pytest
 from ciris_engine.logic.services.graph.tsdb_consolidation.date_calculation_helpers import (
     calculate_month_period,
     calculate_week_period,
-    format_period_label,
     get_retention_cutoff_date,
-    parse_period_datetime,
 )
 
 
@@ -167,78 +165,3 @@ class TestGetRetentionCutoffDate:
 
         with pytest.raises(ValueError, match="non-negative"):
             get_retention_cutoff_date(now, -10)
-
-
-class TestParsePeriodDatetime:
-    """Tests for parse_period_datetime function."""
-
-    def test_parses_z_suffix_format(self):
-        """Should parse ISO format with 'Z' suffix."""
-        dt = parse_period_datetime("2023-10-15T12:00:00Z")
-
-        assert dt.year == 2023
-        assert dt.month == 10
-        assert dt.day == 15
-        assert dt.hour == 12
-        assert dt.tzinfo == timezone.utc
-
-    def test_parses_utc_offset_format(self):
-        """Should parse ISO format with UTC offset."""
-        dt = parse_period_datetime("2023-10-15T12:00:00+00:00")
-
-        assert dt.year == 2023
-        assert dt.month == 10
-        assert dt.day == 15
-        assert dt.hour == 12
-        assert dt.tzinfo == timezone.utc
-
-    def test_raises_on_empty_string(self):
-        """Should raise ValueError for empty string."""
-        with pytest.raises(ValueError, match="cannot be empty"):
-            parse_period_datetime("")
-
-    def test_raises_on_invalid_format(self):
-        """Should raise ValueError for invalid format."""
-        with pytest.raises(ValueError, match="Invalid datetime format"):
-            parse_period_datetime("not-a-date")
-
-    def test_raises_on_none(self):
-        """Should raise ValueError for None."""
-        with pytest.raises(ValueError, match="cannot be empty"):
-            parse_period_datetime(None)
-
-
-class TestFormatPeriodLabel:
-    """Tests for format_period_label function."""
-
-    def test_weekly_label_format(self):
-        """Should format weekly period label correctly."""
-        start = datetime(2023, 10, 9, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2023, 10, 15, 23, 59, 59, tzinfo=timezone.utc)
-        label = format_period_label(start, end, "weekly")
-
-        assert label == "weekly_2023-10-09_to_2023-10-15"
-
-    def test_monthly_label_format(self):
-        """Should format monthly period label correctly."""
-        start = datetime(2023, 10, 1, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2023, 10, 31, 23, 59, 59, tzinfo=timezone.utc)
-        label = format_period_label(start, end, "monthly")
-
-        assert label == "monthly_2023-10-01_to_2023-10-31"
-
-    def test_basic_label_format(self):
-        """Should format basic period label correctly."""
-        start = datetime(2023, 10, 15, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2023, 10, 15, 5, 59, 59, tzinfo=timezone.utc)
-        label = format_period_label(start, end, "basic")
-
-        assert label == "basic_2023-10-15_to_2023-10-15"
-
-    def test_daily_label_format(self):
-        """Should format daily period label correctly."""
-        start = datetime(2023, 10, 15, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2023, 10, 15, 23, 59, 59, tzinfo=timezone.utc)
-        label = format_period_label(start, end, "daily")
-
-        assert label == "daily_2023-10-15_to_2023-10-15"

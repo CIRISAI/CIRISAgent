@@ -510,4 +510,4 @@ This secrets management system ensures that CIRIS can safely handle sensitive in
 
 ---
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

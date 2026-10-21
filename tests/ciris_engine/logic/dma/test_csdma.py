@@ -27,17 +27,17 @@ class TestCSDMAEvaluator:
         """Mock the prompt loader to return proper PromptCollection."""
         mock_loader = Mock()
         mock_collection = Mock()
-        mock_collection.uses_covenant_header = Mock(return_value=True)
+        mock_collection.uses_accord_header = Mock(return_value=True)
         mock_collection.get_system_message = Mock(return_value="Evaluate this thought for common sense.")
         mock_collection.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
-        mock_loader.uses_covenant_header = Mock(return_value=True)
+        mock_loader.uses_accord_header = Mock(return_value=True)
         mock_loader.get_system_message = Mock(return_value="Evaluate this thought for common sense.")
         mock_loader.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
 
         # Mock the get_prompt_loader function
-        monkeypatch.setattr("ciris_engine.logic.dma.csdma.get_prompt_loader", lambda: mock_loader)
+        monkeypatch.setattr("ciris_engine.logic.dma.csdma.get_prompt_loader", lambda *args, **kwargs: mock_loader)
         return mock_loader
 
     @pytest.fixture
@@ -199,6 +199,61 @@ class TestCSDMAEvaluator:
         assert "defer_for_retry" in result.flags
         assert "Failed CSDMA evaluation" in result.reasoning
 
+    # --- transport errors surface; config faults keep the fallback ------------
+
+    TIMEOUT_ERR = "All LLM services failed for CSDMAEvaluator. Last error: LLM API timeout"
+
+    @pytest.mark.asyncio
+    async def test_csdma_timeout_is_raised_not_folded(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """A provider timeout is not a 0.0-plausibility judgement: it must reach run_dma_with_retries."""
+        evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(side_effect=RuntimeError(self.TIMEOUT_ERR))
+        with pytest.raises(RuntimeError, match="LLM API timeout"):
+            await evaluator.evaluate_thought(valid_queue_item)
+
+    @pytest.mark.asyncio
+    async def test_csdma_timeout_is_retried_by_run_dma_with_retries(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
+        good = CSDMAResult(plausibility_score=0.9, flags=[], reasoning="ok")
+        evaluator.call_llm_structured = AsyncMock(side_effect=[RuntimeError(self.TIMEOUT_ERR), (good, None)])
+
+        async def run_csdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item)
+
+        result = await run_dma_with_retries(run_csdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert result.plausibility_score == 0.9
+        assert evaluator.call_llm_structured.call_count == 2
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "Error code: 401 - unauthorized",
+            "Error code: 404 - The model `qwen-x` does not exist",
+        ],
+    )
+    async def test_csdma_auth_and_model_errors_keep_the_fallback(
+        self, message, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """Config faults are not transport: no retry, the existing fallback result."""
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = CSDMAEvaluator(service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(side_effect=RuntimeError(message))
+
+        async def run_csdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item)
+
+        result = await run_dma_with_retries(run_csdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert "LLM_Error" in result.flags
+        assert evaluator.call_llm_structured.call_count == 1
+
     @pytest.mark.asyncio
     async def test_csdma_uses_environment_context(self, mock_service_registry, mock_prompt_loader, valid_queue_item):
         """Test that CSDMA properly uses environment context from queue item."""
@@ -225,7 +280,7 @@ class TestCSDMAEvaluator:
         messages = call_args.kwargs["messages"]
 
         # System message should contain the context
-        system_content = messages[1]["content"]  # Second message after covenant
+        system_content = messages[1]["content"]  # Second message after accord
         assert "Zero gravity" in system_content or "Standard Earth-based" not in system_content
 
     @pytest.mark.asyncio

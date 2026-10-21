@@ -12,129 +12,11 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 
 from ciris_engine.logic import persistence
 from ciris_engine.schemas.config.essential import EssentialConfig
-from ciris_engine.schemas.services.operations import InitializationPhase
 
 if TYPE_CHECKING:
     from ciris_engine.logic.runtime.identity_manager import IdentityManager
 
 logger = logging.getLogger(__name__)
-
-
-def register_all_initialization_steps(
-    runtime: Any,
-    init_manager: Any,
-) -> None:
-    """Register all initialization steps with the initialization manager.
-
-    Args:
-        runtime: The CIRISRuntime instance
-        init_manager: The InitializationService instance
-    """
-    # Phase 0: INFRASTRUCTURE (must be first)
-    init_manager.register_step(
-        phase=InitializationPhase.INFRASTRUCTURE,
-        name="Initialize Infrastructure Services",
-        handler=lambda: initialize_infrastructure(runtime),
-        verifier=lambda: verify_infrastructure(runtime),
-        critical=True,
-    )
-
-    # Phase 1: DATABASE
-    init_manager.register_step(
-        phase=InitializationPhase.DATABASE,
-        name="Initialize Database",
-        handler=lambda: init_database(runtime),
-        verifier=lambda: verify_database_integrity(runtime),
-        critical=True,
-    )
-
-    # Phase 2: MEMORY
-    init_manager.register_step(
-        phase=InitializationPhase.MEMORY,
-        name="Memory Service",
-        handler=lambda: initialize_memory_service(runtime),
-        verifier=lambda: verify_memory_service(runtime),
-        critical=True,
-    )
-
-    # Phase 3: IDENTITY
-    init_manager.register_step(
-        phase=InitializationPhase.IDENTITY,
-        name="Agent Identity",
-        handler=lambda: initialize_identity(runtime),
-        verifier=lambda: verify_identity_integrity(runtime),
-        critical=True,
-    )
-
-    # Phase 4: SECURITY
-    init_manager.register_step(
-        phase=InitializationPhase.SECURITY,
-        name="Security Services",
-        handler=lambda: initialize_security_services(runtime),
-        verifier=lambda: verify_security_services(runtime),
-        critical=True,
-    )
-
-    # Phase 5: SERVICES
-    init_manager.register_step(
-        phase=InitializationPhase.SERVICES,
-        name="Core Services",
-        handler=lambda: initialize_services(runtime),
-        verifier=lambda: verify_core_services(runtime),
-        critical=True,
-    )
-
-    init_manager.register_step(
-        phase=InitializationPhase.SERVICES,
-        name="Start Adapters",
-        handler=lambda: start_adapters(runtime),
-        critical=True,
-    )
-
-    init_manager.register_step(
-        phase=InitializationPhase.SERVICES,
-        name="Register Adapter Services",
-        handler=lambda: register_adapter_services(runtime),
-        critical=True,
-    )
-
-    init_manager.register_step(
-        phase=InitializationPhase.SERVICES,
-        name="Load Saved Adapters",
-        handler=lambda: load_saved_adapters_from_graph(runtime),
-        critical=False,  # Non-critical - system can run without saved adapters
-    )
-
-    init_manager.register_step(
-        phase=InitializationPhase.SERVICES,
-        name="Initialize Maintenance Service",
-        handler=lambda: initialize_maintenance_service(runtime),
-        critical=True,
-    )
-
-    # Phase 6: COMPONENTS
-    init_manager.register_step(
-        phase=InitializationPhase.COMPONENTS,
-        name="Build Components",
-        handler=lambda: build_components(runtime),
-        critical=True,
-    )
-
-    init_manager.register_step(
-        phase=InitializationPhase.COMPONENTS,
-        name="Start Adapter Connections",
-        handler=lambda: start_adapter_connections(runtime),
-        critical=True,
-        timeout=45.0,
-    )
-
-    # Phase 7: VERIFICATION
-    init_manager.register_step(
-        phase=InitializationPhase.VERIFICATION,
-        name="Final System Verification",
-        handler=lambda: final_verification(runtime),
-        critical=True,
-    )
 
 
 async def initialize_infrastructure(runtime: Any) -> None:
@@ -191,8 +73,9 @@ async def init_database(runtime: Any) -> None:
         db_path = str(runtime.essential_config.database.main_db)
         logger.info(f"Using SQLite database: {db_path}")
 
+    # initialize_database bootstraps persist's Engine end-to-end (schema
+    # via persist's own sqlx migrations + A0a legacy graph migration).
     persistence.initialize_database(db_path)
-    persistence.run_migrations(db_path)
 
     if not runtime.essential_config:
         runtime.essential_config = EssentialConfig()
@@ -200,37 +83,90 @@ async def init_database(runtime: Any) -> None:
         logger.warning("No config provided, using defaults")
 
 
-async def verify_database_integrity(runtime: Any) -> bool:
-    """Verify database integrity before proceeding."""
+async def verify_database_integrity() -> bool:
+    """Verify database integrity before proceeding.
+
+    Post-A1 absorption (CIRISAgent#763): persist owns the schema for
+    cirislens_tasks / cirislens_thoughts / cirisgraph_nodes / cirisgraph_edges.
+    If `_bootstrap_persist_engine` constructed the Engine successfully, the
+    schema is intact — persist's sqlx migrations are atomic and idempotent.
+    We probe with a cheap `task_list` call to confirm the engine is healthy.
+    """
     try:
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        import json
 
-        adapter = get_adapter()
-        db_path = None if adapter.is_postgresql() else str(runtime.essential_config.database.main_db)
-        conn = persistence.get_db_connection(db_path)
-        cursor = conn.cursor()
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        adapter = get_adapter()
-        required_tables = ["tasks", "thoughts", "graph_nodes", "graph_edges"]
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not wired — initialize_database must run first")
 
-        for table in required_tables:
-            if adapter.is_postgresql():
-                cursor.execute(
-                    "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s",
-                    (table,),
-                )
-            else:
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        # Cheap sanity probe: paginate one empty page of tasks. Verifies
+        # connectivity + schema in one call. A bad schema would raise.
+        engine.task_list("{}", json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}), 1)
 
-            if not cursor.fetchone():
-                raise RuntimeError(f"Required table '{table}' missing from database")
-
-        conn.close()
-        logger.info("Database integrity verified")
+        logger.info("Database integrity verified (persist engine healthy)")
         return True
     except Exception as e:
         logger.error(f"Database integrity check failed: {e}")
         return False
+
+
+async def init_edge_runtime(runtime: Any) -> None:
+    """Initialize the CIRISEdge federation runtime.
+
+    REQUIRED foundation layer for 2.9.4+, alongside persist + verify.
+    The signer_key_id() exposed by Edge is part of the agent's identity
+    and must exist before any cognitive state runs. Failure to initialize
+    blocks boot — same treatment as a failed persist init.
+
+    Cohabitation (CIRISEdge#16): Edge consumes the SAME ciris_persist
+    Engine; one keyring identity per host. Must run AFTER init_database.
+
+    Test escape: PYTEST_CURRENT_TEST or CIRIS_EDGE_DISABLED=true.
+
+    Before invoking ``initialize_edge_runtime``, seed the AgentModeBroker
+    from EssentialConfig.agent_mode (which honors the AGENT_MODE env var)
+    so Edge sees the configured mode instead of the broker's PROXY default.
+    """
+    from ciris_engine.logic.runtime import edge_runtime
+    from ciris_engine.logic.utils.agent_mode_broker import get_agent_mode_broker
+    from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+    config = _ensure_config(runtime)
+    get_agent_mode_broker().set_mode_sync(config.agent_mode)
+    # CIRISAgent#1244: a mock LLM named only in the module list must be
+    # known before any federation path starts (modules may be mutated
+    # after construction, so re-check immediately before edge init).
+    from ciris_engine.logic.utils.mock_llm_guard import latch_if_mock_llm_module
+
+    latch_if_mock_llm_module(getattr(runtime, "modules_to_load", None) or [], "pre-edge")
+    # Reticulum identity lives in the agent's data dir, NOT per-occurrence —
+    # multi-occurrence agents share the same federation identity.
+    identity_dir = get_data_dir() / "edge"
+    edge_runtime.initialize_edge_runtime(identity_dir)
+
+
+async def verify_edge_runtime() -> bool:
+    """Verify Edge runtime is healthy and the federation address is queryable."""
+    from ciris_engine.logic.runtime import edge_runtime
+
+    if not edge_runtime.is_available():
+        # Disabled (pytest or CIRIS_EDGE_DISABLED) is an explicit opt-out,
+        # NOT a failure — return True so boot continues.
+        if edge_runtime._edge_disabled():
+            logger.info("Edge runtime verification skipped (disabled)")
+            return True
+        logger.error("Edge runtime not available after init")
+        return False
+
+    addr = edge_runtime.get_federation_address()
+    if not addr:
+        logger.error("Edge runtime up but get_federation_address() returned empty")
+        return False
+
+    logger.info("Edge runtime verified: federation_address=%s", addr)
+    return True
 
 
 async def initialize_memory_service(runtime: Any) -> None:
@@ -476,16 +412,32 @@ async def _load_single_saved_adapter(
         logger.debug(f"Adapter {adapter_id} already in adapter_manager, skipping")
         return False
 
-    # Get adapter type, config, occurrence_id, and persist flag
+    # Skip bootstrap-required adapter TYPES outright. Upgrade path: 2.9.5
+    # setups persisted `adapter.ciris_accord_metrics.*` rows to the graph;
+    # on 2.9.6+ the adapter is always loaded at bootstrap (#866), and the
+    # two guards above miss it (bootstrap loads bypass adapter_manager and
+    # the adapter exposes no `adapter_id` attr) — re-loading here would run
+    # TWO instances with duplicate stream subscriptions and sealed traces.
+    base_type = adapter_id.split(":", 1)[0]
+    if base_type in BOOTSTRAP_ADAPTER_TYPES:
+        logger.info(
+            f"Adapter {adapter_id} is bootstrap-required as of 2.9.6 — "
+            "skipping stale graph-persisted copy (loaded at bootstrap instead)"
+        )
+        return False
+
+    # Get adapter type, config, occurrence_id, persist flag, and saved env_vars
     adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
     adapter_config_node = await config_service.get_config(f"adapter.{adapter_id}.config")
     occurrence_id_node = await config_service.get_config(f"adapter.{adapter_id}.occurrence_id")
     persist_node = await config_service.get_config(f"adapter.{adapter_id}.persist")
+    env_vars_node = await config_service.get_config(f"adapter.{adapter_id}.env_vars")
 
     adapter_type = _extract_config_value(adapter_type_node)
     adapter_config_data = _extract_config_value(adapter_config_node)
     saved_occurrence_id = _extract_config_value(occurrence_id_node)
     persist_flag = _extract_config_value(persist_node)
+    saved_env_vars = _extract_config_value(env_vars_node)
 
     # Check persist flag - only load if explicitly marked for persistence
     if not persist_flag:
@@ -506,7 +458,31 @@ async def _load_single_saved_adapter(
         logger.warning(f"No valid adapter type found for saved adapter {adapter_id}, skipping")
         return False
 
+    # Restore saved env vars BEFORE loading the adapter
+    # This ensures env vars are available when the adapter initializes
+    if saved_env_vars and isinstance(saved_env_vars, dict):
+        import os
+
+        restored_vars = []
+        for env_var, value in saved_env_vars.items():
+            if value is not None:
+                # Convert booleans to strings
+                if isinstance(value, bool):
+                    os.environ[env_var] = "true" if value else "false"
+                else:
+                    os.environ[env_var] = str(value)
+                restored_vars.append(env_var)
+        if restored_vars:
+            logger.info(f"Pre-restored env vars for {adapter_id}: {restored_vars}")
+
     adapter_config = _build_adapter_config_from_data(adapter_type, adapter_config_data)
+
+    # Include saved env vars in the adapter config for redundancy
+    if saved_env_vars and isinstance(saved_env_vars, dict) and adapter_config:
+        if hasattr(adapter_config, "adapter_config") and adapter_config.adapter_config:
+            if isinstance(adapter_config.adapter_config, dict):
+                adapter_config.adapter_config["_saved_env_vars"] = saved_env_vars
+
     logger.info(
         f"Loading saved adapter: {adapter_id} (type: {adapter_type}, occurrence: {saved_occurrence_id or 'legacy'})"
     )
@@ -523,6 +499,88 @@ async def _load_single_saved_adapter(
 
     logger.warning(f"Failed to load saved adapter {adapter_id}: {result.message}")
     return False
+
+
+# Bootstrap adapters that are always loaded at startup (skip in env fallback).
+# ciris_accord_metrics is bootstrap-required as of 2.9.6 (#866 LensCore fold).
+BOOTSTRAP_ADAPTER_TYPES = {"api", "cli", "ciris_verify", "ciris_accord_metrics"}
+
+
+async def _load_adapters_from_env_fallback(
+    runtime: Any,
+    config_service: Any,
+    adapter_manager: Any,
+    bootstrap_ids: Set[str],
+    graph_adapter_ids: Set[str],
+    current_occurrence_id: str,
+) -> int:
+    """Load adapters from CIRIS_ADAPTER env var that aren't already in the graph.
+
+    This is a fallback for when setup wizard saves adapters to .env but they weren't
+    persisted to the graph (e.g., first restart after setup wizard re-run).
+
+    Loaded adapters are persisted to graph so they load from graph on subsequent restarts.
+
+    Returns:
+        Number of adapters loaded from env var.
+    """
+    env_adapters = os.environ.get("CIRIS_ADAPTER", "")
+    if not env_adapters:
+        return 0
+
+    env_adapter_list = [a.strip() for a in env_adapters.split(",") if a.strip()]
+    if not env_adapter_list:
+        return 0
+
+    # Filter to adapters not already loaded or in graph
+    adapters_to_load = []
+    for adapter_type in env_adapter_list:
+        adapter_type_lower = adapter_type.lower()
+        # Skip bootstrap adapters (already loaded)
+        if adapter_type_lower in BOOTSTRAP_ADAPTER_TYPES:
+            continue
+        # Skip if already in graph
+        if adapter_type_lower in graph_adapter_ids or adapter_type in graph_adapter_ids:
+            continue
+        # Skip if already loaded via bootstrap
+        if adapter_type_lower in bootstrap_ids or adapter_type in bootstrap_ids:
+            continue
+        # Skip if already in adapter_manager
+        if adapter_type_lower in adapter_manager.loaded_adapters:
+            continue
+        adapters_to_load.append(adapter_type)
+
+    if not adapters_to_load:
+        return 0
+
+    # Import here to avoid circular imports
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    logger.info(f"[ENV-FALLBACK] Loading adapters from CIRIS_ADAPTER: {adapters_to_load}")
+
+    loaded_count = 0
+    for adapter_type in adapters_to_load:
+        try:
+            # Load the adapter via adapter_manager with persist=True
+            adapter_config = AdapterConfig(adapter_type=adapter_type, persist=True)
+            result = await adapter_manager.load_adapter(
+                adapter_type=adapter_type,
+                adapter_id=adapter_type,  # Use type as ID for simplicity
+                config_params=adapter_config,
+            )
+
+            if not result.success:
+                logger.warning(f"[ENV-FALLBACK] Failed to load adapter {adapter_type}: {result.message}")
+                continue
+
+            # adapter_manager.load_adapter with persist=True automatically persists to graph
+            logger.info(f"[ENV-FALLBACK] Loaded and persisted adapter: {adapter_type}")
+            loaded_count += 1
+
+        except Exception as e:
+            logger.error(f"[ENV-FALLBACK] Error loading adapter {adapter_type}: {e}", exc_info=True)
+
+    return loaded_count
 
 
 async def load_saved_adapters_from_graph(runtime: Any) -> None:
@@ -567,15 +625,47 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
         bootstrap_ids = _get_bootstrap_adapter_ids(runtime)
         loaded_count = 0
 
+        # Track loaded adapter types to prevent duplicates (e.g., two home_assistant entries
+        # with different IDs persisted by different code paths)
+        loaded_adapter_types: Set[str] = set()
+
         for adapter_id in adapter_ids:
+            # Pre-check: resolve adapter type from graph to skip duplicate types
+            adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
+            adapter_type_val = _extract_config_value(adapter_type_node)
+            if adapter_type_val and isinstance(adapter_type_val, str):
+                if adapter_type_val in loaded_adapter_types:
+                    logger.warning(
+                        f"Skipping duplicate adapter {adapter_id} — type '{adapter_type_val}' already loaded, "
+                        f"removing stale graph entry"
+                    )
+                    # Clean up stale duplicate from graph
+                    try:
+                        stale_configs = await config_service.list_configs(prefix=f"adapter.{adapter_id}")
+                        for config_key in stale_configs.keys():
+                            await config_service.set_config(config_key, None, updated_by="dedup_cleanup")
+                    except Exception as cleanup_err:
+                        logger.debug(f"Could not clean up stale adapter {adapter_id}: {cleanup_err}")
+                    continue
+
             loaded = await _load_single_saved_adapter(
                 adapter_id, config_service, adapter_manager, bootstrap_ids, current_occurrence_id
             )
             if loaded:
                 loaded_count += 1
+                if adapter_type_val and isinstance(adapter_type_val, str):
+                    loaded_adapter_types.add(adapter_type_val)
 
         if loaded_count > 0:
             logger.info(f"Loaded {loaded_count} saved adapters from graph for occurrence {current_occurrence_id}")
+
+        # Fallback: Load adapters from CIRIS_ADAPTER env var that aren't in the graph
+        # This handles the case where setup wizard saved to .env but adapters weren't persisted to graph
+        env_loaded_count = await _load_adapters_from_env_fallback(
+            runtime, config_service, adapter_manager, bootstrap_ids, adapter_ids, current_occurrence_id
+        )
+        if env_loaded_count > 0:
+            logger.info(f"Loaded {env_loaded_count} adapters from CIRIS_ADAPTER env var (not in graph)")
 
     except Exception as e:
         logger.error(f"Error loading saved adapters from graph: {e}", exc_info=True)
@@ -597,6 +687,42 @@ async def initialize_maintenance_service(runtime: Any) -> None:
     logger.info("Maintenance service verified available")
 
     await runtime._perform_startup_maintenance()
+
+
+async def populate_context_enrichment_cache(runtime: Any) -> None:
+    """Populate the context enrichment cache at startup.
+
+    This pre-runs context enrichment tools (like ha_list_entities, get_statement)
+    so their results are cached and immediately available for the first thought.
+    This prevents startup latency where the first thought has to wait 200-400ms
+    for each enrichment tool.
+
+    Non-critical: If this fails, enrichment will run on first thought instead.
+    """
+    from ciris_engine.logic.setup.first_run import is_first_run
+
+    if is_first_run():
+        logger.info("First-run mode: Skipping context enrichment cache population")
+        return
+
+    try:
+        # Collect available tools first
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            _collect_available_tools,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = await _collect_available_tools(runtime)
+
+        if not available_tools:
+            logger.info("No adapter tools available, skipping enrichment cache population")
+            return
+
+        await populate_enrichment_cache_at_startup(runtime, available_tools)
+        logger.info("Context enrichment cache populated successfully")
+    except Exception as e:
+        # Non-critical - just log and continue
+        logger.warning(f"Failed to populate context enrichment cache: {e}")
 
 
 async def build_components(runtime: Any) -> None:

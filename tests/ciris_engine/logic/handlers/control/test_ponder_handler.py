@@ -553,17 +553,18 @@ class TestPonderHandler:
 
     def test_custom_max_rounds(self, handler_dependencies: ActionHandlerDependencies) -> None:
         """Test handler initialization with custom max_rounds parameter."""
-        # Test default initialization (should be 7)
+        # Test default initialization (should be 5 — matches
+        # EssentialConfig.security.max_thought_depth default since 2.7.1)
         default_handler = PonderHandler(handler_dependencies)
-        assert default_handler.max_rounds == 7
+        assert default_handler.max_rounds == 5
 
         # Test custom max_rounds
         custom_handler = PonderHandler(handler_dependencies, max_rounds=10)
         assert custom_handler.max_rounds == 10
 
-        # Test explicit None (should default to 7)
+        # Test explicit None (should default to 5)
         none_handler = PonderHandler(handler_dependencies, max_rounds=None)
-        assert none_handler.max_rounds == 7
+        assert none_handler.max_rounds == 5
 
         # Test edge cases
         low_handler = PonderHandler(handler_dependencies, max_rounds=1)

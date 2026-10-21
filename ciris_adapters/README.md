@@ -6,7 +6,7 @@ This directory contains modular services that can be dynamically loaded into CIR
 
 | Adapter | Version | Description | QA Tests | Live Tested |
 |---------|---------|-------------|----------|-------------|
-| `ciris_covenant_metrics` | 1.0.0 | CIRIS Covenant compliance metrics - reports WBD and PDMA events to CIRISLens | `covenant_metrics_tests.py` | ✅ 2026-01-21 |
+| `ciris_accord_metrics` | 1.0.0 | CIRIS Covenant compliance metrics - reports WBD and PDMA events to CIRISLens | `covenant_metrics_tests.py` | ✅ 2026-01-21 |
 | `ciris_hosted_tools` | 1.0.0 | CIRIS-hosted tools requiring platform attestation (web search, etc.) | `hosted_tools_tests.py` | ⏳ 2026-01-21 (60% - awaiting billing token) |
 | `external_data_sql` | 1.0.0 | SQL database connector for DSAR automation and external data access | `sql_external_data_tests.py` | ✅ 2026-01-21 (100%) |
 | `home_assistant` | 1.0.0 | Enhanced Home Assistant integration with event detection | - | ❌ |
@@ -22,7 +22,7 @@ This directory contains modular services that can be dynamically loaded into CIR
 ### Testing Priority
 
 1. **High Priority** (production use):
-   - `ciris_covenant_metrics` ✅ - Live tested 2026-01-21
+   - `ciris_accord_metrics` ✅ - Live tested 2026-01-21
    - `mcp_client` / `mcp_server` ✅ - Live tested 2026-01-25 (100%)
    - `external_data_sql` ✅ - Live tested 2026-01-21 (100%)
 
@@ -245,8 +245,8 @@ ToolInfo(
         ethical_considerations="Weather data is informational only",
         prerequisite_actions=["verify_location"],
         followup_actions=["log_weather_query"],
-        min_confidence=0.3,  # 0.0-1.0
-        requires_approval=False,  # If True, triggers DEFER
+        min_confidence=0.3,  # 0.0-1.0 — declared but read by nothing (#942)
+        requires_approval=False,  # PROMPT TEXT ONLY — does NOT trigger DEFER (#942)
     ),
 
     # NEW: Categorization
@@ -267,7 +267,20 @@ ToolInfo(
 | `ToolDocumentation` | Rich documentation with examples and gotchas |
 | `UsageExample` | Code example with title and language |
 | `ToolGotcha` | Common pitfall with severity level |
-| `ToolDMAGuidance` | Guidance for DMA tool selection decisions |
+| `ToolDMAGuidance` | Guidance for DMA tool selection decisions — **advisory prompt content, not a gate** (see below) |
+
+> **`ToolDMAGuidance` does not enforce anything.** Every field on it is either
+> rendered into the action-selection prompt or read by nothing at all. In
+> particular `requires_approval=True` does **not** trigger DEFER, does not
+> interpose a human, and does not block dispatch — it appends one markdown line
+> to the prompt (`ciris_engine/logic/dma/tsaspdma.py:247`) and one label to the
+> first-run consent disclosure
+> (`ciris_engine/logic/services/tool/tool_disclosure.py:118`). `min_confidence`
+> and `followup_actions` are not even rendered. Filed as
+> [#942](https://github.com/CIRISAI/CIRISAgent/issues/942). If your adapter ships
+> a destructive or financial tool, set the field for the operator's benefit — but
+> design as though the tool will be executed the moment the model selects it,
+> because it will. See `FSD/THREAT_MODEL_2.9.7.md`.
 
 ### Benefits for Adapters
 
@@ -277,6 +290,58 @@ ToolInfo(
 4. **Install Guidance** - Users can see how to install missing dependencies
 5. **Discoverability** - Tags enable filtering/searching tools by category
 
+## Service Metadata for DSAR Discovery
+
+All tool services should implement `get_service_metadata()` to enable DSAR (Data Subject Access Request) orchestration. This allows the `ToolBus.get_tools_by_metadata()` to discover which services access external data sources containing personal data.
+
+### Required Method
+
+```python
+def get_service_metadata(self) -> Dict[str, Any]:
+    """Return service metadata for DSAR and data source discovery."""
+    return {
+        "data_source": True,  # Does this service access external data?
+        "data_source_type": "api",  # "api", "file", "rest", "secrets", "sql"
+        "contains_pii": True,  # Does the data source contain PII?
+        "gdpr_applicable": True,  # Is GDPR compliance required?
+        "connector_id": "service_name",  # Unique identifier for this connector
+    }
+```
+
+### Metadata Categories
+
+| Category | `data_source` | `data_source_type` | `contains_pii` | Example Services |
+|----------|---------------|--------------------| ---------------|------------------|
+| **PII Data Sources** | `True` | `"api"` or `"file"` | `True` | reddit, slack, github, himalaya |
+| **Non-PII APIs** | `True` | `"rest"` | `False` | weather, navigation, gemini |
+| **Sensitive/Secrets** | `True` | `"secrets"` | `True` | 1password, oracle, bird |
+| **SQL Connectors** | `True` | `"sql"` | `True` | external_data_sql |
+| **CLI Tools** | `False` | - | - | tmux, summarize, peekaboo |
+| **Device Control** | `False` | - | - | home_assistant (+ `service_type: "device_control"`) |
+
+### DSAR Discovery Usage
+
+```python
+# Find all data sources for DSAR export
+data_sources = await tool_bus.get_tools_by_metadata({"data_source": True})
+
+# Find only GDPR-applicable sources for deletion
+gdpr_sources = await tool_bus.get_tools_by_metadata({
+    "data_source": True,
+    "gdpr_applicable": True
+})
+
+# Find PII-containing sources
+pii_sources = await tool_bus.get_tools_by_metadata({
+    "data_source": True,
+    "contains_pii": True
+})
+```
+
+### Default Behavior
+
+The `ToolServiceProtocol` provides a default implementation returning `{}`. Services that access external data should override this to enable proper DSAR orchestration.
+
 ## Guidelines
 
 - **Test services**: Set `"test_only": true` in manifest
@@ -285,6 +350,7 @@ ToolInfo(
 - **Configuration**: Use schemas, not dicts
 - **Protocols**: Always implement base protocols
 - **No backwards compatibility**: Version via manifest
+- **DSAR Compliance**: Implement `get_service_metadata()` for data sources
 
 ## Examples
 

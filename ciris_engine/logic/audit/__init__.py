@@ -1,45 +1,40 @@
 """Audit subsystem for CIRIS Engine.
 
-Provides cryptographic hash chain and digital signature capabilities for audit trails.
+2.9.7 DRY purge (second-signer removal): the substrate owns the audit
+chain AND the signing identity. All audit/trace signatures come from the
+persist Engine's federation-registered local signer:
 
-Key components:
-- AuditHashChain: Maintains hash chain integrity
-- AuditSignatureManager: Now uses Ed25519 via unified signing key (shared with covenant metrics)
-- AuditVerifier: Verifies signatures (supports both RSA and Ed25519)
-- UnifiedSigningKey: Ed25519 signing key management (recommended)
-- AuditKeyMigration: Migrate existing RSA audit chains to Ed25519
+- ``engine.local_sign(data)``          — Ed25519 signature (64 raw bytes)
+- ``engine.local_public_key_b64()``    — the signer's public key (base64)
+- ``engine.local_derived_key_id()``    — the federation-registered key_id
+  (``derive_key_id(<alias>, <pubkey>)``); the ONLY id the substrate
+  verifies against. Stamping anything else lands ``verify_unknown_key``.
 
-Note: New installations automatically use Ed25519. RSA-2048 is deprecated but
-verification is maintained for backward compatibility with existing audit chains.
-Use database_maintenance.migrate_audit_key_to_ed25519() to migrate existing chains.
+Removed in 2.9.7:
+- signing_protocol.py (UnifiedSigningKey / CIRISVerifySigner): a SECOND
+  Ed25519 signer identity (``agent-{sha12}`` via CIRISVerify) duplicating
+  the persist keyring signer. Its keys were never federation-registered,
+  so peer nodes rejected them with ``verify_unknown_key``.
+- persist_signing.py: signer-material helpers for the removed identity.
+- chain_bridge.py: one-shot 2.9.0 legacy-chain bridge (signed with the
+  removed identity). Pre-2.9.0 installs must upgrade through 2.9.x first.
+
+The only agent-layer concern left here is tenant partitioning for
+persist's ``cirislens_audit_log`` / incident rows.
 """
 
-from .hash_chain import AuditHashChain
-from .key_migration import AuditKeyMigration, MigrationResult, migrate_audit_key_to_ed25519
-from .signature_manager import AuditSignatureManager
-from .signing_protocol import (
-    Ed25519Signer,
-    SignerProtocol,
-    SigningAlgorithm,
-    UnifiedSigningKey,
-    get_unified_signing_key,
-    reset_unified_signing_key,
-)
-from .verifier import AuditVerifier
+import os
 
-__all__ = [
-    "AuditHashChain",
-    "AuditSignatureManager",
-    "AuditVerifier",
-    # New unified signing
-    "SigningAlgorithm",
-    "SignerProtocol",
-    "Ed25519Signer",
-    "UnifiedSigningKey",
-    "get_unified_signing_key",
-    "reset_unified_signing_key",
-    # Migration
-    "AuditKeyMigration",
-    "MigrationResult",
-    "migrate_audit_key_to_ed25519",
-]
+__all__ = ["resolve_tenant_id"]
+
+
+def resolve_tenant_id() -> str:
+    """Tenant ID for persist's cirislens_audit_log / incident rows.
+
+    Prefer CIRIS_AGENT_ID (stable per deployment); otherwise the literal
+    string "agent-default" so operator-less single-agent installs still
+    partition correctly. Readers and writers MUST resolve the tenant via
+    this one function or the audit trail appears empty on read.
+    """
+    agent_id = os.environ.get("CIRIS_AGENT_ID")
+    return agent_id if agent_id else "agent-default"

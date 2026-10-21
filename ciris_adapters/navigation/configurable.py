@@ -210,7 +210,7 @@ class NavigationConfigurableAdapter:
                     "step_type": "input",
                     "title": "Configure User Agent",
                     "description": "Enter a user agent for OpenStreetMap API requests (required by OSM policy)",
-                    "field": "user_agent",
+                    "fields": [{"name": "user_agent"}],
                     "required": True,
                     "placeholder": "CIRIS/1.0 (your.email@example.com)",
                     "validation": {
@@ -223,9 +223,8 @@ class NavigationConfigurableAdapter:
                     "step_type": "select",
                     "title": "Configure Rate Limiting",
                     "description": "Select how long to wait between API requests (OSM recommends 1+ seconds)",
-                    "field": "rate_limit_seconds",
+                    "fields": [{"name": "rate_limit_seconds"}],
                     "required": False,
-                    "optional": True,
                     "options_method": "get_config_options",
                 },
                 {

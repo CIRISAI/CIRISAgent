@@ -14,8 +14,15 @@ from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
 
 
 @pytest.fixture
-def telemetry_setup(monkeypatch):
-    """Set up test fixtures for telemetry tests."""
+def telemetry_setup(persist_engine):
+    """Set up test fixtures for telemetry tests.
+
+    Post-A1 (CIRISAgent#763): `get_average_thought_depth` paginates persist's
+    `thought_list` substrate. The `persist_engine` fixture wires a real
+    Engine; the helper raises `ThoughtDepthQueryError` on an empty database,
+    which is caught upstream — tests below only exercise `query_metrics`
+    paths that don't trigger it.
+    """
     # Create mock memory bus
     mock_memory_bus = AsyncMock()
 
@@ -25,15 +32,6 @@ def telemetry_setup(monkeypatch):
 
     # Create telemetry service
     telemetry_service = GraphTelemetryService(memory_bus=mock_memory_bus, time_service=mock_time_service)
-
-    # Mock database connection for get_average_thought_depth
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_cursor.fetchone.return_value = (2.5,)
-    mock_conn.cursor.return_value = mock_cursor
-    mock_conn.__enter__.return_value = mock_conn
-    mock_conn.__exit__.return_value = None
-    monkeypatch.setattr("ciris_engine.logic.persistence.get_db_connection", lambda **kwargs: mock_conn)
 
     # Mock runtime control for queue saturation
     mock_runtime_bus = MagicMock()
@@ -124,9 +122,6 @@ async def test_get_telemetry_summary_queries_correct_metrics(telemetry_setup):
     # Check that the correct metrics were queried
     expected_metrics = [
         "llm.tokens.total",
-        "llm_tokens_used",  # Legacy metric
-        "llm.tokens.input",
-        "llm.tokens.output",
         "llm.cost.cents",
         "llm.environmental.carbon_grams",
         "llm.environmental.energy_kwh",
@@ -140,6 +135,11 @@ async def test_get_telemetry_summary_queries_correct_metrics(telemetry_setup):
 
     for metric in expected_metrics:
         assert metric in queried_metrics, f"Expected {metric} to be queried"
+
+    # The same LLM call's tokens are also written under these names; summing
+    # them on top of llm.tokens.total double/triple counts tokens_24h/1h.
+    for duplicate in ("llm_tokens_used", "llm.tokens.input", "llm.tokens.output"):
+        assert duplicate not in queried_metrics, f"{duplicate} must not feed the token aggregate"
 
 
 @pytest.mark.asyncio

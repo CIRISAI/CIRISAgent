@@ -1,7 +1,10 @@
 """Context building utilities for Action Selection PDMA."""
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
 
 from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
 from ciris_engine.schemas.dma.faculty import ConscienceFailureContext, EnhancedDMAInputs
@@ -214,6 +217,23 @@ class ActionSelectionContextBuilder:
         conscience_feedback = getattr(triaged_inputs, "conscience_feedback", None)
         _conscience_guidance = self._build_conscience_guidance(conscience_feedback)
 
+        # If a DMA bounce ran AND any DMA exhausted without finding a passing
+        # alternative, fold its difficulty rationale into the conscience-guidance
+        # slot so ASPDMA sees it without a new template variable. Resolved
+        # bounces are invisible — the higher-rated DMA result already replaced
+        # the original on csdma_result / dsdma_result.
+        bounce_summary = getattr(triaged_inputs, "bounce_summary", None)
+        if bounce_summary and getattr(bounce_summary, "any_exhausted", False):
+            from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+            rationale = getattr(bounce_summary, "difficulty_rationale", None) or "(no rationale)"
+            advisory = get_string(
+                get_preferred_language(),
+                "prompts.dma.bounce_advisory_aspdma",
+                rationale=rationale,
+            )
+            _conscience_guidance = f"{_conscience_guidance}{advisory}" if _conscience_guidance else advisory
+
         # Get reject thought guidance
         _reject_thought_guidance = self._get_reject_thought_guidance()
 
@@ -222,87 +242,106 @@ class ActionSelectionContextBuilder:
         _action_parameters_speak_csdma_guidance = _guidance_sections.get("action_parameters_speak_csdma_guidance", "")
         _action_parameters_ponder_guidance = _guidance_sections.get("action_parameters_ponder_guidance", "")
         _action_parameters_observe_guidance = _guidance_sections.get("action_parameters_observe_guidance", "")
-        _rationale_csdma_guidance = _guidance_sections.get("rationale_csdma_guidance", "")
+        _reasoning_csdma_guidance = _guidance_sections.get("reasoning_csdma_guidance", "")
 
         # Build original task context
         _original_task_str = self._build_original_task_context(original_thought)
 
-        # Assemble final content
-        main_user_content = """
-Your task is to determine the single most appropriate HANDLER ACTION based on the ORIGINAL TASK REQUEST and evaluations from four prior DMAs (PDMA, CSDMA, DSDMA, then IDMA evaluating their reasoning).
-You MUST execute the Principled Decision-Making Algorithm (PDMA) to choose this HANDLER ACTION and structure your response as a JSON object matching the provided schema.
-All fields specified in the schema for your response are MANDATORY unless explicitly marked as optional.
-Permitted Handler Actions: {action_options_str}{available_tools_str}
-{installable_tools_str}
-{startup_guidance}
-{conscience_guidance}
-{reject_thought_guidance}
-{final_ponder_advisory}
-{action_parameter_schemas}
-Action Selection Instructions:
-Based on the DMA results, ORIGINAL TASK, and current thought, select the most appropriate handler action.
-CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUST work toward completing that task.
+        # Render the routed user-message template (#974 step 1, FSD
+        # RESEARCH_PROMPT_OVERRIDES §11.1). The ~90-line action doctrine that
+        # used to live here as a Python literal is now the context_integration
+        # field of prompts/action_selection_pdma.yml, rendered through
+        # DMAPromptLoader.get_user_message so localized templates and the
+        # research-override dma_prompt namespace both intercept it
+        # (key: action_selection_pdma.context_integration). The {slot}
+        # structure is structural; only the values are supplied here.
+        loader, template_data = self._load_user_template()
+        _slots: Dict[str, Any] = {
+            "action_options_str": _action_options_str,
+            "available_tools_str": _available_tools_str,
+            "installable_tools_str": _installable_tools_str,
+            "startup_guidance": _startup_guidance,
+            "conscience_guidance": _conscience_guidance,
+            "reject_thought_guidance": _reject_thought_guidance,
+            "action_parameter_schemas": _action_parameter_schemas,
+            "action_parameters_speak_csdma_guidance": _action_parameters_speak_csdma_guidance,
+            "action_parameters_ponder_guidance": _action_parameters_ponder_guidance,
+            "action_parameters_observe_guidance": _action_parameters_observe_guidance,
+            "reasoning_csdma_guidance": _reasoning_csdma_guidance,
+            "final_ponder_advisory": _final_ponder_advisory,
+            "original_thought_content": original_thought.content,
+            "original_task_str": _original_task_str,
+            "thought_depth": original_thought.thought_depth,
+            "ponder_notes_str": _ponder_notes_str,
+            "user_profile_context_str": user_profile_context_str,
+            "system_snapshot_context_str": system_snapshot_context_str,
+            "ethical_summary": _ethical_summary,
+            "csdma_summary": _csdma_summary,
+            "dsdma_summary_str": _dsdma_summary_str,
+            "idma_summary_str": _idma_summary_str,
+        }
+        formatted_content = loader.get_user_message(template_data, **_slots)
 
-Your response MUST be a JSON object with exactly these three keys:
-1. 'selected_action': Choose from {action_options_str}
-2. 'action_parameters': Parameters matching the schema for your selected_action
-    {action_parameters_speak_csdma_guidance}
-    {action_parameters_ponder_guidance}
-    {action_parameters_observe_guidance}
-3. 'rationale': Explain why this action is optimal given the DMA evaluations and CIRIS principles
-    {rationale_csdma_guidance}
+        # Three localized blocks the template has no {slot} for — #993, and the
+        # #990 pair. Every slot in `context_integration` is filled and every
+        # value supplied has a slot; these keys sit outside that closed set, so
+        # they were loaded, localized into 29 languages, and discarded.
+        #
+        # `tool_selection_guidance` is the tool-hallucination guard: "Use the
+        # EXACT tool name from the 'Available tools' list. Do NOT invent or
+        # modify tool names", plus the TSASPDMA division of labour ("you do NOT
+        # provide tool parameters"). It has never been sent to a model.
+        #
+        # APPENDED rather than slotted, deliberately. A new {slot} in
+        # `context_integration` would have to be added to all 29 localized
+        # copies of the template to render for anyone but English speakers —
+        # and a slot that exists in the base and not in a translation is how
+        # you get a block that silently serves some users and not others. The
+        # text itself is already per-locale, so appending it reaches every
+        # language on the first commit.
+        #
+        # Rendered through safe_format with the same slot values: these blocks
+        # carry `{{...}}` escapes (the alignment example is a literal JSON
+        # snippet) which only resolve under a format pass.
+        from ciris_engine.logic.dma.prompt_loader import safe_format
 
-IMPORTANT: Return ONLY a JSON object with these exact keys: selected_action, action_parameters, rationale.
+        for _key in (
+            "csdma_ambiguity_guidance",
+            "csdma_ambiguity_alignment_example",
+            "tool_selection_guidance",
+        ):
+            _text = self._get_agent_specific_prompt(_key, agent_name)
+            if _text:
+                formatted_content += "\n\n" + safe_format(
+                    _text, source=f"action_selection_pdma.{_key}[{loader.language}]", **_slots
+                )
 
-=== ORIGINAL TASK (What the user requested) ===
-{original_task_str}
-
-=== CURRENT THOUGHT (Your current reasoning state) ===
-Thought: "{original_thought_content}"
-Thought Depth: {thought_depth} (0=initial, higher=follow-up after tool use or pondering)
-{ponder_notes_str}
-
-{user_profile_context_str}
-{system_snapshot_context_str}
-
-DMA Summaries to consider for your PDMA reasoning:
-Ethical PDMA: {ethical_summary}
-CSDMA: {csdma_summary}
-DSDMA: {dsdma_summary_str}
-{idma_summary_str}
-
-Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
-Adhere strictly to the schema for your JSON output.
-"""
-        # Format the template with all the variables
-        formatted_content = main_user_content.format(
-            action_options_str=_action_options_str,
-            available_tools_str=_available_tools_str,
-            installable_tools_str=_installable_tools_str,
-            startup_guidance=_startup_guidance,
-            conscience_guidance=_conscience_guidance,
-            reject_thought_guidance=_reject_thought_guidance,
-            action_parameter_schemas=_action_parameter_schemas,
-            action_parameters_speak_csdma_guidance=_action_parameters_speak_csdma_guidance,
-            action_parameters_ponder_guidance=_action_parameters_ponder_guidance,
-            action_parameters_observe_guidance=_action_parameters_observe_guidance,
-            rationale_csdma_guidance=_rationale_csdma_guidance,
-            self=self,
-            final_ponder_advisory=_final_ponder_advisory,
-            guidance_sections=_guidance_sections,
-            original_thought=original_thought,
-            original_thought_content=original_thought.content,
-            original_task_str=_original_task_str,
-            thought_depth=original_thought.thought_depth,
-            ponder_notes_str=_ponder_notes_str,
-            user_profile_context_str=user_profile_context_str,
-            system_snapshot_context_str=system_snapshot_context_str,
-            ethical_summary=_ethical_summary,
-            csdma_summary=_csdma_summary,
-            dsdma_summary_str=_dsdma_summary_str,
-            idma_summary_str=_idma_summary_str,
-        )
         return formatted_content.strip()
+
+    def _load_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
+        """Resolve the ASPDMA user-message template (#974 step 1).
+
+        Returns ``(loader, collection)`` where ``collection.context_integration``
+        is guaranteed non-empty. Loaded through :func:`get_prompt_loader` so the
+        research-override ``dma_prompt`` namespace intercepts the field. A
+        localized template that predates the key serves the base-locale
+        doctrine — exactly what the inline English literal did for every locale
+        before the routing, so composed bytes are unchanged.
+        """
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE, get_prompt_loader
+
+        loader = get_prompt_loader()
+        template_data = loader.load_prompt_template("action_selection_pdma")
+        if not template_data.context_integration and loader.language != DEFAULT_LANGUAGE:
+            loader = get_prompt_loader(DEFAULT_LANGUAGE)
+            template_data = loader.load_prompt_template("action_selection_pdma")
+        if not template_data.context_integration:
+            raise ValueError(
+                "action_selection_pdma.yml no longer defines context_integration — "
+                "the ASPDMA user-message template has no source. #974 routed it out "
+                "of Python; it must live in the YAML."
+            )
+        return loader, template_data
 
     def _get_permitted_actions(self, triaged_inputs: EnhancedDMAInputs) -> List[HandlerActionType]:
         """Get permitted actions from triaged inputs."""
@@ -319,14 +358,26 @@ Adhere strictly to the schema for your JSON output.
             HandlerActionType.TASK_COMPLETE,
         ]
 
-        permitted_actions = triaged_inputs.permitted_actions or default_permitted_actions
+        original_thought = triaged_inputs.original_thought
+
+        # CRITICAL: Use 'is not None' check, NOT truthiness check!
+        # An empty list [] should not fall back to defaults - it means NO actions permitted.
+        # Only fall back if the value is actually None (not provided).
+        if triaged_inputs.permitted_actions is not None:
+            permitted_actions = triaged_inputs.permitted_actions
+            logger.info(
+                f"ActionSelectionPDMA: Using template-defined permitted_actions for thought {original_thought.thought_id}: {[a.value for a in permitted_actions]}"
+            )
+        else:
+            permitted_actions = default_permitted_actions
+            logger.warning(
+                f"ActionSelectionPDMA: 'permitted_actions' is None for thought {original_thought.thought_id}. Using default permitted actions: {[a.value for a in permitted_actions]}"
+            )
 
         if not permitted_actions:
-            original_thought = triaged_inputs.original_thought
-            logger.warning(
-                f"ActionSelectionPDMA: 'permitted_actions' in triaged_inputs is empty for thought {original_thought.thought_id}. Falling back to default."
+            logger.error(
+                f"ActionSelectionPDMA: 'permitted_actions' is EMPTY for thought {original_thought.thought_id}. This should never happen - check template configuration."
             )
-            permitted_actions = default_permitted_actions
 
         # Return the permitted actions - they MUST be HandlerActionType enums
         return list(permitted_actions)
@@ -360,12 +411,18 @@ Adhere strictly to the schema for your JSON output.
         Full parameter schemas are provided separately in action_parameter_schemas.
         """
         if HandlerActionType.TOOL not in permitted_actions:
+            logger.info("[CONTEXT] TOOL action not in permitted_actions, skipping tool summaries")
             return ""
 
         cached_tools = self._get_cached_tools()
         if not cached_tools:
-            logger.debug("[CONTEXT] No cached tools available for tool summaries")
+            logger.warning(
+                "[CONTEXT] No cached tools available for tool summaries - tools may not have been pre-cached!"
+            )
             return ""
+
+        logger.info(f"[CONTEXT] Building tool summaries for {len(cached_tools)} cached tools")
+        logger.info(f"[CONTEXT] Cached tool names: {list(cached_tools.keys())}")
 
         # Build concise summaries using when_to_use (not full parameters)
         summaries = ["\n\n## Quick Tool Guide (when to use each tool):"]
@@ -373,8 +430,11 @@ Adhere strictly to the schema for your JSON output.
             summary = self._get_tool_summary(tool_key, tool_info)
             if summary:
                 summaries.append(summary)
+                logger.debug(f"[CONTEXT] Tool summary: {summary[:80]}...")
 
-        return "\n".join(summaries) if len(summaries) > 1 else ""
+        result = "\n".join(summaries) if len(summaries) > 1 else ""
+        logger.info(f"[CONTEXT] Tool summaries section: {len(result)} chars, {len(summaries)-1} tools")
+        return result
 
     def _get_installable_tools_str(self) -> str:
         """Get list of tools that are available for installation but not currently usable.
@@ -388,15 +448,31 @@ Adhere strictly to the schema for your JSON output.
         return ""
 
     def _build_ethical_summary(self, ethical_pdma_result: EthicalDMAResult) -> str:
-        """Build ethical DMA summary."""
-        # Extract key information from the alignment check text
-        alignment_summary = (
-            ethical_pdma_result.alignment_check[:100] + "..."
-            if len(ethical_pdma_result.alignment_check) > 100
-            else ethical_pdma_result.alignment_check
-        )
+        """Build ethical DMA summary.
 
-        return f"Ethical PDMA Analysis: Stakeholders: {ethical_pdma_result.stakeholders}. Conflicts: {ethical_pdma_result.conflicts}. {alignment_summary}"
+        v3.1 reshape: PDMA emits {action, rationale, weight_alignment_score,
+        ethical_alignment_score}. Two scores: weight_alignment is how
+        aligned the response is with training-weights' natural pull;
+        ethical_alignment is how aligned with the cross-tradition framework.
+        Their delta is the torque magnitude. Bounce gate reads
+        ethical_alignment_score; weight is diagnostic. Summary surfaces both
+        plus the action recommendation and rationale paragraph.
+        """
+        # Truncate rationale for context-builder summary; full rationale
+        # remains available downstream via the result object.
+        rationale_summary = (
+            ethical_pdma_result.rationale[:300] + "..."
+            if len(ethical_pdma_result.rationale) > 300
+            else ethical_pdma_result.rationale
+        )
+        torque = ethical_pdma_result.weight_alignment_score - ethical_pdma_result.ethical_alignment_score
+        return (
+            f"Ethical PDMA Recommendation: action={ethical_pdma_result.action.value}, "
+            f"weight_alignment={ethical_pdma_result.weight_alignment_score:.2f}, "
+            f"ethical_alignment={ethical_pdma_result.ethical_alignment_score:.2f}, "
+            f"torque={torque:+.2f}. "
+            f"Rationale: {rationale_summary}"
+        )
 
     def _build_csdma_summary(self, csdma_result: CSDMAResult) -> str:
         """Build CSDMA summary."""
@@ -414,26 +490,96 @@ Adhere strictly to the schema for your JSON output.
         )
 
     def _build_idma_summary(self, idma_result: Optional[IDMAResult]) -> str:
-        """Build IDMA (Intuition DMA / Coherence Collapse Analysis) summary."""
+        """Build IDMA (Intuition DMA / Coherence Collapse Analysis) summary.
+
+        Field labels and prose flow through the localization layer
+        (`handlers.idma_*` keys) so non-English prompt paths receive the
+        guidance in the agent's preferred language. Numeric values, JSON
+        keys (`k_eff`, `rho`), and component identifiers stay code-stable.
+        """
         if not idma_result:
             return ""
 
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+        lang = get_preferred_language()
+
+        def L(key: str, default: str, **params: Any) -> str:
+            return get_string(lang, f"handlers.{key}", default=default, **params)
+
         fragility_warning = ""
         if idma_result.fragility_flag:
-            fragility_warning = (
-                "⚠️ FRAGILITY DETECTED - Reasoning relies on limited/correlated sources. "
+            fragility_warning = "⚠️ " + L(
+                "idma_fragility_warning",
+                "FRAGILITY DETECTED - reasoning may be relying on too few or too-overlapping sources. "
                 "Options: (1) Use web_search tool if available to get independent information, "
                 "(2) Use other tools to gather additional data, "
                 "(3) Ask the user for more information or clarification, "
                 "(4) Consider alternative points of view, "
-                "(5) Acknowledge uncertainty in your response. "
+                "(5) Acknowledge uncertainty in your response.",
+            ) + " "
+
+        # IDMAResult was trimmed from 43 → 8 fields (see schema comment for why
+        # the removed fields were causing LLM JSON-validation cascades). The
+        # fields referenced below that are no longer on the schema — k_raw,
+        # phase_confidence, collapse_margin, common_cause_flags,
+        # source_type_counts, top_correlation_factors — are fetched with
+        # getattr-default-None so this code still runs against a lean
+        # IDMAResult and continues to render any extras if a provider still
+        # emits them.
+        k_raw = getattr(idma_result, "k_raw", None)
+        phase_confidence = getattr(idma_result, "phase_confidence", None)
+        collapse_margin = getattr(idma_result, "collapse_margin", None)
+        common_cause_flags = getattr(idma_result, "common_cause_flags", None) or []
+        source_type_counts = getattr(idma_result, "source_type_counts", None) or []
+        top_correlation_factors = getattr(idma_result, "top_correlation_factors", None) or []
+
+        source_count = k_raw if k_raw is not None else len(idma_result.sources_identified)
+        plain_language_bits = [
+            f"{L('idma_label_effective_source_count', 'effective source count')}={idma_result.k_eff:.2f}",
+            f"{L('idma_label_source_overlap', 'source overlap')}={idma_result.correlation_risk:.2f}",
+            f"{L('idma_label_reasoning_state', 'reasoning state')}={idma_result.phase}",
+        ]
+        if phase_confidence is not None:
+            plain_language_bits.append(
+                f"{L('idma_label_state_confidence', 'state confidence')}={phase_confidence:.2f}"
+            )
+        if collapse_margin is not None:
+            plain_language_bits.append(
+                f"{L('idma_label_safety_margin', 'safety margin')}={collapse_margin:.2f}"
+            )
+        if source_count:
+            plain_language_bits.append(f"{L('idma_label_raw_source_count', 'raw source count')}={source_count}")
+        if common_cause_flags:
+            plain_language_bits.append(
+                f"{L('idma_label_shared_bottlenecks', 'shared bottlenecks')}={', '.join(common_cause_flags[:3])}"
+            )
+        if idma_result.intervention_recommendation:
+            plain_language_bits.append(
+                f"{L('idma_label_recommended_recovery', 'recommended recovery')}={idma_result.intervention_recommendation}"
             )
 
+        none_label = L("idma_label_none", "None")
+        unknown_label = L("idma_label_unknown", "Unknown")
+        sources_str = ", ".join(idma_result.sources_identified[:3]) if idma_result.sources_identified else none_label
+        source_types_str = (
+            ", ".join(source_type_counts[:3]) if source_type_counts else unknown_label
+        )
+        if top_correlation_factors:
+            top_drivers = ", ".join(top_correlation_factors[:3])
+        elif idma_result.correlation_factors:
+            top_drivers = ", ".join(idma_result.correlation_factors[:3])
+        else:
+            top_drivers = none_label
+
         return (
-            f"IDMA (Intuition/CCA) Output: k_eff={idma_result.k_eff:.2f} (effective sources), "
-            f"ρ={idma_result.correlation_risk:.2f}, Phase={idma_result.phase}. "
+            f"{L('idma_summary_header', 'IDMA (Intuition/CCA) Output')}: "
+            f"{'; '.join(plain_language_bits)}. "
+            f"({L('idma_scientific_mapping', 'Scientific mapping')}: k_eff={idma_result.k_eff:.2f}, rho={idma_result.correlation_risk:.2f}). "
             f"{fragility_warning}"
-            f"Sources: {', '.join(idma_result.sources_identified[:3]) if idma_result.sources_identified else 'None'}. "
+            f"{L('idma_label_sources', 'Sources')}: {sources_str}. "
+            f"{L('idma_label_source_types', 'Source types')}: {source_types_str}. "
+            f"{L('idma_label_top_overlap_drivers', 'Top overlap drivers')}: {top_drivers}. "
             f"Reasoning: {idma_result.reasoning[:150]}..."
         )
 
@@ -484,7 +630,19 @@ Adhere strictly to the schema for your JSON output.
     def _build_guidance_sections(
         self, agent_name: Optional[str], permitted_actions: List[HandlerActionType]
     ) -> Dict[str, str]:
-        """Build all guidance sections."""
+        """Build all guidance sections.
+
+        RESOLVED (#990/#993): ``action_alignment_csdma_guidance`` and
+        ``action_alignment_example`` are built here from
+        ``csdma_ambiguity_guidance`` / ``csdma_ambiguity_alignment_example``,
+        and used to be dropped on the floor — :meth:`build_main_user_content`
+        reads only keys with a matching ``{slot}`` in
+        ``action_selection_pdma.yml``'s ``context_integration``, and those two
+        have none. They are now appended after the template render, together
+        with ``tool_selection_guidance``, so all three reach the model in every
+        locale. See the comment at that append site for why appending beats
+        adding a slot.
+        """
         return {
             "action_alignment_csdma_guidance": self._get_agent_specific_prompt("csdma_ambiguity_guidance", agent_name),
             "action_alignment_example": self._get_agent_specific_prompt(
@@ -499,9 +657,48 @@ Adhere strictly to the schema for your JSON output.
             "action_parameters_observe_guidance": self._get_agent_specific_prompt(
                 "action_params_observe_guidance", agent_name
             ),
-            "rationale_csdma_guidance": self._get_agent_specific_prompt("rationale_csdma_guidance", agent_name),
-            "action_parameter_schemas": self._get_dynamic_action_schemas(permitted_actions),
+            "reasoning_csdma_guidance": self._get_agent_specific_prompt("reasoning_csdma_guidance", agent_name),
+            "action_parameter_schemas": self._composed_action_parameter_schemas(permitted_actions),
         }
+
+    def _composed_action_parameter_schemas(self, permitted_actions: List[HandlerActionType]) -> str:
+        """The action schemas as COMPOSED — manifest first, generation second (#990).
+
+        This slot is the one place in the ASPDMA composer where a runtime value
+        shadows a template field: ``_get_dynamic_action_schemas`` derives the
+        per-action FLAT field list from the live permitted-action set and the
+        handler param models, so ``action_selection_pdma.action_parameter_schemas``
+        in the YAML is only ever a fallback. Applying the research override at
+        the YAML load point therefore did nothing — the manifest value was set
+        on the ``PromptCollection`` and then passed over, while the override
+        layer logged a successful replacement. That is the #989 failure shape in
+        a different place, and it made the key invisible to the ablation gate.
+
+        The override is applied HERE, at the composition boundary, so a manifest
+        value is what actually reaches the model. Gate closed (no manifest) this
+        is byte-identical to calling the generator directly — ``override_dma_prompt``
+        returns ``None`` without both ``CIRIS_RESEARCH_PROMPT_OVERRIDES`` and
+        ``CIRIS_TESTING_MODE``, which is what the #972 goldens prove.
+
+        A replacement inconsistent with the live action enum can produce output
+        the ASPDMA parser rejects. That is a legitimate research condition — a
+        campaign may want exactly that degradation — so it is permitted and made
+        LEGIBLE (the warning below names the risk and the key) rather than
+        prevented. Research mode is the correct place for it.
+        """
+        from ciris_engine.logic.utils.research_overrides import override_dma_prompt
+
+        replacement = override_dma_prompt("action_selection_pdma", "action_parameter_schemas")
+        if replacement is not None:
+            logger.warning(
+                "[RESEARCH-OVERRIDE] action_selection_pdma.action_parameter_schemas replaced at the "
+                "composition boundary: the generated per-action schemas were DISCARDED in favour of "
+                "the manifest value. If it does not match the permitted action set %s, the model's "
+                "response may not parse — that is a property of this arm, not a bug.",
+                [a.value for a in permitted_actions],
+            )
+            return replacement
+        return self._get_dynamic_action_schemas(permitted_actions)
 
     def _build_system_context(self, processing_context_data: Any) -> tuple[str, str]:
         """Build user profile and system snapshot context."""
@@ -529,14 +726,20 @@ Adhere strictly to the schema for your JSON output.
     def _build_conscience_guidance(
         self, conscience_feedback: Optional[Union[JSONDict, ConscienceFailureContext]]
     ) -> str:
-        """Build conscience guidance from feedback if available."""
+        """Build conscience guidance from feedback if available.
+
+        The `retry_guidance` payload is already pre-formatted in the agent's
+        locale (header + structured shard detail + materially-different rule)
+        by `_build_retry_guidance` in thought_processor.main, so we just emit
+        it with surrounding whitespace.
+        """
         if not conscience_feedback:
             return ""
 
         if isinstance(conscience_feedback, ConscienceFailureContext):
-            return f"\n\n**CONSCIENCE OVERRIDE GUIDANCE:**\n{conscience_feedback.retry_guidance}\n"
+            return f"\n\n{conscience_feedback.retry_guidance}\n"
         elif isinstance(conscience_feedback, dict) and "retry_guidance" in conscience_feedback:
-            return f"\n\n**CONSCIENCE OVERRIDE GUIDANCE:**\n{conscience_feedback['retry_guidance']}\n"
+            return f"\n\n{conscience_feedback['retry_guidance']}\n"
 
         return ""
 

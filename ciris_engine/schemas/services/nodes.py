@@ -228,6 +228,18 @@ class ConfigNode(TypedGraphNode):
         if not isinstance(value_data, dict):
             value_data = {}
 
+        # `key` is the contract field; to_graph_node() always writes it AND
+        # encodes it in the node id (id == f"config:{key}"), so the id is an
+        # authoritative fallback. Legacy CONFIG-typed nodes written by other
+        # services before they carried `key` (e.g. the pre-2.9.0
+        # accord_metrics "accord_metrics/events_total" counter) survive in
+        # long-lived graphs; deriving the key from the id lets them
+        # round-trip instead of raising KeyError('key') on every config
+        # scan — which flooded incidents_latest.log every ~10s (#935).
+        key = attrs.get("key")
+        if not key:
+            key = node.id[len("config:") :] if node.id.startswith("config:") else node.id
+
         return cls(
             id=node.id,
             type=node.type,
@@ -237,7 +249,7 @@ class ConfigNode(TypedGraphNode):
             updated_by=updated_by,
             updated_at=updated_at or datetime.now(timezone.utc),  # Final fallback
             # Extra fields from attributes
-            key=attrs["key"],
+            key=key,
             value=ConfigValue(**value_data),
             previous_version=attrs.get("previous_version"),
         )
@@ -495,6 +507,7 @@ class IdentityNode(TypedGraphNode):
     domain_specific_knowledge: Dict[str, str] = Field(default_factory=dict, description="Domain expertise mappings")
     areas_of_expertise: List[str] = Field(default_factory=list, description="Areas where agent has expertise")
     startup_instructions: Optional[str] = Field(None, description="Instructions for startup")
+    auto_load_adapters: bool = Field(False, description="Whether to auto-load adapters")
 
     # Capabilities and permissions from AgentIdentityRoot
     permitted_actions: List[str] = Field(default_factory=list, description="Actions this agent can perform")
@@ -552,6 +565,7 @@ class IdentityNode(TypedGraphNode):
             "domain_specific_knowledge": self.domain_specific_knowledge,
             "areas_of_expertise": self.areas_of_expertise,
             "startup_instructions": self.startup_instructions,
+            "auto_load_adapters": self.auto_load_adapters,
             # Capabilities and permissions
             "permitted_actions": self.permitted_actions,
             "restricted_capabilities": self.restricted_capabilities,
@@ -613,6 +627,7 @@ class IdentityNode(TypedGraphNode):
             domain_specific_knowledge=attrs.get("domain_specific_knowledge", {}),
             areas_of_expertise=attrs.get("areas_of_expertise", []),
             startup_instructions=attrs.get("startup_instructions"),
+            auto_load_adapters=attrs.get("auto_load_adapters", False),
             # Capabilities and permissions
             permitted_actions=attrs.get("permitted_actions", []),
             restricted_capabilities=attrs.get("restricted_capabilities", []),
@@ -646,6 +661,7 @@ class IdentityNode(TypedGraphNode):
             domain_specific_knowledge=identity.core_profile.domain_specific_knowledge,
             areas_of_expertise=identity.core_profile.areas_of_expertise,
             startup_instructions=identity.core_profile.startup_instructions,
+            auto_load_adapters=identity.core_profile.auto_load_adapters,
             # Capabilities and permissions
             permitted_actions=identity.permitted_actions,
             restricted_capabilities=identity.restricted_capabilities,
@@ -677,6 +693,7 @@ class IdentityNode(TypedGraphNode):
                 domain_specific_knowledge=self.domain_specific_knowledge,
                 areas_of_expertise=self.areas_of_expertise,
                 startup_instructions=self.startup_instructions,
+                auto_load_adapters=self.auto_load_adapters,
                 dsdma_prompt_template=None,
                 csdma_overrides={},
                 action_selection_pdma_overrides={},

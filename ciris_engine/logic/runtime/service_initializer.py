@@ -4,6 +4,7 @@ Service initialization for CIRIS Agent runtime.
 Handles the initialization of all core services.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -15,15 +16,24 @@ import aiofiles
 from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.config.config_accessor import ConfigAccessor
+from ciris_engine.logic.config.llm_budget import classify_provider, primary_provider_declaration, resolve_budget
 from ciris_engine.logic.persistence import get_sqlite_db_full_path
 from ciris_engine.logic.registries.base import Priority, ServiceRegistry
+
+# Removed AuditSinkManager - audit is consolidated, no sink needed
+from ciris_engine.logic.runtime.startup_logging import (
+    FIRST_RUN_SERVICES,
+    RESUME_SERVICES,
+    SERVICE_NAMES,
+    TOTAL_CORE_SERVICES,
+    _log_service_started,
+    _set_service_phase,
+)
 
 # CoreToolService removed - SELF_HELP moved to memory per user request
 # BasicTelemetryCollector removed - using GraphTelemetryService instead
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.governance.adaptive_filter import AdaptiveFilterService
-
-# Removed AuditSinkManager - audit is consolidated, no sink needed
 from ciris_engine.logic.services.governance.wise_authority import WiseAuthorityService
 from ciris_engine.logic.services.graph.audit_service import GraphAuditService as AuditService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
@@ -37,68 +47,31 @@ from ciris_engine.logic.services.runtime.llm_service import OpenAICompatibleClie
 from ciris_engine.logic.utils.path_resolution import get_data_dir
 from ciris_engine.protocols.services import LLMService, TelemetryService
 from ciris_engine.schemas.config.essential import EssentialConfig
+from ciris_engine.schemas.config.llm_budget import ProviderClass
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ServiceManifest
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
 logger = logging.getLogger(__name__)
 
-# Total core services for startup logging (22 per architecture)
-TOTAL_CORE_SERVICES = 22
 
-# First-run minimal services (10 services needed to serve setup wizard)
-FIRST_RUN_SERVICES = 10
+def _is_loopback_or_lan(url: str, provider_id: Optional[str] = None) -> bool:
+    """Does this provider run on hardware the user controls (loopback, LAN, overlay)?
 
-# Services started during resume_from_first_run (remaining 12)
-RESUME_SERVICES = 12
+    A TOPOLOGY question, and only that. It decides whether a provider is
+    "local_primary"; it must never be used to decide WHO a provider is — that
+    conflation is CIRISAgent#1063.
 
-# Service names in initialization order for UI display
-SERVICE_NAMES = [
-    "TimeService",  # 1 - Infrastructure
-    "ShutdownService",  # 2 - Infrastructure
-    "InitializationService",  # 3 - Infrastructure
-    "ResourceMonitor",  # 4 - Infrastructure
-    "SecretsService",  # 5 - Memory Foundation
-    "MemoryService",  # 6 - Memory Foundation
-    "ConfigService",  # 7 - Graph Services
-    "AuditService",  # 8 - Graph Services
-    "TelemetryService",  # 9 - Graph Services
-    "IncidentManagement",  # 10 - Graph Services
-    "TSDBConsolidation",  # 11 - Graph Services
-    "ConsentService",  # 12 - Graph Services
-    "WiseAuthority",  # 13 - Security
-    "LLMService",  # 14 - Runtime
-    "AuthenticationService",  # 15 - Runtime (adapter-provided)
-    "DatabaseMaintenance",  # 16 - Infrastructure
-    "RuntimeControl",  # 17 - Runtime (adapter-provided)
-    "TaskScheduler",  # 18 - Lifecycle
-    "AdaptiveFilter",  # 19 - Governance
-    "VisibilityService",  # 20 - Governance
-    "SelfObservation",  # 21 - Governance
-    "SecretsToolService",  # 22 - Tool Services
-]
-
-# Track which phase we're in for logging clarity
-_current_phase: str = "STARTUP"
-
-
-def _set_service_phase(phase: str) -> None:
-    """Set the current service initialization phase for logging."""
-    global _current_phase
-    _current_phase = phase
-    logger.warning(f"[SERVICES] === {phase} PHASE ===")
-    print(f"[SERVICES] === {phase} PHASE ===")
-
-
-def _log_service_started(service_num: int, service_name: str, success: bool = True) -> None:
-    """Log service startup status in a format parseable by the UI."""
-    status = "STARTED" if success else "FAILED"
-    phase_prefix = f"[{_current_phase}] " if _current_phase != "STARTUP" else ""
-    msg = f"{phase_prefix}[SERVICE {service_num}/{TOTAL_CORE_SERVICES}] {service_name} {status}"
-    # Use WARNING level so it shows up in incident logs for easy parsing
-    logger.warning(msg)
-    # Also print to console/stdout for Android logcat visibility
-    print(msg)
+    Delegates to the one provider classifier (``classify_provider``,
+    ciris_engine/logic/config/llm_budget.py, #1186), so the service name, the
+    ``is_local`` metadata and the time budget cannot disagree. That classifier
+    parses the host rather than substring-matching the URL (``"10."`` once
+    matched a version segment) and covers all of 172.16/12, link-local, CGNAT
+    overlays and ``.local`` names.
+    """
+    if not url and not provider_id:
+        return False
+    return classify_provider(provider_id, url) is ProviderClass.LOCAL
 
 
 class ServiceInitializer:
@@ -122,6 +95,17 @@ class ServiceInitializer:
         self.memory_service: Optional[LocalGraphMemoryService] = None
         self.secrets_service: Optional[SecretsService] = None
         self.wa_auth_system: Optional[WiseAuthorityService] = None
+        # AuthenticationService is created in initialize_security_services and
+        # ALSO registered under WISE_AUTHORITY in initialize_all_services so the
+        # batch_context strict attestation gate can find it via the registry.
+        # Default to None at construction time so register-only paths (or tests
+        # that mock-skip the security init phase) can read self.auth_service
+        # without AttributeError. Use Any (not Optional[AuthenticationService])
+        # to keep this consistent with how the field was treated implicitly
+        # before this annotation was added — the alternative would force a
+        # forward-reference import and an `assert is not None` at every
+        # downstream callsite, which the security init phase guarantees.
+        self.auth_service: Any = None
         self.telemetry_service: Optional[TelemetryService] = None
         self.llm_service: Optional[LLMService] = None
         self.audit_service: Optional[AuditService] = None
@@ -196,11 +180,22 @@ class ServiceInitializer:
         _log_service_started(3, "InitializationService")
 
         # Initialize ResourceMonitorService
+        # Device-sized default budget (phones: 1 GB memory; laptop/server: 4 GB).
+        # The monitor's budget is the one source: /v1/system/resources and the
+        # telemetry resource view both report it, so published and acting
+        # numbers cannot drift.
+        from ciris_engine.logic.runtime.device_class import resolve_device_class
         from ciris_engine.logic.services.infrastructure.resource_monitor import ResourceMonitorService
         from ciris_engine.schemas.services.resources_core import ResourceBudget
 
-        # Create default resource budget
-        budget = ResourceBudget()  # Uses defaults from schema
+        budget = ResourceBudget.for_device_class(resolve_device_class())
+        logger.info(
+            "Resource budget: device class %s, memory %s/%s/%s MB (elevated/high/critical)",
+            budget.device_class.value,
+            budget.memory_mb.warning,
+            budget.memory_mb.critical,
+            budget.memory_mb.limit,
+        )
 
         # Credit provider: Controls billing for CIRIS LLM proxy usage
         # - Server: CIRIS_BILLING_API_KEY set → API key auth
@@ -220,8 +215,10 @@ class ServiceInitializer:
 
         # Server: Simple API key check
         api_key = os.getenv("CIRIS_BILLING_API_KEY", "")
-        # Android: Google ID token for JWT auth with CIRIS proxy
-        google_id_token = os.getenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        # Mobile: OAuth ID token for JWT auth with CIRIS proxy (Google on Android, Apple on iOS)
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        google_id_token, _tok_var = read_proxy_token()
 
         if api_key and not is_android:
             # Server with API key - use API key auth
@@ -239,7 +236,7 @@ class ServiceInitializer:
                 cache_ttl_seconds=cache_ttl,
                 fail_open=fail_open,
             )
-            logger.info("Using CIRISBillingProvider with API key auth (URL: %s)", base_url)
+            logger.info("Using CIRISBillingProvider with API key auth")
 
         elif is_android and using_ciris_proxy:
             # Android using CIRIS LLM proxy - requires billing
@@ -282,6 +279,7 @@ class ServiceInitializer:
             db_path=get_sqlite_db_full_path(self.essential_config),
             time_service=self.time_service,
             credit_provider=credit_provider,
+            agent_occurrence_id=getattr(self.essential_config, "agent_occurrence_id", "default"),
         )
         await self.resource_monitor_service.start()
         self._services_started_count += 1
@@ -297,52 +295,27 @@ class ServiceInitializer:
         keys_dir = Path(self.essential_config.security.secrets_key_path)
         keys_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load or generate master key
+        # Load or generate master key. Atomic write (.tmp + fsync + os.replace)
+        # protects against asyncio cancellation mid-write — see RCA-secrets-
+        # master-key-zero-byte for the incident this guards against.
+        # TODO(phase-split): pull master-key bootstrap into an earlier phase
+        # (INFRASTRUCTURE) so it doesn't share a timeout boundary with DB
+        # connect at all. Atomic write makes the file safe even under
+        # cancellation; phase split would prevent the cancellation entirely.
+        # Note: Hardware-backed key protection is handled by CIRISVerify's unified signer
+        # 2.9.7 (#896): persist's Engine owns the runtime encryption key
+        # (auto-initialized via secrets_rotate_master_key); the on-disk file
+        # bootstrap is retained for operational continuity (.ciris_keys layout
+        # is documented + monitored) but the bytes are no longer plumbed into
+        # SecretsService.
         master_key_path = keys_dir / "secrets_master.key"
-        master_key = None
-        is_android = "ANDROID_DATA" in os.environ
+        await self._load_or_create_master_key(master_key_path)
 
-        if is_android:
-            # Android: Use Keystore-wrapped key for hardware-backed protection
-            try:
-                from android_keystore import load_or_create_wrapped_master_key, migrate_plain_key_to_wrapped
-
-                # Migrate existing plain key if present
-                migrate_plain_key_to_wrapped(master_key_path)
-
-                # Load or create wrapped key
-                master_key = load_or_create_wrapped_master_key(master_key_path)
-                if master_key:
-                    logger.info("Loaded secrets master key with Android Keystore protection")
-                else:
-                    logger.error("Failed to load/create Keystore-wrapped master key")
-            except ImportError:
-                logger.warning("Android Keystore module not available, falling back to file storage")
-                is_android = False  # Fall through to standard path
-            except Exception as e:
-                logger.error(f"Android Keystore error: {e}, falling back to file storage")
-                is_android = False
-
-        if not is_android:
-            # Standard path: plain file storage (server deployments)
-            if master_key_path.exists():
-                # Load existing master key
-                async with aiofiles.open(master_key_path, "rb") as f:
-                    master_key = await f.read()
-                logger.info("Loaded existing secrets master key")
-            else:
-                # Generate new master key and save it
-                import secrets
-
-                master_key = secrets.token_bytes(32)
-                async with aiofiles.open(master_key_path, "wb") as f:
-                    await f.write(master_key)
-                # Set restrictive permissions (owner read/write only)
-                os.chmod(master_key_path, 0o600)
-                logger.info("Generated and saved new secrets master key")
-
-        # Create README if it doesn't exist
-        readme_path = keys_dir / "README.md"
+        # Create README if it doesn't exist. Plain-text (.txt) on purpose:
+        # runtime code paths must not emit/reference .md files (D27 — keeps
+        # runtime free of Markdown surfaces; CIRISAgent#807). Content is
+        # informational only and reads identically as .txt.
+        readme_path = keys_dir / "README.txt"
         if not readme_path.exists():
             readme_content = """# CIRIS Keys Directory
 
@@ -383,20 +356,14 @@ This directory contains critical cryptographic keys for the CIRIS system.
 """
             async with aiofiles.open(readme_path, "w") as f:
                 await f.write(readme_content)
-            logger.info("Created .ciris_keys/README.md")
-
-        # Use the proper helper function to get secrets database path
-        # This handles PostgreSQL URL query parameter preservation correctly
-        from ciris_engine.logic.config import get_secrets_db_full_path
-
-        secrets_db_path = get_secrets_db_full_path(self.essential_config)
+            logger.info("Created .ciris_keys/README.txt")
 
         if self.time_service is None:
             raise RuntimeError("TimeService must be initialized before SecretsService")
 
-        self.secrets_service = SecretsService(
-            db_path=secrets_db_path, time_service=self.time_service, master_key=master_key
-        )
+        # Persist's Engine owns the secrets database + crypto (#896) — no
+        # db_path / master_key / key_storage_mode plumbing.
+        self.secrets_service = SecretsService(time_service=self.time_service)
         await self.secrets_service.start()
         self._services_started_count += 1
         _log_service_started(5, "SecretsService")
@@ -435,6 +402,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(7, "ConfigService")
 
+        # Token budgets live in the config graph (none by default); the monitor
+        # reads them now and follows resources.token_budget.* changes live.
+        if self.resource_monitor_service is not None:
+            await self.resource_monitor_service.attach_config_service(self.config_service)
+
         # Register config service immediately so it's available for persistence operations
         registry = get_global_registry()
         # Store essential config on the service so db_paths can find it
@@ -456,10 +428,98 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Migrate essential config to graph
         await self._migrate_config_to_graph()
 
+    @staticmethod
+    async def _load_or_create_master_key(master_key_path: Any) -> bytes:
+        """Load secrets master key from disk, validating length, or generate
+        a fresh one with an atomic write.
+
+        Two failure modes this guards against:
+
+        1. **Cancellation mid-write.** ``aiofiles.open(path, "wb")`` truncates
+           the file the instant the descriptor opens; the bytes only land
+           when the write+close drain. If asyncio cancels the parent task
+           before close, the canonical name is left at 0 bytes — every
+           subsequent boot then fails the ``len(candidate) == 32`` length
+           validation below with no self-healing path.
+           Fix: write to ``<path>.tmp``, fsync, then ``os.replace`` to the
+           canonical name. POSIX rename is atomic — cancellation orphans
+           ``.tmp`` and the canonical name either holds the previous file
+           (or doesn't exist for a first write).
+
+        2. **Corrupted file from any prior cause** — partial write from an
+           older code path, manual operator intervention, FS corruption,
+           etc. We treat any wrong-length file as missing, log an ERROR
+           with a stable string monitoring can alert on, and rotate.
+        """
+        import secrets as secrets_module
+
+        path = Path(master_key_path)
+
+        if path.exists():
+            async with aiofiles.open(path, "rb") as f:
+                candidate = await f.read()
+            if len(candidate) == 32:
+                logger.info("Loaded existing secrets master key")
+                return candidate
+            # Wrong length → treat as corrupted. Stable error string for
+            # monitoring: "secrets_bootstrap_corruption".
+            logger.error(
+                "secrets_bootstrap_corruption: existing %s is %d bytes, "
+                "expected 32. Treating as corrupted and rotating master key. "
+                "Any pre-existing encrypted secrets will be unrecoverable.",
+                path,
+                len(candidate),
+            )
+            # Fall through to generate-and-rotate path.
+
+        # Generate a fresh 32-byte key and persist atomically. asyncio.shield
+        # is belt-and-suspenders — even if the parent task is cancelled, the
+        # write+rename completes; a torn .tmp can never become the canonical
+        # name. The shield is bounded (small FS-only work) so it does not
+        # extend any meaningful timeout window.
+        async def _atomic_write() -> bytes:
+            new_key = secrets_module.token_bytes(32)
+            tmp_path = path.with_suffix(path.suffix + ".tmp")
+            try:
+                async with aiofiles.open(tmp_path, "wb") as f:
+                    await f.write(new_key)
+                    await f.flush()
+                    # fsync the underlying fd so the bytes are durable on disk
+                    # before we promote the .tmp to the canonical name.
+                    fd = f.fileno()
+                    await asyncio.get_running_loop().run_in_executor(None, os.fsync, fd)
+                os.chmod(tmp_path, 0o600)
+                # POSIX atomic rename. Either the canonical name holds the
+                # previous file (or doesn't exist), or it holds the fully-
+                # written new file. There is no torn intermediate state.
+                os.replace(tmp_path, path)
+            except BaseException:
+                # Best-effort cleanup of any orphaned .tmp; never raise from
+                # the cleanup path (the original exception is what matters).
+                try:
+                    if tmp_path.exists():
+                        os.unlink(tmp_path)
+                except Exception:
+                    pass
+                raise
+            logger.info("Generated and saved new secrets master key (atomic)")
+            return new_key
+
+        return await asyncio.shield(_atomic_write())
+
     async def verify_memory_service(self) -> bool:
         """Verify memory service is operational."""
         if not self.memory_service:
             logger.error("Memory service not initialized")
+            return False
+
+        # Checked here rather than asserted inside the try below: the except
+        # catches Exception, which includes AssertionError, so a missing
+        # time_service was reported as "Memory service verification error" —
+        # naming the wrong service. Asserts are also stripped under `python -O`,
+        # so the guard would vanish entirely in an optimized run.
+        if not self.time_service:
+            logger.error("Time service not initialized")
             return False
 
         # Test basic operations
@@ -467,7 +527,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
             from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
             # Use a different node type for test - don't pollute CONFIG namespace
-            assert self.time_service is not None
             now = self.time_service.now()
             test_node = GraphNode(
                 id="_verification_test",
@@ -500,7 +559,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             # Clean up
             await self.memory_service.forget(test_node)
 
-            logger.info("✓ Memory service verified")
+            logger.info("[OK] Memory service verified")
             return True
 
         except Exception as e:
@@ -522,20 +581,27 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Get main database path for WiseAuthority (needs access to tasks table)
         main_db_path = get_sqlite_db_full_path(self.essential_config)
 
-        # Use the proper helper function to get auth database path
-        # This handles PostgreSQL URL query parameter preservation correctly
-        from ciris_engine.logic.config import get_audit_db_full_path
-
-        auth_db_path = get_audit_db_full_path(self.essential_config)
+        # 2.9.0: WA certificates live in the one process-wide persist engine
+        # (wa_cert substrate on the main DB) — there is no separate auth DB.
+        # A process hosts exactly one persist engine; handing the auth service
+        # a different path trips EngineConfigMismatch on bootstrap.
         self.auth_service = AuthenticationService(
-            db_path=auth_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
+            db_path=main_db_path, time_service=self.time_service, key_dir=None  # Will use default ~/.ciris/
         )
         await self.auth_service.start()
         self._services_started_count += 1
         _log_service_started(15, "AuthenticationService")
 
-        # Process pending users from setup wizard if file exists
-        await self._process_pending_users_from_setup()
+        # Long-jump upgrade recovery (2.7.x -> 2.9.x). Pre-2.9.0 the auth
+        # store wrote `wa_cert` rows into the AUDIT database; from 2.9.0 it
+        # reads the persist engine (`cirislens_wa_cert` on the main DB). An
+        # agent that jumped straight across boots GREEN while its owner
+        # cannot log in — the certificate is still on disk, just in the
+        # database the new read path no longer looks at. Import it here:
+        # after the auth service is up (so the persist engine is wired and
+        # the store is usable) and before adapters start minting their own
+        # observers. Idempotent, insert-only, and never raises.
+        self._recover_stranded_wa_certificates()
 
         # Initialize WA authentication system with TimeService and AuthService
         # Use the main database path - WiseAuthority needs access to tasks table
@@ -551,6 +617,24 @@ This directory contains critical cryptographic keys for the CIRIS system.
             msg = f"[FIRST-RUN] ✓ {self._services_started_count}/{FIRST_RUN_SERVICES} minimal services started - ready for setup wizard"
             logger.warning(msg)
             print(msg)
+
+    def _recover_stranded_wa_certificates(self) -> None:
+        """Import legacy `wa_cert` rows stranded by a long-jump upgrade.
+
+        Boot MUST survive this. The migration already swallows its own
+        failures, but an agent that refuses to start is strictly worse than
+        one whose owner has to re-run setup — so guard the import itself
+        too, and say so loudly if it goes wrong.
+        """
+        try:
+            from ciris_engine.logic.persistence.stores.wa_cert_legacy_migration import migrate_legacy_wa_certificates
+
+            migrate_legacy_wa_certificates(self.essential_config)
+        except Exception:
+            logger.exception(
+                "Legacy WA certificate migration could not run — pre-existing owners may be "
+                "unable to log in. Boot continues."
+            )
 
     async def verify_security_services(self) -> bool:
         """Verify security services are operational."""
@@ -569,7 +653,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             logger.error("WA auth service not healthy")
             return False
 
-        logger.info("✓ Security services verified")
+        logger.info("[OK] Security services verified")
         return True
 
     async def initialize_all_services(
@@ -624,7 +708,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
                 if manifest_path.exists():
                     try:
-                        async with aiofiles.open(manifest_path) as f:
+                        async with aiofiles.open(manifest_path, encoding="utf-8") as f:
                             content = await f.read()
                             manifest_data = json.loads(content)
 
@@ -693,6 +777,35 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self._dependencies_resolved += 1  # WiseAuthority service dependency
             logger.info("WiseAuthority service registered in ServiceRegistry")
 
+        # Register AuthenticationService under WISE_AUTHORITY too. Both services
+        # legitimately serve the WISE_AUTHORITY type (per the registry-typing
+        # design): WiseAuthorityService exposes the deferral/guidance surface,
+        # AuthenticationService exposes attestation, key management, and WA-cert
+        # lookups. Consumers disambiguate via attribute presence — e.g. the
+        # batch_context strict-attestation gate filters on
+        # `hasattr(s, "await_attestation_ready")` to find this one. Without this
+        # second registration, the gate raises CRITICAL on every thought because
+        # WiseAuthorityService alone doesn't carry the attestation methods.
+        if self.auth_service:
+            self.service_registry.register_service(
+                service_type=ServiceType.WISE_AUTHORITY,
+                provider=self.auth_service,
+                priority=Priority.HIGH,
+                capabilities=[
+                    "authenticate",
+                    "verify_token",
+                    "create_wa",
+                    "get_wa",
+                    "list_was",
+                    "update_wa",
+                    "await_attestation_ready",
+                    "get_cached_attestation",
+                    "run_attestation",
+                ],
+                metadata={"type": "authentication", "consensus": "single"},
+            )
+            logger.info("AuthenticationService registered in ServiceRegistry under WISE_AUTHORITY")
+
         # Create BusManager first (without telemetry service)
         assert self.service_registry is not None
         assert self.time_service is not None
@@ -701,6 +814,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self.time_service,
             None,  # telemetry_service will be set later
             None,  # audit_service will be set later
+            resource_monitor=self.resource_monitor_service,
         )
         self._dependencies_resolved += 1  # BusManager dependency
 
@@ -737,6 +851,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         # Initialize LLM service(s) based on configuration
         await self._initialize_llm_services(config, modules_to_load)
+
+        # Load any runtime LLM providers that were persisted to config (survives restarts)
+        await self._load_persisted_runtime_llm_providers()
 
         # Secrets service no longer needs LLM service reference
 
@@ -918,6 +1035,19 @@ This directory contains critical cryptographic keys for the CIRIS system.
             return getattr(config.services, attr_name, default)
         return default
 
+    @staticmethod
+    def _resolve_llm_timeout(base_url: Optional[str], provider_id: Optional[str] = None) -> int:
+        """The HTTP timeout for one LLM request to this provider.
+
+        Timeouts come from the LLM budget profile,
+        ciris_engine/logic/config/llm_budget.py (#1186): the provider class
+        (local vs remote) picks the profile, and CIRIS_LLM_TIMEOUT overrides
+        it. ``services.llm_timeout`` in essential.yaml is no longer read, so a
+        desktop (which loads essential.yaml) and a phone (which does not) get
+        the same timeout for the same provider.
+        """
+        return int(resolve_budget(provider_id, base_url).llm_http_timeout_s)
+
     async def _initialize_llm_services(self, config: Any, modules_to_load: Optional[List[str]] = None) -> None:
         """Initialize LLM service(s) based on configuration.
 
@@ -926,8 +1056,15 @@ This directory contains critical cryptographic keys for the CIRIS system.
         """
         # Skip if mock LLM module is being loaded
         if self._skip_llm_init:
-            logger.info("🤖 MOCK LLM module detected - skipping real LLM service initialization")
+            logger.info(" MOCK LLM module detected - skipping real LLM service initialization")
             return
+
+        # Check if CIRIS services are disabled by user preference
+        ciris_services_disabled = os.environ.get("CIRIS_SERVICES_DISABLED", "").lower() in ("true", "1", "yes")
+        if ciris_services_disabled:
+            logger.info(" CIRIS services disabled by user preference (CIRIS_SERVICES_DISABLED=true)")
+            # Continue to load persisted runtime providers (local servers, BYOK keys)
+            # but skip the hardcoded CIRIS proxy providers
 
         # Validate config
         if not hasattr(config, "services"):
@@ -940,16 +1077,18 @@ This directory contains critical cryptographic keys for the CIRIS system.
             _detect_provider_from_env,
             _get_api_key_for_provider,
         )
+        from ciris_engine.logic.services.runtime.llm_service.service import _is_placeholder_api_key
 
         provider = _detect_provider_from_env()
         api_key = _get_api_key_for_provider(provider)
 
-        # Fall back to OPENAI_API_KEY for backward compatibility
+        # Fall back to CIRIS_OPENAI_API_KEY / OPENAI_API_KEY for backward compatibility
         if not api_key:
-            api_key = os.environ.get("OPENAI_API_KEY", "")
+            api_key = os.environ.get("CIRIS_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
 
         if not api_key:
-            logger.warning(f"No API key found for {provider.value} - LLM service will not be initialized")
+            # No primary API key - persisted runtime providers will be loaded after this returns
+            logger.info(f"No API key found for {provider.value} - will use persisted runtime providers if available")
             return
 
         # Initialize real LLM service
@@ -958,31 +1097,136 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Get config values using helper to reduce complexity
         # Base URL only applies to OpenAI-compatible providers
         base_url = None
+        base_urls = None  # Multi-endpoint support for CIRIS proxy
+        is_ciris_proxy_url_checked = False
         if provider in (LLMProvider.OPENAI, LLMProvider.OPENAI_COMPATIBLE):
             base_url = os.environ.get("OPENAI_API_BASE") or self._get_llm_service_config_value(
                 config, "llm_endpoint", None
             )
+            # Check if this is a CIRIS proxy URL - if so, use multi-endpoint failover
+            if base_url:
+                from ciris_engine.config.ciris_services import get_all_proxy_endpoints, is_ciris_proxy_url
 
-        # Get model name - provider-specific defaults
+                is_ciris_proxy_url_checked = is_ciris_proxy_url(base_url)
+                if is_ciris_proxy_url_checked:
+                    # Skip CIRIS proxy if user has disabled CIRIS services
+                    if ciris_services_disabled:
+                        logger.info(" Skipping CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
+                        # Load any persisted runtime providers (user's BYOK providers)
+                        await self._load_persisted_runtime_llm_providers()
+                        # Get the first LLM service from registry to satisfy validation
+                        if self.service_registry:
+                            llm_providers = self.service_registry._services.get(ServiceType.LLM, [])
+                            if llm_providers:
+                                self.llm_service = llm_providers[0].instance
+                                logger.info(f"[OK] Using persisted LLM provider: {llm_providers[0].name}")
+                            else:
+                                logger.warning("[WARN] No LLM providers available after disabling CIRIS services")
+                        return
+
+                    # Get all CIRIS proxy endpoints for multi-region failover
+                    endpoints = get_all_proxy_endpoints()
+                    if len(endpoints) > 1:
+                        # Build list of URLs in priority order, preserving /v1 suffix if present
+                        suffix = "/v1" if base_url.rstrip("/").endswith("/v1") else ""
+                        base_urls = [ep.url.rstrip("/") + suffix for ep in endpoints]
+                        logger.info(
+                            f"[MULTI_ENDPOINT] CIRIS proxy detected, using {len(base_urls)} endpoints: "
+                            f"{[ep.region for ep in endpoints]}"
+                        )
+
+        # A CIRIS-PROXY URL MEANS THE CREDENTIAL IS THE OAUTH ID TOKEN.
+        #
+        # The proxy has no provider enum of its own — it rides OPENAI_COMPATIBLE
+        # — so the key came from OPENAI_API_KEY, which is where the setup wizard
+        # stashed the ID token once, at setup. That value is an hour-lived JWT.
+        # Every restart therefore rebuilt the primary service around the
+        # setup-time token no matter how many times the refresh handshake had
+        # replaced it since, and the first interaction after a restart 401'd
+        # until another whole handshake completed. The handshake variables are
+        # the live copy; read them here.
+        if base_url and is_ciris_proxy_url_checked and not ciris_services_disabled:
+            from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+            proxy_token, proxy_var = read_proxy_token(current=api_key)
+            if proxy_token and proxy_token != api_key:
+                logger.info(
+                    "[TOKEN_HANDSHAKE] proxy startup credential taken from %s, not the setup-time key",
+                    proxy_var,
+                )
+                api_key = proxy_token
+
+        # Needed by BOTH the model default below and the service name further
+        # down; computed once, here, so the two cannot disagree about it.
+        effective_url = base_url or ""
+        declared_provider_id, _ = primary_provider_declaration()
+        is_local_provider = _is_loopback_or_lan(effective_url, declared_provider_id)
+
+        # Get model name — a default model is only meaningful WITHIN a vendor.
+        #
+        # CIRISAgent#1062. OPENAI_COMPATIBLE used to default to "gpt-4o-mini",
+        # and the trailing .get(provider, "gpt-4o-mini") did the same for any
+        # provider not in this map. But OPENAI_COMPATIBLE means "speaks the
+        # OpenAI protocol", NOT "serves OpenAI models" — it is how we reach
+        # Groq, Together, DeepInfra, OpenRouter and every local server. So a
+        # user who picked Groq and left the model blank booted a Groq endpoint
+        # asking for gpt-4o-mini. Observed live on 2.9.24:
+        #
+        #     'ciris_primary' started with model: gpt-4o-mini   <- base_url = api.groq.com
+        #     EthicalPDMAEvaluator initialized with model: gpt-4o-mini
+        #
+        # Every request then failed at the provider, surfaced as an
+        # InstructorRetryException XML dump that never named the cause. His API
+        # key was fine. He was told to check his key.
+        #
+        # A model name from the wrong vendor is not a degraded default — it is a
+        # guaranteed failure wearing the costume of a working config. Where we
+        # do not know the vendor's catalogue we must not invent an entry in it.
         default_models = {
             LLMProvider.OPENAI: "gpt-4o-mini",
-            LLMProvider.OPENAI_COMPATIBLE: "gpt-4o-mini",
             LLMProvider.ANTHROPIC: "claude-sonnet-4-20250514",
             LLMProvider.GOOGLE: "gemini-2.0-flash",
         }
         model_name = (
             os.environ.get("CIRIS_LLM_MODEL_NAME")  # CIRIS_ prefix preferred
+            or os.environ.get("OPENAI_MODEL_NAME")  # OpenAI SDK convention
             or os.environ.get("OPENAI_MODEL")
             or os.environ.get("LLM_MODEL")
-            or self._get_llm_service_config_value(config, "llm_model", default_models.get(provider, "gpt-4o-mini"))
+            or self._get_llm_service_config_value(config, "llm_model", default_models.get(provider, ""))
         )
 
-        # LLM timeout - reduced default to 20s to allow failover within DMA timeout budget
-        # With 90s DMA timeout: 20s × 2 retries × 2 providers = 80s < 90s
-        # Can be overridden via CIRIS_LLM_TIMEOUT for slow providers
-        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
-            config, "llm_timeout", 20
-        )
+        # LOUDLY LOG AND REFUSE, rather than boot a provider that cannot work.
+        #
+        # Same doctrine 2.9.24 applied to adapters: a thing that cannot function
+        # is named and skipped, never started in a broken state and left for the
+        # user to discover one failed request at a time. The API adapter stays
+        # up regardless, so the console and the LLM settings screen are both
+        # reachable to fix this.
+        # NO MODEL RESOLVED — SAY SO LOUDLY, BUT STILL BOOT.
+        #
+        # An earlier attempt REFUSED the provider here. That broke local
+        # inference twice, because locality is not knowable at this point: it is
+        # derived from base_url, which is empty whenever the operator configured
+        # the endpoint by any route other than OPENAI_API_BASE. Gating a refusal
+        # on a signal that is routinely absent fails closed on exactly the users
+        # who did nothing wrong.
+        #
+        # The fault this exists for — silently substituting ANOTHER VENDOR'S
+        # model — is already fixed above: no cross-vendor default is invented.
+        # What remains is to be loud, and to let the call fail legibly (#1066)
+        # rather than refusing to start and taking the console down with it.
+        # 2.9.24's rule holds: always keep one door open.
+        if not model_name:
+            logger.warning(
+                "NO MODEL CONFIGURED for provider '%s' at %s. Starting anyway, but requests will "
+                "fail at the provider until a model is chosen — set one in Settings -> LLM, or "
+                "CIRIS_LLM_MODEL_NAME. (A local server may ignore this and serve what it has loaded.)",
+                provider.value,
+                effective_url or "<default url>",
+            )
+
+        # Timeouts come from the LLM budget profile, ciris_engine/logic/config/llm_budget.py (#1186).
+        llm_timeout = self._resolve_llm_timeout(base_url, declared_provider_id)
 
         # Provider-specific instructor mode defaults
         default_instructor_modes = {
@@ -995,29 +1239,136 @@ This directory contains critical cryptographic keys for the CIRIS system.
 
         llm_config = OpenAIConfig(
             base_url=base_url,
+            base_urls=base_urls,  # Multi-endpoint for CIRIS proxy failover
             model_name=model_name,
             api_key=api_key,
             instructor_mode=instructor_mode,
             timeout_seconds=llm_timeout,
-            # Reduced from 3 to 2 to fit within DMA timeout budget
+            # Remediation attempts for fixable 400s only; transport errors are never retried here (#1186).
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
             provider=provider,
         )
 
-        # Create and start service
+        # NAME THE SERVICE AFTER WHAT IT IS (CIRISAgent#1063).
+        #
+        # This used to decide the name on a TOPOLOGY axis — is this endpoint on
+        # my LAN? — and then label the answer with a BILLING one:
+        #
+        #     service_name = "local_primary" if is_local_provider else "ciris_primary"
+        #
+        # Groq is not on anyone's LAN, so Groq was called `ciris_primary`. So
+        # were OpenAI, Anthropic, Together, DeepInfra and OpenRouter. The name
+        # then reached the UI ("CIRIS Primary configured" over a Groq config),
+        # the error text ("LLM service 'ciris_primary' temporarily unavailable"
+        # for a Groq failure), and the delete path in llm_providers.py, which
+        # branches on `"ciris" in name.lower()` and cleared the wrong env vars.
+        #
+        # It cost a user a day and it misled the maintainer triaging it: the UI
+        # said CIRIS, so he was told he had selected CIRIS services. He had
+        # selected Groq.
+        #
+        # `is_ciris_proxy_url` is the SAME predicate the rest of the system uses
+        # to decide whether it is talking to the proxy, so the name cannot drift
+        # from the truth.
+        from ciris_engine.config.ciris_services import is_ciris_proxy_url
+
+        if is_ciris_proxy_url(effective_url):
+            service_name = "ciris_primary"
+        elif is_local_provider:
+            service_name = "local_primary"
+        else:
+            # e.g. groq_primary, openai_primary, together_primary.
+            service_name = f"{provider.value}_primary"
+
+        # Optional: register the same OpenAI-compatible endpoint N times so the
+        # LLM bus can load-balance across independently-gated replicas. Each
+        # replica gets its own in-flight semaphore and circuit breaker — useful
+        # for tuning: halve CIRIS_LLM_MAX_CONCURRENT and double CIRIS_LLM_REPLICAS
+        # to test bus distribution under the same aggregate load.
+        try:
+            replica_count = max(1, int(os.environ.get("CIRIS_LLM_REPLICAS", "1")))
+        except (TypeError, ValueError):
+            replica_count = 1
+
+        # A PLACEHOLDER KEY IS "NO USABLE KEY" — NOT A FATAL ERROR.
+        #
+        # 2.9.16 added `_is_placeholder_api_key` so the agent would stop dialling
+        # a key it can see is fake (`sk-test` and friends can only return 401).
+        # That part was right. Raising from `OpenAICompatibleClient.__init__` was
+        # not: nothing on this path catches it, so it surfaced as
+        #
+        #     ✗ Core Services failed: The openai API key is a placeholder ...
+        #     RuntimeError: Initialization sequence failed
+        #
+        # and the whole agent refused to boot. Strictly worse than the bug it
+        # replaced — before, the agent ran and only the LLM call failed.
+        #
+        # The correct shape is twelve lines up: a missing key logs and RETURNS,
+        # leaving the agent healthy-but-degraded and letting persisted runtime
+        # providers load. `no_llm_provider` is a supported state with its own
+        # health warning and UI affordance. A placeholder is functionally a
+        # missing key, so it takes the same branch.
+        if _is_placeholder_api_key(api_key, base_url):
+            logger.warning(
+                "⚠️  %s API key is a placeholder, not a credential (length %d) — NOT registering "
+                "this provider; it could only return 401. The agent will start without an LLM "
+                "(health reports `no_llm_provider`). Set a real key, or point base_url at a local "
+                "runtime that does not need one.",
+                provider.value,
+                len(api_key.strip()),
+            )
+            return
+
+        # Create and start primary service
         openai_service = OpenAICompatibleClient(
-            config=llm_config, telemetry_service=self.telemetry_service, time_service=self.time_service
+            config=llm_config,
+            telemetry_service=self.telemetry_service,
+            time_service=self.time_service,
+            service_name=service_name,
         )
         await openai_service.start()
 
-        # Register service
+        # Register primary
         if self.service_registry:
             self.service_registry.register_service(
                 service_type=ServiceType.LLM,
                 provider=openai_service,
                 priority=Priority.HIGH,
                 capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
-                metadata={"provider": provider.value, "model": llm_config.model_name},
+                metadata={"provider": provider.value, "model": llm_config.model_name, "is_local": is_local_provider},
+            )
+
+        # Register additional replicas (same config, distinct service_name)
+        self._llm_replica_services: List[Any] = []
+        for i in range(2, replica_count + 1):
+            replica_name = f"{service_name}_{i}"
+            replica_service = OpenAICompatibleClient(
+                config=llm_config,
+                telemetry_service=self.telemetry_service,
+                time_service=self.time_service,
+                service_name=replica_name,
+            )
+            await replica_service.start()
+            if self.service_registry:
+                self.service_registry.register_service(
+                    service_type=ServiceType.LLM,
+                    provider=replica_service,
+                    priority=Priority.HIGH,
+                    capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
+                    metadata={
+                        "provider": provider.value,
+                        "model": llm_config.model_name,
+                        "is_local": is_local_provider,
+                        "replica_of": service_name,
+                    },
+                )
+            self._llm_replica_services.append(replica_service)
+            logger.info(f"[LLM-REPLICA] Registered {replica_name} (replica #{i} of {service_name})")
+
+        if replica_count > 1:
+            logger.info(
+                f"[LLM-REPLICA] {replica_count} replicas registered at HIGH priority — "
+                f"bus will load-balance across them (each with own semaphore/circuit-breaker)"
             )
 
         # Store reference
@@ -1031,22 +1382,42 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self.resource_monitor_service.signal_bus.register("token_refreshed", openai_service.handle_token_refreshed)
             logger.info("Registered LLM service token refresh handler with ResourceMonitor")
 
+        # Auto-register CIRIS proxy fallback if primary is a local/non-CIRIS URL
+        # This ensures cloud fallback is always available when using local inference
+        from ciris_engine.config.ciris_services import get_proxy_url, is_ciris_proxy_url
+
+        primary_is_local = base_url and not is_ciris_proxy_url(base_url)
+        if primary_is_local and not ciris_services_disabled:
+            from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+            id_token, _tok_var = read_proxy_token()
+            if id_token:
+                logger.info(" Primary LLM is local - registering CIRIS proxy as fallback")
+                await self._initialize_ciris_proxy_fallback(config, id_token)
+
         # Optional: Initialize secondary LLM service
         # Supports both API key auth and CIRIS proxy with JWT auth (Google ID token)
         second_api_key = os.environ.get("CIRIS_OPENAI_API_KEY_2", "")
         second_base_url = os.environ.get("CIRIS_OPENAI_API_BASE_2", "")
-        google_id_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        google_id_token, _tok_var = read_proxy_token()
 
         # Check if secondary LLM is CIRIS proxy (requires JWT auth, not API key)
         is_ciris_proxy_secondary = "ciris.ai" in second_base_url
 
-        if second_api_key:
-            # Standard API key auth
+        if is_ciris_proxy_secondary and google_id_token:
+            # Skip secondary CIRIS proxy if user has disabled CIRIS services
+            if ciris_services_disabled:
+                logger.info(" Skipping secondary CIRIS proxy (CIRIS_SERVICES_DISABLED=true)")
+            else:
+                # CIRIS proxy with JWT auth - always use fresh billing token
+                # (CIRIS_OPENAI_API_KEY_2 may contain a stale JWT from initial setup)
+                logger.info("Secondary LLM using CIRIS proxy with JWT auth")
+                await self._initialize_secondary_llm(config, google_id_token)
+        elif second_api_key:
+            # Standard API key auth (non-proxy)
             await self._initialize_secondary_llm(config, second_api_key)
-        elif is_ciris_proxy_secondary and google_id_token:
-            # CIRIS proxy with JWT auth - use Google ID token as auth
-            logger.info("Secondary LLM using CIRIS proxy with JWT auth")
-            await self._initialize_secondary_llm(config, google_id_token)
 
     async def _initialize_secondary_llm(self, config: Any, api_key: str) -> None:
         """Initialize optional secondary LLM service."""
@@ -1064,10 +1435,8 @@ This directory contains critical cryptographic keys for the CIRIS system.
             self._get_llm_service_config_value(config, "llm_model", "llama3.2"),
         )
 
-        # Use same timeout as primary LLM (20s default for failover budget)
-        llm_timeout = int(os.environ.get("CIRIS_LLM_TIMEOUT", "0")) or self._get_llm_service_config_value(
-            config, "llm_timeout", 20
-        )
+        # Timeouts come from the LLM budget profile, ciris_engine/logic/config/llm_budget.py (#1186).
+        llm_timeout = self._resolve_llm_timeout(base_url)
 
         # Create config
         llm_config = OpenAIConfig(
@@ -1076,13 +1445,29 @@ This directory contains critical cryptographic keys for the CIRIS system.
             api_key=api_key,
             instructor_mode=os.environ.get("INSTRUCTOR_MODE", "JSON"),
             timeout_seconds=llm_timeout,
-            # Reduced from 3 to 2 to fit within DMA timeout budget
+            # Remediation attempts for fixable 400s only; transport errors are never retried here (#1186).
             max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
         )
 
+        # Same rule as the primary: a placeholder is "no usable key", and this
+        # call site has no try/except either, so raising here would take the
+        # whole boot down over an OPTIONAL fallback provider.
+        from ciris_engine.logic.services.runtime.llm_service.service import _is_placeholder_api_key
+
+        if _is_placeholder_api_key(api_key, base_url):
+            logger.warning(
+                "⚠️  secondary LLM API key is a placeholder (length %d) — skipping the secondary "
+                "provider; the primary is unaffected.",
+                len(api_key.strip()),
+            )
+            return
+
         # Create and start service
         service = OpenAICompatibleClient(
-            config=llm_config, telemetry_service=self.telemetry_service, time_service=self.time_service
+            config=llm_config,
+            telemetry_service=self.telemetry_service,
+            time_service=self.time_service,
+            service_name="ciris_secondary",
         )
         await service.start()
 
@@ -1096,99 +1481,152 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 metadata={"provider": "openai_secondary", "model": model_name, "base_url": base_url},
             )
 
+        # Only register token refresh handler for CIRIS proxy secondaries
+        # Non-proxy secondaries use CIRIS_OPENAI_API_KEY_2 which isn't refreshed by Android
+        is_ciris_proxy = any(domain in base_url for domain in ("ciris.ai", "ciris-services"))
+        if is_ciris_proxy and self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
+            self.resource_monitor_service.signal_bus.register("token_refreshed", service.handle_token_refreshed)
+            logger.info("Registered secondary LLM service token refresh handler (CIRIS proxy)")
+
         logger.info(f"Secondary LLM service initialized: {model_name}")
 
-    async def _process_pending_users_from_setup(self) -> None:
-        """Process pending user creation from setup wizard.
+    async def _initialize_ciris_proxy_fallback(self, config: Any, id_token: str) -> None:
+        """Initialize CIRIS proxy as fallback when primary is local/non-CIRIS.
 
-        Checks for ~/.ciris/.ciris_pending_users.json file and creates users if found.
-        This file is created by the setup wizard during first-run configuration.
+        This ensures users with local inference still have cloud fallback available.
+        The CIRIS proxy uses JWT auth (Google/Apple ID token) not API key.
         """
-        import json
-        from pathlib import Path
+        from ciris_engine.config.ciris_services import get_all_proxy_endpoints
+        from ciris_engine.logic.services.runtime.llm_service import OpenAIConfig
 
-        # Check for pending users file in ~/.ciris directory
-        pending_users_file = Path.home() / ".ciris" / ".ciris_pending_users.json"
+        logger.info("Initializing CIRIS proxy fallback for local primary")
 
-        if not pending_users_file.exists():
-            logger.debug("No pending users file found - skipping user creation")
+        # Get all CIRIS proxy endpoints for multi-region failover
+        endpoints = get_all_proxy_endpoints()
+        if not endpoints:
+            logger.warning("No CIRIS proxy endpoints available for fallback")
+            return
+
+        # Build URLs with /v1 suffix
+        base_urls = [ep.url.rstrip("/") + "/v1" for ep in endpoints]
+        base_url = base_urls[0]
+
+        # Use CIRIS-recommended model for fallback
+        model_name = os.environ.get("CIRIS_PROXY_MODEL", "claude-sonnet-4-20250514")
+
+        # Timeouts come from the LLM budget profile, ciris_engine/logic/config/llm_budget.py (#1186).
+        llm_timeout = self._resolve_llm_timeout(base_url)
+
+        llm_config = OpenAIConfig(
+            base_url=base_url,
+            base_urls=base_urls if len(base_urls) > 1 else None,
+            model_name=model_name,
+            api_key=id_token,  # JWT token for CIRIS proxy auth
+            instructor_mode="JSON",
+            timeout_seconds=llm_timeout,
+            max_retries=self._get_llm_service_config_value(config, "llm_max_retries", 2),
+        )
+
+        service = OpenAICompatibleClient(
+            config=llm_config,
+            telemetry_service=self.telemetry_service,
+            time_service=self.time_service,
+            service_name="ciris_proxy_fallback",
+        )
+        await service.start()
+
+        # Register with NORMAL priority (below CRITICAL local, above LOW)
+        if self.service_registry:
+            self.service_registry.register_service(
+                service_type=ServiceType.LLM,
+                provider=service,
+                priority=Priority.NORMAL,
+                capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
+                metadata={"provider": "ciris_proxy", "model": model_name, "base_url": base_url},
+            )
+
+        # Register token refresh handler
+        if self.resource_monitor_service and hasattr(self.resource_monitor_service, "signal_bus"):
+            self.resource_monitor_service.signal_bus.register("token_refreshed", service.handle_token_refreshed)
+
+        logger.info(f"[OK] CIRIS proxy fallback initialized: {model_name} ({len(base_urls)} endpoints)")
+
+    async def _load_persisted_runtime_llm_providers(self) -> None:
+        """Load runtime LLM providers that were persisted to config.
+
+        This enables providers added via the API to survive restarts.
+        """
+        from ciris_engine.logic.persistence.llm_providers import list_providers
+        from ciris_engine.logic.services.runtime.llm_service.service import runtime_provider_config
+        from ciris_engine.schemas.services.capabilities import LLMCapabilities
+
+        if not self.config_service or not self.service_registry:
+            logger.debug("Cannot load persisted LLM providers - services not available")
             return
 
         try:
-            logger.info("=" * 80)
-            logger.info("Processing pending users from setup wizard")
-            logger.info("=" * 80)
+            providers = await list_providers(self.config_service)
+            logger.info(f"[LLM_LOAD] list_providers returned {len(providers) if providers else 0} providers")
+            if not providers:
+                logger.info("No persisted runtime LLM providers to load")
+                return
 
-            # Read pending users data asynchronously
-            async with aiofiles.open(pending_users_file, "r") as f:
-                content = await f.read()
-                users_data = json.loads(content)
+            logger.info(f"Loading {len(providers)} persisted runtime LLM provider(s): {list(providers.keys())}")
 
-            logger.info(f"Loaded pending users file created at: {users_data.get('created_at')}")
+            # Map priority strings to internal Priority enum
+            priority_map = {
+                "critical": Priority.CRITICAL,
+                "high": Priority.HIGH,
+                "normal": Priority.NORMAL,
+                "low": Priority.LOW,
+                "fallback": Priority.FALLBACK,
+            }
 
-            # Process new user if specified
-            if "new_user" in users_data:
-                from ciris_engine.schemas.services.authority_core import WARole
+            for provider_name, config in providers.items():
+                try:
+                    # Check if already registered (avoid duplicates)
+                    existing = self.service_registry.get_provider_by_name(provider_name, ServiceType.LLM)
+                    if existing:
+                        logger.debug(f"Provider '{provider_name}' already registered, skipping")
+                        continue
 
-                new_user = users_data["new_user"]
-                username = new_user["username"]
-                password = new_user["password"]
-                role_str = new_user.get("role", "OBSERVER")
+                    # Timeout from the LLM budget profile for this provider (#1186).
+                    llm_config = runtime_provider_config(
+                        config.provider_id, config.base_url, config.model, config.api_key
+                    )
 
-                # Map role string to WARole enum
-                role_map = {
-                    "ADMIN": WARole.AUTHORITY,
-                    "AUTHORITY": WARole.AUTHORITY,
-                    "OBSERVER": WARole.OBSERVER,
-                    "USER": WARole.OBSERVER,
-                }
-                wa_role = role_map.get(role_str.upper(), WARole.OBSERVER)
+                    # Create and start service
+                    service = OpenAICompatibleClient(
+                        config=llm_config,
+                        telemetry_service=self.telemetry_service,
+                        time_service=self.time_service,
+                        service_name=provider_name,
+                    )
+                    await service.start()
 
-                logger.info(f"Creating new user: {username} with role: {wa_role}")
+                    # Register with appropriate priority
+                    priority = priority_map.get(config.priority.lower(), Priority.FALLBACK)
+                    self.service_registry.register_service(
+                        service_type=ServiceType.LLM,
+                        provider=service,
+                        priority=priority,
+                        capabilities=[LLMCapabilities.CALL_LLM_STRUCTURED],
+                        metadata={
+                            "provider": config.provider_id,
+                            "model": config.model,
+                            "base_url": config.base_url,
+                            "added_at_runtime": True,
+                            "restored_from_persistence": True,
+                        },
+                    )
 
-                # Create WA certificate for the user
-                wa_cert = await self.auth_service.create_wa(
-                    name=username,
-                    email=f"{username}@local",  # Placeholder email for local users
-                    scopes=["read:any", "write:any"] if wa_role == WARole.AUTHORITY else ["read:any"],
-                    role=wa_role,
-                )
+                    logger.info(f"Restored runtime LLM provider '{provider_name}' with priority {config.priority}")
 
-                # Hash password and update the WA
-                password_hash = self.auth_service.hash_password(password)
-                await self.auth_service.update_wa(wa_id=wa_cert.wa_id, password_hash=password_hash)
-
-                logger.info(f"✅ Successfully created user: {username} (WA: {wa_cert.wa_id})")
-
-            # Process system admin password update if specified
-            if "system_admin" in users_data:
-                admin_data = users_data["system_admin"]
-                admin_username = admin_data["username"]
-                new_password = admin_data["password"]
-
-                logger.info(f"Updating system admin password for: {admin_username}")
-
-                # Find the admin WA by username
-                all_was = await self.auth_service.list_was(active_only=True)
-                admin_wa = next((wa for wa in all_was if wa.name == admin_username), None)
-
-                if admin_wa:
-                    # Hash new password and update
-                    password_hash = self.auth_service.hash_password(new_password)
-                    await self.auth_service.update_wa(wa_id=admin_wa.wa_id, password_hash=password_hash)
-                    logger.info(f"✅ Successfully updated admin password for {admin_username}")
-                else:
-                    logger.warning(f"⚠️  Admin user '{admin_username}' not found")
-
-            # Delete the pending users file after processing
-            pending_users_file.unlink()
-            logger.info("Deleted pending users file after successful processing")
-            logger.info("=" * 80)
+                except Exception as e:
+                    logger.warning(f"Failed to restore LLM provider '{provider_name}': {e}")
 
         except Exception as e:
-            logger.error(f"Error processing pending users file: {e}", exc_info=True)
-            # Don't delete the file if processing failed - allow retry on next startup
-            raise
+            logger.warning(f"Failed to load persisted runtime LLM providers: {e}")
 
     async def _initialize_audit_services(self, config: Any, agent_id: str) -> None:
         """Initialize the consolidated audit service with three storage backends.
@@ -1209,7 +1647,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
         # Use config accessor for audit configuration
         assert self.config_accessor is not None
         audit_db_path = await self.config_accessor.get_path("database.audit_db", Path("data/ciris_audit.db"))
-        audit_key_path = await self.config_accessor.get_path("security.audit_key_path", Path(".ciris_keys"))
         retention_days = await self.config_accessor.get_int("security.audit_retention_days", 90)
 
         from ciris_engine.logic.services.graph.audit_service import GraphAuditService
@@ -1223,7 +1660,6 @@ This directory contains critical cryptographic keys for the CIRIS system.
             export_format="jsonl",
             enable_hash_chain=True,
             db_path=str(audit_db_path),
-            key_path=str(audit_key_path),
             retention_days=retention_days,
         )
         # Runtime will be set later when available
@@ -1247,6 +1683,11 @@ This directory contains critical cryptographic keys for the CIRIS system.
         updated_handlers = inject_graph_audit_service_to_handlers(self.audit_service)
         logger.info(f"Injected graph audit service into {updated_handlers} incident capture handler(s)")
 
+        # Refusals the constitutional halt makes outside the act gate are audited here.
+        from ciris_engine.logic.utils.halt_latch import bind_refusal_audit
+
+        bind_refusal_audit(self.audit_service)
+
         # Audit sink manager removed - GraphAuditService handles its own lifecycle
         logger.info("GraphAuditService handles its own retention and cleanup")
 
@@ -1261,17 +1702,69 @@ This directory contains critical cryptographic keys for the CIRIS system.
         self._services_started_count += 1
         _log_service_started(10, "IncidentManagement")
 
-    async def _initialize_skill_adapters(self) -> None:
-        """Auto-load eligible skill adapters based on config.
+    def _is_auto_discovery_enabled(self) -> bool:
+        """Check if auto-discovery is enabled by template and config."""
+        from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
 
-        Discovers adapters from configured paths, checks eligibility
-        (binary presence, env vars, etc.), and registers eligible ones
-        with the tool bus.
-        """
-        # Check if auto-discovery is enabled
-        adapters_config = self.essential_config.adapters
-        if not adapters_config.auto_discovery:
+        identity = retrieve_agent_identity()
+
+        if not identity or not hasattr(identity.core_profile, "auto_load_adapters"):
+            logger.info("[SKILL-ADAPTERS] Auto-discovery not enabled by current agent template")
+            return False
+        if not identity.core_profile.auto_load_adapters:
+            logger.info("[SKILL-ADAPTERS] Auto-discovery not enabled by current agent template")
+            return False
+        if not self.essential_config.adapters.auto_discovery:
             logger.info("[SKILL-ADAPTERS] Auto-discovery disabled by config")
+            return False
+        return True
+
+    async def _start_and_register_adapter(self, adapter_name: str, service: Any) -> None:
+        """Start an adapter service and register it with the service registry."""
+        if hasattr(service, "start"):
+            start_result = service.start()
+            if hasattr(start_result, "__await__"):
+                await start_result
+
+        if self.service_registry is None:
+            return
+
+        # First check if the adapter declares explicit service registrations
+        if hasattr(service, "get_services_to_register"):
+            registrations = service.get_services_to_register()
+            for reg in registrations:
+                self.service_registry.register_service(
+                    service_type=reg.service_type,
+                    provider=reg.provider,
+                    priority=reg.priority if hasattr(reg, "priority") else Priority.NORMAL,
+                    capabilities=reg.capabilities if hasattr(reg, "capabilities") else [],
+                    metadata={"adapter": adapter_name, "auto_loaded": True},
+                )
+                logger.info(f"[SKILL-ADAPTERS] Registered {reg.service_type.value} from adapter: {adapter_name}")
+            return
+
+        if hasattr(service, "get_all_tool_info"):
+            self.service_registry.register_service(
+                service_type=ServiceType.TOOL,
+                provider=service,
+                priority=Priority.NORMAL,
+                capabilities=["execute_tool", "get_all_tool_info"],
+                metadata={"adapter": adapter_name, "auto_loaded": True},
+            )
+            logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
+        elif hasattr(service, "send_deferral") or hasattr(service, "handle_deferral"):
+            self.service_registry.register_service(
+                service_type=ServiceType.WISE_AUTHORITY,
+                provider=service,
+                priority=Priority.NORMAL,
+                capabilities=["send_deferral", "accord_metrics"],
+                metadata={"adapter": adapter_name, "auto_loaded": True},
+            )
+            logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
+
+    async def _initialize_skill_adapters(self) -> None:
+        """Auto-load eligible skill adapters based on config."""
+        if not self._is_auto_discovery_enabled():
             return
 
         logger.info("[SKILL-ADAPTERS] Starting auto-discovery...")
@@ -1280,11 +1773,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
         from ciris_engine.logic.services.tool import AdapterDiscoveryService
         from ciris_engine.logic.services.tool.eligibility_checker import ToolEligibilityChecker
 
-        # Create eligibility checker with config service for config_keys validation
-        # This enables checking environment variables for config requirements
         eligibility_checker = ToolEligibilityChecker(config_service=self.config_service)
-
-        # Build service dependencies for adapter instantiation
         service_deps = {
             "bus_manager": self.bus_manager,
             "memory_service": self.memory_service,
@@ -1295,13 +1784,9 @@ This directory contains critical cryptographic keys for the CIRIS system.
             "agent_occurrence_id": self.essential_config.agent_occurrence_id,
         }
 
-        # Get explicitly enabled adapters from CIRIS_ADAPTER env var
-        # These should NOT be skipped even if in the default disabled list
         env_adapter = get_env_var("CIRIS_ADAPTER")
-        explicitly_enabled = set(a.strip() for a in env_adapter.split(",")) if env_adapter else set()
-
-        # Compute effective disabled list by removing explicitly enabled adapters
-        # This allows users to override the default disabled list via CIRIS_ADAPTER
+        explicitly_enabled = {a.strip() for a in env_adapter.split(",")} if env_adapter else set()
+        adapters_config = self.essential_config.adapters
         effective_disabled = [a for a in adapters_config.disabled_adapters if a not in explicitly_enabled]
 
         if explicitly_enabled:
@@ -1309,48 +1794,22 @@ This directory contains critical cryptographic keys for the CIRIS system.
             if overridden:
                 logger.info(f"[SKILL-ADAPTERS] Explicitly enabled adapters override disabled: {overridden}")
 
-        # Create discovery service and load eligible adapters
         discovery = AdapterDiscoveryService(eligibility_checker=eligibility_checker)
         eligible = await discovery.load_eligible_adapters(
             disabled_adapters=effective_disabled,
             service_dependencies=service_deps,
         )
 
-        # Register eligible adapters with tool bus
         if not eligible:
             logger.info("[SKILL-ADAPTERS] No eligible adapters found")
             return
 
         for adapter_name, service in eligible.items():
+            # ciris_verify is always loaded at bootstrap — skip to avoid double-load
+            if adapter_name == "ciris_verify":
+                continue
             try:
-                # Start the service if it has a start method
-                if hasattr(service, "start"):
-                    start_result = service.start()
-                    if hasattr(start_result, "__await__"):
-                        await start_result
-
-                if self.service_registry is not None:
-                    # Register with tool bus if it provides tools
-                    if hasattr(service, "get_all_tool_info"):
-                        self.service_registry.register_service(
-                            service_type=ServiceType.TOOL,
-                            provider=service,
-                            priority=Priority.NORMAL,
-                            capabilities=["execute_tool", "get_all_tool_info"],
-                            metadata={"adapter": adapter_name, "auto_loaded": True},
-                        )
-                        logger.info(f"[SKILL-ADAPTERS] Registered tool adapter: {adapter_name}")
-                    # Register WISE_AUTHORITY services (e.g., covenant_metrics)
-                    elif hasattr(service, "send_deferral") or hasattr(service, "handle_deferral"):
-                        self.service_registry.register_service(
-                            service_type=ServiceType.WISE_AUTHORITY,
-                            provider=service,
-                            priority=Priority.NORMAL,
-                            capabilities=["send_deferral", "covenant_metrics"],
-                            metadata={"adapter": adapter_name, "auto_loaded": True},
-                        )
-                        logger.info(f"[SKILL-ADAPTERS] Registered wisdom adapter: {adapter_name}")
-
+                await self._start_and_register_adapter(adapter_name, service)
             except Exception as e:
                 logger.warning(f"[SKILL-ADAPTERS] Failed to register {adapter_name}: {e}")
 
@@ -1364,9 +1823,10 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 logger.error("Service registry not initialized")
                 return False
 
-            # Check critical services (LLM service is optional during first-run)
+            # Check critical services (LLM service is optional during first-run or when disabled)
             from typing import Any, List
 
+            from ciris_engine.logic.persistence.llm_providers import get_ciris_services_disabled
             from ciris_engine.logic.setup.first_run import is_first_run
 
             # Use named dict for better error messages
@@ -1377,11 +1837,21 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 "adaptive_filter_service": self.adaptive_filter_service,
             }
 
-            # Only require LLM service if not in first-run mode
-            if not is_first_run():
+            # LLM service is optional when:
+            # 1. First-run mode (setup wizard will configure it)
+            # 2. CIRIS services disabled with no other provider (user can add via settings)
+            ciris_disabled = get_ciris_services_disabled()
+            if is_first_run():
+                if not self.llm_service:
+                    logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
+            elif ciris_disabled and not self.llm_service:
+                logger.warning(
+                    "[WARN] No LLM provider configured - CIRIS services disabled and no local provider set up"
+                )
+                logger.warning("[WARN] Agent will start but cannot process requests until an LLM provider is added")
+            elif not ciris_disabled:
+                # Only require LLM service when CIRIS services are enabled
                 critical_services["llm_service"] = self.llm_service
-            elif not self.llm_service:
-                logger.info("LLM service not initialized (first-run mode - will be initialized after setup)")
 
             for name, service in critical_services.items():
                 if not service:
@@ -1393,7 +1863,7 @@ This directory contains critical cryptographic keys for the CIRIS system.
                 logger.error("Audit service not initialized")
                 return False
 
-            logger.info("✓ All core services verified")
+            logger.info("[OK] All core services verified")
             return True
         except Exception as e:
             logger.error(f"Core services verification failed: {e}")

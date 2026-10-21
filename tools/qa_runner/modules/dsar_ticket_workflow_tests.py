@@ -40,7 +40,7 @@ class DSARTicketWorkflowTests:
 
     async def run(self) -> List[Dict]:
         """Run all DSAR ticket workflow tests."""
-        self.console.print("\n[cyan]🎫 Testing DSAR Ticket Workflow[/cyan]")
+        self.console.print("\n[cyan] Testing DSAR Ticket Workflow[/cyan]")
 
         tests = [
             # Phase 1: Ticket Creation
@@ -69,10 +69,10 @@ class DSARTicketWorkflowTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                self.console.print(f" [FAIL] {name}: {str(e)[:100]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
 
@@ -210,7 +210,7 @@ class DSARTicketWorkflowTests:
         if not identity_stage.get("completed"):
             raise ValueError(f"Stage metadata not updated. Full metadata: {metadata}")
 
-        self.console.print(f"     [dim]✓ Stage metadata updated successfully[/dim]")
+        self.console.print(f" [dim][OK] Stage metadata updated successfully[/dim]")
 
     async def test_observe_complete_ticket(self):
         """Use update_ticket tool to complete the ticket."""
@@ -254,13 +254,12 @@ class DSARTicketWorkflowTests:
 
     async def test_verify_blocked_no_task(self):
         """Verify blocked tickets stay in blocked status (WorkProcessor skips them)."""
+        # Note: This test is removed from the test list but method kept for reference
+        # Blocked tickets should not be auto-processed by WorkProcessor
+        # To verify: Create blocked ticket, wait, check it's still blocked
         await asyncio.sleep(3)
-
-        # Get the blocked ticket we created earlier
-        # The architecture is: blocked tickets should stay blocked (not auto-processed)
-        # We just need to verify the ticket exists and is still blocked
-        # (Tasks are ephemeral, checking for their absence is not reliable)
-        self.console.print(f"     [dim]Blocked tickets remain blocked (architecture verified by status)[/dim]")
+        # This test was removed from the list since blocked tickets are
+        # correctly handled by the architecture and don't need explicit verification
 
     async def test_create_deferred_ticket(self):
         """Create a ticket with deferred status."""
@@ -371,7 +370,7 @@ class DSARTicketWorkflowTests:
                     self.console.print(f"     [dim]Loop iteration {i}: Update confirmed after {attempt+1}s[/dim]")
                     break
             else:
-                self.console.print(f"     [dim]⚠️  Loop iteration {i}: Update not confirmed after {max_retries}s[/dim]")
+                self.console.print(f" [dim][WARN] Loop iteration {i}: Update not confirmed after {max_retries}s[/dim]")
                 # Exit early if iteration 0 fails
                 if i == 0:
                     raise ValueError(f"Iteration 0 failed - exiting early to debug. Message sent: {message}")
@@ -411,7 +410,7 @@ class DSARTicketWorkflowTests:
             if not stage_data.get("completed"):
                 raise ValueError(f"Stage {stage} not marked complete. Full metadata: {metadata}")
 
-        self.console.print(f"     [dim]✓ All {len(expected_stages)} stages verified complete[/dim]")
+        self.console.print(f" [dim][OK] All {len(expected_stages)} stages verified complete[/dim]")
 
     def _print_summary(self):
         """Print test summary."""

@@ -1,0 +1,586 @@
+name: Refresh iOS substrate binaries
+
+# Refresh the iOS-bundled substrate Mach-O binaries to the versions pinned in
+# requirements.txt. Since the ONE WHEEL move (#896) the substrate arrives as a
+# single `ciris-server` release asset — persist / edge / lens live inside it and
+# are no longer pinned or fetched separately. `ciris-verify` remains its own pin.
+# (Historically this refreshed CIRISVerify + CIRISPersist + CIRISEdge separately;
+# requirements.txt, from their published GitHub releases. Eliminates the
+# "needs a macOS dev box" bottleneck — runs on macos-latest which ships
+# otool + install_name_tool + the gh CLI out of the box.
+#
+# Manual trigger only. Opens a PR against the target branch with the refreshed
+# binaries. A human reviewer approves and merges; no auto-push to release
+# branches. The PR review is the gate for the (large) Resources.zip diff.
+#
+# This is the iOS counterpart to the Android substrate refresh done by
+# `tools/update_android_libs.py`. It drives `tools/update_substrate_libs.py`, which
+# reads the pins from requirements.txt — so the branch you target MUST already
+# carry the desired ciris-persist / ciris-edge / ciris-verify pins.
+
+on:
+  # CALLED AS A JOB by compose-gate, which owns the decision about whether iOS
+  # is stale. This used to trigger itself on `pull_request` and push the
+  # refreshed lock straight back to the PR branch — which broke the PR it was
+  # trying to help:
+  #
+  #   4b609f59  github-actions[bot]  chore(ios): refresh iOS substrate…
+  #     -> ALL 8 workflows on that SHA: conclusion=action_required
+  #
+  # The push is authenticated with the workflow's own GITHUB_TOKEN, so GitHub
+  # attributes every run it triggers to github-actions[bot] and gates them
+  # behind manual approval. The author's own commits (actor=emooreatx) run
+  # untouched. Pushing as a human instead would take a PAT, which we do not
+  # want — so this no longer pushes at all in the PR path. It builds the
+  # bundle on the macOS runner (the only host that can) and hands it back as
+  # an ARTIFACT; the gate then tells you the one command to land it.
+  workflow_call:
+    inputs:
+      target_branch:
+        description: "Branch to refresh. MUST already carry the desired substrate pins in requirements.txt."
+        required: true
+        type: string
+      libs:
+        description: "Which libs to refresh (space-separated subset of: server verify), or 'all'."
+        required: false
+        default: "all"
+        type: string
+      upload_only:
+        description: "Build and upload the refreshed bundle as an artifact; do NOT commit or push. Used by compose-gate."
+        required: false
+        default: false
+        type: boolean
+      build_sim_natives:
+        description: "Also cross-build the third-party SIMULATOR natives (pydantic_core, cryptography, aiohttp, cffi) into app_packages_native_sim/, at the versions bundled in Resources.zip. Needed by the five-platform gate; not by a device refresh."
+        required: false
+        default: false
+        type: boolean
+      always_upload:
+        description: "With upload_only: upload the bundle even when nothing changed vs the tree. The five-platform gate needs the bundle on every run, changed or not."
+        required: false
+        default: false
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: "Branch to refresh + open the PR against. MUST already carry the desired substrate pins in requirements.txt."
+        required: true
+        type: string
+      libs:
+        description: "Which libs to refresh to their requirements.txt pins (space-separated subset of: server verify), or 'all'. NOTE: persist/edge/lens are no longer separate — they ship inside the ciris-server ONE WHEEL (#896)."
+        required: false
+        default: "all"
+        type: string
+      upload_only:
+        description: "Build and upload the refreshed bundle as an artifact; do NOT commit or push."
+        required: false
+        default: false
+        type: boolean
+      build_sim_natives:
+        description: "Also cross-build the third-party SIMULATOR natives (pydantic_core, cryptography, aiohttp, cffi) into app_packages_native_sim/, at the versions bundled in Resources.zip. Needed by the five-platform gate; not by a device refresh."
+        required: false
+        default: false
+        type: boolean
+      always_upload:
+        description: "With upload_only: upload the bundle even when nothing changed vs the tree. The five-platform gate needs the bundle on every run, changed or not."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write       # Required to push the refresh branch (workflow_dispatch path)
+  pull-requests: write  # Required to open the PR (workflow_dispatch path)
+
+concurrency:
+  # PER BRANCH, not global. This was a single shared group with
+  # cancel-in-progress, so two PRs bumping the substrate pin at the same time
+  # cancelled each other's refresh and whichever lost came back "stale" with no
+  # explanation. The refresh is per-branch work; the mutex must be too.
+  # ...and PER MODE. The five-platform gate calls this workflow in upload-only
+  # mode on every PR run; a dispatched refresh that COMMITS shares the branch
+  # but not the work, and with one group the gate's call cancelled the dispatch
+  # eight seconds into its checkout (2026-09-05, release/2.10.0).
+  # ...and PER RUN for upload-only callers. Per-branch-per-mode was still one
+  # group for every upload-only caller on a branch, and there are two: the
+  # five-platform gate's bundle job and compose-gate's ios-refresh. A push that
+  # bumps the server pin fires compose-gate at the same moment the gate is
+  # dispatched, and the later one cancelled the earlier one's bundle -- the
+  # gate's iOS leg then had no substrate at all and failed as "no /health
+  # within 120s" (run #34223901074). Every upload-only caller needs its OWN
+  # bundle, so there is nothing to serialise between them: key the group on the
+  # calling run. The commit path keeps the per-branch mutex, which is a real one.
+  group: refresh-ios-substrate-${{ inputs.target_branch || github.ref }}-${{ inputs.upload_only && format('upload-{0}', github.run_id) || 'commit' }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    name: Refresh iOS substrate (${{ inputs.libs || 'all' }}) on ${{ inputs.target_branch || github.head_ref }}
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout ${{ inputs.target_branch }}
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.target_branch || github.head_ref }}
+          # Need full history so we can branch + push
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify Apple toolchain is present
+        # macos-latest ships these; this step is a defense-in-depth assert
+        # that fails the job loudly if a future runner image drops them,
+        # instead of failing inside the update tool with a confusing error.
+        run: |
+          which otool
+          which install_name_tool
+          otool --version || true
+          install_name_tool 2>&1 | head -1 || true
+
+      - name: Resolve pinned versions from requirements.txt
+        id: pins
+        run: |
+          # The tool drives off requirements.txt; surface the resolved pins so
+          # the commit/PR title is accurate and so a typo'd target_branch
+          # (one without the v4 pins) is obvious in the run log.
+          # ONE WHEEL (#896): persist / edge / lens are no longer pinned
+          # separately — they ship inside `ciris-server`. This step used to read
+          # `ciris-persist` and `ciris-edge`, which now resolve to the EMPTY
+          # STRING, so the release check below ran `gh release view "v"` against
+          # repos that no longer publish an iOS asset. verify is still its own pin.
+          get_pin() { grep -oE "^$1[>=<!~ ]*[0-9]+\.[0-9]+\.[0-9]+" requirements.txt | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1; }
+          S=$(get_pin ciris-server); V=$(get_pin ciris-verify)
+
+          # Fail LOUDLY on an unresolvable pin. An empty version silently became
+          # `v` in a release URL and produced a confusing 'release not found'
+          # far from the cause.
+          [ -n "$S" ] || { echo "::error::no ciris-server== pin in requirements.txt on this branch — target a branch that carries the pin you want"; exit 1; }
+
+          echo "server=$S" >> "$GITHUB_OUTPUT"
+          echo "verify=$V" >> "$GITHUB_OUTPUT"
+          echo "Resolved pins → server=$S / verify=${V:-<unpinned>}"
+
+      - name: Verify gh CLI auth + releases exist
+        # gh on macos-latest auto-uses GITHUB_TOKEN; assert the iOS tarballs
+        # exist for each requested lib before we burn the rest of the job.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LIBS: ${{ inputs.libs || 'all' }}
+          S: ${{ steps.pins.outputs.server }}
+          V: ${{ steps.pins.outputs.verify }}
+        run: |
+          want() { [ "$LIBS" = "all" ] && return 0; echo " $LIBS " | grep -q " $1 "; }
+
+          # The iOS tarball comes from the RELEASE, not PyPI. v0.5.173 shipped its
+          # wheels to PyPI while the release was still missing the iOS triple, so
+          # "the version exists" is NOT the same question as "the iOS asset exists".
+          # Assert the asset itself.
+          check() {
+            name="$1"; ver="$2"; repo="$3"
+            [ -n "$ver" ] || { echo "::error::$name has no resolvable pin — cannot refresh it"; exit 1; }
+            gh release view "v$ver" --repo "CIRISAI/$repo" --json tagName --jq .tagName >/dev/null 2>&1 \
+              || { echo "::error::CIRISAI/$repo v$ver: release not found"; exit 1; }
+            gh release view "v$ver" --repo "CIRISAI/$repo" --json assets --jq '.assets[].name' 2>/dev/null \
+              | grep -qiE "ios" \
+              || { echo "::error::CIRISAI/$repo v$ver exists but carries NO iOS asset — the release is incomplete. Re-run the failing asset job upstream; do NOT re-tag."; exit 1; }
+            echo "  OK CIRISAI/$repo v$ver has an iOS asset"
+          }
+
+          want server && check server "$S" CIRISServer
+          if want verify; then
+            if [ -n "$V" ]; then check verify "$V" CIRISVerify; else echo "  . verify unpinned - skipping"; fi
+          fi
+          echo "All requested iOS release tarballs present."
+
+      - name: Refresh iOS substrate to pins
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LIBS: ${{ inputs.libs || 'all' }}
+          S: ${{ steps.pins.outputs.server }}
+          V: ${{ steps.pins.outputs.verify }}
+        run: |
+          # update_substrate_libs.py downloads the iOS tarball, lays the PyO3 .so
+          # into app_packages_native/, wires the .fwork → Frameworks redirect
+          # via otool/install_name_tool, refreshes the Python bindings, and
+          # rebuilds Resources.zip. Run per requested lib so the run log is
+          # explicit about what changed.
+          want() { [ "$LIBS" = "all" ] && return 0; echo " $LIBS " | grep -q " $1 "; }
+          # `tools/update_substrate_libs.py` is the current tool. The old
+          # `tools.update_ios_libs` module predates the one-wheel move and knows
+          # nothing about `server`, so it could never refresh the substrate that now
+          # actually ships. Per-lib invocation so the run log says what changed.
+          # An EMPTY $LIBS makes want() false for everything, so the refresh runs
+          # nothing and the step still exits 0 — "success" over a no-op. That is
+          # exactly what happened on the first automatic run: LIBS was unset on the
+          # pull_request event, the updater printed not one line, and the job
+          # reported "No changes - iOS bundle already matches the pins" while the
+          # bundle was a full release behind. Refuse the ambiguous state instead.
+          [ -n "$LIBS" ] || { echo "::error::LIBS is empty — refusing to run a refresh that would silently do nothing"; exit 1; }
+
+          want server && python3 tools/update_substrate_libs.py --platform ios --lib server "$S"
+          if want verify && [ -n "$V" ]; then
+            python3 tools/update_substrate_libs.py --platform ios --lib verify "$V"
+          fi
+          echo "done"
+
+      - name: Set up Python 3.10 (build-side interpreter for the cp310 iOS embed)
+        if: inputs.build_sim_natives
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build simulator third-party natives
+        # WHY THIS EXISTS. The iOS app embeds Python 3.10, and four of the engine's
+        # dependencies carry C/Rust extensions: pydantic_core, cryptography,
+        # aiohttp, cffi. Resources.zip ships their pure-Python halves plus .fwork
+        # redirects pointing at Frameworks/<module>.framework/<module> inside the
+        # .app; something has to PRODUCE those frameworks. On a developer machine
+        # that was a briefcase build. No runner has one, so the embedded
+        # interpreter died on its first third-party import in every simulator
+        # run the five-platform gate had ever made (CIRISAgent#1135).
+        #
+        # THREE ARE FETCHED, ONE IS BUILT. BeeWare publishes cp310 simulator
+        # wheels for cffi, aiohttp and cryptography at exactly the versions
+        # Resources.zip bundles -- the same toolchain that produced the device
+        # bundle. An earlier version of this step cross-compiled them with a
+        # distutils environment instead, and produced macOS binaries that linked
+        # fine and could never load; the wheels are what should have been used
+        # from the start. pydantic-core publishes no iOS wheel anywhere, so it is
+        # built with cargo against the simulator slice of Python.xcframework,
+        # using PyO3's cross-compile variables -- not maturin, whose interpreter
+        # probing refused the host/target mismatch.
+        #
+        # Versions come from the .dist-info directories in Resources.zip: the
+        # native half MUST match the pure-Python half already bundled, or
+        # `import pydantic` (and cffi) fail their own version checks.
+        #
+        # Per-module failures are REPORTED, not fatal: whatever is present is
+        # uploaded, and the gate's embed phase says which frameworks exist.
+        if: inputs.build_sim_natives
+        id: simnat
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PY_TAG: "3.10-b14"
+          PY_ASSET: "Python-3.10-iOS-support.b14.tar.gz"
+          BEEWARE_INDEX: "https://pypi.anaconda.org/beeware/simple"
+          IOS_SIM_TAG: "ios_13_0_arm64_iphonesimulator"
+        run: |
+          set -uo pipefail
+          WORK="$RUNNER_TEMP/simnat"; mkdir -p "$WORK/wheels" "$WORK/src"
+          OUT="apps/ios/app_packages_native_sim"; mkdir -p "$OUT"
+          status=()
+
+          # --- versions: what Resources.zip already bundles ---
+          ver_of() { unzip -l apps/ios/Resources.zip | awk '{print $4}' | grep -oE "app_packages/$1-[0-9][0-9.]*\.dist-info" | head -1 | sed -E "s/.*$1-([0-9.]+)\.dist-info/\1/"; }
+          V_PYDC=$(ver_of pydantic_core); V_CRYPTO=$(ver_of cryptography); V_AIO=$(ver_of aiohttp); V_CFFI=$(ver_of cffi)
+          echo "versions:  pydantic_core=$V_PYDC cryptography=$V_CRYPTO aiohttp=$V_AIO cffi=$V_CFFI"
+          for v in "$V_PYDC" "$V_CRYPTO" "$V_AIO" "$V_CFFI"; do [ -n "$v" ] || { echo "::error::could not read a bundled version from Resources.zip"; exit 1; }; done
+
+          # --- 1. the three C extensions: BeeWare's prebuilt simulator wheels ---
+          fetch_wheel() { # name version
+            echo "::group::fetch $1 $2 ($IOS_SIM_TAG)"
+            if python -m pip download -q --no-deps --only-binary :all: --index-url "$BEEWARE_INDEX" \
+                 --platform "$IOS_SIM_TAG" --python-version 3.10 --implementation cp --abi cp310 \
+                 "$1==$2" -d "$WORK/wheels" 2>&1 | tail -5; then
+              status+=("$1=fetched")
+            else
+              status+=("$1=MISSING-ON-INDEX"); echo "::warning::no cp310 $IOS_SIM_TAG wheel for $1==$2 on $BEEWARE_INDEX -- it will have to be built"
+            fi
+            echo "::endgroup::"
+          }
+          fetch_wheel cffi "$V_CFFI"
+          fetch_wheel aiohttp "$V_AIO"
+          fetch_wheel cryptography "$V_CRYPTO"
+
+          # --- 2. pydantic_core: cargo, cross-compiled with PyO3 against the slice ---
+          echo "::group::build pydantic_core ($V_PYDC) with cargo"
+          gh release download "$PY_TAG" --repo beeware/Python-Apple-support -p "$PY_ASSET" -O "$WORK/pysupport.tar.gz"
+          mkdir -p "$WORK/pysupport" && tar -xzf "$WORK/pysupport.tar.gz" -C "$WORK/pysupport"
+          SLICE=$(find "$WORK/pysupport" -maxdepth 3 -type d -name "ios-arm64_x86_64-simulator" | head -1)
+          [ -d "$SLICE/lib-arm64/python3.10" ] || { echo "::error::no lib-arm64/python3.10 in the simulator slice"; exit 1; }
+          echo "slice: $SLICE"
+          rustup target add aarch64-apple-ios-sim >/dev/null 2>&1 || true
+          python -m pip install -q typing_extensions   # build.rs runs generate_self_schema.py on the host
+          SDIST_URL=$(curl -s "https://pypi.org/pypi/pydantic-core/$V_PYDC/json" | python -c 'import json,sys; print(next(u["url"] for u in json.load(sys.stdin)["urls"] if u["packagetype"]=="sdist"))')
+          if [ -n "$SDIST_URL" ] && curl -sSL "$SDIST_URL" -o "$WORK/src/pydantic_core.tar.gz" \
+             && tar -xzf "$WORK/src/pydantic_core.tar.gz" -C "$WORK/src" \
+             && ( cd "$WORK/src"/pydantic_core-*/ \
+                  && SDKROOT="$(xcrun --sdk iphonesimulator --show-sdk-path)" IPHONEOS_DEPLOYMENT_TARGET=13.0 \
+                     PYO3_PYTHON="$(command -v python3.10)" \
+                     PYO3_CROSS_LIB_DIR="$SLICE/lib-arm64" PYO3_CROSS_PYTHON_VERSION=3.10 PYO3_CROSS_PYTHON_IMPLEMENTATION=CPython \
+                     CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup" \
+                     cargo build --release --target aarch64-apple-ios-sim --features "pyo3/extension-module" 2>&1 | grep -vE "^\s+(Compiling|Downloading|Downloaded|Updating|Locking|Fresh) " | tail -30 \
+                  && DYLIB=$(ls target/aarch64-apple-ios-sim/release/lib_pydantic_core.dylib) \
+                  && mkdir -p "$OLDPWD/$OUT/pydantic_core" \
+                  && cp "$DYLIB" "$OLDPWD/$OUT/pydantic_core/_pydantic_core.cpython-310-iphonesimulator.so" ); then
+            status+=("pydantic_core=built")
+          else
+            status+=("pydantic_core=FAILED"); echo "::warning::simulator native build FAILED: pydantic_core"
+          fi
+          echo "::endgroup::"
+
+          # --- extract the wheels' .so files into app_packages_native_sim/ with
+          #     their package-relative paths (embed_native_frameworks.sh names the
+          #     framework from that path: aiohttp/_http_parser.*.so ->
+          #     aiohttp._http_parser, matching the .fwork redirects) ---
+          for whl in "$WORK/wheels"/*.whl; do
+            [ -f "$whl" ] || continue
+            X="$WORK/x/$(basename "$whl" .whl)"; mkdir -p "$X"; unzip -qo "$whl" -d "$X"
+            while IFS= read -r so; do
+              rel="${so#$X/}"; mkdir -p "$OUT/$(dirname "$rel")"; cp "$so" "$OUT/$rel"
+            done < <(find "$X" -name "*.so" -type f)
+          done
+
+          echo "## simulator natives" | tee "$OUT/MANIFEST.txt"
+          printf '  %s\n' "${status[@]}" | tee -a "$OUT/MANIFEST.txt"
+          ok=true
+          for want in "pydantic_core/_pydantic_core" "cryptography/hazmat/bindings/_openssl" "aiohttp/_http_parser" "_cffi_backend"; do
+            f=$(find "$OUT" -path "*$want*" -name "*.so" | head -1)
+            if [ -n "$f" ]; then
+              arch=$(lipo -info "$f" 2>/dev/null | sed 's/.*: //')
+              # Read the platform TEXTUALLY with vtool (IOSSIMULATOR / MACOS / IOS).
+              # Only a clear IOSSIMULATOR is ok; the simulator's own dlopen error is
+              # the final arbiter, so a doubtful binary is kept, not deleted.
+              vt=$(xcrun vtool -show-build "$f" 2>/dev/null | awk '/platform/{print $2; exit}')
+              minos=$(xcrun vtool -show-build "$f" 2>/dev/null | awk '/minos/{print $2; exit}')
+              case "$vt" in
+                IOSSIMULATOR) echo "  ok      $want  [$arch, $vt minos=$minos]" | tee -a "$OUT/MANIFEST.txt" ;;
+                "")           echo "  present $want  [$arch, platform unreadable -- kept; the simulator will say]" | tee -a "$OUT/MANIFEST.txt" ;;
+                *)            echo "  WRONG-PLATFORM $want  [$arch, $vt -- kept so the simulator's dlopen error is the evidence]" | tee -a "$OUT/MANIFEST.txt"; ok=false ;;
+              esac
+            else
+              echo "  MISSING $want" | tee -a "$OUT/MANIFEST.txt"; ok=false
+            fi
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          $ok || echo "::warning::not every simulator native is present and simulator-built -- see MANIFEST.txt; the gate's iOS leg will show which imports fail"
+
+      - name: Detect changes
+        id: diff
+        run: |
+          # "No changes" is only good news if the bundle is ACTUALLY current. Assert
+          # it against the lock rather than inferring currency from an empty git diff —
+          # a refresh that ran nothing also produces an empty diff, and that is how the
+          # first automatic run reported "already matches the pins" while iOS sat a
+          # release behind.
+          python3 tools/dev/check_ios_substrate_current.py
+
+          # A byte diff is NOT evidence of a substantive change, and treating it as
+          # one put this workflow in a loop that blocked the 2.9.18 release.
+          #
+          # Re-zipping identical content yields different bytes because zip embeds
+          # mtimes; substrate.lock.json rewrites `updated_at` every run; the
+          # xcframework Info.plist repair rewrites timestamps too. So a re-run over
+          # an ALREADY-CURRENT bundle always looked "changed" -> committed -> pushed.
+          # And because a bot-authored commit parks every workflow in
+          # `action_required`, each of those no-op pushes froze the whole PR's
+          # checks. Every subsequent push re-triggered the refresh (a pull_request
+          # path filter is cumulative, not per-push), so it never settled.
+          #
+          # Currency is the real question, and check_ios_substrate_current.py above
+          # already answers it authoritatively from substrate.lock.json. If the
+          # bundle is current, there is nothing to say — regardless of what the byte
+          # diff claims.
+          # A RECORDED-VERSION change is substantive even when no byte of the
+          # bundle moves. 0.5.177's iOS binaries are identical to 0.5.176's, so
+          # the ONLY thing the refresh had to change was the lock — and the
+          # Resources-only diff above called that "timestamp-only churn" and threw
+          # it away. The run then reported success while leaving the lock a
+          # release behind, which is what kept compose-gate red on 2.9.24 and,
+          # earlier, on 2.9.22.
+          #
+          # Compare the RECORDED LIBS, not the file: substrate.lock.json rewrites
+          # `updated_at` on every run, so a whole-file diff is always dirty and
+          # would resurrect exactly the churn loop this guard exists to prevent.
+          libs_of() { git show "$1:apps/ios/substrate.lock.json" 2>/dev/null \
+            | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin).get('libs',{}),sort_keys=True))" 2>/dev/null || echo '{}'; }
+          LIBS_HEAD=$(libs_of HEAD)
+          LIBS_NOW=$(python3 -c "import json; print(json.dumps(json.load(open('apps/ios/substrate.lock.json')).get('libs',{}),sort_keys=True))" 2>/dev/null || echo '{}')
+          if [ "$LIBS_HEAD" != "$LIBS_NOW" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "substrate.lock.json records different libs than HEAD — committing."
+            echo "  HEAD: $LIBS_HEAD"
+            echo "  now : $LIBS_NOW"
+            git diff --stat || true
+          elif python3 tools/dev/check_ios_substrate_current.py >/dev/null 2>&1 \
+             && git diff --quiet -- apps/ios/Resources/ ; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "iOS bundle is already current for these pins — not committing timestamp-only churn."
+            git diff --stat || true
+          elif git diff --quiet && git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes — iOS bundle already matches the pins."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat
+          fi
+
+      # ── upload_only: hand the bundle back, do not touch the branch ──────────
+      #
+      # This is the path compose-gate takes. The macOS runner is the only host
+      # that can materialise the Resources tree, so it still does ALL the work
+      # here in CI — it just stops short of committing, because a push from
+      # this job is authenticated as github-actions[bot] and freezes every
+      # check on the PR behind "waiting for approval".
+      #
+      # The artifact is the handoff. `gh run download` lands it in the working
+      # tree, and the commit is then authored by whoever runs that — a real
+      # collaborator, whose pushes trigger CI normally. No PAT required.
+      - name: Upload refreshed bundle
+        # `changed` gates the human-landing path; the five-platform gate wants
+        # the bundle on EVERY run and passes always_upload for it.
+        if: inputs.upload_only && (steps.diff.outputs.changed == 'true' || inputs.always_upload)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-substrate-refresh
+          if-no-files-found: error
+          retention-days: 7
+          # Mirrors the `git add` list in the commit path below — same paths,
+          # same bundle, just delivered as a download instead of a push.
+          path: |
+            apps/ios/app_packages_native
+            apps/ios/app_packages_native_sim
+            apps/ios/Frameworks
+            apps/ios/Resources/app_packages
+            apps/ios/Resources.zip
+            apps/ios/substrate.lock.json
+
+      - name: How to land it
+        if: inputs.upload_only && steps.diff.outputs.changed == 'true'
+        run: |
+          {
+            echo "### iOS substrate rebuilt — one command to land it"
+            echo
+            echo 'The bundle for `ciris-server ${{ steps.pins.outputs.server }}` is attached to this run as'
+            echo '`ios-substrate-refresh`. It is NOT pushed: a push from this job runs as'
+            echo '`github-actions[bot]`, which parks every check on the PR in `action_required`.'
+            echo
+            echo '```bash'
+            # Via a temp dir: `gh run download` REFUSES to overwrite, so
+            # extracting straight into apps/ios/ aborts on the first file
+            # that already exists — which is all of them — and lands nothing.
+            echo "T=\$(mktemp -d)"
+            echo "gh run download ${{ github.run_id }} -R ${{ github.repository }} \\"
+            echo "  -n ios-substrate-refresh -D \"\$T\""
+            echo "cp -a \"\$T\"/. apps/ios/"
+            echo "git add -f apps/ios/app_packages_native apps/ios/Frameworks \\"
+            echo "  apps/ios/Resources/app_packages apps/ios/Resources.zip \\"
+            echo "  apps/ios/substrate.lock.json"
+            echo "git commit -m 'chore(ios): refresh iOS substrate to ciris-server ${{ steps.pins.outputs.server }}'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── dispatch path: still commits and opens its own PR ───────────────────
+      - name: Configure git committer
+        if: steps.diff.outputs.changed == 'true' && !inputs.upload_only
+        run: |
+          git config user.name "ciris-ios-substrate-refresh[bot]"
+          git config user.email "ciris-ios-substrate-refresh@users.noreply.github.com"
+
+      - name: Create branch, commit, push
+        id: branch
+        if: steps.diff.outputs.changed == 'true' && !inputs.upload_only
+        run: |
+          # On a pull_request the refresh belongs ON THAT PR: the branch that moved
+          # the pin is the branch whose iOS bundle is now stale, and compose-gate's
+          # currency check runs on that same PR. Opening a SECOND PR would leave the
+          # first one red and rely on a human noticing the pairing.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            branch="${{ github.head_ref }}"
+            echo "refreshing in place on PR branch $branch"
+            git checkout -B "$branch"
+          else
+            branch="chore/ios-substrate-refresh-$(date -u +%Y%m%dT%H%M%S)"
+            git checkout -b "$branch"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          # Stage only the iOS substrate paths — keeps incidental workspace
+          # dirt out of the PR while covering the native .so, the .fwork
+          # redirect frameworks, the Python bindings, and Resources.zip.
+          # -f is required: apps/ios/Resources/ is gitignored
+          # (apps/ios/.gitignore), so the regenerated Python bindings
+          # under Resources/app_packages won't stage without a force-add.
+          git add -f \
+            apps/ios/app_packages_native \
+            apps/ios/Frameworks \
+            apps/ios/Resources/app_packages \
+            apps/ios/Resources.zip \
+            apps/ios/substrate.lock.json
+          git status -s
+          git commit -m "chore(ios): refresh iOS substrate binaries to ciris-server ${{ steps.pins.outputs.server }} (verify ${{ steps.pins.outputs.verify }})"
+          git push origin "$branch"
+
+      - name: Open PR
+        if: steps.diff.outputs.changed == 'true' && !inputs.upload_only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          BRANCH_NAME: ${{ steps.branch.outputs.branch }}
+          TRIGGER_ACTOR: ${{ github.actor }}
+          LIBS: ${{ inputs.libs || 'all' }}
+          S: ${{ steps.pins.outputs.server }}
+          V: ${{ steps.pins.outputs.verify }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          body_file=$(mktemp)
+          {
+            printf '%s\n' "Automated iOS substrate refresh produced by [\`refresh-ios-substrate.yml\`](.github/workflows/refresh-ios-substrate.yml) running on \`macos-latest\`."
+            printf '\n'
+            printf '%s\n' "Refreshes the iOS-bundled substrate Mach-O binaries to the requirements.txt pins on \`${TARGET_BRANCH}\`: **ciris-server ${S} / verify ${V}**. Since the one-wheel move (#896), persist / edge / lens ship INSIDE ciris-server and are no longer fetched separately."
+            printf '\n## Why this exists\n\n'
+            printf '%s\n' "\`tools/update_substrate_libs.py\` rejects non-macOS hosts (it needs Apple's \`otool\` + \`install_name_tool\` to wire the \`.fwork\` → Frameworks redirect). Running it on a hosted \`macos-latest\` runner removes the macOS-dev-box bottleneck."
+            printf '\n## How to review\n\n'
+            printf '%s\n' "- Diff is expected to be **binary only** — \`app_packages_native/*/.abi3.so\`, \`Frameworks/*\`, the Python bindings, and \`Resources.zip\`."
+            printf '%s\n' "- ⚠️ **Check the \`Resources.zip\` size delta.** It should track the swapped native \`.so\` sizes, NOT balloon by 80MB+ — a large jump means the native binaries got bundled into the zip instead of riding in \`app_packages_native\` via the \`.fwork\` redirect."
+            printf '%s\n' "- Cross-check against the Android wheel/JNI refresh already shipped in the corresponding agent commit on \`${TARGET_BRANCH}\`."
+            printf '\n## Trigger context\n\n'
+            printf '%s\n' "- Triggered by: @${TRIGGER_ACTOR}"
+            printf '%s\n' "- Target branch: \`${TARGET_BRANCH}\`"
+            printf '%s\n' "- Workflow run: ${RUN_URL}"
+            printf '\n🤖 Generated by [refresh-ios-substrate.yml](.github/workflows/refresh-ios-substrate.yml)\n'
+          } > "$body_file"
+
+          # No --label: labels aren't guaranteed to exist in the repo and a
+          # missing label makes `gh pr create` exit non-zero AFTER the branch
+          # is already pushed (the run then looks failed despite a good push).
+          # A reviewer can add labels on the PR if desired.
+          # The branch is already pushed; opening the PR is the last, smallest step.
+          # When the repository forbids Actions from creating PRs (Settings →
+          # Actions → General → "Allow GitHub Actions to create and approve pull
+          # requests"), `gh pr create` fails with "GitHub Actions is not permitted
+          # to create or approve pull requests" — and a run whose real work
+          # succeeded then reads as failed (2026-09-05, release/2.10.0, the PR had
+          # to be opened by hand). Say what to click instead of failing.
+          if ! out=$(gh pr create \
+            --repo "${{ github.repository }}" \
+            --base "${TARGET_BRANCH}" \
+            --head "${BRANCH_NAME}" \
+            --title "chore(ios): refresh iOS substrate to ciris-server ${S} / verify ${V}" \
+            --body-file "$body_file" 2>&1); then
+            compare="${{ github.server_url }}/${{ github.repository }}/compare/${TARGET_BRANCH}...${BRANCH_NAME}?expand=1"
+            if printf '%s' "$out" | grep -q "not permitted to create or approve pull requests"; then
+              echo "::warning::The refresh is pushed to ${BRANCH_NAME} but this repository does not let Actions open PRs. Open it here: ${compare} — or allow it under Settings → Actions → General → 'Allow GitHub Actions to create and approve pull requests'."
+              {
+                echo "## iOS substrate refreshed — PR NOT opened"
+                echo
+                echo "The repository forbids GitHub Actions from creating pull requests, so the branch is pushed and waiting:"
+                echo
+                echo "- branch: \`${BRANCH_NAME}\`"
+                echo "- open the PR: ${compare}"
+                echo "- or allow it once: Settings → Actions → General → *Allow GitHub Actions to create and approve pull requests*"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$out"
+            echo "::error::gh pr create failed after the branch was pushed (${BRANCH_NAME}); open it by hand: ${compare}"
+            exit 1
+          fi
+          echo "$out"
+
+      - name: No-change summary
+        if: steps.diff.outputs.changed == 'false'
+        run: |
+          echo "iOS bundle already matches the requirements.txt pins. No PR opened."

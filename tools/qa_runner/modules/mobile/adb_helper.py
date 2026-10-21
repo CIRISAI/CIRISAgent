@@ -4,14 +4,18 @@ ADB Helper for Mobile QA Testing
 Provides utilities for interacting with Android devices via ADB.
 """
 
+import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
+
+import requests
 
 
 @dataclass
@@ -67,13 +71,12 @@ class ADBHelper:
             if os.path.isfile(path) and os.access(path, os.X_OK):
                 return path
 
-        # Try to find in PATH
-        try:
-            result = subprocess.run(["which", "adb"], capture_output=True, text=True)
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
-            pass
+        # Try to find in PATH. shutil.which() rather than the `which` binary,
+        # which does not exist on Windows -- and it finds adb.exe there, which
+        # shelling out never would even if the binary had been present.
+        found = shutil.which("adb")
+        if found:
+            return found
 
         raise RuntimeError("ADB not found. Install Android SDK or set adb_path.")
 
@@ -140,7 +143,9 @@ class ADBHelper:
             args.append("-r")
         args.append(apk_path)
 
-        result = self._run_adb(args, timeout=120)
+        # 250MB+ debug APKs regularly exceed 120s on cold emulators — a timeout
+        # here surfaced as a bare "APK installation failed" with no cause.
+        result = self._run_adb(args, timeout=600)
         return "Success" in result.stdout
 
     def uninstall_app(self, package: str) -> bool:
@@ -149,7 +154,16 @@ class ADBHelper:
         return result.returncode == 0
 
     def launch_app(self, package: str, activity: str) -> bool:
-        """Launch an app activity."""
+        """Launch an app activity, after writing the harness run kind (CIRISAgent#1245).
+
+        An ``am start`` extra reaches the Kotlin activity, not the embedded
+        Python, so the run kind travels as the debug property the agent reads.
+        Written before every launch so a stale value from an earlier job on the
+        same device cannot outlive it.
+        """
+        from tools.qa_runner.run_kind import android_setprop_args
+
+        self._run_adb(android_setprop_args())
         result = self._run_adb(["shell", "am", "start", "-n", f"{package}/{activity}"])
         return result.returncode == 0
 
@@ -303,6 +317,129 @@ class ADBHelper:
         result = self._run_adb(["shell", "run-as", package, "ls"])
         return result.returncode == 0
 
+    def shell(self, command: str, timeout: int = 30) -> str:
+        """Run a shell command on the device; return stdout ('' on failure).
+
+        Returns empty string rather than raising, because callers use this to
+        READ device state (config files, properties) where "absent" and
+        "unreadable" warrant the same handling. Callers that need to distinguish
+        a genuine empty value from a failed command must check for the value
+        they expect rather than treating '' as authoritative.
+        """
+        result = self._run_adb(["shell", command], timeout=timeout)
+        return result.stdout if result.returncode == 0 else ""
+
+    def _pull_logs_via_backup(self, output_path: Path, package: str, verbose: bool = True) -> List[str]:
+        """Pull logs via adb backup when run-as is unavailable.
+
+        Requires allowBackup="true" in AndroidManifest (set for debug builds).
+        User must confirm backup on device.
+
+        Args:
+            output_path: Directory to save logs
+            package: Android package name
+            verbose: Print progress messages
+
+        Returns:
+            List of collected file paths
+        """
+        import tempfile
+        import zlib
+
+        files = []
+
+        def log(msg: str):
+            if verbose:
+                print(f"  {msg}")
+
+        try:
+            # Create temp file for backup
+            with tempfile.NamedTemporaryFile(suffix=".ab", delete=False) as tmp:
+                backup_path = tmp.name
+
+            # Run adb backup (user must confirm on device)
+            log("Running adb backup (confirm on device)...")
+            result = self._run_adb(["backup", "-f", backup_path, "-noapk", package], timeout=120)
+
+            # Check if backup succeeded (file should be > 100 bytes)
+            if not os.path.exists(backup_path):
+                log("Backup file not created")
+                return files
+
+            backup_size = os.path.getsize(backup_path)
+            if backup_size < 100:
+                log(f"Backup too small ({backup_size} bytes) - user may have declined")
+                os.unlink(backup_path)
+                return files
+
+            log(f"Backup created: {backup_size} bytes")
+
+            # Extract backup (Android backup format: 24-byte header + zlib compressed tar)
+            log("Extracting backup...")
+            with open(backup_path, "rb") as f:
+                header = f.read(24)
+                compressed_data = f.read()
+
+            try:
+                tar_data = zlib.decompress(compressed_data)
+            except zlib.error as e:
+                log(f"Failed to decompress backup: {e}")
+                os.unlink(backup_path)
+                return files
+
+            # Write tar and extract
+            tar_path = backup_path + ".tar"
+            with open(tar_path, "wb") as f:
+                f.write(tar_data)
+
+            import tarfile
+
+            with tarfile.open(tar_path, "r") as tar:
+                # Find and extract log files
+                logs_path = output_path / "logs"
+                logs_path.mkdir(exist_ok=True)
+
+                for member in tar.getmembers():
+                    if "/ciris/logs/" in member.name and member.isfile():
+                        # Extract to logs directory
+                        basename = os.path.basename(member.name)
+                        f = tar.extractfile(member)
+                        if f:
+                            content = f.read()
+                            file_path = logs_path / basename
+                            with open(file_path, "wb") as out:
+                                out.write(content)
+                            files.append(str(file_path))
+                            log(f"logs/{basename}")
+
+                # Also extract .env if present
+                for member in tar.getmembers():
+                    if member.name.endswith("/.env") and member.isfile():
+                        f = tar.extractfile(member)
+                        if f:
+                            content = f.read().decode("utf-8", errors="replace")
+                            # Redact sensitive tokens
+                            content = re.sub(
+                                r'(CIRIS_BILLING_GOOGLE_ID_TOKEN=")[^"]{20,}(")', r"\1[REDACTED]\2", content
+                            )
+                            content = re.sub(r'(OPENAI_API_KEY=")[^"]{20,}(")', r"\1[REDACTED]\2", content)
+                            env_path = output_path / "env_file.txt"
+                            with open(env_path, "w") as out:
+                                out.write(content)
+                            files.append(str(env_path))
+                            log("env_file.txt (tokens redacted)")
+                        break
+
+            # Cleanup temp files
+            os.unlink(backup_path)
+            os.unlink(tar_path)
+
+        except Exception as e:
+            if verbose:
+                print(f"[WARN] Backup extraction failed: {e}")
+
+        return files
+
     def pull_device_logs(self, output_dir: str, package: str = "ai.ciris.mobile", verbose: bool = True) -> dict:
         """
         Pull comprehensive logs and files from device.
@@ -349,7 +486,7 @@ class ADBHelper:
             if can_run_as:
                 print("[INFO] Debug build detected - full file access available")
             else:
-                print("[WARN] Release build detected - limited file access (logcat only)")
+                print("[WARN] run-as unavailable (Samsung bug?) - will use API fallback")
 
         # 1. App Info
         log("Collecting app info...")
@@ -393,7 +530,8 @@ class ADBHelper:
         results["files"].append(str(logcat_crashes))
         log("logcat_crashes.txt")
 
-        # Logcat - App logs (CIRISApp, MainActivity, EnvFileUpdater, etc.)
+        # Logcat - App logs (CIRISApp, MainActivity, ViewModels, etc.)
+        # Include all ViewModels and key app components
         logcat_app = output_path / "logcat_app.txt"
         result = self._run_adb(
             [
@@ -401,13 +539,38 @@ class ADBHelper:
                 "-d",
                 "-v",
                 "time",
+                # Core app components
                 "CIRISApp:*",
                 "MainActivity:*",
                 "EnvFileUpdater:*",
                 "TokenManager:*",
                 "FirstRunDetector:*",
-                "BillingViewModel:*",
                 "PythonRuntime:*",
+                # API client
+                "CIRISApiClient:*",
+                # All ViewModels
+                "AdaptersViewModel:*",
+                "AuditViewModel:*",
+                "BillingViewModel:*",
+                "ConfigViewModel:*",
+                "ConsentViewModel:*",
+                "GraphMemoryViewModel:*",
+                "InteractViewModel:*",
+                "LogsViewModel:*",
+                "MemoryViewModel:*",
+                "RuntimeViewModel:*",
+                "SchedulerViewModel:*",
+                "ServicesViewModel:*",
+                "SessionsViewModel:*",
+                "SettingsViewModel:*",
+                "SetupViewModel:*",
+                "StartupViewModel:*",
+                "TrustViewModel:*",
+                "TicketsViewModel:*",
+                # Localization
+                "LocalizationManager:*",
+                "LocalizationResourceLoader:*",
+                "LocalizedString:*",
                 "*:S",
             ]
         )
@@ -416,7 +579,7 @@ class ADBHelper:
         results["files"].append(str(logcat_app))
         log("logcat_app.txt")
 
-        # Logcat - Combined
+        # Logcat - Combined (app + python + web)
         logcat_combined = output_path / "logcat_combined.txt"
         result = self._run_adb(
             [
@@ -424,11 +587,21 @@ class ADBHelper:
                 "-d",
                 "-v",
                 "time",
+                # Core app
                 "CIRISApp:*",
                 "MainActivity:*",
                 "EnvFileUpdater:*",
+                "TokenManager:*",
+                "CIRISApiClient:*",
+                # Key ViewModels (subset for combined)
+                "SettingsViewModel:*",
+                "SetupViewModel:*",
+                "InteractViewModel:*",
+                "BillingViewModel:*",
+                # Python
                 "python.stdout:*",
                 "python.stderr:*",
+                # Web
                 "chromium:*",
                 "WebViewFactory:*",
                 "*:S",
@@ -446,7 +619,16 @@ class ADBHelper:
             logs_path = output_path / "logs"
             logs_path.mkdir(exist_ok=True)
 
-            for log_file in ["latest.log", "incidents_latest.log", "ciris.log"]:
+            # Include the RUST tracing logs (ciris-server.log*) — the compose /
+            # keyring / edge diagnostics live there, and their absence from
+            # pulls is how the 2.9.7 compose-hang stayed dark. Glob on-device
+            # since the dated filename changes daily.
+            rust_ls = self._run_adb(
+                ["shell", "run-as", package, "sh", "-c", f"ls {logs_dir}/ciris-server.log* 2>/dev/null"]
+            )
+            rust_logs = [line.strip().split("/")[-1] for line in (rust_ls.stdout or "").splitlines() if line.strip()]
+
+            for log_file in ["latest.log", "incidents_latest.log", "ciris.log", *rust_logs]:
                 result = self._run_adb(["shell", "run-as", package, "cat", f"{logs_dir}/{log_file}"])
                 if result.returncode == 0 and result.stdout.strip():
                     file_path = logs_path / log_file
@@ -523,6 +705,16 @@ class ADBHelper:
                     f.write(result.stdout)
                 results["files"].append(str(file_list_path))
                 log("file_listing.txt")
+
+        else:
+            # Fallback: Use adb backup (works on Samsung devices where run-as is broken)
+            # Requires allowBackup="true" in debug manifest and user confirmation on device
+            log("Attempting adb backup fallback (approve on device if prompted)...")
+            backup_files = self._pull_logs_via_backup(output_path, package, verbose=verbose)
+            results["files"].extend(backup_files)
+
+            if not backup_files:
+                log("adb backup failed - only logcat available")
 
         if verbose:
             print(f"\n[SUCCESS] Logs saved to: {output_path}")

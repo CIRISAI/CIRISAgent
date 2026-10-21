@@ -9,6 +9,8 @@ from typing import List, Optional, Protocol
 
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
+    AuthorizationDecision,
+    AuthorizationDenialReason,
     DeferralApprovalContext,
     DeferralRequest,
     DeferralResponse,
@@ -26,8 +28,45 @@ class WiseAuthorityServiceProtocol(ServiceProtocol, Protocol):
 
     @abstractmethod
     async def check_authorization(self, wa_id: str, action: str, resource: Optional[str] = None) -> bool:
-        """Check if a WA is authorized for an action on a resource."""
+        """Check if a WA is authorized for an action on a resource.
+
+        Boolean face of :meth:`authorize`. Kept because it is the signature
+        every adapter implements.
+        """
         ...
+
+    async def authorize(self, wa_id: str, action: str, resource: Optional[str] = None) -> AuthorizationDecision:
+        """Authorize a WA for an action on a resource, WITH the reasoning.
+
+        The decision face of :meth:`check_authorization`. Callers that must
+        tell a human *why* they were refused cannot do it from a bool: the
+        API's jurisdiction gate needs ``required_scope`` and ``reason`` to say
+        "you may not resolve a MEDICAL deferral, you need
+        resolve_deferrals:medical" instead of a bare 403.
+
+        NOT abstract, deliberately. Wise authority is a multi-provider bus, and
+        not every provider authorizes by CIRIS scope strings — the Discord
+        adapter decides by guild role and has no ``held_scopes`` to report.
+        Demanding a scope-shaped answer from it would either break it outright
+        or invite a fabricated one. So the default derives an honest, coarse
+        decision from :meth:`check_authorization` and reports
+        ``scope_enforced=False``, which is precisely what that field is for:
+        this rests on the role gate alone. Providers that DO enforce scope
+        (WiseAuthorityService) override this with the scope-aware version.
+        """
+        allowed = await self.check_authorization(wa_id, action, resource)
+        return AuthorizationDecision(
+            allowed=allowed,
+            reason=None if allowed else AuthorizationDenialReason.ROLE_FORBIDS_ACTION,
+            message=(
+                f"{'Permitted' if allowed else 'Refused'} by {type(self).__name__} role gate; "
+                "this provider does not enforce resource scope."
+            ),
+            wa_id=wa_id,
+            action=action,
+            resource=resource,
+            scope_enforced=False,
+        )
 
     @abstractmethod
     async def request_approval(self, action: str, context: DeferralApprovalContext) -> bool:

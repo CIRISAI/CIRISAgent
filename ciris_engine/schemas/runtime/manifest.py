@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+import logging
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
@@ -31,7 +32,7 @@ class ServiceCapabilityDeclaration(BaseModel):
     version: str = Field(default="1.0.0", description="Capability version")
     parameters: Optional[Dict[str, str]] = Field(None, description="Parameter descriptions")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceDependency(BaseModel):
@@ -42,7 +43,7 @@ class ServiceDependency(BaseModel):
     minimum_version: Optional[str] = Field(None, description="Minimum service version required")
     capabilities_required: List[str] = Field(default_factory=list, description="Required capabilities")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceDeclaration(BaseModel):
@@ -53,7 +54,7 @@ class ServiceDeclaration(BaseModel):
     priority: ServicePriority = Field(ServicePriority.NORMAL, description="Service priority level")
     capabilities: List[str] = Field(default_factory=list, description="List of capability names")
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, defer_build=True)
 
 
 class ModuleInfo(BaseModel):
@@ -73,8 +74,10 @@ class ModuleInfo(BaseModel):
     auto_load: bool = Field(True, description="Whether to auto-load this module")
     opt_in_required: bool = Field(False, description="Whether explicit opt-in is required")
     requires_consent: bool = Field(False, description="Whether user consent is required for data collection")
+    # UI visibility - internal adapters should not appear in Add Adapter dialog
+    internal_only: bool = Field(False, description="If True, adapter is hidden from UI and cannot be manually loaded")
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True, defer_build=True)
 
 
 class LegacyDependencies(BaseModel):
@@ -85,7 +88,7 @@ class LegacyDependencies(BaseModel):
     external: Optional[Dict[str, str]] = Field(None, description="External package dependencies")
     internal: Optional[List[str]] = Field(None, description="Internal module dependencies")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConfigurationParameter(BaseModel):
@@ -99,7 +102,7 @@ class ConfigurationParameter(BaseModel):
     required: bool = Field(True, description="Whether this parameter is required")
     enum: Optional[List[str]] = Field(None, description="Allowed values for string parameters")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AdapterOAuthConfig(BaseModel):
@@ -119,15 +122,35 @@ class AdapterOAuthConfig(BaseModel):
     scopes: List[str] = Field(default_factory=list, description="OAuth scopes to request")
     pkce_required: bool = Field(True, description="Whether PKCE is required for this OAuth flow")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class AdapterDeviceAuthConfig(BaseModel):
+    """Device authorization (RFC 8628) configuration for adapter workflows.
+
+    Used for CIRISNode and similar adapters that use device code flow
+    instead of redirect-based OAuth.
+    """
+
+    provider_name: str = Field(..., description="Device auth provider name (e.g., 'CIRISPortal')")
+    device_authorize_path: str = Field("/api/device/authorize", description="Device authorization endpoint path")
+    device_token_path: str = Field("/api/device/token", description="Device token polling endpoint path")
+    poll_interval: int = Field(5, description="Seconds between poll attempts")
+    expires_in: int = Field(900, description="Device code expiration in seconds")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConfigurationFieldDefinition(BaseModel):
     """Definition of a field within an input step."""
 
-    # Field identification - supports both 'name' and 'field_id' patterns
-    name: Optional[str] = Field(None, description="Field name (alternative to field_id)")
-    field_id: Optional[str] = Field(None, description="Field identifier (alternative to name)")
+    # ONE KEY FOR THE FIELD'S IDENTITY. This carried `name` AND `field_id` as
+    # alternatives, both optional, so a field could have neither -- and 15 of
+    # 58 fields in the tree used one spelling while 43 used the other. Two
+    # spellings of one fact is how a reader ends up matching on the wrong one.
+    # `name` is required; `field_id` retires (migrated by
+    # tools/dev/migrate_interactive_config.py). CIRISClient#39.
+    name: str = Field(..., description="Field name -- the key this field writes")
     label: Optional[str] = Field(None, description="Human-readable label for the field")
 
     # Field type and input
@@ -146,15 +169,45 @@ class ConfigurationFieldDefinition(BaseModel):
 
     # Conditional display
     depends_on: Optional[Dict[str, Any]] = Field(None, description="Conditional display based on other fields")
+    # DECLARED BECAUSE THEY ARE USED. `options` is read by the client's
+    # ConfigFieldData; `sensitive` and `readonly` are written by manifests. With
+    # extra="allow" an undeclared key validates silently, and silence is how
+    # `field_id`, `field_name` and `optional` drifted in. The manifest lint
+    # rejects any key not declared here.
+    options: Optional[List[Any]] = Field(None, description="Static choices for a select-style field")
+    sensitive: bool = Field(False, description="Value is a secret: mask it, never log it")
+    readonly: bool = Field(False, description="Shown but not editable")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional field-specific properties
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional field-specific properties
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_field_id(cls, data: Any) -> Any:
+        """Read the retired spelling; never write it.
+
+        The tree uses one spelling (`name`, enforced by the manifest lint), but
+        an out-of-tree adapter authored against the pre-#1154 schema still says
+        `field_id`. Rejecting it here would make `discover_services()` drop that
+        adapter with one error line at boot -- a silent removal from the
+        operator's point of view. Normalise on the way in and say so, so the
+        adapter keeps working and its author learns the spelling changed.
+        """
+        if isinstance(data, dict) and "name" not in data and "field_id" in data:
+            data = dict(data)
+            data["name"] = data.pop("field_id")
+            logging.getLogger(__name__).warning(
+                "interactive_config field %r uses the retired key `field_id`; read as `name`. "
+                "Run tools/dev/migrate_interactive_config.py on this manifest (CIRISClient#39).",
+                data["name"],
+            )
+        return data
 
 
 class ConfigurationStep(BaseModel):
     """A step in an adapter configuration workflow."""
 
     step_id: str = Field(..., description="Unique identifier for this step")
-    step_type: Literal["discovery", "oauth", "select", "input", "confirm"] = Field(
+    step_type: Literal["discovery", "oauth", "device_auth", "select", "input", "confirm"] = Field(
         ..., description="Type of configuration step"
     )
     title: str = Field(..., description="Human-readable step title")
@@ -168,6 +221,11 @@ class ConfigurationStep(BaseModel):
     # OAuth step fields
     oauth_config: Optional[AdapterOAuthConfig] = Field(None, description="OAuth configuration for oauth steps")
 
+    # Device auth step fields (RFC 8628)
+    device_auth_config: Optional[AdapterDeviceAuthConfig] = Field(
+        None, description="Device authorization configuration for device_auth steps"
+    )
+
     # Select step fields
     options_method: Optional[str] = Field(
         None, description="Method name to call for retrieving options in select steps"
@@ -180,30 +238,63 @@ class ConfigurationStep(BaseModel):
     )
     dynamic_fields: bool = Field(False, description="Whether fields are dynamically generated")
 
-    # Input step fields - simple single field (alternative to 'fields' list)
-    field: Optional[str] = Field(None, description="Single field name (simple input)")
-    field_name: Optional[str] = Field(None, description="Configuration field name for input/select steps")
+    # CONTENTS ARE ALWAYS `fields`. Three keys used to name what a step
+    # collects: `fields` (a list), `field_name` (one name, on select steps)
+    # and `field` (declared, used by nothing). A single field is a list of
+    # one, and a select step's output is a field like any other. `field` and
+    # `field_name` retire; the migration rewrites `field_name: x` as
+    # `fields: [{name: x}]`. CIRISClient#39.
     input_type: Optional[str] = Field(None, description="Input type (text, password, number)")
     placeholder: Optional[str] = Field(None, description="Placeholder text")
 
-    # Step requirements and flow control
+    # ONE AXIS, ONE KEY. This carried `required` AND `optional`, both
+    # defaulting to False, so a step with neither was "not required and not
+    # optional" -- a third state the schema permitted and no reader could act
+    # on. One step in the tree carried both. `optional` retires; absent means
+    # not required, and that is the only thing absence can mean. CIRISClient#39.
     required: bool = Field(False, description="Whether this step is required")
-    optional: bool = Field(False, description="Whether this step/field is optional")
     default: Optional[Any] = Field(None, description="Default value for the field")
     validation: Optional[Dict[str, Any]] = Field(None, description="Validation rules (e.g., min, max, pattern)")
 
-    # Dependencies - supports both list of step_ids and conditional dict
-    depends_on: Optional[Union[List[str], Dict[str, Any]]] = Field(
-        None, description="Step dependencies - list of step_ids or conditional dict"
+    # TWO CONCEPTS, TWO KEYS, EACH ONE SHAPE. `depends_on` is ORDERING: the
+    # step ids that must complete first. `condition` is DISPLAY: a predicate
+    # on a collected value. external_data_sql uses both on one step and
+    # means both. What drifted was `depends_on` also admitting a dict that
+    # nothing wrote -- one key, two shapes. It is a list now.
+    depends_on: Optional[List[str]] = Field(
+        None, description="Step ids that must complete before this one"
     )
     condition: Optional[Dict[str, Any]] = Field(
-        None, description="Condition for showing this step (e.g., {field: 'x', equals: 'y'})"
+        None, description="Predicate on a collected value for showing this step (e.g., {field: 'x', equals: 'y'})"
     )
 
     # Confirm step fields
     action: Optional[str] = Field(None, description="Action to perform on confirm (e.g., 'test_connection')")
 
-    model_config = ConfigDict(extra="allow")  # Allow additional step-specific properties
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional step-specific properties
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_legacy_optional(cls, data: Any) -> Any:
+        """Read the retired `optional` spelling as the inverse of `required`; never write it.
+
+        With `extra="allow"` an out-of-tree `optional: false` step validated
+        silently while `required` kept its default (False) -- a step the author
+        marked mandatory became skippable, and the wizard accepted an empty
+        selection for it. `required` wins when both are present.
+        """
+        if isinstance(data, dict) and "optional" in data:
+            data = dict(data)
+            legacy = data.pop("optional")
+            if "required" not in data:
+                data["required"] = not bool(legacy)
+            logging.getLogger(__name__).warning(
+                "interactive_config step %r uses the retired key `optional`; read as required=%s. "
+                "Run tools/dev/migrate_interactive_config.py on this manifest (CIRISClient#39).",
+                data.get("step_id"),
+                data.get("required"),
+            )
+        return data
 
 
 class InteractiveConfiguration(BaseModel):
@@ -220,7 +311,7 @@ class InteractiveConfiguration(BaseModel):
     steps: List[ConfigurationStep] = Field(default_factory=list, description="Ordered list of configuration steps")
     completion_method: str = Field("apply_config", description="Method name to call when configuration is complete")
 
-    model_config = ConfigDict(extra="allow")  # Allow reference/documentation fields
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow reference/documentation fields
 
 
 class ServiceManifest(BaseModel):
@@ -247,8 +338,11 @@ class ServiceManifest(BaseModel):
     platform_requirements_rationale: Optional[str] = Field(
         None, description="Explanation of why platform requirements are needed"
     )
+    cli_dependencies: List[str] = Field(
+        default_factory=list, description="Required CLI tools/binaries (e.g., 'tmux', 'mcporter')"
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     def validate_manifest(self) -> List[str]:
         """Validate manifest consistency.
@@ -293,7 +387,7 @@ class ServiceMetadata(BaseModel):
     priority: ServicePriority = Field(ServicePriority.NORMAL, description="Service priority")
     health_status: str = Field("unknown", description="Current health status")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ModuleLoadResult(BaseModel):
@@ -305,7 +399,7 @@ class ModuleLoadResult(BaseModel):
     errors: List[str] = Field(default_factory=list, description="Any errors encountered")
     warnings: List[str] = Field(default_factory=list, description="Any warnings generated")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ServiceRegistration(BaseModel):
@@ -318,4 +412,4 @@ class ServiceRegistration(BaseModel):
     metadata: ServiceMetadata = Field(..., description="Service metadata")
     registered_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)

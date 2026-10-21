@@ -1,0 +1,270 @@
+{
+  "_meta": {
+    "purpose": "Crisis-resource corpus for locale 'en'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
+    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
+    "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
+  },
+  "locale": "en",
+  "needs_verified_entries": false,
+  "verification_notes": "Base corpus. US/UK/global entries carried from the builtin registry; Ethiopia emergency entries verified May 2026 (see per-entry notes).",
+  "disclaimer": "DISCLAIMER: I am an AI moderator, not a healthcare provider. The following\nis general information only, not medical advice or crisis intervention:\n\nThis information is provided as-is without warranty. CIRIS L3C is not a\nhealthcare provider and does not endorse these resources. Please seek\nqualified professional help.",
+  "resources": {
+    "findahelpline": {
+      "id": "findahelpline",
+      "name": "Find a Helpline",
+      "type": "directory",
+      "url": "https://findahelpline.com/",
+      "phone": null,
+      "text_number": null,
+      "search_term": null,
+      "description": "International directory of crisis helplines",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en",
+        "es",
+        "fr",
+        "de",
+        "it",
+        "pt",
+        "ru",
+        "zh",
+        "ja",
+        "ko"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "URL verified reachable (HTTP 200) 2026-08-02 at corpus cut (CIRISAgent#971).",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "iasp": {
+      "id": "iasp",
+      "name": "IASP Crisis Centers",
+      "type": "directory",
+      "url": "https://iasp.info/resources/Crisis_Centres",
+      "phone": null,
+      "text_number": null,
+      "search_term": null,
+      "description": "International Association for Suicide Prevention resource directory",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "URL redirects to the https://www.iasp.info/ homepage as of 2026-08-02 — the /resources/Crisis_Centres path is stale. Kept byte-identical at the corpus cut; see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "crisis_text_line": {
+      "id": "crisis_text_line",
+      "name": "Crisis Text Line",
+      "type": "text_line",
+      "url": "https://www.crisistextline.org/",
+      "phone": null,
+      "text_number": "741741",
+      "search_term": null,
+      "description": "24/7 text-based crisis support (US, UK, Canada)",
+      "availability": [
+        "us",
+        "uk",
+        "ca"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "Carried from the builtin registry at corpus cut (2.9.9). URL verified reachable (HTTP 200) 2026-08-02; short code 741741 not re-verified at cut.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "988_lifeline": {
+      "id": "988_lifeline",
+      "name": "988 Suicide & Crisis Lifeline",
+      "type": "hotline",
+      "url": "https://988lifeline.org/",
+      "phone": "988",
+      "text_number": null,
+      "search_term": null,
+      "description": "24/7 suicide prevention and crisis support (US)",
+      "availability": [
+        "us"
+      ],
+      "languages": [
+        "en",
+        "es"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "Carried from the builtin registry at corpus cut (2.9.9). 988 is the US national 3-digit lifeline code. 988lifeline.org returned HTTP 403 to the automated check 2026-08-02 (bot filter) — loads normally in a browser.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "samaritans": {
+      "id": "samaritans",
+      "name": "Samaritans",
+      "type": "hotline",
+      "url": "https://www.samaritans.org/",
+      "phone": "116 123",
+      "text_number": null,
+      "search_term": null,
+      "description": "24/7 emotional support (UK and Ireland)",
+      "availability": [
+        "uk"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "Carried from the builtin registry at corpus cut (2.9.9). URL verified reachable (HTTP 200) 2026-08-02; 116 123 not re-verified at cut.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "local_search": {
+      "id": "local_search",
+      "name": "Local Crisis Services",
+      "type": "search_term",
+      "url": null,
+      "phone": null,
+      "text_number": null,
+      "search_term": "crisis hotline [your location]",
+      "description": "Search for crisis services in your area",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "Search-term resource; nothing to verify.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "emergency_services": {
+      "id": "emergency_services",
+      "name": "Emergency Services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "For immediate danger or medical emergency",
+      "availability": [
+        "us",
+        "ca"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "911 is the North American emergency number.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "ethiopia_police": {
+      "id": "ethiopia_police",
+      "name": "Ethiopia Federal Police",
+      "type": "emergency",
+      "url": null,
+      "phone": "991",
+      "text_number": null,
+      "search_term": null,
+      "description": "Federal Police emergency line (Ethiopia)",
+      "availability": [
+        "et"
+      ],
+      "languages": [
+        "am",
+        "en"
+      ],
+      "last_validated": "2026-05-01T00:00:00Z",
+      "validation_notes": "Verified May 2026 against gorebet.com, addisababa.embassy.qa and en.wikipedia.org/wiki/List_of_emergency_telephone_numbers.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "ethiopia_ambulance": {
+      "id": "ethiopia_ambulance",
+      "name": "Ethiopia Ambulance (Addis Ababa Red Cross)",
+      "type": "emergency",
+      "url": null,
+      "phone": "907",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance service — primary route for medical/psychiatric emergencies in Addis Ababa",
+      "availability": [
+        "et"
+      ],
+      "languages": [
+        "am",
+        "en"
+      ],
+      "last_validated": "2026-05-01T00:00:00Z",
+      "validation_notes": "Verified May 2026 against gorebet.com, addisababa.embassy.qa and en.wikipedia.org/wiki/List_of_emergency_telephone_numbers.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "ethiopia_fire": {
+      "id": "ethiopia_fire",
+      "name": "Ethiopia Fire Brigade",
+      "type": "emergency",
+      "url": null,
+      "phone": "939",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire brigade emergency line (Ethiopia; some regions also use 912)",
+      "availability": [
+        "et"
+      ],
+      "languages": [
+        "am",
+        "en"
+      ],
+      "last_validated": "2026-05-01T00:00:00Z",
+      "validation_notes": "Verified May 2026 against gorebet.com, addisababa.embassy.qa and en.wikipedia.org/wiki/List_of_emergency_telephone_numbers.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    }
+  }
+}

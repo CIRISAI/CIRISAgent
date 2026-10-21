@@ -13,19 +13,22 @@ This is a semantic/LLM-based implementation - no hardware dependencies.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.dma.prompts import PromptCollection
 
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils import COVENANT_TEXT
+from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.base import IDMAProtocol
 from ciris_engine.schemas.dma.results import IDMAResult
 from ciris_engine.schemas.runtime.models import ImageContent
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
-from .prompt_loader import get_prompt_loader
+from .prompt_loader import DMAPromptLoader, get_prompt_loader
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +62,28 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             **kwargs,
         )
 
-        # Load prompts from YAML file
-        self.prompt_loader = get_prompt_loader()
-        self.prompt_template_data = self.prompt_loader.load_prompt_template("idma")
+        # Do NOT cache template - language may change at runtime
+        self._prompt_template_name = "idma"
 
-        # Store last user prompt for debugging/streaming
+        # Store last prompts for debugging/streaming
         self.last_user_prompt: Optional[str] = None
+        self.last_system_prompt: Optional[str] = None
+
+        # Per-thought language override populated from user_profiles in
+        # _extract_context_data. None means fall back to env var.
+        self._explicit_language: Optional[str] = None
 
         logger.info(f"IDMAEvaluator initialized with model: {self.model_name}")
+
+    @property
+    def prompt_loader(self) -> DMAPromptLoader:
+        """Get prompt loader for the thread's currently-active language."""
+        return get_prompt_loader(language=self._explicit_language)
+
+    @property
+    def prompt_template_data(self) -> "PromptCollection":
+        """Load prompt template fresh each time to respect language changes."""
+        return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
     def _create_idma_messages(
         self,
@@ -80,9 +97,18 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         """Assemble prompt messages for IDMA evaluation."""
         messages: List[JSONDict] = []
 
-        # Add covenant if configured
-        if self.prompt_loader.uses_covenant_header(self.prompt_template_data):
-            messages.append({"role": "system", "content": COVENANT_TEXT})
+        # Add accord based on mode (centralized in get_accord_text)
+        accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
+        accord_text = get_accord_text(accord_mode)
+        if accord_text:
+            messages.append({"role": "system", "content": accord_text})
+        # Per-language guidance — empty for most languages, populated for
+        # locales where systematic terminology gaps were observed (am as
+        # of 2.7.6). See ciris_engine.logic.utils.localization.get_language_guidance.
+        from ciris_engine.logic.utils.localization import get_language_guidance
+        _lang_guidance = get_language_guidance(self.prompt_loader.language)
+        if _lang_guidance:
+            messages.append({"role": "system", "content": _lang_guidance})
 
         # Get system message from prompt template
         system_message = self.prompt_loader.get_system_message(
@@ -119,27 +145,82 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
 
         return messages
 
+    def compose_messages(
+        self,
+        thought_content: str,
+        context_summary: str,
+        task_context_str: str,
+        system_snapshot_str: str,
+        user_profiles_str: str,
+        prior_dma_context: str,
+        images: Optional[List[ImageContent]] = None,
+    ) -> List[JSONDict]:
+        """Compose the full IDMA prompt message list from gathered inputs (#972).
+
+        Pure prompt composition - no LLM call, no data fetching. All awaited
+        data gathering (task fetch, context extraction, prior-DMA formatting)
+        happens in ``evaluate_thought()`` before this is called.
+        """
+        # Prepend task context to system snapshot
+        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
+        combined_snapshot_block = task_context_block + system_snapshot_str + user_profiles_str
+
+        return self._create_idma_messages(
+            thought_content,
+            context_summary,
+            system_snapshot_block=combined_snapshot_block,
+            user_profiles_block="",
+            prior_dma_context=prior_dma_context,
+            images=images,
+        )
+
+    def _sync_language_from_context(self, context: Optional[Any]) -> None:
+        """Sync prompt language using the full localization priority chain.
+
+        Walks thought/task preferred_language → user_profile.preferred_language →
+        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
+        """
+        from ciris_engine.logic.utils.localization import (
+            get_preferred_language,
+            get_user_language_from_context,
+        )
+
+        new_language = (
+            get_user_language_from_context(context) if context is not None else get_preferred_language()
+        )
+        if new_language != self._explicit_language:
+            self._explicit_language = new_language
+            logger.debug(f"IDMA: Synced prompt language to {new_language}")
+
     def _extract_context_data(self, context: Optional[Any]) -> tuple[str, str, str]:
-        """Extract context strings from context object."""
+        """Extract context strings from context object.
+
+        Also syncs user's language preference to the DMA prompt loader.
+        """
         system_snapshot_str = ""
         user_profiles_str = ""
         context_summary = "CIRIS AI Agent - evaluating information diversity"
 
         if not context:
+            self._sync_language_from_context(None)
             return system_snapshot_str, user_profiles_str, context_summary
 
+        user_profiles = None
         if hasattr(context, "system_snapshot") and context.system_snapshot:
             system_snapshot_str = format_system_snapshot(context.system_snapshot)
             if hasattr(context.system_snapshot, "user_profiles") and context.system_snapshot.user_profiles:
-                user_profiles_str = format_user_profiles(context.system_snapshot.user_profiles)
+                user_profiles = context.system_snapshot.user_profiles
+                user_profiles_str = format_user_profiles(user_profiles)
 
             agent_identity = getattr(context.system_snapshot, "agent_identity", None)
             if agent_identity:
                 agent_id = getattr(agent_identity, "agent_id", "Unknown")
                 context_summary = f"{agent_id} - evaluating information diversity and source independence"
         elif hasattr(context, "user_profiles") and context.user_profiles:
-            user_profiles_str = format_user_profiles(context.user_profiles)
+            user_profiles = context.user_profiles
+            user_profiles_str = format_user_profiles(user_profiles)
 
+        self._sync_language_from_context(context)
         return system_snapshot_str, user_profiles_str, context_summary
 
     def _build_prior_dma_context(
@@ -152,11 +233,34 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         context_parts = []
 
         if ethical_result:
+            # PDMA v3.2: schema reshaped from 6 prose fields to flat
+            # {action, rationale, weight_alignment_score, ethical_alignment_score}.
+            # Stakeholders / conflicts / principle-grounding now live IMPLICITLY
+            # inside `rationale` per the §IX output contract; the two scores
+            # carry the felt-torque signal that the old `alignment_check` field
+            # used to gesture at. Surface all of it so IDMA's downstream
+            # fragility/correlation assessment sees the same ethical context
+            # density it had under the old schema.
+            recommended = getattr(ethical_result, "action", None)
+            if recommended is None:
+                recommended_str = "N/A"
+            elif hasattr(recommended, "value"):
+                recommended_str = recommended.value
+            else:
+                recommended_str = str(recommended)
+            w_score = getattr(ethical_result, "weight_alignment_score", None)
+            e_score = getattr(ethical_result, "ethical_alignment_score", None)
+            torque = (w_score - e_score) if (w_score is not None and e_score is not None) else None
             context_parts.append(
                 f"=== Ethical PDMA Analysis ===\n"
-                f"Stakeholders: {getattr(ethical_result, 'stakeholders', 'N/A')}\n"
-                f"Conflicts: {getattr(ethical_result, 'conflicts', 'N/A')}\n"
-                f"Reasoning: {getattr(ethical_result, 'reasoning', 'N/A')}"
+                f"Recommended action: {recommended_str}\n"
+                f"Weight alignment (training-pull): "
+                f"{w_score if w_score is not None else 'N/A'}\n"
+                f"Ethical alignment (framework-pull): "
+                f"{e_score if e_score is not None else 'N/A'}\n"
+                f"Felt torque (weight − ethical): "
+                f"{f'{torque:+.2f}' if torque is not None else 'N/A'}\n"
+                f"Rationale: {getattr(ethical_result, 'rationale', 'N/A')}"
             )
 
         if csdma_result:
@@ -200,23 +304,23 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         # Build prior DMA context for analysis
         prior_dma_context = self._build_prior_dma_context(ethical_result, csdma_result, dsdma_result)
 
-        # Prepend task context to system snapshot
-        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
-        combined_snapshot_block = task_context_block + system_snapshot_str + user_profiles_str
-
         # Get images from thought item
         thought_images = getattr(thought_item, "images", []) or []
 
-        messages = self._create_idma_messages(
+        # Compose messages via the extracted seam (#972)
+        messages = self.compose_messages(
             thought_content_str,
             context_summary,
-            system_snapshot_block=combined_snapshot_block,
-            user_profiles_block="",
-            prior_dma_context=prior_dma_context,
+            task_context_str,
+            system_snapshot_str,
+            user_profiles_str,
+            prior_dma_context,
             images=thought_images,
         )
 
-        # Store user prompt for streaming/debugging
+        # Store prompts for streaming/debugging
+        system_messages = [m for m in messages if m.get("role") == "system"]
+        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
         user_messages = [m for m in messages if m.get("role") == "user"]
         content = user_messages[-1]["content"] if user_messages else None
         self.last_user_prompt = str(content) if content is not None else None
@@ -231,7 +335,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             result_tuple = await self.call_llm_structured(
                 messages=messages,
                 response_model=IDMAResult,
-                max_tokens=4096,
+                max_tokens=8192,
                 temperature=0.0,
                 thought_id=thought_item.thought_id,
                 task_id=thought_item.source_task_id,

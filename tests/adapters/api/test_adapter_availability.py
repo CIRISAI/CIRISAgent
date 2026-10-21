@@ -27,20 +27,21 @@ class TestAdapterAvailabilityRoutes:
 
     def test_available_adapters_with_auth(self, client, auth_headers):
         """Test available adapters endpoint with valid auth."""
+        from ciris_engine.schemas.adapters.discovery import AdapterDiscoveryReport
+
         # Mock the discovery service at the source module
         with patch(DISCOVERY_SERVICE_PATCH) as mock_discovery_class:
             mock_discovery = Mock()
             mock_discovery_class.return_value = mock_discovery
 
-            # Create mock discovery report
-            mock_report = Mock()
-            mock_report.model_dump.return_value = {
-                "discovered_adapters": ["mcp_client", "mcp_server"],
-                "eligible_adapters": ["mcp_client"],
-                "ineligible_adapters": ["mcp_server"],
-                "total_discovered": 2,
-                "total_eligible": 1,
-            }
+            # Create a real AdapterDiscoveryReport instance
+            mock_report = AdapterDiscoveryReport(
+                eligible=[],
+                ineligible=[],
+                total_discovered=2,
+                total_eligible=1,
+                total_installable=1,
+            )
             mock_discovery.get_discovery_report = AsyncMock(return_value=mock_report)
 
             response = client.get("/v1/system/adapters/available", headers=auth_headers)
@@ -239,42 +240,42 @@ class TestAdapterAvailabilityHelpers:
 
     def test_check_platform_requirements_empty(self):
         """Test platform check with empty requirements."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _check_platform_requirements_satisfied
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import check_platform_requirements_satisfied
 
         # Empty requirements should always be satisfied
-        assert _check_platform_requirements_satisfied([]) is True
+        assert check_platform_requirements_satisfied([]) is True
 
     def test_should_filter_adapter_mock(self):
         """Test filtering logic for mock adapters."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _should_filter_adapter
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import should_filter_adapter
 
         manifest = {"module": {"MOCK": True}, "services": [{"type": "TOOL"}]}
-        assert _should_filter_adapter(manifest) is True
+        assert should_filter_adapter(manifest) is True
 
     def test_should_filter_adapter_library(self):
         """Test filtering logic for library modules."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _should_filter_adapter
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import should_filter_adapter
 
         manifest = {"module": {}, "metadata": {"type": "library"}, "services": [{"type": "TOOL"}]}
-        assert _should_filter_adapter(manifest) is True
+        assert should_filter_adapter(manifest) is True
 
     def test_should_filter_adapter_no_services(self):
         """Test filtering logic for modules with no services."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _should_filter_adapter
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import should_filter_adapter
 
         manifest = {"module": {}, "services": []}
-        assert _should_filter_adapter(manifest) is True
+        assert should_filter_adapter(manifest) is True
 
     def test_should_filter_adapter_common_module(self):
         """Test filtering logic for common modules."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _should_filter_adapter
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import should_filter_adapter
 
         manifest = {"module": {"name": "mcp_common"}, "services": [{"type": "TOOL"}]}
-        assert _should_filter_adapter(manifest) is True
+        assert should_filter_adapter(manifest) is True
 
     def test_should_not_filter_valid_adapter(self):
         """Test that valid adapters are not filtered."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _should_filter_adapter
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import should_filter_adapter
 
         manifest = {
             "module": {"name": "mcp_client", "MOCK": False},
@@ -282,11 +283,11 @@ class TestAdapterAvailabilityHelpers:
             "metadata": {},
         }
         # When not filtering by platform, this should pass
-        assert _should_filter_adapter(manifest, filter_by_platform=False) is False
+        assert should_filter_adapter(manifest, filter_by_platform=False) is False
 
     def test_extract_service_types(self):
         """Test extraction of service types from manifest."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _extract_service_types
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import extract_service_types
 
         manifest = {
             "services": [
@@ -295,12 +296,12 @@ class TestAdapterAvailabilityHelpers:
                 {"type": "TOOL"},  # Duplicate
             ]
         }
-        types = _extract_service_types(manifest)
+        types = extract_service_types(manifest)
         assert types == ["TOOL", "COMMUNICATION"]
 
     def test_parse_config_parameters(self):
         """Test parsing of configuration parameters from manifest."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _parse_config_parameters
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import parse_config_parameters
 
         manifest = {
             "configuration": {
@@ -313,7 +314,7 @@ class TestAdapterAvailabilityHelpers:
                 "timeout": {"type": "integer", "default": 30, "description": "Timeout in seconds"},
             }
         }
-        params = _parse_config_parameters(manifest)
+        params = parse_config_parameters(manifest)
         assert len(params) == 2
 
         api_key_param = next(p for p in params if p.name == "api_key")
@@ -327,9 +328,9 @@ class TestAdapterAvailabilityHelpers:
 
     def test_get_core_adapter_info_api(self):
         """Test getting core adapter info for API adapter."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _get_core_adapter_info
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import get_core_adapter_info
 
-        info = _get_core_adapter_info("api")
+        info = get_core_adapter_info("api")
         assert info.module_id == "api"
         assert info.name == "API Adapter"
         assert "REST API" in info.description
@@ -337,18 +338,18 @@ class TestAdapterAvailabilityHelpers:
 
     def test_get_core_adapter_info_discord(self):
         """Test getting core adapter info for Discord adapter."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _get_core_adapter_info
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import get_core_adapter_info
 
-        info = _get_core_adapter_info("discord")
+        info = get_core_adapter_info("discord")
         assert info.module_id == "discord"
         assert info.requires_external_deps is True
         assert "discord.py" in info.external_dependencies
 
     def test_get_core_adapter_info_unknown(self):
         """Test getting core adapter info for unknown adapter."""
-        from ciris_engine.logic.adapters.api.routes.system.adapters import _get_core_adapter_info
+        from ciris_engine.logic.adapters.api.routes._adapter_discovery import get_core_adapter_info
 
-        info = _get_core_adapter_info("unknown_adapter")
+        info = get_core_adapter_info("unknown_adapter")
         assert info.module_id == "unknown_adapter"
         # Should still return valid info with defaults
         assert info.name == "Unknown_Adapter"

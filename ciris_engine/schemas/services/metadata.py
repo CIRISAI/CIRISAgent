@@ -40,4 +40,4 @@ class ServiceMetadata(BaseModel):
     stepping_enabled: Optional[bool] = Field(None, description="Whether pipeline stepping is enabled")
     queue_depth: Optional[int] = Field(None, description="Current processor queue depth")
 
-    model_config = ConfigDict(extra="forbid")  # No arbitrary fields allowed
+    model_config = ConfigDict(extra="forbid", defer_build=True)  # No arbitrary fields allowed

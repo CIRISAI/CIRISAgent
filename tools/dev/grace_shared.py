@@ -114,7 +114,6 @@ def get_debugging_guidance() -> str:
 
 3. Root Cause Analysis (RCA) Mode:
    • Preserve the crime scene - don't clean up immediately
-   • Use debug_tools.py to explore
    • Trace the full flow before changes
    • Test incrementally with small steps
    • Question assumptions about the design

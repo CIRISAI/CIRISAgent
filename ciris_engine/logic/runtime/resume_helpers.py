@@ -181,6 +181,274 @@ async def auto_enable_android_adapters_for_resume(runtime: Any) -> None:
                 logger.warning(f"[RESUME] Failed to auto-enable Android adapters on {adapter.__class__.__name__}: {e}")
 
 
+async def auto_enable_environment_adapters_for_resume(runtime: Any) -> None:
+    """Auto-enable adapters based on detected runtime environment.
+
+    This is the centralized entry point for environment-based adapter enabling.
+    Currently supports:
+
+    1. Home Assistant Addon Mode (SUPERVISOR_TOKEN present):
+       - Auto-enables home_assistant adapter with supervisor authentication
+       - No OAuth required, uses HA's automatic token injection
+
+    2. Android Platform (CIRIS_ANDROID + Google Auth):
+       - Delegated to auto_enable_android_adapters_for_resume()
+
+    Called during runtime resume after core services are initialized.
+    """
+    import os
+
+    # Check for HA addon mode (SUPERVISOR_TOKEN present)
+    if os.getenv("SUPERVISOR_TOKEN"):
+        await _auto_enable_ha_addon_adapter(runtime)
+
+    # Android-specific adapters (delegated to existing logic)
+    await auto_enable_android_adapters_for_resume(runtime)
+
+
+async def _auto_enable_ha_addon_adapter(runtime: Any) -> None:
+    """Auto-enable Home Assistant adapter when running as HA addon.
+
+    When SUPERVISOR_TOKEN is present (injected by HA Supervisor),
+    the home_assistant adapter can be auto-enabled with automatic
+    authentication - no OAuth flow required.
+    """
+    import os
+
+    supervisor_token = os.getenv("SUPERVISOR_TOKEN")
+    if not supervisor_token:
+        return
+
+    # Check if home_assistant adapter is already loaded
+    loaded_adapter_types = set()
+    for adapter in runtime.adapters:
+        adapter_type = getattr(adapter, "adapter_type", None)
+        if adapter_type:
+            loaded_adapter_types.add(str(adapter_type).lower())
+        class_name = adapter.__class__.__name__.lower()
+        if "homeassistant" in class_name or "home_assistant" in class_name:
+            loaded_adapter_types.add("home_assistant")
+
+    if "home_assistant" in loaded_adapter_types:
+        logger.debug("[AUTO_ENABLE] home_assistant adapter already loaded, skipping")
+        return
+
+    logger.info("[AUTO_ENABLE] HA addon mode detected (SUPERVISOR_TOKEN present) - enabling home_assistant adapter")
+
+    try:
+        # Use runtime_control_service to load the adapter properly
+        runtime_control = getattr(runtime, "runtime_control_service", None)
+        if not runtime_control:
+            logger.warning("[AUTO_ENABLE] No runtime_control_service available for adapter loading")
+            return
+
+        result = await runtime_control.load_adapter(
+            adapter_type="home_assistant",
+            adapter_id="home_assistant_auto",
+            config={
+                "supervisor_mode": True,
+                "auto_enabled": True,
+            },
+        )
+
+        if result.success:
+            logger.info(f"[AUTO_ENABLE] Successfully auto-enabled home_assistant adapter (id: {result.adapter_id})")
+
+            # Persist to CIRIS_ADAPTER env for next restart
+            existing = os.environ.get("CIRIS_ADAPTER", "")
+            if "home_assistant" not in existing:
+                new_adapters = f"{existing},home_assistant" if existing else "home_assistant"
+                os.environ["CIRIS_ADAPTER"] = new_adapters
+                logger.info(f"[AUTO_ENABLE] Updated CIRIS_ADAPTER: {new_adapters}")
+
+                # Try to persist to .env file
+                await _persist_adapter_to_env("home_assistant")
+        else:
+            logger.warning(f"[AUTO_ENABLE] Failed to enable home_assistant adapter: {result.error}")
+    except Exception as e:
+        logger.warning(f"[AUTO_ENABLE] Error enabling home_assistant adapter: {e}")
+
+
+async def _persist_adapter_to_env(adapter_type: str) -> None:
+    """Persist adapter to .env file for next restart."""
+    try:
+        from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+        env_path = get_env_file_path()
+        if env_path and env_path.exists():
+            content = env_path.read_text()
+            lines = content.split("\n")
+            found_line = False
+            modified = False
+
+            for i, line in enumerate(lines):
+                if line.startswith("CIRIS_ADAPTER="):
+                    found_line = True
+                    existing = line.split("=", 1)[1].strip().strip('"')
+                    if adapter_type not in existing:
+                        new_value = f"{existing},{adapter_type}" if existing else adapter_type
+                        lines[i] = f'CIRIS_ADAPTER="{new_value}"'
+                        modified = True
+                    # else: adapter already present, nothing to do
+                    break
+
+            if not found_line:
+                # Add new CIRIS_ADAPTER line only if no existing line was found
+                lines.append(f'CIRIS_ADAPTER="{adapter_type}"')
+                modified = True
+
+            if modified:
+                env_path.write_text("\n".join(lines))
+                logger.info(f"[AUTO_ENABLE] Persisted {adapter_type} to .env file")
+            else:
+                logger.debug(f"[AUTO_ENABLE] {adapter_type} already in CIRIS_ADAPTER, no change needed")
+    except Exception as e:
+        logger.debug(f"[AUTO_ENABLE] Could not persist {adapter_type} to .env: {e}")
+
+
+# Bootstrap adapters that are always loaded at startup (before setup wizard).
+# ciris_accord_metrics joined in 2.9.6 (#866): the observability spine is
+# required like verify; the accord-traces opt-in is a CEG wire artifact
+# (consent:community_trust:v1 grant), not an adapter-load decision.
+# (persist + edge are required substrate RUNTIMES, not adapters — they
+# block boot in persistence init / init_edge_runtime respectively.)
+BOOTSTRAP_ADAPTERS = {"api", "cli", "ciris_verify", "ciris_accord_metrics"}
+
+
+async def _persist_adapter_to_graph(runtime: Any, adapter_type: str, adapter_config: Any) -> None:
+    """Persist adapter config to graph so it loads on subsequent restarts.
+
+    Uses the same key pattern as RuntimeAdapterManager: adapter.{adapter_id}.*
+    """
+    from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+    config_service = getattr(runtime, "config_service", None)
+    if not config_service:
+        logger.warning(f"[RESUME] No config_service - cannot persist adapter {adapter_type} to graph")
+        return
+
+    try:
+        occurrence_id = get_current_occurrence_id()
+        adapter_id = adapter_type  # Use adapter_type as ID for simplicity
+
+        # Save adapter config to graph (same pattern as RuntimeAdapterManager)
+        await config_service.set_config(f"adapter.{adapter_id}.type", adapter_type)
+        await config_service.set_config(f"adapter.{adapter_id}.config", adapter_config.model_dump_json())
+        await config_service.set_config(f"adapter.{adapter_id}.occurrence_id", occurrence_id)
+        await config_service.set_config(f"adapter.{adapter_id}.persist", True)
+
+        logger.info(f"[RESUME] Persisted adapter {adapter_type} to graph (occurrence={occurrence_id})")
+    except Exception as e:
+        logger.warning(f"[RESUME] Failed to persist adapter {adapter_type} to graph: {e}")
+
+
+async def load_post_setup_adapters_for_resume(
+    runtime: Any, log_step: Callable[[int, int, str], None], total_steps: int
+) -> None:
+    """Load adapters that were enabled during setup wizard.
+
+    This loads adapters that require setup to complete first, such as:
+    - cirisnode: Requires Portal registration and signing key provisioning
+
+    Bootstrap adapters (api, cli, ciris_verify) are already loaded and skipped.
+
+    Args:
+        runtime: The CIRISRuntime instance
+        log_step: Logging callback
+        total_steps: Total steps for progress logging
+    """
+    import os
+
+    from ciris_engine.logic.adapters import load_adapter
+    from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+    from ciris_engine.schemas.config.essential import EssentialConfig
+    from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+    # Get enabled adapters from environment (set during setup as CIRIS_ADAPTER)
+    enabled_adapters_str = os.environ.get("CIRIS_ADAPTER", "")
+    if not enabled_adapters_str:
+        log_step(12, total_steps, "No CIRIS_ADAPTER configured - skipping post-setup adapter loading")
+        return
+
+    enabled_adapters = [a.strip() for a in enabled_adapters_str.split(",") if a.strip()]
+    log_step(12, total_steps, f"Enabled adapters from config: {enabled_adapters}")
+
+    # Get currently loaded adapter types
+    loaded_adapter_types = set()
+    for adapter in runtime.adapters:
+        adapter_type = getattr(adapter, "adapter_type", None)
+        if adapter_type:
+            loaded_adapter_types.add(str(adapter_type).lower())
+        # Also check class name
+        class_name = adapter.__class__.__name__.lower()
+        if "api" in class_name:
+            loaded_adapter_types.add("api")
+        if "cli" in class_name:
+            loaded_adapter_types.add("cli")
+        if "verify" in class_name:
+            loaded_adapter_types.add("ciris_verify")
+
+    log_step(12, total_steps, f"Already loaded adapters: {loaded_adapter_types}")
+
+    # Filter to adapters that need loading (not bootstrap, not already loaded)
+    adapters_to_load = [
+        a for a in enabled_adapters if a.lower() not in BOOTSTRAP_ADAPTERS and a.lower() not in loaded_adapter_types
+    ]
+
+    if not adapters_to_load:
+        log_step(12, total_steps, "All enabled adapters already loaded - nothing to do")
+        return
+
+    log_step(12, total_steps, f"Loading post-setup adapters: {adapters_to_load}")
+
+    # Create startup context for adapters
+    context = AdapterStartupContext(
+        essential_config=runtime.essential_config or EssentialConfig(),
+        modules_to_load=runtime.modules_to_load,
+        startup_channel_id=runtime.startup_channel_id or "",
+        debug=runtime.debug,
+        bus_manager=runtime.bus_manager,
+        time_service=runtime.time_service,
+        service_registry=runtime.service_registry,
+    )
+
+    for adapter_type in adapters_to_load:
+        try:
+            adapter_class = load_adapter(adapter_type)
+
+            # Get adapter-specific config from environment - MUST set persist=True
+            adapter_config = AdapterConfig(adapter_type=adapter_type, persist=True)
+
+            # Create and register adapter
+            adapter_instance = adapter_class(runtime, context=context, adapter_config=adapter_config.settings)  # type: ignore[call-arg]
+            runtime.adapters.append(adapter_instance)
+
+            # Register adapter services with buses
+            if hasattr(adapter_instance, "get_services_to_register"):
+                services_to_register = adapter_instance.get_services_to_register()
+                for service_reg in services_to_register:
+                    if runtime.service_registry:
+                        runtime.service_registry.register_service(
+                            service_reg.service_type, service_reg.provider, service_reg.priority
+                        )
+                        logger.info(
+                            f"[RESUME] Registered {adapter_type} service: "
+                            f"{service_reg.service_type} (priority={service_reg.priority})"
+                        )
+
+            # Start the adapter
+            if hasattr(adapter_instance, "start"):
+                await adapter_instance.start()
+
+            # Persist to graph so it loads on subsequent restarts
+            await _persist_adapter_to_graph(runtime, adapter_type, adapter_config)
+
+            logger.info(f"[RESUME] Successfully loaded and started post-setup adapter: {adapter_type}")
+
+        except Exception as e:
+            logger.error(f"[RESUME] Failed to load post-setup adapter '{adapter_type}': {e}", exc_info=True)
+
+
 def _ensure_config(runtime: Any) -> "EssentialConfig":
     """Ensure essential_config is available, raise if not."""
     if not runtime.essential_config:

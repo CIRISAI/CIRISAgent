@@ -18,6 +18,9 @@ from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 
+# Import VerifyAttestationContext for unified attestation/disclosure
+from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
 # Import CircuitBreakerState directly for runtime validation
 from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 from ciris_engine.schemas.types import JSONDict
@@ -121,6 +124,11 @@ class SystemSnapshot(BaseModel):
         default_factory=list, description="CRITICAL resource alerts that require immediate attention"
     )
 
+    # Constitutional halt (CC 4.2.1.1): informational only, after a resume.
+    accord_pause_notice: Optional[str] = Field(
+        None, description="One informational line after a constitutional halt ended. Asks for no action."
+    )
+
     # User profiles (used by context builder)
     user_profiles: List["UserProfile"] = Field(default_factory=list, description="User profile information")
 
@@ -154,7 +162,28 @@ class SystemSnapshot(BaseModel):
         description="Results from tools marked with context_enrichment=True, keyed by adapter_type:tool_name",
     )
 
-    model_config = ConfigDict(extra="forbid")  # Be strict about fields to catch misuse
+    # CIRISVerify attestation context - MUST be included in all LLM contexts
+    # Per FSD-001: This disclosure MUST be visible in agent processing context
+    # Full attestation state with key signature/storage info
+    verify_attestation: Optional["VerifyAttestationContext"] = Field(
+        None, description="Full CIRISVerify attestation context with disclosure, key info, and status"
+    )
+
+    # Legacy fields (kept for backwards compatibility, populated from verify_attestation)
+    license_disclosure_text: Optional[str] = Field(
+        None, description="[DEPRECATED] Use verify_attestation.disclosure_text"
+    )
+    license_disclosure_severity: Optional[str] = Field(
+        None, description="[DEPRECATED] Use verify_attestation.disclosure_severity"
+    )
+    attestation_summary: Optional[str] = Field(
+        None, description="[DEPRECATED] Use verify_attestation.attestation_summary"
+    )
+
+    # Wallet status - provides financial context for the agent
+    wallet_summary: Optional[str] = Field(None, description="Wallet status summary (balance, limits, provider)")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)  # Be strict about fields to catch misuse
 
 
 class TaskSummary(BaseModel):
@@ -180,7 +209,7 @@ class TaskSummary(BaseModel):
     result_data: Optional[Dict[str, str]] = Field(None, description="Structured result data")
     error: Optional[str] = Field(None, description="Error if failed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtState(BaseModel):
@@ -208,7 +237,7 @@ class ThoughtState(BaseModel):
     # Decision
     selected_action: Optional[str] = Field(None, description="Action selected")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class UserProfile(BaseModel):
@@ -255,7 +284,7 @@ class UserProfile(BaseModel):
     # Additional context
     notes: Optional[str] = Field(None, description="Additional notes or context about the user")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ChannelContext(BaseModel):
@@ -288,7 +317,7 @@ class ChannelContext(BaseModel):
     def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditVerification(BaseModel):
@@ -304,7 +333,7 @@ class AuditVerification(BaseModel):
     issues: List[str] = Field(default_factory=list, description="Issues found during verification")
     missing_entries: List[str] = Field(default_factory=list, description="Missing entry IDs")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtSummary(BaseModel):
@@ -317,7 +346,7 @@ class ThoughtSummary(BaseModel):
     thought_type: Optional[str] = Field(None, description="Type of thought")
     thought_depth: Optional[int] = Field(None, description="Processing depth")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class TelemetrySummary(BaseModel):
@@ -370,7 +399,7 @@ class TelemetrySummary(BaseModel):
     def serialize_datetimes(self, dt: datetime, _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ContinuitySummary(BaseModel):
@@ -403,7 +432,7 @@ class ContinuitySummary(BaseModel):
     def serialize_datetimes(self, dt: Optional[datetime], _info: Any) -> Optional[str]:
         return dt.isoformat() if dt else None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

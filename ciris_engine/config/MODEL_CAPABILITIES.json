@@ -16,8 +16,15 @@
     "preferred_context_window": 256000,
     "max_combined_cost_per_million_cents": 100,
     "min_provider_count": 2,
-    "required_capabilities": ["tool_use", "structured_output"],
-    "recommended_capabilities": ["vision", "json_mode", "streaming"]
+    "required_capabilities": [
+      "tool_use",
+      "structured_output"
+    ],
+    "recommended_capabilities": [
+      "vision",
+      "json_mode",
+      "streaming"
+    ]
   },
   "providers": {
     "openai": {
@@ -198,11 +205,15 @@
             "json_mode": true,
             "streaming": true
           },
-          "underlying_providers": ["groq", "together", "lambda_labs"],
+          "underlying_providers": [
+            "groq",
+            "together",
+            "lambda_labs"
+          ],
           "tier": "default",
           "ciris_compatible": true,
-          "ciris_recommended": true,
-          "notes": "Primary CIRIS model - MoE architecture, multi-provider fallback"
+          "ciris_recommended": false,
+          "notes": "Former primary; still compatible. Superseded as QA default by qwen/qwen3.6-35b-a3b on 2026-09-04."
         },
         "meta-llama/llama-3.3-70b-instruct": {
           "display_name": "Llama 3.3 70B",
@@ -216,7 +227,11 @@
             "json_mode": true,
             "streaming": true
           },
-          "underlying_providers": ["together", "groq", "fireworks"],
+          "underlying_providers": [
+            "together",
+            "groq",
+            "fireworks"
+          ],
           "tier": "fallback",
           "ciris_compatible": true,
           "ciris_recommended": false,
@@ -266,6 +281,48 @@
           "ciris_compatible": true,
           "ciris_recommended": false,
           "notes": "High quality, available via aggregator"
+        },
+        "qwen/qwen3.6-35b-a3b": {
+          "display_name": "Qwen3.6 35B A3B",
+          "architecture": "mixture_of_experts",
+          "active_params": "3B",
+          "context_window": 262144,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "underlying_providers": [
+            "deepinfra"
+          ],
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": true,
+          "notes": "QA default from 2026-09-04. Reasoning must be OFF on the wire (OpenRouter reasoning.enabled=false, which the LLM service already sends); live check returned the EpistemicHumilityResult schema exactly with 0 reasoning tokens."
+        },
+        "meta-llama/llama-4-scout": {
+          "display_name": "Llama 4 Scout",
+          "architecture": "mixture_of_experts",
+          "active_params": "17B",
+          "context_window": 131072,
+          "capabilities": {
+            "tool_use": true,
+            "structured_output": true,
+            "vision": true,
+            "json_mode": true,
+            "streaming": true
+          },
+          "underlying_providers": [
+            "deepinfra",
+            "groq",
+            "together"
+          ],
+          "tier": "default",
+          "ciris_compatible": true,
+          "ciris_recommended": false,
+          "notes": "Supported; not the default since 2026-09-04. Known: on the epistemic-humility conscience it has returned recommended_action=\"speak\" (the evaluated action's name) and omitted required fields -- the conscience now normalizes and retries around this, but qwen/qwen3.6-35b-a3b returned the schema exactly on the same prompt."
         }
       }
     },

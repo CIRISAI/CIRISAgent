@@ -25,7 +25,7 @@ But there is no separate "wa_auth" service.
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
-from ciris_engine.schemas.infrastructure.oauth import OAuthCallbackResponse, OAuthProviderConfig
+from ciris_engine.schemas.infrastructure.oauth import OAuthCallbackResponse, OAuthProviderConfig, OAuthUserProfile
 from ciris_engine.schemas.services.authority.jwt import JWTClaims
 from ciris_engine.schemas.services.authority.wa_updates import WACertificateUpdate
 from ciris_engine.schemas.services.authority_core import AuthorizationContext, WACertificate
@@ -177,7 +177,7 @@ class OAuthService(Protocol):
 
     @abstractmethod
     async def create_oauth_wa(
-        self, provider: str, external_id: str, profile: Dict[str, Any]
+        self, provider: str, external_id: str, profile: OAuthUserProfile
     ) -> Optional[WACertificate]:
         """Create WA certificate from OAuth profile."""
         ...

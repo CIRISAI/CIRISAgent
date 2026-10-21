@@ -1,0 +1,139 @@
+name: "Capture upgrade-compat fixture"
+description: >-
+  Snapshots the agent's three databases (engine, audit, secrets) at the end of
+  a CI run as a "golden artifact" the next major release consumes through its
+  upgrade-bootstrap path. See tools/release/UPGRADE_FIXTURE.md for the contract.
+
+inputs:
+  source-name:
+    description: >-
+      Identifier for this fixture's host workflow (safety | memory-burst |
+      qa-full). Becomes part of the artifact name and the MANIFEST so the
+      consumer matrix can pin specific shapes.
+    required: true
+  scenario-tag:
+    description: >-
+      Optional extra tag baked into the artifact name and MANIFEST — useful when
+      the host workflow has a matrix dimension (e.g. safety-battery's
+      lang/domain/template tuple). Empty by default.
+    required: false
+    default: ""
+  data-dir:
+    description: >-
+      Directory containing ciris_engine.db (+ ciris_audit.db, secrets.db).
+      Defaults to $GITHUB_WORKSPACE/data — which is where all three current
+      host workflows land their DBs (qa_runner sets CIRIS_HOME=project_root,
+      memory_benchmark.py runs with cwd=checkout, safety-battery uses
+      qa_runner). Override only if your workflow puts data elsewhere.
+    required: false
+    default: ""
+
+outputs:
+  artifact-name:
+    description: Name of the uploaded fixture artifact
+    value: ${{ steps.build.outputs.artifact-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Build fixture
+      id: build
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+        SOURCE_NAME="${{ inputs.source-name }}"
+        SCENARIO_TAG="${{ inputs.scenario-tag }}"
+
+        # Use the explicit data-dir input if provided, else the canonical
+        # location all three host workflows use: $GITHUB_WORKSPACE/data.
+        # qa_runner pins CIRIS_HOME=project_root; memory_benchmark.py runs
+        # with cwd=checkout; both land DBs at <checkout>/data/.
+        DATA_DIR="${{ inputs.data-dir }}"
+        if [ -z "$DATA_DIR" ]; then
+          DATA_DIR="$GITHUB_WORKSPACE/data"
+        fi
+
+        echo "[capture] data_dir=$DATA_DIR"
+        if [ ! -d "$DATA_DIR" ]; then
+          echo "::error::Capture failed: data dir $DATA_DIR does not exist."
+          echo "::error::The host workflow must run the agent before invoking this action."
+          exit 1
+        fi
+        ls -la "$DATA_DIR"
+        if [ ! -f "$DATA_DIR/ciris_engine.db" ]; then
+          echo "::error::Capture failed: $DATA_DIR/ciris_engine.db not found."
+          echo "::error::Listing above shows what IS in $DATA_DIR — agent may have used a different path."
+          echo "::error::If your workflow uses a non-standard data dir, pass it via the data-dir input."
+          exit 1
+        fi
+
+        FIXTURE_DIR="/tmp/upgrade-fixture"
+        rm -rf "$FIXTURE_DIR"
+        mkdir -p "$FIXTURE_DIR"
+
+        # Copy every .db file. The agent owns engine + audit + secrets; we
+        # take the whole set so the consumer can exercise full bootstrap.
+        # WAL/SHM sidecars are intentionally NOT copied — they're transient
+        # state and the upgrade-bootstrap forces a checkpoint anyway.
+        copied=0
+        for db in "$DATA_DIR"/*.db; do
+          [ -f "$db" ] || continue
+          cp -v "$db" "$FIXTURE_DIR/"
+          copied=$((copied + 1))
+        done
+        if [ "$copied" -eq 0 ]; then
+          echo "::error::No .db files in $DATA_DIR — nothing to capture."
+          exit 1
+        fi
+
+        # Build MANIFEST.json with version, sha256s, source identifier
+        python3 <<PY
+        import hashlib, json
+        from datetime import datetime, timezone
+        from pathlib import Path
+        fixture_dir = Path("$FIXTURE_DIR")
+        manifest = {
+            "agent_version": "$AGENT_VERSION",
+            "fixture_source": "$SOURCE_NAME",
+            "scenario_tag": "$SCENARIO_TAG",
+            "built_at": datetime.now(timezone.utc).isoformat(),
+            "git_sha": "${{ github.sha }}",
+            "workflow_run": "${{ github.run_id }}",
+            "captured_from": "$DATA_DIR",
+            "artifacts": {},
+        }
+        for db in sorted(fixture_dir.glob("*.db")):
+            h = hashlib.sha256()
+            with db.open("rb") as f:
+                for chunk in iter(lambda: f.read(1 << 16), b""):
+                    h.update(chunk)
+            manifest["artifacts"][db.name] = {
+                "sha256": h.hexdigest(),
+                "bytes": db.stat().st_size,
+            }
+        (fixture_dir / "MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        print(json.dumps(manifest, indent=2))
+        PY
+
+        # Compose artifact name: upgrade-fixture-<version>-<source>[-<tag>]
+        if [ -n "$SCENARIO_TAG" ]; then
+          ARTIFACT_NAME="upgrade-fixture-${AGENT_VERSION}-${SOURCE_NAME}-${SCENARIO_TAG}"
+        else
+          ARTIFACT_NAME="upgrade-fixture-${AGENT_VERSION}-${SOURCE_NAME}"
+        fi
+        # Artifact names can't contain '/' or other path-y chars
+        ARTIFACT_NAME=$(echo "$ARTIFACT_NAME" | tr '/' '-' | tr ' ' '-')
+        echo "artifact-name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+        echo "Artifact: $ARTIFACT_NAME"
+
+    - name: Upload fixture artifact
+      if: steps.build.outputs.artifact-name != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.build.outputs.artifact-name }}
+        path: /tmp/upgrade-fixture/
+        retention-days: 90
+        if-no-files-found: warn
+        overwrite: true

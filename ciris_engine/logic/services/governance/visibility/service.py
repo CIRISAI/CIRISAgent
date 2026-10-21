@@ -83,7 +83,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         # Note: This gets the most recent active task, as the processor's current task
         # is not directly accessible from here
         current_task = None
-        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self._db_path)
+        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
         if active_tasks:
             current_task = active_tasks[0]
 
@@ -91,7 +91,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         active_thoughts = []
         try:
             # Get recent pending/active thoughts
-            pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING, db_path=self._db_path)
+            pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING)
             active_thoughts = pending_thoughts[:10]  # Limit to 10 most recent
         except Exception:
             pass
@@ -99,7 +99,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         # Get recent decisions from completed thoughts
         recent_decisions: List[Thought] = []
         try:
-            completed_thoughts = get_thoughts_by_status(ThoughtStatus.COMPLETED, db_path=self._db_path)
+            completed_thoughts = get_thoughts_by_status(ThoughtStatus.COMPLETED)
             # Get the most recent thoughts that have final_action (which they all should)
             for thought in completed_thoughts[:10]:  # Get last 10
                 if thought.final_action:
@@ -153,7 +153,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         tasks = []
 
         # First try to get completed tasks
-        completed_tasks = get_tasks_by_status(TaskStatus.COMPLETED, db_path=self._db_path)
+        completed_tasks = get_tasks_by_status(TaskStatus.COMPLETED)
         if completed_tasks:
             # Sort by updated_at timestamp (most recent first)
             completed_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
@@ -161,7 +161,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         # If we need more tasks, add active ones
         if len(tasks) < limit:
-            active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self._db_path)
+            active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
             if active_tasks:
                 active_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
                 remaining = limit - len(tasks)
@@ -169,7 +169,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         # If still need more, add failed tasks
         if len(tasks) < limit:
-            failed_tasks = get_tasks_by_status(TaskStatus.FAILED, db_path=self._db_path)
+            failed_tasks = get_tasks_by_status(TaskStatus.FAILED)
             if failed_tasks:
                 failed_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
                 remaining = limit - len(tasks)
@@ -177,7 +177,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
 
         # If still need more, add pending
         if len(tasks) < limit:
-            pending_tasks = get_tasks_by_status(TaskStatus.PENDING, db_path=self._db_path)
+            pending_tasks = get_tasks_by_status(TaskStatus.PENDING)
             if pending_tasks:
                 pending_tasks.sort(key=lambda t: t.updated_at if t.updated_at else t.created_at, reverse=True)
                 remaining = limit - len(tasks)
@@ -191,7 +191,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         from ciris_engine.schemas.services.visibility import ThoughtStep
 
         # Get the task from persistence
-        task = get_task_by_id(task_id, db_path=self._db_path)
+        task = get_task_by_id(task_id)
         if not task:
             # Return empty trace if task not found
             return ReasoningTrace(
@@ -216,7 +216,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         actions_taken = []
 
         try:
-            thoughts = get_thoughts_by_task_id(task_id, db_path=self._db_path)
+            thoughts = get_thoughts_by_task_id(task_id)
 
             for thought in thoughts:
                 try:
@@ -291,7 +291,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         from ciris_engine.schemas.services.visibility import DecisionRecord
 
         # Get the task from persistence
-        task = get_task_by_id(task_id, db_path=self._db_path)
+        task = get_task_by_id(task_id)
         task_description = "Unknown task"
         created_at = self._now()
 
@@ -304,7 +304,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         successful_decisions = 0
 
         try:
-            thoughts = get_thoughts_by_task_id(task_id, db_path=self._db_path)
+            thoughts = get_thoughts_by_task_id(task_id)
 
             for thought in thoughts:
                 try:
@@ -371,7 +371,7 @@ class VisibilityService(BaseService, VisibilityServiceProtocol):
         # Action ID is typically the thought_id that decided on the action
         try:
             # Get the thought from persistence
-            thought = get_thought_by_id(action_id, db_path=self._db_path)
+            thought = get_thought_by_id(action_id)
 
             if thought:
                 if thought.final_action:

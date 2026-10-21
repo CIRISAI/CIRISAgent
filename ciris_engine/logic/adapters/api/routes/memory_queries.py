@@ -6,10 +6,9 @@ Extracted from memory.py to improve modularity and testability.
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ciris_engine.logic.persistence.db.core import get_db_connection
 from ciris_engine.logic.utils.jsondict_helpers import get_dict
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
@@ -53,10 +52,8 @@ async def query_timeline_nodes(
     Returns:
         List of GraphNode objects
     """
-    # Get database path
+    # db_path retained for signature compat; persist owns the connection.
     db_path = DatabaseExecutor.get_db_path(memory_service)
-    if not db_path:
-        return []
 
     # Calculate time range
     start_time, end_time = TimeRangeCalculator.calculate_range(hours)
@@ -65,8 +62,8 @@ async def query_timeline_nodes(
         f"[TIMELINE-QUERY] Time range: start={start_time.isoformat()}, end={end_time.isoformat()}, hours={hours}"
     )
 
-    # Build query with all filters (including user filtering for OBSERVER users)
-    query, params = QueryBuilder.build_timeline_query(
+    # Build persist NodeFilter + client-side post-options.
+    node_filter, post_options = QueryBuilder.build_timeline_query(
         start_time=start_time,
         end_time=end_time,
         scope=scope,
@@ -76,22 +73,20 @@ async def query_timeline_nodes(
         user_filter_ids=user_filter_ids,
     )
 
-    # Execute query and get rows
-    rows = DatabaseExecutor.execute_query(db_path, query, params)
+    # Execute via persist substrate.
+    rows = DatabaseExecutor.execute_query(db_path, node_filter, post_options)
 
-    # Build GraphNode objects from rows
+    # Build GraphNode objects from persist rows.
     return GraphNodeBuilder.build_from_rows(rows)
 
 
-async def get_memory_stats(memory_service: Any) -> JSONDict:
-    """
-    Get statistics about memory storage.
+async def get_memory_stats() -> JSONDict:
+    """Get statistics about memory storage.
 
-    Args:
-        memory_service: Memory service instance
-
-    Returns:
-        Dictionary with memory statistics
+    Post-A1 absorption (CIRISAgent#763, CIRISPersist#65): counts are
+    aggregated via persist's `cirisgraph_count_*` substrate. Recent-
+    activity buckets use `cirisgraph_query_nodes` with `updated_after`
+    filter (#62) so we don't paginate the full graph just to count.
     """
     stats: JSONDict = {
         "total_nodes": 0,
@@ -103,57 +98,75 @@ async def get_memory_stats(memory_service: Any) -> JSONDict:
     }
 
     try:
-        db_path = getattr(memory_service, "db_path", None)
-        if not db_path:
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
             return stats
 
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
+        # Sum totals + by-type counts across every scope. Persist's
+        # `cirisgraph_count_nodes` requires a scope filter; we sum across
+        # all known scopes.
+        scopes = ("LOCAL", "COMMUNITY", "IDENTITY", "ENVIRONMENT")
+        nodes_by_type = get_dict(stats, "nodes_by_type", {})
+        nodes_by_scope = get_dict(stats, "nodes_by_scope", {})
 
-            # Total nodes
-            cursor.execute("SELECT COUNT(*) FROM graph_nodes")
-            stats["total_nodes"] = cursor.fetchone()[0]
+        total_nodes = 0
+        total_edges = 0
+        for scope in scopes:
+            n_nodes = int(engine.cirisgraph_count_nodes(json.dumps({"scope": scope})))
+            n_edges = int(engine.cirisgraph_count_edges(scope))
+            total_nodes += n_nodes
+            total_edges += n_edges
+            if n_nodes:
+                nodes_by_scope[scope] = n_nodes
+            # By type within scope
+            raw = engine.cirisgraph_count_nodes_by_type(scope)
+            per_type = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or {})
+            for ntype, count in per_type.items():
+                prior = nodes_by_type.get(ntype, 0)
+                prior_int = int(prior) if isinstance(prior, (int, str, float)) else 0
+                nodes_by_type[ntype] = prior_int + int(count)
 
-            # Total edges
-            cursor.execute("SELECT COUNT(*) FROM graph_edges")
-            stats["total_edges"] = cursor.fetchone()[0]
+        stats["total_nodes"] = total_nodes
+        stats["total_edges"] = total_edges
 
-            # Nodes by type
-            nodes_by_type = get_dict(stats, "nodes_by_type", {})
-            cursor.execute("SELECT node_type, COUNT(*) FROM graph_nodes GROUP BY node_type")
-            for row in cursor.fetchall():
-                nodes_by_type[row[0]] = row[1]
-
-            # Nodes by scope
-            nodes_by_scope = get_dict(stats, "nodes_by_scope", {})
-            cursor.execute("SELECT scope, COUNT(*) FROM graph_nodes GROUP BY scope")
-            for row in cursor.fetchall():
-                nodes_by_scope[row[0]] = row[1]
-
-            # Recent activity (last 24 hours)
-            recent_activity = get_dict(stats, "recent_activity", {})
-            now = datetime.now()
-            yesterday = now - timedelta(days=1)
-
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            placeholder = get_adapter().placeholder()
-
-            cursor.execute(
-                f"SELECT COUNT(*) FROM graph_nodes WHERE updated_at >= {placeholder}", (yesterday.isoformat(),)
+        # Recent activity: count nodes/edges updated in the last 24h via
+        # the updated_after filter (CIRISPersist#62 / #65). Sum across scopes.
+        # Persist's NodeFilter decoder requires a timezone-aware ISO 8601
+        # string; naive `datetime.now().isoformat()` parses to "premature
+        # end of input at column 64" and the integration silently returns 0.
+        now = datetime.now(timezone.utc)
+        yesterday = (now - timedelta(days=1)).isoformat()
+        recent_activity = get_dict(stats, "recent_activity", {})
+        recent_nodes = 0
+        for scope in scopes:
+            recent_nodes += int(
+                engine.cirisgraph_count_nodes(
+                    json.dumps({"scope": scope, "updated_after": yesterday})
+                )
             )
-            recent_activity["nodes_24h"] = cursor.fetchone()[0]
+        recent_activity["nodes_24h"] = recent_nodes
+        # Persist's `cirisgraph_count_edges` is scope-only (no time filter
+        # in 1.6.0); recent edges fall back to 0 until upstream adds the
+        # time-windowed counter.
+        recent_activity["edges_24h"] = 0
 
-            cursor.execute(
-                f"SELECT COUNT(*) FROM graph_edges WHERE created_at >= {placeholder}", (yesterday.isoformat(),)
-            )
-            recent_activity["edges_24h"] = cursor.fetchone()[0]
-
-            # Storage size
+        # Storage size: best-effort against the engine DSN. Persist owns
+        # the file; if the agent can resolve a SQLite path on disk, size
+        # it; otherwise skip (Postgres deployments don't have a file).
+        try:
             import os
 
-            if os.path.exists(db_path):
-                stats["storage_size_mb"] = os.path.getsize(db_path) / (1024 * 1024)
+            from ciris_engine.logic.persistence import get_sqlite_db_full_path
+
+            sqlite_path = get_sqlite_db_full_path()
+            if isinstance(sqlite_path, str) and os.path.exists(sqlite_path):
+                stats["storage_size_mb"] = os.path.getsize(sqlite_path) / (1024 * 1024)
+        except Exception as e:
+            # storage_size_mb is best-effort cosmetic stat — leave it at 0.0
+            # if the DB path can't be resolved/stat'd (e.g. Postgres).
+            logger.debug("storage size calculation skipped: %s", e)
 
     except Exception as e:
         logger.error(f"Failed to get memory stats: {e}")
@@ -191,13 +204,11 @@ async def search_nodes(
     Returns:
         List of matching GraphNode objects
     """
-    # Get database path
+    # db_path retained for signature compat; persist owns the connection.
     db_path = DatabaseExecutor.get_db_path(memory_service)
-    if not db_path:
-        return []
 
-    # Build search query with all filters (including user filtering for OBSERVER users)
-    sql_query, params = QueryBuilder.build_search_query(
+    # Build persist NodeFilter + client-side post-options.
+    node_filter, post_options = QueryBuilder.build_search_query(
         query=query,
         node_type=node_type,
         scope=scope,
@@ -209,10 +220,10 @@ async def search_nodes(
         user_filter_ids=user_filter_ids,
     )
 
-    # Execute query and get rows
-    rows = DatabaseExecutor.execute_query(db_path, sql_query, params)
+    # Execute via persist substrate.
+    rows = DatabaseExecutor.execute_query(db_path, node_filter, post_options)
 
-    # Build GraphNode objects from rows
+    # Build GraphNode objects from persist rows.
     return GraphNodeBuilder.build_from_rows(rows)
 
 

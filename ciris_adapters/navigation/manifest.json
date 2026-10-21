@@ -32,23 +32,39 @@
         "step_type": "input",
         "title": "Configure User Agent",
         "description": "Enter a user agent for OpenStreetMap API requests (required by OSM policy)",
-        "field": "user_agent",
         "required": true,
-        "placeholder": "CIRIS/1.0 (your.email@example.com)",
-        "validation": {
-          "min_length": 10,
-          "pattern": ".*"
-        }
+        "fields": [
+          {
+            "name": "user_agent",
+            "label": "User Agent String",
+            "type": "string",
+            "required": true,
+            "default": "CIRIS/1.0 (your.email@example.com)",
+            "description": "Include app name and contact email per OSM policy"
+          }
+        ]
       },
       {
         "step_id": "rate_limit",
-        "step_type": "select",
+        "step_type": "input",
         "title": "Configure Rate Limiting",
         "description": "Select how long to wait between API requests (OSM recommends 1+ seconds)",
-        "field": "rate_limit_seconds",
         "required": false,
-        "optional": true,
-        "options_method": "get_config_options"
+        "fields": [
+          {
+            "name": "rate_limit_seconds",
+            "label": "Rate Limit (seconds)",
+            "type": "select",
+            "required": false,
+            "default": "1.0",
+            "description": "Minimum delay between API requests",
+            "options": [
+              {"value": "0.5", "label": "0.5 seconds", "description": "Faster but may be rate limited"},
+              {"value": "1.0", "label": "1 second (Recommended)", "description": "OSM recommended minimum"},
+              {"value": "2.0", "label": "2 seconds", "description": "Conservative, always safe"}
+            ]
+          }
+        ]
       },
       {
         "step_id": "confirm",

@@ -9,7 +9,6 @@ import json
 import logging
 from typing import Optional
 
-from ciris_engine.logic.persistence.db import get_db_connection
 from ciris_engine.logic.persistence.models.graph import add_graph_node, get_graph_node
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.persistence.core import IdentityContext
@@ -20,15 +19,13 @@ from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, Node
 logger = logging.getLogger(__name__)
 
 
-def store_agent_identity(
-    identity: AgentIdentityRoot, time_service: TimeServiceProtocol, db_path: Optional[str] = None
-) -> bool:
+def store_agent_identity(identity: AgentIdentityRoot, time_service: TimeServiceProtocol) -> bool:
     """
     Store agent identity in the graph database.
 
     Args:
         identity: The agent identity to store
-        db_path: Optional database path override
+        time_service: Time service for timestamping the identity node
 
     Returns:
         True if successful, False otherwise
@@ -44,7 +41,7 @@ def store_agent_identity(
         graph_node = identity_node.to_graph_node()
 
         # Store in graph
-        add_graph_node(graph_node, time_service, db_path=db_path)
+        add_graph_node(graph_node, time_service)
         logger.info(f"Stored identity for agent {identity.agent_id}")
         return True
 
@@ -53,12 +50,9 @@ def store_agent_identity(
         return False
 
 
-def retrieve_agent_identity(db_path: Optional[str] = None) -> Optional[AgentIdentityRoot]:
+def retrieve_agent_identity() -> Optional[AgentIdentityRoot]:
     """
     Retrieve agent identity from the graph database.
-
-    Args:
-        db_path: Optional database path override
 
     Returns:
         AgentIdentityRoot if found, None otherwise
@@ -68,7 +62,7 @@ def retrieve_agent_identity(db_path: Optional[str] = None) -> Optional[AgentIden
         from ciris_engine.schemas.services.nodes import IdentityNode
 
         # Get identity node
-        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY, db_path=db_path)
+        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY)
 
         if not graph_node:
             logger.debug("No identity node found in graph")
@@ -89,7 +83,7 @@ def retrieve_agent_identity(db_path: Optional[str] = None) -> Optional[AgentIden
 
 
 def update_agent_identity(
-    identity: AgentIdentityRoot, updated_by: str, time_service: TimeServiceProtocol, db_path: Optional[str] = None
+    identity: AgentIdentityRoot, updated_by: str, time_service: TimeServiceProtocol
 ) -> bool:
     """
     Update agent identity in the graph database.
@@ -100,7 +94,7 @@ def update_agent_identity(
     Args:
         identity: The updated agent identity
         updated_by: WA ID who approved the update
-        db_path: Optional database path override
+        time_service: Time service for timestamping the update
 
     Returns:
         True if successful, False otherwise
@@ -110,7 +104,7 @@ def update_agent_identity(
         from ciris_engine.schemas.services.nodes import IdentityNode
 
         # Get current node to preserve version info
-        current_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY, db_path=db_path)
+        current_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY)
 
         version = 1
         if current_node:
@@ -136,7 +130,7 @@ def update_agent_identity(
             graph_node.attributes.tags.append(f"version:{version}")
 
         # Store updated identity
-        add_graph_node(graph_node, time_service, db_path=db_path)
+        add_graph_node(graph_node, time_service)
         logger.info(f"Updated identity for agent {identity.agent_id} by {updated_by} (version {version})")
         return True
 
@@ -150,7 +144,6 @@ def store_creation_ceremony(
     new_agent_id: str,
     ceremony_id: str,
     time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> bool:
     """
     Store a creation ceremony record in the database.
@@ -159,30 +152,28 @@ def store_creation_ceremony(
         ceremony_request: The creation ceremony request
         new_agent_id: ID of the newly created agent
         ceremony_id: Unique ceremony identifier
-        db_path: Optional database path override
 
     Returns:
         True if successful, False otherwise
+
+    Note (CIRISAgent#763): routes through ciris-persist's `ceremony_record`
+    substrate instead of raw sqlite3 writes to legacy `creation_ceremonies`
+    table.
     """
     try:
-        sql = """
-            INSERT INTO creation_ceremonies (
-                ceremony_id, timestamp, creator_agent_id, creator_human_id,
-                wise_authority_id, new_agent_id, new_agent_name, new_agent_purpose,
-                new_agent_description, creation_justification, expected_capabilities,
-                ethical_considerations, template_profile_hash, ceremony_status
-            ) VALUES (
-                :ceremony_id, :timestamp, :creator_agent_id, :creator_human_id,
-                :wise_authority_id, :new_agent_id, :new_agent_name, :new_agent_purpose,
-                :new_agent_description, :creation_justification, :expected_capabilities,
-                :ethical_considerations, :template_profile_hash, :ceremony_status
-            )
-        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        params = {
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError(
+                "persist engine not initialized — call initialize_database() "
+                "before any ceremony operation"
+            )
+
+        payload = {
             "ceremony_id": ceremony_id,
             "timestamp": time_service.now().isoformat(),
-            "creator_agent_id": "system",  # Or current agent ID if agent-initiated
+            "creator_agent_id": "system",
             "creator_human_id": ceremony_request.human_id,
             "wise_authority_id": ceremony_request.wise_authority_id or ceremony_request.human_id,
             "new_agent_id": new_agent_id,
@@ -192,14 +183,12 @@ def store_creation_ceremony(
             "creation_justification": ceremony_request.creation_justification,
             "expected_capabilities": json.dumps(ceremony_request.expected_capabilities),
             "ethical_considerations": ceremony_request.ethical_considerations,
-            "template_profile_hash": hash(ceremony_request.template_profile),
+            # Persist requires `template_profile_hash` as a string.
+            "template_profile_hash": str(hash(ceremony_request.template_profile)),
             "ceremony_status": "completed",
         }
 
-        with get_db_connection(db_path=db_path) as conn:
-            conn.execute(sql, params)
-            conn.commit()
-
+        engine.ceremony_record(json.dumps(payload))
         logger.info(f"Stored creation ceremony {ceremony_id} for agent {new_agent_id}")
         return True
 
@@ -208,7 +197,7 @@ def store_creation_ceremony(
         return False
 
 
-def get_identity_for_context(db_path: Optional[str] = None) -> IdentityContext:
+def get_identity_for_context() -> IdentityContext:
     """
     Get identity information formatted for use in processing contexts.
 
@@ -221,7 +210,7 @@ def get_identity_for_context(db_path: Optional[str] = None) -> IdentityContext:
         # Import IdentityNode
         from ciris_engine.schemas.services.nodes import IdentityNode
 
-        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY, db_path=db_path)
+        graph_node = get_graph_node(node_id="agent/identity", scope=GraphScope.IDENTITY)
 
         if not graph_node:
             raise RuntimeError(

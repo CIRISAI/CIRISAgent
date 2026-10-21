@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA DEFER বেছে নেওয়ার পরে অধিকারভিত্তিক দ্বিতীয় পর্যায়ের পর্যালোচনা
+
+component_name: dsaspdma
+description: "ডিফারাল-নির্দিষ্ট কর্ম নির্বাচন: DEFER কর্মকে অধিকার/প্রয়োজনের taxonomy অনুযায়ী শ্রেণিবদ্ধ করে"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === অধিকার / প্রয়োজনের শ্রেণিবিন্যাস ===
+  - health_and_bodily_integrity: জীবন, স্বাস্থ্য, শারীরিক অখণ্ডতা, প্রতিবন্ধিতা, চিকিৎসা নিরাপত্তা, অস্ত্রায়ন, বিপজ্জনক উপাদান বা সরাসরি শারীরিক ক্ষতির ইঙ্গিতের জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: বাসস্থান, আশ্রয়, ঘরের নিরাপত্তা, খাদ্য, পানি, স্যানিটেশন, জ্বালানি, অবকাঠামো এবং অন্যান্য মৌলিক জীবনযাত্রার শর্তের জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: কাজ, আয়, মজুরি, ঋণ, ক্রেডিট, সুবিধা, সামাজিক নিরাপত্তা, বিনিয়োগ, কর বা অন্যান্য জীবিকা ও আর্থিক স্থিতিশীলতার প্রয়োজনের জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: আইনি পরামর্শ, আইনি সহায়তা, যথাযথ প্রক্রিয়া, ন্যায্য বিচার, প্রতিকার প্রাপ্তি, চুক্তি, দায় বা বিচার ব্যবস্থায় প্রবেশাধিকার প্রশ্নের জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: আইনের সামনে স্বীকৃতি, পরিচয় যাচাই, জাতীয়তা, ভোট, নির্বাচন, জন-অংশগ্রহণ বা নাগরিক অবস্থানের জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: গোপনীয়তা, স্বায়ত্তশাসন, মর্যাদা, জবরদস্তি, প্রতারণা, প্রভাবিতকরণ, বায়োমেট্রিক অনুমান বা নজরদারি থেকে সুরক্ষার জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: শিক্ষা, গবেষণা, জ্ঞানে প্রবেশাধিকার, সাংস্কৃতিক অংশগ্রহণ এবং বিজ্ঞানের সুফলের জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: কমিউনিটি মডারেশন, সংকট এস্কেলেশন, প্যাটার্ন শনাক্তকরণ, জননিরাপত্তা, বৈষম্য বা প্রধানত গোষ্ঠীকে প্রভাবিত করা ক্ষতির জন্য ব্যবহার করুন।
+    অধিকারের ভিত্তি: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: ডিফারালটি যখন মূলত অনিশ্চয়তা, নীতি ব্যাখ্যা, কর্তৃত্বের সীমা বা নির্দিষ্ট ডোমেইন-বহির্ভূত মানব তত্ত্বাবধান নিয়ে হয় তখন ব্যবহার করুন।
+    অধিকারের ভিত্তি: human_review_and_accountability
+
+  === কার্যগত ডিফারাল কারণ কোড ===
+  - licensed_domain_required: লাইসেন্সধারী বিশেষজ্ঞ বা আলাদাভাবে শাসিত ডোমেইন হ্যান্ডলার প্রয়োজন।
+  - rights_impact_review: অনুরোধটি সুরক্ষিত অধিকার বা মূল মানবিক প্রয়োজনকে বাস্তবভাবে প্রভাবিত করে এবং পর্যালোচনা দরকার।
+  - safety_escalation: সম্ভাব্য ক্ষতি বা সংকট পরিস্থিতিতে তাৎক্ষণিক এস্কেলেশন বা মানব তত্ত্বাবধান দরকার।
+  - consent_or_authority_required: আগে বৈধ সম্মতি, অনুমোদন বা দায়বদ্ধ মানব কর্তৃত্ব প্রয়োজন।
+  - insufficient_context: দায়িত্বশীলভাবে এগোতে এজেন্টের যথেষ্ট নির্ভরযোগ্য প্রসঙ্গ নেই।
+  - policy_review_required: কাজ করার আগে নীতি বা শাসন ব্যাখ্যা প্রয়োজন।
+  - resource_or_system_limitation: সিস্টেম সীমাবদ্ধতা পর্যালোচনা ছাড়া নিরাপদ সমাপ্তি বাধা দেয়।
+  - time_based_review: সিদ্ধান্তটি পরে নির্দিষ্ট সময়ে বা শর্ত বদলানোর পরে পুনর্বিবেচনা করা উচিত।
+  - ethical_uncertainty: সিস্টেম নৈতিকভাবে অনিশ্চিত রয়ে গেছে এবং মানব বিচার দরকার।
+  - unknown: কার্যগত কারণ অস্পষ্ট থাকলে fallback code।
+
+system_guidance_header: |
+  === ডিফারাল-নির্দিষ্ট কর্ম নির্বাচন (DSASPDMA) ===
+
+  ASPDMA ইতিমধ্যে DEFER বেছে নিয়েছে।
+  তোমার কাজ কর্মের পছন্দ আবার খুলে দেখা নয়।
+  তোমার কাজ হলো ডিফারালটি শ্রেণিবদ্ধ করা যাতে তা ব্যাখ্যাযোগ্য, auditযোগ্য এবং routeযোগ্য হয়।
+
+  তোমাকে অবশ্যই:
+  1. DEFER কর্ম বজায় রাখতে হবে।
+  2. সেরা প্রাথমিক অধিকার / প্রয়োজন বিভাগ বেছে নিতে হবে।
+  3. সেরা operational reason code বেছে নিতে হবে।
+  4. কেবল বাস্তবভাবে প্রযোজ্য হলে secondary need categories যোগ করতে হবে।
+  5. domain_hint কেবল তখন সেট করতে হবে যখন লাইসেন্সপ্রাপ্ত domain handler স্পষ্টত প্রয়োজন।
+
+evaluation_steps: |
+  ধাপ 1: মূল thought এবং provisional ASPDMA reasoning পড়ো।
+  ধাপ 2: কোন মানবিক প্রয়োজন / মানবাধিকার bucket সবচেয়ে সরাসরি জড়িত তা শনাক্ত করো।
+  ধাপ 3: সিস্টেম কেন defer করছে তা সবচেয়ে ভালোভাবে ব্যাখ্যা করে এমন operational reason code বেছে নাও।
+  ধাপ 4: reason_summary সংক্ষিপ্ত, নির্দিষ্ট এবং ব্যবহারকারীর জন্য পাঠযোগ্য রাখো।
+  ধাপ 5: একটি primary category পছন্দ করো। কেসটি সত্যিই একাধিক অধিকার জুড়ে থাকলে তবেই secondary categories যোগ করো।
+
+context_integration: |
+  === মূল THOUGHT ===
+  {original_thought_content}
+
+  === ASPDMA RATIONALE ===
+  {aspdma_reasoning}
+
+  === বর্তমান DEFER REASON ===
+  {current_reason}
+
+  === বর্তমান DEFER CONTEXT ===
+  {current_context}
+
+  === বর্তমান DEFER UNTIL ===
+  {current_defer_until}
+
+  === বর্তমান DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === লাইসেন্সপ্রাপ্ত DOMAIN OPTIONS ===
+  স্পষ্টত প্রয়োজন হলেই এদের একটি ব্যবহার করো: {domain_hint_options}
+
+response_format: |
+  এই fields সহ একটি FLAT JSON object ফেরত দাও:
+  - "reason_summary": সংক্ষিপ্ত মানব-পাঠযোগ্য ব্যাখ্যা
+  - "operational_reason": উপরের operational reason codes-এর একটি
+  - "primary_need_category": উপরের অধিকার / প্রয়োজন taxonomy values-এর একটি
+  - "secondary_need_categories": অতিরিক্ত taxonomy values-এর ঐচ্ছিক list
+  - "rights_basis": সংক্ষিপ্ত rights-basis labels-এর list
+  - "domain_hint": বিশেষ লাইসেন্সপ্রাপ্ত handler স্পষ্টত দরকার হলে ঐচ্ছিক licensed domain enum
+  - "defer_until": timing বদলাতে হলে ঐচ্ছিক ISO timestamp override
+
+  উদাহরণ:
+  {{"reason_summary": "প্রক্রিয়াগত দিকনির্দেশনা দেওয়ার আগে লাইসেন্সপ্রাপ্ত আইনি পর্যালোচনা প্রয়োজন।", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  ভাষার নিয়ম:
+  - ব্যবহারকারীর পছন্দের ভাষায় উত্তর দাও।
+  - JSON keys এবং enum values অবশ্যই ইংরেজিতে ঠিক যেমন দেওয়া আছে তেমন থাকবে।
+  - reason_summary-এর মতো মানব-পাঠযোগ্য free text-ই শুধু localize করবে।
+
+closing_reminder: |
+  গুরুত্বপূর্ণ:
+  - DEFER থেকে অন্য action-এ সরে যেও না।
+  - লাইসেন্সপ্রাপ্ত handling সত্যিই implied না হলে domain_hint তৈরি করো না।
+  - legal এবং financial access-কে অধিকার-প্রভাবিত প্রয়োজন হিসেবে ধরো, generic admin issue হিসেবে নয়।
+  - সবচেয়ে সংকীর্ণ সঠিক category এবং সবচেয়ে পরিষ্কার rights basis পছন্দ করো।

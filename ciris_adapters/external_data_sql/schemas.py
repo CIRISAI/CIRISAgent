@@ -1,9 +1,29 @@
 """Schemas for SQL external data connector."""
 
+import re
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# SQL identifier allowlist — letter or underscore start, then alphanumerics/underscores.
+# Defense-in-depth at the config-load boundary: the privacy schema is operator-controlled
+# today (not end-user input at runtime), but several call sites interpolate `table_name`
+# and `column_name` directly into SQL strings. If the schema ever becomes user-editable
+# (admin UI form, imported YAML), this validator is the choke point that prevents SQL
+# injection through the identifier surface.
+# `re.ASCII` keeps `\w` to ASCII-only [A-Za-z0-9_], matching SQL standard
+# identifier chars. Without this flag, Python's `\w` would also accept
+# Unicode letters — too permissive for SQL identifier validation.
+_SQL_IDENT_RE = re.compile(r"^[A-Za-z_]\w*$", re.ASCII)
+
+
+def _validate_sql_identifier(value: str) -> str:
+    if not _SQL_IDENT_RE.match(value):
+        raise ValueError(
+            f"invalid SQL identifier: {value!r} — must match ^[A-Za-z_]\\w*$ (ASCII)"
+        )
+    return value
 
 
 class SQLDialect(str, Enum):
@@ -25,6 +45,11 @@ class PrivacyColumnMapping(BaseModel):
         description="Strategy: delete, pseudonymize, hash, truncate, null",
     )
 
+    @field_validator("column_name")
+    @classmethod
+    def _v_column_name(cls, v: str) -> str:
+        return _validate_sql_identifier(v)
+
 
 class PrivacyTableMapping(BaseModel):
     """Privacy schema for a single table."""
@@ -36,6 +61,18 @@ class PrivacyTableMapping(BaseModel):
         default_factory=list,
         description="Related tables to cascade delete (e.g., user_sessions)",
     )
+
+    @field_validator("table_name", "identifier_column")
+    @classmethod
+    def _v_identifier(cls, v: str) -> str:
+        return _validate_sql_identifier(v)
+
+    @field_validator("cascade_deletes")
+    @classmethod
+    def _v_cascade(cls, v: List[str]) -> List[str]:
+        for entry in v:
+            _validate_sql_identifier(entry)
+        return v
 
 
 class PrivacySchemaConfig(BaseModel):

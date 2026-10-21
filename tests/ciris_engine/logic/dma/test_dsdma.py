@@ -27,15 +27,27 @@ class TestDSDMAEvaluator:
         """Mock the prompt loader to return proper PromptCollection."""
         mock_loader = Mock()
         mock_collection = Mock()
-        mock_collection.uses_covenant_header = Mock(return_value=True)
+        mock_collection.uses_accord_header = Mock(return_value=True)
         mock_collection.get_system_message = Mock(return_value="Evaluate for domain alignment.")
         mock_collection.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
         mock_collection.get_prompt = Mock(return_value="Domain evaluation template")
+        # #974 step 2: the user message routes through the loader's
+        # context_integration render seam. The live slot marks a post-#974
+        # template (see BaseDSDMA._resolve_user_template's stale-translation
+        # guard); the loader-level render returns the composed user text.
+        mock_collection.context_integration = (
+            "{full_snapshot_and_profile_context_str}\n"
+            "Evaluate this thought for the '{domain_name}' domain: \"{thought_content_str}\""
+        )
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
+        # Mock accord mode to return "full" for proper message ordering
+        mock_loader.get_accord_mode = Mock(return_value="full")
+        mock_loader.language = "en"
+        mock_loader.get_user_message = Mock(return_value="Thought to evaluate: Test thought")
 
         # Mock the get_prompt_loader function
-        monkeypatch.setattr("ciris_engine.logic.dma.dsdma_base.get_prompt_loader", lambda: mock_loader)
+        monkeypatch.setattr("ciris_engine.logic.dma.dsdma_base.get_prompt_loader", lambda *args, **kwargs: mock_loader)
         return mock_loader
 
     @pytest.fixture
@@ -73,16 +85,18 @@ class TestDSDMAEvaluator:
         # Create ThoughtContent (not a dict!)
         content = ThoughtContent(text="Should I perform a medical diagnosis?", metadata={})
 
-        # Create the queue item from the thought
-        queue_item = ProcessingQueueItem.from_thought(
-            valid_thought, raw_input="Should I perform a medical diagnosis?", queue_item_content=content
+        # Create the queue item directly (avoid from_thought which hits database)
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={
+                "system_snapshot": valid_system_snapshot.model_dump(),
+                "environment_context": {"description": "Medical consultation context"},
+            },
         )
-
-        # Add the context with system snapshot (using proper attribute assignment)
-        queue_item.initial_context = {
-            "system_snapshot": valid_system_snapshot.model_dump(),
-            "environment_context": {"description": "Medical consultation context"},
-        }
 
         return queue_item
 
@@ -96,10 +110,13 @@ class TestDSDMAEvaluator:
             domain_specific_knowledge={"rules_summary": "Medical domain requires professional credentials"},
         )
 
-        # Mock the LLM call to return LLMOutputForDSDMA (not DSDMAResult!)
-
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(
-            score=0.9,
+        # Mock the LLM call to return DSDMAResult directly. The 2.7.4 prompt
+        # cleanup migrated DSDMA from a `score`-based LLMOutputForDSDMA shim
+        # to using DSDMAResult as the instructor response_model so the LLM's
+        # 4-field output matches the schema exactly.
+        mock_llm_output = DSDMAResult(
+            domain="medical / clinical practice",
+            domain_alignment=0.9,
             flags=["requires_medical_license", "high_risk"],
             reasoning="Medical diagnosis requires professional medical credentials and licensing.",
         )
@@ -109,9 +126,10 @@ class TestDSDMAEvaluator:
         # Evaluate
         result = await evaluator.evaluate_thought(valid_queue_item, current_context=None)
 
-        # Verify result is proper schema
+        # Verify result is proper schema. The LLM-produced `domain` field now
+        # flows through (was previously overwritten with self.domain_name).
         assert isinstance(result, DSDMAResult)
-        assert result.domain == "medical"
+        assert result.domain == "medical / clinical practice"
         assert result.domain_alignment == 0.9
         assert "requires_medical_license" in result.flags
         assert "Medical diagnosis requires" in result.reasoning
@@ -132,10 +150,14 @@ class TestDSDMAEvaluator:
         """Test that DSDMA fails fast when agent identity is missing."""
         # Create queue item WITHOUT system snapshot
         content = ThoughtContent(text="Test thought", metadata={})
-        queue_item = ProcessingQueueItem.from_thought(valid_thought, queue_item_content=content)
-
-        # No initial_context means no identity
-        queue_item.initial_context = {}
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={},  # No identity
+        )
 
         evaluator = BaseDSDMA(domain_name="test_domain", service_registry=mock_service_registry)
 
@@ -164,8 +186,14 @@ class TestDSDMAEvaluator:
         )
 
         content = ThoughtContent(text="Test thought", metadata={})
-        queue_item = ProcessingQueueItem.from_thought(valid_thought, queue_item_content=content)
-        queue_item.initial_context = {"system_snapshot": incomplete_snapshot.model_dump()}
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={"system_snapshot": incomplete_snapshot.model_dump()},
+        )
 
         evaluator = BaseDSDMA(domain_name="finance", service_registry=mock_service_registry)
 
@@ -198,6 +226,62 @@ class TestDSDMAEvaluator:
         assert "LLM_Error_Instructor" in result.flags  # Changed because instructor mode uses different flag
         assert "Failed DSDMA evaluation" in result.reasoning
 
+    # --- transport errors surface; config faults keep the fallback ------------
+
+    @pytest.mark.asyncio
+    async def test_dsdma_timeout_is_retried_by_run_dma_with_retries(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = BaseDSDMA(domain_name="legal", service_registry=mock_service_registry)
+        good = DSDMAResult(domain="legal", domain_alignment=0.8, flags=[], reasoning="ok")
+        timeout = RuntimeError("All LLM services failed for BaseDSDMA. Last error: LLM API timeout")
+        evaluator.call_llm_structured = AsyncMock(side_effect=[timeout, (good, None)])
+
+        async def run_dsdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+        result = await run_dma_with_retries(run_dsdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert result.domain_alignment == 0.8
+        assert evaluator.call_llm_structured.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_dsdma_exhausted_timeouts_fail_closed(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """Every attempt times out -> DMAFailure, never a fabricated alignment."""
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+        from ciris_engine.logic.dma.exceptions import DMAFailure
+
+        evaluator = BaseDSDMA(domain_name="legal", service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(
+            side_effect=RuntimeError("All LLM services failed for BaseDSDMA. Last error: LLM API timeout")
+        )
+
+        async def run_dsdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+        with pytest.raises(DMAFailure, match="failed after 2 attempts"):
+            await run_dma_with_retries(run_dsdma_like, retry_limit=2, timeout_seconds=30.0)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("message", ["Error code: 401 - unauthorized", "Error code: 404 - model not found"])
+    async def test_dsdma_auth_and_model_errors_keep_the_fallback(
+        self, message, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        from ciris_engine.logic.dma.dma_executor import run_dma_with_retries
+
+        evaluator = BaseDSDMA(domain_name="legal", service_registry=mock_service_registry)
+        evaluator.call_llm_structured = AsyncMock(side_effect=RuntimeError(message))
+
+        async def run_dsdma_like(**_):
+            return await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+        result = await run_dma_with_retries(run_dsdma_like, retry_limit=2, timeout_seconds=30.0)
+        assert "LLM_Error_Instructor" in result.flags
+        assert evaluator.call_llm_structured.call_count == 1
+
     @pytest.mark.asyncio
     async def test_dsdma_uses_domain_specific_knowledge(
         self, mock_service_registry, mock_prompt_loader, valid_queue_item
@@ -212,8 +296,9 @@ class TestDSDMAEvaluator:
             domain_name="finance", service_registry=mock_service_registry, domain_specific_knowledge=domain_knowledge
         )
 
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(
-            score=0.7,
+        mock_llm_output = DSDMAResult(
+            domain="finance",
+            domain_alignment=0.7,
             flags=["regulatory_risk"],
             reasoning="Requires SEC compliance review",
         )
@@ -238,10 +323,20 @@ class TestDSDMAEvaluator:
     async def test_dsdma_formats_identity_block_correctly(
         self, mock_service_registry, mock_prompt_loader, valid_queue_item
     ):
-        """Test that DSDMA formats the identity block with CORE IDENTITY header."""
+        """Test that DSDMA formats the identity block with CORE IDENTITY header.
+
+        As of 2.7.8.13 the language_guidance injection fires for English too
+        (the en canonical carries the universal-defense rules), so the
+        message at messages[1] is now the language_guidance system message,
+        not the identity prompt. This test is position-agnostic — it
+        searches all messages for the CORE IDENTITY block rather than
+        pinning to a specific index. See
+        test_dsdma_injects_amharic_language_guidance_into_messages for the
+        position-aware injection contract.
+        """
         evaluator = BaseDSDMA(domain_name="engineering", service_registry=mock_service_registry)
 
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(score=0.5, flags=[], reasoning="Test")
+        mock_llm_output = DSDMAResult(domain="engineering", domain_alignment=0.5, flags=[], reasoning="Test")
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
 
         await evaluator.evaluate_thought(valid_queue_item, current_context=None)
@@ -250,19 +345,99 @@ class TestDSDMAEvaluator:
         call_args = evaluator.call_llm_structured.call_args
         messages = call_args.kwargs["messages"]
 
-        # System message should contain CORE IDENTITY block
-        # First message is Covenant, second should be the system prompt with identity
-        if len(messages) > 1:
-            system_content = messages[1]["content"]
-        else:
-            # If only one message, it should contain identity
-            system_content = messages[0]["content"]
+        # CORE IDENTITY block must appear in SOME system message — across
+        # all the messages assembled (accord, optional language_guidance,
+        # domain prompt). Position-agnostic search avoids brittleness when
+        # the injection sequence shifts.
+        all_system_content = "\n\n".join(m["content"] for m in messages if m.get("role") == "system")
+        # Fall back to all-message content if 'role' isn't tagged
+        if not all_system_content:
+            all_system_content = "\n\n".join(m["content"] for m in messages)
 
-        assert "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===" in system_content
-        assert "Agent: test_agent" in system_content
-        assert "Description: Test agent for DSDMA evaluation" in system_content
-        assert "Role: Assistant for testing purposes" in system_content
-        assert "============================================" in system_content
+        assert "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===" in all_system_content
+        assert "Agent: test_agent" in all_system_content
+        assert "Description: Test agent for DSDMA evaluation" in all_system_content
+        assert "Role: Assistant for testing purposes" in all_system_content
+        assert "============================================" in all_system_content
+
+    @pytest.mark.asyncio
+    async def test_dsdma_injects_amharic_language_guidance_into_messages(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """DSDMA must inject the per-language guidance block as a system
+        message when the prompt language has a populated guidance string
+        (Amharic as of 2.7.6). The block lands BEFORE the DMA-specific
+        system message so the model conditions on terminology rules
+        before hitting the domain prompt.
+
+        Pin: this is the load-bearing prompt-loading change for the
+        Amharic terminology fix. If the injection silently disappears,
+        Qwen 3.6 reverts to producing ማንነት ማወቅ (self-knowledge) when it
+        should produce ምርመራ (examination) for medical "diagnosis".
+        """
+        from unittest.mock import patch
+
+        evaluator = BaseDSDMA(domain_name="Personal Assistant", service_registry=mock_service_registry)
+        # Force the Amharic prompt loader path so get_language_guidance("am")
+        # fires. The real prompt loader resolves language from env / user
+        # profile / explicit override; for the test we patch the helper
+        # directly so the test doesn't depend on global env state.
+        with patch(
+            "ciris_engine.logic.utils.localization.get_language_guidance",
+            return_value="=== የቋንቋ መመሪያ ===\nfake-amharic-guidance-content",
+        ):
+            mock_llm_output = DSDMAResult(
+                domain="personal assistance",
+                domain_alignment=0.8,
+                flags=[],
+                reasoning="ok",
+            )
+            evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
+
+            await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+            messages = evaluator.call_llm_structured.call_args.kwargs["messages"]
+            guidance_messages = [
+                m
+                for m in messages
+                if m["role"] == "system" and "fake-amharic-guidance-content" in str(m.get("content", ""))
+            ]
+            assert len(guidance_messages) == 1, (
+                f"Expected exactly 1 language-guidance system message, got {len(guidance_messages)}. "
+                f"All messages: {[(m['role'], str(m.get('content', ''))[:60]) for m in messages]}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_dsdma_skips_empty_language_guidance(
+        self, mock_service_registry, mock_prompt_loader, valid_queue_item
+    ):
+        """When `get_language_guidance` returns empty (English and 27 other
+        locales as of 2.7.6), DSDMA must NOT append a blank system
+        message. Empty system messages waste tokens AND can confuse some
+        providers' message-validation."""
+        from unittest.mock import patch
+
+        evaluator = BaseDSDMA(domain_name="Personal Assistant", service_registry=mock_service_registry)
+        with patch(
+            "ciris_engine.logic.utils.localization.get_language_guidance",
+            return_value="",
+        ):
+            mock_llm_output = DSDMAResult(
+                domain="personal assistance",
+                domain_alignment=0.8,
+                flags=[],
+                reasoning="ok",
+            )
+            evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
+
+            await evaluator.evaluate_thought(valid_queue_item, current_context=None)
+
+            messages = evaluator.call_llm_structured.call_args.kwargs["messages"]
+            empty_systems = [m for m in messages if m["role"] == "system" and not str(m.get("content", "")).strip()]
+            assert not empty_systems, (
+                f"DSDMA must not append empty system messages — found {len(empty_systems)}. "
+                f"All messages: {[(m['role'], str(m.get('content', ''))[:40]) for m in messages]}"
+            )
 
     @pytest.mark.asyncio
     async def test_dsdma_evaluate_method_backward_compatibility(
@@ -271,7 +446,7 @@ class TestDSDMAEvaluator:
         """Test that the evaluate() method maintains backward compatibility."""
         evaluator = BaseDSDMA(domain_name="general", service_registry=mock_service_registry)
 
-        mock_llm_output = BaseDSDMA.LLMOutputForDSDMA(score=0.8, flags=[], reasoning="Valid thought")
+        mock_llm_output = DSDMAResult(domain="general", domain_alignment=0.8, flags=[], reasoning="Valid thought")
         evaluator.call_llm_structured = AsyncMock(return_value=(mock_llm_output, None))
 
         # Call via evaluate() method
@@ -286,9 +461,16 @@ class TestDSDMAEvaluator:
     ):
         """Test that DSDMA fails fast when initial_context is not a dict."""
         content = ThoughtContent(text="Test thought", metadata={})
-        queue_item = ProcessingQueueItem.from_thought(valid_thought, queue_item_content=content)
+        queue_item = ProcessingQueueItem(
+            thought_id=valid_thought.thought_id,
+            thought_type=valid_thought.thought_type,
+            content=content,
+            source_task_id=valid_thought.source_task_id,
+            thought_depth=valid_thought.thought_depth,
+            initial_context={},  # Start with empty dict
+        )
 
-        # Set initial_context to wrong type
+        # Set initial_context to wrong type after construction
         queue_item.initial_context = "not a dict"  # Wrong type!
 
         evaluator = BaseDSDMA(domain_name="test_domain", service_registry=mock_service_registry)

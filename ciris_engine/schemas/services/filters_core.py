@@ -56,7 +56,7 @@ class FilterTrigger(BaseModel):
     # For learned patterns
     learned_from: Optional[str] = Field(default=None, description="Source of learned pattern")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class UserTrustProfile(BaseModel):
@@ -96,7 +96,7 @@ class UserTrustProfile(BaseModel):
     safety_patterns: List[str] = Field(default_factory=list, description="Active safety pattern IDs")
     pattern_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Pattern-based risk score")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConversationHealth(BaseModel):
@@ -117,7 +117,7 @@ class ConversationHealth(BaseModel):
     samples_today: int = Field(default=0, description="Samples taken today")
     issues_detected: int = Field(default=0, description="Issues found in samples")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ContextHint(BaseModel):
@@ -126,7 +126,7 @@ class ContextHint(BaseModel):
     key: str = Field(description="Context key")
     value: str = Field(description="Context value")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FilterResult(BaseModel):
@@ -142,7 +142,7 @@ class FilterResult(BaseModel):
     suggested_action: Optional[str] = Field(default=None, description="Suggested action to take")
     context_hints: List[ContextHint] = Field(default_factory=list, description="Additional context")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ChannelConfig(BaseModel):
@@ -153,7 +153,7 @@ class ChannelConfig(BaseModel):
     custom_triggers: List[str] = Field(default_factory=list, description="Channel-specific trigger IDs")
     sample_rate_override: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Override sample rate")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AdaptiveFilterConfig(BaseModel):
@@ -191,7 +191,7 @@ class AdaptiveFilterConfig(BaseModel):
     total_messages_processed: int = Field(default=0, description="Total messages filtered")
     total_issues_caught: int = Field(default=0, description="Total issues detected")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PriorityStats(BaseModel):
@@ -201,7 +201,7 @@ class PriorityStats(BaseModel):
     count: int = Field(default=0, description="Number of messages at this priority")
     percentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Percentage of total")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class TriggerStats(BaseModel):
@@ -211,7 +211,7 @@ class TriggerStats(BaseModel):
     count: int = Field(default=0, description="Number of times triggered")
     percentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Percentage of total")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FilterStats(BaseModel):
@@ -227,7 +227,7 @@ class FilterStats(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc), description="When stats were reset"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FilterHealth(BaseModel):
@@ -240,7 +240,7 @@ class FilterHealth(BaseModel):
     config_version: int = Field(default=1, description="Current config version")
     last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Last update time")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FilterServiceMetadata(BaseModel):

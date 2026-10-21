@@ -57,6 +57,45 @@ def memory_bus():
 @pytest_asyncio.fixture
 async def audit_service(memory_bus, temp_db, time_service):
     """Create an audit service for testing."""
+    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
+
+    from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+    # A3 cutover / 2.9.7 second-signer removal: wire a real persist engine
+    # WITH a local signing identity (mirroring db/core.py's _construct_engine)
+    # pointed at a temp DB. The audit service signs entries via
+    # engine.local_sign under engine.local_derived_key_id() — no CIRISVerify
+    # mock is needed.
+    #
+    # IMPORTANT: this fixture mutates the module-global `_engine` in
+    # ciris_engine.logic.persistence.models.graph. We reset it in the
+    # finally-block below so subsequent tests (especially the incident
+    # service tests, which expect `get_persist_engine() is None` to fall
+    # through to the memory-bus mock) don't inherit our engine.
+    import ciris_engine.logic.persistence.models.graph as _graph_mod
+
+    _prior_engine = _graph_mod._engine
+    _prior_dsn = _graph_mod._engine_dsn
+
+    with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
+        persist_db_path = pf.name
+    seed_path = persist_db_path + ".seed"
+    with open(seed_path, "wb") as sf:
+        sf.write(os.urandom(32))
+    pqc_seed_path = persist_db_path + ".pqc"
+    with open(pqc_seed_path, "wb") as qf:
+        qf.write(os.urandom(32))
+    reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
+    persist_engine = Engine(
+        f"sqlite:///{persist_db_path}",
+        "test-audit-key",
+        local_key_id="test-audit-key",
+        local_key_path=seed_path,
+        local_pqc_key_id="test-audit-key-pqc",
+        local_pqc_key_path=pqc_seed_path,
+    )
+    set_persist_engine(persist_engine, dsn=f"sqlite:///{persist_db_path}")
+
     # Create a temporary directory for export
     with tempfile.TemporaryDirectory() as temp_dir:
         export_path = os.path.join(temp_dir, "audit_export.jsonl")
@@ -73,6 +112,16 @@ async def audit_service(memory_bus, temp_db, time_service):
             await service.stop()
         except asyncio.CancelledError:
             pass  # Expected when cancelling export task
+    # Tear down persist engine + DB. Restore the prior module-global so
+    # subsequent tests aren't affected by our wiring (cross-test isolation
+    # — see comment above set_persist_engine call).
+    _graph_mod._engine = _prior_engine
+    _graph_mod._engine_dsn = _prior_dsn
+    for _p in (persist_db_path, seed_path, pqc_seed_path):
+        try:
+            os.unlink(_p)
+        except OSError:
+            pass
 
 
 @pytest.mark.asyncio

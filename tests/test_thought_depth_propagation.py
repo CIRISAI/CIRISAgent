@@ -245,7 +245,7 @@ class TestThoughtDepthPropagation:
         mock_time_service.now.return_value = datetime.now(timezone.utc)
         mock_time_service.now_iso.return_value = datetime.now(timezone.utc).isoformat()
         mock_dependencies.time_service = mock_time_service
-        ponder_handler = PonderHandler(mock_dependencies, max_rounds=5)
+        ponder_handler = PonderHandler(mock_dependencies, max_rounds=7)
 
         # Test content generation for different ponder counts
         questions = ["Persistent issue", "Still failing"]
@@ -253,7 +253,7 @@ class TestThoughtDepthPropagation:
         # Test heavily pondered content (count=4 after increment)
         content = ponder_handler._generate_ponder_follow_up_content("Test task", questions, 4, heavily_pondered_thought)
 
-        # Should include depth-specific guidance
+        # Should include depth-specific guidance (depth 4 with max_rounds=7 is "deep into this task")
         assert "deep into this task" in content.lower()
         assert "actions remaining" in content.lower()
         assert "task" in content.lower()  # Task context mentioned

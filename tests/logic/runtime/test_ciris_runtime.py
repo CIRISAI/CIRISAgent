@@ -147,7 +147,6 @@ def essential_config(temp_dir):
             audit_retention_days=7,
             secrets_encryption_key_env="TEST_KEY",
             secrets_key_path=temp_dir / "secrets_keys",
-            audit_key_path=temp_dir / "audit_keys",
             enable_signed_audit=False,
             max_thought_depth=5,
         ),
@@ -281,7 +280,9 @@ class TestCIRISRuntimeCreation:
 
         assert runtime.essential_config == essential_config
         assert runtime.startup_channel_id == ""
-        assert len(runtime.adapters) == 1
+        # CLI adapter is always loaded; ciris_verify may fail if not properly installed
+        # In CI/test environments, ciris_verify may not be available
+        assert len(runtime.adapters) >= 1, f"Expected at least 1 adapter, got {len(runtime.adapters)}"
         assert runtime._initialized is False
 
         print(f"[test_create_runtime_with_config] Test completed successfully")
@@ -861,10 +862,16 @@ class TestAgentProcessorInitialization:
         # Mock the shutdown method to avoid complex shutdown logic
         runtime.shutdown = AsyncMock()
 
-        # Mock is_first_run to return False so error path is taken
+        # Mock is_first_run to return False and services_disabled to return False
+        # so the error path is taken (not first-run mode and not services-disabled mode)
         # Mock asyncio.all_tasks to return no matching task
-        with patch("asyncio.all_tasks", return_value=[]), patch(
-            "ciris_engine.logic.setup.first_run.is_first_run", return_value=False
+        with (
+            patch("asyncio.all_tasks", return_value=[]),
+            patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False),
+            patch(
+                "ciris_engine.logic.persistence.llm_providers.get_ciris_services_disabled",
+                return_value=False,
+            ),
         ):
             # The RuntimeError gets caught and logged, but doesn't propagate
             await runtime.run()

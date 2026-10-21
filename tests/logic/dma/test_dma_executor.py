@@ -13,7 +13,6 @@ import pytest
 
 # Import the SUT
 from ciris_engine.logic.dma.dma_executor import (
-    DMA_RETRY_LIMIT,
     run_action_selection_pdma,
     run_csdma,
     run_dma_with_retries,
@@ -94,10 +93,10 @@ def ethical_evaluator(service_registry):
     # Mock only the evaluate method to control results
     evaluator.evaluate = AsyncMock(
         return_value=EthicalDMAResult(
-            stakeholders="user, system",
-            conflicts="none",
-            reasoning="Test ethical reasoning",
-            alignment_check="Ethical alignment confirmed with high confidence (0.9). All principles satisfied.",
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. Test ethical reasoning Ethical alignment confirmed with high confidence (0.9). All principles satisfied.",
+            weight_alignment_score=0.85,
+            ethical_alignment_score=0.85,
         )
     )
     return evaluator
@@ -173,7 +172,8 @@ class TestDMARetryLogic:
             nonlocal call_count
             call_count += 1
             if call_count < 2:
-                raise ValueError("Temporary failure")
+                # A transient transport failure: the one category DMAs retry.
+                raise RuntimeError("All LLM services failed for test. Last error: LLM API timeout")
             return "success after retry"
 
         result = await run_dma_with_retries(
@@ -219,10 +219,11 @@ class TestEthicalPDMA:
                 time_service=time_service,
             )
 
-            assert result.stakeholders == "user, system"
-            assert result.conflicts == "none"
-            assert result.reasoning == "Test ethical reasoning"
-            assert "alignment confirmed" in result.alignment_check.lower()
+            # PDMA v3.1: assert on action + rationale + two-score split
+            assert result.action == HandlerActionType.SPEAK
+            assert "user, system" in result.rationale
+            assert 0.0 <= result.weight_alignment_score <= 1.0
+            assert 0.0 <= result.ethical_alignment_score <= 1.0
 
             # Verify correlation was tracked
             assert mock_persistence.add_correlation.called
@@ -271,10 +272,10 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-                stakeholders="user, system",
-                conflicts="none",
-                reasoning="Ethical approval",
-                alignment_check="Ethical alignment confirmed. All principles satisfied.",
+                action=HandlerActionType.SPEAK,
+                rationale="Stakeholders: user, system. Ethical approval Ethical alignment confirmed. All principles satisfied.",
+                weight_alignment_score=0.85,
+                ethical_alignment_score=0.85,
             ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.85,
@@ -317,10 +318,10 @@ class TestActionSelectionPDMA:
         enhanced_inputs = EnhancedDMAInputs(
             original_thought=processing_queue_item,
             ethical_pdma_result=EthicalDMAResult(
-                stakeholders="user, system",
-                conflicts="none",
-                reasoning="Approved",
-                alignment_check="Basic ethical approval.",
+                action=HandlerActionType.SPEAK,
+                rationale="Stakeholders: user, system. Approved Basic ethical approval.",
+                weight_alignment_score=0.85,
+                ethical_alignment_score=0.85,
             ),
             csdma_result=CSDMAResult(
                 plausibility_score=0.8,
@@ -357,12 +358,12 @@ class TestDMAIntegration:
         """Test retry wrapper with actual PDMA function."""
         # Make evaluator fail once then succeed
         ethical_evaluator.evaluate.side_effect = [
-            Exception("Temporary failure"),
+            Exception("Connection error: temporary failure reaching the provider (timed out)"),
             EthicalDMAResult(
-                stakeholders="user, system",
-                conflicts="none",
-                reasoning="Success after retry",
-                alignment_check="Basic ethical approval.",
+                action=HandlerActionType.SPEAK,
+                rationale="Stakeholders: user, system. Success after retry Basic ethical approval.",
+                weight_alignment_score=0.85,
+                ethical_alignment_score=0.85,
             ),
         ]
 
@@ -376,9 +377,9 @@ class TestDMAIntegration:
                 time_service=time_service,
             )
 
-            assert result.stakeholders == "user, system"
-            assert result.conflicts == "none"
-            assert result.reasoning == "Success after retry"
+            # PDMA v3.0 reshape
+            assert result.action == HandlerActionType.SPEAK
+            assert "user, system" in result.rationale
             assert ethical_evaluator.evaluate.call_count == 2
 
 
@@ -427,7 +428,7 @@ class TestTSASPDMA:
                 evaluator=tsaspdma_evaluator,
                 tool_name="test_tool",
                 tool_info=tool_info,
-                aspdma_rationale="ASPDMA selected this tool for file operations",
+                aspdma_reasoning="ASPDMA selected this tool for file operations",
                 original_thought=processing_queue_item,
                 context=None,
                 time_service=time_service,
@@ -455,7 +456,7 @@ class TestTSASPDMA:
                 evaluator=tsaspdma_evaluator,
                 tool_name="test_tool",
                 tool_info=tool_info,
-                aspdma_rationale="ASPDMA selected file reader",
+                aspdma_reasoning="ASPDMA selected file reader",
                 original_thought=processing_queue_item,
                 context=None,
                 time_service=time_service,
@@ -484,7 +485,7 @@ class TestTSASPDMA:
                 evaluator=tsaspdma_evaluator,
                 tool_name="test_tool",
                 tool_info=tool_info,
-                aspdma_rationale="ASPDMA selected this tool",
+                aspdma_reasoning="ASPDMA selected this tool",
                 original_thought=processing_queue_item,
                 context=None,
                 time_service=time_service,
@@ -503,7 +504,7 @@ class TestTSASPDMA:
                 evaluator=tsaspdma_evaluator,
                 tool_name="test_tool",
                 tool_info=tool_info,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
                 original_thought=processing_queue_item,
                 context=None,
                 time_service=None,
@@ -527,7 +528,7 @@ class TestTSASPDMA:
                     evaluator=tsaspdma_evaluator,
                     tool_name="test_tool",
                     tool_info=tool_info,
-                    aspdma_rationale="Test rationale",
+                    aspdma_reasoning="Test rationale",
                     original_thought=processing_queue_item,
                     context=None,
                     time_service=time_service,
@@ -547,7 +548,7 @@ class TestTSASPDMA:
                 evaluator=tsaspdma_evaluator,
                 tool_name="test_tool",
                 tool_info=tool_info,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
                 original_thought=processing_queue_item,
                 context=None,
                 time_service=time_service,
@@ -575,7 +576,7 @@ class TestTSASPDMA:
                 evaluator=tsaspdma_evaluator,
                 tool_name="test_tool",
                 tool_info=tool_info,
-                aspdma_rationale="Test with context",
+                aspdma_reasoning="Test with context",
                 original_thought=processing_queue_item,
                 context=context,
                 time_service=time_service,

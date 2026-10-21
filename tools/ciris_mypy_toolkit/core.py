@@ -97,7 +97,7 @@ class CIRISMypyToolkit:
         Returns:
             Analysis report with schema, protocol, and type safety issues
         """
-        logger.info("🔍 Starting CIRIS compliance analysis...")
+        logger.info(" Starting CIRIS compliance analysis...")
 
         # Get mypy errors
         mypy_errors = self.get_mypy_errors()
@@ -145,7 +145,7 @@ class CIRISMypyToolkit:
         Returns:
             Path to the proposal file
         """
-        logger.info("🔍 Analyzing issues and proposing fixes...")
+        logger.info(" Analyzing issues and proposing fixes...")
 
         # Default categories in order of safety/impact
         if categories is None:
@@ -176,7 +176,7 @@ class CIRISMypyToolkit:
         }
 
         for category in categories:
-            logger.info(f"🎯 Analyzing {category} issues...")
+            logger.info(f" Analyzing {category} issues...")
 
             if category == "type_annotations":
                 changes = self.type_fixer.propose_type_fixes()
@@ -200,9 +200,9 @@ class CIRISMypyToolkit:
         with open(output_file, "w") as f:
             json.dump(proposal, f, indent=2)
 
-        logger.info(f"📄 Proposed changes written to {output_file}")
-        logger.info("⚠️  REVIEW THE PROPOSED CHANGES BEFORE APPLYING!")
-        logger.info(f"📋 To apply: python -m ciris_mypy_toolkit.cli execute {output_file}")
+        logger.info(f" Proposed changes written to {output_file}")
+        logger.info("[WARN] REVIEW THE PROPOSED CHANGES BEFORE APPLYING!")
+        logger.info(f" To apply: python -m ciris_mypy_toolkit.cli execute {output_file}")
 
         return output_file
 
@@ -216,7 +216,7 @@ class CIRISMypyToolkit:
         Returns:
             Dictionary of fixes applied per category
         """
-        logger.info(f"🚀 Executing approved fixes from {proposal_file}")
+        logger.info(f" Executing approved fixes from {proposal_file}")
 
         import json
 
@@ -224,7 +224,7 @@ class CIRISMypyToolkit:
             proposal = json.load(f)
 
         if not proposal["metadata"]["validation_required"]:
-            logger.warning("⚠️  This proposal was not marked for validation!")
+            logger.warning("[WARN] This proposal was not marked for validation!")
 
         fixes_summary = {}
         initial_errors = len(self.get_mypy_errors())
@@ -233,7 +233,7 @@ class CIRISMypyToolkit:
             if not changes:  # Skip empty change sets
                 continue
 
-            logger.info(f"🎯 Applying {category} fixes...")
+            logger.info(f" Applying {category} fixes...")
 
             if category == "type_annotations":
                 fixes = self.type_fixer.apply_approved_fixes(changes)
@@ -254,7 +254,7 @@ class CIRISMypyToolkit:
         final_errors = len(self.get_mypy_errors())
         fixes_summary["total_errors_eliminated"] = initial_errors - final_errors
 
-        logger.info(f"✅ Applied fixes. Errors: {initial_errors} → {final_errors}")
+        logger.info(f"[OK] Applied fixes. Errors: {initial_errors} → {final_errors}")
 
         return fixes_summary
 

@@ -111,7 +111,7 @@ class MCPClientConfigurableAdapter:
                     "step_type": "select",
                     "title": "Select Transport Type",
                     "description": "Choose how to connect to the MCP server",
-                    "field_name": "transport",
+                    "fields": [{"name": "transport"}],
                     "required": True,
                 },
                 {
@@ -127,7 +127,7 @@ class MCPClientConfigurableAdapter:
                     "step_type": "input",
                     "title": "Security Settings (Optional)",
                     "description": "Configure security and rate limiting",
-                    "optional": True,
+                    "required": False,
                     "fields": [
                         {
                             "name": "max_calls_per_minute",
@@ -150,7 +150,7 @@ class MCPClientConfigurableAdapter:
                     "step_type": "select",
                     "title": "Select Bus Bindings",
                     "description": "Choose which CIRIS buses to bind this server to",
-                    "field_name": "enabled_buses",
+                    "fields": [{"name": "enabled_buses"}],
                     "multiple": True,
                     "required": True,
                 },

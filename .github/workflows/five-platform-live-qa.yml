@@ -1,0 +1,1357 @@
+# The release gate that actually uses the product.
+#
+# WHY THIS EXISTS. Every other job here checks a PART: the wheel builds, the
+# types check, the shards pass. None of them ask the only question a user asks —
+# "if I install this and type a message, do I get an answer?" In one release this
+# repo shipped an APK that could not build, a client with no XCFramework, and two
+# PyPI wheels short of a set, all behind green ticks. Each was invisible because
+# nothing exercised the path end to end.
+#
+# So: install the built artifact, configure a REAL model with a REAL key, drive
+# the REAL UI to the Interact screen, send a message, and require an answer on
+# screen — on all five platforms we ship.
+#
+# THREE RUNNER IMAGES, FIVE PLATFORMS. macOS hosts its own desktop plus the iOS
+# simulator; Linux hosts its own desktop plus the Android emulator; Windows hosts
+# itself. Pairing them keeps the runner count (and the bill) at three while still
+# covering five targets.
+#
+# ONE FLOW, FIVE TIMES. There is a single CIRISClient Compose app now, exposing
+# one TestAutomationServer on 9091 everywhere, so the automation is written once
+# and selected with `--platform`. Nothing below contains platform-specific TEST
+# logic — only platform-specific BRING-UP, which is genuinely different (an
+# emulator is not a window).
+#
+# WHAT MAKES IT A GATE RATHER THAN A REPORT:
+#   * the response assertion fails on silence (web_ui `wait_for_response`)
+#   * the trace assertion asks the CANONICAL whether it holds what we authored
+#     (ciris-server >= 0.5.208 `delivery_receipt`, CIRISServer#487/#592) and
+#     falls back to the replication-counter ladder when the receipt cannot be
+#     established or the wheel is older. Rooting, KEX and envelope counts are
+#     the sender's preconditions and can all be green with nothing stored at the
+#     far end — which is the gap the receipt closes. Still NON-BLOCKING while
+#     upstream rebuilds KEX/replication; it reports instead of failing, and the
+#     restore is marked at the call site.
+#     A null verdict is UNKNOWN, NOT ZERO, and is reported as such — never red.
+#     ONE EXCEPTION IS ENFORCED: the node must have AUTHORED > 0 traces
+#     (`--require-authored`, exit 5). That rung is below delivery and does not
+#     wait on upstream; its absence hid a zero-trace regression for six nightlies.
+#   * a platform that cannot run must SKIP loudly; it must never quietly pass
+
+name: Five-Platform Live QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Subset to run (space-separated: linux macos windows android ios), or 'all'"
+        required: false
+        default: "all"
+        type: string
+      use_live_key:
+        description: "Use the real OPENROUTER_API_KEY (off = mock LLM, proves the flow but not the wire)"
+        required: false
+        default: true
+        type: boolean
+      client_preview_tag:
+        description: "CIRISClient PRERELEASE tag to test instead of the requirements.txt pin (e.g. preview-scroll-dispatch). Empty = the pin."
+        required: false
+        default: ""
+        type: string
+  # Nightly rather than per-PR: it boots emulators and spends real LLM tokens, so
+  # it is too slow and too costly to gate every push. The release path is what
+  # needs it, and a nightly failure lands before the next tag.
+  schedule:
+    - cron: "0 7 * * *"
+
+concurrency:
+  # Per ref, and cancel-in-progress: two pushes should not fight over emulators.
+  group: five-platform-live-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Run-kind marker (CIRISAgent#1245): every agent this workflow starts is a
+# synthetic QA run, live model or not, and its traces must say so. Agents under
+# the mock LLM mark themselves "mock" and never ship remotely (#1244).
+env:
+  CIRIS_TRACE_RUN_KIND: qa
+
+jobs:
+  # THE iOS BUNDLE, BUILT ONCE. The simulator app needs frameworks for every
+  # native extension the embedded engine imports: the substrate (ciris_server,
+  # a fetch) and four third-party modules (a cross-build no runner had ever
+  # performed). refresh-ios-substrate.yml owns both on the macOS toolchain and
+  # hands the result back as an artifact; the macos-ios leg below downloads it
+  # before building the app (CIRISAgent#1135).
+  ios-bundle:
+    name: iOS bundle (substrate + simulator natives)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == '' || inputs.platforms == 'all' || contains(inputs.platforms, 'ios') }}
+    # The reusable workflow declares write scopes for its push path; upload_only
+    # never pushes, so they go unused here, but a caller must still grant them.
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/refresh-ios-substrate.yml
+    with:
+      target_branch: ${{ github.ref_name }}
+      libs: server
+      upload_only: true
+      always_upload: true
+      build_sim_natives: true
+    secrets: inherit
+
+  live-qa:
+    needs: [ios-bundle]
+    # ios-bundle failing (or skipped on a non-iOS dispatch) must not skip the
+    # gate: the mac leg falls back to fetching the substrate itself.
+    if: ${{ !cancelled() }}
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      # NEVER fail-fast. The entire point is a five-way comparison; killing the
+      # matrix on the first red destroys the gallery that makes it reviewable.
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-android
+            os: ubuntu-latest
+            platforms: "linux android"
+          - label: macos-ios
+            # macos-15, NOT macos-14. The macos-14 image carries only Xcode 15.4,
+            # while Homebrew's xcodegen (2.45.4) emits pbxproj format 77:
+            #   xcodebuild: error: The project 'iosApp' cannot be opened because
+            #   it is in a future Xcode project file format (77)
+            # Pinning an older xcodegen would silence that, but it would also mean
+            # CI validated a toolchain nobody ships from. macos-15 carries Xcode 16
+            # and matches the generator, so the build here is the build that ships.
+            os: macos-15
+            platforms: "macos ios"
+          - label: windows
+            os: windows-latest
+            platforms: "windows"
+
+    env:
+      CIRIS_TEST_MODE: "true"
+      CIRIS_TESTING_MODE: "true"
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      # Every bring-up command's FULL stdout/stderr lands here, and the collect
+      # step uploads it unconditionally. A CI failure nobody can diagnose from
+      # the artifact costs a re-run with more logging to discover what the first
+      # run already knew.
+      CIRIS_QA_LOG_DIR: ${{ github.workspace }}/artifacts/cmdlogs
+      # Stage lines must carry the time they HAPPENED. Buffered, every "[n/5]"
+      # print of the iOS bring-up flushed together at the end -- all stamped
+      # 02:17:01, including "[5/5] Waiting ... (up to 120s)" -- so the job log
+      # could not place the launch against what os_log showed.
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # REFUSE TO TEST A SUBSTRATE THE PHONES WILL NOT RUN. requirements.txt is
+      # one of several ciris-server pin sites: apps/android/build.gradle installs
+      # its own exact pin into the APK, and the iOS bundle is refreshed from the
+      # requirements pin by a separate job. Bumping requirements.txt alone shipped
+      # 0.5.203 to the desktops and 0.5.199 to Android, and the Android leg then
+      # died on the bug 0.5.203 had fixed (run #34223901074) -- forty minutes to
+      # learn what this says in two seconds. The fix hint names the lockstep tool.
+      - name: Substrate pins agree (requirements.txt vs apps/android/build.gradle)
+        shell: bash
+        run: python3 tools/dev/check_version_alignment.py
+
+      # The desktop app ships as the uber-jar INSIDE the pinned ciris-client
+      # wheel and must land in ciris_engine/desktop_app/ BEFORE the wheel is
+      # built — that is what setup.py packages and what desktop_launcher.py
+      # globs at runtime.
+      - name: Vendor the CIRIS Desktop UberJar from the client wheel
+        shell: bash
+        env:
+          # Only needed on the preview path, where the wheels come from a
+          # CIRISClient release rather than PyPI. Same cross-repo public read the
+          # fetch_client_artifacts.py steps already do with this token.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PREVIEW='${{ inputs.client_preview_tag }}'
+          REQUESTED='${{ inputs.platforms || 'all' }}'
+          MINE='${{ matrix.platforms }}'
+          # A PREVIEW NEED NOT COVER EVERY PLATFORM. This one ships no macosx
+          # wheel, and a `platforms: linux android` dispatch still boots the macOS
+          # runner (the per-leg filter lives further down, inside the run step), so
+          # the mac vendored a wheel for work it was never going to do and failed
+          # the job. If none of THIS runner's platforms were asked for, there is
+          # nothing to vendor. NOT a job-level `if`: the matrix context is not
+          # available there, which is what invalidated the workflow file in
+          # 0216ed4ad.
+          if [ -n "$PREVIEW" ] && [ "$REQUESTED" != "all" ]; then
+            wanted=0
+            for plat in $MINE; do
+              echo " $REQUESTED " | grep -q " $plat " && wanted=1
+            done
+            if [ "$wanted" = 0 ]; then
+              echo "no requested platform on this runner ($MINE); skipping the preview vendor"
+              exit 0
+            fi
+          fi
+          if [ -n "$PREVIEW" ]; then
+            # A preview build is a PRERELEASE on a non-`v<version>` tag whose version
+            # carries a PEP 440 local segment (0.5.208+preview.gNNNNNNN). PyPI refuses
+            # those by design, so `pip download ciris-client==` cannot reach it -- the
+            # wheels come from the release itself. Version is derived from the asset
+            # name rather than typed twice.
+            # ONE WHEEL, THE PLATFORM'S OWN. `--pattern 'ciris_client-*.whl'` pulls
+            # all of them (any + manylinux + win_amd64) and vendor_desktop_jar.py
+            # requires exactly one -- it extracts a PLATFORM-SPECIFIC uber-jar
+            # (CIRIS-linux-x64-*.jar), so "any of them" is not a valid answer. The
+            # pip path this replaces only ever downloads the wheel matching the
+            # host, and this must behave the same.
+            case "${RUNNER_OS}" in
+              Linux)   WHEEL_PAT='ciris_client-*manylinux*.whl' ;;
+              Windows) WHEEL_PAT='ciris_client-*win_amd64*.whl' ;;
+              macOS)   WHEEL_PAT='ciris_client-*macosx*.whl' ;;
+              *)       echo "::error::unknown RUNNER_OS ${RUNNER_OS}"; exit 1 ;;
+            esac
+            gh release download "$PREVIEW" --repo CIRISAI/CIRISClient \
+              --pattern "$WHEEL_PAT" --dir "${RUNNER_TEMP}/clientwheel" || {
+                echo "::error::$PREVIEW has no wheel matching $WHEEL_PAT — a preview that omits this platform cannot be tested on it"
+                exit 1
+              }
+            CLIENT_VERSION=$(ls "${RUNNER_TEMP}/clientwheel" | sed -n 's/^ciris_client-\(.*\)-py3-none-.*\.whl$/\1/p' | head -1)
+            [ -n "$CLIENT_VERSION" ] || { echo "::error::could not derive a version from $PREVIEW assets"; exit 1; }
+            echo "CIRIS_CLIENT_VERSION=$CLIENT_VERSION" >> "$GITHUB_ENV"
+            echo "CIRIS_CLIENT_RELEASE_TAG=$PREVIEW" >> "$GITHUB_ENV"
+            echo "::warning::TESTING A CLIENT PREVIEW: $CLIENT_VERSION from tag $PREVIEW, NOT the requirements.txt pin"
+          else
+            CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+            python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d "${RUNNER_TEMP}/clientwheel"
+          fi
+          python3 tools/dev/vendor_desktop_jar.py "${RUNNER_TEMP}/clientwheel" ciris_engine/desktop_app "$CLIENT_VERSION"
+
+      # Install the WHEEL, not the checkout: `pip install .` exercises a source
+      # tree no user ever receives.
+      - name: Build and install the wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist
+          python -m pip install "$(ls dist/*.whl | head -1)"
+          python -m pip install requests httpx
+          # The agent wheel Requires the PINNED client, so the line above just pulled
+          # it from PyPI. Put the preview back on top -- --no-deps so pip does not
+          # "fix" the deliberate mismatch by reinstalling the pin.
+          # Only where the vendor step actually fetched one: a subset dispatch
+          # (`platforms: linux android`) boots the macOS runner too, and its vendor
+          # step exits early with nothing in clientwheel/ -- expanding the glob
+          # there under `set -u` failed the job that was meant to be skipped.
+          if [ -n '${{ inputs.client_preview_tag }}' ]; then
+            preview_wheel=$(ls "${RUNNER_TEMP}"/clientwheel/ciris_client-*.whl 2>/dev/null | head -1 || true)
+            if [ -n "$preview_wheel" ]; then
+              python -m pip install --force-reinstall --no-deps "$preview_wheel"
+              python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
+            else
+              echo "no preview wheel vendored on this runner (no requested platform here); leaving the pinned client"
+            fi
+          fi
+
+      # ── Linux desktop needs a display. `/screenshot` is AWT Robot, which
+      # photographs a SCREEN; without one there is nothing to photograph and the
+      # app cannot start at all. Xvfb also isolates the capture, which is the
+      # mitigation CIRISAgent#1104 asks for.
+      - name: Start a virtual display (Linux only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          Xvfb :99 -screen 0 1600x1200x24 >/dev/null 2>&1 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+
+      - name: Enable KVM for the Android emulator (Linux only)
+        if: contains(matrix.platforms, 'android')
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      # DIAGNOSTIC ONLY — the bring-up boots its own simulator.
+      # An earlier version resolved and booted the UDID here with an inline
+      # python one-liner, which (a) duplicated logic that now lives in
+      # `_ios_pick_simulator` and (b) broke the YAML: its backslash continuation
+      # started at column 1, outside the block scalar. Listing what the runner
+      # has is still worth doing — when iOS fails, "which runtimes existed" is
+      # the first question, and it must be in the log before anything can fail.
+      - name: Show available iOS simulators
+        if: contains(matrix.platforms, 'ios')
+        continue-on-error: true
+        run: |
+          # The generator and the reader must agree on pbxproj format; when they
+          # do not, xcodebuild reports a version NUMBER and nothing about why.
+          echo "xcode:    $(xcodebuild -version | head -1)"
+          echo "selected: $(xcode-select -p)"
+          echo "xcodegen: $(xcodegen --version 2>/dev/null || echo "<not installed yet>")"
+          mkdir -p artifacts/cmdlogs
+          xcode-select -p | tee artifacts/cmdlogs/xcode-select.txt
+          xcrun simctl list devices available | tee artifacts/cmdlogs/simulators.txt
+
+      # The client xcframeworks are gitignored (~108 MB of another repo's build
+      # output), so a clean checkout cannot compile iOS. Same gap as the Android
+      # AAR that left v2.9.42 with no APK — CIRISClient#24 tracks it upstream.
+      - name: Fetch the client xcframeworks (iOS only)
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns ios; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/fetch_client_artifacts.py --platform ios
+
+      # USE THE REAL BUILD SCRIPT. A hand-rolled `xcodebuild -scheme iosApp`
+      # produces a broken app: the .xcodeproj is GENERATED from project.yml by
+      # xcodegen, Resources.zip has to be rebuilt from the overlaid
+      # ciris_engine/ciris_verify sources, and prepare_python_bundle.sh lays down
+      # an ARCH-SPECIFIC Python bundle (simulator != device). This is the script
+      # that has been shipping to the App Store; CI must not maintain a second,
+      # subtly-different copy of it.
+      #
+      # It also installs and launches on the simulator. The bring-up below then
+      # re-launches with CIRIS_TEST_MODE (simctl only forwards env with the
+      # SIMCTL_CHILD_ prefix, which this script does not set), which is idempotent.
+      # ANDROID NEEDS AN EMULATOR THAT THE RUNNER DOES NOT SHIP.
+      # GitHub's ubuntu images carry the Android SDK but NOT the emulator package
+      # and NOT any system image, so bring-up died on
+      #   FileNotFoundError: /usr/local/lib/android/sdk/emulator/emulator
+      # and android has never once run in this gate — its tile has read
+      # "did not run" since the workflow was written.
+      # The APK links against the PUBLISHED client .aar — apps/settings.gradle.kts
+      # resolves it from a flatDir repository at android/libs, and nothing else
+      # puts it there. Only the iOS half was being fetched, so the android build
+      # had no client to link against at all.
+      # CHAQUOPY WANTS PYTHON 3.10 AT AN ABSOLUTE PATH.
+      #
+      # apps/android/build.gradle pins `buildPython "/usr/bin/python3.10"`, which
+      # does not exist on the runner, so the APK build died with
+      #   [/usr/bin/python3.10] is not a valid Python 3.10 command
+      # after the emulator had booted and the .aar had been fetched. build.yml's
+      # android-release job already solves this the same way; the gate was simply
+      # never given the step.
+      #
+      # update-environment: false is the important part. This job runs the QA
+      # runner on 3.12, and letting setup-python prepend 3.10 to PATH would swap
+      # the interpreter the wheel was installed for — fixing the APK build by
+      # breaking everything after it.
+      - name: Set up Python 3.10 for Chaquopy (Android only)
+        id: py310
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          update-environment: false
+
+      - name: Symlink python3.10 for Chaquopy (Android only)
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
+        run: |
+          set -euo pipefail
+          PY='${{ steps.py310.outputs.python-path }}'
+          [ -n "$PY" ] || { echo '::error::setup-python reported no interpreter path'; exit 1; }
+          sudo ln -sf "$PY" /usr/bin/python3.10
+          # Assert the exact thing gradle will assert, here where it is legible.
+          /usr/bin/python3.10 --version
+
+      - name: Fetch the client .aar (Android only)
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/fetch_client_artifacts.py --platform android
+
+      - name: Install the Android emulator + system image
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns android; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'android')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'android'))
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMAN="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          AVDMAN="$SDK/cmdline-tools/latest/bin/avdmanager"
+          # PIN THE AVD HOME. avdmanager writes to $ANDROID_AVD_HOME, else
+          # $ANDROID_SDK_HOME/.android/avd, else $HOME/.android/avd — and the
+          # emulator resolves that list independently. Leaving both to inference let
+          # them disagree: creation reported success and `-list-avds` came back
+          # empty, so bring-up failed with "no AVDs configured" for an AVD that had
+          # just been created somewhere else.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          yes | "$SDKMAN" --licenses > /dev/null 2>&1 || true
+          # ~1500 lines of progress bar otherwise; keep the outcome, drop the bar.
+          "$SDKMAN" "platform-tools" "emulator" "$IMAGE" 2>&1 | grep -v "^\[" | tail -5
+          echo no | "$AVDMAN" create avd -n ciris_qa -k "$IMAGE" --force 2>&1 | grep -v "^\[" | tail -5
+
+          # PROVE THE AVD, NOT JUST THE BINARY.
+          #
+          # The previous version asserted `test -x emulator`, then ran `-list-avds`
+          # without looking at the result — so an empty list sailed through as
+          # success and surfaced two steps later as a bring-up error that said
+          # nothing about provisioning. A check whose output nobody reads is not a
+          # check.
+          test -x "$SDK/emulator/emulator" || { echo "::error::emulator still missing after install"; exit 1; }
+          AVDS=$("$SDK/emulator/emulator" -list-avds 2>/dev/null || true)
+          echo "AVD_HOME=$ANDROID_AVD_HOME"
+          echo "avds: ${AVDS:-<none>}"
+          echo "$AVDS" | grep -qx "ciris_qa" || {
+            echo "::error::ciris_qa was created but the emulator cannot see it"
+            ls -la "$ANDROID_AVD_HOME" 2>/dev/null || true
+            exit 1
+          }
+        env:
+          IMAGE: "system-images;android-34;google_apis;x86_64"
+
+
+      # MATERIALIZE THE iOS PYTHON BUNDLE IN THE RUNNER.
+      #
+      # The full build path calls prepare_python_bundle.sh, which copies the
+      # bundle out of a BeeWare app built by `briefcase build iOS`. That can
+      # never run here: `ios/` is untracked (git ls-files ios/ -> 0 files), so
+      # the briefcase project exists only on a machine someone has run
+      # `briefcase create` on. Every iOS run so far died on its absence.
+      #
+      # It does not have to. BOTH halves of what prepare would have produced are
+      # obtainable in-runner:
+      #
+      #   1. the stdlib and app packages ship INSIDE the tracked 28M
+      #      apps/ios/Resources.zip. `apps/ios/Resources/python` looks missing on
+      #      a clean checkout only because the EXTRACTED form is gitignored —
+      #      build.yml already extracts it exactly this way.
+      #
+      #   2. Python.xcframework is not in that zip; briefcase downloads it from
+      #      beeware/Python-Apple-support into its Support/ dir. Fetching the same
+      #      release asset directly gets the identical artifact with no briefcase
+      #      project involved.
+      #
+      # Both are asserted after the fact, because a missing bundle does not fail
+      # the build — it produces an app that installs and launches to nothing,
+      # which is the failure mode this whole gate exists to stop.
+      - name: Pull the iOS bundle built by ios-bundle
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
+        # Uploaded with apps/ios/... paths, so the artifact root is apps/ios;
+        # extracting there restores app_packages_native_sim/ (simulator natives
+        # + substrate) and the rest in place.
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ios-substrate-refresh
+          path: apps/ios
+
+      - name: Materialize the iOS Python bundle
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns ios; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pinned: the stdlib in Resources.zip is python3.10, and a support
+          # package from another line would mismatch it at load time.
+          PY_TAG: "3.10-b14"
+          PY_ASSET: "Python-3.10-iOS-support.b14.tar.gz"
+        run: |
+          set -euo pipefail
+          mkdir -p apps/ios/Resources/app apps/ios/Frameworks
+          (cd apps/ios/Resources && unzip -qo ../Resources.zip)
+          test -d apps/ios/Resources/python \
+            || { echo "::error::Resources.zip carried no python/ — the bundle is not what this expects"; exit 1; }
+
+          if [ ! -d apps/ios/Frameworks/Python.xcframework ]; then
+            gh release download "$PY_TAG" --repo beeware/Python-Apple-support \
+              -p "$PY_ASSET" -O /tmp/pysupport.tar.gz
+            mkdir -p /tmp/pysupport
+            tar -xzf /tmp/pysupport.tar.gz -C /tmp/pysupport
+            XCF=$(find /tmp/pysupport -maxdepth 3 -name "Python.xcframework" -type d | head -1)
+            [ -n "$XCF" ] || { echo "::error::$PY_ASSET carried no Python.xcframework"; exit 1; }
+            cp -R "$XCF" apps/ios/Frameworks/
+          fi
+
+          # project.yml references this exact slice for the simulator build.
+          test -d "apps/ios/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator" \
+            || { echo "::error::Python.xcframework has no simulator slice"; exit 1; }
+          echo "stdlib:  $(du -sh apps/ios/Resources/python | cut -f1)"
+          echo "support: $(du -sh apps/ios/Frameworks/Python.xcframework | cut -f1)"
+
+          # THE SUBSTRATE, SIMULATOR SLICE. app_packages_native_sim/ is
+          # gitignored -- it holds a 56 MB ciris_server/_native.abi3.so -- so it
+          # exists on a developer machine and never on a runner. Without it the
+          # embed phase reports "no app_packages_native_sim/" and `import
+          # ciris_server` cannot succeed on-simulator, which is the engine.
+          #
+          # ciris-server ships BOTH slices in its -ios.tar.gz release asset
+          # (ios-device/ and ios-simulator/, verified on v0.5.196), and
+          # update_substrate_libs already stages the simulator one here. So this
+          # is a fetch, not a build.
+          SIM_SO="apps/ios/app_packages_native_sim/ciris_server/_native.abi3.so"
+          if [ -f "$SIM_SO" ]; then
+            echo "substrate: provided by the ios-bundle artifact"
+          else
+            echo "substrate: ios-bundle artifact absent -- fetching directly"
+            python3 -m tools.update_substrate_libs --platform ios --lib server
+          fi
+          test -f "$SIM_SO" \
+            || { echo "::error::no simulator ciris_server at $SIM_SO (neither the ios-bundle artifact nor update_substrate_libs provided it)"; exit 1; }
+          if [ -f apps/ios/app_packages_native_sim/MANIFEST.txt ]; then
+            echo "--- simulator natives (from ios-bundle) ---"; cat apps/ios/app_packages_native_sim/MANIFEST.txt
+          fi
+          echo "substrate: $(du -sh apps/ios/app_packages_native_sim | cut -f1) (simulator ciris_server)"
+
+          # WHAT IS STILL MISSING, NAMED. The four third-party natives come from
+          # a briefcase simulator build no runner performs, and no wheel source
+          # exists for them: pydantic-core and cryptography publish no iOS
+          # wheels at all, aiohttp and cffi publish them only for cp313 while
+          # this embed is cp310. Say so here rather than letting the embed phase
+          # report it 200 lines later as a bare WARNING (CIRISAgent#1135).
+          for mod in pydantic_core cryptography aiohttp _cffi_backend; do
+            find apps/ios/app_packages_native_sim -path "*$mod*" -name "*.so" -print -quit 2>/dev/null | grep -q . \
+              || echo "::warning::iOS simulator native missing: $mod (CIRISAgent#1135) — the embedded engine will not import"
+          done
+
+      - name: Build + deploy the iOS app to the simulator
+        # BOTH questions, because they are different: matrix.platforms says
+        # this RUNNER owns ios; inputs.platforms says whether the operator
+        # ASKED for it. Checking only the first meant a `platforms: linux`
+        # dispatch still ran this step — minutes of download, and a step that
+        # can fail the whole workflow — for a platform explicitly excluded.
+        # The subset check existed already, but only INSIDE the flow loop,
+        # long after this had run. Empty = schedule (no inputs) = full run.
+        if: >-
+          contains(matrix.platforms, 'ios')
+          && (inputs.platforms == '' || inputs.platforms == 'all'
+              || contains(inputs.platforms, 'ios'))
+        id: iosbuild
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/cmdlogs
+          brew install xcodegen 2>&1 | tail -2 || true
+          # --quick, BECAUSE CI HAS NO BRIEFCASE PROJECT. `ios/` is entirely
+          # untracked (0 files in git): the BeeWare app the full path wants exists
+          # only on a machine that has run `briefcase create/build iOS`, so
+          # prepare_python_bundle.sh can never succeed on a runner. The bundle CI
+          # needs is already on disk by here — fetched by fetch_client_artifacts.py
+          # above, as the script's own preflight confirms ("Resources: 46MB").
+          # --quick overlays the repo's live ciris_engine/ciris_adapters onto it,
+          # which is the part CI exists to test.
+          # --no-launch: install only. Launching here left the iOS app holding
+          # :8080/:9091 across the macOS desktop leg on the same loopback; the
+          # driver's ios-simulator-up launches it when the iOS leg starts.
+          bash apps/ios/scripts/rebuild_and_deploy.sh --quick --no-launch 2>&1 \
+            | tee artifacts/cmdlogs/ios-rebuild-and-deploy.log | tail -30
+          # Same locator the script uses — note -not -path Index.noindex, which a
+          # naive find picks up and then installs a stub that launches to nothing.
+          APP=$(find ~/Library/Developer/Xcode/DerivedData/iosApp-* \
+                -name "iosApp.app" -path "*Debug-iphonesimulator*" \
+                -not -path "*/Index.noindex/*" -type d 2>/dev/null | head -1)
+          echo "app=$APP" >> "$GITHUB_OUTPUT"
+          echo "built: ${APP:-<none>}"
+
+      - name: Run the shared flow on each platform this runner owns
+        id: qa
+        shell: bash
+        env:
+          # Real key when present. On fork PRs secrets are absent, and the run
+          # falls back to the mock LLM: that still proves the UI flow end to end,
+          # and the step SAYS so rather than implying live coverage it did not
+          # have.
+          # ONLY a manual dispatch can turn the live key OFF. On `schedule` there is
+          # no input, so `inputs.use_live_key` is EMPTY — and Actions' loose equality
+          # treats empty as equal to false, which selected '0' and made every nightly
+          # take the mock branch. The automatic release signal was therefore never
+          # exercising the real model wire, while reporting "no secret available".
+          USE_LIVE_KEY: ${{ (github.event_name == 'workflow_dispatch' && inputs.use_live_key == false) && '0' || '1' }}
+          REQUESTED: ${{ inputs.platforms || 'all' }}
+          IOS_APP: ${{ steps.iosbuild.outputs.app }}
+          # NOT interpolated into the script. A `run:` body that contains any
+          # `${{ }}` is evaluated as ONE expression, and GitHub caps expressions at
+          # 21000 characters -- this step crossed that at 9293c53a9 and the whole
+          # workflow file became unparseable (a push-event run with jobs: []).
+          # Plain text has no such limit; the matrix reaches the script as env.
+          MATRIX_PLATFORMS: ${{ matrix.platforms }}
+        run: |
+          set -uo pipefail
+          # Same AVD home the provisioning step used. The emulator re-derives
+          # this independently, and a mismatch reads as 'no AVDs configured'.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p artifacts/shots artifacts/logs
+          overall=0
+
+          # A FAILING LEG MUST NAME ITS LAYER. Every failure below routes through
+          # diagnose_gate_failure.py, which reads the logs, classifies the break
+          # (INFRA / CLIENT / WIRE / AGENT / SILENT / DELIVERY) and appends a row
+          # here. Header written once, before any row can land under it.
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ ! -s "${GITHUB_STEP_SUMMARY}" ]; then
+            {
+              echo "### Five-platform gate - failures by layer"
+              echo ""
+              echo "| platform | phase | layer | meaning | evidence |"
+              echo "|---|---|---|---|---|"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          for plat in $MATRIX_PLATFORMS; do
+            if [ "$REQUESTED" != "all" ] && ! echo " $REQUESTED " | grep -q " $plat "; then
+              echo "::notice::$plat not in requested subset — skipping"
+              continue
+            fi
+
+            # linux/macos/windows are all the DESKTOP target; android/ios are
+            # their own. The label is what a human reads; --platform is what the
+            # automation needs.
+            case "$plat" in
+              linux|macos|windows) target=desktop ;;
+              *)                   target="$plat" ;;
+            esac
+
+            echo "::group::$plat ($target)"
+            llm_args="--mock-llm"
+            if [ "$USE_LIVE_KEY" = "1" ] && [ -n "${OPENROUTER_API_KEY:-}" ]; then
+              # PIN THE MODEL. Without --llm-model the automation clicks the first
+              # entry in the live dropdown, sorted alphabetically — which on
+              # OpenRouter is `aion-labs/aion-2.0`, a model that MANDATES reasoning:
+              #
+              #   HTTP 400 Reasoning is mandatory for this endpoint and cannot be
+              #   disabled.
+              #
+              # Every DMA then fails, no reply is produced, and interact times out
+              # at 110s. The gate reported "no reply rendered" and the cause was the
+              # model it had chosen for itself. "Whatever sorts first" is not a
+              # model choice.
+              #
+              # qwen/qwen3.6-35b-a3b is the OpenRouter QA default (CLAUDE.md, live
+              # model matrix). It replaced meta-llama/llama-4-scout on 2026-09-04
+              # after an RCA on the Android leg: scout returned malformed
+              # structured output for the epistemic-humility conscience twice in
+              # one thought (recommended_action="speak" instead of the enum, then
+              # a missing required field), each turning a correct SPEAK into a
+              # forced PONDER. Qwen returned the schema exactly on the same prompt.
+              llm_args="--llm-provider openrouter --llm-key $OPENROUTER_API_KEY --llm-require-live-models --llm-model qwen/qwen3.6-35b-a3b"
+              echo "LLM: REAL key (live models required)"
+            else
+              echo "LLM: mock (no secret available) — flow is covered, the wire is NOT"
+            fi
+
+            # TEAR DOWN THE PREVIOUS PLATFORM FIRST.
+            #
+            # The macos-ios runner walks macOS then iOS on ONE host, and the loop left
+            # macOS's backend on :8080 and its TestAutomationServer on :9091 running.
+            # The iOS simulator shares the host network, so its servers could not bind
+            # and every health check, /tree read and authenticated history request would
+            # have landed on the STILL-RUNNING macOS stack — scoring a second desktop
+            # interaction as the iOS result. A false green on the platform least able to
+            # be checked by eye, which is worse than iOS simply failing.
+            #
+            # Killing by port rather than by name because the desktop app, the embedded
+            # backend and the simulator host process are different binaries that only
+            # agree on where they listen.
+            # LISTENERS ONLY. Without -sTCP:LISTEN, lsof also returns every process
+            # holding a CLIENT socket on the port -- and the iOS simulator app polls
+            # 127.0.0.1:8080 for its backend, so the macOS teardown's kill -9 took the
+            # simulator app down with it (run 33706020778: "exited due to SIGKILL |
+            # sent by bash"). Owning a port means listening on it, not talking to it.
+            # 4242/4243 are the NODE's (transport + read API). They matter now that a
+            # run-without-AI pass leaves a ciris-server node holding them instead of a
+            # main.py agent (CIRISAgent#1149): the with-AI pass that follows boots an
+            # agent whose node fold binds :4243, and an orphan from the previous pass
+            # is EADDRINUSE (CIRISAgent#1101/#1102).
+            # NOT `lsof`: it does not exist on Windows Git Bash, so every probe here
+            # failed into its `|| true` and this loop silently did nothing on one of
+            # the three runners. free_ports.py finds holders per-platform and then
+            # PROVES the port is free by binding it (CIRISAgent#1102).
+            # AND ITS ANSWER IS BINDING. This call is the proof the platform starts
+            # clean; discarding its exit code (`|| true`) would let the next app boot
+            # into EADDRINUSE, or -- worse on the shared macOS/iOS runner -- let its
+            # probes answer against the previous platform's listeners and read green.
+            if ! python3 tools/dev/free_ports.py 8080 9091 8091 4242 4243 --timeout 30 --label teardown; then
+              overall=1
+              echo "::error::$plat: a listener from the previous platform survived teardown -- skipping $plat rather than testing it against a stale backend"
+              echo "::endgroup::"
+              continue
+            fi
+
+            export CIRIS_HOME="${RUNNER_TEMP}/ciris-$plat"
+            mkdir -p "$CIRIS_HOME"
+
+            # --headless is a DESKTOP concept (it controls the app window /
+            # browser). An emulator or simulator has its own display and the flag
+            # means nothing there, so it is only passed for desktop.
+            extra=""
+            noai_ok=1
+            [ "$target" = "desktop" ] && extra="--headless"
+            if [ "$target" = "ios" ]; then
+              if [ -z "${IOS_APP:-}" ]; then
+                # SKIP LOUDLY, never quietly pass. An absent artifact that reads
+                # as success is how v2.9.42 shipped with no APK.
+                echo "::error::ios: no simulator .app was built — skipping, and FAILING the job"
+                overall=1
+                echo "::endgroup::"
+                continue
+              fi
+              extra="$extra --ios-app-path $IOS_APP"
+            fi
+
+            # 0. RUN WITHOUT AI — the wizard's OTHER answer (CIRISAgent#1149). The
+            #    product has two shapes and CI only ever drove one. Here the owner
+            #    answers "without an AI assistant" on YOU: the wizard skips the AI
+            #    screen, the agent records CIRIS_RUN_WITHOUT_AI=true, and the backend
+            #    process BECOMES a ciris-server node — :8080 goes away and the client
+            #    follows to :4243. Reaching Interact in that state is the assertion,
+            #    and it needs client >= 0.5.203 to know where to look.
+            python -m tools.qa_runner.modules.web_ui desktop-setup \
+              --platform "$target" --launch $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              --run-without-ai \
+              --screenshot-on-success "artifacts/shots/$plat-setup-noai.png" \
+              -v || { overall=1; noai_ok=0; echo "::error::$plat run-without-AI setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            # ONE FAULT, ONE RED. If the no-AI setup never completed, a login
+            # failure here is its CONSEQUENCE, not a finding: the app is mid-wizard,
+            # so every element the driver waits for is legitimately absent. Nightly
+            # 34596459034 turned one unreachable test server into four reds that read
+            # as client defects, and the classifier called all of them UNKNOWN
+            # (CIRISAgent#1172). Skip loudly instead.
+            if [ "$noai_ok" = 1 ]; then
+              python -m tools.qa_runner.modules.web_ui desktop-login \
+                --platform "$target" $extra \
+                --username qaadmin --password "qa_test_password_12345" \
+                --run-without-ai \
+                --screenshot-on-success "artifacts/shots/$plat-login-noai.png" \
+                -v || { overall=1; echo "::error::$plat run-without-AI login failed — Interact unreachable against a node-only backend"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            else
+              echo "::notice::$plat run-without-AI login SKIPPED — setup-noai did not complete, so a failure here would be a consequence, not a finding"
+            fi
+
+            # 0b. RESET THROUGH THE CLIENT, not with rm. The client's factory reset is
+            #     what deletes the .env, and the .env is where CIRIS_RUN_WITHOUT_AI
+            #     lives — skip it and every later boot keeps handing the process to the
+            #     node, so the with-AI pass below would have no :8080 to talk to.
+            #     Driving the real button is also how we find out if that reset ever
+            #     stops clearing the flag.
+            if [ "$noai_ok" = 1 ]; then
+              python -m tools.qa_runner.modules.web_ui desktop-reset \
+                --platform "$target" $extra \
+                --screenshot-on-success "artifacts/shots/$plat-reset.png" \
+                -v || { overall=1; echo "::error::$plat client reset failed — the with-AI pass starts from an unknown state"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase reset --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
+
+            else
+              # The reset is the cleanup the with-AI pass depends on, and it cannot
+              # run through a UI that never got there. Clear the home directly so the
+              # with-AI result below is still trustworthy; best-effort because a
+              # Windows file lock must not end the leg.
+              echo "::notice::$plat client reset SKIPPED — setup-noai did not complete; wiping $CIRIS_HOME so the with-AI pass starts from a known state"
+              rm -rf "$CIRIS_HOME" 2>/dev/null || true
+              mkdir -p "$CIRIS_HOME"
+            fi
+
+            # 0c. Reap the node the no-AI pass left behind. `--launch` tears down the
+            #     app and `main.py --adapter api`, but a node-only backend is
+            #     `python -m ciris_server` and holds :4242/:4243, which the agent's own
+            #     node fold is about to want.
+            # WAIT FOR THE PORTS, DO NOT SLEEP AND HOPE. A `sleep 3` here let the macOS
+            # leg boot its next backend into
+            #   "Edge runtime initialization failed (REQUIRED foundation dep):
+            #    Edge transport ports are held by another process"
+            # which is CIRISAgent#1102 reproducing in CI: the previous backend's Rust
+            # transport threads outlive a hard kill, and the graceful release added in
+            # 2.10.0 is bypassed when the launcher kills -9. The port being free is
+            # observable, so observe it instead of guessing at a duration.
+            # THIS LOOP USED TO LIE ON WINDOWS. It probed with `lsof`, which Git Bash
+            # does not have, so `held` was always empty and it printed "free after 2s"
+            # having verified nothing. Run #34147279506 is the proof: that line printed
+            # while the no-AI leg's node still held :4242, and the next backend died on
+            #   ReticulumTransport::new: ... (os error 10048)
+            # An absent process listing is not evidence of a free port — free_ports.py
+            # settles it by binding, which no missing tool can answer wrongly.
+            # iOS ALSO NEEDS 9091: the reset relaunches the simulator app, whose test
+            # server binds :9091 before the slower backend listeners, and the next
+            # `--launch` (run_ios_simulator_up) refuses to proceed while :9091 has an
+            # owner. Desktop's `--launch` tears its own app down, so it is not listed.
+            reset_ports="4242 4243 8080"
+            [ "$target" = "ios" ] && reset_ports="$reset_ports 9091"
+            if ! python3 tools/dev/free_ports.py $reset_ports --timeout 60 --label post-reset; then
+              # Say it here rather than letting the next backend fail with an error that
+              # reads like a product fault.
+              echo "::error::$plat ports still held after 60s — the next backend will fail Edge init (CIRISAgent#1102)"
+              overall=1
+            fi
+
+            # 1. Setup wizard through the real UI, with a real key.
+            # A SHOT AT EVERY STAGE. The capture wrapper runs after main() whatever
+            # the exit code, but only when asked -- and only desktop-chat asked. A
+            # platform that dies in setup (Android, every run so far) therefore
+            # produced no screenshot at all, and "what did the screen say when it
+            # refused to advance" had to be inferred from a tag dump.
+            python -m tools.qa_runner.modules.web_ui desktop-setup \
+              --platform "$target" --launch $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              $llm_args \
+              --screenshot-on-success "artifacts/shots/$plat-setup.png" \
+              -v || { overall=1; echo "::error::$plat setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
+
+            # 2. LOG IN. `desktop-setup` completes the wizard and leaves the app
+            #    on the Login screen ("Desktop existing user - showing local login
+            #    form", isFirstRun=false) — it does NOT land on Interact. The
+            #    first run of this workflow failed exactly here: desktop-chat
+            #    opens with "wait for Interact screen" and never authenticates, so
+            #    every element lookup after it failed in cascade. The Windows job
+            #    has always done setup -> login; this now matches it.
+            python -m tools.qa_runner.modules.web_ui desktop-login \
+              --platform "$target" $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              --screenshot-on-success "artifacts/shots/$plat-login.png" \
+              -v \
+              || { overall=1; echo "::error::$plat login failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase login --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}"  || true; echo "::endgroup::"; continue; }
+
+            # 3. THE GATE: reach Interact, send a message, require a rendered
+            #    reply, and photograph what shipped.
+            chat_rc=0; trace_rc=0
+            # CREDENTIALS ARE REQUIRED HERE NOW. The reply assertion reads
+            # /v1/agent/history, so desktop-chat authenticates like the two steps
+            # above. Without them it fell back to `admin`, which this workflow never
+            # creates, and every platform failed with `401 Unauthorized` raised by
+            # the gate rather than by the product.
+            python -m tools.qa_runner.modules.web_ui desktop-chat \
+              --platform "$target" $extra \
+              --username qaadmin --password "qa_test_password_12345" \
+              --screenshot-on-success "artifacts/shots/$plat.png" \
+              -v || { chat_rc=1; overall=1; echo "::error::$plat interact failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase interact --logs artifacts artifacts/logs artifacts/cmdlogs "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" --probe-provider || true; }
+
+            # 3b. THE CSD FLOWS (FSD/CSD_STANDARD.md). The same YAML the CSDs embed
+            #     is driven here against the logged-in client: navigation, card,
+            #     interactions, expectations before/after each step, screenshots
+            #     per step and a JSON report per flow (artifacts/flows/*.json, read
+            #     by the gallery). check_csd.py only proves the documents and the
+            #     flows agree; this is where the flows are actually run. A flow the
+            #     client cannot satisfy (version floor, refused scroll, absent tag)
+            #     fails the leg -- the flow says what it expected and what it saw.
+            #     Exit 2 = every failing flow stopped at its FIRST precondition: the
+            #     pinned client does not show that screen (CIRISClient#45 unmerged),
+            #     so the flow never ran. That is a warning naming the flows, not a
+            #     red leg -- the JSON and the gallery still carry it. Exit 1 = a
+            #     flow started and then failed: the leg is red.
+            if [ "$target" = "desktop" ]; then
+              flow_rc=0
+              python -m tools.qa_runner.modules.web_ui flow \
+                --platform "$target" $extra \
+                --spec tools/qa_runner/flows --artifacts artifacts \
+                -v || flow_rc=$?
+              if [ "$flow_rc" = 1 ]; then
+                overall=1; echo "::error::$plat CSD flows failed -- see artifacts/flows/*.json and artifacts/shots/flow-*.png"
+              elif [ "$flow_rc" != 0 ]; then
+                echo "::warning::$plat CSD flows could not start on this client (their screens are not in the pinned ciris-client) -- see artifacts/flows/*.json"
+              fi
+            fi
+
+            # RECORD THE RESULT OURSELVES. `--json-report` is FEDERATION-ONLY:
+            # the global parser accepts it and only the `federation` command
+            # ever writes it, so passing it to setup/login/chat was a silent
+            # no-op. That is why the first run produced no chat-*.json, and the
+            # gallery would have shown five "did not run" tiles for three jobs
+            # that actually ran. The exit code is the fact that matters.
+            # The verdict is written AFTER both assertions, below.
+
+            # 4. ONE IDENTITY, ONE LIVE HOLDER.
+            #    A first-run Google sign-in + setup minted TWO ROOT certs for the
+            #    same identity, and the node then fail-closed every later sign-in
+            #    (auth.oauth.store_unavailable). An OAuth user has no password, so
+            #    that is a permanent lockout on a fresh install.
+            #
+            #    This gate authenticates with a local password, so it does not walk
+            #    the OAuth path and did not see it. But the bug is a broken
+            #    INVARIANT, not a consent-screen problem — and an invariant can be
+            #    asserted against the store with no provider involved. Cheap, and it
+            #    fails the moment any run leaves two holders behind.
+            # THE STORE IS NOT ON THE HOST FOR MOBILE. $CIRIS_HOME/data is where the
+            # DESKTOP backend writes; the Android and iOS apps embed their own backend
+            # and write inside the device/simulator sandbox. Pointing this at the host
+            # path for every target meant the assertion returned 2 (no database) on
+            # every mobile run and set overall=1 — so android and iOS could never pass,
+            # no matter how well the interaction itself went. A check that cannot
+            # succeed is not a gate, it is a permanent red light.
+            #
+            # Resolve where the platform ACTUALLY wrote, and when it cannot be reached,
+            # say NOT COVERED rather than inventing a failure.
+            db=""
+            case "$target" in
+              desktop) db="$CIRIS_HOME/data/ciris_engine.db" ;;
+                android)
+                  # adb is NOT on PATH here -- the emulator steps reach it through
+                  # $SDK/platform-tools -- and under `set -e` a command substitution
+                  # whose binary is missing kills the step. That is the exit 127 that
+                  # failed linux-android after setup 6/6, login 7/7 and chat 5/5 had
+                  # all passed, twice over. The ios branch below already guarded its
+                  # substitution with `|| true`; this one never did.
+                  pkg=ai.ciris.mobile.debug
+                  ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+                  remote=""
+                  if [ -x "$ADB" ]; then
+                    remote=$("$ADB" exec-out run-as "$pkg" sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r' || true)
+                  else
+                    echo "::warning::adb not found at '$ADB' -- skipping the one-holder check for $plat"
+                  fi
+                  if [ -n "$remote" ]; then
+                    "$ADB" exec-out run-as "$pkg" cat "$remote" > "artifacts/db-$plat.db" 2>/dev/null \
+                      && db="artifacts/db-$plat.db"
+                  fi ;;
+              ios)
+                data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
+                if [ -n "$data" ]; then
+                  f=$(find "$data" -name ciris_engine.db 2>/dev/null | head -1)
+                  [ -n "$f" ] && cp "$f" "artifacts/db-$plat.db" && db="artifacts/db-$plat.db"
+                fi ;;
+            esac
+
+            if [ -n "$db" ] && [ -f "$db" ]; then
+              # python3, not python: the runners carry no unversioned `python`,
+              # so this and the trace assertion below exited 127 (command not
+              # found) — and 127 escaped as the step's exit code, failing
+              # linux-android after every one of its tests had passed. Two
+              # checks were reporting nothing while looking like they ran.
+              python3 tools/dev/assert_one_holder_per_identity.py "$db" \
+                || { overall=1; echo "::error::$plat provider identity has >1 live holder"; }
+            else
+              echo "::notice::$plat OAuth-holder invariant NOT COVERED — no reachable database"
+            fi
+
+            # 5. Traces reaching canonical — REPORTED, NOT ENFORCED, for now.
+            #
+            #    The rung this requires (`replication`) sits on top of the
+            #    KEX/replication path upstream is currently rebuilding, so runs
+            #    legitimately stop at `kex` for a reason that is not ours and
+            #    that no change here can clear. Blocking the release gate on
+            #    someone else's in-flight revamp would hold five platforms
+            #    permanently red and train us to ignore the colour — which is
+            #    how a gate stops being a gate.
+            #
+            #    It still RUNS and still prints its ladder, so the day
+            #    replication lands it shows up in the log; restore enforcement by
+            #    putting `overall=1` back on the failure branch below. Annotated
+            #    as a warning so the run states what is not being enforced: an
+            #    unenforced check that is ALSO invisible is a vacuous pass with
+            #    extra steps.
+            #    NOTE this is downstream of step 3: with no message sent, the node
+            #    admits no traces at all (trace_plane standing=never_admitted,
+            #    rows=0) and this fails for a reason that is not about delivery.
+            #    FOUR OUTCOMES, FOUR CODES. 0 delivered, 1 did not, 3 could not
+            #    be observed (CIRISServer#518 — the wheel exposes no replication
+            #    counter), 4 the canonical's receipt could not be established.
+            #    Collapsing any of these into another is a lie in one direction
+            #    or the other: as 0 the gallery claimed "traces reached
+            #    canonical" for a run that proved nothing, which is how this was
+            #    wrong before.
+            # ASK THE RECEIVER, NOT THE SENDER (ciris-server >= 0.5.208,
+            # CIRISServer#487/#592). Every rung below this is our own account of
+            # what we sent — rooted, KEX present, envelopes counted — and all of
+            # them can be green while nothing was stored at the far end. The
+            # receipt is the canonical's own signed statement of what it holds,
+            # verified against our directory with its key's standing checked at
+            # the instant of the ask, so a replayed or wrong-signer answer
+            # contributes nothing. The ladder stays as the diagnosis for when the
+            # receipt cannot be established, and as the answer on an older wheel.
+            #
+            # THE BACKEND MUST STILL BE UP: the accessor reads this node's own
+            # engine handle, so it is asked over the agent's API while the
+            # platform is still standing, not from a log after teardown.
+            receipt_base="http://localhost:8080"
+            if [ "$target" = "android" ]; then
+              # The backend lives inside the emulator; the host reaches it only
+              # through the adb forward the bring-up step installed, and that
+              # forward does not survive every teardown path on the way here
+              # (_android_teardown removes both ports). Re-assert it — adb forward
+              # is idempotent, so this is a no-op when it is already standing, and
+              # the difference between "no route" and "no receipt" when it is not.
+              ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+              [ -x "$ADB" ] && "$ADB" forward tcp:8080 tcp:8080 >/dev/null 2>&1 || true
+            fi
+            set +e
+            python3 tools/dev/assert_traces_reached_canonical.py \
+              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240 \
+              --receipt-url "$receipt_base" \
+              --receipt-username qaadmin --receipt-password "qa_test_password_12345" \
+              --receipt-raw-out "artifacts/receipt-$plat.json" \
+              --require-authored
+            trace_status=$?
+            set -e
+            case "$trace_status" in
+              0) trace_rc=0; traces_json=true ;;
+              3) trace_rc=0; traces_json=null
+                 echo "::notice::$plat trace delivery NOT OBSERVABLE on this substrate (CIRISServer#518)" ;;
+              4) trace_rc=0; traces_json=null
+                 # UNKNOWN IS NOT FAILURE. Upstream is explicit that a null verdict
+                 # means unreachable / unverified / partial — someone else's outage
+                 # or an incomplete directory, not a statement that we did not
+                 # deliver. Scoring it red would make this gate report other
+                 # people's weather.
+                 echo "::notice::$plat canonical RECEIPT NOT ESTABLISHED (unknown, not zero) — see the per-canonical reasons above" ;;
+              5) trace_rc=1; traces_json=false; overall=1
+                 # ENFORCED: THE NODE SEALED NOTHING. Below delivery and independent
+                 # of the upstream KEX/replication revamp, so it is fatal now. From
+                 # 2026-10-09 to 10-14 every platform authored 0 traces (a mock-LLM
+                 # latch set by adapter discovery in a LIVE run, CIRISAgent#1244)
+                 # and this job stayed green: "authored 0" reads as receipt
+                 # UNKNOWN (4), and 4 is not failure. Vacuous green, six nightlies.
+                 echo "::error::$plat authored NO traces (receipt authored=0 or unreadable) — local fault, check [MOCK-GUARD]/[CONSENT] in the agent log" ;;
+              *) trace_rc=1; traces_json=false
+                 echo "::warning::$plat traces did not reach canonical (NOT enforced — upstream KEX/replication revamp in flight)" ;;
+            esac
+
+            # BACKEND MEMORY, while the platform is still standing. The agent's node
+            # is folded into the backend process, so this is what a 4 GB laptop or a
+            # phone pays for agent + node. ciris-server 0.5.222 raised the
+            # canonical's resting RSS ~800 MB -> ~1.3 GB and how much of that is
+            # per-node is not yet known; this samples after the flow's activity and
+            # again after an idle minute so a release can be compared with the last.
+            # REPORT-ONLY: the sampler always exits 0 and writes null with a reason
+            # when it cannot read a number.
+            python3 tools/dev/sample_backend_memory.py --platform "$plat" --target "$target" \
+              --idle-secs 60 --out "artifacts/memory-$plat.json" || true
+
+              # THE TILE REFLECTS WHAT IS ENFORCED. It used to require both halves,
+              # which was right while both were fatal — writing it after only the
+              # chat step had put a green tile on a red job and hidden which
+              # platform lost the second half.
+              #
+              # With the trace rung reporting rather than blocking (upstream
+              # KEX/replication revamp), keeping it in `success` would paint every
+              # tile red on a job that passed — the same misreporting, inverted,
+              # and it would bury the screenshots this gallery exists to show.
+              # So `success` tracks the enforced half, and `traces` keeps carrying
+              # the un-enforced rung as its own field so nothing is concealed.
+              # Restore the conjunction here when enforcement comes back.
+              printf '{"platform":"%s","success":%s,"interact":%s,"traces":%s}\n' \
+                "$plat" \
+                "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
+                "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
+                "$traces_json" \
+                > "artifacts/chat-$plat.json"
+
+            cp -r "$CIRIS_HOME/logs" "artifacts/logs/$plat" 2>/dev/null || true
+            # The emulator's own log is where a boot failure explains itself —
+            # graphics negotiation, KVM, a corrupt AVD. Without it, "did not
+            # appear in adb" is the whole story we get.
+            cp /tmp/ciris_android_emulator.log "artifacts/cmdlogs/emulator-$plat.log" 2>/dev/null || true
+            echo "::endgroup::"
+          done
+          exit $overall
+
+      - name: Collect artifacts
+        if: always()
+        shell: bash
+        env:
+          MATRIX_PLATFORMS: ${{ matrix.platforms }}
+        run: |
+          set +e
+          mkdir -p artifacts/logs artifacts/cmdlogs
+          # SIMULATOR CRASH REPORTS. An iOS SIGABRT shows up in oslog as one launchd
+          # line ("exited due to SIGABRT … ran for 36620ms", run 34272658734) and
+          # the reason is in the .ips report macOS writes under DiagnosticReports,
+          # which nothing collected -- CIRISClient#50 was filed without it. Only
+          # reports from this job's window, so a runner's stale crashes stay out.
+          if [ "${RUNNER_OS}" = "macOS" ]; then
+            mkdir -p artifacts/cmdlogs/ios-crashes
+            # THE APP'S REPORT IS INSIDE THE DEVICE, not on the host. The first
+            # version searched only ~/Library/Logs/DiagnosticReports and collected
+            # exactly one file -- xcodebuild's own abort (run 34283596992) -- while
+            # the iosApp SIGABRT this exists for sat in the simulator container at
+            # ~/Library/Developer/CoreSimulator/Devices/<UDID>/data/Library/Logs/
+            # DiagnosticReports. Search both, and keep the process name in the
+            # filename so a host crash cannot be mistaken for the app's.
+            for root in "$HOME/Library/Logs/DiagnosticReports" \
+                        "$HOME/Library/Logs/CoreSimulator" \
+                        "$HOME/Library/Developer/CoreSimulator/Devices"; do
+              [ -d "$root" ] || continue
+              find "$root" -type f \( -name '*.ips' -o -name '*.crash' \) -mmin -240 \
+                -exec cp {} artifacts/cmdlogs/ios-crashes/ \; 2>/dev/null
+            done
+            n=$(ls artifacts/cmdlogs/ios-crashes 2>/dev/null | wc -l | tr -d ' ')
+            app=$(grep -l -i "iosApp\|ai.ciris.mobile" artifacts/cmdlogs/ios-crashes/* 2>/dev/null | wc -l | tr -d ' ')
+            echo "simulator crash reports collected: $n ($app naming the app)"
+          fi
+          # Agent + node logs per platform home.
+          for d in "${RUNNER_TEMP}"/ciris-*; do
+            [ -d "$d" ] || continue
+            name=$(basename "$d")
+            [ -d "$d/logs" ] && cp -r "$d/logs" "artifacts/logs/$name" 2>/dev/null
+            # .env carries secrets — ship the SHAPE, never the values, so a failed
+            # run stays diagnosable without leaking a key into a public artifact.
+            [ -f "$d/.env" ] && sed 's/=".*"/=<redacted>/' "$d/.env" > "artifacts/$name.env.shape.txt"
+          done
+          # THE CLIENT'S OWN LOG. A UI failure is undiagnosable without it: the
+          # agent and node both look healthy while the app renders the wrong
+          # surface, and "[gate] clientMode=…" exists only here.
+          #
+          # Run 3 collected ONLY ciris_desktop_setup.log — the setup phase's file —
+          # so when the interact gate found that the agent SPEAKs and the UI never
+          # renders the reply (CIRISAgent#1127), the client half of that story was
+          # missing from the artifact. Searching every plausible home and every
+          # phase, because the one log that matters is the one for the phase that
+          # failed.
+          # WINDOWS KEEPS IT SOMEWHERE UNIX PATHS DO NOT REACH. The desktop client
+          # writes to `C:\Users\RUNNER~1\AppData\Local\Temp\ciris_desktop_setup.log`
+          # — observed verbatim in the Windows job. `$TMPDIR` is unset there and
+          # `$LOCALAPPDATA` arrives as a BACKSLASH path that `find` cannot walk, so
+          # a Unix-shaped root list quietly collected nothing on the one platform
+          # whose client log we have actually needed.
+          #
+          # cygpath converts when present (git-bash on the Windows runner); the
+          # ${VAR//\\//} fallback covers a bash without it. `$TEMP`/`$TMP` are the
+          # Windows spellings of the same directory.
+          roots="${TMPDIR:-/tmp} ${RUNNER_TEMP} $HOME ."
+          for w in "${LOCALAPPDATA:-}" "${TEMP:-}" "${TMP:-}"; do
+            [ -n "$w" ] || continue
+            if command -v cygpath >/dev/null 2>&1; then
+              w=$(cygpath -u "$w" 2>/dev/null || echo "$w")
+            else
+              w="${w//\\//}"
+            fi
+            roots="$roots $w"
+          done
+          for d in $roots; do
+            [ -d "$d" ] || continue
+            # depth 3: AppData/Local/Temp sits three below $HOME on Windows.
+            # .jstack.txt: the jcmd thread dump of a JVM that was alive but never served.
+            find "$d" -maxdepth 3 \( -name 'ciris_desktop*.log' -o -name 'ciris_desktop*.jstack.txt' \) -newermt '-3 hours' \
+              -exec cp {} artifacts/ \; 2>/dev/null
+          done
+          echo "client-log search roots: $roots"
+          ls artifacts/ciris_desktop*.log 2>/dev/null || echo "NOTE: no desktop client log found — a UI failure will not be diagnosable"
+          # Android: the device's own logcat, which is where a Chaquopy or
+          # TestAutomationServer failure actually appears.
+          #
+          # GATED ON THIS RUNNER ACTUALLY HAVING ANDROID, and wrapped in a
+          # timeout. GitHub's macOS runners ship the Android SDK, so
+          # `command -v adb` succeeds there — and with no device attached, adb
+          # blocks starting its server. That hung this step for over an hour on
+          # macos-ios, burned the job timeout, and (worse) blocked the
+          # upload-artifact step behind it, so the macOS failure could not be
+          # diagnosed at all. A collect step must never be able to outlive the
+          # thing it is collecting for.
+          # The platform gate alone already excludes macos-ios (its
+          # MATRIX_PLATFORMS is "macos ios"), so `command -v adb` was never what
+          # kept adb off the macOS runner — and on the ubuntu runner adb is NOT
+          # on PATH: the emulator steps above reach it through
+          # $SDK/platform-tools. So the guard was false on the one runner that
+          # has a device, the block was skipped, and because the "unavailable"
+          # fallback lived INSIDE the guard, the absence was silent. Run
+          # 33704781359 lost the only log that could explain why Android's test
+          # server died right after answering /health with testMode=true.
+          #
+          # Resolve adb explicitly, and always leave a file saying why if we
+          # cannot: a missing diagnostic must never be indistinguishable from a
+          # diagnostic that was never attempted.
+          if [ "${MATRIX_PLATFORMS#*android}" != "$MATRIX_PLATFORMS" ]; then
+            ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+            if [ -x "$ADB" ]; then
+              timeout 60 "$ADB" logcat -d > artifacts/logs/android-logcat.txt 2>/dev/null || \
+                echo "logcat unavailable (adb timed out or no device attached)" > artifacts/logs/android-logcat.txt
+              # THE RUNTIME LOGS GO TO FILES, not logcat: latest.log, incidents_latest.log and
+              # the Rust ciris-server.log* under files/ciris/logs in the app's data dir.
+              # Pulled HERE, in the always() collection step, because the per-platform
+              # block `continue`s on a setup/login failure before its post-chat section --
+              # a pull placed there ran only for legs that had already got past login
+              # (2026-09-04, run 33901202920: iOS failed at login, no app logs shipped).
+              #
+              # AND IN THIS BRANCH, NOT THE OTHER ONE. This pull used to sit inside the
+              # `else` of the adb check — the branch that runs only when adb is
+              # MISSING, which is exactly when `adb exec-out` cannot work. On every
+              # real run adb was present, logcat was taken, and the app logs were
+              # silently skipped along with the warning meant to say so. The first
+              # receiver-verified trace negative (run 35171092823) reached android
+              # with no [DELIVERY-PROBE] lines to explain it, because none had ever
+              # been collected. A diagnostic that only runs when it cannot succeed
+              # is the same as no diagnostic, with a comment claiming otherwise.
+              mkdir -p artifacts/logs/android; n=0
+              for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
+                case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "artifacts/logs/android/$f" 2>/dev/null && n=$((n+1)) ;; esac
+              done
+              echo "  pulled $n android log file(s) into artifacts/logs/android"
+              ls artifacts/logs/android/incidents_latest.log artifacts/logs/android/incidents_*.log >/dev/null 2>&1 || echo "::warning::android: no incidents log pulled from the device -- the agent-side story will be missing"
+            else
+              echo "logcat unavailable (no adb executable at '$ADB')" > artifacts/logs/android-logcat.txt
+              echo "::warning::android: no adb executable at '$ADB' -- neither logcat nor the app's runtime logs could be collected"
+            fi
+          fi
+          # THE iOS APP LOGS, on every leg outcome: the runtime's files/ciris/logs plus
+          # the KMP bridge logs from the app container. _ios_diagnostics gathers them
+          # only when bring-up fails; here they ship whatever happened after.
+          if [ "${MATRIX_PLATFORMS#*ios}" != "$MATRIX_PLATFORMS" ]; then
+            data=$(xcrun simctl get_app_container booted ai.ciris.mobile data 2>/dev/null || true)
+            if [ -n "$data" ]; then
+              mkdir -p artifacts/logs/ios; n=0
+              while IFS= read -r f; do cp "$f" "artifacts/logs/ios/$(basename "$f")" 2>/dev/null && n=$((n+1)); done \
+                < <(find "$data" \( -name "*.log" -o -name "*.log.*" \) -type f -size -50M 2>/dev/null | grep -E "/ciris/logs/|kmp_[a-z]+\.log$" | head -40)
+              echo "  pulled $n ios log file(s) into artifacts/logs/ios"
+              ls artifacts/logs/ios/incidents_latest.log artifacts/logs/ios/incidents_*.log >/dev/null 2>&1 || echo "::warning::ios: no incidents log in the app container -- the agent-side story will be missing"
+            else
+              echo "  ios: no app container resolved (app not installed on the booted simulator?) -- no app logs"
+            fi
+          fi
+          # iOS: the SIMULATOR's own os_log for our bundle. Until now this was
+          # gathered only by _ios_diagnostics on the FAILURE path, so a run that
+          # failed its assertion while the app was technically alive produced no
+          # app-side output at all — which is the half you need when the question
+          # is "the agent replied, why did the screen not change".
+          if [ "${MATRIX_PLATFORMS#*ios}" != "$MATRIX_PLATFORMS" ] && command -v xcrun >/dev/null 2>&1; then
+            # A SIGABRT WITH NO MESSAGE IS NOT A DIAGNOSIS. Kotlin/Native writes
+            # the uncaught-exception text to stderr, which for a simctl-launched
+            # app lands in the simulator's os_log and NOWHERE ELSE — not in the
+            # .ips (its `asi` is null for these), not in kmp_errors.log, not in
+            # the Python logs. Run 34889646303 crashed the iOS app mid-setup and
+            # this capture returned "unavailable", so the only artifact of the
+            # failure was a backtrace through the Compose dispatcher with no
+            # statement of what threw.
+            #
+            # Two independent problems, fixed together:
+            #
+            # 1. THE FALLBACK CONFLATED ITS CAUSES. "no booted simulator or log
+            #    show timed out" is a disjunction, so the operator cannot act on
+            #    it: one means the app took the simulator down with it, the other
+            #    means our query was too slow. Say which.
+            #
+            # 2. `--last 15m` OVER EVERYTHING IS TOO SLOW. Predicate filtering in
+            #    `log show` happens AFTER the store is read, so a broad window
+            #    pays full cost before matching anything and routinely burns the
+            #    180s. The crash line is the whole point, so take it FIRST in a
+            #    narrow, cheap query that can afford to finish, then attempt the
+            #    wide one best-effort.
+            booted=$(xcrun simctl list devices booted 2>/dev/null | grep -c "Booted" || true)
+            if [ "${booted:-0}" -eq 0 ]; then
+              echo "ios os_log unavailable: NO BOOTED SIMULATOR at collection time." \
+                   "The app may have taken it down; check cmdlogs/ios-crashes/*.ips." \
+                 > artifacts/logs/ios-oslog.txt
+            else
+              # The crash-shaped lines, first and cheap.
+              timeout 90 xcrun simctl spawn booted log show --last 15m --style syslog \
+                --predicate 'messageType == error OR messageType == fault' \
+                > artifacts/logs/ios-oslog-faults.txt 2>/dev/null \
+                || echo "ios os_log faults: timed out after 90s" > artifacts/logs/ios-oslog-faults.txt
+              # Then the full app-scoped stream, best effort.
+              timeout 240 xcrun simctl spawn booted log show --last 15m --style syslog \
+                --predicate 'subsystem CONTAINS "ai.ciris" OR process CONTAINS "iosApp"' \
+                > artifacts/logs/ios-oslog.txt 2>/dev/null \
+                || echo "ios os_log unavailable: simulator WAS booted, log show exceeded 240s." \
+                        "See logs/ios-oslog-faults.txt for the error/fault slice." \
+                   > artifacts/logs/ios-oslog.txt
+            fi
+          fi
+
+          # A MANIFEST, so a MISSING log is as visible as a present one. Every
+          # diagnosis this gate has needed so far turned on noticing that
+          # something was absent — the desktop client log, the chat JSON, the
+          # screenshot. An index makes absence legible without unpacking.
+          {
+            echo "# Five-Platform Live QA — collected artifacts"
+            echo "# runner=${MATRIX_PLATFORMS}  run=${GITHUB_RUN_ID:-local}"
+            echo
+            echo "## present"
+            find artifacts -type f -printf '%10s  %p\n' 2>/dev/null | sort -k2 \
+              || find artifacts -type f -exec ls -l {} \; 2>/dev/null | awk '{print $5"  "$9}'
+            echo
+            echo "## expected-but-absent"
+            for plat in ${MATRIX_PLATFORMS}; do
+              [ -f "artifacts/shots/$plat-setup.png" ] || echo "  shots/$plat-setup.png (no setup screenshot — did the app start at all?)"
+              [ -f "artifacts/shots/$plat.png" ]   || echo "  shots/$plat.png (no chat screenshot — did the flow reach the chat step?)"
+              [ -f "artifacts/chat-$plat.json" ]   || echo "  chat-$plat.json (no result — did the flow reach the chat step?)"
+              [ -d "artifacts/logs/ciris-$plat" ]  || echo "  logs/ciris-$plat/ (no agent logs — did the platform boot?)"
+              # The DEVICE-side log. Absent, an app that dies after coming up
+              # looks identical to one that never started — which is exactly
+              # the question Android posed in run 33704781359.
+              case "$plat" in
+                android) [ -f "artifacts/logs/android-logcat.txt" ] \
+                  || echo "  logs/android-logcat.txt (no device log — an app death cannot be diagnosed)"
+                         [ -d "artifacts/logs/android" ] && [ -n "$(ls artifacts/logs/android 2>/dev/null)" ] \
+                  || echo "  logs/android/ (no runtime logs pulled from the app — no [DELIVERY-PROBE] ladder, no incidents)" ;;
+                ios)     [ -f "artifacts/logs/ios-oslog.txt" ] \
+                  || echo "  logs/ios-oslog.txt (no simulator log — an app death cannot be diagnosed)"
+                         [ -f "artifacts/logs/ios-oslog-faults.txt" ] \
+                  || echo "  logs/ios-oslog-faults.txt (no error/fault slice — a SIGABRT would have no message)" ;;
+              esac
+            done
+            ls artifacts/ciris_desktop*.log >/dev/null 2>&1 || echo "  ciris_desktop*.log (no CLIENT log — a UI failure cannot be diagnosed)"
+          } > artifacts/MANIFEST.txt 2>&1
+          cat artifacts/MANIFEST.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-qa-${{ matrix.label }}
+          path: artifacts
+          retention-days: 14
+
+  gallery:
+    name: Screenshot gallery
+    needs: live-qa
+    # ALWAYS. A gallery that only renders when everything passed is useless
+    # exactly when it is most needed — the red run is the one worth looking at.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: incoming
+
+      - name: Build a self-contained gallery
+        run: |
+          python3 tools/dev/build_qa_gallery.py incoming \
+            --out gallery/index.html \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: five-platform-gallery
+          path: gallery
+          retention-days: 14

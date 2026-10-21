@@ -7,7 +7,7 @@ These replace all Dict[str, Any] usage in adapter_manager.py.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.adapters.tools import ToolInfo
 
@@ -46,6 +46,8 @@ class AdapterConfig(BaseModel):
         "(e.g., MCP servers with bus_bindings). Validated by the adapter's typed config class.",
     )
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class AdapterLoadRequest(BaseModel):
     """Request to load an adapter."""
@@ -54,6 +56,8 @@ class AdapterLoadRequest(BaseModel):
     adapter_id: str = Field(..., description="Unique ID for the adapter instance")
     config: Optional[AdapterConfig] = Field(None, description="Configuration parameters")
     auto_start: bool = Field(True, description="Whether to auto-start the adapter")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class AdapterOperationResult(BaseModel):
@@ -66,6 +70,8 @@ class AdapterOperationResult(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
     details: Optional[Dict[str, Union[str, int, float, bool]]] = Field(None, description="Additional details")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class AdapterMetrics(BaseModel):
     """Metrics for an adapter."""
@@ -75,6 +81,8 @@ class AdapterMetrics(BaseModel):
     uptime_seconds: float = Field(0.0, description="Adapter uptime in seconds")
     last_error: Optional[str] = Field(None, description="Last error message")
     last_error_time: Optional[datetime] = Field(None, description="Last error timestamp")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class RuntimeAdapterStatus(BaseModel):
@@ -89,6 +97,17 @@ class RuntimeAdapterStatus(BaseModel):
     metrics: Optional[AdapterMetrics] = Field(None, description="Adapter metrics")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
     tools: Optional[List[ToolInfo]] = Field(None, description="Tools provided by adapter")
+    error: Optional[str] = Field(None, description="Error message if adapter failed")
+
+    # Re-authentication status - for OAuth adapters that need token refresh
+    needs_reauth: bool = Field(False, description="Whether re-authentication is required")
+    reauth_reason: Optional[str] = Field(None, description="Reason re-authentication is needed")
+
+    # Interactive auth support - for adapters with auth steps in their wizard
+    has_auth_step: bool = Field(False, description="Whether adapter has an auth step in its wizard")
+    auth_step_id: Optional[str] = Field(None, description="ID of the auth step (oauth or device_auth)")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class AdapterListResponse(BaseModel):
@@ -97,6 +116,8 @@ class AdapterListResponse(BaseModel):
     adapters: List[RuntimeAdapterStatus] = Field(..., description="List of adapter statuses")
     total_count: int = Field(..., description="Total number of adapters")
     running_count: int = Field(..., description="Number of running adapters")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ServiceRegistrationInfo(BaseModel):
@@ -107,15 +128,11 @@ class ServiceRegistrationInfo(BaseModel):
     priority: str = Field(..., description="Registration priority")
     capabilities: List[str] = Field(..., description="Service capabilities")
 
+    model_config = ConfigDict(defer_build=True)
 
-class AdapterInfo(BaseModel):
-    """Detailed information about an adapter."""
 
-    adapter_id: str = Field(..., description=ADAPTER_ID_DESC)
-    adapter_type: str = Field(..., description=ADAPTER_TYPE_DESC)
-    config: AdapterConfig = Field(..., description="Adapter configuration")
-    load_time: str = Field(..., description="ISO timestamp when loaded")
-    is_running: bool = Field(..., description=IS_RUNNING_DESC)
+# NOTE: AdapterInfo was removed from here - use ciris_engine.schemas.services.core.runtime.AdapterInfo
+# which has full fields: services_registered, tools, metrics, etc.
 
 
 class CommunicationAdapterInfo(BaseModel):
@@ -124,6 +141,8 @@ class CommunicationAdapterInfo(BaseModel):
     adapter_id: str = Field(..., description=ADAPTER_ID_DESC)
     adapter_type: str = Field(..., description=ADAPTER_TYPE_DESC)
     is_running: bool = Field(..., description=IS_RUNNING_DESC)
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class CommunicationAdapterStatus(BaseModel):
@@ -134,6 +153,8 @@ class CommunicationAdapterStatus(BaseModel):
     communication_adapters: List[CommunicationAdapterInfo] = Field(..., description="List of adapters")
     safe_to_unload: bool = Field(..., description="Whether safe to unload")
     warning_message: Optional[str] = Field(None, description="Warning message")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ModuleConfigParameter(BaseModel):
@@ -147,6 +168,8 @@ class ModuleConfigParameter(BaseModel):
     required: bool = Field(True, description="Whether parameter is required")
     sensitivity: Optional[str] = Field(None, description="Sensitivity level (e.g., 'HIGH' for secrets)")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ModuleTypeInfo(BaseModel):
     """Information about an available module/adapter type."""
@@ -156,6 +179,8 @@ class ModuleTypeInfo(BaseModel):
     version: str = Field(..., description="Module version")
     description: str = Field(..., description="Module description")
     author: str = Field(..., description="Module author")
+    homepage: Optional[str] = Field(None, description="Module homepage or documentation URL")
+    emoji: Optional[str] = Field(None, description="Display emoji for UI (from imported skills)")
     module_source: str = Field(..., description="Source: 'core' for built-in or 'modular' for plugin")
     service_types: List[str] = Field(
         default_factory=list, description="Service types provided (e.g., TOOL, COMMUNICATION)"
@@ -168,10 +193,13 @@ class ModuleTypeInfo(BaseModel):
     external_dependencies: Dict[str, str] = Field(
         default_factory=dict, description="External package dependencies with version constraints"
     )
+    cli_dependencies: List[str] = Field(
+        default_factory=list, description="Required CLI tools/binaries (e.g., 'tmux', 'mcporter')"
+    )
     is_mock: bool = Field(False, description="Whether this is a mock/test module")
     safe_domain: Optional[str] = Field(None, description="Safe domain classification")
     prohibited: List[str] = Field(default_factory=list, description="Prohibited use cases")
-    metadata: Optional[Dict[str, Union[str, bool, int, List[str]]]] = Field(None, description="Additional metadata")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata (supports nested structures)")
     # Platform requirements for this adapter
     platform_requirements: List[str] = Field(
         default_factory=list, description="Platform requirements (e.g., 'android_play_integrity', 'google_native_auth')"
@@ -180,6 +208,13 @@ class ModuleTypeInfo(BaseModel):
         None, description="Explanation of why platform requirements exist"
     )
     platform_available: bool = Field(True, description="Whether this adapter is available on the current platform")
+    internal_only: bool = Field(False, description="If True, adapter is hidden from UI and cannot be manually loaded")
+    # Interactive configuration (wizard) support
+    has_interactive_config: bool = Field(
+        False, description="Whether this adapter has interactive configuration (wizard workflow)"
+    )
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ModuleTypesResponse(BaseModel):
@@ -189,3 +224,34 @@ class ModuleTypesResponse(BaseModel):
     adapters: List[ModuleTypeInfo] = Field(..., description="Dynamically loaded adapters")
     total_core: int = Field(..., description="Total number of core modules")
     total_adapters: int = Field(..., description="Total number of adapters")
+
+    model_config = ConfigDict(defer_build=True)
+
+
+class AdapterLoadFailure(BaseModel):
+    """A configured adapter that did NOT load, kept for the life of the process.
+
+    CIRISAgent#1057. Adapter load failures were logged once at boot and then
+    forgotten, so a fleet ran for several releases with two adapters failing to
+    import on every agent — and one agent serving with NONE of its configured
+    adapters — while every health check said `healthy`. The failure was
+    discoverable only by reading the adapter manager's own log line, which is
+    not a monitoring strategy.
+
+    Keeping the failures as state (rather than as a log event) is what lets
+    /v1/system/health answer the question an operator actually asks: is this
+    agent doing what it was configured to do?
+    """
+
+    adapter_type: str = Field(..., description="Configured adapter type that failed to load")
+    adapter_id: str = Field(..., description="Configured adapter id")
+    error: str = Field(..., description="Exception text, for the operator")
+    error_type: str = Field(..., description="Exception class name")
+    is_missing_module: bool = Field(
+        False,
+        description=(
+            "True when the adapter could not be IMPORTED at all — a renamed or removed adapter still "
+            "named in config, rather than one that exists and failed to start. In #1057 this was "
+            "'ciris_covenant_metrics' (renamed to ciris_accord_metrics) and 'sync' (gone)."
+        ),
+    )

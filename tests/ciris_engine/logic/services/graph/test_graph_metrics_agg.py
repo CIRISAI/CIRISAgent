@@ -22,7 +22,7 @@ import os
 import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -280,16 +280,49 @@ class TestAuditServiceMetrics(BaseMetricsTest):
     @pytest_asyncio.fixture
     async def audit_service(self, mock_memory_bus, time_service):
         """Create audit service."""
+        from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
+
+        import ciris_engine.logic.persistence.models.graph as _graph_mod
+        from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+        # A3 cutover / 2.9.7: the audit hash-chain write goes through the
+        # persist engine and signs via engine.local_sign — wire a real one
+        # WITH a local signing identity (pointed at a temp DB) or log_event
+        # raises "persist engine not wired". Restored in the finally.
+        _prior_engine = _graph_mod._engine
+        _prior_dsn = _graph_mod._engine_dsn
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            service = GraphAuditService(
-                memory_bus=mock_memory_bus,
-                time_service=time_service,
-                db_path=os.path.join(temp_dir, "audit.db"),
-                key_path=os.path.join(temp_dir, "keys"),
+            persist_db_path = os.path.join(temp_dir, "audit.db")
+            seed_path = os.path.join(temp_dir, "local.seed")
+            with open(seed_path, "wb") as _sf:
+                _sf.write(os.urandom(32))
+            pqc_seed_path = os.path.join(temp_dir, "local.pqc")
+            with open(pqc_seed_path, "wb") as _qf:
+                _qf.write(os.urandom(32))
+            reset_engine()  # un-pin any engine a prior fixture wired
+            persist_engine = Engine(
+                f"sqlite:///{persist_db_path}",
+                "test-key",
+                local_key_id="test-key",
+                local_key_path=seed_path,
+                local_pqc_key_id="test-key-pqc",
+                local_pqc_key_path=pqc_seed_path,
             )
-            await service.start()
-            yield service
-            await service.stop()
+            set_persist_engine(persist_engine, dsn=f"sqlite:///{persist_db_path}")
+            try:
+                service = GraphAuditService(
+                    memory_bus=mock_memory_bus,
+                    time_service=time_service,
+                    db_path=persist_db_path,
+                    enable_hash_chain=True,
+                )
+                await service.start()
+                yield service
+                await service.stop()
+            finally:
+                _graph_mod._engine = _prior_engine
+                _graph_mod._engine_dsn = _prior_dsn
 
     @pytest.mark.asyncio
     async def test_audit_service_base_metrics(self, audit_service):

@@ -7,7 +7,7 @@ Ensures filter tests wait for task completion before proceeding to next test.
 import json
 import threading
 import time
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import requests
 
@@ -25,6 +25,8 @@ class FilterTestHelper:
         self.stream_error = threading.Event()
         self.stream_connected = threading.Event()
         self.current_response: Optional[Any] = None  # Track response for cleanup
+        self.task_complete_seen = False  # Track if TASK_COMPLETE action was seen
+        self.action_results: List[Dict[str, Any]] = []
 
     def start_monitoring(self) -> None:
         """Start monitoring SSE stream for task completions."""
@@ -34,6 +36,8 @@ class FilterTestHelper:
         self.should_stop.clear()
         self.stream_error.clear()
         self.stream_connected.clear()
+        self.task_complete_seen = False  # Reset on start
+        self.action_results.clear()
         self.stream_thread = threading.Thread(target=self._monitor_stream, daemon=True)
         self.stream_thread.start()
 
@@ -55,6 +59,12 @@ class FilterTestHelper:
 
         if self.stream_thread:
             self.stream_thread.join(timeout=2)
+
+    def clear_task_ids(self) -> None:
+        """Clear completed task IDs to prepare for next test."""
+        self.completed_tasks.clear()
+        self.task_complete_seen = False
+        self.action_results.clear()
 
     def wait_for_task_complete(self, task_id: Optional[str] = None, timeout: float = 30.0) -> bool:
         """
@@ -141,8 +151,12 @@ class FilterTestHelper:
                             for event in events:
                                 event_type = event.get("event_type")
 
-                                # Look for action_result events (ANY action completes the thought)
+                                # Look for action_result events
                                 if event_type == "action_result":
+                                    self.action_results.append(event)
+                                    if len(self.action_results) > 200:
+                                        self.action_results = self.action_results[-200:]
+
                                     action_executed = event.get("action_executed", "")
                                     execution_success = event.get("execution_success", False)
                                     task_id = event.get("task_id", "unknown")
@@ -150,16 +164,30 @@ class FilterTestHelper:
 
                                     if self.verbose:
                                         print(
-                                            f"[SSE] ACTION_RESULT: task={task_id[:8]}, thought={thought_id[:8]}, "
+                                            f"[SSE] ACTION_RESULT: task={task_id[:8] if task_id else 'N/A'}, "
+                                            f"thought={thought_id[:8] if thought_id else 'N/A'}, "
                                             f"action={action_executed}, success={execution_success}"
                                         )
 
-                                    # ANY action_result that succeeded indicates thought completion
-                                    # (speak, memorize, recall, task_complete, etc. all complete the thought)
-                                    if execution_success:
+                                    # Check specifically for TASK_COMPLETE action
+                                    if action_executed and action_executed.upper() == "TASK_COMPLETE":
+                                        if execution_success:
+                                            if self.verbose:
+                                                print(
+                                                    f"[SSE] ✅ TASK_COMPLETE seen for task {task_id[:8] if task_id else 'N/A'}"
+                                                )
+                                            self.task_complete_seen = True
+
+                                    # Only track TASK_COMPLETE as completion - other actions (SPEAK, MEMORIZE, etc.)
+                                    # are intermediate steps, not task completion
+                                    if (
+                                        action_executed
+                                        and action_executed.upper() == "TASK_COMPLETE"
+                                        and execution_success
+                                    ):
                                         if self.verbose:
                                             print(
-                                                f"[SSE] ✅ Action completed: {action_executed} for thought {thought_id[:8]}"
+                                                f"[SSE] ✅ TASK_COMPLETE for thought {thought_id[:8] if thought_id else 'N/A'}"
                                             )
                                         # Use thought_id as the completion marker (not task_id which may be None)
                                         if thought_id and thought_id != "unknown":

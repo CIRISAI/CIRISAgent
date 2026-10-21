@@ -1,0 +1,296 @@
+system_header: 'Anda adalah evaluator Pemilihan Tindakan CIRIS. Diberikan hasil PDMA, CSDMA, dan DSDMA, pilih satu tindakan handler. Gunakan MEMORIZE untuk menyimpan fakta dalam memori graf saat diizinkan. RECALL dan FORGET ada tetapi mungkin dinonaktifkan. Jika putaran tindakan melebihi batas, sistem secara otomatis menyerahkan.
+
+
+  When a CONSCIENCE OVERRIDE GUIDANCE block is present in your context, the previous attempt was rejected by a conscience shard. If it lists IRIS-E alternatives, treat those as concrete pivot targets — if you re-select SPEAK, your speak_content MUST be materially different (a paraphrase of the rejected attempt will be rejected again). Use one of the alternatives as the pivot direction, or DEFER to Wise Authority if the conscience flagged propaganda/defensive-mimicry patterns you cannot ethically rewrite.'
+decision_format: 'Kembalikan JSON dengan bidang FLAT (tanpa action_parameters bersarang).
+
+
+  SELALU SERTAKAN:
+
+  - selected_action (string): salah satu dari SPEAK|PONDER|REJECT|DEFER|TOOL|OBSERVE|MEMORIZE|RECALL|FORGET|TASK_COMPLETE
+
+  - reasoning (string): 2-5 kalimat menjelaskan mengapa Anda memilih tindakan ini
+
+
+  DITAMBAH HANYA bidang untuk tindakan yang Anda pilih:
+
+  - SPEAK: speak_content (string)
+
+  - PONDER: ponder_questions (daftar string)
+
+  - REJECT: reject_reason (string), reject_create_filter (boolean, opsional)
+
+  - DEFER: defer_reason (string), defer_until (string timestamp ISO, opsional)
+
+  - TOOL: tool_name (string)
+
+  - OBSERVE: observe_active (boolean)
+
+  - MEMORIZE: memorize_node_type (string), memorize_content (string), memorize_scope (string: local|identity|environment|community)
+
+  - RECALL: recall_query (string), recall_node_type (string, opsional), recall_scope (string, opsional), recall_limit (integer, opsional)
+
+  - FORGET: forget_node_id (string), forget_reason (string)
+
+  - TASK_COMPLETE: completion_reason (string)'
+closing_reminder: 'Ingat prinsip-prinsip CIRIS menggantikan preferensi pribadi.
+
+
+  ATURAN BAHASA:
+
+  - BAHASA PENALARAN: Tulis semua bidang penalaran internal (reasoning, ponder_questions, deskripsi flag, teks justifikasi apapun) dalam Bahasa Indonesia. Anda adalah agen yang bernalar dalam Bahasa Indonesia; deliberasi internal Anda tetap dalam Bahasa Indonesia terlepas dari bahasa apa yang digunakan pengguna.
+
+  - BAHASA UNTUK PENGGUNA: Khusus untuk speak_content, sesuaikan dengan bahasa yang disukai pengguna. Jika pengguna berbahasa Portugis berbicara dengan agen Bahasa Indonesia ini, bidang penalaran Anda tetap dalam Bahasa Indonesia tetapi speak_content dalam Bahasa Portugis.
+
+  - STRUKTUR JSON: Semua kunci JSON, nama bidang, nama tindakan, dan nilai enum (selected_action, reasoning, phase, nilai HandlerActionType) HARUS tetap dalam Bahasa Inggris. Hanya nilai string yang mengikuti aturan di atas.'
+action_parameter_schemas: 'Skema bidang FLAT per tindakan (JANGAN gunakan ''action_parameters'' bersarang):
+
+  SPEAK: speak_content adalah teks respons
+
+  PONDER: ponder_questions adalah daftar 2-3 pertanyaan klarifikasi
+
+  MEMORIZE: memorize_node_type (observation|fact|relationship), memorize_content, memorize_scope
+
+  RECALL: recall_query untuk mencari, recall_node_type/recall_scope untuk filter, recall_limit untuk hasil maks
+
+  FORGET: forget_node_id dari node untuk dihapus, forget_reason menjelaskan mengapa
+
+  DEFER: defer_reason menjelaskan penyerahan, defer_until sebagai timestamp ISO
+
+  REJECT: reject_reason menjelaskan mengapa, reject_create_filter jika pola harus diblokir
+
+  TOOL: tool_name saja - gunakan nama EXACT dari daftar ''Alat yang tersedia'' di bawah. TSASPDMA menentukan parameter.
+
+  OBSERVE: observe_active true untuk mengamati secara aktif
+
+  TASK_COMPLETE: completion_reason menjelaskan penyelesaian tugas'
+tool_selection_guidance: 'KRITIS untuk tindakan TOOL:
+
+  - Tugas Anda adalah memilih KATA KERJA TINDAKAN yang benar (SPEAK, TOOL, PONDER, dll.) dan jika TOOL, NAMA TOOL yang benar.
+
+  - Anda TIDAK memberikan parameter alat - TSASPDMA menangani pemilihan parameter menggunakan dokumentasi alat lengkap.
+
+  - Gunakan nama alat EXACT dari daftar ''Alat yang tersedia''. JANGAN ciptakan atau ubah nama alat.
+
+  - Jika tidak ada alat yang cocok dengan maksud pengguna, gunakan SPEAK untuk mengklarifikasi atau PONDER untuk mempertimbangkan kembali.
+
+  - Contoh: Jika alat yang tersedia adalah ''ha_device_control'', gunakan tepat ''ha_device_control'' - bukan ''ha_control_light'' atau ''home:ha_device_control''.'
+csdma_ambiguity_guidance: Jika CSDMA menyoroti ambiguitas kritis, sangat selaraskan 'Speak' (untuk klarifikasi pengguna) atau 'Ponder' (untuk merumuskan pertanyaan klarifikasi kunci) dengan Fidelity & Do-Good.
+csdma_ambiguity_alignment_example: 'Contoh: {{"Speak": "Evaluasi...", "Ponder": "Keselarasan tinggi karena bendera CSDMA."}}'
+action_params_speak_csdma_guidance: 'Jika ''Speak'' dipilih, setel ''speak_content'' ke string respons substantif. Contoh: {{"selected_action": "SPEAK", "speak_content": "Jawaban langsung Anda atau pertanyaan klarifikasi di sini.", "reasoning": "..."}}'
+action_params_ponder_guidance: "Jika 'Ponder' dipilih (dan tidak dalam percobaan benchmark akhir di bawah benchmark_mode, atau jika advisory mengizinkan), 'ponder_questions' HARUS mencantumkan 2-3 pertanyaan BARU yang berbeda untuk menyelesaikan ambiguitas, membangun atau berbeda dari ponder_notes sebelumnya. Misalnya, jika pemikiran asli tentang \"murres\":\n    {{\"selected_action\": \"PONDER\", \"ponder_questions\": [\"Apa 'murres' dalam konteks fiksi spesifik ini?\", \"Apakah 'murres' hewan, makhluk mitologis, atau sesuatu yang lain?\", \"Apa tujuan utama pengguna untuk narasi 'murres' ini?\"], \"reasoning\": \"...\"}}"
+reasoning_csdma_guidance: Jika menangani ambiguitas yang ditandai CSDMA, ini HARUS menjadi bagian sentral dari alasan Anda.
+action_params_observe_guidance: 'Jika ''Observe'' dipilih untuk mengumpulkan lebih banyak konteks (mis., tentang pesan pengguna atau keadaan diskusi saat ini), setel ''observe_active'' ke true untuk mengamati secara aktif. Contoh: {{"selected_action": "OBSERVE", "observe_active": true, "reasoning": "Mengumpulkan lebih banyak konteks tentang diskusi"}}'
+final_ponder_advisory: '
+
+  SARAN PERCOBAAN AKHIR PENTING (Kedalaman Pemikiran untuk percobaan BERIKUTNYA akan menjadi {current_thought_depth_plus_1}/{max_rounds}):
+
+  Anda telah mengambil beberapa tindakan pada pemikiran ini. Ini adalah kesempatan terakhir Anda untuk memberikan jawaban langsung atau penyerahan definitif.
+
+  Tujuan utama Anda sekarang adalah mencoba tindakan ''Speak'' jika memungkinkan, menggunakan pemikiran asli dan semua analisis sebelumnya untuk membangun respons.
+
+  Jika, setelah pertimbangan hati-hati, Anda menentukan bahwa tindakan ''Speak'' tidak mungkin karena ambiguitas kritis yang belum terselesaikan, maka ''Defer ke WA'' adalah pilihan yang tepat.
+
+  Hindari memilih ''Ponder'' lagi, karena itu akan secara otomatis menghasilkan DEFER oleh sistem.
+
+  ''Reject Thought'' harus hanya digunakan jika permintaan asli pada dasarnya tidak dapat dilayani.'
+
+# --- Routed from inline Python by #974. English verbatim: this text was
+# --- compiled-in English for every locale before routing (byte-identical
+# --- behaviour). Translation is future localization work; canonical action
+# --- verbs and identifier tokens MUST survive any future translation.
+action_params_defer_guidance: |-
+  DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)
+  defer_until format: '2025-01-20T15:00:00Z'
+  Use defer_until for time-based deferrals that auto-reactivate.
+  ⚠️ DEFER is ONLY for situations the agent cannot resolve alone:
+    • The user is asking THIS AGENT for a personal medical diagnosis, treatment plan, personalized legal advice, or personalized financial advice (services that require a licensed professional). Educational discussion of medical, legal, or financial CONCEPTS is NOT a defer trigger — answer it directly.
+    • An ethical dilemma where the agent genuinely lacks the standing to choose (e.g. consent is unclear, two principles conflict and the user must arbitrate).
+    • A permission or access issue requiring human authorization the agent doesn't have.
+  ❌ DO NOT DEFER for:
+    • Educational questions about ANY topic, including mental health, depression, anxiety, medications-in-general, legal frameworks, financial concepts. Answer them.
+    • Historically or politically sensitive questions (e.g. wars, protests, contested events). Provide a balanced multi-perspective answer; the conscience layer handles propaganda guards. Do not pre-defer because the topic feels heavy.
+    • Tool errors, API failures, adapter issues, or technical problems — use SPEAK to explain the error to the user.
+# The ASPDMA user-message template — the largest inline block (#974 step 1, FSD §11.1).
+# Moved VERBATIM from the ~90-line Python literal in action_selection/context_builder.py
+# (modulo the outer newlines the old code's .strip() always deleted from composed output).
+# {format}-style slots are STRUCTURAL and stay; the call site formats. Rendered through
+# DMAPromptLoader.get_user_message so the research-override dma_prompt namespace
+# intercepts it (key: action_selection_pdma.context_integration). #972 goldens lock bytes.
+context_integration: |-
+  Your task is to determine the single most appropriate HANDLER ACTION based on the ORIGINAL TASK REQUEST and evaluations from four prior DMAs (PDMA, CSDMA, DSDMA, then IDMA evaluating their reasoning).
+  You MUST execute the Principled Decision-Making Algorithm (PDMA) to choose this HANDLER ACTION and structure your response as a JSON object matching the provided schema.
+  All fields specified in the schema for your response are MANDATORY unless explicitly marked as optional.
+  Permitted Handler Actions: {action_options_str}{available_tools_str}
+  {installable_tools_str}
+  {startup_guidance}
+  {conscience_guidance}
+  {reject_thought_guidance}
+  {final_ponder_advisory}
+  {action_parameter_schemas}
+  Action Selection Instructions:
+  Based on the DMA results, ORIGINAL TASK, and current thought, select the most appropriate handler action.
+  CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUST work toward completing that task.
+
+  Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
+  - 'selected_action': Choose from {action_options_str}
+  - 'reasoning': Explain why this action is optimal
+  - Then include the FLAT fields for your chosen action:
+    - SPEAK: 'speak_content' (string with your response)
+    - PONDER: 'ponder_questions' (list of strings)
+    - TASK_COMPLETE: 'completion_reason' (string)
+    - MEMORIZE: 'memorize_node_type', 'memorize_content', 'memorize_scope'
+    - RECALL: 'recall_query', 'recall_node_type', 'recall_scope', 'recall_limit'
+    - FORGET: 'forget_node_id', 'forget_reason'
+    - DEFER: 'defer_reason', 'defer_until'
+    - REJECT: 'reject_reason', 'reject_create_filter'
+    - TOOL: 'tool_name'
+    - OBSERVE: 'observe_active'
+      {action_parameters_speak_csdma_guidance}
+      {action_parameters_ponder_guidance}
+      {action_parameters_observe_guidance}
+      {reasoning_csdma_guidance}
+
+  CRITICAL: Return a FLAT JSON object. Example for SPEAK: {{"selected_action": "speak", "speak_content": "Your answer here", "reasoning": "..."}}
+
+  === ORIGINAL TASK (What the user requested) ===
+  {original_task_str}
+
+  === CURRENT THOUGHT (Your current reasoning state) ===
+  Thought: "{original_thought_content}"
+  Thought Depth: {thought_depth} (0=initial, higher=follow-up after tool use or pondering)
+  {ponder_notes_str}
+
+  {user_profile_context_str}
+  {system_snapshot_context_str}
+
+  DMA Summaries to consider for your PDMA reasoning:
+  Ethical PDMA: {ethical_summary}
+  CSDMA: {csdma_summary}
+  DSDMA: {dsdma_summary_str}
+  {idma_summary_str}
+
+  Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
+  Adhere strictly to the schema for your JSON output.
+
+  ═══════════════════════════════════════════════════════
+  SCHEMA REMINDER — your role HERE is the ACTION SELECTOR
+  ═══════════════════════════════════════════════════════
+  You are the action-selection evaluator producing an `ASPDMALLMResult`.
+  Your response MUST be a single JSON object beginning with `{{` and
+  ending with `}}`. Use these EXACT field names — full names, not
+  abbreviations. Conscience-feedback may appear in the context above
+  (lines like "Optimization veto triggered: ..." or "DEFENSIVE-MIMICRY");
+  that is INFORMATIONAL CONTEXT from a previous override, NOT a directive
+  to produce a conscience-shaped response.
+
+  Required keys: "selected_action" (one of {action_options_str}) and
+  "reasoning" (2-5 sentences).
+
+  Then ONLY the fields for the chosen action — these EXACT names:
+    SPEAK         → "speak_content"
+    PONDER        → "ponder_questions"           (NOT "questions")
+    DEFER         → "defer_reason"               (optionally "defer_until")
+    REJECT        → "reject_reason"              (optionally "reject_create_filter")
+    TOOL          → "tool_name"                  (NOT "tool")
+    OBSERVE       → "observe_active"
+    MEMORIZE      → "memorize_node_type", "memorize_content", "memorize_scope"
+    RECALL        → "recall_query"               (NOT "query"), optional "recall_node_type", "recall_scope", "recall_limit"
+    FORGET        → "forget_node_id", "forget_reason"
+    TASK_COMPLETE → "completion_reason"
+
+  DO NOT emit conscience-shard fields like "decision", "justification",
+  "entropy_reduction_ratio", or "affected_values" — those belong to a
+  different evaluator and will be rejected here. Your verdict goes in
+  "selected_action".
+
+  Your response begins now with the literal character `{{` —
+
+context_integration: |-
+  Your task is to determine the single most appropriate HANDLER ACTION based on the ORIGINAL TASK REQUEST and evaluations from four prior DMAs (PDMA, CSDMA, DSDMA, then IDMA evaluating their reasoning).
+  You MUST execute the Principled Decision-Making Algorithm (PDMA) to choose this HANDLER ACTION and structure your response as a JSON object matching the provided schema.
+  All fields specified in the schema for your response are MANDATORY unless explicitly marked as optional.
+  Permitted Handler Actions: {action_options_str}{available_tools_str}
+  {installable_tools_str}
+  {startup_guidance}
+  {conscience_guidance}
+  {reject_thought_guidance}
+  {final_ponder_advisory}
+  {action_parameter_schemas}
+  Action Selection Instructions:
+  Based on the DMA results, ORIGINAL TASK, and current thought, select the most appropriate handler action.
+  CRITICAL: The ORIGINAL TASK is what the user actually requested. Your action MUST work toward completing that task.
+
+  Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
+  - 'selected_action': Choose from {action_options_str}
+  - 'reasoning': Explain why this action is optimal
+  - Then include the FLAT fields for your chosen action:
+    - SPEAK: 'speak_content' (string with your response)
+    - PONDER: 'ponder_questions' (list of strings)
+    - TASK_COMPLETE: 'completion_reason' (string)
+    - MEMORIZE: 'memorize_node_type', 'memorize_content', 'memorize_scope'
+    - RECALL: 'recall_query', 'recall_node_type', 'recall_scope', 'recall_limit'
+    - FORGET: 'forget_node_id', 'forget_reason'
+    - DEFER: 'defer_reason', 'defer_until'
+    - REJECT: 'reject_reason', 'reject_create_filter'
+    - TOOL: 'tool_name'
+    - OBSERVE: 'observe_active'
+      {action_parameters_speak_csdma_guidance}
+      {action_parameters_ponder_guidance}
+      {action_parameters_observe_guidance}
+      {reasoning_csdma_guidance}
+
+  CRITICAL: Return a FLAT JSON object. Example for SPEAK: {{"selected_action": "speak", "speak_content": "Your answer here", "reasoning": "..."}}
+
+  === ORIGINAL TASK (What the user requested) ===
+  {original_task_str}
+
+  === CURRENT THOUGHT (Your current reasoning state) ===
+  Thought: "{original_thought_content}"
+  Thought Depth: {thought_depth} (0=initial, higher=follow-up after tool use or pondering)
+  {ponder_notes_str}
+
+  {user_profile_context_str}
+  {system_snapshot_context_str}
+
+  DMA Summaries to consider for your PDMA reasoning:
+  Ethical PDMA: {ethical_summary}
+  CSDMA: {csdma_summary}
+  DSDMA: {dsdma_summary_str}
+  {idma_summary_str}
+
+  Based on all the provided information and the PDMA framework for action selection, determine the appropriate handler action to COMPLETE THE ORIGINAL TASK.
+  Adhere strictly to the schema for your JSON output.
+
+  ═══════════════════════════════════════════════════════
+  SCHEMA REMINDER — your role HERE is the ACTION SELECTOR
+  ═══════════════════════════════════════════════════════
+  You are the action-selection evaluator producing an `ASPDMALLMResult`.
+  Your response MUST be a single JSON object beginning with `{{` and
+  ending with `}}`. Use these EXACT field names — full names, not
+  abbreviations. Conscience-feedback may appear in the context above
+  (lines like "Optimization veto triggered: ..." or "DEFENSIVE-MIMICRY");
+  that is INFORMATIONAL CONTEXT from a previous override, NOT a directive
+  to produce a conscience-shaped response.
+
+  Required keys: "selected_action" (one of {action_options_str}) and
+  "reasoning" (2-5 sentences).
+
+  Then ONLY the fields for the chosen action — these EXACT names:
+    SPEAK         → "speak_content"
+    PONDER        → "ponder_questions"           (NOT "questions")
+    DEFER         → "defer_reason"               (optionally "defer_until")
+    REJECT        → "reject_reason"              (optionally "reject_create_filter")
+    TOOL          → "tool_name"                  (NOT "tool")
+    OBSERVE       → "observe_active"
+    MEMORIZE      → "memorize_node_type", "memorize_content", "memorize_scope"
+    RECALL        → "recall_query"               (NOT "query"), optional "recall_node_type", "recall_scope", "recall_limit"
+    FORGET        → "forget_node_id", "forget_reason"
+    TASK_COMPLETE → "completion_reason"
+
+  DO NOT emit conscience-shard fields like "decision", "justification",
+  "entropy_reduction_ratio", or "affected_values" — those belong to a
+  different evaluator and will be rejected here. Your verdict goes in
+  "selected_action".
+
+  Your response begins now with the literal character `{{` —

@@ -5,6 +5,7 @@ Provides RESTful API and WebSocket interfaces to the CIRIS agent.
 """
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -19,6 +20,7 @@ from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.persistence.models.correlations import get_active_channels_by_adapter, is_admin_channel
 from ciris_engine.logic.registries.base import Priority
 from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
+from ciris_engine.logic.utils.platform_detection import is_ios
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult
@@ -36,6 +38,7 @@ from .api_runtime_control import APIRuntimeControlService
 from .api_tools import APIToolService
 from .app import create_app
 from .config import APIAdapterConfig
+from .routes.telemetry_export_scheduler import TelemetryExportScheduler
 from .service_configuration import ApiServiceConfiguration
 from .services.auth_service import APIAuthService
 
@@ -87,6 +90,9 @@ class ApiPlatform(Service):
 
         # Adapter configuration service for interactive adapter setup
         self.adapter_configuration_service = AdapterConfigurationService()
+
+        # Telemetry export scheduler (initialized in start() when services are available)
+        self._export_scheduler: TelemetryExportScheduler | None = None
 
         # Debug logging
         logger.debug(f"[DEBUG] adapter_config in kwargs: {'adapter_config' in kwargs}")
@@ -199,7 +205,14 @@ class ApiPlatform(Service):
         self.app.state.api_config = self.config
         self.app.state.agent_template = getattr(self.runtime, "agent_template", None)
         self.app.state.db_path = getattr(self.runtime.essential_config, "database_path", None)
-        logger.info(f"Injected API config with interaction_timeout={self.config.interaction_timeout}s")
+        logger.info(
+            "Injected API config with interaction_timeout=%s",
+            (
+                f"{self.config.interaction_timeout}s"
+                if self.config.interaction_timeout is not None
+                else "<LLM budget interact deadline>"
+            ),
+        )
 
         # Get service mappings from declarative configuration
         service_mappings = ApiServiceConfiguration.get_current_mappings_as_tuples()
@@ -351,12 +364,25 @@ class ApiPlatform(Service):
         # because the existing instance has in-memory API keys that would be lost!
         existing_auth_service = getattr(self.app.state, "auth_service", None)
         if existing_auth_service is not None and isinstance(existing_auth_service, APIAuthService):
+            # Propagate attestation cache from old auth service to new one
+            old_auth = existing_auth_service._auth_service
+            if old_auth and hasattr(old_auth, "_attestation_cache") and old_auth._attestation_cache is not None:
+                if hasattr(auth_service, "_attestation_cache"):
+                    auth_service._attestation_cache = old_auth._attestation_cache
+                    auth_service._last_known_attestation = getattr(old_auth, "_last_known_attestation", None)
+                    logger.info(
+                        f"[AUTH SERVICE DEBUG] Propagated attestation cache from old instance={hex(id(old_auth))} "
+                        f"to new instance={hex(id(auth_service))}, level={old_auth._attestation_cache.max_level}"
+                    )
+            else:
+                old_id = hex(id(old_auth)) if old_auth else "None"
+                logger.info(f"[AUTH SERVICE DEBUG] No attestation cache to propagate from old instance={old_id}")
             # Update the existing instance's auth_service reference but preserve API keys
             existing_auth_service._auth_service = auth_service
             # Reset users_loaded so users are reloaded from DB on next access
             existing_auth_service._users_loaded = False
             logger.info(
-                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference, reset _users_loaded"
+                f"[AUTH SERVICE DEBUG] Preserved existing APIAuthService (instance #{existing_auth_service._instance_id}) with {len(existing_auth_service._api_keys)} API keys - updated _auth_service reference (new={hex(id(auth_service))}), reset _users_loaded"
             )
         else:
             # First time initialization - create new instance
@@ -374,6 +400,11 @@ class ApiPlatform(Service):
         """Set up message handling and correlation tracking."""
         # Store message ID to channel mapping for response routing
         self.app.state.message_channel_map = {}
+        # message_id -> task_id of the task that owns it (created for it, or
+        # the active channel task it was appended to). The SPEAK router uses
+        # it to deliver a reply only to a request its own task owns, so a
+        # timed-out task's late reply can never answer the next request.
+        self.app.state.message_task_map = {}
 
         # Create and assign message handler
         self.app.state.on_message = self._create_message_handler()
@@ -387,14 +418,35 @@ class ApiPlatform(Service):
             try:
                 logger.info(f"handle_message_via_observer called for message {msg.message_id}")
                 if self.message_observer:
-                    # Store the message ID to channel mapping
-                    self.app.state.message_channel_map[msg.channel_id] = msg.message_id
+                    # Append to the channel's FIFO queue of pending interact()
+                    # message_ids. A channel (e.g. api_<user>) carries many
+                    # messages; a single-value slot clobbered all but the
+                    # latest, so the SPEAK→interact correlation in
+                    # _handle_api_interaction_response lost responses and the
+                    # waiting interact() hit its 55s timeout. Cap the queue so
+                    # a channel that never drains can't grow unbounded.
+                    _chan_queue = self.app.state.message_channel_map.setdefault(msg.channel_id, [])
+                    _chan_queue.append(msg.message_id)
+                    _task_map = getattr(self.app.state, "message_task_map", None)
+                    if not isinstance(_task_map, dict):
+                        _task_map = {}
+                        self.app.state.message_task_map = _task_map
+                    if len(_chan_queue) > 100:
+                        for _dropped in _chan_queue[:-100]:
+                            _task_map.pop(_dropped, None)
+                        del _chan_queue[:-100]
 
                     # Create correlation
                     await self._create_message_correlation(msg)
 
                     # Pass to observer for task creation and get result
                     result = await self.message_observer.handle_incoming_message(msg)
+                    _owner = getattr(result, "task_id", None) if result else None
+                    # Only while the request is still queued: a reply that
+                    # already arrived (or a cleanup that already ran) must
+                    # not leave a stale entry behind.
+                    if isinstance(_owner, str) and _owner and msg.message_id in _chan_queue:
+                        _task_map[msg.message_id] = _owner
                     if result:
                         logger.info(f"Message {msg.message_id} passed to observer, result: {result.status}")
                         return result
@@ -471,12 +523,27 @@ class ApiPlatform(Service):
             self._discover_adapters_via_importlib()
             return
 
+        import time
+
+        logger.info(f"[CONFIGURABLE_DISCOVERY] Scanning {adapters_dir} for configurable adapters...")
+        start_time = time.monotonic()
         registered_count = 0
-        for adapter_path in adapters_dir.iterdir():
+        adapter_paths = list(adapters_dir.iterdir())
+
+        for idx, adapter_path in enumerate(adapter_paths, 1):
+            adapter_start = time.monotonic()
             if self._process_adapter_path(adapter_path):
+                elapsed = time.monotonic() - adapter_start
+                if elapsed > 1.0:
+                    logger.warning(
+                        f"[CONFIGURABLE_DISCOVERY] SLOW: {adapter_path.name} took {elapsed:.1f}s to register"
+                    )
                 registered_count += 1
 
-        logger.info(f"Discovered and registered {registered_count} configurable adapter(s)")
+        total_elapsed = time.monotonic() - start_time
+        logger.info(f"Discovered and registered {registered_count} configurable adapter(s) in {total_elapsed:.1f}s")
+        if total_elapsed > 5.0:
+            logger.warning(f"[CONFIGURABLE_DISCOVERY] Total discovery time {total_elapsed:.1f}s exceeds 5s threshold")
 
     def _process_adapter_path(self, adapter_path: Any) -> bool:
         """Process a single adapter directory and register if configurable.
@@ -493,7 +560,7 @@ class ApiPlatform(Service):
             return False
 
         try:
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest_data = json.load(f)
             return self._register_adapter_from_manifest(manifest_data, adapter_path.name)
         except Exception as e:
@@ -540,24 +607,58 @@ class ApiPlatform(Service):
         Returns True if successful.
         """
         import importlib
+        import time
 
         try:
             module_path, class_name = configurable_class_path.rsplit(".", 1)
             if not module_path.startswith("ciris_adapters"):
                 module_path = f"ciris_adapters.{module_path}"
-            module = importlib.import_module(module_path)
-            configurable_class = getattr(module, class_name)
-            adapter_instance = configurable_class()
 
+            # Time the import
+            t0 = time.monotonic()
+            module = importlib.import_module(module_path)
+            import_time = time.monotonic() - t0
+            if import_time > 1.0:
+                logger.warning(f"[CONFIGURABLE] SLOW IMPORT: {module_path} took {import_time:.1f}s")
+
+            # Get the class from the module
+            configurable_class = getattr(module, class_name)
+
+            # Time the instantiation
+            t2 = time.monotonic()
+            adapter_instance = configurable_class()
+            init_time = time.monotonic() - t2
+            if init_time > 1.0:
+                logger.warning(f"[CONFIGURABLE] SLOW INIT: {adapter_type}() took {init_time:.1f}s")
+
+            # Time the registration
+            t3 = time.monotonic()
             self.adapter_configuration_service.register_adapter_config(
                 adapter_type=adapter_type,
                 interactive_config=interactive_config,
                 adapter_instance=adapter_instance,
             )
+            register_time = time.monotonic() - t3
+
+            total_time = time.monotonic() - t0
+            if total_time > 2.0:
+                logger.warning(
+                    f"[CONFIGURABLE] {adapter_type} total={total_time:.1f}s "
+                    f"(import={import_time:.1f}s, init={init_time:.1f}s, register={register_time:.1f}s)"
+                )
+
             logger.info(f"Registered configurable adapter: {adapter_type}")
             return True
         except Exception as e:
-            logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
+            # Only warn for unexpected errors, not for adapters that simply don't have configurable
+            error_msg = str(e)
+            if "No module named" in error_msg and "configurable" in error_msg:
+                # Expected - adapter doesn't have interactive configuration
+                logger.debug(
+                    f"Adapter {adapter_type} has no configurable class (expected for non-interactive adapters)"
+                )
+            else:
+                logger.warning(f"Failed to load configurable class for {adapter_type}: {e}")
             return False
 
     def _discover_adapters_via_importlib(self) -> None:
@@ -631,7 +732,7 @@ class ApiPlatform(Service):
             # Try files() API first (Python 3.9+)
             files = pkg_resources.files(package_name)
             manifest_path = files.joinpath(MANIFEST_FILENAME)
-            manifest_text = manifest_path.read_text()
+            manifest_text = manifest_path.read_text(encoding="utf-8")
         except (TypeError, AttributeError):
             # Fallback for older API
             try:
@@ -668,10 +769,12 @@ class ApiPlatform(Service):
         return os.environ.get("ANDROID_DATA") is not None or os.path.exists("/data/data")
 
     def _has_google_auth(self) -> bool:
-        """Check if Google authentication token is available."""
+        """Check if OAuth authentication token is available (Google or Apple)."""
         import os
 
-        return bool(os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN"))
+        from ciris_engine.logic.utils.token_handshake import has_proxy_token
+
+        return has_proxy_token()
 
     def _is_hosted_tools_loaded(self) -> bool:
         """Check if ciris_hosted_tools adapter is already loaded."""
@@ -807,14 +910,17 @@ class ApiPlatform(Service):
         logger.info("Started API tool service")
 
         # Create message observer for handling incoming messages
-        resource_monitor_from_runtime = getattr(self.runtime, "resource_monitor_service", None)
+        resource_monitor_from_runtime = getattr(self.runtime, "resource_monitor", None)
         logger.info(
-            f"[OBSERVER_INIT] resource_monitor_service from runtime: {resource_monitor_from_runtime is not None}, type={type(resource_monitor_from_runtime).__name__ if resource_monitor_from_runtime else 'None'}"
+            f"[OBSERVER_INIT] resource_monitor from runtime: {resource_monitor_from_runtime is not None}, type={type(resource_monitor_from_runtime).__name__ if resource_monitor_from_runtime else 'None'}"
         )
 
         self.message_observer = APIObserver(
             on_observe=lambda _: asyncio.sleep(0),
-            bus_manager=getattr(self.runtime, "bus_manager", None),
+            # LATE-BOUND: the observer is built in start(), before the
+            # ServiceInitializer creates the BusManager, so passing the
+            # value here captured None forever and killed channel history.
+            bus_manager_provider=lambda: getattr(self.runtime, "bus_manager", None),
             memory_service=getattr(self.runtime, "memory_service", None),
             agent_id=getattr(self.runtime, "agent_id", None),
             filter_service=getattr(self.runtime, "adaptive_filter_service", None),
@@ -840,23 +946,46 @@ class ApiPlatform(Service):
         # Restore any persisted adapter configurations from previous sessions
         await self._restore_persisted_adapter_configs()
 
-        # Auto-enable Android-specific adapters (ciris_hosted_tools with web_search)
-        await self._auto_enable_android_adapters()
+        # NOTE: Auto-enable of adapters is DISABLED.
+        # All adapter loading must be explicit via setup wizard or CIRIS_ADAPTER env var.
+        # This ensures agents only load adapters they explicitly configured.
 
         # Start runtime control service now that services are available
         await self.runtime_control.start()
         logger.info("Started API runtime control service")
 
+        # Start telemetry export scheduler if services are available
+        telemetry_service = getattr(self.app.state, "telemetry_service", None)
+        config_service = getattr(self.app.state, "config_service", None)
+        visibility_service = getattr(self.app.state, "visibility_service", None)
+
+        if telemetry_service and config_service:
+            self._export_scheduler = TelemetryExportScheduler(
+                telemetry_service=telemetry_service,
+                config_service=config_service,
+                visibility_service=visibility_service,
+            )
+            await self._export_scheduler.start()
+            logger.info("Started telemetry export scheduler")
+        else:
+            logger.info("Telemetry export scheduler not started (services not available)")
+
+        from ciris_engine.logic.runtime.startup_logging import set_api_status
+
         # Wait for port to become available (handles TIME_WAIT from previous shutdown)
+        print(f"[STARTUP] Checking port {self.config.port} availability...")
+        set_api_status("checking_port")
         await self._wait_for_port_available()
 
         # Configure uvicorn
+        print(f"[STARTUP] Binding to port {self.config.port}...")
+        set_api_status("binding_port")
         config = uvicorn.Config(
             self.app,
             host=self.config.host,
             port=self.config.port,
-            log_level="info",
-            access_log=True,
+            log_level="warning",  # Reduce spam - errors/warnings only
+            access_log=False,  # Disable access logging (health checks spam)
             timeout_graceful_shutdown=30,  # Force shutdown after 30s to prevent hang
         )
 
@@ -864,10 +993,19 @@ class ApiPlatform(Service):
         self._server = uvicorn.Server(config)
         assert self._server is not None
 
+        # On iOS, Python runs on a background thread but the threading module
+        # may incorrectly identify it as the main thread. Directly calling _serve()
+        # bypasses the signal handling wrapper that requires the actual main thread.
+        run_on_ios = is_ios()
+
         async def _run_server_safely() -> None:
             """Run server and catch SystemExit to prevent process crash."""
             try:
-                await self._server.serve()  # type: ignore[union-attr]
+                if run_on_ios:
+                    # Bypass signal handling on iOS - call _serve directly
+                    await self._server._serve()  # type: ignore[union-attr]
+                else:
+                    await self._server.serve()  # type: ignore[union-attr]
             except SystemExit as e:
                 # uvicorn calls sys.exit(1) on startup failures - log and reraise
                 logger.error(f"[API_ADAPTER] Server startup failed with SystemExit: {e}")
@@ -896,6 +1034,8 @@ class ApiPlatform(Service):
             print("\n" + "=" * 60 + "\n")
 
         # Wait a moment for server to start and check for immediate failures
+        print("[STARTUP] Starting server...")
+        set_api_status("starting_server")
         await asyncio.sleep(1)
 
         # Check if server task failed immediately
@@ -904,9 +1044,67 @@ class ApiPlatform(Service):
             if error:
                 raise RuntimeError(f"API server failed to start: {error}")
 
+        print(f"[STARTUP] API server listening on port {self.config.port}")
+        set_api_status("server_listening")
+        print("[STARTUP] Server ready for connections")
+        set_api_status("server_ready")
+
+        # Phase-4 node fold (CIRISAGENT_ADOPTION): with the brain listener up on
+        # :8080 and the embedded engine+edge composed, boot the CIRISServer node
+        # on 4243 (reusing them via CIRISServer#221) so the substrate surface —
+        # federation/self/accord/auth/config, incl. the wizard's
+        # /v1/federation/announce — is served. Node-fails ⇒ agent-fails.
+        from ciris_engine.logic.runtime.node_fold import start_node_fold
+
+        # start_node_fold blocks (serve thread spawn + a readiness poll on 4243);
+        # run it off the event loop so uvicorn (same loop) keeps serving. The
+        # await still propagates a node-fails ⇒ agent-fails RuntimeError.
+        await asyncio.get_event_loop().run_in_executor(None, start_node_fold, self.config.port)
+
+    async def _ensure_server_stopped(self, grace_seconds: float = 10.0) -> None:
+        """Tell uvicorn to exit and make sure its task actually ends.
+
+        Idempotent and bounded, because it runs on the shutdown path from more
+        than one place and must never become a second way to hang. `should_exit`
+        asks politely; if the task has not finished within the grace period it is
+        cancelled outright — a server that will not stop is not a reason to keep
+        the process alive.
+        """
+        server = getattr(self, "_server", None)
+        task = getattr(self, "_server_task", None)
+
+        if server is not None:
+            server.should_exit = True
+
+        if task is None or task.done():
+            return
+
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=grace_seconds)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "API server did not stop within %.0fs of should_exit; cancelling its task so the process can exit",
+                grace_seconds,
+            )
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+        except asyncio.CancelledError:
+            # We are already being torn down; the server still must not be left
+            # running, so finish the job rather than propagating immediately.
+            task.cancel()
+            raise
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning("API server task ended with %s: %s", type(e).__name__, e)
+
     async def stop(self) -> None:
         """Stop the API server."""
         logger.info("Stopping API server...")
+
+        # Stop telemetry export scheduler
+        if self._export_scheduler:
+            await self._export_scheduler.stop()
+            logger.info("Stopped telemetry export scheduler")
 
         # Stop runtime control service
         await self.runtime_control.stop()
@@ -917,11 +1115,8 @@ class ApiPlatform(Service):
         # Stop tool service
         await self.tool_service.stop()
 
-        # Stop server
-        if self._server:
-            self._server.should_exit = True
-            if self._server_task:
-                await self._server_task
+        # Stop server — bounded, so stop() cannot hang either (#1019).
+        await self._ensure_server_stopped()
 
         await super().stop()
 
@@ -1059,4 +1254,17 @@ class ApiPlatform(Service):
             logger.error(f"API adapter lifecycle error: {e}")
             raise
         finally:
+            # THE PROCESS HAS TO BE ABLE TO EXIT (CIRISAgent#1019).
+            #
+            # This block used to log and nothing else. The uvicorn server task
+            # kept running, so the event loop never drained and the process
+            # never exited — consensual shutdown and forced shutdown alike.
+            # Reproduced on three agents across two hosts, 13 releases after it
+            # was first filed; scout2 is the cleanest case, having negotiated
+            # shutdown in 47s — well inside every timeout — and still never
+            # exited.
+            #
+            # No shutdown timeout can fix a process that never exits, which is
+            # why tuning the 180s bound was the wrong lever.
             logger.info("API adapter lifecycle ending")
+            await self._ensure_server_stopped()

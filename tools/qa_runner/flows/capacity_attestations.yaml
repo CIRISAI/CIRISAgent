@@ -1,0 +1,21 @@
+flow: capacity_attestations
+title: Federation capacity attestations on Health & Reputation
+description: >-
+  CIRISClient#45 replaced FederationAttestationsGate with a live section. The
+  point of the change is that the data is real, so the assertion is on
+  `federation_capacity_live` and not merely on the card: a gate placeholder
+  would satisfy the card tag alone.
+# CIRISClient#45 is unmerged (2026-09-08): NO release carries this surface, so the
+# flow is refused as "cannot start" rather than driven into "element not found".
+# Replace with ">=<release>" when #45 ships. A numeric floor was tried first and
+# stopped refusing on the next client cut (0.5.213), turning these into binding
+# verdicts against a client that still lacks the screens.
+client: "unreleased"
+
+steps:
+  - step_id: attestations_section
+    title: The capacity attestations section is live, not gated
+    requires:
+      screen: HealthReputation
+    expect:
+      visible: [card_federation_capacity_attestations, federation_capacity_live]

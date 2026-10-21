@@ -1,0 +1,1067 @@
+name: Safety Battery
+
+# Two-runner pipeline per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
+# (https://github.com/CIRISAI/CIRISNodeCore/blob/main/FSD/SAFETY_BATTERY_CI_LOOP.md):
+#
+#   1. Capture: agent-under-test responds to a canonical battery's
+#      questions on Together gemma. Signed artifact uploaded.
+#   2. Interpret: a CIRIS interpreter agent applies the cell's
+#      rubric criteria to each captured response and emits signed
+#      verdicts. Cross-linked to the capture bundle's SHAs.
+#
+# Both runners stream full reasoning traces
+# (CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR) into their respective bundle.
+# Both bundles attested via actions/attest-build-provenance.
+#
+# safety.ciris.ai consumes the interpret bundle's verdicts.jsonl; the
+# capture bundle is the upstream evidence reference.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'  # Monday 7am UTC
+  workflow_dispatch:
+    inputs:
+      lang:
+        description: 'ISO 639-1 cell language'
+        required: false
+        default: 'am'
+        type: choice
+        options: [am, ar, bn, my, ha, hi, mr, fa, pa, sw, ta, te, ur, yo, en, de, es, fr, it, pt, ru, uk, ja, ko, zh, id, th, vi, tr]
+      domain:
+        description: 'Cell domain'
+        required: false
+        default: 'mental_health'
+        type: string
+      model:
+        description: 'Live LLM model identifier (CLAUDE.md live model matrix). With live_provider=openrouter use the OpenRouter id, e.g. qwen/qwen3.6-35b-a3b.'
+        required: false
+        default: 'Qwen/Qwen3.6-35B-A3B'
+        type: string
+      live_provider:
+        # deepinfra = the behaviour before this input existed. openrouter was
+        # added 2026-10-15: DeepInfra Qwen3.6-35B-A3B queue latency put every
+        # DMA call of the 2.16 battery past the 45 s per-call timeout (a
+        # 201-token prompt measured 16-68 s), so 89 of 90 questions failed.
+        description: 'Capture LLM provider: deepinfra (DEEPINFRA_API_KEY) or openrouter (OPENROUTER_API_KEY, https://openrouter.ai/api/v1)'
+        required: false
+        default: 'deepinfra'
+        type: choice
+        options: [deepinfra, openrouter]
+      template_id:
+        description: "Agent template (default → Ally persona)"
+        required: false
+        default: 'default'
+        type: choice
+        options: [default, datum, scout, echo-speculative, echo, echo-core, sage, test]
+      force:
+        description: 'Bypass dedup pre-flight and force a fresh run'
+        required: false
+        default: false
+        type: boolean
+      freshness_days:
+        description: 'Dedup freshness window in days (default 7)'
+        required: false
+        default: '7'
+        type: string
+      skip_interpret:
+        description: 'Run only capture; skip interpret (useful for debugging)'
+        required: false
+        default: false
+        type: boolean
+      research_manifest:
+        # A corpus ARM (e.g. a 1.3 accord candidate) captured before it is
+        # pinned. Applied through the audited research-override facility
+        # (ciris_engine/logic/utils/research_overrides.py), which needs both
+        # CIRIS_RESEARCH_PROMPT_OVERRIDES and CIRIS_TESTING_MODE=true; this
+        # input sets both for the capture job only. Blank = canonical corpus,
+        # i.e. exactly the behaviour before this input existed.
+        description: 'Repo-relative path to a COMMITTED research-override manifest (e.g. tools/research/manifests/torque-mvm-armB.json). Capture artifact names gain -arm-<sha256[:12]> so dedup keys on the manifest. Blank = canonical corpus.'
+        required: false
+        default: ''
+        type: string
+      research_manifest_digest:
+        description: 'Optional expected sha256:... from `python3 -m ciris_engine.logic.utils.research_overrides manifest-digest <path>`. The run refuses on mismatch. Ignored without research_manifest.'
+        required: false
+        default: ''
+        type: string
+  pull_request:
+    paths:
+      - 'tests/safety/**'
+      - 'tools/qa_runner/modules/safety_battery.py'
+      - 'tools/qa_runner/modules/safety_interpret.py'
+      - 'tools/qa_runner/modules/_module_metadata.py'
+      - 'tools/safety_battery_migrate.py'
+      - 'tools/safety_battery_pick_lang.py'
+      - 'ciris_engine/data/localized/**'
+      # #990 — what the agent is INSTRUCTED to do is as much a safety input as
+      # the battery itself. Three blocks turned out never to have been composed
+      # (idma's propaganda-pattern check, dsdma's LANGUAGE RULES, tsaspdma's
+      # closing reminder), and no CI signal existed that would have noticed
+      # them appearing or disappearing. A change to prompt composition is
+      # exactly the change class this battery exists to validate, so it now
+      # triggers here.
+      #
+      # Cost note: GitHub evaluates `paths` cumulatively over a PR, not
+      # per-push — once one commit in a PR has matched, every later push to
+      # that PR re-triggers this workflow, live LLM calls included. Cancel
+      # superseded runs (configured below) rather than expecting the filter to
+      # narrow again.
+      - 'ciris_engine/logic/dma/prompts/**'
+      - 'ciris_engine/logic/dma/prompt_loader.py'
+      - 'ciris_engine/logic/dma/dsdma_base.py'
+      - 'ciris_engine/logic/dma/action_selection/context_builder.py'
+      # Note: the spec the loop consumes (BatteryManifest, criteria.json,
+      # Verdict shape) lives at github.com/CIRISAI/CIRISNodeCore.
+      # Spec changes trigger this workflow only via the cell artifacts
+      # (battery / rubric files) that already match `tests/safety/**`.
+
+permissions:
+  id-token: write       # Sigstore attestation issuance
+  attestations: write
+  contents: read
+  actions: read         # gh api artifacts (dedup pre-flight + interpret-side fetch)
+
+# 2.8.11 Tier 3 CI hardening: cancel superseded runs on the same ref.
+# Prevents force-push / PR-rotation races where an old run finishes after
+# a new run starts (we hit this on PR#750→#752 rotation in 2.8.10).
+# Scheduled runs (cron) on main don't share the ref with PR runs, so they
+# don't cancel each other.
+#
+# A dispatch is keyed by its CELL as well (lang/domain/template/arm): a campaign
+# dispatches many cells on one ref (e.g. the 2.16 1.2b-vs-1.3 arms x 29 locales),
+# and keyed by ref alone each dispatch cancelled the one before it. A re-dispatch
+# of the same cell still supersedes the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-{0}-{1}-{2}-{3}', github.event.inputs.lang, github.event.inputs.domain, github.event.inputs.template_id, github.event.inputs.research_manifest) || '' }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────
+  # JOB 0: PICK-LANG — auto-advance through untested languages
+  #
+  # On workflow_dispatch (operator explicitly picked a lang), use that.
+  # On schedule (cron) or pull_request auto-trigger, look at the existing
+  # capture artifacts and pick the next-least-recently-captured language
+  # from the 14-cell roster. Spreads coverage automatically as PRs land
+  # instead of hammering `am` every time.
+  # ───────────────────────────────────────────────────────────────────
+  pick-lang:
+    name: Pick next language
+    runs-on: ubuntu-latest
+    # 10, not 5: a page that needs every retry costs ~30s of backoff (#1233).
+    timeout-minutes: 10
+    permissions:
+      actions: read   # list workflow artifacts
+      contents: read  # sparse checkout of the pick script
+    outputs:
+      lang: ${{ steps.pick.outputs.lang }}
+      reason: ${{ steps.pick.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: tools/safety_battery_pick_lang.py
+          sparse-checkout-cone-mode: false
+      - id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPLICIT_LANG: ${{ github.event.inputs.lang }}
+          REPO: ${{ github.repository }}
+        run: |
+          # #1233. The pick (untested cells first, then the oldest capture) and
+          # the artifact scan live in tools/safety_battery_pick_lang.py, with
+          # unit tests. The old inline `gh api --paginate` walked ~35 pages of
+          # the repo-wide artifact list with no retry, and GitHub sometimes
+          # truncates a page ("unexpected end of JSON input") — one bad page
+          # killed every scheduled run from 09-28 on. The script fetches one
+          # page at a time and retries a bad page with bounded backoff.
+          #
+          # Gate on the script's own exit status inside `if`, never on a pipe:
+          # under `shell: bash` (-eo pipefail) a failing command would abort the
+          # step before the distinct error below could be printed.
+          if python3 tools/safety_battery_pick_lang.py --repo "$REPO" --explicit-lang "$EXPLICIT_LANG"; then
+            :
+          else
+            echo "::error title=Pre-flight failed::Pre-flight (language pick) failed — no capture ran"
+            {
+              echo "## ❌ Pre-flight (language pick) failed — no capture ran"
+              echo ""
+              echo "This is NOT a battery result. The artifact scan that picks the next cell"
+              echo "failed after retries (see the log above). No agent was started."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Step summary
+        env:
+          PICKED_LANG: ${{ steps.pick.outputs.lang }}
+          PICK_REASON: ${{ steps.pick.outputs.reason }}
+        run: |
+          {
+            echo "## Picked language: \`${PICKED_LANG}\`"
+            echo ""
+            echo "**Reason:** ${PICK_REASON}"
+            echo ""
+            echo "Auto-advance through the 29-cell roster on cron + pull_request triggers."
+            echo "Use \`workflow_dispatch\` with explicit \`lang\` input to override."
+          } >> $GITHUB_STEP_SUMMARY
+
+  # ───────────────────────────────────────────────────────────────────
+  # JOB 1: CAPTURE — agent-under-test produces signed responses
+  # ───────────────────────────────────────────────────────────────────
+  capture:
+    name: Capture (${{ needs.pick-lang.outputs.lang }}/${{ github.event.inputs.domain || 'mental_health' }}/${{ github.event.inputs.template_id || 'default' }})
+    needs: pick-lang
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      artifact_name: ${{ steps.versions.outputs.artifact_name }}
+      bundle_dir: ${{ steps.bundle.outputs.bundle_dir }}
+      agent_version: ${{ steps.versions.outputs.agent_version }}
+      battery_version: ${{ steps.versions.outputs.battery_version }}
+      model_slug: ${{ steps.versions.outputs.model_slug }}
+      arm_suffix: ${{ steps.research.outputs.arm_suffix }}
+      skip: ${{ steps.dedup.outputs.skip }}
+    env:
+      CIRIS_FORCE_FIRST_RUN: "1"
+      PYTHONUNBUFFERED: "1"
+      LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
+      DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
+      LIVE_PROVIDER_INPUT: ${{ github.event.inputs.live_provider || 'deepinfra' }}
+      TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
+      FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
+      FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
+      # Untrusted dispatch input: reaches scripts via env only, never ${{ }}.
+      RESEARCH_MANIFEST_INPUT: ${{ github.event.inputs.research_manifest || '' }}
+      RESEARCH_MANIFEST_DIGEST_INPUT: ${{ github.event.inputs.research_manifest_digest || '' }}
+      # Trace streaming per FSD §6 — every @streaming_step broadcast
+      # the agent ships gets teed to disk for forensic review. Per-call
+      # token/cost/latency metadata in these traces is the canonical
+      # source for profiling LLM usage.
+      CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR: ${{ github.workspace }}/qa_reports/capture_traces
+      # Default flush interval is 60s. Under full accord (~93KB),
+      # per-question latency grew from ~50s to ~75s and the OLD-run-to-
+      # NEW-run regression (31 trace files → 0) traced to batches getting
+      # cut off by shutdown before the next flush. 5s flush keeps the
+      # tee'd batch dir continuously up-to-date. Pairs with the 30s drain
+      # wait in safety_battery.py's `run()` at end-of-questions.
+      CIRIS_ACCORD_METRICS_FLUSH_INTERVAL: '5'
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+      - name: Install CIRISVerify system deps (libtss2)
+        # The ciris-verify wheel's Linux x86_64 build runtime-depends on
+        # libtss2-tctildr.so.0 (and friends) per requirements.txt note.
+        # Even with 2.x's software-only fallback, the FFI initializer
+        # probes for hardware first and the .so resolution failure
+        # surfaces as "Failed to load library" before fallback can fire.
+        # apt-install the runtime subset; ~5s on first cache miss.
+        #
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 15
+          shell: bash
+          # BOUND APT'S NETWORK CALLS. apt has no default timeout, so an
+          # unreachable mirror makes `apt-get update` hang until the retry
+          # wrapper's per-attempt timeout kills it — consuming the whole retry
+          # allowance in one attempt. Seen 2026-08-19 on Staged QA (job
+          # 96231479052) and Capture (96232500877): both died at exactly 5m00s
+          # having logged only "Attempt 1". Retries help a command that FAILS,
+          # never one that does not return.
+          command: |
+            APT_NET_OPTS=(-o Acquire::Retries=3
+                          -o Acquire::http::Timeout=20
+                          -o Acquire::https::Timeout=20)
+            sudo apt-get update "${APT_NET_OPTS[@]}"
+            sudo apt-get install -y --no-install-recommends "${APT_NET_OPTS[@]}" \
+              libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0
+      - name: Install dependencies
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            python -m pip install --upgrade pip
+            pip install -e .
+            pip install -r requirements-dev.txt
+
+      - name: Stage research manifest (corpus arm)
+        # No-op without the research_manifest input: arm_suffix stays empty, no
+        # env is exported, and the run is the canonical capture it always was.
+        id: research
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$RESEARCH_MANIFEST_INPUT" ]; then
+            echo "arm_suffix=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Resolve INSIDE the checkout: a path escaping the workspace would read
+          # an arbitrary runner file into a prompt.
+          case "$RESEARCH_MANIFEST_INPUT" in
+            /*|*..*) echo "::error::research_manifest must be repo-relative and must not traverse upward"; exit 1 ;;
+          esac
+          SRC="$GITHUB_WORKSPACE/$RESEARCH_MANIFEST_INPUT"
+          if [ ! -f "$SRC" ]; then
+            echo "::error::no manifest at $RESEARCH_MANIFEST_INPUT on $SHA — a manifest is referenced by COMMIT, so it must exist on the ref being run"
+            exit 1
+          fi
+          FILE_SHA=$(sha256sum "$SRC" | cut -d' ' -f1)
+          if ! DIGEST=$(python3 -m ciris_engine.logic.utils.research_overrides manifest-digest "$SRC"); then
+            echo "::error::research_manifest is not a readable manifest (manifest-digest failed)"
+            exit 1
+          fi
+          if [ -n "$RESEARCH_MANIFEST_DIGEST_INPUT" ] && [ "$DIGEST" != "$RESEARCH_MANIFEST_DIGEST_INPUT" ]; then
+            echo "::error::manifest digest mismatch — declared $RESEARCH_MANIFEST_DIGEST_INPUT, actual $DIGEST. The manifest changed since the digest was taken."
+            exit 1
+          fi
+          # Same loader the agent runs at startup, so a bad manifest is refused
+          # here in seconds rather than as "server failed to start" after boot.
+          if ! CIRIS_TESTING_MODE=true python3 -m ciris_engine.logic.utils.research_overrides validate "$SRC" > /tmp/research_validate.txt 2>&1; then
+            cat /tmp/research_validate.txt
+            echo "::error::research_manifest rejected — the agent would refuse to start on it (cause above)"
+            exit 1
+          fi
+          # $GITHUB_ENV, not export: each run: is its own shell. The qa_runner
+          # passes its environment through to the agent server it spawns.
+          {
+            echo "CIRIS_RESEARCH_PROMPT_OVERRIDES=$SRC"
+            echo "CIRIS_TESTING_MODE=true"
+            echo "CIRIS_RESEARCH_MANIFEST_PATH=$RESEARCH_MANIFEST_INPUT"
+          } >> "$GITHUB_ENV"
+          {
+            echo "arm_suffix=-arm-${FILE_SHA:0:12}"
+            echo "sha256=$FILE_SHA"
+            echo "digest=$DIGEST"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::research arm: $RESEARCH_MANIFEST_INPUT sha256=$FILE_SHA digest=$DIGEST"
+          {
+            echo "## Research manifest (corpus arm)"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| path | \`$RESEARCH_MANIFEST_INPUT\` @ \`$SHA\` |"
+            echo "| sha256 | \`$FILE_SHA\` |"
+            echo "| digest | \`$DIGEST\` |"
+            echo "| declared | \`${RESEARCH_MANIFEST_DIGEST_INPUT:-(none)}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Read agent_version + battery_version + assemble tuple
+        id: versions
+        env:
+          ARM_SUFFIX: ${{ steps.research.outputs.arm_suffix }}
+        run: |
+          AGENT_VERSION=$(python3 -c "from ciris_engine.constants import CIRIS_VERSION; print(CIRIS_VERSION)")
+          # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
+          declare -A ISO_TO_DIR=(
+            [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
+            [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
+            [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+            [en]=english [de]=german [es]=spanish [fr]=french [it]=italian
+            [pt]=portuguese [ru]=russian [uk]=ukrainian [ja]=japanese [ko]=korean
+            [zh]=chinese [id]=indonesian [th]=thai [vi]=vietnamese [tr]=turkish
+          )
+          LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
+          BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
+          BATTERY_VERSION=$(python3 -c "import json; print(json.load(open('$BATTERY_PATH'))['battery_version'])")
+          MODEL_SLUG=$(python3 -c "from tools.qa_runner.modules.safety_battery import slugify_model; print(slugify_model('$MODEL_INPUT'))")
+          ARTIFACT_NAME="safety-battery-capture-${LANG_INPUT}-${DOMAIN_INPUT}-v${BATTERY_VERSION}-${MODEL_SLUG}-${AGENT_VERSION}-${TEMPLATE_INPUT}${ARM_SUFFIX}"
+          echo "agent_version=$AGENT_VERSION" >> $GITHUB_OUTPUT
+          echo "battery_version=$BATTERY_VERSION" >> $GITHUB_OUTPUT
+          echo "model_slug=$MODEL_SLUG" >> $GITHUB_OUTPUT
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          {
+            echo "## Capture tuple"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Cell | \`${LANG_INPUT}/${DOMAIN_INPUT}\` |"
+            echo "| Battery | \`v${BATTERY_VERSION}\` |"
+            echo "| Model | \`${MODEL_INPUT}\` (\`${MODEL_SLUG}\`) |"
+            echo "| Agent | \`${AGENT_VERSION}\` |"
+            echo "| Template | \`${TEMPLATE_INPUT}\` |"
+            echo "| Corpus | \`${RESEARCH_MANIFEST_INPUT:-canonical}\` |"
+            echo "| Artifact | \`${ARTIFACT_NAME}\` |"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Capture dedup pre-flight
+        id: dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ steps.versions.outputs.artifact_name }}
+        run: |
+          if [ "$FORCE_INPUT" = "true" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::notice::force=true — bypassing capture dedup"
+            exit 0
+          fi
+          MATCH=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+            -f name="$ARTIFACT_NAME" -f per_page=10 \
+            --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0] // empty')
+          if [ -z "$MATCH" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::notice::no matching capture for $ARTIFACT_NAME — proceeding"
+            exit 0
+          fi
+          CREATED=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
+          URL=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')
+          AGE_DAYS=$(python3 -c "
+          from datetime import datetime, timezone
+          created = datetime.fromisoformat('$CREATED'.replace('Z', '+00:00'))
+          print(f'{(datetime.now(timezone.utc) - created).total_seconds() / 86400:.2f}')
+          ")
+          if python3 -c "import sys; sys.exit(0 if float('$AGE_DAYS') < float('$FRESHNESS_DAYS') else 1)"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "existing_url=$URL" >> $GITHUB_OUTPUT
+            echo "## Capture dedup skip" >> $GITHUB_STEP_SUMMARY
+            echo "Fresh capture artifact exists (age=${AGE_DAYS}d, window=${FRESHNESS_DAYS}d) — skipping." >> $GITHUB_STEP_SUMMARY
+            echo "Existing: $URL" >> $GITHUB_STEP_SUMMARY
+            echo "::notice::Capture dedup skip — fresh artifact exists: $URL"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check secrets availability (capture)
+        # GitHub does not pass repository secrets to workflows triggered by
+        # pull_request events from forks. Without DEEPINFRA_API_KEY the
+        # capture job has nothing to call — hard-failing would just spam
+        # external contributors with red Xs they cannot fix. Soft-skip
+        # the live steps with a clear notice instead. Internal PRs +
+        # workflow_dispatch + schedule events always have the secret.
+        id: secrets_check
+        env:
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ "$LIVE_PROVIDER_INPUT" = "openrouter" ]; then DEEPINFRA_API_KEY="$OPENROUTER_API_KEY"; fi
+          if [ -z "$DEEPINFRA_API_KEY" ]; then
+            echo "have_secret=false" >> $GITHUB_OUTPUT
+            echo "::notice::DEEPINFRA_API_KEY unavailable (likely fork PR). Skipping live capture; a maintainer can re-run on a trusted branch."
+            {
+              echo "## Capture skipped — secret unavailable"
+              echo ""
+              echo "This run does not have \`DEEPINFRA_API_KEY\` in scope (commonly happens on fork PRs)."
+              echo "A maintainer can re-run this workflow on a trusted branch to produce a fresh capture."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "have_secret=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Write DeepInfra API key
+        # Capture default model is Qwen/Qwen3.6-35B-A3B served by
+        # DeepInfra (per CLAUDE.md live model matrix + safety_battery.py
+        # LIVE_LLM_DEFAULTS). The qa_runner's metadata-driven --live
+        # auto-enable looks for ~/.deepinfra_key — write the secret to
+        # that path so the lookup succeeds. (Earlier iteration used
+        # ~/.together_key + gemma; switched 2026-05-11.)
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
+        env:
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          umask 077
+          if [ "$LIVE_PROVIDER_INPUT" = "openrouter" ]; then
+            printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key"
+          else
+            printf '%s' "$DEEPINFRA_API_KEY" > "$HOME/.deepinfra_key"
+          fi
+
+      - name: Run safety battery (capture)
+        id: capture
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
+        # Bounded BELOW the job's 90 minutes (#1264). When the job timeout fired
+        # first, the job was cancelled mid-step and nothing after it ran: no
+        # logs, no traces, no partial results. A step timeout ends only this
+        # step, and the `always()` diagnostic upload below still gets its turn.
+        timeout-minutes: 75
+        run: |
+          mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
+          # deepinfra: the module's LIVE_LLM_DEFAULTS (key file, base URL). openrouter:
+          # named explicitly; the LLM service sends reasoning.enabled=false there.
+          PROVIDER_ARGS=()
+          if [ "$LIVE_PROVIDER_INPUT" = "openrouter" ]; then
+            PROVIDER_ARGS=(--live --live-key-file "$HOME/.openrouter_key"
+                           --live-base-url https://openrouter.ai/api/v1)  # provider auto-detected: openrouter
+          fi
+          python3 -m tools.qa_runner safety_battery \
+            --safety-battery-lang "$LANG_INPUT" \
+            --safety-battery-domain "$DOMAIN_INPUT" \
+            --safety-battery-template "$TEMPLATE_INPUT" \
+            "${PROVIDER_ARGS[@]}" \
+            --live-model "$MODEL_INPUT" \
+            --wipe-data \
+            --verbose 2>&1 | tee qa_reports/capture_workflow.log
+
+      - name: Locate capture bundle
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
+        id: bundle
+        run: |
+          BUNDLE_DIR=$(ls -td qa_reports/safety_battery/${LANG_INPUT}_${DOMAIN_INPUT}_* 2>/dev/null | head -1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            echo "::error::No capture bundle produced"
+            exit 1
+          fi
+          # Copy streamed traces into the bundle for upload
+          TRACE_COUNT=0
+          if [ -d "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" ]; then
+            mkdir -p "$BUNDLE_DIR/traces"
+            cp -r "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"/* "$BUNDLE_DIR/traces/" 2>/dev/null || true
+            # wc -l on Linux emits leading whitespace ("       0"); strip it
+            # so the GH Actions string compare `... == '0'` actually matches.
+            # Caught by the ar run: warning + step-summary fired (bash `-eq 0`
+            # handles whitespace), but `Upload agent server logs` step skipped
+            # because YAML string comparison is strict — "       0" != "0".
+            TRACE_COUNT=$(ls "$BUNDLE_DIR/traces" 2>/dev/null | wc -l | tr -d '[:space:]')
+          fi
+          echo "trace_count=$TRACE_COUNT" >> $GITHUB_OUTPUT
+          echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+          ls -la "$BUNDLE_DIR"
+
+          # 2.8.11 CI hardening: make lens-push health LOUD in future runs.
+          # Silent 0-trace was masking real regressions (ha cap=0; yo cap=26).
+          # Emit a step-summary block + workflow annotation so the next person
+          # looking at a green checkmark immediately sees lens-push status.
+          if [ "$TRACE_COUNT" -eq 0 ]; then
+            # Warning, not error: capture itself still ran (responses captured).
+            # But traces=0 means lens push didn't fire — that's a regression we
+            # want visible. Common causes documented inline in the summary.
+            echo "::warning title=Lens push produced 0 traces::accord_metrics adapter likely not loaded, consent env var missing, or agent shut down before flush. See step summary."
+            {
+              echo ""
+              echo "## ⚠️ Lens push: 0 traces produced"
+              echo ""
+              echo "Capture succeeded (responses landed in \`results.jsonl\`), but no per-LLM-call trace metadata reached the bundle. The accord_metrics adapter is the canonical source for token-count / cost / latency profiling — silent failure here means we ship without that signal."
+              echo ""
+              echo "**Things to check, in order:**"
+              echo ""
+              echo "1. **qa_runner stdout** (\`capture_workflow.log\`): look for "
+              echo "   - \`✅ Auto-enabling --live-lens\` (means qa_runner saw \`REQUIRES_LIVE_LLM\` and enabled the lens flow)"
+              echo "   - \`CIRIS_ACCORD_METRICS_CONSENT=true\` (consent set; without this the adapter does NOT start)"
+              echo "   - \`CIRIS_ACCORD_METRICS_ENDPOINT=…lens-api/api/v1\` (endpoint set; if missing, batches have nowhere to ship)"
+              echo "2. **Agent server logs** (\`logs/sqlite/latest.log\`, auto-uploaded as \`safety-battery-agent-logs-${{ github.run_id }}\` when trace_count=0): look for"
+              echo "   - \`[accord_metrics] starting\` (adapter loaded by agent)"
+              echo "   - \`📡 POST\` / \`📂 Tee'd batch\` (actual ship + local-tee firing)"
+              echo "3. **Shutdown sequence** in qa_runner stdout: \`⚠️ Server force killed\` means the adapter's \`stop()\` final-flush didn't run. The 30s drain wait in \`safety_battery.py::run()\` should cover this, but the buffer state at shutdown depends on flush cadence."
+              echo "4. **Workflow env block** (this file): confirm \`CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR\` and \`CIRIS_ACCORD_METRICS_FLUSH_INTERVAL\` are set on the \`capture\` job."
+              echo ""
+              echo "**The lens push is supposed to be transparent.** If you're reading this banner, the supposed-transparency broke — please track down which link in the chain failed before this PR merges."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            # Batches were SEALED. That is not SHIPPED, and the gap is why four
+            # runs on 2026-08-07 printed this banner while only one reached the
+            # canonical: the tee fires before the offer, so a serve gate that
+            # declines to offer anything still fills it. The canonical recorded
+            # zero arrivals AND zero 401s for the other three — nothing was
+            # rejected because nothing was sent.
+            #
+            # Report the tee as production, then the agent's verdict as delivery.
+            DJ="$BUNDLE_DIR/summary.json"
+            SHIPPED=$(python3 -c "import json;print(json.load(open('$DJ')).get('delivery',{}).get('shipped'))" 2>/dev/null || echo None)
+            SENT=$(python3 -c "import json;print(json.load(open('$DJ')).get('delivery',{}).get('envelopes_sent_total'))" 2>/dev/null || echo None)
+            CONSENT=$(python3 -c "import json;print(json.load(open('$DJ')).get('delivery',{}).get('consent_authored'))" 2>/dev/null || echo None)
+            echo "delivery_shipped=$SHIPPED" >> $GITHUB_OUTPUT
+            {
+              echo ""
+              echo "## Lens: $TRACE_COUNT batches sealed"
+              echo ""
+              echo "\`$TRACE_COUNT\` batches reached the local tee. **The tee fires when a batch is sealed, BEFORE any offer is made** — this counts production, not delivery."
+              echo ""
+            } >> $GITHUB_STEP_SUMMARY
+            if [ "$SHIPPED" = "True" ]; then
+              echo "::notice title=Ship confirmed::$TRACE_COUNT sealed; agent reports SHIP CONFIRMED (envelopes_sent_total=$SENT)."
+              echo "### ✅ Delivery: **SHIP CONFIRMED** — \`envelopes_sent_total=$SENT\`, consent authored: \`$CONSENT\`" >> $GITHUB_STEP_SUMMARY
+            elif [ "$SHIPPED" = "False" ]; then
+              echo "::warning title=Produced but not shipped::$TRACE_COUNT sealed, agent reports SHIP UNCONFIRMED (consent_authored=$CONSENT). Nothing reached the canonical; this run's traces are local-only."
+              {
+                echo "### ⚠️ Delivery: **SHIP UNCONFIRMED** — produced, never offered"
+                echo ""
+                echo "\`consent_authored=$CONSENT\`. Replication is gated on the owner's consent AND on the node being claimed; the grant is authored by a retry loop that gives up when the delivery-probe window closes. A run that loses that race seals batches normally and offers none, so the canonical records neither an arrival nor a rejection."
+              } >> $GITHUB_STEP_SUMMARY
+            else
+              echo "::warning title=Delivery unknown::$TRACE_COUNT sealed; no [DELIVERY-PROBE] verdict captured — whether they shipped is UNKNOWN, not assumed good."
+              echo "### ❓ Delivery: **UNKNOWN** — no probe verdict in the bundle. An unknown is not a pass." >> $GITHUB_STEP_SUMMARY
+            fi
+            {
+              echo ""
+              echo "Per-LLM-call trace metadata is in \`traces/accord-batch-*.json\` in the artifact; the delivery verdict and raw \`[DELIVERY-PROBE]\` lines are in \`summary.json\` under \`delivery\`."
+            } >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Capture gate (every question answered)
+        # Vacuous-green fix (2026-10-15): ten runs captured 1 of 90 responses
+        # and still went green, and interpret graded 63 PASS verdicts against
+        # empty responses. An incomplete capture fails HERE, before the bundle
+        # is attested or uploaded under the dedup name (so a later run is not
+        # short-circuited by it); the diagnostic logs below still upload.
+        id: capture_gate
+        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
+        run: python3 tools/safety_battery_capture_gate.py "${{ steps.bundle.outputs.bundle_dir }}"
+
+      - name: Upload agent server logs (capture unfinished or delivery unproven)
+        # When trace_count=0 the bundle alone doesn't tell us WHY the lens
+        # push didn't fire. The agent server logs (logs/sqlite/latest.log,
+        # incidents_latest.log, console.log) have the adapter-startup,
+        # POST-attempt, and shutdown lines we need to diagnose. Upload them
+        # as a separate small artifact so the next person looking at this
+        # run has the data, not just the diagnostic guidance.
+        #
+        # GATED ON DELIVERY, NOT PRODUCTION. This used to fire only on
+        # trace_count == '0' — the count of files in the local tee, which is
+        # written when a batch is SEALED, upstream of any offer. So a run that
+        # sealed nine batches and shipped none passed the condition and its logs
+        # were discarded: exactly what happened to en run 31218689164, which sat
+        # at `kex_present: false` for 360s and threw away the only record of why.
+        # Production and delivery are different claims; this step exists for the
+        # second one, and was keyed to the first.
+        #
+        # AND WHENEVER THE CAPTURE DID NOT FINISH (#1264). `always()` makes this
+        # run after a failed, timed-out or cancelled capture too: run
+        # 38492155330 hit the job timeout and left no artifact at all, so the
+        # stall could not be diagnosed from the run. The partial results and
+        # the trace tee ride along, so a stalled run still shows how far it got.
+        if: >-
+          always() &&
+          steps.dedup.outputs.skip != 'true' &&
+          steps.secrets_check.outputs.have_secret == 'true' && (
+            steps.capture.outcome != 'success' ||
+            steps.bundle.outcome != 'success' ||
+            steps.capture_gate.outcome == 'failure' ||
+            steps.bundle.outputs.trace_count == '0' ||
+            steps.bundle.outputs.delivery_shipped != 'True'
+          )
+        uses: actions/upload-artifact@v6
+        with:
+          name: safety-battery-agent-logs-${{ github.run_id }}-${{ needs.pick-lang.outputs.lang }}
+          path: |
+            logs/sqlite/latest.log
+            logs/sqlite/incidents_latest.log
+            logs/sqlite/console.log
+            logs/sqlite/canonical_reachability.log
+            logs/postgres/latest.log
+            logs/postgres/incidents_latest.log
+            logs/postgres/console.log
+            logs/postgres/canonical_reachability.log
+            qa_reports/capture_workflow.log
+            qa_reports/safety_battery/
+            qa_reports/capture_traces/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Attest capture bundle
+        if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            ${{ steps.bundle.outputs.bundle_dir }}/results.jsonl
+            ${{ steps.bundle.outputs.bundle_dir }}/summary.json
+            ${{ steps.bundle.outputs.bundle_dir }}/manifest_signed.json
+
+      - name: Upload capture bundle
+        # Upload ONLY when a real bundle was produced. The previous
+        # `if: always() && skip != 'true'` uploaded even when "Locate
+        # capture bundle" failed — which produced 2-KB log-only
+        # artifacts that subsequent dedup pre-flights matched against
+        # and short-circuited on. Now: require bundle_dir to be set,
+        # which only happens when "Locate capture bundle" succeeded.
+        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.versions.outputs.artifact_name }}
+          path: |
+            ${{ steps.bundle.outputs.bundle_dir }}
+            qa_reports/capture_workflow.log
+          retention-days: 90
+          overwrite: true
+          if-no-files-found: error
+
+      - name: Capture upgrade-compat fixture (safety)
+        # Snapshot the post-capture agent state as a "real-scenario" upgrade
+        # fixture. Scenario-tag carries the (lang, domain, template) tuple
+        # so the next major release's upgrade-compat matrix can pin a
+        # specific shape if needed. See tools/release/UPGRADE_FIXTURE.md.
+        # qa_runner sets CIRIS_HOME=project_root, so DBs land at
+        # $GITHUB_WORKSPACE/data — the action's default location.
+        # Not for a research arm: its state was produced under overridden
+        # prompts and is not a real-scenario upgrade fixture.
+        if: steps.dedup.outputs.skip != 'true' && steps.bundle.outputs.bundle_dir != '' && env.RESEARCH_MANIFEST_INPUT == ''
+        uses: ./.github/actions/capture-upgrade-fixture
+        with:
+          source-name: safety
+          scenario-tag: ${{ env.LANG_INPUT }}-${{ env.DOMAIN_INPUT }}-${{ env.TEMPLATE_INPUT }}
+
+      - name: Clean up key file (capture)
+        if: always()
+        run: |
+          for k in "$HOME/.deepinfra_key" "$HOME/.openrouter_key"; do
+            shred -u "$k" 2>/dev/null || rm -f "$k" || true
+          done
+
+  # ───────────────────────────────────────────────────────────────────
+  # JOB 2: INTERPRET — foundation-model judge applies criteria to responses
+  #
+  # No CIRIS agent in this job. The judge is Claude Opus 4.7 called
+  # directly via Anthropic /v1/messages. Plain Python script.
+  # ───────────────────────────────────────────────────────────────────
+  interpret:
+    name: Interpret (${{ needs.pick-lang.outputs.lang }}/${{ github.event.inputs.domain || 'mental_health' }})
+    needs: [pick-lang, capture]
+    # Interpret runs whenever the interpret-tuple artifact doesn't exist,
+    # regardless of whether capture just ran fresh or short-circuited via
+    # dedup. If capture skipped, we'll fetch the previously-existing
+    # capture artifact by tuple name. Interpret's own dedup pre-flight
+    # decides whether the verdicts already exist for this rubric + judge
+    # + prompt SHA combination.
+    if: github.event.inputs.skip_interpret != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # 27 criteria × ~10s/call = ~5min + overhead
+    env:
+      PYTHONUNBUFFERED: "1"
+      LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
+      DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
+      TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
+      FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
+      FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
+      # No CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR here — interpret is a
+      # plain Python script calling the Anthropic judge directly, not
+      # a CIRIS agent. No agent traces to stream.
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+      - name: Install dependencies
+        # No libtss2 needed — the judge is a direct Anthropic API call.
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            python -m pip install --upgrade pip
+            pip install -e .
+            pip install -r requirements-dev.txt
+
+      - name: Download capture artifact (cross-run lookup by tuple name)
+        # Capture may have either (a) run fresh and uploaded the artifact
+        # in THIS workflow run, or (b) deduped and pointed at an artifact
+        # from a prior run. Either way the artifact_name is the same
+        # (tuple-deterministic, latest-wins). actions/download-artifact@v7
+        # only finds same-run uploads by default; use gh api to pull the
+        # most-recent matching artifact across all runs in the repo so
+        # the cross-run reuse path works.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ needs.capture.outputs.artifact_name }}
+        run: |
+          mkdir -p ./capture_bundle
+          ART_ID=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+            -f name="$ARTIFACT_NAME" -f per_page=10 \
+            --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0].id // empty')
+          if [ -z "$ART_ID" ]; then
+            echo "::error::No capture artifact found for $ARTIFACT_NAME (expected either freshly uploaded by this run's capture job, or a prior matching artifact)"
+            exit 1
+          fi
+          echo "::notice::Downloading capture artifact ID=$ART_ID (name=$ARTIFACT_NAME)"
+          gh api -H "Accept: application/vnd.github+json" \
+            "repos/${{ github.repository }}/actions/artifacts/$ART_ID/zip" \
+            > /tmp/capture.zip
+          unzip -q /tmp/capture.zip -d ./capture_bundle
+          rm /tmp/capture.zip
+          ls -la ./capture_bundle
+
+      - name: Locate capture bundle directory
+        id: capture_dir
+        run: |
+          # download-artifact extracts under the named-path, preserving subdir structure
+          BUNDLE_DIR=$(find ./capture_bundle -type d -name "${LANG_INPUT}_${DOMAIN_INPUT}_*" | head -1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            # Fallback — bundle may be at the top level if upload was flat
+            BUNDLE_DIR=$(find ./capture_bundle -type f -name "results.jsonl" | head -1 | xargs dirname 2>/dev/null)
+          fi
+          if [ -z "$BUNDLE_DIR" ] || [ ! -f "$BUNDLE_DIR/manifest_signed.json" ]; then
+            echo "::error::Could not locate capture bundle (looking for results.jsonl + manifest_signed.json)"
+            find ./capture_bundle -type f | head -20
+            exit 1
+          fi
+          echo "capture_bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+
+      - name: Capture gate (refuse to grade an incomplete capture)
+        # Same gate as the capture job, for a bundle fetched by tuple name: a
+        # verdict over a missing response is not a verdict.
+        run: python3 tools/safety_battery_capture_gate.py "${{ steps.capture_dir.outputs.capture_bundle_dir }}"
+
+      - name: Resolve interpret tuple
+        id: interpret_versions
+        env:
+          # Empty for canonical captures; -arm-<sha12> for a research arm, so
+          # an arm's verdicts never dedup against the canonical cell's.
+          ARM_SUFFIX: ${{ needs.capture.outputs.arm_suffix }}
+        run: |
+          # Read rubric_id from the capture's BatteryManifest's criteria file
+          # Mirror tools/qa_runner/modules/safety_battery.py ISO_TO_LANG_DIR (29 cells).
+          declare -A ISO_TO_DIR=(
+            [am]=amharic [ar]=arabic [bn]=bengali [my]=burmese [ha]=hausa
+            [hi]=hindi [mr]=marathi [fa]=persian [pa]=punjabi [sw]=swahili
+            [ta]=tamil [te]=telugu [ur]=urdu [yo]=yoruba
+            [en]=english [de]=german [es]=spanish [fr]=french [it]=italian
+            [pt]=portuguese [ru]=russian [uk]=ukrainian [ja]=japanese [ko]=korean
+            [zh]=chinese [id]=indonesian [th]=thai [vi]=vietnamese [tr]=turkish
+          )
+          LANG_DIR="${ISO_TO_DIR[$LANG_INPUT]:-$LANG_INPUT}"
+          BATTERY_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/v4_${LANG_DIR}_${DOMAIN_INPUT}_arc.json"
+          CRITERIA_REL=$(python3 -c "import json; print(json.load(open('$BATTERY_PATH'))['criteria_path'])")
+          CRITERIA_PATH="tests/safety/${LANG_DIR}_${DOMAIN_INPUT}/${CRITERIA_REL}"
+          # Extract rubric_id from criteria.json — short suffix only for artifact name
+          RUBRIC_ID=$(python3 -c "import json; print(json.load(open('$CRITERIA_PATH'))['rubric_id'])")
+          # short = after last underscore-cluster (e.g. am_mh_v4_canonical_universal → canonical_universal)
+          RUBRIC_SHORT=$(echo "$RUBRIC_ID" | sed -E 's/^[a-z]+_[a-z]+_v[0-9]+_//')
+          # Judge identity bound INTO the artifact name so dedup invalidates
+          # when JUDGE_PROMPT_TEMPLATE or JUDGE_DEFAULTS["model"] changes.
+          # Without these, editing the judge prompt and pushing would let
+          # interpret_dedup reuse stale verdicts (P1 finding, codex review).
+          JUDGE_MODEL=$(python3 -c "from tools.qa_runner.modules.safety_interpret import JUDGE_DEFAULTS; print(JUDGE_DEFAULTS['model'])")
+          JUDGE_MODEL_SLUG=$(python3 -c "from tools.qa_runner.modules.safety_battery import slugify_model; from tools.qa_runner.modules.safety_interpret import JUDGE_DEFAULTS; print(slugify_model(JUDGE_DEFAULTS['model']))")
+          JUDGE_PROMPT_SHA256=$(python3 -c "import hashlib; from tools.qa_runner.modules.safety_interpret import JUDGE_PROMPT_TEMPLATE; print(hashlib.sha256(JUDGE_PROMPT_TEMPLATE.encode('utf-8')).hexdigest())")
+          JUDGE_PROMPT_SHORT="${JUDGE_PROMPT_SHA256:0:8}"
+          INTERPRETER_VERSION="${{ needs.capture.outputs.agent_version }}"  # v1: same release as agent-under-test
+          ARTIFACT_NAME="safety-battery-interpret-${LANG_INPUT}-${DOMAIN_INPUT}-v${{ needs.capture.outputs.battery_version }}-${{ needs.capture.outputs.model_slug }}-${{ needs.capture.outputs.agent_version }}-${TEMPLATE_INPUT}-${RUBRIC_SHORT}-${JUDGE_MODEL_SLUG}-${JUDGE_PROMPT_SHORT}-${INTERPRETER_VERSION}${ARM_SUFFIX}"
+          echo "rubric_id=$RUBRIC_ID" >> $GITHUB_OUTPUT
+          echo "rubric_short=$RUBRIC_SHORT" >> $GITHUB_OUTPUT
+          echo "judge_model=$JUDGE_MODEL" >> $GITHUB_OUTPUT
+          echo "judge_model_slug=$JUDGE_MODEL_SLUG" >> $GITHUB_OUTPUT
+          echo "judge_prompt_sha256=$JUDGE_PROMPT_SHA256" >> $GITHUB_OUTPUT
+          echo "interpreter_version=$INTERPRETER_VERSION" >> $GITHUB_OUTPUT
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          {
+            echo "## Interpret tuple"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Rubric | \`${RUBRIC_ID}\` |"
+            echo "| Judge model | \`${JUDGE_MODEL}\` (\`${JUDGE_MODEL_SLUG}\`) |"
+            echo "| Judge prompt sha | \`${JUDGE_PROMPT_SHORT}\` (full: \`${JUDGE_PROMPT_SHA256}\`) |"
+            echo "| Interpreter agent version | \`${INTERPRETER_VERSION}\` |"
+            echo "| Artifact | \`${ARTIFACT_NAME}\` |"
+            echo "| Capture artifact | \`${{ needs.capture.outputs.artifact_name }}\` |"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Interpret dedup pre-flight
+        id: interpret_dedup
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: ${{ steps.interpret_versions.outputs.artifact_name }}
+        run: |
+          if [ "$FORCE_INPUT" = "true" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          MATCH=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+            -f name="$ARTIFACT_NAME" -f per_page=10 \
+            --jq '.artifacts | map(select(.expired == false)) | sort_by(.created_at) | reverse | .[0] // empty')
+          if [ -z "$MATCH" ]; then
+            echo "skip=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          CREATED=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])')
+          AGE_DAYS=$(python3 -c "
+          from datetime import datetime, timezone
+          c=datetime.fromisoformat('$CREATED'.replace('Z','+00:00'))
+          print(f'{(datetime.now(timezone.utc) - c).total_seconds()/86400:.2f}')
+          ")
+          if python3 -c "import sys; sys.exit(0 if float('$AGE_DAYS') < float('$FRESHNESS_DAYS') else 1)"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            URL=$(echo "$MATCH" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')
+            echo "## Interpret dedup skip" >> $GITHUB_STEP_SUMMARY
+            echo "Fresh interpret artifact exists (age=${AGE_DAYS}d) — skipping." >> $GITHUB_STEP_SUMMARY
+            echo "Existing: $URL" >> $GITHUB_STEP_SUMMARY
+            echo "::notice::Interpret dedup skip — fresh artifact exists: $URL"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check secrets availability (interpret)
+        # Same pattern as the capture-side gate: fork PRs do not get
+        # OPENROUTER_API_KEY, so hard-failing would spam external
+        # contributors. Soft-skip the live judge steps with a clear
+        # notice. Internal PRs + workflow_dispatch + schedule have it.
+        id: interpret_secrets_check
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "have_secret=false" >> $GITHUB_OUTPUT
+            echo "::notice::OPENROUTER_API_KEY unavailable (likely fork PR). Skipping judge run; a maintainer can re-run on a trusted branch."
+            {
+              echo "## Interpret skipped — secret unavailable"
+              echo ""
+              echo "This run does not have \`OPENROUTER_API_KEY\` in scope (commonly happens on fork PRs)."
+              echo "A maintainer can re-run this workflow on a trusted branch to produce fresh verdicts."
+            } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "have_secret=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Write OpenRouter API key
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key"
+
+      - name: Run safety interpret
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
+        run: |
+          mkdir -p qa_reports
+          python3 -m tools.qa_runner safety_interpret \
+            --safety-interpret-capture-dir "${{ steps.capture_dir.outputs.capture_bundle_dir }}" \
+            --verbose 2>&1 | tee qa_reports/interpret_workflow.log
+
+      - name: Locate interpret bundle
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
+        id: interpret_bundle
+        run: |
+          BUNDLE_DIR=$(ls -td qa_reports/safety_interpret/* 2>/dev/null | head -1)
+          if [ -z "$BUNDLE_DIR" ]; then
+            echo "::error::No interpret bundle produced"
+            exit 1
+          fi
+          echo "bundle_dir=$BUNDLE_DIR" >> $GITHUB_OUTPUT
+          ls -la "$BUNDLE_DIR"
+          if [ -f "$BUNDLE_DIR/verdicts_summary.json" ] && [ -f "$BUNDLE_DIR/verdicts.jsonl" ]; then
+            # 2.8.11 Tier "results easy to read in CI summary": render the
+            # verdict bundle as a real markdown report (overall headline,
+            # per-criterion breakdown, failure detail list) instead of a
+            # raw JSON dump. The full JSON stays in the uploaded artifact;
+            # this summary is for at-a-glance "did the agent regress" reading
+            # in the GitHub Actions run page.
+            python3 <<PYEOF >> $GITHUB_STEP_SUMMARY
+          import json, os
+
+          summary = json.load(open(os.path.join("$BUNDLE_DIR", "verdicts_summary.json")))
+          verdicts = [json.loads(l) for l in open(os.path.join("$BUNDLE_DIR", "verdicts.jsonl"))]
+
+          counts = summary["verdict_counts"]
+          n = summary["n_verdicts"]
+          p, f, u = counts.get("pass", 0), counts.get("fail", 0), counts.get("undetermined", 0)
+
+          icon = "✅" if (f == 0 and u == 0) else ("❌" if f > 0 else "⚠️")
+          headline_lang = summary["cell"]["language"]
+          headline_domain = summary["cell"]["domain"]
+
+          print()
+          print(f"## {icon} Safety battery: {headline_lang} / {headline_domain}")
+          print()
+          print(f"**Rubric:** \`{summary['rubric_id']}\` · v{summary['rubric_version']}")
+          print(f"**Battery:** \`{summary['battery_id']}\` · v{summary['battery_version']}")
+          print(f"**Judge:** \`{summary['judge_model']}\` · prompt sha \`{summary['judge_prompt_sha256'][:8]}\`")
+          print()
+          print("### Overall")
+          print()
+          print("| Pass | Fail | Undetermined | Total |")
+          print("|---:|---:|---:|---:|")
+          print(f"| {p} | {f} | {u} | {n} |")
+
+          # Per-criterion breakdown — sorted by id, fails highlighted
+          print()
+          print("### Per-criterion")
+          print()
+          print("| Criterion | Pass | Fail | Undetermined |")
+          print("|---|---:|---:|---:|")
+          per_crit = summary.get("per_criterion_counts", {})
+          for cid in sorted(per_crit.keys()):
+              c = per_crit[cid]
+              row_icon = ""
+              if c.get("fail", 0) > 0:
+                  row_icon = " ❌"
+              elif c.get("undetermined", 0) > 0:
+                  row_icon = " ⚠️"
+              print(f"| \`{cid}\`{row_icon} | {c.get('pass', 0)} | {c.get('fail', 0)} | {c.get('undetermined', 0)} |")
+
+          # Failure detail — every cited span, grouped by criterion
+          fails = [v for v in verdicts if v.get("verdict") == "fail"]
+          if fails:
+              print()
+              print(f"### Failures ({len(fails)})")
+              print()
+              for v in fails:
+                  q = v.get("question_id", "?")
+                  c = v.get("criterion_id", "?")
+                  sev = v.get("severity", "?")
+                  kind = v.get("interpreter_kind", "?")
+                  span = (v.get("cited_span") or "").strip().replace("\n", " ")[:120]
+                  print(f"- \`{q}\` · **{c}** ({sev}, {kind}) — cited: \`{span}\`")
+
+          # Undetermined detail — separate from fails so judge-side issues
+          # (HTTP 529, network) don't get confused with agent regressions
+          undets = [v for v in verdicts if v.get("verdict") == "undetermined"]
+          if undets:
+              print()
+              print(f"### Undetermined ({len(undets)})")
+              print()
+              for v in undets:
+                  q = v.get("question_id", "?")
+                  c = v.get("criterion_id", "?")
+                  err = (v.get("error") or "").strip().replace("\n", " ")[:160]
+                  print(f"- \`{q}\` · **{c}** — error: \`{err}\`")
+              print()
+              print("_Undetermined verdicts are typically judge-side issues (HTTP 529 Overloaded, network) — not agent regressions. 2.8.11 added retry backoff for transient 5xx; persistent undetermined after retry indicates a judge prompt issue._")
+
+          # Footer with artifact pointer
+          print()
+          print(f"_Bundle: \`{os.path.basename('$BUNDLE_DIR')}\` — see uploaded artifact for full verdict JSONL + signed manifest._")
+          PYEOF
+          fi
+
+      - name: Attest interpret bundle
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_secrets_check.outputs.have_secret == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}/verdicts.jsonl
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}/verdicts_summary.json
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}/manifest_signed.json
+
+      - name: Upload interpret bundle
+        # Only upload when a real bundle was produced. Mirrors the
+        # capture-side fix: previously `if: always() && skip != 'true'`
+        # uploaded log-only 1.7-KB artifacts when "Locate interpret
+        # bundle" failed, which subsequent dedup pre-flights then
+        # matched against and short-circuited on. Now: require
+        # interpret_bundle.outputs.bundle_dir to be set, and fail the
+        # upload itself if no real files were found.
+        if: steps.interpret_dedup.outputs.skip != 'true' && steps.interpret_bundle.outputs.bundle_dir != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.interpret_versions.outputs.artifact_name }}
+          path: |
+            ${{ steps.interpret_bundle.outputs.bundle_dir }}
+            qa_reports/interpret_workflow.log
+          retention-days: 90
+          overwrite: true
+          if-no-files-found: error
+
+      - name: Clean up key file (interpret)
+        if: always()
+        run: shred -u "$HOME/.openrouter_key" 2>/dev/null || rm -f "$HOME/.openrouter_key" || true

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.types import JSONDict
 
 from .enums import TaskStatus, ThoughtStatus, ThoughtType
+from .task_envelope import TaskEnvelope
 
 
 class ImageContent(BaseModel):
@@ -29,7 +30,7 @@ class ImageContent(BaseModel):
     filename: Optional[str] = Field(default=None, description="Original filename if available")
     size_bytes: Optional[int] = Field(default=None, description="File size in bytes for tracking")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     def to_data_url(self) -> str:
         """Convert to data URL format for LLM APIs."""
@@ -46,8 +47,26 @@ class TaskContext(BaseModel):
     correlation_id: str = Field(..., description="Correlation ID for tracing")
     parent_task_id: Optional[str] = Field(None, description="Parent task if nested")
     agent_occurrence_id: str = Field(default="default", description="Runtime occurrence ID that owns this task")
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "task. When present, takes priority over user/system defaults in "
+            "the localization chain. Set by adapters from the originating "
+            "channel/user metadata (e.g. MessageContext.metadata.language)."
+        ),
+    )
+    envelope: Optional[TaskEnvelope] = Field(
+        None,
+        description=(
+            "Task-scoped authorization envelope (CIRISAgent#938). Issued at task "
+            "creation from outside the reasoning loop and bound to this task id; "
+            "its lifetime is the task's. None means DENY to a future tool gate — "
+            "never 'unconstrained'. Nothing enforces it in Phase 1."
+        ),
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class TaskOutcome(BaseModel):
@@ -59,7 +78,7 @@ class TaskOutcome(BaseModel):
     memories_created: List[str] = Field(default_factory=list, description="Memory node IDs created")
     errors: List[str] = Field(default_factory=list, description="Errors encountered")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ThoughtContext(BaseModel):
@@ -72,8 +91,16 @@ class ThoughtContext(BaseModel):
     parent_thought_id: Optional[str] = Field(None, description="Parent thought if pondering")
     correlation_id: str = Field(..., description="Correlation ID")
     agent_occurrence_id: str = Field(default="default", description="Runtime occurrence ID (inherited from task)")
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "thought. Inherited from the parent task's preferred_language at "
+            "thought creation time. Top of the localization chain."
+        ),
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FinalAction(BaseModel):
@@ -83,11 +110,17 @@ class FinalAction(BaseModel):
     action_params: JSONDict = Field(..., description="Action parameters (will be typed per action)")
     reasoning: str = Field(..., description="Why this action was chosen")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class Task(BaseModel):
-    """Core task object - the unit of work."""
+    """Core task object - the unit of work.
+
+    The Task is the record of truth for `preferred_language`. Every Thought
+    derived from this task inherits `preferred_language` directly. The same
+    value is also mirrored on `context.preferred_language` so the localization
+    helper finds it via either path.
+    """
 
     task_id: str = Field(..., description="Unique task identifier")
     channel_id: str = Field(..., description="Channel where task originated/reports to")
@@ -99,6 +132,15 @@ class Task(BaseModel):
     updated_at: str = Field(..., description="ISO8601 timestamp")
     parent_task_id: Optional[str] = Field(None, description="Parent task for nested work")
     context: Optional[TaskContext] = Field(None, description="Task context")
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "task. Top of the localization chain. The Task is the record of "
+            "truth — every Thought derived from this task inherits this value, "
+            "and the same value is mirrored on context.preferred_language."
+        ),
+    )
     outcome: Optional[TaskOutcome] = Field(None, description="Outcome when complete")
     # Task signing fields
     signed_by: Optional[str] = Field(None, description="WA ID that signed this task")
@@ -116,7 +158,7 @@ class Task(BaseModel):
         default_factory=list, description="Images attached to this task for multimodal processing"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class Thought(BaseModel):
@@ -141,8 +183,18 @@ class Thought(BaseModel):
     images: List[ImageContent] = Field(
         default_factory=list, description="Images from source task for multimodal processing"
     )
+    preferred_language: Optional[str] = Field(
+        None,
+        description=(
+            "ISO 639-1 language code for the agent's working language on this "
+            "thought. Copied from the parent Task's preferred_language at "
+            "thought creation time, and propagated to follow-up thoughts. "
+            "Mirrored on context.preferred_language; the localization helper "
+            "finds it via either path."
+        ),
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

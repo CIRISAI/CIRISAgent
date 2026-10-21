@@ -122,18 +122,24 @@ class AdapterConfigurationService:
         self,
         adapter_type: str,
         user_id: str,
+        start_step_id: Optional[str] = None,
+        existing_config: Optional[Dict[str, Any]] = None,
     ) -> AdapterConfigSession:
         """Start a new configuration session for an adapter.
 
         Args:
             adapter_type: Type of adapter to configure
             user_id: ID of user performing configuration
+            start_step_id: Optional step ID to start at (for re-auth flows)
+            existing_config: Optional existing config to pre-populate session data
+                             (used for re-auth to preserve base_url etc.)
 
         Returns:
             New configuration session
 
         Raises:
             ValueError: If adapter doesn't support interactive configuration
+            ValueError: If start_step_id is invalid
         """
         if adapter_type not in self._adapter_manifests:
             raise ValueError(f"Adapter '{adapter_type}' does not support interactive configuration")
@@ -143,6 +149,33 @@ class AdapterConfigurationService:
             adapter_type=adapter_type,
             user_id=user_id,
         )
+
+        # If start_step_id is specified, find and set the step index
+        if start_step_id:
+            config = self._adapter_manifests[adapter_type]
+            step_index = None
+            for i, step in enumerate(config.steps):
+                if step.step_id == start_step_id:
+                    step_index = i
+                    break
+            if step_index is None:
+                raise ValueError(f"Requested step not found in adapter '{adapter_type}'")
+            session.current_step_index = step_index
+            # Log index only to avoid logging user-controlled step ID
+            logger.info(f"Starting session at step index {step_index}")
+
+        # Pre-populate collected_config with existing config for re-auth flows
+        # This allows OAuth step to use previously configured base_url
+        if existing_config:
+            session.collected_config.update(existing_config)
+            # Log count only to avoid exposing user-controlled key names
+            logger.info(f"Pre-populated session with {len(existing_config)} existing config keys")
+
+        # THE FIRST STEP CAN BE CONDITIONAL TOO. Skip before anyone sees it --
+        # after existing_config is folded in, so a re-auth flow's condition can
+        # read what was configured last time.
+        self.skip_unsatisfied(session, self._adapter_manifests[adapter_type])
+
         self._sessions[session.session_id] = session
         logger.info(f"Started config session {session.session_id} for {adapter_type}")
         return session
@@ -162,6 +195,68 @@ class AdapterConfigurationService:
             if self._is_session_expired(session):
                 session.status = SessionStatus.EXPIRED
         return session
+
+    @staticmethod
+    def condition_holds(step: ConfigurationStep, collected: Dict[str, Any]) -> bool:
+        """Does this step's `condition` hold against what the session has collected?
+
+        THREE SHAPES, exhaustively -- the ones the tree actually writes:
+
+            {"field": "dialect", "equals": "sqlite"}
+            {"field": "dialect", "not_equals": "sqlite"}
+            {"field": "auth_method", "values": ["api_key"]}
+
+        A step with no condition always holds. A condition whose field has not
+        been collected yet does NOT hold: showing a step before the answer it
+        depends on exists would be asking a question out of order. `field` names
+        either an input field (stored under its name) or a select step (stored
+        under its step_id) -- both land in `collected_config` the same way.
+
+        Until this existed, `condition` was declared by manifests and evaluated
+        by nothing: external_data_sql showed BOTH its sqlite and its
+        server-connection steps to everyone (CIRISClient#39).
+        """
+        cond = step.condition
+        if not cond:
+            return True
+        field = cond.get("field")
+        if field is None or field not in collected:
+            return False
+        actual = collected[field]
+        if "equals" in cond:
+            return bool(actual == cond["equals"])
+        if "not_equals" in cond:
+            return bool(actual != cond["not_equals"])
+        if "values" in cond:
+            return actual in (cond["values"] or [])
+        # A predicate with no recognised operator is a manifest error, and a
+        # manifest error must not silently show or hide a step.
+        raise ValueError(f"step {step.step_id!r}: condition has no equals/not_equals/values: {cond}")
+
+    def skip_unsatisfied(self, session: AdapterConfigSession, config: InteractiveConfiguration) -> None:
+        """Advance past every step whose condition does not currently hold.
+
+        Called wherever a step is about to be PRESENTED -- on start, on
+        advance, and when status is read -- so a conditional step can never be
+        shown by one path and skipped by another.
+        """
+        steps = config.steps
+        while session.current_step_index < len(steps):
+            if self.condition_holds(steps[session.current_step_index], session.collected_config):
+                return
+            logger.info(
+                f"[CONDITION] Skipping step {steps[session.current_step_index].step_id!r}: "
+                f"condition not met"
+            )
+            session.current_step_index += 1
+
+    def current_step(self, session: AdapterConfigSession) -> Optional[ConfigurationStep]:
+        """The step to present now, with unsatisfied conditions skipped. None when done."""
+        config = self._adapter_manifests[session.adapter_type]
+        self.skip_unsatisfied(session, config)
+        if session.current_step_index >= len(config.steps):
+            return None
+        return config.steps[session.current_step_index]
 
     async def execute_step(
         self,
@@ -185,14 +280,19 @@ class AdapterConfigurationService:
             return StepResult(step_id="", success=False, error="Session expired")
 
         config = self._adapter_manifests[session.adapter_type]
-        if session.current_step_index >= len(config.steps):
+        step = self.current_step(session)
+        if step is None:
             return StepResult(step_id="", success=False, error="No more steps")
-
-        step = config.steps[session.current_step_index]
         adapter = self._adapter_instances[session.adapter_type]
 
         try:
             result = await self._execute_step_type(session, step, adapter, step_data)
+            # An advance may land on a step whose condition is now decidable
+            # and false; move past it so `next_step_index` names a step that
+            # will actually be shown.
+            if result.success and result.next_step_index is not None:
+                self.skip_unsatisfied(session, config)
+                result.next_step_index = session.current_step_index
             session.update()
             return result
         except Exception as e:
@@ -200,9 +300,30 @@ class AdapterConfigurationService:
             return StepResult(step_id=step.step_id, success=False, error=str(e))
 
     async def _execute_discovery_step(
-        self, session: AdapterConfigSession, step: ConfigurationStep, adapter: ConfigurableAdapterProtocol
+        self,
+        session: AdapterConfigSession,
+        step: ConfigurationStep,
+        adapter: ConfigurableAdapterProtocol,
+        step_data: Optional[Dict[str, Any]] = None,
     ) -> StepResult:
-        """Execute a discovery step."""
+        """Execute a discovery step.
+
+        If step_data contains 'selected_url' or 'manual_url', stores the URL
+        and advances to the next step. Otherwise, runs discovery and returns
+        discovered items for user selection.
+        """
+        step_data = step_data or {}
+
+        # Check if user has selected an item or entered a manual URL
+        selected_url = step_data.get("selected_url") or step_data.get("manual_url")
+        if selected_url:
+            logger.info(f"[DISCOVERY STEP] User selected URL: {selected_url}")
+            session.collected_config["base_url"] = selected_url
+            session.current_step_index += 1
+            logger.info(f"[DISCOVERY STEP] Stored base_url, advancing to step {session.current_step_index}")
+            return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
+
+        # Run discovery
         items = await adapter.discover(step.discovery_method or "default")
         session.step_results[step.step_id] = items
         logger.info(f"[DISCOVERY STEP] Returning {len(items)} discovered items to client")
@@ -211,17 +332,8 @@ class AdapterConfigurationService:
                 f"[DISCOVERY STEP]   → {item.get('label', 'unknown')} - {item.get('metadata', {}).get('url', 'no url')}"
             )
 
-        if items:
-            session.current_step_index += 1
-            logger.info(f"[DISCOVERY STEP] Advanced to step index {session.current_step_index}")
-
-        next_idx = session.current_step_index if items else None
-        logger.info(
-            f"[DISCOVERY STEP] next_step_index={next_idx} (advancing={'yes' if items else 'no - no items found'})"
-        )
-        return StepResult(
-            step_id=step.step_id, success=True, data={"discovered_items": items}, next_step_index=next_idx
-        )
+        # Don't auto-advance - wait for user to select an item
+        return StepResult(step_id=step.step_id, success=True, data={"discovered_items": items}, next_step_index=None)
 
     async def _handle_oauth_callback(
         self,
@@ -250,16 +362,16 @@ class AdapterConfigurationService:
         """Store OAuth-related data from step_data into session."""
         if "base_url" in step_data and step_data["base_url"]:
             session.collected_config["base_url"] = step_data["base_url"]
-            logger.info(f"[OAUTH STEP] Stored base_url from step_data: {step_data['base_url']}")
+            logger.info("[OAUTH STEP] Stored base_url from step_data")
 
         if step_data.get("callback_base_url"):
             session.collected_config["callback_base_url"] = step_data["callback_base_url"]
-            logger.info(f"[OAUTH STEP] Using local callback base URL: {step_data['callback_base_url']}")
+            logger.info("[OAUTH STEP] Using local callback base URL")
 
         if step_data.get("redirect_uri"):
             session.collected_config["redirect_uri"] = step_data["redirect_uri"]
             session.collected_config["platform"] = step_data.get("platform")
-            logger.info(f"[OAUTH STEP] Using custom redirect URI: {step_data['redirect_uri']}")
+            logger.info("[OAUTH STEP] Using custom redirect URI")
 
     async def _generate_oauth_url(
         self,
@@ -270,7 +382,7 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Generate OAuth authorization URL."""
         base_url = session.collected_config.get("base_url", "")
-        logger.info(f"[OAUTH STEP] Generating OAuth URL with base_url={base_url}")
+        logger.info("[OAUTH STEP] Generating OAuth URL")
 
         if not base_url:
             logger.error("[OAUTH STEP] ERROR: No base_url in collected_config!")
@@ -291,7 +403,7 @@ class AdapterConfigurationService:
                 redirect_uri=step_data.get("redirect_uri"),
                 platform=step_data.get("platform"),
             )
-            logger.info(f"[OAUTH STEP] Generated OAuth URL: {oauth_url}")
+            logger.info("[OAUTH STEP] Generated OAuth URL successfully")
         except Exception as e:
             logger.error(f"[OAUTH STEP] Failed to generate OAuth URL: {e}")
             return StepResult(step_id=step.step_id, success=False, error=f"Failed to get OAuth URL: {str(e)}")
@@ -313,11 +425,9 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Execute an OAuth step."""
         logger.info(f"[OAUTH STEP] Executing OAuth step for session {session.session_id}")
-        logger.info(f"[OAUTH STEP] step_data keys: {list(step_data.keys())}")
-        logger.info(f"[OAUTH STEP] collected_config before: {session.collected_config}")
+        logger.debug(f"[OAUTH STEP] step_data keys: {list(step_data.keys())}")
 
         self._store_oauth_step_data(session, step_data)
-        logger.info(f"[OAUTH STEP] collected_config after: {session.collected_config}")
 
         if "code" in step_data:
             return await self._handle_oauth_callback(session, step, adapter, step_data)
@@ -334,19 +444,36 @@ class AdapterConfigurationService:
         logger.info(
             f"[SELECT STEP] Processing step {step.step_id}, step_data keys: {list(step_data.keys()) if step_data else 'None'}"
         )
-        logger.info(f"[SELECT STEP] Raw step_data: {step_data}")
+        logger.debug(f"[SELECT STEP] step_data keys: {list(step_data.keys()) if step_data else 'None'}")
 
         selection = step_data.get("selection") or step_data.get("selected")
-        logger.info(f"[SELECT STEP] Extracted selection: {selection}")
 
-        if selection:
-            session.collected_config[step.step_id] = selection
+        # "skip" means user chose to skip an optional step with no selection
+        if selection == "skip":
+            selection = ""
+
+        # ONE AXIS. This read a retired `optional` key; a select step may be
+        # skipped with an empty selection iff it is not required.
+        if selection is not None and (selection or not step.required):
+            # Advance: has selection, OR optional step with empty/skip selection
+            value = selection if selection else ""
+            session.collected_config[step.step_id] = value
+            # A SELECT STEP WRITES THE FIELD IT DECLARES. Adapters read the
+            # declared name (`dialect`, `response_mode`, `auth_method`), and
+            # `condition` predicates name it too -- but only the step_id was
+            # ever stored, so external_data_sql's validate_config failed with
+            # "dialect is required" on a completed wizard and mock_llm's
+            # response_mode never reached the environment. The step_id key is
+            # kept for anything that reads it.
+            for f in step.fields or []:
+                session.collected_config[f.name] = value
             session.current_step_index += 1
             logger.info(
-                f"[SELECT STEP] Stored selection for {step.step_id}: {selection}, advancing to step {session.current_step_index}"
+                f"[SELECT STEP] Stored selection for {step.step_id} (value='{selection}'), advancing to step {session.current_step_index}"
             )
             return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
 
+        # No selection key in step_data at all — fetch options for display
         logger.info(f"[SELECT STEP] No selection provided, fetching options for {step.step_id}")
         options = await adapter.get_config_options(step.step_id, session.collected_config)
         logger.info(f"[SELECT STEP] Got {len(options) if options else 0} options for {step.step_id}")
@@ -355,12 +482,49 @@ class AdapterConfigurationService:
     def _execute_input_step(
         self, session: AdapterConfigSession, step: ConfigurationStep, step_data: Dict[str, Any]
     ) -> StepResult:
-        """Execute an input step."""
+        """Execute an input step.
+
+        Advances to next step if:
+        - step_data is not None (i.e., user submitted the form, even if empty)
+        - All required fields have values
+
+        If step_data is None, we return awaiting_input=True.
+        If step_data is {} (empty dict from optional fields), we still advance.
+        """
+        # step_data being None means no submission yet; {} means form submitted with no values
+        if step_data is None:
+            return StepResult(step_id=step.step_id, success=True, data={"awaiting_input": True})
+
+        # Check if all required fields have values
+        required_fields: list[str] = []
+        if step.fields:
+            for f in step.fields:
+                if f.required:
+                    required_fields.append(f.name)
+
+        missing_required = [field for field in required_fields if not step_data.get(field)]
+
+        # STEP-LEVEL `required` WAS DECORATIVE. Only field-level required was
+        # checked, so a step marked required with all-optional fields advanced
+        # on an empty form. A required step needs at least one answer.
+        if step.required and not any(step_data.values()):
+            logger.warning(f"[INPUT STEP] Step {step.step_id!r} is required and received no values")
+            return StepResult(
+                step_id=step.step_id, success=False, error=f"Step {step.step_id!r} is required"
+            )
+
+        if missing_required:
+            logger.warning(f"[INPUT STEP] Missing required fields: {missing_required}")
+            return StepResult(
+                step_id=step.step_id, success=False, error=f"Missing required fields: {', '.join(missing_required)}"
+            )
+
+        # All validations passed - store data and advance
         if step_data:
             session.collected_config.update(step_data)
-            session.current_step_index += 1
-            return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
-        return StepResult(step_id=step.step_id, success=True, data={"awaiting_input": True})
+        session.current_step_index += 1
+        logger.info(f"[INPUT STEP] Step completed, advancing to step {session.current_step_index}")
+        return StepResult(step_id=step.step_id, success=True, next_step_index=session.current_step_index)
 
     def _execute_confirm_step(self, session: AdapterConfigSession, step: ConfigurationStep) -> StepResult:
         """Execute a confirm step."""
@@ -372,6 +536,111 @@ class AdapterConfigurationService:
             next_step_index=session.current_step_index,
         )
 
+    async def _execute_device_auth_step(
+        self,
+        session: AdapterConfigSession,
+        step: ConfigurationStep,
+        adapter: ConfigurableAdapterProtocol,
+        step_data: Dict[str, Any],
+    ) -> StepResult:
+        """Execute a device authorization (RFC 8628) step.
+
+        Device auth flow:
+        1. First call: Initiate device auth, return user_code and verification_uri
+        2. Subsequent calls with poll=true: Poll for completion
+        3. On completion: Store tokens/keys and advance
+        """
+        logger.info(f"[DEVICE_AUTH STEP] Executing for session {session.session_id}")
+        logger.debug(f"[DEVICE_AUTH STEP] step_data keys: {list(step_data.keys()) if step_data else 'None'}")
+
+        # Store portal URL if provided
+        if "portal_url" in step_data:
+            session.collected_config["portal_url"] = step_data["portal_url"]
+
+        # Check if we're polling for completion
+        if step_data.get("poll") and session.collected_config.get("device_code"):
+            logger.info("[DEVICE_AUTH STEP] Polling for device auth completion")
+            # Call adapter's poll method (uses handle_oauth_callback for compatibility)
+            try:
+                result = await adapter.handle_oauth_callback(
+                    code=session.collected_config["device_code"],
+                    state=session.session_id,
+                    base_url=session.collected_config.get("portal_url", ""),
+                )
+                if result.get("status") == "complete":
+                    session.collected_config["device_auth_result"] = result
+                    session.status = SessionStatus.ACTIVE
+                    session.current_step_index += 1
+                    logger.info("[DEVICE_AUTH STEP] Authorization complete!")
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=True,
+                        data={"status": "complete", "result": result},
+                        next_step_index=session.current_step_index,
+                    )
+                elif result.get("status") == "pending":
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=True,
+                        data={"status": "pending"},
+                        awaiting_callback=True,
+                    )
+                else:
+                    return StepResult(
+                        step_id=step.step_id,
+                        success=False,
+                        error=result.get("error", "Device authorization failed"),
+                    )
+            except Exception as e:
+                logger.error(f"[DEVICE_AUTH STEP] Poll error: {e}")
+                return StepResult(step_id=step.step_id, success=False, error=str(e))
+
+        # Initial request: Initiate device auth
+        portal_url = session.collected_config.get("portal_url", "")
+        if not portal_url:
+            return StepResult(
+                step_id=step.step_id,
+                success=False,
+                error="No portal_url provided. Please select a CIRISNode first.",
+            )
+
+        try:
+            # Use get_oauth_url to initiate device auth (returns verification URL with user code)
+            auth_data = await adapter.get_oauth_url(
+                base_url=portal_url,
+                state=session.session_id,
+            )
+
+            # If adapter returns a dict (device auth data) vs string (OAuth URL)
+            if isinstance(auth_data, dict):
+                session.collected_config["device_code"] = auth_data.get("device_code")
+                session.collected_config["user_code"] = auth_data.get("user_code")
+                session.status = SessionStatus.AWAITING_OAUTH  # Reuse status
+                return StepResult(
+                    step_id=step.step_id,
+                    success=True,
+                    data={
+                        "verification_uri": auth_data.get("verification_uri_complete"),
+                        "user_code": auth_data.get("user_code"),
+                        "expires_in": auth_data.get("expires_in", 900),
+                        "interval": auth_data.get("interval", 5),
+                    },
+                    awaiting_callback=True,
+                )
+            else:
+                # String URL returned - treat as verification URI
+                session.status = SessionStatus.AWAITING_OAUTH
+                return StepResult(
+                    step_id=step.step_id,
+                    success=True,
+                    data={"verification_uri": auth_data},
+                    awaiting_callback=True,
+                )
+
+        except Exception as e:
+            logger.error(f"[DEVICE_AUTH STEP] Initiation error: {e}")
+            return StepResult(step_id=step.step_id, success=False, error=str(e))
+
     async def _execute_step_type(
         self,
         session: AdapterConfigSession,
@@ -381,9 +650,11 @@ class AdapterConfigurationService:
     ) -> StepResult:
         """Execute step based on its type."""
         if step.step_type == "discovery":
-            return await self._execute_discovery_step(session, step, adapter)
+            return await self._execute_discovery_step(session, step, adapter, step_data)
         elif step.step_type == "oauth":
             return await self._execute_oauth_step(session, step, adapter, step_data)
+        elif step.step_type == "device_auth":
+            return await self._execute_device_auth_step(session, step, adapter, step_data)
         elif step.step_type == "select":
             return await self._execute_select_step(session, step, adapter, step_data)
         elif step.step_type == "input":
@@ -421,7 +692,11 @@ class AdapterConfigurationService:
         success = await adapter.apply_config(session.collected_config)
         if success:
             session.status = SessionStatus.COMPLETED
-            logger.info(f"Configuration applied for session {session_id}")
+            # Sanitize session_id before logging (user-controlled data)
+            import hashlib
+
+            session_hash = hashlib.sha256(session_id.encode()).hexdigest()[:8]
+            logger.info(f"Configuration applied for session [id_hash:{session_hash}]")
         else:
             session.status = SessionStatus.FAILED
 
@@ -520,7 +795,7 @@ class AdapterConfigurationService:
             all_configs = await config_service.list_configs(prefix=prefix)
 
             if not all_configs:
-                logger.info(f"No persisted configs found for adapter type: {adapter_type}")
+                logger.info("No persisted configs found for requested adapter type")
                 return False
 
             # Remove each config by setting to None (or use delete if available)
@@ -534,9 +809,9 @@ class AdapterConfigurationService:
                 except Exception as e:
                     logger.warning(f"Failed to remove config {key}: {e}")
 
-            logger.info(f"Removed {removed_count} persisted configs for {adapter_type}")
+            logger.info(f"Removed {removed_count} persisted configs for adapter")
             return removed_count > 0
 
         except Exception as e:
-            logger.error(f"Failed to remove persisted config for {adapter_type}: {e}")
+            logger.error(f"Failed to remove persisted config for adapter: {e}")
             return False

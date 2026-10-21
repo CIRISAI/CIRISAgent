@@ -3,11 +3,7 @@ import logging
 
 from ciris_engine.protocols.runtime.base import BaseAdapterProtocol
 
-from .cirisnode_client import CIRISNodeClient
-
-OpenAICompatibleClient = None
-
-__all__ = ["load_adapter", "BaseAdapterProtocol", "CIRISNodeClient"]
+__all__ = ["load_adapter", "BaseAdapterProtocol"]
 
 logger = logging.getLogger(__name__)
 

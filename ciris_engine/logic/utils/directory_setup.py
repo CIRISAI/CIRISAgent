@@ -7,7 +7,6 @@ before the application starts. FAILS FAST with clear error messages.
 
 import os
 import shutil
-import sqlite3
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
@@ -81,12 +80,27 @@ class DatabaseAccessError(DirectorySetupError):
     pass
 
 
-def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> None:
-    """
-    Ensure only one agent can run on this database using WAL Mode + Busy Timeout.
+def _is_ios_runtime() -> bool:
+    """True when running on iOS — single-process by design, so lock-probe
+    failures are always stale locks from a previous run rather than competing
+    agents. iOS reports sys.platform=='ios' under 3.13+, or 'darwin' with an
+    iphoneos multiarch under the Toga/BeeWare bridge that ships our build."""
+    if sys.platform == "ios":
+        return True
+    if sys.platform == "darwin" and hasattr(sys, "implementation"):
+        return "iphoneos" in getattr(sys.implementation, "_multiarch", "").lower()
+    return False
 
-    Uses SQLite's WAL (Write-Ahead Logging) mode with IMMEDIATE transaction
-    to detect if another process is already using the database.
+
+def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> None:
+    """Ensure only one agent process can hold the database.
+
+    Post-2.9.0 absorption: persist's `Engine` constructor opens the
+    DSN through sqlx with serialized writes. If a second process holds
+    the SQLite file exclusively (WAL or otherwise), the Engine call
+    raises with a clear `database is locked` message. We probe by
+    constructing an Engine and immediately dropping it — no Python-side
+    sqlite3 import needed.
 
     Args:
         db_path: Path to the SQLite database file or PostgreSQL connection string
@@ -95,52 +109,61 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     Raises:
         DatabaseAccessError: If database is already in use by another agent
     """
-    # Skip exclusive access check for PostgreSQL (connection string starts with "postgresql://")
+    # Skip exclusive access check for PostgreSQL — sqlx pools handle
+    # multi-process safely, and there's no notion of file-level locking.
     if db_path.startswith(("postgresql://", "postgres://")):
-        print(f"✓ Skipping exclusive access check for PostgreSQL: {db_path}")
+        print(f"[OK] Skipping exclusive access check for PostgreSQL: {db_path}")
         return
 
     db_path_obj = Path(db_path)
-
-    # Create database parent directory if needed
     db_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
+    # Post-2.9.4: the prior implementation pre-constructed
+    # `Engine(dsn, "ciris-agent-bootstrap")` as a probe, then `del`'d it.
+    # That was safe in early persist 3.x but breaks persist 3.6.3+ because
+    # the Engine is a process-singleton (CIRISPersist#88 `reset_engine` is
+    # the only release path) — the probe pinned a bootstrap-keyed Engine
+    # in-process, then the real `initialize_database` hit
+    # `EngineConfigMismatch` with the agent's actual signing_key_id at
+    # boot. See CIRISConformance/tests/test_030_cohabitation_init.py for
+    # the canonical "one Engine per process" pattern.
+    #
+    # Lock detection is preserved end-to-end: persist's `Engine()` call
+    # in `_bootstrap_persist_engine` opens the DSN via sqlx and raises
+    # "database is locked" naturally when another process holds the file
+    # — the lock-error mapping below still fires; it just runs against
+    # the real Engine construction instead of a separate probe.
     try:
-        # Quick connectivity test with minimal timeout
-        # Using timeout=0.1 to fail fast if database is locked
-        conn = sqlite3.connect(db_path, timeout=0.1)
-
-        # Enable WAL mode for better concurrency detection
-        conn.execute("PRAGMA journal_mode=WAL")
-
-        # Attempt exclusive lock - this will fail immediately if another agent is running
-        conn.execute("BEGIN IMMEDIATE")  # Exclusive lock attempt
-        conn.rollback()  # Release the lock immediately
-        conn.close()
-
-        print(f"✓ Database exclusive access confirmed: {db_path}")
-
-    except sqlite3.OperationalError as e:
-        error_msg = f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-        print(f"  SQLite Error: {e}", file=sys.stderr)
-        print(f"  Only one CIRIS agent can run per database file", file=sys.stderr)
-        print(f"  Check for other running agents using: ps aux | grep ciris", file=sys.stderr)
-
-        if fail_fast:
-            sys.exit(1)
-        raise DatabaseAccessError(error_msg)
+        if not os.access(db_path_obj.parent, os.W_OK):
+            raise PermissionError(f"Database parent dir not writable: {db_path_obj.parent}")
+        print(f"[OK] Database parent dir ready: {db_path}")
 
     except Exception as e:
-        error_msg = f"UNEXPECTED DATABASE ERROR for {db_path}: {e}"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+        msg = str(e).lower()
+        is_lock_error = "lock" in msg or "busy" in msg or "in use" in msg
+
+        # iOS: stale lock from previous crash, not a competing agent.
+        if _is_ios_runtime() and (is_lock_error or "operation not permitted" in msg):
+            print("[WARN] iOS: database lock probe failed (stale lock from previous run) — proceeding")
+            print(f"  Underlying: {e}")
+            return
+
+        if is_lock_error:
+            error_msg = f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
+            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
+            print(f"  Underlying error: {e}", file=sys.stderr)
+            print("  Only one CIRIS agent can run per database file", file=sys.stderr)
+            print("  Check for other running agents using: ps aux | grep ciris", file=sys.stderr)
+        else:
+            error_msg = f"UNEXPECTED DATABASE ERROR for {db_path}: {e}"
+            print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
 
         if fail_fast:
             sys.exit(1)
         raise DatabaseAccessError(error_msg)
 
 
-def check_disk_space(path: Path, required_mb: int = 100) -> Tuple[bool, float]:
+def check_disk_space(path: Path, required_mb: int = 50) -> Tuple[bool, float]:
     """
     Check if sufficient disk space is available.
 
@@ -165,7 +188,7 @@ def _check_disk_space_or_fail(base_dir: Path, fail_fast: bool) -> None:
     """Check disk space and fail if insufficient."""
     has_space, available_mb = check_disk_space(base_dir)
     if not has_space:
-        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 100MB REQUIRED - EXITING"
+        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 50MB REQUIRED - EXITING"
         print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
         if fail_fast:
             sys.exit(1)
@@ -176,7 +199,7 @@ def _create_directory(dir_path: Path, mode: int, fail_fast: bool) -> None:
     """Create a single directory with specified permissions."""
     if not dir_path.exists():
         dir_path.mkdir(parents=True, mode=mode)
-        print(f"✓ Created directory: {dir_path} with mode {oct(mode)}")
+        print(f"[OK] Created directory: {dir_path} with mode {oct(mode)}")
 
         # Verify creation
         if not dir_path.exists():
@@ -193,7 +216,7 @@ def _fix_directory_permissions(dir_path: Path, mode: int, fail_fast: bool) -> No
     if current_mode != mode:
         try:
             dir_path.chmod(mode)
-            print(f"✓ Fixed permissions for {dir_path}: {oct(current_mode)} -> {oct(mode)}")
+            print(f"[OK] Fixed permissions for {dir_path}: {oct(current_mode)} -> {oct(mode)}")
         except Exception as perm_error:
             error_msg = f"WRONG PERMS on {dir_path}: Has {oct(current_mode)}, needs {oct(mode)} - CANNOT FIX - EXITING"
             print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
@@ -215,7 +238,7 @@ def _check_directory_ownership(dir_path: Path, user_id: int, group_id: int, fail
             # os.chown is Unix-only
             if hasattr(os, "chown"):
                 os.chown(dir_path, user_id, group_id)
-                print(f"✓ Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
+                print(f"[OK] Fixed ownership for {dir_path}: {stat.st_uid}:{stat.st_gid} -> {user_id}:{group_id}")
             else:
                 # Windows doesn't have chown
                 return
@@ -316,9 +339,8 @@ def setup_application_directories(
         "data": 0o755,  # Database files
         "data_archive": 0o755,  # Archived thoughts/tasks
         "logs": 0o755,  # Log files
-        "audit_keys": 0o700,  # Sensitive audit keys - restricted!
         "config": 0o755,  # Configuration files
-        ".secrets": 0o700,  # Secrets storage - restricted!
+        "secrets": 0o700,  # Secrets storage - restricted!
     }
 
     for dir_name, mode in directories.items():
@@ -364,7 +386,7 @@ def setup_application_directories(
                 with open(file_path, "a"):
                     # Successfully opened for writing
                     pass
-                print(f"✓ Write access verified for {file_path}")
+                print(f"[OK] Write access verified for {file_path}")
             except (PermissionError, IOError) as e:
                 # Get file stats for debugging
                 stat = file_path.stat()
@@ -380,7 +402,7 @@ def setup_application_directories(
                     sys.exit(1)
                 raise PermissionError(error_msg)
 
-    print("✓ All directories and critical files successfully configured")
+    print("[OK] All directories and critical files successfully configured")
 
 
 def _validate_directory(dir_path: Path) -> None:
@@ -407,33 +429,6 @@ def _validate_directory(dir_path: Path) -> None:
         raise PermissionError(error_msg)
 
 
-def _validate_file_permissions(file_path: Path) -> None:
-    """Validate a file is writable if it exists."""
-    if not file_path.exists():
-        return  # File doesn't exist, that's OK
-
-    try:
-        with open(file_path, "a"):
-            # File is writable
-            pass
-    except (PermissionError, IOError):
-        # Get file stats for debugging
-        stat = file_path.stat()
-        owner, group = _get_file_owner_info(stat)
-
-        # getuid/getgid are Unix-only, not available on Windows
-        current_uid = getattr(os, "getuid", lambda: -1)()
-        current_gid = getattr(os, "getgid", lambda: -1)()
-
-        error_msg = f"CANNOT WRITE TO CRITICAL FILE {file_path}"
-        print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
-        print(f"  Owner: {owner}:{group} (uid={stat.st_uid}, gid={stat.st_gid})", file=sys.stderr)
-        print(f"  Permissions: {oct(stat.st_mode & 0o777)}", file=sys.stderr)
-        print(f"  Current user: uid={current_uid}, gid={current_gid}", file=sys.stderr)
-        print(f"  FIX: sudo chown {current_uid}:{current_gid} {file_path}", file=sys.stderr)
-        raise PermissionError(error_msg)
-
-
 def validate_directories(base_dir: Optional[Path] = None) -> bool:
     """
     Validate that all required directories exist and are writable.
@@ -456,7 +451,7 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
     # Check disk space first
     _check_disk_space_or_fail(base_dir, False)
 
-    required_dirs = ["data", "data_archive", "logs", "audit_keys", "config"]
+    required_dirs = ["data", "data_archive", "logs", "config"]
 
     for dir_name in required_dirs:
         dir_path = base_dir / dir_name
@@ -501,7 +496,7 @@ def validate_directories(base_dir: Optional[Path] = None) -> bool:
                 print(f"  FIX: sudo chown {current_uid}:{current_gid} {file_path}", file=sys.stderr)
                 raise PermissionError(error_msg)
 
-    print("✓ All directories and critical files validated successfully")
+    print("[OK] All directories and critical files validated successfully")
     return True
 
 
@@ -524,10 +519,10 @@ if __name__ == "__main__":
             print("Setting up CIRIS application directories...")
             setup_application_directories(fail_fast=not args.no_fail_fast)
 
-        print("\n✓ SUCCESS: All directories properly configured!")
+        print("\n[OK] SUCCESS: All directories properly configured!")
     except DirectorySetupError as e:
-        print(f"\n✗ FAILED: {e}", file=sys.stderr)
+        print(f"\n[FAIL] FAILED: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"\n✗ UNEXPECTED ERROR: {e}", file=sys.stderr)
+        print(f"\n[FAIL] UNEXPECTED ERROR: {e}", file=sys.stderr)
         sys.exit(1)

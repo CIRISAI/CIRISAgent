@@ -122,11 +122,13 @@ def stateful_runtime_control_service():
 @pytest.fixture
 def test_app(stateful_runtime_control_service, mock_communication_service):
     """Create test app with mocked services."""
+    from tests.fixtures.auth import setup_test_admin_user
+
     app = create_app()
 
-    # Set up APIAuthService in dev mode
+    # Set up APIAuthService with test admin user
     auth_service = APIAuthService()
-    auth_service._dev_mode = True
+    setup_test_admin_user(auth_service)
     app.state.auth_service = auth_service
 
     # Mock the service dependencies directly on app.state
@@ -174,13 +176,11 @@ def test_app(stateful_runtime_control_service, mock_communication_service):
 
 @pytest.fixture
 def auth_headers(test_app):
-    """Get authentication headers."""
-    client = TestClient(test_app)
+    """Get authentication headers via login endpoint."""
+    from tests.fixtures.auth import make_login_request
 
-    login_response = client.post("/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"})
-    assert login_response.status_code == 200
-    token = login_response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    client = TestClient(test_app)
+    return make_login_request(client)
 
 
 class TestPauseInteractionContract:
@@ -265,10 +265,10 @@ class TestPauseInteractionContract:
 
     def test_pause_contract_documentation(self):
         """
-        Document the expected pause→interact contract for COVENANT compliance.
+        Document the expected pause→interact contract for ACCORD compliance.
         """
         contract = """
-        PAUSE→INTERACT CONTRACT FOR COVENANT TRANSPARENCY:
+        PAUSE→INTERACT CONTRACT FOR ACCORD TRANSPARENCY:
 
         1. When processor.pause_processing() is called:
            - All new interactions should be processed more slowly or queued
@@ -280,7 +280,7 @@ class TestPauseInteractionContract:
            - OR explicitly queue the interaction
            - OR reject with appropriate status code
 
-        3. COVENANT compliance validation:
+        3. ACCORD compliance validation:
            - Pause state must be detectable via API
            - Processing behavior must be transparent
            - No silent failures or hidden processing

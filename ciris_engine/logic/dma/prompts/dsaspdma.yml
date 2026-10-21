@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# A rights-based second pass after ASPDMA selects DEFER
+
+component_name: dsaspdma
+description: "Deferral-specific action selection - classifies a DEFER action against the rights/needs taxonomy"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === RIGHTS / NEEDS TAXONOMY ===
+  - health_and_bodily_integrity: Use for life, health, bodily integrity, disability, medical safety, weaponization, hazardous materials, or direct physical-harm implications.
+    Rights basis: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Use for housing, shelter, home security, food, water, sanitation, energy, infrastructure, and other essential living conditions.
+    Rights basis: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: Use for work, income, wages, debt, credit, benefits, social security, investment, taxes, or other material livelihood and financial-stability needs.
+    Rights basis: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Use for legal advice, legal aid, due process, fair trial, access to remedy, contracts, liability, or other justice-system access questions.
+    Rights basis: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Use for recognition before the law, identity verification, nationality, voting, elections, public participation, or civic standing.
+    Rights basis: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Use for privacy, autonomy, dignity, freedom from coercion, fraud, manipulation, biometric inference, or surveillance concerns.
+    Rights basis: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Use for education, research, access to knowledge, cultural participation, and the benefits of science.
+    Rights basis: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Use for community moderation, crisis escalation, pattern detection, public safety, discrimination, or harms that primarily affect groups rather than one person alone.
+    Rights basis: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Use when the deferral is mostly about uncertainty, policy interpretation, authority boundaries, or non-domain-specific human oversight.
+    Rights basis: human_review_and_accountability
+
+  === OPERATIONAL DEFERRAL REASON CODES ===
+  - licensed_domain_required: A licensed specialist or separately governed domain handler is required.
+  - rights_impact_review: The request materially affects protected rights or core human needs and needs review.
+  - safety_escalation: Potential harm or crisis conditions require immediate escalation or human oversight.
+  - consent_or_authority_required: Valid consent, authorization, or accountable human authority is required first.
+  - insufficient_context: The agent lacks enough reliable context to proceed responsibly.
+  - policy_review_required: A policy or governance interpretation is needed before acting.
+  - resource_or_system_limitation: System constraints prevent safe completion without review.
+  - time_based_review: The decision should be reconsidered later at a specific time or after a condition changes.
+  - ethical_uncertainty: The system remains ethically uncertain and requires human judgment.
+  - unknown: Fallback code when the operational reason remains unclear.
+
+system_guidance_header: |
+  === DEFERRAL-SPECIFIC ACTION SELECTION (DSASPDMA) ===
+
+  ASPDMA already chose DEFER.
+  Your job is NOT to reopen the action choice.
+  Your job is to classify the deferral so it becomes explainable, auditable, and routable.
+
+  You must:
+  1. Preserve the DEFER action.
+  2. Choose the best primary rights / needs category.
+  3. Choose the best operational reason code.
+  4. Add secondary needs categories only when they materially apply.
+  5. Set domain_hint only when a licensed domain handler is clearly required.
+
+evaluation_steps: |
+  STEP 1: Read the original thought and the provisional ASPDMA reasoning.
+  STEP 2: Identify which human need / human-rights bucket is most directly implicated.
+  STEP 3: Choose the operational reason code that best explains WHY the system is deferring.
+  STEP 4: Keep the reason summary short, specific, and user-legible.
+  STEP 5: Prefer one primary category. Add secondary categories only when the case genuinely spans multiple rights.
+
+context_integration: |
+  === ORIGINAL THOUGHT ===
+  {original_thought_content}
+
+  === ASPDMA RATIONALE ===
+  {aspdma_reasoning}
+
+  === CURRENT DEFER REASON ===
+  {current_reason}
+
+  === CURRENT DEFER CONTEXT ===
+  {current_context}
+
+  === CURRENT DEFER UNTIL ===
+  {current_defer_until}
+
+  === CURRENT DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === LICENSED DOMAIN OPTIONS ===
+  Use one of these only if clearly required: {domain_hint_options}
+
+response_format: |
+  Return a FLAT JSON object with these fields:
+  - "reason_summary": short human-readable explanation
+  - "operational_reason": one of the operational reason codes above
+  - "primary_need_category": one of the rights / needs taxonomy values above
+  - "secondary_need_categories": optional list of additional taxonomy values
+  - "rights_basis": list of short rights-basis labels
+  - "domain_hint": optional licensed domain enum when a specialized licensed handler is clearly needed
+  - "defer_until": optional ISO timestamp override if timing should change
+
+  Example:
+  {{"reason_summary": "Licensed legal review is required before giving procedural guidance.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  LANGUAGE RULES:
+  - Respond in the user's preferred language.
+  - JSON keys and enum values MUST remain exactly as specified in English.
+  - Only human-readable free text such as reason_summary should localize.
+
+closing_reminder: |
+  IMPORTANT:
+  - Do not switch away from DEFER.
+  - Do not invent a domain_hint unless licensed handling is truly implied.
+  - Legal and financial access should be treated as rights-impacting needs, not as generic admin issues.
+  - Prefer the narrowest accurate category with the clearest rights basis.

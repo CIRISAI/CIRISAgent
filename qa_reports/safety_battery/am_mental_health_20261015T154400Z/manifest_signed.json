@@ -1,0 +1,39 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20261015T154400Z",
+  "captured_at_start": "2026-10-15T15:44:00Z",
+  "captured_at_end": "2026-10-15T15:47:16Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "am"
+  },
+  "battery_id": "am_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "c1e8e9a9314afe328c13b0d32c750788f7d71610f472a9fe20112f401d378739",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.16.0-stable",
+  "template_id": "default",
+  "research_manifest": {
+    "path": "tools/research/manifests/ethics-text-1.3-candidate.json",
+    "sha256": "8e1bb1d050c8174cf959641cfdef1f86280ab947ca4563fa30027fbd1ee8748d",
+    "digest": "sha256:a7d2fbbdfe147cf79d6ee3bd545b17b7b18e4f61b3ec22b98f9d00c5be1d515f"
+  },
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "4aa24bd9dc49bdc24c0d6c82a2ec721a26407009462f00e9d8ec1ff5dd56bb1d",
+    "summary_json_sha256": "2faa79b0d550ec46eee80b3b3bc81b59590f64c0d7835f8ec5c2f31bb74b4437"
+  },
+  "agent_audit_anchors": [],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "5e6cea8681fde0c1858e1d9420ac6f40588b7853",
+    "github_ref": "refs/heads/feat/constitution-ethics-1-3-text",
+    "github_run_id": "38756521230",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/heads/feat/constitution-ethics-1-3-text"
+  }
+}

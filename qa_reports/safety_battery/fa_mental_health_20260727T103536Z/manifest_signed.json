@@ -1,0 +1,71 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20260727T103536Z",
+  "captured_at_start": "2026-07-27T10:35:36Z",
+  "captured_at_end": "2026-07-27T10:43:37Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "fa"
+  },
+  "battery_id": "fa_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "2cd574f224481ebdd6b2a424709cfc78ec9482a39e94231b37886a49d6c3a16f",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.9.6-stable",
+  "template_id": "default",
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "9c0e622d5ef1d08545e8cf4f4abb5a4f3937217e625c20a6c410fa274f7e9702",
+    "summary_json_sha256": "27141e7a8975f2a0ae8f1a476f37353f507c00214d018be564f73438848599b3"
+  },
+  "agent_audit_anchors": [
+    {
+      "question_id": "fa_mh_v4_q01",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q02",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q03",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q04",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q05",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q06",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q07",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q08",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "fa_mh_v4_q09",
+      "agent_task_id": null
+    }
+  ],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "7f2369bed22c626404a1dcf8e09bfeb81a573d82",
+    "github_ref": "refs/heads/main",
+    "github_run_id": "30258525924",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/heads/main"
+  }
+}

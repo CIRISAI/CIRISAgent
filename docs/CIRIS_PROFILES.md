@@ -189,4 +189,4 @@ Remember: These are just templates. The agent's actual identity evolves through 
 
 ---
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

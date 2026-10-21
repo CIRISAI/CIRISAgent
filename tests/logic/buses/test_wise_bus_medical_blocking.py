@@ -95,14 +95,12 @@ class TestMedicalCapabilityBlocking:
         ],
     )
     def test_validate_capability_blocks_medical(self, wise_bus, capability):
-        """Test that all medical-related capabilities are blocked."""
-        with pytest.raises(ValueError) as exc_info:
-            wise_bus._validate_capability(capability)
-
-        error_msg = str(exc_info.value)
-        assert "PROHIBITED" in error_msg
-        assert "MEDICAL capabilities blocked" in error_msg
-        assert "separate licensed system" in error_msg
+        """Test that all medical-related capabilities are blocked (routed to deferral)."""
+        result = wise_bus._validate_capability(capability)
+        # Medical capabilities now return DomainDeferralRequired instead of raising
+        assert result is not None, f"Expected deferral signal for '{capability}', got None"
+        assert hasattr(result, "category"), f"Expected DomainDeferralRequired, got {type(result)}"
+        assert "MEDICAL" in str(result.category).upper()
 
     @pytest.mark.parametrize(
         "capability",
@@ -136,7 +134,7 @@ class TestMedicalCapabilityBlocking:
 
     @pytest.mark.asyncio
     async def test_request_guidance_blocks_medical_capability(self, wise_bus):
-        """Test that request_guidance blocks medical capabilities."""
+        """Test that request_guidance blocks medical capabilities via deferral."""
         medical_capabilities = [
             "domain:medical",
             "domain:health:triage",
@@ -146,13 +144,14 @@ class TestMedicalCapabilityBlocking:
 
         for cap in medical_capabilities:
             request = GuidanceRequest(context="test context", options=["A", "B"], capability=cap)
-
-            with pytest.raises(ValueError) as exc_info:
-                await wise_bus.request_guidance(request)
-
-            error_msg = str(exc_info.value)
-            assert "PROHIBITED" in error_msg
-            assert cap in error_msg
+            # Medical capabilities now return deferral response instead of raising
+            response = await wise_bus.request_guidance(request)
+            assert response is not None
+            assert (
+                "deferral" in response.reasoning.lower()
+                or "licensed" in response.reasoning.lower()
+                or "routed" in response.reasoning.lower()
+            ), f"Expected deferral response for '{cap}', got: {response.reasoning}"
 
     @pytest.mark.asyncio
     async def test_request_guidance_allows_safe_capability(self, wise_bus):
@@ -205,19 +204,14 @@ class TestMedicalCapabilityBlocking:
         assert response is not None
 
     def test_error_message_clarity(self, wise_bus):
-        """Test that error messages are clear and actionable."""
-        with pytest.raises(ValueError) as exc_info:
-            wise_bus._validate_capability("domain:medical")
-
-        error_msg = str(exc_info.value)
-        # Check for key information
-        assert "PROHIBITED" in error_msg
-        assert "MEDICAL capabilities blocked" in error_msg
-        assert "domain:medical" in error_msg
-        assert "separate licensed system" in error_msg
+        """Test that deferral messages are clear and actionable."""
+        result = wise_bus._validate_capability("domain:medical")
+        assert result is not None
+        assert "domain:medical" in result.reason
+        assert "licensed" in result.reason.lower()
 
     def test_partial_match_blocking(self, wise_bus):
-        """Test that partial matches of medical terms are blocked."""
+        """Test that partial matches of medical terms are blocked (deferred)."""
         blocked_variations = [
             "medical_anything",
             "health_monitoring",
@@ -234,9 +228,8 @@ class TestMedicalCapabilityBlocking:
 
         for term in blocked_variations:
             capability = f"domain:{term}"
-            with pytest.raises(ValueError) as exc_info:
-                wise_bus._validate_capability(capability)
-            assert "PROHIBITED" in str(exc_info.value)
+            result = wise_bus._validate_capability(capability)
+            assert result is not None, f"Expected deferral for '{capability}', got None"
 
     def test_case_insensitive_blocking(self, wise_bus):
         """Test that blocking is case-insensitive."""
@@ -251,8 +244,8 @@ class TestMedicalCapabilityBlocking:
         ]
 
         for cap in case_variations:
-            with pytest.raises(ValueError):
-                wise_bus._validate_capability(cap)
+            result = wise_bus._validate_capability(cap)
+            assert result is not None, f"Expected deferral for '{cap}', got None"
 
 
 class TestMedicalBlockingIntegration:
@@ -274,16 +267,14 @@ class TestMedicalBlockingIntegration:
             urgency="high",
         )
 
-        # Should be blocked immediately
-        with pytest.raises(ValueError) as exc_info:
-            await wise_bus.request_guidance(request)
-
-        # Verify error message
-        error = str(exc_info.value)
-        assert "PROHIBITED" in error
-        assert "domain:medical:diagnosis" in error
-        assert "MEDICAL capabilities blocked" in error
-        assert "separate licensed system" in error
+        # Should be routed to deferral instead of raising
+        response = await wise_bus.request_guidance(request)
+        assert response is not None
+        assert (
+            "deferral" in response.reasoning.lower()
+            or "licensed" in response.reasoning.lower()
+            or "routed" in response.reasoning.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_safe_navigation_request_flow(self):

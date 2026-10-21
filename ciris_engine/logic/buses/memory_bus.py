@@ -13,14 +13,16 @@ if TYPE_CHECKING:
 
 from dataclasses import dataclass
 
+from ciris_engine.logic.utils.halt_latch import bus_backstop
 from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int, get_str
 from ciris_engine.protocols.services import MemoryService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
+from ciris_engine.schemas.runtime.accord_halt import BusBackstopCall
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.memory import MemorySearchResult, TimeSeriesDataPoint
 from ciris_engine.schemas.services.graph.memory import MemorySearchFilter
-from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
 from ciris_engine.schemas.services.operations import MemoryOpResult, MemoryOpStatus, MemoryQuery
 
 from .base_bus import BaseBus, BusMessage
@@ -95,6 +97,11 @@ class MemoryBus(BaseBus[MemoryService]):
 
         This is always synchronous as handlers need the result.
         """
+        # CC 4.2.1.1 backstop: a handler's act does not write memory under a halt.
+        halt = await bus_backstop(BusBackstopCall.MEMORY_MEMORIZE)
+        if halt is not None:
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=halt.refusal_reason(), data=None)
+
         # Note: handler_name is the SOURCE (who's calling), not the target service
         # We currently have only one memory service, so no routing is needed
         service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["memorize"])
@@ -163,6 +170,11 @@ class MemoryBus(BaseBus[MemoryService]):
 
         This is always synchronous as handlers need the result.
         """
+        # CC 4.2.1.1 backstop: a handler's act does not erase memory under a halt.
+        halt = await bus_backstop(BusBackstopCall.MEMORY_FORGET)
+        if halt is not None:
+            return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=halt.refusal_reason(), data=None)
+
         service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["forget"])
 
         if not service:
@@ -371,6 +383,47 @@ class MemoryBus(BaseBus[MemoryService]):
             self._error_count += 1
             logger.error(f"Failed to memorize log: {e}", exc_info=True)
             return MemoryOpResult[GraphNode](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
+
+    async def create_edge(
+        self,
+        edge: "GraphEdge",
+        handler_name: Optional[str] = None,
+    ) -> "MemoryOpResult[GraphEdge]":
+        """
+        Create an edge between two nodes in the memory graph.
+
+        Args:
+            edge: The GraphEdge to create
+            handler_name: Name of the handler making this request (for debugging)
+
+        Returns:
+            MemoryOpResult[GraphEdge] with the created edge in data field
+        """
+        from ciris_engine.schemas.services.graph_core import GraphEdge as GraphEdgeType
+
+        # CC 4.2.1.1 backstop: a handler's act does not write memory under a halt.
+        halt = await bus_backstop(BusBackstopCall.MEMORY_CREATE_EDGE)
+        if halt is not None:
+            return MemoryOpResult[GraphEdgeType](status=MemoryOpStatus.FAILED, reason=halt.refusal_reason(), data=None)
+
+        service = await self.get_service(handler_name=handler_name or "unknown", required_capabilities=["create_edge"])
+
+        if not service:
+            logger.error(f"No memory service available (requested by handler: {handler_name or 'unknown'})")
+            return MemoryOpResult[GraphEdgeType](
+                status=MemoryOpStatus.FAILED,
+                reason=ERROR_NO_MEMORY_SERVICE,
+                data=None,
+            )
+
+        try:
+            result = await service.create_edge(edge)
+            self._operation_count += 1
+            return result
+        except Exception as e:
+            self._error_count += 1
+            logger.error(f"Failed to create edge: {e}", exc_info=True)
+            return MemoryOpResult[GraphEdgeType](status=MemoryOpStatus.FAILED, reason=str(e), error=str(e))
 
     async def export_identity_context(self, handler_name: Optional[str] = None) -> str:
         """Export identity nodes as string representation."""

@@ -42,57 +42,93 @@
         "step_id": "user_agent",
         "step_type": "input",
         "title": "NOAA User Agent",
-        "description": "Enter a user agent for NOAA Weather API (required by NOAA, e.g., 'MyApp/1.0 (contact@example.com)')",
-        "field": "user_agent",
-        "input_type": "text",
-        "placeholder": "CIRIS/1.0 (contact@ciris.ai)",
+        "description": "Enter a user agent for NOAA Weather API (required by NOAA)",
         "required": true,
-        "default": "CIRIS/1.0 (contact@ciris.ai)"
+        "fields": [
+          {
+            "name": "user_agent",
+            "label": "User Agent String",
+            "type": "string",
+            "required": true,
+            "default": "CIRIS/1.0 (contact@ciris.ai)",
+            "description": "Format: AppName/Version (contact@email.com)"
+          }
+        ]
       },
       {
         "step_id": "owm_api_key",
         "step_type": "input",
         "title": "OpenWeatherMap API Key (Optional)",
-        "description": "Enter your OpenWeatherMap API key for international coverage. Leave blank to use NOAA only (US-only). Get a free key at https://openweathermap.org/api",
-        "field": "owm_api_key",
-        "input_type": "password",
-        "placeholder": "Enter API key or leave blank",
+        "description": "For international coverage. Leave blank for NOAA only (US). Get free key at openweathermap.org",
         "required": false,
-        "optional": true
+        "fields": [
+          {
+            "name": "owm_api_key",
+            "label": "OpenWeatherMap API Key",
+            "type": "password",
+            "required": false,
+            "description": "Leave blank to skip"
+          }
+        ]
       },
       {
         "step_id": "select_units",
-        "step_type": "select",
+        "step_type": "input",
         "title": "Temperature Units",
         "description": "Select your preferred temperature and wind speed units",
-        "field": "units",
-        "options_method": "get_config_options",
         "required": false,
-        "default": "imperial",
-        "optional": true
+        "fields": [
+          {
+            "name": "units",
+            "label": "Units",
+            "type": "select",
+            "required": false,
+            "default": "imperial",
+            "options": [
+              {"value": "imperial", "label": "Imperial (°F, mph)", "description": "Fahrenheit and miles per hour"},
+              {"value": "metric", "label": "Metric (°C, m/s)", "description": "Celsius and meters per second"},
+              {"value": "kelvin", "label": "Kelvin", "description": "Scientific units"}
+            ]
+          }
+        ]
       },
       {
         "step_id": "default_location",
         "step_type": "input",
         "title": "Default Location (Optional)",
-        "description": "Enter a default location as 'latitude,longitude' (e.g., '40.7128,-74.0060' for NYC) or leave blank",
-        "field": "default_location",
-        "input_type": "text",
-        "placeholder": "40.7128,-74.0060",
+        "description": "Set a default location for weather queries",
         "required": false,
-        "optional": true
+        "fields": [
+          {
+            "name": "default_location",
+            "label": "Default Location",
+            "type": "string",
+            "required": false,
+            "description": "Enter as latitude,longitude (e.g., 40.7128,-74.0060 for NYC)"
+          }
+        ]
       },
       {
         "step_id": "update_interval",
         "step_type": "input",
-        "title": "Cache Update Interval (Optional)",
-        "description": "How often to refresh cached weather data in seconds (minimum 60, default 300)",
-        "field": "update_interval",
-        "input_type": "number",
-        "placeholder": "300",
+        "title": "Cache Interval (Optional)",
+        "description": "How often to refresh cached weather data",
         "required": false,
-        "default": 300,
-        "optional": true
+        "fields": [
+          {
+            "name": "update_interval",
+            "label": "Update Interval",
+            "type": "select",
+            "required": false,
+            "default": "300",
+            "options": [
+              {"value": "60", "label": "1 minute", "description": "Most frequent updates"},
+              {"value": "300", "label": "5 minutes (Recommended)", "description": "Good balance"},
+              {"value": "600", "label": "10 minutes", "description": "Less frequent"},
+              {"value": "1800", "label": "30 minutes", "description": "Minimal API usage"}
+            ]
+          }
+        ]
       },
       {
         "step_id": "confirm",

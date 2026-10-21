@@ -129,6 +129,11 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
     def __init__(self, *_: Any, **kwargs: Any) -> None:
         # Initialize BaseService with service name
         super().__init__(service_name="MockLLMService", **kwargs)
+        # CIRISAgent#1244: any process that constructs the mock LLM must never
+        # ship a trace off-node. One-way latch, read by the trace-export guard.
+        from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+        mark_mock_llm_active("MockLLMService")
         self._client: Optional[MockLLMClient] = None
         self.model_name = "mock-model"
 
@@ -259,8 +264,23 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
             raise
 
         # Simulate llama4scout resource usage from together.ai
-        # Estimate input tokens from messages
-        input_tokens = int(sum(len(msg.get("content", "").split()) * 1.3 for msg in messages))  # ~1.3 tokens per word
+        # Estimate input tokens from messages (handles both string and multimodal list content)
+        def count_words(content: Any) -> int:
+            if isinstance(content, str):
+                return len(content.split())
+            elif isinstance(content, list):
+                # Multimodal content - count words from text blocks, estimate ~100 tokens per image
+                words = 0
+                for block in content:
+                    if isinstance(block, dict):
+                        if block.get("type") == "text":
+                            words += len(block.get("text", "").split())
+                        elif block.get("type") == "image_url":
+                            words += 100  # Estimate ~100 tokens per image
+                return words
+            return 0
+
+        input_tokens = int(sum(count_words(msg.get("content", "")) * 1.3 for msg in messages))  # ~1.3 tokens per word
         output_tokens = max_tokens // 4  # Assume ~25% of max tokens used on average
 
         # Ensure minimum token counts for testing

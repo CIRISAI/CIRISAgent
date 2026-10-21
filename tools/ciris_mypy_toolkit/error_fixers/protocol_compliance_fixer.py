@@ -27,12 +27,12 @@ class ProtocolComplianceFixer:
 
     def propose_protocol_fixes(self) -> Dict[str, Any]:
         """Propose protocol compliance fixes for agent review."""
-        logger.info("🔍 Analyzing protocol compliance issues for agent review...")
+        logger.info(" Analyzing protocol compliance issues for agent review...")
         return {"total_proposed": 0, "changes": []}  # Stub for now
 
     def apply_approved_fixes(self, approved_changes: Dict[str, Any]) -> int:
         """Apply agent-approved protocol fixes."""
-        logger.info("🎯 Applying agent-approved protocol fixes...")
+        logger.info(" Applying agent-approved protocol fixes...")
         return 0  # Stub for now
 
     def _fix_database_access(self) -> int:

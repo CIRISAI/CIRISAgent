@@ -633,13 +633,20 @@ def setup_runtime_monitoring_tasks(runtime: Any) -> Tuple[Optional[Any], List[An
             agent_task = task
             break
 
-    # In first-run mode, there is no agent task - just monitor adapters
+    # In first-run mode or when services are disabled, there is no agent task - just monitor adapters
+    from ciris_engine.logic.persistence.llm_providers import get_ciris_services_disabled
+
     first_run = is_first_run()
-    if not agent_task and not first_run:
+    services_disabled = get_ciris_services_disabled()
+
+    if not agent_task and not first_run and not services_disabled:
         raise RuntimeError("Agent processor task not found - initialization may have failed")
 
     if first_run and not agent_task:
         logger.info("First-run mode: Monitoring adapters only (no agent processor)")
+    elif services_disabled and not agent_task:
+        logger.warning("No LLM provider configured: Running in limited mode (API-only, no agent processing)")
+        logger.warning("Add an LLM provider in Settings > LLM Configuration to enable full functionality")
 
     # Set up monitoring tasks
     runtime._ensure_shutdown_event()
@@ -735,17 +742,43 @@ def log_adapter_configuration_details(adapters: List[Any]) -> None:
 
 
 def create_adapter_lifecycle_tasks(adapters: List[Any], agent_task: Any) -> List[Any]:
-    """Create and start adapter lifecycle tasks."""
+    """Create and start adapter lifecycle tasks.
+
+    Args:
+        adapters: List of adapter instances
+        agent_task: The agent processor task, or None in first-run/setup mode
+
+    Returns:
+        List of lifecycle tasks
+
+    Note:
+        When agent_task is None (first-run mode), only adapters that explicitly
+        handle None in their run_lifecycle signature (e.g., API adapter) will
+        have their lifecycle started. Other adapters are skipped to prevent
+        crashes from `await None`.
+    """
     logger.info("Creating agent processor task...")
 
     adapter_tasks = []
     for adapter in adapters:
         adapter_name = adapter.__class__.__name__
 
-        if hasattr(adapter, "run_lifecycle"):
-            lifecycle_task = asyncio.create_task(adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask")
-            adapter_tasks.append(lifecycle_task)
-            logger.info(f"  → Starting {adapter_name} lifecycle...")
+        if not hasattr(adapter, "run_lifecycle"):
+            continue
+
+        # In first-run mode (agent_task=None), only start adapters that can handle it
+        # The API adapter explicitly handles None; others typically do `await agent_task`
+        # which crashes with "object NoneType can't be used in 'await' expression"
+        if agent_task is None:
+            # Check if adapter's run_lifecycle has Optional type hint or handles None
+            # API adapter is the canonical example that handles first-run mode
+            if "Api" not in adapter_name and "API" not in adapter_name:
+                logger.info(f"  → Skipping {adapter_name} lifecycle (first-run mode, no agent task)")
+                continue
+
+        lifecycle_task = asyncio.create_task(adapter.run_lifecycle(agent_task), name=f"{adapter_name}LifecycleTask")
+        adapter_tasks.append(lifecycle_task)
+        logger.info(f"  → Starting {adapter_name} lifecycle...")
 
     return adapter_tasks
 
@@ -757,7 +790,7 @@ async def _check_adapter_health(adapter: Any) -> bool:
         return True
 
     if not hasattr(adapter, "is_healthy"):
-        logger.warning(f"  ⚠️  {adapter_name} has no is_healthy method")
+        logger.warning(f" [WARN] {adapter_name} has no is_healthy method")
         return False
 
     try:
@@ -766,7 +799,7 @@ async def _check_adapter_health(adapter: Any) -> bool:
             logger.debug(f"  ⏳ {adapter_name} not yet healthy, waiting...")
             return False
         else:
-            logger.info(f"  ✓ {adapter_name} is healthy and connected")
+            logger.info(f" [OK] {adapter_name} is healthy and connected")
             return True
     except Exception as e:
         logger.debug(f"  ⏳ {adapter_name} health check failed: {e}")
@@ -813,7 +846,7 @@ async def verify_adapter_service_registration(runtime: Any) -> bool:
                             required_capabilities=["send_message"],
                         )
                         if test_service:
-                            logger.info("  ✅ All adapters connected and services registered!")
+                            logger.info(" [OK] All adapters connected and services registered!")
                             return True
                     except Exception as e:
                         logger.debug(f"Service registration check failed: {e}")
@@ -821,103 +854,3 @@ async def verify_adapter_service_registration(runtime: Any) -> bool:
                 await asyncio.sleep(0.5)
     except asyncio.TimeoutError:
         return False
-
-
-# ============================================================================
-# CRITICAL SERVICES HELPERS (CC 18 -> CC ~6) - 3 helpers
-# ============================================================================
-
-
-def identify_critical_service_dependencies() -> None:
-    """Determine critical services and dependency order"""
-    pass
-
-
-def execute_critical_service_health_checks() -> None:
-    """Perform comprehensive health validation"""
-    pass
-
-
-def handle_critical_service_failures() -> None:
-    """Implement failure recovery for critical services"""
-    pass
-
-
-# ============================================================================
-# SERVICE REGISTRATION HELPERS (CC 13 -> CC ~5) - 3 helpers
-# ============================================================================
-
-
-def prepare_service_registration_context() -> None:
-    """Set up context for service registration"""
-    pass
-
-
-def execute_service_registration_workflow() -> None:
-    """Register services with proper dependency handling"""
-    pass
-
-
-def validate_service_registration_integrity() -> None:
-    """Verify successful service registration"""
-    pass
-
-
-# ============================================================================
-# CONTINUITY AWARENESS HELPERS (CC 11 -> CC ~6) - 2 helpers
-# ============================================================================
-
-
-def capture_runtime_continuity_state() -> None:
-    """Capture current continuity and cognitive state"""
-    pass
-
-
-def persist_continuity_for_recovery() -> None:
-    """Store continuity state for future recovery"""
-    pass
-
-
-# ============================================================================
-# COMMON RUNTIME UTILITIES - 8 additional helpers
-# ============================================================================
-
-
-def validate_runtime_configuration() -> None:
-    """Comprehensive runtime configuration validation"""
-    pass
-
-
-def create_runtime_error_context() -> None:
-    """Create structured error context for debugging"""
-    pass
-
-
-def measure_runtime_performance_metrics() -> None:
-    """Collect and analyze runtime performance data"""
-    pass
-
-
-def handle_runtime_resource_limits() -> None:
-    """Monitor and enforce resource constraints"""
-    pass
-
-
-def synchronize_runtime_state_transitions() -> None:
-    """Ensure thread-safe state transitions"""
-    pass
-
-
-def audit_runtime_operations() -> None:
-    """Create audit trail for runtime operations"""
-    pass
-
-
-def optimize_runtime_memory_usage() -> None:
-    """Manage memory allocation and cleanup"""
-    pass
-
-
-def coordinate_runtime_service_lifecycle() -> None:
-    """Orchestrate service start/stop sequences"""
-    pass

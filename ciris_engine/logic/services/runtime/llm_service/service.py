@@ -10,20 +10,26 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Type, Union, cast
+from json import JSONDecodeError
+from typing import Any, Awaitable, Callable, Dict, List, NoReturn, Optional, Tuple, Type, Union, cast
+from urllib.parse import urlparse
 
+import httpx
 import instructor
 from openai import (
     APIConnectionError,
-    APIStatusError,
     AsyncOpenAI,
     AuthenticationError,
+    BadRequestError,
     InternalServerError,
     RateLimitError,
 )
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ValidationError as PydanticValidationError
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt
 
 
 class LLMProvider(str, Enum):
@@ -35,41 +41,84 @@ class LLMProvider(str, Enum):
     OPENAI_COMPATIBLE = "openai_compatible"  # For OpenRouter, Groq, Together, etc.
 
 
+from ciris_engine.logic.config.llm_budget import LOCAL_PROVIDER_IDS, classify_provider, resolve_budget
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import LLMService as LLMServiceProtocol
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.runtime.llm import MessageDict
+from ciris_engine.schemas.config.llm_budget import ProviderClass
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.protocols_core import LLMStatus, LLMUsageStatistics
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from ciris_engine.schemas.services.core import ServiceCapabilities
-from ciris_engine.schemas.services.llm import ExtractedJSONData, JSONExtractionResult
+from ciris_engine.schemas.services.llm import (
+    EndpointStats,
+    ExtractedJSONData,
+    JSONExtractionResult,
+    LLMErrorContext,
+    LLMRequestMetadata,
+    MultiEndpointStatus,
+    OpenRouterProviderConfig,
+    RetryState,
+)
 
 from .pricing_calculator import LLMPricingCalculator
 
-# Type alias for error context dict used in error handling
-ErrorContext = Dict[str, Any]
+
+def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict]:
+    """Merge consecutive messages that share a role.
+
+    Some strict OpenAI-compatible providers (DeepInfra) reject multiple system
+    messages with HTTP 400 even when they appear at the start. Merging
+    consecutive same-role messages is semantically equivalent and makes CIRIS
+    portable across lenient and strict providers. Multimodal content (lists)
+    is preserved by concatenation; string content is joined with a blank line.
+    """
+    if not messages:
+        return messages
+    out: List[MessageDict] = []
+    for msg in messages:
+        if out and out[-1].get("role") == msg.get("role"):
+            prev_content = out[-1].get("content")
+            curr_content = msg.get("content")
+            merged: Any
+            # If either side is a list (multimodal), concatenate as a list;
+            # otherwise join strings with a blank line.
+            if isinstance(prev_content, list) or isinstance(curr_content, list):
+                prev_list = (
+                    prev_content if isinstance(prev_content, list) else [{"type": "text", "text": str(prev_content)}]
+                )
+                curr_list = (
+                    curr_content if isinstance(curr_content, list) else [{"type": "text", "text": str(curr_content)}]
+                )
+                merged = prev_list + curr_list
+            else:
+                merged = f"{prev_content}\n\n{curr_content}"
+            out[-1] = cast(MessageDict, {**out[-1], "content": merged})
+        else:
+            out.append(cast(MessageDict, dict(msg)))
+    return out
 
 
 def _build_ciris_proxy_metadata(
     task_id: Optional[str],
     thought_id: Optional[str],
-    retry_state: Dict[str, Any],
+    retry_state: RetryState,
     resp_model_name: str,
-) -> Dict[str, Any]:
-    """Build metadata dict for CIRIS proxy requests.
+) -> LLMRequestMetadata:
+    """Build metadata for CIRIS proxy requests.
 
     Args:
         task_id: Task ID for billing (required for CIRIS proxy)
         thought_id: Optional thought ID for tracing
-        retry_state: Dict tracking retry count/error/request_id
+        retry_state: State tracking retry count/error/request_id
         resp_model_name: Name of the response model for logging
 
     Returns:
-        Dict with metadata including interaction_id and retry info
+        LLMRequestMetadata with interaction_id and retry info
 
     Raises:
         RuntimeError: If task_id is None (required for billing)
@@ -84,55 +133,198 @@ def _build_ciris_proxy_metadata(
         )
     interaction_id = hashlib.sha256(task_id.encode()).hexdigest()[:32]
 
-    metadata: Dict[str, Any] = {"interaction_id": interaction_id}
-
-    if retry_state["count"] > 0:
-        metadata["retry_count"] = retry_state["count"]
-        if retry_state["previous_error"]:
-            metadata["previous_error"] = retry_state["previous_error"]
-        if retry_state["original_request_id"]:
-            metadata["original_request_id"] = retry_state["original_request_id"]
+    if retry_state.count > 0:
         logger.info(
-            f"[LLM_RETRY] attempt={retry_state['count']} "
-            f"prev_error={retry_state['previous_error']} "
+            f"[LLM_RETRY] attempt={retry_state.count} "
+            f"prev_error={retry_state.previous_error} "
             f"interaction_id={interaction_id}"
         )
+        return LLMRequestMetadata(
+            interaction_id=interaction_id,
+            retry_count=retry_state.count,
+            previous_error=retry_state.previous_error,
+            original_request_id=retry_state.original_request_id,
+        )
     else:
-        retry_state["original_request_id"] = uuid.uuid4().hex[:12]
-        metadata["request_id"] = retry_state["original_request_id"]
+        request_id = uuid.uuid4().hex[:12]
+        retry_state.original_request_id = request_id
         logger.info(
             f"[LLM_REQUEST] interaction_id={interaction_id} "
-            f"request_id={retry_state['original_request_id']} "
+            f"request_id={request_id} "
             f"thought_id={thought_id} model={resp_model_name}"
         )
+        return LLMRequestMetadata(
+            interaction_id=interaction_id,
+            original_request_id=request_id,
+        )
 
-    return metadata
+
+def build_request_extra_body(
+    base_url: str,
+    model_name: str,
+    *,
+    require_zero_data_retention: bool = True,
+) -> Dict[str, Any]:
+    """The ``extra_body`` an outbound completion carries, for ANY caller.
+
+    One definition, two callers: the pipeline builds on top of this, and setup
+    validation now sends the same thing. That shared-ness is the point, not an
+    optimisation.
+
+    The setup wizard previously constructed a bare ``AsyncOpenAI`` and sent a
+    plain completion — no reasoning-off extras, and no data policy. So it could
+    report "Connection successful!" for a configuration the pipeline would then
+    refuse, because the two were not asking the provider the same question. With
+    zero-data-retention that divergence is worse than confusing: validation would
+    succeed precisely BECAUSE it omitted the guardrail the real request carries,
+    telling a user their privacy-constrained setup works when it does not.
+
+    Callers with extra per-request context (the CIRIS proxy's task/thought
+    metadata) add it on top; they do not fork this.
+    """
+    extra_body: Dict[str, Any] = OpenAICompatibleClient._build_reasoning_off_extras(base_url, model_name or "")
+
+    if "openrouter.ai" in base_url:
+        provider_config = _build_openrouter_provider_config(require_zero_data_retention=require_zero_data_retention)
+        if provider_config.order or provider_config.ignore or provider_config.data_collection:
+            extra_body["provider"] = provider_config.model_dump(exclude_defaults=True, exclude_none=True)
+
+    return extra_body
 
 
-def _build_openrouter_provider_config() -> Dict[str, Any]:
-    """Build provider config for OpenRouter requests from environment variables.
+def _build_openrouter_provider_config(require_zero_data_retention: bool = True) -> OpenRouterProviderConfig:
+    """Build provider config for OpenRouter requests.
+
+    Args:
+        require_zero_data_retention: when True, ask OpenRouter to route only to
+            providers that do not retain or train on the request. Passed IN by
+            the caller from configuration rather than read from a constant here,
+            because a retention policy the user cannot see or change is the
+            defect this parameter exists to remove.
 
     Environment variables:
         OPENROUTER_PROVIDER_ORDER: comma-separated preferred providers
         OPENROUTER_IGNORE_PROVIDERS: comma-separated providers to skip
 
     Returns:
-        Dict with provider ordering/ignore preferences, empty if none configured
+        OpenRouterProviderConfig with routing preferences and the data policy
     """
-    provider_config: Dict[str, Any] = {}
+    order: List[str] = []
+    ignore: List[str] = []
 
     provider_order = os.environ.get("OPENROUTER_PROVIDER_ORDER", "")
     if provider_order:
-        provider_config["order"] = [p.strip() for p in provider_order.split(",") if p.strip()]
+        order = [p.strip() for p in provider_order.split(",") if p.strip()]
 
     ignore_providers = os.environ.get("OPENROUTER_IGNORE_PROVIDERS", "")
     if ignore_providers:
-        provider_config["ignore"] = [p.strip() for p in ignore_providers.split(",") if p.strip()]
+        ignore = [p.strip() for p in ignore_providers.split(",") if p.strip()]
 
-    if provider_config:
-        logger.info(f"[OPENROUTER] Using provider config: {provider_config}")
+    config = OpenRouterProviderConfig(
+        order=order,
+        ignore=ignore,
+        data_collection="deny" if require_zero_data_retention else None,
+    )
+    if order or ignore or config.data_collection:
+        logger.info(
+            f"[OPENROUTER] Using provider config: order={order}, ignore={ignore}, "
+            f"data_collection={config.data_collection}"
+        )
 
-    return provider_config
+    return config
+
+
+def _try_recover_missing_brace(exc: Exception, resp_model: Type[BaseModel]) -> Optional[Tuple[BaseModel, Any]]:
+    """Recover from the Llama-family JSON-mode dropped-prefix bug: model
+    emits a JSON body that's missing its leading characters. Two distinct
+    variants observed on `meta-llama/llama-4-scout` via OpenRouter
+    (instructor JSON mode), both Groq and other backend routings:
+
+      Variant 1 — drops just the leading `{`:
+        ``"selected_action": "speak", "speak_content": "...", ...}``
+        Recovery: prepend ``{``.
+
+      Variant 2 — drops both `{` and the opening `"`:
+        ``selected_action": "speak", "reasoning": "...", ...}``
+        Recovery: prepend ``{"``.
+
+    Empirical: on a 20-call ASPDMA sweep against scout (capture-replay,
+    JSON mode), variant 2 was 12/17 failures and variant 1 was 2/17 —
+    handling only variant 1 leaves the bulk of the production failure
+    rate uncovered.
+
+    The closing `}` is usually present in both cases. Bypasses the entire
+    failure cascade that otherwise opens the circuit breaker.
+
+    Returns (parsed_model, completion) on successful recovery, None when
+    the exception isn't this specific bug pattern (so the caller re-raises).
+    """
+    import re as _re
+
+    last = getattr(exc, "last_completion", None)
+    if last is None:
+        return None
+    try:
+        content = last.choices[0].message.content
+    except Exception:
+        return None
+    if not content or not isinstance(content, str):
+        return None
+
+    stripped = content.lstrip()
+    if stripped.startswith("{"):
+        # Already valid-shaped — different bug, not ours to fix here.
+        return None
+
+    # Try the two known dropped-prefix shapes in order. Each candidate
+    # is validated against the schema; first one that parses wins. The
+    # leading-whitespace tolerance comes from `lstrip()` above, so we
+    # only need to reason about the first non-whitespace bytes.
+    candidates: list[str] = []
+    if _re.match(r'^"\w+"\s*:', stripped):
+        # Variant 1: dropped just `{`. Prepend onto raw content (NOT
+        # stripped) so the JSON parser sees the original leading
+        # whitespace, which keeps line/column numbers in error messages
+        # meaningful.
+        candidates.append("{" + content)
+    elif _re.match(r'^\w+"\s*:', stripped):
+        # Variant 2: dropped both `{` and the opening `"` of the first
+        # key. Prepend `{"` directly onto stripped content (the raw
+        # leading whitespace doesn't help here — we're inserting two
+        # synthetic chars where the model started its key, not where
+        # the brace would have been).
+        candidates.append('{"' + stripped)
+    else:
+        return None
+
+    for candidate in candidates:
+        try:
+            parsed = resp_model.model_validate_json(candidate)
+        except Exception:
+            continue
+        return parsed, last
+
+    return None
+
+
+def _count_images_in_content(content: Any) -> Tuple[int, int]:
+    """Count images and their size in a message content block.
+
+    Returns:
+        Tuple of (image_count, total_bytes)
+    """
+    if not isinstance(content, list):
+        return 0, 0
+
+    count = 0
+    total_bytes = 0
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "image_url":
+            count += 1
+            url = block.get("image_url", {}).get("url", "")
+            if url.startswith("data:image"):
+                total_bytes += len(url)
+    return count, total_bytes
 
 
 def _log_multimodal_content(
@@ -141,29 +333,14 @@ def _log_multimodal_content(
     thought_id: Optional[str],
     resp_model_name: str,
 ) -> int:
-    """Log details about multimodal (vision) content in messages.
-
-    Args:
-        msg_list: List of message dicts
-        model_name: The model being called
-        thought_id: Optional thought ID for tracing
-        resp_model_name: Name of the response model
-
-    Returns:
-        Number of images found in the messages
-    """
+    """Log details about multimodal (vision) content in messages."""
     image_count = 0
     total_image_bytes = 0
 
     for msg in msg_list:
-        content = msg.get("content", "")
-        if isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "image_url":
-                    image_count += 1
-                    url = block.get("image_url", {}).get("url", "")
-                    if url.startswith("data:image"):
-                        total_image_bytes += len(url)
+        count, size = _count_images_in_content(msg.get("content", ""))
+        image_count += count
+        total_image_bytes += size
 
     if image_count > 0:
         logger.info(
@@ -177,7 +354,7 @@ def _log_multimodal_content(
 
 def _handle_instructor_retry_exception(
     error: Exception,
-    error_context: ErrorContext,
+    error_context: LLMErrorContext,
     circuit_breaker: "CircuitBreaker",
 ) -> None:
     """Handle InstructorRetryException with detailed error categorization.
@@ -187,7 +364,7 @@ def _handle_instructor_retry_exception(
 
     Args:
         error: The InstructorRetryException
-        error_context: Dict with model, provider, response_model, etc.
+        error_context: Context with model, provider, response_model, etc.
         circuit_breaker: The circuit breaker instance for recording failures
 
     Raises:
@@ -196,6 +373,31 @@ def _handle_instructor_retry_exception(
     """
     error_str = str(error).lower()
     full_error = str(error)
+
+    # EVERY FAILURE MUST REACH THE LOG, NAMING THE PROVIDER AND THE MODEL.
+    #
+    # CIRISAgent#1066. Of the branches below, only the rate-limit one logged.
+    # The rest raised a RuntimeError and nothing else, so a user whose agent was
+    # visibly failing sent us a `latest.log` containing ZERO error lines — no
+    # exception, no provider message, no circuit-breaker trip. He was told to
+    # check an API key that was fine; the real fault was a model name his
+    # provider does not serve (#1062), which the provider had said plainly in a
+    # response nobody recorded.
+    #
+    # 2.9.23 promised "if it does not work, the console and logs will tell you
+    # why". This is the one line that makes that true for LLM calls: WHICH model,
+    # at WHICH provider, and what the provider actually said. Logged once here,
+    # before the branch, so no future branch can be added that stays silent.
+    logger.error(
+        "LLM call FAILED — model=%s provider=%s response_model=%s breaker=%s consecutive_failures=%d%s\n  provider said: %s",
+        error_context.model,
+        error_context.provider,
+        error_context.response_model,
+        error_context.circuit_breaker_state,
+        error_context.consecutive_failures,
+        f" thought={error_context.thought_id}" if error_context.thought_id else "",
+        full_error[:600],
+    )
 
     # Check for rate limit first - DON'T record as circuit breaker failure
     is_rate_limit = (
@@ -210,17 +412,17 @@ def _handle_instructor_retry_exception(
     # Schema validation errors
     if _is_validation_error(error_str):
         _log_instructor_error(
-            "SCHEMA VALIDATION", error_context, full_error, extra=f"Expected Schema: {error_context['response_model']}"
+            "SCHEMA VALIDATION", error_context, full_error, extra=f"Expected Schema: {error_context.response_model}"
         )
         raise RuntimeError(
-            f"LLM response validation failed for {error_context['response_model']} - "
+            f"LLM response validation failed for {error_context.response_model} - "
             "circuit breaker activated for failover"
         ) from error
 
     # Timeout errors
     if _is_timeout_error(error_str):
         _log_instructor_error("TIMEOUT", error_context, full_error, extra="Request exceeded timeout")
-        raise TimeoutError("LLM API timeout - circuit breaker activated") from error
+        raise TimeoutError("LLM API timeout") from error
 
     # Service unavailable / 503 errors
     if _is_service_unavailable_error(error_str):
@@ -231,9 +433,9 @@ def _handle_instructor_retry_exception(
     if is_rate_limit:
         logger.warning(
             f"LLM RATE LIMIT (429) - Provider quota exceeded (NOT counting as CB failure).\n"
-            f"  Model: {error_context['model']}\n"
-            f"  Provider: {error_context['provider']}\n"
-            f"  CB State: {error_context['circuit_breaker_state']} "
+            f"  Model: {error_context.model}\n"
+            f"  Provider: {error_context.provider}\n"
+            f"  CB State: {error_context.circuit_breaker_state} "
             f"(not incrementing - rate limits are transient)\n"
             f"  Error: {full_error[:300]}"
         )
@@ -255,11 +457,27 @@ def _handle_instructor_retry_exception(
 
 
 def _is_context_length_error(error_str: str) -> bool:
-    """Check if error string indicates a context length exceeded error."""
+    """Check if error string indicates a context length exceeded error.
+
+    Catches both context-window overruns ("context_length", "maximum context")
+    AND output-budget overruns where the agent passed a max_tokens larger
+    than the provider accepts. The latter shows up in two phrasings:
+      - "max_tokens must not exceed N"            (some providers)
+      - "max_tokens must be less than or equal to N"  (Groq llama-4 family)
+    Both indicate the same fix: shrink the request budget.
+    """
     context_patterns = ["context_length", "maximum context", "context length", "token limit", "too many tokens"]
     if any(pattern in error_str for pattern in context_patterns):
         return True
-    return "max_tokens" in error_str and "exceed" in error_str
+    # Generic "max_tokens ... exceed" (most providers)
+    if "max_tokens" in error_str and "exceed" in error_str:
+        return True
+    # Groq-specific "max_tokens must be less than or equal to N" — same
+    # remediation applies (reduce per-call max_tokens), so categorize as
+    # CONTEXT_LENGTH_EXCEEDED for downstream remediation lookup.
+    if "max_tokens" in error_str and ("less than or equal to" in error_str or "must be" in error_str):
+        return True
+    return False
 
 
 def _is_validation_error(error_str: str) -> bool:
@@ -283,9 +501,81 @@ def _is_content_filter_error(error_str: str) -> bool:
     return any(pattern in error_str for pattern in filter_patterns)
 
 
+def _is_model_not_available_error(error_str: str) -> bool:
+    """Check if error indicates the configured model name doesn't exist on
+    the provider. This is a CONFIG bug (wrong .env / wrong manager-injected
+    OPENAI_MODEL_NAME), NOT a transient failure — retrying with the same
+    model name will keep failing forever. Categorize as non-retryable so
+    the operator sees the diagnostic immediately instead of after instructor's
+    retry storm.
+
+    Caught patterns (across providers):
+      - Together AI:  "Unable to access model X. Please visit
+                       https://api.together.ai/models" + "model_not_available"
+      - OpenAI/Groq:  "model_not_found" / "does not exist"
+      - DeepInfra:    "model not found" + 404
+      - Generic:      "invalid_request_error" + "model"
+    """
+    patterns = [
+        "model_not_available",
+        "model_not_found",
+        "model not found",
+        "unable to access model",
+        "does not exist",  # paired with model context — see also generic 404 detection below
+    ]
+    if any(p in error_str for p in patterns):
+        return True
+    # Generic 404 + model — covers providers that phrase the error differently
+    return ("404" in error_str or "not_found" in error_str) and "model" in error_str
+
+
+# Remediation messages keyed on the categories returned by
+# `OpenAICompatibleClient._categorize_llm_error`. When a retryable error
+# fires in `_retry_with_backoff`, we inject the matching remediation as a
+# user message before the next attempt so the LLM sees what went wrong and
+# can self-correct — same shape as instructor v2's native ValidationError
+# reask, extended to API-level errors that instructor doesn't handle natively.
+#
+# Only LLM-fault categories get remediation — categories where the LLM
+# authored a malformed/oversized/blocked response and a clearer prompt would
+# help. Transient categories (TIMEOUT, CONNECTION_ERROR, RATE_LIMIT,
+# INTERNAL_ERROR) get plain backoff-and-retry: the LLM did nothing wrong, no
+# point telling it to "try harder".
+LLM_ERROR_REMEDIATIONS: Dict[str, str] = {
+    "CONTEXT_LENGTH_EXCEEDED": (
+        "Your previous attempt's input + reasoning exceeded the model's "
+        "context window, OR the requested output token budget was larger "
+        "than this provider accepts. Please be more concise: keep the "
+        "rationale to a single paragraph, avoid restating the full system "
+        "context, and produce only the JSON fields specified — no preamble, "
+        "no commentary outside the schema."
+    ),
+    "VALIDATION_ERROR": (
+        "Your previous response did not match the required schema after "
+        "instructor's native retries. Please re-emit the JSON object with "
+        "EXACTLY the keys specified in the system prompt. Pay close "
+        "attention to: field names (case-sensitive, English even in "
+        "non-English locales), required vs optional fields, value types "
+        "(strings vs numbers vs enums), and the action-verb whitelist "
+        "(lowercase: speak, defer, ponder, reject, observe, memorize, "
+        "recall, forget, tool, task_complete)."
+    ),
+    "CONTENT_FILTER": (
+        "Your previous attempt was blocked by the provider's content "
+        "filter. Please address the same task using more neutral language "
+        "— the substance of your reasoning is what matters, not its "
+        "phrasing. Avoid quoting inflammatory terms verbatim; describe "
+        "concepts in plain analytical language."
+    ),
+    # Transient categories below — listed for documentation, no remediation.
+    # "TIMEOUT", "CONNECTION_ERROR", "RATE_LIMIT", "INTERNAL_ERROR" use plain
+    # exponential backoff without remediation messaging.
+}
+
+
 def _log_instructor_error(
     error_type: str,
-    error_context: ErrorContext,
+    error_context: LLMErrorContext,
     full_error: str,
     extra: Optional[str] = None,
 ) -> None:
@@ -293,19 +583,160 @@ def _log_instructor_error(
 
     Args:
         error_type: Type label for the error (e.g., "TIMEOUT", "VALIDATION")
-        error_context: Dict with model, provider, response_model, etc.
+        error_context: Context with model, provider, response_model, etc.
         full_error: Full error message string
         extra: Optional extra line to include in log
     """
     extra_line = f"\n  {extra}" if extra else ""
     logger.error(
         f"LLM {error_type} - Error occurred.\n"
-        f"  Model: {error_context['model']}\n"
-        f"  Provider: {error_context['provider']}{extra_line}\n"
-        f"  CB State: {error_context['circuit_breaker_state']} "
-        f"({error_context['consecutive_failures']} consecutive failures)\n"
+        f"  Model: {error_context.model}\n"
+        f"  Provider: {error_context.provider}{extra_line}\n"
+        f"  CB State: {error_context.circuit_breaker_state} "
+        f"({error_context.consecutive_failures} consecutive failures)\n"
         f"  Error: {full_error[:500]}"
     )
+
+
+def _root_provider_fault(error: BaseException) -> str:
+    """The provider's own STRUCTURED fault code, not our reading of its prose.
+
+    Returns a stable slug — ``model_not_found`` / ``invalid_api_key`` /
+    ``rate_limited`` / ``insufficient_quota`` — or "" when the provider did not
+    say something we can act on with confidence.
+
+    WHY NOT MATCH THE MESSAGE TEXT. The health surface turns this into an
+    instruction ("choose a different model" vs "update your key"), and those are
+    opposite actions. Deriving that from substrings means every provider's
+    wording, in every locale, is load-bearing — and the first vendor who writes
+    "unknown model" instead of "does not exist" silently stops being diagnosed.
+    OpenAI-compatible APIs already hand us ``body.error.code``; Groq returned
+    ``model_not_found`` verbatim in the 2.9.27 field report.
+
+    STATUS CODE ALONE IS NOT ENOUGH, and this is the trap worth naming: a 404
+    from an OpenAI-compatible endpoint means "we could not find that" — which is
+    a missing MODEL if the body says so, and a wrong BASE URL if it does not.
+    Treating every 404 as a bad model would tell a user with a typo'd endpoint to
+    go change their model, which is confidently wrong and worse than silence. So
+    404 only yields ``model_not_found`` when the body's own code or message says
+    the model is what was missing.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = error
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        body = getattr(cur, "body", None)
+        # Google wraps its error in a LIST — `[{"error": {...}}]` — where every
+        # other OpenAI-compatible vendor sends a dict. Observed live; without
+        # this unwrap every Google error had an unreadable body, so its 404s
+        # fell through to "check your endpoint" and its worded key rejection to
+        # raw JSON, regardless of what the branches below know.
+        if isinstance(body, list) and body and isinstance(body[0], dict):
+            body = body[0]
+        code = ""
+        message = ""
+        if isinstance(body, dict):
+            err = body.get("error")
+            # The openai SDK UNWRAPS the envelope before storing `.body`: a live
+            # NotFoundError carries {"message": ..., "code": "model_not_found"}
+            # directly, with no {"error": ...} around it. Verified against the
+            # live API — unit fixtures built with the wrapped shape passed while
+            # every real 404 fell through to the endpoint branch, which is how a
+            # correct-looking walker misrouted every provider at once. Accept
+            # both shapes: the envelope (raw HTTP, some SDK paths) and the
+            # unwrapped inner object (the openai SDK's own).
+            if not isinstance(err, dict) and ("message" in body or "code" in body):
+                err = body
+            if isinstance(err, dict):
+                code = str(err.get("code") or "").strip().lower()
+                message = str(err.get("message") or "").strip().lower()
+        status = getattr(cur, "status_code", None)
+
+        # The provider named it. Trust that over anything we infer.
+        if code in ("model_not_found", "invalid_api_key", "rate_limit_exceeded", "insufficient_quota"):
+            return {"rate_limit_exceeded": "rate_limited"}.get(code, code)
+
+        # Two causes the live conformance matrix proved were falling through to
+        # "check your endpoint", measured at a 45% classifier gap:
+        #
+        # POLICY/ROUTING. OpenRouter answers 404/400 with its own sentence when
+        # no endpoint satisfies the request's routing constraints — the
+        # data-policy/ZDR guardrail ("...matching your guardrail restrictions
+        # and data policy") or provider pinning ("No allowed providers are
+        # available"). The body message is the provider's own statement, not our
+        # reading of prose patterns across vendors: only OpenRouter emits these
+        # sentences and they are the documented shape of this refusal.
+        if "data policy" in message or "guardrail" in message or "no allowed providers" in message:
+            return "policy_blocked"
+        # BILLING. Anthropic reports an empty balance as HTTP 400 — the same
+        # status Google uses for a REJECTED KEY — so status alone routes a
+        # billing problem to "replace your credentials", which replaces a
+        # working key and fixes nothing. Observed live: only the body separates
+        # them. 402 (Together) is unambiguous.
+        if status == 402 or "credit balance is too low" in message or "credit limit exceeded" in message:
+            return "insufficient_quota"
+        # Google rejects a bad key as HTTP 400 with "API key not valid. Please
+        # pass a valid API key." — no 401, no error.code. Observed live; without
+        # this the one provider that words it differently fell to the generic
+        # branch and the user saw raw JSON.
+        if "api key not valid" in message or "pass a valid api key" in message:
+            return "invalid_api_key"
+
+        # 401 is unambiguous across OpenAI-compatible vendors: the credential was
+        # refused. No body needed.
+        if status == 401 or isinstance(cur, AuthenticationError):
+            return "invalid_api_key"
+        if status == 429:
+            return "rate_limited"
+        # 404 ONLY counts as a missing model when the body says the model is what
+        # was missing. Otherwise it is very likely a wrong base_url.
+        if status == 404 and "model" in message:
+            return "model_not_found"
+        # Two more wordings for "that model id is wrong", observed live: OpenRouter
+        # answers 400 "x is not a valid model ID"; Google answers 400
+        # "GenerateContentRequest.model: unexpected model name format" for a
+        # case-mangled id. Same user remedy as a missing model — pick one the
+        # provider actually lists.
+        if "not a valid model id" in message or "unexpected model name format" in message:
+            return "model_not_found"
+
+        cur = cur.__cause__ or cur.__context__
+    return ""
+
+
+def _root_provider_error(error: BaseException) -> str:
+    """Dig the PROVIDER's own words out of a wrapper exception.
+
+    CIRISAgent#1071. `InstructorRetryException` is what a non-OpenAI deployment
+    actually hits, and its str() is often just the class name plus a retry
+    envelope — the provider's real complaint ("model not found", "invalid api
+    key", "max_tokens must be <= 8192") sits one or two links down the
+    __cause__ / __context__ chain, on an openai APIStatusError.
+
+    Without this, the log names the wrapper and the operator learns nothing:
+    which of two configured providers failed, and what it said, is exactly the
+    question the log has to answer.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = error
+    best = ""
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        status = getattr(cur, "status_code", None)
+        # openai's APIStatusError carries the parsed body; prefer it.
+        body = getattr(cur, "body", None)
+        if isinstance(body, dict):
+            msg = body.get("error", {}).get("message") if isinstance(body.get("error"), dict) else None
+            msg = msg or body.get("message")
+            if msg:
+                return f"HTTP {status} {msg}" if status else str(msg)
+        text = str(cur).strip()
+        if status is not None and text:
+            return f"HTTP {status} {text}"
+        if text and not best:
+            best = text
+        cur = cur.__cause__ or cur.__context__
+    return best
 
 
 def _handle_generic_llm_exception(
@@ -349,40 +780,195 @@ def _handle_generic_llm_exception(
             f"  Will be retried by LLM bus. Error: {error_msg[:300]}"
         )
     else:
+        # ONE LINE. CIRISAgent#1071: this was a multi-line record, so every log
+        # view that works line-at-a-time — grep, the incidents capture, the
+        # console tail an operator actually reads — showed only
+        #
+        #     LLM UNEXPECTED ERROR - InstructorRetryException.
+        #
+        # and dropped the model, provider and message onto orphaned
+        # continuation lines. Three of those in a row is what a production
+        # operator saw, and it told them nothing about which of two configured
+        # providers had failed.
+        #
+        # The facts that identify the fault go on the first line, and the
+        # provider's own words are dug out of the wrapper's cause chain.
         logger.error(
-            f"LLM UNEXPECTED ERROR - {type(error).__name__}.\n"
-            f"  Model: {model_name}\n"
-            f"  Provider: {base_url or 'default'}\n"
-            f"  Expected Schema: {resp_model_name}\n"
-            f"  Error: {error_msg[:500]}"
+            "LLM CALL FAILED (%s) model=%s provider=%s schema=%s | provider said: %s",
+            type(error).__name__,
+            model_name or "<unset>",
+            base_url or "default",
+            resp_model_name,
+            (_root_provider_error(error) or error_msg)[:400].replace("\n", " "),
         )
-    raise RuntimeError(f"LLM call failed ({type(error).__name__}): {error_msg[:300]}") from error
+    # The message this raises is re-printed verbatim by the LLM bus and by four
+    # DMA sites, so its shape multiplies. [:300] truncated but did NOT collapse
+    # newlines — 300 characters of XML still spans ~13 physical lines, five
+    # times over. Prefer the provider's actual complaint over the wrapper's
+    # envelope, and keep it on one line.
+    _cause = _root_provider_error(error) or error_msg
+    raise RuntimeError(f"LLM call failed ({type(error).__name__}): {' '.join(_cause.split())[:300]}") from error
 
 
 # Configuration class for LLM services (supports multiple providers)
 class OpenAIConfig(BaseModel):
-    """Configuration for LLM services. Supports OpenAI, Anthropic, and Google."""
+    """Configuration for LLM services. Supports OpenAI, Anthropic, and Google.
+
+    For CIRIS proxy, supports multi-endpoint failover via base_urls parameter.
+    Endpoints are tried in order on failure (geographic redundancy).
+    """
 
     api_key: str = Field(default="")
     model_name: str = Field(default="gpt-4o-mini")
     base_url: Optional[str] = Field(default=None)
+    # Multi-endpoint support: list of base URLs to try in order (optional)
+    # If provided, takes precedence over base_url for endpoint rotation
+    base_urls: Optional[List[str]] = Field(default=None)
     instructor_mode: str = Field(default="JSON")
     max_retries: int = Field(default=3)
-    timeout_seconds: int = Field(default=5)
+    timeout_seconds: int = Field(default=60)  # Increased from 5s for live LLM APIs
     # Provider selection - defaults to openai for backward compatibility
     provider: LLMProvider = Field(default=LLMProvider.OPENAI)
+    require_zero_data_retention: bool = Field(
+        default=True,
+        description=(
+            "Only route to providers that do not retain or train on request data. "
+            "Default ON: the safe posture must be what you get by NOT deciding. "
+            "Carried onto the wire as OpenRouter's provider.data_collection='deny'."
+        ),
+    )
 
     model_config = ConfigDict(protected_namespaces=())
+
+    def get_effective_base_urls(self) -> List[str]:
+        """Get list of base URLs to use, in priority order.
+
+        Returns base_urls if set, otherwise [base_url] if set, otherwise empty list.
+        """
+        if self.base_urls:
+            return [url for url in self.base_urls if url]
+        if self.base_url:
+            return [self.base_url]
+        return []
+
+
+#: Attempts ``_retry_with_backoff`` makes when a 400 is one the model can fix
+#: (context length, content filter). It never retries transport errors.
+DEFAULT_REMEDIATION_ATTEMPTS = 2
+
+
+def runtime_provider_config(
+    provider_id: Optional[str], base_url: str, model: str, api_key: Optional[str]
+) -> OpenAIConfig:
+    """The OpenAIConfig for a provider added at runtime or restored from persistence.
+
+    The HTTP timeout comes from the LLM budget profile for this provider
+    (ciris_engine/logic/config/llm_budget.py, #1186), so a provider added from
+    the settings screen gets the same timeout it gets after a restart. A
+    declared local provider needs no key; local servers ignore the value.
+    """
+    budget = resolve_budget(provider_id, base_url)
+    key = api_key or ""
+    if not key and (provider_id or "").strip().lower() in LOCAL_PROVIDER_IDS:
+        key = "local"
+    return OpenAIConfig(
+        base_url=base_url,
+        model_name=model,
+        api_key=key,
+        instructor_mode="JSON",
+        timeout_seconds=int(budget.llm_http_timeout_s),
+        max_retries=DEFAULT_REMEDIATION_ATTEMPTS,
+    )
+
+
+#: How many times instructor may ask the model again after an answer that did
+#: not fit the schema. Each reask is a fresh HTTP call.
+_INSTRUCTOR_REASK_ATTEMPTS = 2
+
+
+def _instructor_reask_error_types() -> Tuple[Type[Exception], ...]:
+    """The errors instructor raises when the model ANSWERED but the answer did not parse.
+
+    These, and only these, are worth a reask: the model is up and the next
+    attempt carries the validation error back to it.
+    """
+    found: List[Type[Exception]] = [PydanticValidationError, JSONDecodeError]
+    # From instructor.core, NOT `import instructor.exceptions`: importing that
+    # shim makes `instructor.exceptions` an attribute of the package, which
+    # would silently switch on the InstructorRetryException branch of
+    # _handle_general_exception (dormant in production today).
+    try:
+        import instructor.core.exceptions as exceptions_module
+    except ImportError:  # pragma: no cover - layout differs across instructor versions
+        return tuple(found)
+    for name in ("ValidationError", "AsyncValidationError"):
+        candidate = getattr(exceptions_module, name, None)
+        if isinstance(candidate, type) and issubclass(candidate, Exception):
+            found.append(candidate)
+    return tuple(found)
+
+
+_INSTRUCTOR_REASK_ERRORS = _instructor_reask_error_types()
+
+
+def _instructor_reask_policy() -> AsyncRetrying:
+    """instructor's retry policy: reask on schema failures, never on transport failures.
+
+    instructor's integer ``max_retries`` builds a tenacity policy that retries
+    EVERY exception, so a request that timed out was silently sent again and
+    each call could cost twice the HTTP timeout before anything above it heard
+    about it. Transport errors (timeouts, refused connections, 5xx, 429) now
+    surface on their first occurrence; the per-try of the enclosing stage is
+    the one layer that retries them (#1186).
+
+    Built per call: a tenacity policy keeps per-run state on the object, and
+    calls run concurrently.
+    """
+    return AsyncRetrying(
+        stop=stop_after_attempt(_INSTRUCTOR_REASK_ATTEMPTS),
+        retry=retry_if_exception_type(_INSTRUCTOR_REASK_ERRORS),
+    )
+
+
+def _transport_error_types() -> Tuple[Type[Exception], ...]:
+    """Errors that mean the provider did not answer: timeouts, connections, 429, 5xx.
+
+    The OpenAI SDK wraps httpx; the native Anthropic SDK has its own classes;
+    the Google SDK lets httpx errors through. Anthropic's are included only if
+    that SDK is already loaded — only the native Anthropic client can raise
+    them, and importing it here would cost every other deployment the import.
+    """
+    found: List[Type[Exception]] = [APIConnectionError, RateLimitError, InternalServerError, httpx.TransportError]
+    anthropic = sys.modules.get("anthropic")
+    if anthropic is not None:
+        for name in ("APIConnectionError", "RateLimitError", "InternalServerError"):
+            candidate = getattr(anthropic, name, None)
+            if isinstance(candidate, type) and issubclass(candidate, Exception):
+                found.append(candidate)
+    return tuple(found)
+
+
+def _is_timeout_exception(error: BaseException) -> bool:
+    """A timeout by type, for SDK errors whose message does not say so (httpx.ReadTimeout(''))."""
+    return isinstance(error, (TimeoutError, httpx.TimeoutException)) or "timeout" in type(error).__name__.lower()
+
+
+def _env(*names: str) -> str:
+    """Get first non-empty value from env var names (CIRIS_ prefix checked first)."""
+    for name in names:
+        val = os.environ.get(f"CIRIS_{name}") or os.environ.get(name) or ""
+        if val:
+            return val
+    return ""
 
 
 def _detect_provider_from_env() -> LLMProvider:
     """Detect LLM provider from environment variables.
 
-    Checks CIRIS_LLM_PROVIDER (preferred) or LLM_PROVIDER first,
-    then falls back to detecting based on which API key is set.
+    Checks CIRIS_ prefixed vars first (set by setup wizard), then unprefixed.
     """
-    # Explicit provider setting takes precedence (CIRIS_ prefix preferred)
-    provider_env = (os.environ.get("CIRIS_LLM_PROVIDER") or os.environ.get("LLM_PROVIDER") or "").lower()
+    # Explicit provider setting takes precedence
+    provider_env = _env("LLM_PROVIDER").lower()
     if provider_env:
         if provider_env in ("anthropic", "claude"):
             return LLMProvider.ANTHROPIC
@@ -394,32 +980,96 @@ def _detect_provider_from_env() -> LLMProvider:
             return LLMProvider.OPENAI_COMPATIBLE
 
     # Auto-detect based on which API key is set
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    if _env("ANTHROPIC_API_KEY"):
         return LLMProvider.ANTHROPIC
-    if os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"):
+    if _env("GOOGLE_API_KEY", "GEMINI_API_KEY"):
         return LLMProvider.GOOGLE
 
     # Default to OpenAI (or OpenAI-compatible if base_url is set)
-    if os.environ.get("OPENAI_API_BASE"):
+    if _env("OPENAI_API_BASE"):
         return LLMProvider.OPENAI_COMPATIBLE
     return LLMProvider.OPENAI
 
 
+#: Keys that are obviously not credentials — placeholders we or a setup flow
+#: wrote, never something a provider issued. Matched case-insensitively and
+#: exactly, so a real key that merely CONTAINS one of these is unaffected.
+_PLACEHOLDER_API_KEYS = frozenset(
+    {
+        "sk-test",
+        "test",
+        "sk-placeholder",
+        "placeholder",
+        "changeme",
+        "change-me",
+        "your-api-key",
+        "your-api-key-here",
+        "your_api_key_here",
+        "dummy",
+        "example",
+        "todo",
+        "none",
+        "null",
+        "xxx",
+    }
+)
+
+#: Hosts where a short/dummy key is definitely wrong. A LOCAL endpoint is the
+#: opposite case — Ollama and llama.cpp are routinely handed "ollama" or "none"
+#: as a key precisely because they ignore it, and refusing those would break
+#: local inference to fix a cloud typo.
+_REAL_OPENAI_HOSTS = ("api.openai.com",)
+
+
+def _is_placeholder_api_key(api_key: str, base_url: Optional[str]) -> bool:
+    """True if this key cannot possibly authenticate and we should not try.
+
+    Attempting anyway is not free. On a live install `OPENAI_API_KEY=sk-test`
+    (7 chars) produced a 401 from every DMA in the shutdown chain — the agent
+    deliberates about accepting shutdown, so simply STOPPING it emitted
+    `Incorrect API key provided: sk-test` three times over, plus tracebacks,
+    from a user who had asked nothing. Worse, health reported
+    `provider=openai` as ready, because readiness checked configuration rather
+    than whether the credential could work.
+
+    Scoped to keys bound for the real OpenAI endpoint. Anything with a custom
+    base_url is left alone: local runtimes are handed placeholder keys ON
+    PURPOSE (they ignore the value), and a check that broke `jetson.local`
+    Ollama to catch a cloud typo would be a bad trade.
+    """
+    key = (api_key or "").strip()
+    if not key:
+        return False  # the existing empty-key guard owns this case
+
+    host = (base_url or "").strip().lower()
+    if host and not any(h in host for h in _REAL_OPENAI_HOSTS):
+        return False
+
+    if key.lower() in _PLACEHOLDER_API_KEYS:
+        return True
+    # Real OpenAI keys are ~51 chars ("sk-" + 48); the project variants are
+    # longer still. 20 is far below any issued key and far above the
+    # placeholders above, so it catches truncation without judging format.
+    return key.startswith("sk-") and len(key) < 20
+
+
 def _get_api_key_for_provider(provider: LLMProvider) -> str:
-    """Get the appropriate API key for the given provider."""
-    # Check CIRIS_LLM_API_KEY first as override (takes precedence over provider-specific keys)
+    """Get the appropriate API key for the given provider.
+
+    Checks CIRIS_ prefixed vars first (set by setup wizard), then unprefixed.
+    """
+    # Check CIRIS_LLM_API_KEY first as override
     ciris_key = os.environ.get("CIRIS_LLM_API_KEY", "")
     if ciris_key:
         return ciris_key
 
     if provider == LLMProvider.ANTHROPIC:
-        return os.environ.get("ANTHROPIC_API_KEY", "")
+        return _env("ANTHROPIC_API_KEY")
     elif provider == LLMProvider.GOOGLE:
-        # Support both GOOGLE_API_KEY and GEMINI_API_KEY
-        return os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+        return _env("GOOGLE_API_KEY", "GEMINI_API_KEY")
     else:
-        # OpenAI and OpenAI-compatible use OPENAI_API_KEY
-        return os.environ.get("OPENAI_API_KEY", "")
+        # OpenAI and OpenAI-compatible
+        return _env("OPENAI_API_KEY")
 
 
 logger = logging.getLogger(__name__)
@@ -436,7 +1086,10 @@ StructuredCallFunc = Callable[
 
 
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
-    """Client for interacting with OpenAI-compatible APIs with circuit breaker protection."""
+    """Client for interacting with OpenAI-compatible APIs with circuit breaker protection.
+
+    Supports multi-endpoint failover for CIRIS proxy (NA/EU regions).
+    """
 
     # Type annotations for client attributes - actual type varies by provider
     client: Any  # AsyncOpenAI, AsyncAnthropic, or genai module
@@ -463,12 +1116,22 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         else:
             self.openai_config = config
 
+        # Multi-endpoint support: track available endpoints and current index
+        self._endpoint_urls: List[str] = self.openai_config.get_effective_base_urls()
+        self._current_endpoint_index: int = 0
+        self._endpoint_failure_counts: Dict[str, int] = {}  # Track failures per endpoint
+
         # Initialize circuit breaker BEFORE calling super().__init__
         circuit_config = CircuitBreakerConfig(
             failure_threshold=5,  # Open after 5 consecutive failures
             recovery_timeout=60.0,  # Wait 60 seconds before testing recovery
             success_threshold=2,  # Close after 2 successful calls
             timeout_duration=5.0,  # 5 second API timeout
+            # Parallel DMA calls that time out together are ONE slow episode
+            # of this provider, not three failures (the 2026-10-15 drained
+            # queue: 3 concurrent timeouts + 1 retry tripped the breaker on
+            # one slow thought).
+            failure_coalesce_window_s=1.0,
         )
         self.circuit_breaker = CircuitBreaker("llm_service", circuit_config)
 
@@ -486,18 +1149,60 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 "Stack trace will show where this is being called from."
             )
 
-        # Initialize retry configuration
+        # Retry configuration for `_retry_with_backoff`, which is now ONLY the
+        # remediation layer: some 400s are LLM-fault and fixable (context
+        # length, max_tokens overrun, content filter). The loop categorizes
+        # each BadRequestError via `_categorize_llm_error` and retries, with a
+        # remediation message, only if the category is in
+        # `LLM_ERROR_REMEDIATIONS`; other 400s raise immediately.
+        #
+        # Transport errors (timeouts, connection errors, 429, 5xx) are NOT
+        # retried here: they are converted and raised on first occurrence, and
+        # the per-try of the enclosing stage is the one layer that retries
+        # them (#1186). Retrying a timeout here multiplied the HTTP timeout.
         self.max_retries = min(getattr(self.openai_config, "max_retries", 3), 3)
         self.base_delay = 1.0
         self.max_delay = 30.0
-        self.retryable_exceptions = (APIConnectionError, RateLimitError)
+        self.retryable_exceptions: Tuple[Type[Exception], ...] = (BadRequestError,)
         # Note: We can't check for instructor.exceptions.InstructorRetryException at import time
         # because it might not exist. We'll check it at runtime instead.
-        self.non_retryable_exceptions = (APIStatusError,)
+        # AuthenticationError + other non-BadRequest APIStatusErrors stay non-retryable.
+        self.non_retryable_exceptions = (AuthenticationError,)
+
+        #: The provider's own last complaint, surfaced by /v1/system/health so a
+        #: degraded agent can say "Invalid API Key" instead of "check your
+        #: network". Empty until something actually fails.
+        self.last_error: str = ""
+
+        #: The provider's STRUCTURED fault code for that same failure
+        #: (``model_not_found`` / ``invalid_api_key`` / ...), so the health
+        #: surface can pick the right instruction without re-reading prose.
+        #: See :func:`_root_provider_fault` for why the text is not enough.
+        self.last_fault_code: str = ""
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
-        model_name = self.openai_config.model_name or "gpt-4o-mini"
+        # An unset model may fall back to OpenAI's default ONLY IF THIS REALLY IS
+        # OPENAI (CIRISAgent#1062).
+        #
+        # This was `model_name or "gpt-4o-mini"` unconditionally — the last place
+        # a Groq/Together/DeepInfra endpoint could still be handed an OpenAI
+        # model and fail with an error naming nothing.
+        #
+        # Deleting the fallback outright was ALSO wrong, and Staged QA caught it:
+        # a config that genuinely is OpenAI and simply names no model relied on
+        # it, and sending an empty model broke the run. The substitution is not
+        # the bug; applying it to OTHER vendors is. So it now applies only when
+        # the endpoint is OpenAI's own (or unset, which means the same thing).
+        # PARSE THE HOST — do not substring-match it. `"api.openai.com" in url`
+        # is true for https://api.openai.com.evil.com/v1 and for any URL that
+        # merely mentions it in a query string (CodeQL py/incomplete-url-
+        # substring-sanitization). This is the same sloppiness this release
+        # already fixed in _is_loopback_or_lan's `"10." in url`; I reintroduced
+        # it here and CodeQL caught it.
+        _host = (urlparse(base_url).hostname or "").lower() if base_url else ""
+        _is_openai_endpoint = not _host or _host == "api.openai.com" or _host.endswith(".openai.com")
+        model_name = self.openai_config.model_name or ("gpt-4o-mini" if _is_openai_endpoint else "")
         provider = getattr(self.openai_config, "provider", LLMProvider.OPENAI)
 
         # Store provider for later use
@@ -508,6 +1213,22 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             provider_name = provider.value if hasattr(provider, "value") else str(provider)
             raise RuntimeError(
                 f"No API key found for {provider_name}. Please set the appropriate API key environment variable."
+            )
+
+        # A placeholder key is treated exactly like NO key: refuse here rather
+        # than register a provider that can only 401. Same failure path, one
+        # honest line, instead of a wall of `Incorrect API key provided` from
+        # every DMA the next time anything needs the model — including the
+        # shutdown deliberation, which fires when the user merely stops the
+        # agent. NOT logging the key itself: it is a credential slot by
+        # contract, whatever happens to be sitting in it.
+        if _is_placeholder_api_key(api_key, base_url):
+            provider_name = provider.value if hasattr(provider, "value") else str(provider)
+            raise RuntimeError(
+                f"The {provider_name} API key is a placeholder, not a credential "
+                f"(length {len(api_key.strip())}). Refusing to connect — it can only "
+                f"return 401. Set a real key, or point base_url at a local runtime "
+                f"that does not need one."
             )
 
         # Initialize client based on provider
@@ -557,6 +1278,84 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         self._total_errors = 0
         self.pricing_calculator = LLMPricingCalculator()
 
+    # Multi-endpoint failover methods
+
+    def _get_current_endpoint(self) -> Optional[str]:
+        """Get the current active endpoint URL."""
+        if not self._endpoint_urls:
+            return self.openai_config.base_url
+        if self._current_endpoint_index >= len(self._endpoint_urls):
+            self._current_endpoint_index = 0
+        return self._endpoint_urls[self._current_endpoint_index]
+
+    def _rotate_to_next_endpoint(self) -> bool:
+        """Rotate to the next available endpoint.
+
+        Returns True if we rotated to a new endpoint, False if no more endpoints.
+        """
+        if not self._endpoint_urls or len(self._endpoint_urls) <= 1:
+            return False
+
+        old_index = self._current_endpoint_index
+        self._current_endpoint_index = (self._current_endpoint_index + 1) % len(self._endpoint_urls)
+
+        # Check if we've tried all endpoints
+        if self._current_endpoint_index == 0:
+            # We've cycled through all endpoints
+            logger.warning(f"[MULTI_ENDPOINT] Cycled through all {len(self._endpoint_urls)} endpoints")
+            return False
+
+        old_url = self._endpoint_urls[old_index]
+        new_url = self._endpoint_urls[self._current_endpoint_index]
+        logger.info(
+            f"[MULTI_ENDPOINT] Rotating from {old_url} to {new_url} "
+            f"(index {old_index} -> {self._current_endpoint_index})"
+        )
+
+        # Update the client's base URL
+        self._update_client_base_url(new_url)
+        return True
+
+    def _update_client_base_url(self, new_url: str) -> None:
+        """Update the OpenAI client's base URL for endpoint rotation."""
+        if hasattr(self.client, "base_url"):
+            self.client.base_url = new_url
+        if hasattr(self.instruct_client, "client") and hasattr(self.instruct_client.client, "base_url"):
+            self.instruct_client.client.base_url = new_url
+        # Also update the config for consistency
+        self.openai_config.base_url = new_url
+
+    def _record_endpoint_failure(self, endpoint_url: str) -> None:
+        """Record a failure for a specific endpoint."""
+        if endpoint_url not in self._endpoint_failure_counts:
+            self._endpoint_failure_counts[endpoint_url] = 0
+        self._endpoint_failure_counts[endpoint_url] += 1
+        logger.info(
+            f"[MULTI_ENDPOINT] Endpoint {endpoint_url} failure count: " f"{self._endpoint_failure_counts[endpoint_url]}"
+        )
+
+    def _record_endpoint_success(self, endpoint_url: str) -> None:
+        """Record a success for a specific endpoint, resetting its failure count."""
+        if endpoint_url in self._endpoint_failure_counts:
+            self._endpoint_failure_counts[endpoint_url] = 0
+
+    def _reset_to_primary_endpoint(self) -> None:
+        """Reset to the primary (first) endpoint."""
+        if self._endpoint_urls and self._current_endpoint_index != 0:
+            self._current_endpoint_index = 0
+            self._update_client_base_url(self._endpoint_urls[0])
+            logger.info(f"[MULTI_ENDPOINT] Reset to primary endpoint: {self._endpoint_urls[0]}")
+
+    def get_endpoint_stats(self) -> MultiEndpointStatus:
+        """Get statistics about endpoint usage and failures."""
+        return MultiEndpointStatus(
+            endpoints=self._endpoint_urls,
+            current_index=self._current_endpoint_index,
+            current_endpoint=self._get_current_endpoint(),
+            failure_counts=self._endpoint_failure_counts.copy(),
+            total_endpoints=len(self._endpoint_urls),
+        )
+
     def _init_openai_client(
         self, api_key: str, base_url: Optional[str], model_name: str, timeout: int, instructor_mode: str
     ) -> None:
@@ -592,8 +1391,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self._init_openai_client(api_key, base_url, model_name, timeout, "json")
             return
 
-        # Create async Anthropic client
-        self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout)
+        # Create async Anthropic client. SDK retries off, as for OpenAI: the SDK
+        # default (2) retried timeouts inside one call, tripling it (#1186).
+        self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout, max_retries=0)
 
         # Use instructor with Anthropic - ANTHROPIC_TOOLS mode for best results
         self.instruct_client = instructor.from_anthropic(self.client, mode=instructor.Mode.ANTHROPIC_TOOLS)
@@ -679,11 +1479,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # Use instructor's from_provider for Google with async support
         # Pass api_key directly to instructor (it creates the genai.Client internally)
         # Format: "google/model-name"
+        # The genai client has no timeout unless given one (milliseconds), and
+        # retries nothing unless given retry_options, which we leave unset.
+        from google.genai import types as genai_types
+
         provider_string = f"google/{model_name}"
         self.instruct_client = instructor.from_provider(
             provider_string,
             async_client=True,
             api_key=api_key,
+            http_options=genai_types.HttpOptions(timeout=int(timeout * 1000)),
         )
         # Store a reference to the genai module for potential direct access
         self.client = genai
@@ -735,8 +1540,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             logger.warning("[LLM_TOKEN] Attempted to update with empty API key - ignoring")
             return
 
-        old_key_preview = self.openai_config.api_key[:20] + "..." if self.openai_config.api_key else "None"
-        new_key_preview = new_api_key[:20] + "..."
+        # Describe the rotation without publishing either key. `[:20]` was 17
+        # characters of secret for an `sk-` key, twice — and this path runs on
+        # every hourly token refresh, so it wrote them repeatedly. Length plus
+        # "did it actually change" answers what this log is for: confirming the
+        # refresh took, and catching a refresh that handed back the same key.
+        old_key_preview = f"len={len(self.openai_config.api_key)}" if self.openai_config.api_key else "None"
+        new_key_preview = f"len={len(new_api_key)} (changed={new_api_key != self.openai_config.api_key})"
 
         # Update config
         self.openai_config.api_key = new_api_key
@@ -762,6 +1572,23 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self.circuit_breaker.get_stats().get("state", "unknown"),
         )
 
+    def update_base_url(self, new_base_url: str) -> None:
+        """Update the base URL on the OpenAI client.
+
+        Called when .env migration has updated OPENAI_API_BASE to new infrastructure URLs.
+        """
+        old_base_url = str(self.client.base_url) if self.client.base_url else "None"
+
+        self.client.base_url = new_base_url
+        if hasattr(self.instruct_client, "client") and hasattr(self.instruct_client.client, "base_url"):
+            self.instruct_client.client.base_url = new_base_url
+
+        logger.info(
+            "[LLM_TOKEN] Base URL updated:\n" "  Old URL: %s\n" "  New URL: %s",
+            old_base_url,
+            new_base_url,
+        )
+
     async def handle_token_refreshed(self, signal: str, resource: str) -> None:
         """Handle token_refreshed signal from ResourceMonitor.
 
@@ -776,21 +1603,84 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """
         logger.info("[LLM_TOKEN] Received token_refreshed signal: %s for %s", signal, resource)
 
-        # Read fresh API key from environment
-        new_api_key = os.environ.get("OPENAI_API_KEY", "")
+        # Check if this service uses CIRIS proxy (JWT auth via Google/Apple ID token)
+        base_url = getattr(self.openai_config, "base_url", "") or ""
+        is_ciris_proxy = any(domain in base_url for domain in ("ciris.ai", "ciris-services"))
+
+        # Read fresh API key from appropriate environment variable
+        if is_ciris_proxy:
+            # CIRIS proxy uses JWT auth (Google/Apple ID token).
+            #
+            # THREE NAMES, because three clients wrote three names. Android
+            # writes CIRIS_BILLING_GOOGLE_ID_TOKEN, iOS writes
+            # CIRIS_BILLING_APPLE_ID_TOKEN, and desktop wrote
+            # CIRIS_BILLING_OAUTH_TOKEN — a variable nothing here had ever
+            # read. So on desktop the whole refresh handshake completed
+            # successfully and changed nothing: the client silently re-signed
+            # in, rewrote .env, tripped the reload, and this method re-read the
+            # SAME expired token, reported "unchanged", reset the breaker, and
+            # 401'd again. Forever, from about an hour after setup.
+            #
+            # The desktop client now writes the Google name like Android does;
+            # this reads the legacy name too so a client and an agent that
+            # disagree about the version still recover.
+            from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+            new_api_key, source_var = read_proxy_token(current=self.openai_config.api_key or "")
+        else:
+            # Standard OpenAI-compatible service uses OPENAI_API_KEY
+            new_api_key = os.environ.get("OPENAI_API_KEY", "")
 
         if not new_api_key:
-            logger.warning("[LLM_TOKEN] No OPENAI_API_KEY found in environment after refresh")
+            env_var = "CIRIS_BILLING_*_ID_TOKEN" if is_ciris_proxy else "OPENAI_API_KEY"
+            logger.warning("[LLM_TOKEN] No %s found in environment after refresh", env_var)
             return
 
         # Check if key actually changed
-        if new_api_key == self.openai_config.api_key:
-            logger.info("[LLM_TOKEN] API key unchanged after refresh - just resetting circuit breaker")
+        key_changed = new_api_key != self.openai_config.api_key
+        if key_changed:
+            self.update_api_key(new_api_key)
+        else:
+            # SAY WHAT WAS ACTUALLY CHECKED. This branch is what a stranded
+            # desktop user's log looked like for the whole outage, and it read
+            # as routine housekeeping: a reload happened, nothing changed, the
+            # breaker reset, the next call 401'd. Naming the variables that
+            # were consulted separates "the client never wrote a new token"
+            # from "the token is new and the provider still rejects it" — two
+            # different problems that looked identical here.
+            if is_ciris_proxy:
+                logger.warning(
+                    "[LLM_TOKEN] Reload produced NO new token — still holding the same value "
+                    "(read %s). The client signalled a refresh but wrote nothing this agent "
+                    "reads, so every proxy call will keep failing 401. Resetting the breaker "
+                    "anyway so the next attempt is not suppressed.",
+                    source_var or "no CIRIS_BILLING_* variable",
+                )
+            else:
+                logger.info("[LLM_TOKEN] API key unchanged after refresh - resetting circuit breaker")
             self.circuit_breaker.reset()
-            return
 
-        # Update the key
-        self.update_api_key(new_api_key)
+        # Also check if base URL changed (e.g. .env migration from legacy URLs)
+        new_base_url = os.environ.get("OPENAI_API_BASE", "")
+        if new_base_url and hasattr(self.client, "base_url"):
+            current_base_url = str(self.client.base_url).rstrip("/") if self.client.base_url else ""
+            if new_base_url.rstrip("/") != current_base_url:
+                self.update_base_url(new_base_url)
+
+        # Check if model changed (e.g. user changed model in Settings)
+        new_model = os.environ.get("OPENAI_MODEL", "")
+        if new_model and new_model != self.model_name:
+            old_model = self.model_name
+            self.model_name = new_model
+            self.openai_config.model_name = new_model
+            logger.info(
+                "[LLM_TOKEN] Model updated:\n  Old model: %s\n  New model: %s",
+                old_model,
+                new_model,
+            )
+            # Reset circuit breaker since we're switching models
+            self.circuit_breaker.reset()
+
         logger.info("[LLM_TOKEN] Token refresh complete - LLM service ready for requests")
 
     def _get_client(self) -> Any:
@@ -942,7 +1832,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         logger.debug(f"Structured LLM call for {response_model.__name__}")
         self.circuit_breaker.check_and_raise()
 
-        retry_state: Dict[str, Any] = {"count": 0, "previous_error": None, "original_request_id": None}
+        retry_state = RetryState()
+
+        # Merge consecutive same-role messages (system-system, user-user) before
+        # dispatch. Strict OpenAI-compatible providers like DeepInfra reject
+        # multiple system messages with HTTP 400 "System message must be at the
+        # beginning." Merging is semantically equivalent — two system messages
+        # concatenated with a blank line produce identical LLM behavior — and
+        # makes CIRIS portable across lenient (OpenAI, OpenRouter) and strict
+        # (DeepInfra) providers.
+        messages = _coalesce_consecutive_roles(messages)
 
         async def _make_structured_call(
             msg_list: List[MessageDict],
@@ -953,6 +1852,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             try:
                 extra_kwargs = self._build_extra_kwargs(task_id, thought_id, resp_model.__name__, retry_state)
                 image_count = _log_multimodal_content(msg_list, self.model_name, thought_id, resp_model.__name__)
+
+                # Log request details for debugging local inference issues
+                client_base_url = getattr(self.client, "base_url", None)
+                client_timeout = getattr(self.client, "timeout", None)
+                is_local = self._is_local_endpoint(str(client_base_url) if client_base_url else "")
+                logger.info(
+                    f"[LLM_REQUEST] model={self.model_name}, base_url={client_base_url}, "
+                    f"timeout={client_timeout}, response_model={resp_model.__name__}, "
+                    f"msg_count={len(msg_list)}, thought_id={thought_id}, is_local={is_local}, "
+                    f"extra_body={extra_kwargs.get('extra_body')}"
+                )
 
                 # Google/Gemini uses generation_config dict instead of direct params
                 if self.provider == LLMProvider.GOOGLE:
@@ -974,16 +1884,71 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                     token_param = {"max_tokens": max_toks}
                     temp_param = {"temperature": temp}
 
-                response, completion = await self.instruct_client.chat.completions.create_with_completion(
-                    model=self.model_name,
-                    messages=cast(Any, msg_list),
-                    response_model=resp_model,
-                    max_retries=0,
-                    **temp_param,
-                    **token_param,
-                    **extra_kwargs,
-                )
+                # Seed plumbing (#975, FSD §14 step 6): transmitted ONLY when
+                # explicitly configured, on the OpenAI-compatible path only.
+                # A regime manifest that pins `seed` is refused unless the
+                # runtime actually sends it (enforced-or-refused, set-equality
+                # [M-6/M-N3]); this is the sending half. Opt-in on purpose:
+                # some OpenAI-compatible providers reject unknown params, and
+                # under a pinned manifest that rejection must be a loud
+                # per-call failure, never a silently-dropped pin.
+                seed_param: Dict[str, int] = {}
+                _seed_env = os.environ.get("CIRIS_LLM_SEED", "")
+                if _seed_env and token_param:  # token_param empty == gemini branch; seed is OpenAI-path only
+                    try:
+                        seed_param = {"seed": int(_seed_env)}
+                    except ValueError:
+                        raise RuntimeError(
+                            f"CIRIS_LLM_SEED must be an integer, got {_seed_env!r} — "
+                            f"refusing to run with an unparseable determinism pin"
+                        )
 
+                import time as _time
+
+                _call_start = _time.monotonic()
+                logger.debug("[LLM_REQUEST] Starting instructor call...")
+
+                try:
+                    # max_retries: instructor's native reask, and ONLY that.
+                    # On schema mismatch instructor injects a per-provider
+                    # remediation message ("Validation Error found:\n...") and
+                    # re-calls. Transport errors are NOT retried here (see
+                    # _instructor_reask_policy); they surface on first
+                    # occurrence. Our outer `_retry_with_backoff` handles
+                    # remediable 400s (context_length, content_filter) with
+                    # CIRIS-specific remediation per `LLM_ERROR_REMEDIATIONS`.
+                    response, completion = await self.instruct_client.chat.completions.create_with_completion(
+                        model=self.model_name,
+                        messages=cast(Any, msg_list),
+                        response_model=resp_model,
+                        max_retries=_instructor_reask_policy(),
+                        **temp_param,
+                        **token_param,
+                        **seed_param,
+                        **extra_kwargs,
+                    )
+                except Exception as inst_exc:
+                    # Llama-family JSON-mode bug recovery: scout/llama-4 in
+                    # JSON mode on OpenRouter routinely emit a JSON body
+                    # missing the leading `{` — content like
+                    #   `"selected_action": "speak", ...}`
+                    # Instructor parses this as `Invalid JSON: expected
+                    # value at line 1 column 1`. The fix is purely a
+                    # parsing-layer concern — prepend `{` and re-parse with
+                    # Pydantic. We do this BEFORE the general exception
+                    # handler so a clean recovery doesn't get swallowed.
+                    recovered = _try_recover_missing_brace(inst_exc, resp_model)
+                    if recovered is not None:
+                        response, completion = recovered
+                        logger.info(
+                            f"[LLM_RECOVERY] Recovered from missing-leading-brace JSON "
+                            f"for {resp_model.__name__} (thought_id={thought_id})"
+                        )
+                    else:
+                        raise
+
+                _call_duration = _time.monotonic() - _call_start
+                logger.info(f"[LLM_REQUEST] Instructor call completed in {_call_duration:.2f}s")
                 self._log_completion_details(completion, image_count, thought_id)
                 return await self._process_successful_response(response, completion)
 
@@ -991,45 +1956,350 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 self._handle_auth_error(e)
                 raise
 
-            except (APIConnectionError, RateLimitError, InternalServerError) as e:
+            except _transport_error_types() as e:
+                # The provider did not answer. Raise on the FIRST occurrence,
+                # in the same shape these errors had when instructor wrapped
+                # them: TimeoutError for a timeout (the wording the conscience
+                # fail-closed path and _categorize_llm_error key on), and a
+                # circuit-breaker failure recorded for everything but a 429.
+                # Retrying is the enclosing stage's per-try's job (#1186).
                 self._handle_provider_error(e)
+                self._raise_categorized(e, resp_model.__name__, thought_id=thought_id, already_tracked=True)
+
+            except BadRequestError:
+                # Re-raise raw so `_retry_with_backoff` can categorize it via
+                # `_categorize_llm_error` and inject the matching remediation
+                # message on the next attempt. If we routed BadRequestError
+                # through `_handle_general_exception` like every other
+                # Exception subclass, it would be wrapped as a generic
+                # `RuntimeError`, the categorization would never see the
+                # original 4xx body, and the retry-with-remediation path
+                # added in 2.7.4 would never fire — exactly the regression
+                # flagged by the release/2.7.4 PR review.
                 raise
 
             except Exception as e:
                 self._handle_general_exception(e, resp_model.__name__)
                 raise  # Should not reach here as _handle_general_exception always raises
 
+        # Multi-endpoint failover: try each endpoint before giving up
+        last_exception: Optional[Exception] = None
+        endpoints_tried = 0
+        max_endpoint_attempts = max(len(self._endpoint_urls), 1)
+
+        while endpoints_tried < max_endpoint_attempts:
+            current_endpoint = self._get_current_endpoint()
+            endpoints_tried += 1
+
+            try:
+                result = await self._retry_with_backoff(
+                    _make_structured_call, messages, response_model, max_tokens, temperature, retry_state=retry_state
+                )
+                # Success! Record it and reset retry state for next call
+                if current_endpoint:
+                    self._record_endpoint_success(current_endpoint)
+                return result
+
+            except CircuitBreakerError:
+                logger.warning("LLM service circuit breaker is open, failing fast")
+                raise
+
+            except BadRequestError as e:
+                # `_retry_with_backoff` has had its remediation attempt (or
+                # judged the 400 not remediable). Name the fault the way every
+                # other failure is named (#1066) rather than leak the raw 400.
+                self._raise_categorized(e, response_model.__name__, thought_id=thought_id)
+
+            except TimeoutError as e:
+                last_exception = e
+                if current_endpoint:
+                    self._record_endpoint_failure(current_endpoint)
+                # Try next endpoint if available
+                if self._rotate_to_next_endpoint():
+                    logger.info(
+                        f"[MULTI_ENDPOINT] Timeout on {current_endpoint}, "
+                        f"trying next endpoint (attempt {endpoints_tried + 1}/{max_endpoint_attempts})"
+                    )
+                    retry_state = RetryState()
+                    continue
+                logger.warning("LLM structured service timeout, no more endpoints to try")
+                raise
+
+            except (RuntimeError, APIConnectionError, InternalServerError) as e:
+                last_exception = e
+                if current_endpoint:
+                    self._record_endpoint_failure(current_endpoint)
+                # Try next endpoint if available (but not for auth errors)
+                error_str = str(e).lower()
+                is_auth_error = "401" in error_str or "authentication" in error_str
+                if not is_auth_error and self._rotate_to_next_endpoint():
+                    logger.info(
+                        f"[MULTI_ENDPOINT] Error on {current_endpoint}, "
+                        f"trying next endpoint (attempt {endpoints_tried + 1}/{max_endpoint_attempts})"
+                    )
+                    retry_state = RetryState()
+                    continue
+                raise
+
+        # All endpoints exhausted
+        if last_exception:
+            raise last_exception
+        raise RuntimeError("All endpoints exhausted without success")
+
+    @staticmethod
+    def _endpoint_host(base_url: str) -> str:
+        """The HOST of an endpoint, lowercased — never a substring of the URL.
+
+        ``"api.openai.com" in base_url`` is also true for
+        ``https://api.openai.com.attacker.example/v1`` and for any URL that
+        merely mentions the name in a path or query, so provider dispatch keyed
+        on a substring can be steered by a hostile base_url. CodeQL calls this
+        incomplete-url-substring-sanitization; it is right.
+        """
+        from urllib.parse import urlsplit
+
+        raw = (base_url or "").strip()
+        if not raw:
+            return ""
+        if "://" not in raw:
+            raw = "//" + raw
         try:
-            return await self._retry_with_backoff(
-                _make_structured_call, messages, response_model, max_tokens, temperature, retry_state=retry_state
-            )
-        except CircuitBreakerError:
-            logger.warning("LLM service circuit breaker is open, failing fast")
-            raise
-        except TimeoutError:
-            logger.warning("LLM structured service timeout, failing fast to prevent retry cascade")
-            raise
+            return (urlsplit(raw).hostname or "").lower()
+        except ValueError:
+            return ""
+
+    @staticmethod
+    def _host_is(host: str, domain: str) -> bool:
+        """Exact host, or a subdomain of it — never a lookalike suffix."""
+        return host == domain or host.endswith("." + domain)
+
+    @staticmethod
+    def _build_reasoning_off_extras(base_url: str, model_name: str) -> Dict[str, Any]:
+        """Return the ``extra_body`` keys that disable reasoning for this
+        specific (provider, model) combination.
+
+        There is NO universal off-switch. Every provider has its own enum
+        and 422s on keys it doesn't know:
+
+        * Together (Kimi family) needs ``thinking.type=disabled`` — vLLM key
+          is silently ignored.
+        * Together (vLLM-served: gemma-4, qwen3+, deepseek) needs
+          ``chat_template_kwargs.enable_thinking=False`` — Kimi key is
+          silently ignored. Live A/B (2.7.4) confirmed the Kimi key alone
+          leaves gemma-4 reasoning ON (~20s baseline) vs ~3s with vLLM key.
+        * DeepInfra (vLLM-served) takes the same vLLM key.
+        * OpenRouter normalizes via ``reasoning.enabled=False``.
+        * OpenAI o-series / gpt-5 takes ``reasoning_effort="minimal"``
+          (rejects the field on 4o/4-turbo). Groq has the same field name
+          but a different enum (``low|medium|high|xhigh|none``) and 422s
+          on ``minimal`` — verified live 2.7.4, scout cell circuit-broke
+          every call.
+        * Groq's only output-suppression knob is ``reasoning_format=hidden``,
+          which only applies to its reasoning models (qwen reasoning,
+          gpt-oss). Sending it to Llama-4-scout (a non-reasoning model)
+          may 422; we omit it because llama-scout doesn't reason anyway.
+        * CIRIS proxy / Anthropic SDK paths don't use OpenAI-style
+          extra_body for reasoning toggles.
+        * Local endpoints (vLLM, llama.cpp, ollama) take the vLLM key —
+          this also fixes Gemma-4 putting responses in
+          ``reasoning_content`` instead of ``content`` when thinking is on.
+
+        Pydantic AI and OpenRouter both do this same per-provider dispatch
+        internally (verified via their docs); there is no shortcut to a
+        single universal payload.
+        """
+        base = (base_url or "").lower()
+        model = (model_name or "").lower()
+        host = OpenAICompatibleClient._endpoint_host(base_url)
+        is_host = OpenAICompatibleClient._host_is
+
+        if is_host(host, "openrouter.ai"):
+            # `reasoning.enabled=false` is OpenRouter's documented switch and it
+            # works: live A/B on qwen3-32b, 100 reasoning tokens / 4.1s ->
+            # 0 tokens / 1.5s.
+            #
+            # DO NOT ALSO SEND chat_template_kwargs HERE. OpenRouter does not
+            # document that parameter, and adding it alongside the real switch
+            # measurably UN-disables reasoning: same model, same call, 0 tokens
+            # became 229 and 1.5s became 7.3s. A key that looks harmless because
+            # "unknown keys are ignored" is not ignored on this hop.
+            #
+            # Some endpoints refuse to be quiet: DeepSeek-R1 answers
+            # `400 Reasoning is mandatory for this endpoint and cannot be
+            # disabled`, so asking turns every call into a hard failure instead
+            # of a slow one. For those, ask only that the reasoning be left OUT
+            # of the response, which they accept.
+            if any(t in model for t in ("deepseek-r1", "-r1", ":thinking", "-thinking")):
+                return {"reasoning": {"exclude": True}}
+            # ADHERENCE IS UPSTREAM-DEPENDENT, and no request-side key fixes
+            # that. Same model, same payload, four calls, reading the `provider`
+            # field OpenRouter returns:
+            #   SiliconFlow -> 0 reasoning tokens (honours it)
+            #   Nebius      -> 130-301 tokens (ignores it)
+            #   DeepInfra   -> 296 tokens (ignores it)
+            # `provider.require_parameters=true` does NOT restrict routing to
+            # the ones that honour it — measured, still landed on Nebius. The
+            # only real lever is routing itself: OPENROUTER_IGNORE_PROVIDERS /
+            # OPENROUTER_PROVIDER_ORDER, which this module already sends.
+            return {"reasoning": {"enabled": False}}
+
+        if is_host(host, "together.xyz") or is_host(host, "together.ai"):
+            # Models live in BOTH families on this endpoint; layer both keys.
+            # Each is silently ignored by the family that doesn't honour it.
+            return {
+                "thinking": {"type": "disabled"},
+                "chat_template_kwargs": {"enable_thinking": False},
+            }
+
+        if is_host(host, "deepinfra.com"):
+            # vLLM-backed; same key as Together's vLLM family. Add
+            # `reasoning.enabled` for newer DeepSeek-V3.1+ which honours it.
+            return {
+                "chat_template_kwargs": {"enable_thinking": False},
+                "reasoning": {"enabled": False},
+            }
+
+        if is_host(host, "groq.com"):
+            # Non-reasoning models (llama-scout) have nothing to disable, and
+            # unknown keys risk a 422, so they still get {}.
+            #
+            # Reasoning models DID get {} too, which is how gpt-oss shipped with
+            # thinking fully on. Live measurement fixes the value:
+            #   reasoning_effort="none"     -> 400, `must be one of low, medium,
+            #                                  or high` (Groq has NO none — the
+            #                                  older comment here claimed it did)
+            #   reasoning_format="hidden"   -> accepted, 57 reasoning tokens:
+            #                                  hides the text, still pays for it
+            #   reasoning_effort="low"      -> accepted, 40 tokens -> 6
+            # So "low" is the real floor on this provider. CIRIS does its own
+            # reasoning in the DMA pipeline; we want the model's kept minimal.
+            if any(t in model for t in ("gpt-oss", "qwen", "deepseek", "reason")):
+                return {"reasoning_effort": "low"}
+            return {}
+
+        # An EMPTY base_url is not "unknown" — it is OpenAI. The SDK defaults to
+        # api.openai.com/v1 when none is given, which is the single most common
+        # configuration there is, and it used to fall all the way through to the
+        # unknown-endpoint default and send nothing. So gpt-5 / o-series reasoned
+        # at full effort on the default config, which is exactly the tax this
+        # whole map exists to remove.
+        if is_host(host, "openai.com") or not host:
+            # Only the reasoning families accept `reasoning_effort`; 4o/4-turbo
+            # 400 on the field, so they still get nothing.
+            #
+            # The value is NOT one enum across the families. Measured live:
+            #   gpt-5.2 + "minimal" -> 400 `does not support 'minimal' with
+            #                          this model. Supported values are: 'none'…`
+            #   gpt-5.2 + "none"    -> 0 reasoning tokens, 563ms (the floor)
+            #   gpt-5.2 + "low"     -> 7 reasoning tokens, 1197ms
+            # We shipped "minimal" for the whole set, which means every gpt-5
+            # call was a hard 400 — not slow, broken.
+            if "gpt-5" in model:
+                return {"reasoning_effort": "none"}
+            if any(t in model for t in ("o1", "o3", "o4")):
+                # The o-series enum is low|medium|high — "low" is its floor.
+                return {"reasoning_effort": "low"}
+            return {}
+
+        if is_host(host, "googleapis.com"):
+            # Gemini through the OpenAI-compat shim. Two knobs exist and they
+            # CONFLICT — `reasoning_effort` and `thinking_config`
+            # (thinking_budget / thinking_level) cannot both be sent — so send
+            # exactly one: `reasoning_effort="none"`, which Google documents as
+            # the OpenAI-surface way to turn thinking off on 2.5-class models.
+            #
+            # 2.5 Pro and the 3.x family CANNOT turn thinking off at all, and
+            # the shim is strict about the enum it accepts per model, so for
+            # those we send nothing rather than earn a 400 on every call. This
+            # branch existing at all is the fix: Google fell through to the
+            # unknown-endpoint default and shipped with thinking ON, which is
+            # the 30-60s-per-call tax this whole map exists to avoid.
+            cannot_disable = "2.5-pro" in model or "gemini-3" in model
+            return {} if cannot_disable else {"reasoning_effort": "none"}
+
+        if is_host(host, "ciris.ai") or host.startswith("ciris-services"):
+            # Already-wrapped CIRIS proxy: no native reasoning toggle.
+            return {}
+
+        if is_host(host, "anthropic.com"):
+            # Anthropic uses a top-level `thinking` parameter on the
+            # Messages API, not extra_body. Default Claude calls don't
+            # opt into extended thinking; nothing to disable here.
+            return {}
+
+        # Positively-identified local endpoint (vLLM/llama.cpp/ollama/LM
+        # Studio): send the vLLM key. CIRIS owns reasoning via the DMA
+        # pipeline; we turn the model's own reasoning off.
+        # See docs/GEMMA_4_COMPATIBILITY.md (response goes to
+        # reasoning_content instead of content when thinking is enabled
+        # on local Gemma-4).
+        if OpenAICompatibleClient._is_local_url(base):
+            return {"chat_template_kwargs": {"enable_thinking": False}}
+
+        # Truly unknown endpoint (or empty base_url that defaults to
+        # OpenAI's standard /v1). Send NOTHING — strict OpenAI-compatible
+        # providers reject unknown request keys with 400, and any
+        # endpoint we haven't explicitly classified should not be assumed
+        # vLLM. If a future deployment needs a toggle here, add it as an
+        # explicit branch above keyed on a recognizable base_url
+        # substring.
+        return {}
 
     def _build_extra_kwargs(
         self,
         task_id: Optional[str],
         thought_id: Optional[str],
         resp_model_name: str,
-        retry_state: Dict[str, Any],
+        retry_state: RetryState,
     ) -> Dict[str, Any]:
-        """Build extra kwargs for the LLM API call based on provider."""
+        """Build extra kwargs for the LLM API call based on provider.
+
+        Reasoning is disabled per-endpoint via ``_build_reasoning_off_extras``
+        (each provider has its own enum; sending one universal payload 422s on
+        Groq — verified live 2.7.4). Provider branches add their own extras
+        (CIRIS proxy metadata, OpenRouter routing config) on top.
+        """
         extra_kwargs: Dict[str, Any] = {}
         base_url = self.openai_config.base_url or ""
 
+        # Shared with setup validation — see build_request_extra_body. The
+        # `data_collection` guard lives in there, because a ZDR-only config must
+        # still emit the provider block; omitting it from that condition would
+        # let the promise exist on the model and never reach the wire.
+        extra_body: Dict[str, Any] = build_request_extra_body(
+            base_url,
+            self.model_name or "",
+            require_zero_data_retention=self.openai_config.require_zero_data_retention,
+        )
+
         if "ciris.ai" in base_url or "ciris-services" in base_url:
             metadata = _build_ciris_proxy_metadata(task_id, thought_id, retry_state, resp_model_name)
-            extra_kwargs["extra_body"] = {"metadata": metadata}
-        elif "openrouter.ai" in base_url:
-            provider_config = _build_openrouter_provider_config()
-            if provider_config:
-                extra_kwargs["extra_body"] = {"provider": provider_config}
+            extra_body["metadata"] = metadata.model_dump()
+        elif self._is_local_endpoint(base_url):
+            logger.debug(
+                f"[LOCAL_LLM] Disabled model reasoning for model={self.model_name} "
+                f"on local endpoint={base_url} (CIRIS provides reasoning structure)"
+            )
 
+        extra_kwargs["extra_body"] = extra_body
         return extra_kwargs
+
+    @staticmethod
+    def _is_local_url(base_url: str) -> bool:
+        """Is this URL a local LLM server (vLLM, llama.cpp, Ollama, LM Studio)?
+
+        Delegates to the one provider classifier (``classify_provider``,
+        ciris_engine/logic/config/llm_budget.py, #1186) so the reasoning-off
+        decision and the time budget can never disagree about what is local.
+        Callable from static contexts (``_build_reasoning_off_extras``).
+        """
+        if not base_url:
+            return False
+        return classify_provider(None, base_url) is ProviderClass.LOCAL
+
+    def _is_local_endpoint(self, base_url: str) -> bool:
+        """Instance form of :meth:`_is_local_url`, used for request logging."""
+        return self._is_local_url(base_url)
 
     def _log_completion_details(self, completion: Any, image_count: int, thought_id: Optional[str]) -> None:
         """Log completion details for debugging."""
@@ -1089,6 +2359,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Handle authentication errors (401)."""
         self._track_error(e)
         self._total_errors += 1
+        # Record the fault HERE too. This handler is a SIBLING of `except
+        # Exception`, so it is matched first and never reaches
+        # _handle_general_exception — recording only there left the two most
+        # user-visible faults (a rejected key, a provider outage) invisible to
+        # the health ladder, and left a stale earlier code on screen: correct
+        # the model and then present a bad key, and the UI still says "change
+        # the model". _root_provider_fault returns "" when it cannot name the
+        # fault, which correctly falls back to the provider's own words.
+        self.last_error = _root_provider_error(e)
+        self.last_fault_code = _root_provider_fault(e)
         base_url = self.openai_config.base_url or ""
 
         if "ciris.ai" in base_url:
@@ -1114,6 +2394,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         """Handle provider-specific errors (connection, rate limit, internal server)."""
         self._track_error(e)
         self._total_errors += 1
+        # Record the fault HERE too. This handler is a SIBLING of `except
+        # Exception`, so it is matched first and never reaches
+        # _handle_general_exception — recording only there left the two most
+        # user-visible faults (a rejected key, a provider outage) invisible to
+        # the health ladder, and left a stale earlier code on screen: correct
+        # the model and then present a bad key, and the UI still says "change
+        # the model". _root_provider_fault returns "" when it cannot name the
+        # fault, which correctly falls back to the provider's own words.
+        self.last_error = _root_provider_error(e)
+        self.last_fault_code = _root_provider_fault(e)
 
         error_details = {
             "error_type": type(e).__name__,
@@ -1165,6 +2455,48 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 f"Provider returned internal server error: {e}"
             )
 
+    def _raise_categorized(
+        self,
+        e: Exception,
+        resp_model_name: str,
+        *,
+        thought_id: Optional[str] = None,
+        already_tracked: bool = False,
+    ) -> NoReturn:
+        """Log, record and re-raise a provider failure in its categorized form.
+
+        The same categorization instructor-wrapped failures always got: a
+        TimeoutError for a timeout, RuntimeError naming 503 / 429 / context
+        length / content filter otherwise, a circuit-breaker failure for
+        everything but a rate limit, and the original error as the cause.
+        """
+        if not already_tracked:
+            self._track_error(e)
+            self._total_errors += 1
+            self.last_error = _root_provider_error(e)
+            self.last_fault_code = _root_provider_fault(e)
+        error_context = LLMErrorContext(
+            model=self.model_name,
+            provider=self.openai_config.base_url or "default",
+            response_model=resp_model_name,
+            circuit_breaker_state=self.circuit_breaker.state.value,
+            consecutive_failures=self.circuit_breaker.consecutive_failures,
+            thought_id=thought_id,
+        )
+        if _is_timeout_exception(e) and not _is_timeout_error(str(e).lower()):
+            # The handler below categorizes by message; say what the type already knows.
+            logger.error(
+                "LLM call FAILED — model=%s provider=%s response_model=%s: %s (timeout)",
+                error_context.model,
+                error_context.provider,
+                resp_model_name,
+                type(e).__name__,
+            )
+            self.circuit_breaker.record_failure()
+            raise TimeoutError("LLM API timeout") from e
+        _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
+        raise RuntimeError(f"LLM call failed ({type(e).__name__})") from e  # pragma: no cover - handler always raises
+
     def _handle_general_exception(self, e: Exception, resp_model_name: str) -> None:
         """Handle general exceptions including instructor retry exceptions."""
         # Check if this is an instructor retry exception
@@ -1172,18 +2504,37 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             if isinstance(e, instructor.exceptions.InstructorRetryException):
                 self._track_error(e)
                 self._total_errors += 1
-                error_context: ErrorContext = {
-                    "model": self.model_name,
-                    "provider": self.openai_config.base_url or "default",
-                    "response_model": resp_model_name,
-                    "circuit_breaker_state": self.circuit_breaker.state.value,
-                    "consecutive_failures": self.circuit_breaker.consecutive_failures,
-                }
+                error_context = LLMErrorContext(
+                    model=self.model_name,
+                    provider=self.openai_config.base_url or "default",
+                    response_model=resp_model_name,
+                    circuit_breaker_state=self.circuit_breaker.state.value,
+                    consecutive_failures=self.circuit_breaker.consecutive_failures,
+                )
+                self.last_error = _root_provider_error(e)
+                self.last_fault_code = _root_provider_fault(e)
                 _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
         self._track_error(e)
         self._total_errors += 1
+        # REMEMBER WHAT THE PROVIDER SAID (CIRISAgent#1062 follow-up).
+        #
+        # /v1/system/health reports "no LLM provider is answering" and, before
+        # this, could say nothing about WHY — so a revoked key and an unknown
+        # model produced the same sentence, pointing the reader at their network.
+        # The provider's own words are already unwrapped for the log; keeping the
+        # last one lets the health warning name the actual fault.
+        self.last_error = _root_provider_error(e)
+        # …AND the structured slug, on EVERY failure, not just the instructor one.
+        # These two are read as a pair: health prefers last_fault_code over
+        # substring-matching last_error. Refreshing only half means a provider
+        # whose first failure was `model_not_found` and whose current failure is a
+        # timeout keeps telling the user to change the model — the remedy would
+        # describe an outage that is already over while the live one goes unnamed.
+        # _root_provider_fault returns "" when it cannot name the fault, which is
+        # the correct way to say "no structured verdict, fall back to the words".
+        self.last_fault_code = _root_provider_fault(e)
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )
@@ -1217,7 +2568,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         response_model: Type[BaseModel],
         max_tokens: int,
         temperature: float,
-        retry_state: Optional[Dict[str, Any]] = None,
+        retry_state: Optional[RetryState] = None,
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Retry with exponential backoff (private method).
 
@@ -1227,29 +2578,77 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             response_model: Pydantic response model
             max_tokens: Max tokens
             temperature: Temperature
-            retry_state: Optional dict to track retry info for CIRIS proxy metadata
-                         {"count": int, "previous_error": str, "original_request_id": str}
+            retry_state: Optional RetryState to track retry info for CIRIS proxy metadata
         """
         last_exception = None
+        # Make a working copy of `messages` so remediation injections don't
+        # mutate the caller's list. Each retry appends its remediation to this
+        # local copy, so attempt N sees the original messages + N-1 remediations
+        # describing what went wrong on each prior attempt — same shape as
+        # instructor v2's native ValidationError reask, extended to API errors.
+        working_messages: List[MessageDict] = list(messages)
         for attempt in range(self.max_retries):
             try:
-                return await func(messages, response_model, max_tokens, temperature)
+                return await func(working_messages, response_model, max_tokens, temperature)
             except self.retryable_exceptions as e:
                 last_exception = e
 
-                # Categorize error for retry metadata
+                # Categorize error for retry metadata + remediation lookup
                 error_category = self._categorize_llm_error(e)
+
+                # MODEL_NOT_AVAILABLE is a config error — wrong model name
+                # in .env or manager-injected OPENAI_MODEL_NAME. Retrying
+                # with the same model name will keep failing forever.
+                # Surface it immediately so the operator sees "you typo'd
+                # the model name" without burning 3× retry budget × 5
+                # parallel DMA calls × 600s qa_runner timeout per cell.
+                if error_category == "MODEL_NOT_AVAILABLE":
+                    logger.error(
+                        f"[LLM_MODEL_NOT_AVAILABLE] model={getattr(self, 'model_name', '<unknown>')} "
+                        f"error={str(e)[:200]} — config bug, raising without retry"
+                    )
+                    raise
+
+                # If a BadRequestError surfaces with a category we don't
+                # remediate (e.g. malformed request, missing field), retry
+                # provides no value — raise immediately to surface the bug.
+                if isinstance(e, BadRequestError) and error_category not in LLM_ERROR_REMEDIATIONS:
+                    logger.error(
+                        f"[LLM_BAD_REQUEST_NON_REMEDIABLE] category={error_category} "
+                        f"error={str(e)[:200]} — raising without retry"
+                    )
+                    raise
 
                 # Update retry state for next attempt's metadata
                 if retry_state is not None:
-                    retry_state["count"] = attempt + 1
-                    retry_state["previous_error"] = error_category
+                    retry_state.count = attempt + 1
+                    retry_state.previous_error = error_category
 
                 if attempt < self.max_retries - 1:
                     delay = min(self.base_delay * (2**attempt), self.max_delay)
+
+                    # Inject remediation message into the message history for
+                    # the NEXT attempt iff the category is LLM-fault (not a
+                    # transient infra issue). The LLM sees what went wrong on
+                    # the previous attempt and can self-correct — same pattern
+                    # instructor's native reask uses for ValidationError, just
+                    # extended here to API-level errors instructor doesn't
+                    # handle natively.
+                    remediation = LLM_ERROR_REMEDIATIONS.get(error_category)
+                    if remediation:
+                        working_messages = working_messages + [
+                            {"role": "user", "content": remediation},
+                        ]
+                        logger.info(
+                            f"[LLM_REMEDIATION] category={error_category} "
+                            f"attempt={attempt + 1}/{self.max_retries} "
+                            f"injected_remediation={remediation[:80]!r}..."
+                        )
+
                     logger.warning(
                         f"[LLM_RETRY_SCHEDULED] attempt={attempt + 1}/{self.max_retries} "
-                        f"error={error_category} delay={delay:.1f}s"
+                        f"error={error_category} delay={delay:.1f}s "
+                        f"remediated={'yes' if remediation else 'no'}"
                     )
                     import asyncio
 
@@ -1275,9 +2674,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         - VALIDATION_ERROR: Response didn't match schema
         - AUTH_ERROR: Authentication failed (401)
         - INTERNAL_ERROR: Provider error (500/503)
+        - CIRCUIT_OPEN: no request sent, the provider's breaker is open
         - UNKNOWN: Unrecognized error
         """
         error_str = str(error).lower()
+
+        # An open breaker sent no request: the message embeds the provider's
+        # last real error ("last: LLM API timeout"), which must not be read as
+        # a fresh timeout -- retrying into an open breaker fails identically.
+        if isinstance(error, CircuitBreakerError) or "circuit breaker open for" in error_str:
+            return "CIRCUIT_OPEN"
 
         # Check for timeout errors
         if "timeout" in error_str or "timed out" in error_str:
@@ -1293,18 +2699,26 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if isinstance(error, RateLimitError) or ERROR_PATTERN_RATE_LIMIT in error_str or ERROR_PATTERN_429 in error_str:
             return "RATE_LIMIT"
 
-        # Check for context length exceeded
-        if (
-            "context_length" in error_str
-            or "maximum context" in error_str
-            or "context length" in error_str
-            or "token limit" in error_str
-            or "too many tokens" in error_str
-        ):
+        # Check model-not-available BEFORE context-length / validation /
+        # rate-limit, because Together's "Unable to access model X" 404s
+        # match validation patterns too — the model-not-available signal
+        # is the most specific and actionable, so prefer it.
+        if _is_model_not_available_error(error_str):
+            return "MODEL_NOT_AVAILABLE"
+
+        # Check for context length exceeded — delegates to the shared
+        # detector so we catch every phrasing in one place (Groq's
+        # "must be less than or equal to N" and the generic "exceed" patterns
+        # both land here, both get the same CONTEXT_LENGTH_EXCEEDED remediation).
+        if _is_context_length_error(error_str):
             return "CONTEXT_LENGTH_EXCEEDED"
 
+        # Check for content filter / safety blocks
+        if _is_content_filter_error(error_str):
+            return "CONTENT_FILTER"
+
         # Check for validation errors
-        if "validation" in error_str or "validationerror" in error_str:
+        if _is_validation_error(error_str):
             return "VALIDATION_ERROR"
 
         # Check for auth errors
@@ -1318,25 +2732,15 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         return "UNKNOWN"
 
     def _signal_token_refresh_needed(self) -> None:
-        """Write a signal file to indicate token refresh is needed (for ciris.ai).
+        """Ask the client for a fresh proxy token.
 
-        This file is monitored by the Android app to trigger Google silentSignIn().
-        The signal file is written to CIRIS_HOME/.token_refresh_needed
+        The path, the filename and the logging live in
+        `ciris_engine.logic.utils.token_handshake`. This method used to resolve
+        CIRIS_HOME and spell the filename itself — and so did a second copy in
+        the billing provider, and three Kotlin clients each had their own
+        constants. That is exactly how the desktop half came to write a token
+        variable this half never read.
         """
-        import os
-        from pathlib import Path
+        from ciris_engine.logic.utils.token_handshake import request_token_refresh
 
-        try:
-            # Get CIRIS_HOME from environment (set by mobile_main.py on Android)
-            ciris_home = os.getenv("CIRIS_HOME")
-            if not ciris_home:
-                # Fallback for non-Android environments
-                from ciris_engine.logic.utils.path_resolution import get_ciris_home
-
-                ciris_home = str(get_ciris_home())
-
-            signal_file = Path(ciris_home) / ".token_refresh_needed"
-            signal_file.write_text(str(time.time()))
-            logger.info(f"Token refresh signal written to: {signal_file}")
-        except Exception as e:
-            logger.error(f"Failed to write token refresh signal: {e}")
+        request_token_refresh(reason=f"proxy 401 on model {self.model_name}")

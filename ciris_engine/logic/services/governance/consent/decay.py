@@ -101,7 +101,7 @@ class DecayProtocolManager:
         )
         if self._time_service is None:
             raise ValueError("TimeService required for decay protocol")
-        add_graph_node(decay_node, self._time_service, self._db_path)
+        add_graph_node(decay_node, self._time_service)
 
         # Update consent to expired (identity severed immediately)
         revoked_status = ConsentStatus(
@@ -134,7 +134,7 @@ class DecayProtocolManager:
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(revoked_node, self._time_service, self._db_path)
+        add_graph_node(revoked_node, self._time_service)
 
         # Create audit entry for decay initiation
         audit = ConsentAuditEntry(
@@ -157,7 +157,7 @@ class DecayProtocolManager:
             updated_by="consent_manager",
             updated_at=now,
         )
-        add_graph_node(audit_node, self._time_service, self._db_path)
+        add_graph_node(audit_node, self._time_service)
 
         # Track active decay
         self._active_decays[user_id] = decay
@@ -220,7 +220,7 @@ class DecayProtocolManager:
             )
             if self._time_service is None:
                 raise ValueError("TimeService required for decay phase update")
-            add_graph_node(decay_node, self._time_service, self._db_path)
+            add_graph_node(decay_node, self._time_service)
 
             logger.info(
                 f"Decay phase '{phase}' completed for {user_id}, "

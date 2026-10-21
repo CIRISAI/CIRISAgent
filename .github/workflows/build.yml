@@ -1,31 +1,173 @@
 name: Build and Deploy
 # GitHub Container Registry permissions fixed in org settings
 
+# RELEASES PUBLISH ONLY FROM A PUSHED RELEASE TAG (v<CIRIS_VERSION>, e.g.
+# v2.16.1-stable). Main pushes and PRs build and test everything -- wheels,
+# installer, images -- but publish nothing. That used to be gated on
+# `refs/heads/main` + "this version is not on PyPI yet", which shipped an
+# incomplete ciris-agent 2.16.0 + v2.16.0-stable from a mid-release main commit
+# (18c59a93); PyPI is immutable, so the real release had to become 2.16.1.
+#
+# Release flow: merge the bump to main -> push the tag on that commit -> the
+# tag's run of THIS workflow rebuilds and retests every artefact, `release-gate`
+# refuses unless the tag == "v" + CIRIS_VERSION and the commit is on main, and
+# only then do the publish jobs run. tests/workflows/test_release_only_on_tag.py
+# holds every publishing job to that gate.
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*-stable'
   pull_request:
     types: [opened, synchronize, reopened]
 
-permissions:
-  contents: read
-  packages: write
-  pull-requests: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a release half-way through publishing (a re-pushed tag would
+  # otherwise kill a run between the PyPI upload and the GitHub release).
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
-  test:
-    name: Test
+  # Run mypy in parallel with tests for faster feedback
+  typecheck:
+    name: Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Stdlib-only guard, no deps required — run before the pip install so a
+      # localization regression fails fast. Catches keys referenced in
+      # commonMain Kotlin (localizedString/getString) that are undefined in
+      # en.json (which render raw on every platform — CIRISAgent#240) and
+      # en.json mirror drift across platform bundles.
+      - name: Localization guard (reference coverage + mirror parity)
+        run: python tools/dev/check_localization_sync.py
+
+      # Value-integrity ratchet. check_localization_integrity has existed since
+      # #952 but nothing ever invoked it, which is how 1116 errors sat in the
+      # corpus through green run after green run — the tool was treated as the
+      # fix. Running it bare would fail on all of that pre-existing debt and
+      # teach everyone to skip the step, so it gates ONLY on classes already
+      # repaired to zero: reintroducing one is a regression a reviewer can act
+      # on, while the standing debt stays visible without blocking.
+      #
+      # Add a check name here as its class reaches zero. Removing one is a
+      # decision to let that defect back in, and should be argued for.
+      - name: Localization value-integrity ratchet (repaired classes stay repaired)
+        run: python tools/dev/check_localization_integrity.py --fail-on placeholder-corrupt
+
+      # Compliance evidence must not drift behind or ahead of the code
+      # (CIRISAgent#1002; NULLWORKS RC3 finding F7). `resolve()` proves an
+      # `impl` row still points at a real symbol — claims cannot run AHEAD of
+      # code. The issue-state check proves an `open` row's gap still exists —
+      # claims cannot lag BEHIND it either, which is the harder half to notice
+      # because a stale gap declaration does not look stale.
+      #
+      # GH_TOKEN is passed so the issue-state half actually runs here; it is
+      # network-optional and silently skips locally, so CI is the place it is
+      # guaranteed to execute.
+      - name: Compliance evidence consistency (exact-pin, both directions)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/check_evidence.py
+
+      # A CSD's flow block must be byte-identical to the executable flow file it
+      # names, in both directions (FSD/CSD_STANDARD.md §7). This is what makes a
+      # screen reorder fail CI unless the spec moves with it (CIRISClient#39).
+      - name: CSD spec/flow identity (both directions)
+        run: python tools/dev/check_csd.py
+
+      # D27: runtime code must not depend on its own .md (outside L4 attestation
+      # tree). Stdlib-only AST gate, no deps. CIRISAgent#807.
+      - name: D27 runtime .md-reference gate
+        run: python tools/dev/check_no_runtime_md_reference.py
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        # Retry-wrapped per 2.8.11 CI hardening: PyPI transients (slow mirror
+        # selection, 503s, regional CDN flake) cause single-attempt installs
+        # to fail ~1-2% of runs. nick-fields/retry@v4 with exp backoff turns
+        # those into noise instead of CI failures. Worst-case wait: 3×30s.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            pip install --upgrade pip
+            pip install typing_extensions>=4.0.0
+            pip install -r requirements.txt
+            pip install -r requirements-dev.txt
+
+      - name: Run mypy strict type checking
+        run: |
+          mypy ciris_engine --config-file mypy.ini
+
+  # Sharded test execution - 8 parallel jobs for ~8x speedup
+  test:
+    name: Test (shard ${{ matrix.shard }}/8)
+    runs-on: ubuntu-latest
+    # 30 -> 60: THE JOB CLOCK INCLUDES CHECKOUT, AND CHECKOUT GOT SLOW.
+    #
+    # Shard 1 was killed at 30m20s on run 32284797337 having spent ~12 minutes in
+    # actions/checkout before pytest started — the same slow full clone that made
+    # the Repo Size Audit time out the same day. That left the 25-minute test
+    # budget with ~18 minutes of job clock to fit into, so the OUTERMOST bound
+    # fired first.
+    #
+    # Which is exactly the failure the nested-bounds comment below exists to
+    # prevent: when GitHub's backstop wins, the inner bounds never run, so the
+    # hang-stacks artifact they exist to produce is never written. Shard 1
+    # uploaded no stacks and no durations — a self-reporting diagnostic once again
+    # structurally unable to report.
+    #
+    # The inner bounds are UNCHANGED and still correctly ordered
+    # (1380s controller < 1500s SIGTERM < job). Only the backstop moves, so it
+    # goes back to being a backstop rather than the thing that kills the run.
+    # This does not slow a healthy shard: the 25-minute SIGTERM still bounds the
+    # actual test run.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Essential for accurate SonarQube results
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Clean Python Cache and Test Artifacts
         run: |
@@ -38,21 +180,622 @@ jobs:
           rm -rf data/*.db || true
 
       - name: Install Dependencies
-        run: |
-          pip install --upgrade pip
-          pip install typing_extensions>=4.0.0
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            pip install --upgrade pip
+            pip install typing_extensions>=4.0.0
+            pip install -r requirements.txt
+            pip install -r requirements-dev.txt
+            pip install pytest-split  # For test sharding
 
-      - name: Run mypy strict type checking
-        run: |
-          mypy ciris_engine --config-file mypy.ini
-
-      - name: Run tests and coverage
+      - name: Run tests (shard ${{ matrix.shard }}/8)
         env:
           CI: true
         run: |
-          pytest tests/ -n 4 --cov=./ --cov-report=xml:coverage.xml
+          # Sharded test execution with stability flags:
+          # --splits 8 --group N: Split tests into 8 groups, run group N
+          # --splitting-algorithm=least_duration: Balance by test duration
+          # --store-durations: Save durations to .test_durations (JSON dict)
+          # --reruns=2: Rerun failed/crashed tests up to 2 times
+          # -n 4: 4 parallel workers within each shard
+          # --dist=loadgroup: Respect xdist_group markers (keep grouped tests on same worker)
+          # timeout 1500 (25 min) MUST stay meaningfully below the job's
+          # timeout-minutes (now 60). It was 1800 — exactly equal to the
+          # then-30m job bound — and since the job
+          # clock starts at checkout while this one starts here (~2 min later),
+          # the job timeout ALWAYS won. The SIGTERM never arrived, so the #956
+          # sessionfinish guard and SIGTERM faulthandler could never dump the
+          # stacks they exist to dump: a self-reporting diagnostic that was
+          # structurally unable to report.
+          #
+          # Observed 2026-08-02 on shard 3 (run 30730155206): every test passed
+          # at 99% and 03:27:44, then 13 minutes of silence, then GitHub killed
+          # the job at 03:40 with orphan pytest/python processes still alive.
+          # No stack dump, because the internal timeout would not have fired
+          # until 03:42.
+          #
+          # THREE NESTED BOUNDS, innermost first. Each must stay strictly below
+          # the next or the inner one can never fire:
+          #
+          #   --session-timeout=2520 (42m)  pytest gives up and REPORTS
+          #   timeout ... 2700       (45m)  SIGTERM if pytest itself is wedged
+          #   timeout-minutes: 60           GitHub's backstop (was 30; checkout
+          #                                 alone now eats ~12m of the job clock)
+          #
+          # The session bound is the one that actually fixes the 2026-08-02
+          # shard-3 hang. Root cause, from the first stacks this hang has ever
+          # produced: a worker (gw2) died without reporting — it appears zero
+          # times in the log and produced no dump — and the controller sat in
+          # `xdist/dsession.py:154 loop_once` waiting for results that could
+          # never arrive. The likely death is the SIGBUS race that
+          # `_release_persist_engine` already documents for this same shard.
+          # `--max-worker-restart=4` did not catch it, so the controller waited
+          # forever.
+          #
+          # CORRECTION (2026-08-02, run 30754955268): `--session-timeout` bounds
+          # the loop ONLY WHILE WORKERS ARE STILL COMPLETING ITEMS. pytest-timeout
+          # evaluates it in its runtest_protocol hookwrapper — workers only,
+          # between items. When the last live worker wedged INSIDE a test at
+          # native level (persist/sqlx teardown race; the per-test thread-method
+          # timer never got the GIL), nothing evaluated it again and the external
+          # SIGTERM was what finally killed the run — exit 124, no stacks. The
+          # flag stays because it covers the still-cycling variant and exits 1,
+          # but it is not the controller's bound. That is
+          # CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS below: an in-process
+          # wall-clock deadline armed at conftest import in the controller only,
+          # which dumps every thread's stack to the hang-stacks artifact and
+          # exits 1 BEFORE the external 1500s SIGTERM — so the bound that kills
+          # the run is the one that reports it. Opt-in via env on purpose: a
+          # healthy local full-suite run may legitimately outlive any number
+          # this job would pick, so the number lives with the job that knows
+          # its budget. Ordering: controller deadline 2580 < SIGTERM 2700 < job 60m.
+          #
+          # RESIZED 2026-08-19 (run 32296077047). Shard 6 tripped the 1380s
+          # deadline at 76% WITH TESTS STILL PASSING, and the stacks it dumped —
+          # the first this bound has ever produced, now that the job backstop no
+          # longer pre-empts it — carried NO ciris_engine or test frames at all.
+          # The only project frames were the watchdog's own `_emit_stacks`,
+          # `_controller_deadline` and `_hang_watchdog`. Nothing was wedged.
+          #
+          # The deadline fires on elapsed time regardless of progress, so its
+          # "a worker is likely wedged in native code" message was a
+          # misdiagnosis. 15k+ tests over 8 shards no longer fit in 23 minutes;
+          # four shards exceeded 20m of test time on the same run. This is a
+          # resize, not a hang fix — there was no hang.
+          #
+          # THE 15-MINUTE GAP TO THE JOB BOUND IS DELIBERATE. The job clock
+          # starts at checkout, which has been observed at ~12 minutes on this
+          # repo. SIGTERM at 45m inside a 60m job leaves room for that; sizing
+          # the inner bounds closer to 60 would recreate the exact failure above,
+          # where the outer bound wins and the inner ones never report.
+          # COVERAGE_FILE: emit the raw coverage DATA file, not a per-shard XML
+          # report. The old flow wrote 8 full-tree XMLs and "merged" them by
+          # appending <package> elements, which never OR'd the per-line hits, so
+          # Sonar resolved each file to ONE arbitrary shard's view and scored lines
+          # as uncovered that other shards had covered (CIRISAgent#1116).
+          # `coverage combine` unions properly, and is the only thing that can
+          # merge BRANCH data at all.
+          #
+          # No leading dot in the name: upload-artifact skips hidden files unless
+          # include-hidden-files is set, which would silently drop the data.
+          COVERAGE_FILE=coverage-data-shard-${{ matrix.shard }} \
+          CIRIS_TEST_CONTROLLER_DEADLINE_SECONDS=2580 \
+          timeout --signal=SIGTERM --kill-after=30 2700 \
+            pytest tests/ -n 4 --dist=loadgroup \
+            --splits 8 --group ${{ matrix.shard }} \
+            --splitting-algorithm=least_duration \
+            --store-durations --durations-path=test_durations_shard_${{ matrix.shard }} \
+            --reruns=2 --reruns-delay=1 --max-worker-restart=4 \
+            --session-timeout=2520 \
+            --cov=./ --cov-report=
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-data-shard-${{ matrix.shard }}
+          path: coverage-data-shard-${{ matrix.shard }}
+          retention-days: 1
+
+      - name: Upload durations artifact
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: durations-shard-${{ matrix.shard }}
+          path: test_durations_shard_${{ matrix.shard }}
+          retention-days: 7
+
+      # Exit-hang stacks (#956). Written by tests/conftest.py to a FILE rather
+      # than stderr on purpose: pytest installs fd-level capture before conftest
+      # is imported, so a hung or killed process never flushes anything written
+      # to stderr — which is why the 2026-08-02 shard-3 hang produced no
+      # diagnostics at all despite a watchdog being armed for exactly it.
+      #
+      # if: always() because the interesting case is precisely the failed or
+      # cancelled run. Absent on a healthy shard, so an empty upload here is the
+      # expected outcome and `if-no-files-found: ignore` keeps it quiet.
+      - name: Upload exit-hang stacks
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: hang-stacks-shard-${{ matrix.shard }}
+          path: hang-stacks-*.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Postgres backend verification — Phase 1 of 2.9.0 waterfall.
+  # Runs the persist-routed test suite against a real Postgres so the
+  # sqlx-bundled Postgres backend is verified before 2.9.0 ships. Scope is
+  # the persistence layer; full agent QA on Postgres comes later once
+  # Phases 2-4 finish migrating raw-SQL callers to persist substrate.
+  test-postgres:
+    name: Test (persist backend = postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ciris_test
+          POSTGRES_PASSWORD: ciris_test_password
+          POSTGRES_DB: ciris_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ciris_test -d ciris_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            pip install --upgrade pip
+            pip install typing_extensions>=4.0.0
+            pip install -r requirements.txt
+            pip install -r requirements-dev.txt
+
+      - name: Run persistence tests against Postgres-backed persist
+        env:
+          CI: true
+          CIRIS_DB_URL: postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db
+          # Mark this run so test fixtures that need to opt out of the
+          # Postgres backend (e.g. legacy SQLite-only schema tests) can
+          # skip themselves cleanly. Phases 2-4 will widen the scope.
+          CIRIS_TEST_BACKEND: postgres
+        run: |
+          # Phase 1 scope: persist-substrate roundtrip tests + the
+          # tests that drive ciris-persist directly. Excludes legacy
+          # raw-SQL tests pending Phase 2-4 migration.
+          # 900s (15 min) against this job's timeout-minutes: 20 — same
+          # inversion as the shard job above, where 1200 exactly equalled the
+          # job budget and the job always won first. Keep a real gap so a hang
+          # here self-reports instead of being killed silently.
+          timeout --signal=SIGTERM --kill-after=30 900 \
+            pytest \
+              tests/ciris_engine/logic/persistence/ \
+              tests/test_persistence/ \
+              -n 4 \
+              --reruns=2 --reruns-delay=1 \
+              --timeout=120 \
+              -k "not sqlite_only" \
+              -m "not skip_postgres"
+
+  # Staged QA — run the full QA suite against a venv installed from the
+  # canonical staged tree (tools.dev.stage_runtime → wheel → venv).
+  # Validates the SHIPPED wheel artifact, not just the source tree. Catches
+  # the class of bug where setup.py / MANIFEST.in / staging diverge silently
+  # and the wheel ships incomplete content (the 2.8.4 thin-wheel + missing
+  # conscience-prompts incident class). Fast (~3–4 min on cold cache) so
+  # cheap to gate releases on.
+  staged-qa:
+    name: Staged QA (${{ matrix.subset }})
+    runs-on: ubuntu-latest
+    # Matrix-split: all_1 / all_2 run as parallel jobs, each dual-backend
+    # (sqlite + postgres, parallel). fail-fast off so one leg's failure
+    # doesn't cancel the other.
+    #
+    # timeout-minutes 30 was too short: each job runs sqlite + postgres as
+    # concurrent subprocesses, and the postgres leg is meaningfully slower
+    # (real PG vs in-process SQLite). It consistently overran the 30-min
+    # cap, so GH SIGTERM'd the job mid-run — the postgres agent then did a
+    # normal graceful shutdown and its remaining ~77 tests failed
+    # "connection refused", while the faster sqlite leg had already gone
+    # green. Raised to 55 so the slower leg finishes cleanly.
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        subset: [all_1, all_2]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-staged-qa-${{ hashFiles('requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-staged-qa-
+            ${{ runner.os }}-pip-
+
+      - name: Install TPM2 system libraries
+        # Required at runtime by ciris-verify v1.13.2's Linux x86_64 wheel
+        # (libtss2-tctildr.so.0 + transitive friends). Without these,
+        # `from ciris_verify import verify_tree` fails at ctypes.CDLL with
+        # `OSError: libtss2-tctildr.so.0: cannot open shared object file`.
+        # Full subset per CIRISAgent#740: tctildr + esys + mu + rc + sys.
+        # ubuntu-latest ships without them by default; production Dockerfile
+        # apt-installs the same set.
+        #
+        # Retry-wrapped per 2.8.11 CI hardening: apt mirror selection
+        # occasionally returns stale package lists or transient 503s.
+        #
+        # A RETRY WRAPPER CANNOT HELP IF ONE ATTEMPT HANGS (2026-08-19, job
+        # 96231479052). Staged QA (all_2) failed here having run for exactly
+        # 5m01s — the per-attempt timeout — and the log shows only "Attempt 1".
+        # Attempts 2 and 3 never happened: the first one consumed the entire
+        # allowance, inside a 55-minute job with plenty of room left.
+        #
+        # The cause is in the log: every azure.archive.ubuntu.com line is `Ign:`.
+        # The mirror was unreachable and apt has NO default network timeout, so
+        # `apt-get update` sat there until the wrapper killed it. Retries only
+        # help a command that FAILS; they do nothing for one that never returns.
+        #
+        # So bound apt's own network calls. A dead mirror now errors in seconds
+        # and the retry does what it was added to do. Acquire::Retries covers the
+        # transient-503 case inside a single attempt, which is cheaper than a
+        # whole new attempt.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 15
+          shell: bash
+          command: |
+            APT_NET_OPTS=(-o Acquire::Retries=3
+                          -o Acquire::http::Timeout=20
+                          -o Acquire::https::Timeout=20)
+            sudo apt-get update "${APT_NET_OPTS[@]}"
+            sudo apt-get install -y --no-install-recommends "${APT_NET_OPTS[@]}" \
+              libtss2-esys-3.0.2-0t64 \
+              libtss2-mu-4.0.1-0t64 \
+              libtss2-rc0t64 \
+              libtss2-sys1t64 \
+              libtss2-tctildr0t64 \
+              libtss2-tcti-device0t64
+
+      - name: Install dev deps + build tooling
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            pip install --upgrade pip wheel
+            # qa_runner needs the dev requirements to run (rich, requests, etc.);
+            # the staged venv installs the wheel's runtime deps separately via
+            # tools.qa_runner.staged_env.
+            pip install -r requirements.txt
+            pip install -r requirements-dev.txt
+            pip install build  # for stage_env's wheel-build step
+
+      - name: Cross-platform parity assertion (staged tree == wheel install)
+        # Pre-flight: prove the canonical staging algorithm produces the same
+        # bytes the wheel ships. If this fails, every downstream platform
+        # (Android Chaquopy, iOS Resources, docker, wheel install) drifts
+        # from the signed manifest and L4 cannot pass. Cheap to assert here.
+        run: |
+          python3 -m tools.dev.stage_runtime --check --quiet > /tmp/staged-hash
+          # Build a wheel from the staged tree, install into a tempvenv,
+          # walk what got installed and compare. (Reuses staged_env.prepare
+          # which is what qa_runner --from-staged calls.)
+          python3 -m tools.qa_runner.staged_env --rebuild --root /tmp/ciris-staged-qa
+          python3 -m tools.dev.stage_runtime --check --quiet \
+            --src /tmp/ciris-staged-qa/venv/lib/python3.12/site-packages \
+            > /tmp/installed-hash
+          echo "Staged tree hash:    $(cat /tmp/staged-hash)"
+          echo "Wheel-install hash:  $(cat /tmp/installed-hash)"
+          if ! diff -q /tmp/staged-hash /tmp/installed-hash; then
+            echo "::error::Canonical staged tree and wheel install diverge!"
+            echo "::error::See tools/dev/stage_runtime.py::ExemptRules vs setup.py package_data + MANIFEST.in."
+            exit 1
+          fi
+          echo "✓ Canonical staging == wheel install (byte-equal)"
+
+      - name: Run QA against staged venv (${{ matrix.subset }}, dual backend)
+        env:
+          # Force first-run state so the QA runner can drive the setup wizard.
+          CIRIS_FORCE_FIRST_RUN: "1"
+        run: |
+          # --from-staged: server-under-test is the wheel-installed ciris-server
+          # in /tmp/ciris-staged-qa/venv (already prepared by the parity-check
+          # step above; staged_env.prepare is idempotent and reuses it).
+          # --no-mock-llm not set → uses mock LLM (no API keys needed in CI).
+          #
+          # --database-backends sqlite postgres: exercises the full QA suite
+          # against BOTH persistence backends SEQUENTIALLY. qa_runner
+          # self-provisions the postgres backend via a docker container
+          # (ubuntu-latest ships Docker); no GH service block needed.
+          #
+          # NOT --parallel-backends (2026-07-20 all_1 RCA, 5 consecutive
+          # failures): the node-folded substrate binds fixed host-wide ports
+          # (:4242 reticulum transport, :4243 node read-API) and both legs
+          # share CIRIS_HOME (one data/edge/edge_identity.rid). Two
+          # simultaneous legs therefore cross-contaminate: the loser of the
+          # :4242 bind race gets "Address already in use", its node_fold then
+          # finds the WINNER's :4243 node and reuses it — a foreign node with
+          # a diverged signing key (each leg's startup wipe re-mints the
+          # shared identity) — and every accord-metrics capture fails
+          # `receive_and_persist: ValueError: verify_unknown_key` (×244 →
+          # incidents gate → exit 1). Sequential legs each get the host to
+          # themselves. Restore --parallel-backends only after the substrate
+          # exposes per-instance node/edge listen addrs (CIRISServer ask
+          # filed; agent guard: node_fold identity-verified reuse).
+          # ORDER MATTERS: postgres FIRST, sqlite LAST. Sequential legs each
+          # wipe $GITHUB_WORKSPACE/data at start, and the postgres leg's
+          # engine state lives in the docker postgres (no ciris_engine.db on
+          # disk) — so if postgres ran last, the fixture-capture step below
+          # would find the data dir wiped of the sqlite leg's DB (run
+          # 29850066267). With sqlite last, its ciris_engine.db is the final
+          # on-disk state, exactly what capture-upgrade-fixture snapshots.
+          python3 -m tools.qa_runner ${{ matrix.subset }} --from-staged \
+            --database-backends postgres sqlite
+
+      - name: Capture upgrade-compat fixture (qa-full)
+        # Snapshot the post-QA-sweep agent state as a "full-coverage"
+        # upgrade fixture. qa_runner exercises every module's API surface,
+        # so the DB carries the widest variety of graph/audit/secrets
+        # state of the three host workflows. See tools/release/UPGRADE_FIXTURE.md.
+        # qa_runner sets CIRIS_HOME=project_root, so DBs land at
+        # $GITHUB_WORKSPACE/data — the action's default location.
+        # Captured on the all_1 leg only — one fixture, no cross-leg
+        # artifact-name collision.
+        if: success() && matrix.subset == 'all_1'
+        uses: ./.github/actions/capture-upgrade-fixture
+        with:
+          source-name: qa-full
+
+      - name: Upload qa_status snapshot
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: staged-qa-status-${{ matrix.subset }}
+          path: qa_reports/qa_status.json
+          retention-days: 14
+
+      # The RUNTIME logs, not just the verdict. Staged QA reported 191 HTTP
+      # bodies saying "Invalid session token" and not one line explaining why:
+      # the responses reached the job output, the server logs that would name
+      # the rejecting branch stayed on the runner and were discarded. A failure
+      # you can see but not diagnose costs a full CI round-trip per hypothesis.
+      # `if: always()` because a PASSING run's logs are how you learn what
+      # normal looks like — which is what makes the failing one legible.
+      - name: Upload staged QA runtime logs
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: staged-qa-logs-${{ matrix.subset }}
+          path: |
+            logs/
+            qa_reports/
+            !**/*.db
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Surface incidents log to job summary on failure
+        # Don't make operators download the artifact + grep by hand. The
+        # actual cause of "agent never reached WORK" is usually a single
+        # ERROR/CRITICAL block in incidents_latest.log — pull it inline so
+        # it's visible in the GitHub Actions step log and the job summary.
+        if: failure()
+        run: |
+          {
+            echo "## 🚨 Staged QA (${{ matrix.subset }}) failed — surfacing logs"
+            echo
+            for backend in sqlite postgres; do
+              inc="logs/${backend}/incidents_latest.log"
+              if [ -f "$inc" ]; then
+                echo "### ${backend}: ERROR / CRITICAL lines from \`$inc\`"
+                echo
+                echo '```'
+                # Each ERROR/CRITICAL line + 5 following lines for traceback
+                # context. `grep -A 5 ... | head -200` caps at 200 lines so a
+                # runaway stack trace doesn't blow out the summary.
+                grep -nE ' - (ERROR|CRITICAL)|RUNTIME SHUTDOWN REQUESTED' -A 5 "$inc" \
+                  | head -200 \
+                  || echo "(no ERROR/CRITICAL lines — investigate latest.log)"
+                echo '```'
+                echo
+              else
+                echo "### ${backend}: no incidents log at \`$inc\`"
+                echo
+              fi
+            done
+            echo "Full logs in artifact: **staged-qa-server-logs-${{ matrix.subset }}**"
+            echo
+            echo "Download with: \`gh run download <RUN_ID> -n staged-qa-server-logs-${{ matrix.subset }}\`"
+            echo "(NOT \`-p '*'\` — path filters silently drop everything that doesn't match)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Also echo a marker to the step log so it's findable in a scroll.
+          echo "::group::Incidents log highlights (also in job summary)"
+          for backend in sqlite postgres; do
+            inc="logs/${backend}/incidents_latest.log"
+            if [ -f "$inc" ]; then
+              echo "--- ${backend} ---"
+              grep -nE ' - (ERROR|CRITICAL)|RUNTIME SHUTDOWN REQUESTED' -A 5 "$inc" | head -200 || true
+            fi
+          done
+          echo "::endgroup::"
+
+      - name: Upload server logs on failure
+        uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: staged-qa-server-logs-${{ matrix.subset }}
+          path: |
+            logs/
+            /tmp/ciris-staged-qa/venv/lib/python3.12/site-packages/logs/
+          retention-days: 7
+          if-no-files-found: warn
+
+  # Combine coverage and run SonarQube after all shards complete
+  test-summary:
+    name: Test Summary
+    needs: [typecheck, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: coverage-data-shard-*
+          path: coverage/
+          merge-multiple: true
+
+      - name: Combine coverage reports
+        run: |
+          pip install coverage
+          # UNION the shards, do not concatenate them.
+          #
+          # This used to parse the 8 per-shard XMLs and append their <package>
+          # elements into one tree. That produced a coverage.xml with 8 entries
+          # per file — one per shard, each holding only that shard's hits — and
+          # nothing ever OR'd the per-line counts. Sonar resolved the duplicate
+          # keys to a single arbitrary shard, so lines covered by tests in a
+          # different shard were reported UNCOVERED, and new_coverage came out
+          # far below the truth (CIRISAgent#1116: edge_runtime.py lines 314-316
+          # and 330 were covered by shards 1-6 and scored as uncovered).
+          #
+          # `coverage combine` is what actually merges: it unions line hits and
+          # arc/branch data, which the XML append could not do at all.
+          shopt -s nullglob
+          files=(coverage/coverage-data-shard-*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No coverage data files found — every shard's data is missing."
+            exit 1
+          fi
+          echo "Combining ${#files[@]} shard data file(s):"
+          printf '  %s\n' "${files[@]}"
+          # A shard whose data is missing must be LOUD: a silently absent shard
+          # is exactly the failure mode that produced the wrong number before.
+          if [ ${#files[@]} -ne 8 ]; then
+            echo "::warning::Expected 8 shard data files, found ${#files[@]} — coverage is understated."
+          fi
+          coverage combine "${files[@]}"
+          coverage xml            # [xml] output = coverage.xml in .coveragerc
+          coverage report --format=total | sed 's/^/Combined line coverage: /'
+          ls -la coverage.xml
+
+      - name: Download all duration artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: durations-shard-*
+          path: durations/
+          merge-multiple: true
+
+      - name: Analyze slowest tests (top 1%)
+        run: |
+          python -c "
+          import json
+          import glob
+
+          # Collect all test durations from all shards
+          # pytest-split format: {test_nodeid: duration_seconds, ...}
+          all_tests = []
+          for f in glob.glob('durations/test_durations_shard_*'):
+              try:
+                  with open(f) as fp:
+                      data = json.load(fp)
+                      for test_name, duration in data.items():
+                          all_tests.append({
+                              'name': test_name,
+                              'duration': duration
+                          })
+              except Exception as e:
+                  print(f'Warning: Could not parse {f}: {e}')
+
+          if not all_tests:
+              print('No test duration data found')
+              exit(0)
+
+          # Sort by duration descending
+          all_tests.sort(key=lambda x: x['duration'], reverse=True)
+
+          total = len(all_tests)
+          top_1_pct = max(1, total // 100)  # At least 1 test
+
+          print(f'## Slowest Tests (Top 1% of {total} tests)')
+          print()
+          print(f'| Rank | Duration | Test |')
+          print(f'|------|----------|------|')
+
+          total_slow_time = 0
+          for i, test in enumerate(all_tests[:top_1_pct], 1):
+              duration = test['duration']
+              total_slow_time += duration
+              name = test['name']
+              # Truncate long names
+              if len(name) > 80:
+                  name = '...' + name[-77:]
+              print(f'| {i} | {duration:.2f}s | \`{name}\` |')
+
+          print()
+          total_time = sum(t['duration'] for t in all_tests)
+          print(f'**Top 1% ({top_1_pct} tests) account for {total_slow_time:.1f}s of {total_time:.1f}s total ({100*total_slow_time/total_time:.1f}%)**')
+          " | tee slowest-tests.md
+
+          # Add to GitHub Actions summary
+          echo "## 🐢 Slowest Tests" >> $GITHUB_STEP_SUMMARY
+          cat slowest-tests.md >> $GITHUB_STEP_SUMMARY
 
       - name: Display and write version
         env:
@@ -62,7 +805,7 @@ jobs:
           cat BUILD_INFO.txt || echo "No BUILD_INFO.txt created"
 
       - name: Upload BUILD_INFO artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-info
           path: BUILD_INFO.txt
@@ -79,189 +822,474 @@ jobs:
             echo "should_run=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: SonarQube Scan
+      - name: SonarCloud Scan
         if: steps.check_sonar.outputs.should_run == 'true'
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarcloud-github-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-gui:
-    name: Build GUI Assets
-    needs: test
-    runs-on: ubuntu-latest
-    if: success()
-    steps:
-      - name: Checkout CIRISGUI-Standalone
-        uses: actions/checkout@v4
-        with:
-          repository: CIRISAI/CIRISGUI-Standalone
-          path: cirisgui
-
-      - name: Find Next.js app directory
-        id: find_app
-        run: |
-          # Find the directory containing package.json and next.config.mjs
-          GUI_DIR=$(find cirisgui -name "package.json" -type f -exec dirname {} \; | head -1)
-          if [ -z "$GUI_DIR" ]; then
-            echo "❌ Could not find package.json in CIRISGUI-Standalone repo"
-            exit 1
-          fi
-          echo "Found Next.js app in: $GUI_DIR"
-          echo "gui_dir=$GUI_DIR" >> $GITHUB_OUTPUT
-
-          # Verify next.config.mjs exists
-          if [ ! -f "$GUI_DIR/next.config.mjs" ]; then
-            echo "⚠️  Warning: next.config.mjs not found in $GUI_DIR"
-          else
-            echo "✅ next.config.mjs found"
-          fi
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: cirisgui/package-lock.json
-
-      - name: Configure for static export
-        run: |
-          cd ${{ steps.find_app.outputs.gui_dir }}
-          # Ensure next.config.mjs has output: 'export'
-          if [ -f next.config.mjs ]; then
-            if ! grep -q "output.*:.*['\"]export['\"]" next.config.mjs 2>/dev/null; then
-              echo "⚠️  Warning: next.config.mjs may need output: 'export' configuration"
-              echo "Attempting to add it..."
-              # Backup original
-              cp next.config.mjs next.config.mjs.bak
-              # Add output export if not present (simple approach)
-              sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" next.config.mjs || true
-            fi
-            echo "✅ Static export configuration verified"
-          else
-            echo "⚠️  Skipping next.config.mjs configuration (file not found)"
-          fi
-
-      - name: Install dependencies
-        run: |
-          # Install from monorepo root (where package-lock.json lives)
-          # Use npm install instead of npm ci to handle minor version drift in lock file
-          cd cirisgui
-          npm install --legacy-peer-deps
-
-      - name: Build static assets
-        id: build_gui
-        run: |
-          cd ${{ steps.find_app.outputs.gui_dir }}
-          npm run build
-          echo "✅ GUI build complete"
-
-          # Check for static export first, fallback to .next/standalone
-          if [ -d "out" ]; then
-            echo "Using static export from out/"
-            ls -la out/ | head -20
-            BUILD_OUTPUT="out"
-          elif [ -d ".next/standalone" ]; then
-            echo "Using standalone build from .next/standalone"
-            ls -la .next/standalone/ | head -20
-            BUILD_OUTPUT=".next/standalone"
-          elif [ -d ".next/static" ]; then
-            echo "Using static build from .next/static"
-            ls -la .next/static/ | head -20
-            BUILD_OUTPUT=".next/static"
-          else
-            echo "❌ No build output found (checked: out/, .next/standalone, .next/static)"
-            ls -la
-            exit 1
-          fi
-
-          echo "build_output=$BUILD_OUTPUT" >> $GITHUB_OUTPUT
-
-      - name: Upload GUI artifacts
-        id: upload_gui
-        uses: actions/upload-artifact@v4
-        with:
-          name: gui-static-assets
-          path: ${{ steps.find_app.outputs.gui_dir }}/${{ steps.build_gui.outputs.build_output }}/
-          retention-days: 7
-
+  # Platform-specific wheels: each runner builds the desktop JAR for its OS,
+  # then setup.py detects the JAR platform and tags the wheel accordingly.
+  # Runs in parallel with tests; `publish-wheels` is the gate that requires
+  # test-summary to have passed before any wheel is uploaded.
   build-wheel:
-    name: Build Python Wheel
-    needs: [test, build-gui]
-    runs-on: ubuntu-latest
-    if: success()
+    name: Build Wheel (${{ matrix.name }})
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false  # Don't cancel other builds if one fails/is cancelled
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS ARM64
+          # macOS Intel: built and uploaded manually (GitHub runner capacity issues)
+          - os: ubuntu-latest
+            name: Linux x64
+          - os: windows-latest
+            name: Windows x64
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
-      - name: Download GUI artifacts
-        uses: actions/download-artifact@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          name: gui-static-assets
-          path: ciris_engine/gui_static/
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Verify GUI assets
+      - name: Set up Gradle (with distribution + dependency cache)
+        # 2.8.11 Tier 2 CI hardening: setup-gradle@v4 caches the Gradle
+        # distribution itself (the gradle-X.Y-bin.zip download that timed
+        # out post-2.8.10 merge) AND the dependency cache (~/.gradle/caches).
+        # First run on a runner downloads + caches; subsequent runs and
+        # subsequent jobs on the same workflow share the cache.
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Vendor the CIRIS Desktop UberJar from the client wheel
+        # WAS two steps: `./gradlew :shared:desktopTest` and
+        # `./gradlew :desktopApp:packageUberJarForCurrentOS`, plus a freshness
+        # assertion against packageVersion in desktopApp/build.gradle.kts.
+        #
+        # Both modules are gone. The shared client and the desktop app are built
+        # by CIRISAI/CIRISClient; the desktop app ships as the uber-jar inside the
+        # `ciris-client` platform wheel, which `ciris-server` already depends on.
+        # So the jar arrives with `pip install` and is copied into
+        # ciris_engine/desktop_app/ -- exactly where the gradle build used to put
+        # it. (The Kotlin tests went upstream with the source they cover.)
+        #
+        # The wheel layout is deliberately unchanged: setup.py derives this
+        # wheel's PLATFORM TAG from the bundled jar's filename, MANIFEST.in ships
+        # the directory, and ciris_engine/desktop_launcher.py globs it at runtime.
+        # Sourcing the jar differently is a small change; moving it would have
+        # rewritten all three.
+        #
+        # The freshness check survives in the form that still applies: it can no
+        # longer compare against a local packageVersion, so it asserts the pinned
+        # client version instead. The failure it prevents is unchanged -- a stale
+        # jar shipping as fresh, reaching users as "Node is vX - app built for Y".
+        shell: bash
         run: |
-          echo "GUI assets downloaded to ciris_engine/gui_static/"
-          ls -la ciris_engine/gui_static/ | head -20
-          FILE_COUNT=$(find ciris_engine/gui_static -type f | wc -l)
-          echo "Total files: $FILE_COUNT"
-          if [ "$FILE_COUNT" -lt 5 ]; then
-            echo "⚠️  Warning: Very few GUI files found"
-          else
-            echo "✅ GUI assets look good"
+          set -euo pipefail
+          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+          [ -n "$CLIENT_VERSION" ] || { echo "::error::no ciris-client== pin in requirements.txt"; exit 1; }
+
+          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d /tmp/clientwheel
+          # The freshness assertion lives in the script: upstream names the jar
+          # for its own product version (client 0.5.192 -> CIRIS-*-1.5.192.jar),
+          # so a naive "does the filename contain 0.5.192" check fails on every
+          # correct build. The script compares the shared minor.patch tail.
+          python tools/dev/vendor_desktop_jar.py /tmp/clientwheel ciris_engine/desktop_app "$CLIENT_VERSION"
+          ls -lh ciris_engine/desktop_app/
+
+      # NOTE: JRE bundling removed to keep wheel size under PyPI's 100MB limit.
+      # The desktop JAR (~60MB) is included; users must have Java 17+ installed.
+      # The CLI provides platform-specific installation instructions if Java
+      # is not found (see ciris_engine/desktop_launcher.py).
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel
+
+      - name: Build wheel
+        run: |
+          python -m build --wheel
+          ls -lh dist/
+        shell: bash
+
+      - name: Check wheel contents
+        run: |
+          WHEEL_FILE=$(ls dist/*.whl)
+          echo "Wheel: $WHEEL_FILE"
+          unzip -l "$WHEEL_FILE" | grep "\.jar" || echo "WARNING: No JAR found in wheel!"
+          echo "Total files:"
+          unzip -l "$WHEEL_FILE" | tail -1
+        shell: bash
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: wheel-${{ matrix.os }}
+          path: dist/*.whl
+          retention-days: 30
+
+  # Windows fat installer: PyInstaller-bundled ciris-agent.exe + jlink-trimmed
+  # JRE + Compose desktop JAR + libciris_verify.dll, all wrapped in a single
+  # Inno Setup .exe. Solves the "Python install path issues" + "Java not
+  # installed" pain points for non-technical Windows users (2.7.6 install
+  # initiative). Output uploaded as a CI artifact and attached to GitHub
+  # Releases on tagged main pushes.
+  #
+  # See installers/windows/README.md for the full pipeline rationale and
+  # how to build locally for testing without a CI run.
+  build-windows-installer:
+    name: Build Windows Installer
+    # Runs in parallel with tests; produces a CI artifact for human download.
+    # No downstream job depends on it, so test-summary is not a prerequisite.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Set up Java 17 (for jlink + desktop JAR build)
+        # CIRISAgent#875 — Liberica, NOT Temurin: the jlink runtime trimmed
+        # here ships inside the Windows installer, and Temurin 17 dropped
+        # Windows 7 support. BellSoft Liberica JDK 17 officially supports
+        # Win7 SP1, so the bundled runtime launches on the supported floor.
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'liberica'
+          java-version: '17'
+
+      - name: Set up Gradle (with distribution + dependency cache)
+        # 2.8.11 Tier 2 CI hardening — see equivalent step in build-wheel
+        # matrix above for rationale.
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Install Python dependencies
+        # Retry-wrapped per 2.8.11 CI hardening.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install pyinstaller
+
+      - name: Vendor the CIRIS Desktop UberJar from the client wheel
+        # Same source as the matrix wheel build: the installer needs the jar
+        # whether or not the wheel job ran in this workflow. No gradle here any
+        # more -- :desktopApp is gone, and the jar comes from the pinned
+        # ciris-client wheel. That also retires the retry wrapper, which existed
+        # for gradle's distribution download; pip has its own retries.
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLIENT_VERSION=$(grep -oE '^ciris-client==[0-9.]+' requirements.txt | cut -d= -f3)
+          [ -n "$CLIENT_VERSION" ] || { echo "::error::no ciris-client== pin in requirements.txt"; exit 1; }
+          python -m pip download "ciris-client==${CLIENT_VERSION}" --no-deps -d /tmp/clientwheel
+          python tools/dev/vendor_desktop_jar.py /tmp/clientwheel ciris_engine/desktop_app "$CLIENT_VERSION"
+          ls -lh ciris_engine/desktop_app/
+
+      - name: Build PyInstaller bundle
+        run: |
+          cd installers/windows
+          pyinstaller ciris-agent.spec --noconfirm
+          ls dist/ciris-agent/ | head -20
+        shell: bash
+
+      - name: Locate desktop JAR for installer
+        # PyInstaller's --onedir lands the bundle at
+        #   installers/windows/dist/ciris-agent/
+        # but Inno Setup's .iss expects the bundle at
+        #   dist/ciris-agent/ (repo-root-relative).
+        # Move it up + ensure the desktop JAR is at the path the .iss
+        # references.
+        run: |
+          mkdir -p dist
+          mv installers/windows/dist/ciris-agent dist/
+          # The desktop jar now lives in ciris_engine/desktop_app/, vendored
+          # from the ciris-client wheel above; the .iss path was updated to match.
+          ls dist/ciris-agent/ | head -10
+        shell: bash
+
+      - name: Trim JRE via jlink
+        run: |
+          $jar = Get-ChildItem -Path 'ciris_engine\desktop_app' -Filter 'CIRIS-*.jar' | Select-Object -First 1
+          if (-not $jar) { Write-Error "No CIRIS-windows-*.jar found"; exit 1 }
+          .\installers\windows\bundle-jre.ps1 -JarPath $jar.FullName -OutputDir dist\runtime
+        shell: pwsh
+
+      - name: Fetch Universal CRT redist (Windows 7 prerequisite, best-effort)
+        # CIRISAgent#875 — Win7 needs KB2999226 for the api-ms-win-crt-*
+        # import-sets the bundled Rust/Python binaries carry. Best-effort:
+        # the .iss bundles it with skipifsourcedoesntexist, so a failed/rot
+        # download never breaks the build (Win8.1+ ignores it; Win7 users
+        # can hand-provision per installers/windows/README.md).
+        continue-on-error: true
+        run: |
+          $dst = "installers/windows/redist"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          $url = "https://download.microsoft.com/download/5/B/C/5BC5DBB3-652D-4DCE-B14A-475AB85EEF6E/Windows6.1-KB2999226-x64.msu"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile "$dst/Windows6.1-KB2999226-x64.msu" -UseBasicParsing -TimeoutSec 120
+            Write-Host "UCRT redist fetched."
+          } catch {
+            Write-Warning "UCRT redist fetch failed ($_); installer will build without it (Win7 users hand-provision)."
+          }
+        shell: pwsh
+
+      - name: Install Inno Setup
+        # Retry-wrapped per 2.8.11 CI hardening: chocolatey CDN can return
+        # transient HTTP 503 / connection-reset; one bad fetch shouldn't
+        # tank the entire installer build.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: pwsh
+          command: choco install innosetup -y --no-progress
+
+      - name: Build installer with Inno Setup
+        # Pass the version explicitly so the installer name and metadata
+        # match what the bundled binaries report. Read from constants.py
+        # to keep one source of truth.
+        run: |
+          # Read CIRIS_VERSION without importing the `ciris_engine`
+          # package — the package's __init__ pulls full runtime + deps
+          # not installed in this job (only ciris-verify is). exec()'ing
+          # constants.py directly runs only its stdlib imports +
+          # constant assignments. Strip "-stable" suffix to match the
+          # installer-name convention.
+          $version = python -c "exec(open('ciris_engine/constants.py').read()); print(CIRIS_VERSION.replace('-stable',''))"
+          Write-Host "Building installer for CIRIS $version"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+              "/DCirisVersion=$version" `
+              installers\windows\ciris-installer.iss
+          Get-ChildItem dist\*.exe
+        shell: pwsh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-installer
+          path: dist/CIRIS-Setup-*.exe
+          retention-days: 30
+
+  # Headless wheel (no desktop JAR) for server-only deployments.
+  # Tagged py3-none-any so it's a universal fallback.
+  build-wheel-headless:
+    name: Build Wheel (Headless)
+    # Runs in parallel with tests; gated downstream by `publish-wheels`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: |
+          pip install --upgrade pip
+          pip install build wheel
+
+      - name: Build headless wheel (no JAR)
+        run: |
+          # Ensure no JAR or bundled JRE is present so setup.py produces py3-none-any
+          rm -rf ciris_engine/desktop_app/*.jar ciris_engine/desktop_app/jre
+          python -m build --wheel
+          ls -lh dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: wheel-headless
+          path: dist/*.whl
+          retention-days: 30
+
+  # The tag is the release's source of truth, and it must agree with the code.
+  # Every publishing job needs this AND repeats the tag condition in its own
+  # `if:` (tests/workflows/test_release_only_on_tag.py checks both), so a job
+  # cannot be made to publish on main by editing one line.
+  release-gate:
+    name: Release Gate (tag == CIRIS_VERSION)
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Refuse to publish unless the tag names the version in code
+        id: check
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py)
+          if [ -z "$VERSION" ]; then
+            echo "::error::could not read CIRIS_VERSION from ciris_engine/constants.py"
+            exit 1
           fi
+          if [ "$TAG_NAME" != "v$VERSION" ]; then
+            echo "::error::tag '$TAG_NAME' != v$VERSION (CIRIS_VERSION). Refusing to publish."
+            echo "::error::Bump with tools/dev/bump_version.py, merge, then tag THAT commit."
+            exit 1
+          fi
+          # Every other version site (Android versionName, mobile version files,
+          # client pins) must agree too -- a tag on a half-bumped tree is the
+          # same incomplete release this gate exists to stop.
+          python3 tools/dev/check_version_alignment.py
+          # Only a commit that is on main may be released: a tag pushed on an
+          # unmerged branch would otherwise publish code nobody reviewed.
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tagged commit $GITHUB_SHA is not on origin/main. Refusing to publish."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing CIRIS $VERSION from $TAG_NAME ($GITHUB_SHA)"
+
+  # Collect all wheels and publish to PyPI + alias packages + SDK
+  publish-wheels:
+    name: Publish Wheels
+    # Choke point gating all release-side jobs: the release gate must have
+    # passed, tests must have passed AND all wheels must have built.
+    # register-build / deploy / android-release transitively depend on this
+    # through their `needs` chains.
+    needs: [release-gate, test-summary, build-wheel, build-wheel-headless]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
+
+      - name: List all wheels
+        run: ls -lh dist/*.whl
 
       - name: Install build tools
         run: |
           pip install --upgrade pip
           pip install build twine
 
-      - name: Build wheel
-        run: |
-          python -m build --wheel
-          ls -lh dist/
-
-      - name: Check wheel contents
-        run: |
-          WHEEL_FILE=$(ls dist/*.whl)
-          echo "Checking contents of $WHEEL_FILE"
-          unzip -l "$WHEEL_FILE" | grep -E "(gui_static|covenant|main\.py)" | head -20 || echo "Pattern not found"
-          echo ""
-          echo "Total files in wheel:"
-          unzip -l "$WHEEL_FILE" | tail -1
-
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-wheel
-          path: dist/*.whl
-          retention-days: 30
-
       - name: Publish to PyPI
-        if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m twine upload dist/*.whl
+          # NO continue-on-error: a 2.7.4 incident hid the PyPI project-size
+          # quota rejection (`400 Project size too large`) behind a green
+          # build for two releases — only the 9.2 MB headless wheel made
+          # it to PyPI, the three platform-specific wheels (~65-70 MB each)
+          # were silently dropped, and Linux/macOS/Windows desktop installs
+          # got the headless wheel with no JAR. If twine fails now, this
+          # step fails — visible in CI, not buried.
+          python -m twine upload dist/*.whl --skip-existing --verbose
+
+      - name: Build and publish alias packages
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          # Build and publish alias packages (depend on ciris-agent)
+          for pkg in packages/ciris-engine packages/cirisagent packages/cirisai packages/ciris-ai; do
+            if [ -d "$pkg" ]; then
+              echo "Building $pkg..."
+              cd "$pkg"
+              python -m build --wheel
+              python -m twine upload dist/*.whl --skip-existing || true
+              cd ../..
+            fi
+          done
+
+      - name: Build and publish SDK
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          cd ciris_sdk
+          python -m build --wheel
+          python -m twine upload dist/*.whl --skip-existing || true
 
   build:
     name: Build Docker Images
-    needs: test
+    # Runs in parallel with tests; gated downstream by `register-build`
+    # (which needs both this job and `publish-wheels`, and `publish-wheels`
+    # carries the test-summary gate).
     runs-on: ubuntu-latest
-    if: success()
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Download BUILD_INFO artifact
-        uses: actions/download-artifact@v4
+      # Generate BUILD_INFO inline rather than downloading the test-summary
+      # artifact — keeps this job parallel with tests. version.py just hashes
+      # the Python tree and HMAC-signs it; no test-result dependency.
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          name: build-info
-          path: .
+          python-version: '3.12'
+
+      - name: Generate BUILD_INFO
+        env:
+          CIRIS_BUILD_SIGN_KEY: ${{ secrets.CIRIS_BUILD_SIGN_KEY }}
+        run: |
+          python version.py
+          cat BUILD_INFO.txt || echo "No BUILD_INFO.txt created"
+
+      # The "Regenerate startup_python_hashes.json" bridge step was retired
+      # in 2.8.6 (CIRISAgent#740). Desktop / server now call ciris_verify
+      # v1.13.2's verify_tree() FFI directly against agent_root — no JSON
+      # middleman. Mobile (Chaquopy) keeps its own boot-time hash dump for
+      # Algorithm B. Closes the L3 ceiling on installs (CIRISVerify#9).
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -276,10 +1304,29 @@ jobs:
 
       - name: Get version from constants
         id: version
+        env:
+          REF: ${{ github.ref }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
+          # The :<version> and :latest image tags are a release (CIRISManager
+          # deploys :latest). They are pushed only from a release tag that names
+          # this exact version; this job does not wait for release-gate (it runs
+          # in parallel with the tests), so it repeats the check itself rather
+          # than push a mislabelled :latest before the gate fails.
+          RELEASE=false
+          case "$REF" in
+            refs/tags/v*-stable)
+              if [ "$TAG_NAME" != "v$VERSION" ]; then
+                echo "::error::tag '$TAG_NAME' != v$VERSION (CIRIS_VERSION). Refusing to push release images."
+                exit 1
+              fi
+              RELEASE=true
+              ;;
+          esac
+          echo "release=$RELEASE" >> $GITHUB_OUTPUT
 
       - name: Extract metadata
         id: meta
@@ -290,8 +1337,8 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
             type=sha
-            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.release == 'true' }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.release == 'true' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -305,7 +1352,33 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
+      # Research trace-capture harness — published alongside the agent image so
+      # the research team can pull a pinned, reproducible capture environment
+      # instead of building from a working tree. Isolated by construction:
+      # container-local DB, logs and port, so a capture run on a shared box
+      # cannot collide with development or with another run.
+      - name: Extract metadata (research capture)
+        id: meta_research
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/cirisai/ciris-research-capture
+          tags: |
+            type=ref,event=branch
+            type=sha
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.release == 'true' }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.release == 'true' }}
 
+      - name: Build and push research capture image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.research
+          push: ${{ github.repository == 'CIRISAI/CIRISAgent' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+          tags: ${{ steps.meta_research.outputs.tags }}
+          labels: ${{ steps.meta_research.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
       - name: Build Summary
         if: always()
@@ -327,14 +1400,349 @@ jobs:
           echo "### Images:" >> $GITHUB_STEP_SUMMARY
           echo "- ciris-agent" >> $GITHUB_STEP_SUMMARY
 
+  register-build:
+    name: Register Build with CIRISRegistry
+    needs: [release-gate, build, publish-wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install ciris-build-sign (CIRISVerify v1.10.1+)
+        # v1.10.1 ships the `register` subcommand which writes all 3 registry
+        # tables (builds + binary_manifests + function_manifests) — closes
+        # the parent-row gap that left 2.7.8/2.7.9 with only function_manifests
+        # rows (#727). Also cuts over from gRPC RegisterBuild → HTTP POST
+        # /v1/builds; drops REGISTRY_JWT_SECRET requirement. Pinned to the
+        # current runtime triple (verify 5.0.0, bounded <6.0.0) so the CLI
+        # matches what the agent signs against at runtime — avoids canonical-
+        # hash skew on register. The edge-1.5 cut moved the runtime verify wheel
+        # to 5.0.0 (persist 4.10.0 lifted its `ciris-verify` pin to `<6,>=5`), so
+        # the JCS canonicalization (#59/#61) is now consistent sign-time and
+        # runtime; the bound just keeps the signer on the same major as runtime.
+        run: |
+          pip install --upgrade "ciris-verify>=5.0.0,<6.0.0"
+          which ciris-build-sign && ciris-build-sign --version
+
+      - name: Emit build-secrets hash file
+        # The agent's release builds inject secrets at build time into files
+        # not in the source repo. Their SHA-256 hashes are tracked in
+        # build_agent_extras.py and surfaced here for ciris-build-sign
+        # --tree-extra-hashes-file consumption.
+        run: |
+          python tools/ops/build_agent_extras.py > build-secrets.json
+          cat build-secrets.json
+          # Desktop staged tree does NOT contain _build_secrets.py (it is
+          # generated at deployment time). Mobile Resources/app DOES contain
+          # it (generated at iOS build time). Split so each sign step uses
+          # the correct extra-hashes file.  See CIRISAgent#743.
+          echo '{}' > build-secrets-desktop.json
+          cp build-secrets.json build-secrets-mobile.json
+
+      - name: Stage canonical runtime tree
+        # Produce the SAME tree CIRISVerify walks at runtime. Single source of
+        # truth for: (a) the manifest signed below, (b) the wheel content (via
+        # setup.py package_data + MANIFEST.in), (c) Android Chaquopy bundle,
+        # (d) iOS Resources bundle. Every consumer hashes the same bytes, so
+        # the runtime walk produces the same total_hash the signing-time walk
+        # produced — L4 file integrity passes by construction.
+        #
+        # Algorithm matches ciris_verify_core::security::build_manifest::
+        # walk_file_tree + ExemptRules byte-for-byte. See tools/dev/
+        # stage_runtime.py docstring for the full rule set.
+        run: |
+          python3 -m tools.dev.stage_runtime /tmp/ciris-staged --print-manifest > /tmp/ciris-staged-manifest.json
+          # Echo the hash to the workflow log so a green build is auditable.
+          python3 -c "import json; m=json.load(open('/tmp/ciris-staged-manifest.json')); print(f'Staged hash: {m[\"total_hash\"]}'); print(f'Staged files: {m[\"files_copied\"]}')"
+
+      - name: Sign build manifest (Python runtime, staged)
+        env:
+          # Fleet convention: secrets stored base64-encoded; ciris-build-sign
+          # reads the seed/secret as FILE PATHS (not raw values), so we
+          # materialize to mktemp paths before invocation. Pattern matches
+          # CIRISPersist/.github/workflows/ci.yml exactly. Bridge-provisioned
+          # across all 6 onboarded repos on 2026-05-01.
+          CIRIS_BUILD_ED25519_SECRET: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
+          CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
+        run: |
+          if [ -z "${CIRIS_BUILD_ED25519_SECRET}" ] || [ -z "${CIRIS_BUILD_MLDSA_SECRET}" ]; then
+            echo "::error::Hybrid signing secrets not configured."
+            echo "::error::Set CIRIS_BUILD_ED25519_SECRET and CIRIS_BUILD_MLDSA_SECRET."
+            echo "::error::See CIRISPersist/docs/BUILD_SIGNING.md for ciris-build-sign generate-keys + secret upload."
+            exit 1
+          fi
+          # Materialize the secret bytes to short-lived files. set +x stays
+          # OFF so the secret never echoes to logs (GH Actions auto-masks
+          # declared secrets, but belt-and-suspenders here too).
+          umask 077
+          ED_KEY_PATH=$(mktemp)
+          MLDSA_KEY_PATH=$(mktemp)
+          # Secrets are stored base64-encoded; decode to raw bytes for the CLI.
+          printf '%s' "${CIRIS_BUILD_ED25519_SECRET}" | base64 -d > "$ED_KEY_PATH"
+          printf '%s' "${CIRIS_BUILD_MLDSA_SECRET}" | base64 -d > "$MLDSA_KEY_PATH"
+
+          # Read CIRIS_VERSION as a string literal without importing the
+          # `ciris_engine` package (transitive import chain pulls runtime
+          # deps not installed in this signing job; only ciris-verify is).
+          # Strip the channel suffix (-stable / -rc / -beta) so the
+          # registry receives plain semver in `binary_version` per #726
+          # — every other primitive ships plain semver, and the registry
+          # does exact-string match on the column. Format in source:
+          # `CIRIS_VERSION = "x.y.z-stage"`.
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
+          fi
+          echo "CIRIS_VERSION (stripped of channel suffix) = $VERSION"
+          GIT_SHA=$(git rev-parse HEAD)
+          # Sign the staged tree. No --tree-include or --tree-exempt-* flags
+          # needed: stage_runtime already applied the canonical filter, so
+          # what's at /tmp/ciris-staged is exactly what gets signed and
+          # exactly what the runtime walks. Target name preserved as
+          # python-source-tree for v1.12.x verify-client compatibility (the
+          # name is historical; the content is now the staged runtime).
+          # Explicit --tree-include / --tree-exempt-dir / --tree-exempt-ext flags
+          # match tools/dev/stage_runtime.py::ExemptRules byte-for-byte. Without
+          # them, ciris-build-sign falls back to its internal defaults which
+          # exclude .json (and other non-py extensions) — that drops 30+ real
+          # runtime data files (ciris_engine/data/localized/*.json) from the
+          # registered manifest, even though they're already in the staged tree
+          # AND in the wheel install. Caught at L4 validation post-2.8.6 merge.
+          # CIRISAgent#742, drift-protection in tests/dev/test_canonical_rules_parity.py.
+          ciris-build-sign sign \
+            --primitive agent \
+            --tree /tmp/ciris-staged \
+            --tree-include ciris_engine ciris_adapters ciris_sdk \
+            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git tests examples gui_static desktop_app \
+            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 md pyi deleted \
+            --tree-extra-hashes-file build-secrets-desktop.json \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA" \
+            --target python-source-tree \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
+            --key-id "agent-steward-2026" \
+            --output build-manifest.json
+          # Wipe key files immediately after signing.
+          shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
+
+      - name: Extract mobile Resources.zip
+        run: |
+          mkdir -p apps/ios/Resources/app
+          cd apps/ios/Resources && unzip -qo ../Resources.zip
+
+      - name: Sign mobile build manifest
+        env:
+          # Same secret-materialization pattern as the Python source-tree
+          # sign step above; see that step's comment block for rationale.
+          CIRIS_BUILD_ED25519_SECRET: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
+          CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
+        run: |
+          if [ -z "${CIRIS_BUILD_ED25519_SECRET}" ] || [ -z "${CIRIS_BUILD_MLDSA_SECRET}" ]; then
+            echo "::error::Hybrid signing secrets not configured (mobile sign step)."
+            exit 1
+          fi
+          umask 077
+          ED_KEY_PATH=$(mktemp)
+          MLDSA_KEY_PATH=$(mktemp)
+          printf '%s' "${CIRIS_BUILD_ED25519_SECRET}" | base64 -d > "$ED_KEY_PATH"
+          printf '%s' "${CIRIS_BUILD_MLDSA_SECRET}" | base64 -d > "$MLDSA_KEY_PATH"
+
+          # Strip channel suffix per #726 (plain semver to registry).
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: failed to extract CIRIS_VERSION from ciris_engine/constants.py"; exit 1
+          fi
+          echo "CIRIS_VERSION (stripped of channel suffix) = $VERSION"
+          GIT_SHA=$(git rev-parse HEAD)
+          ciris-build-sign sign \
+            --primitive agent \
+            --tree apps/ios/Resources/app \
+            --tree-include ciris_engine ciris_adapters ciris_ios ciris_sdk \
+            --tree-exempt-dir __pycache__ .venv venv node_modules logs .pytest_cache .mypy_cache dist build .ruff_cache .coverage .tox .nox .git tests examples gui_static desktop_app \
+            --tree-exempt-ext pyc pyo env log audit db sqlite sqlite3 md pyi deleted \
+            --tree-extra-hashes-file build-secrets-mobile.json \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA-mobile" \
+            --target ios-mobile-bundle \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
+            --key-id "agent-steward-2026" \
+            --output build-manifest-mobile.json
+          # Wipe key files immediately after signing.
+          shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
+
+      - name: Register release with CIRISRegistry (file mode + binary mode)
+        # Single-step replacement for the legacy two-curl-POST flow, per
+        # CIRISAgent#727. ciris-build-sign register (v1.10.1+) writes all
+        # 3 registry tables — builds + binary_manifests + function_manifests —
+        # in one call, closing the parent-row gap that left every release
+        # ≥ 2.7.8 with only function_manifests rows. Mode auto-detected
+        # from the BuildManifest:
+        #   - python-source-tree → FILE mode (FileTreeExtras present)
+        #     → writes builds row + function_manifests
+        #   - ios-mobile-bundle  → BINARY mode (binary hash present)
+        #     → writes builds row + binary_manifests + function_manifests
+        # Mixed modes in a single register call are rejected, so we run
+        # two calls per release (#727 § "single mode per release call").
+        # REGISTRY_JWT_SECRET no longer needed (v1.10.1 cut over to HTTP
+        # POST /v1/builds with REGISTRY_ADMIN_TOKEN bearer).
+        # Pre-flight requirement: agent-steward pubkey must be registered
+        # as a trusted key for project='ciris-agent' via
+        # RegisterTrustedPrimitiveKey admin RPC (otherwise HTTP 403
+        # no_trusted_key).
+        env:
+          REGISTRY_URL: ${{ vars.REGISTRY_URL }}
+          REGISTRY_ADMIN_TOKEN: ${{ secrets.REGISTRY_ADMIN_TOKEN }}
+          CIRIS_BUILD_ED25519_SECRET: ${{ secrets.CIRIS_BUILD_ED25519_SECRET }}
+          CIRIS_BUILD_MLDSA_SECRET: ${{ secrets.CIRIS_BUILD_MLDSA_SECRET }}
+        run: |
+          if [ -z "${CIRIS_BUILD_ED25519_SECRET}" ] || [ -z "${CIRIS_BUILD_MLDSA_SECRET}" ]; then
+            echo "::error::Hybrid signing secrets not configured (register step)."
+            exit 1
+          fi
+          umask 077
+          ED_KEY_PATH=$(mktemp)
+          MLDSA_KEY_PATH=$(mktemp)
+          printf '%s' "${CIRIS_BUILD_ED25519_SECRET}" | base64 -d > "$ED_KEY_PATH"
+          printf '%s' "${CIRIS_BUILD_MLDSA_SECRET}" | base64 -d > "$MLDSA_KEY_PATH"
+
+          # Strip channel suffix per #726 (plain semver to registry).
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
+          GIT_SHA=$(git rev-parse HEAD)
+
+          # Call 1: python-source-tree (file mode → builds row, file_manifest_json populated).
+          echo "::group::register python-source-tree (file mode)"
+          ciris-build-sign register \
+            --project ciris-agent \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA" \
+            --target python-source-tree:./build-manifest.json \
+            --modules core \
+            --source-repo "https://github.com/CIRISAI/CIRISAgent" \
+            --source-commit "$GIT_SHA" \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
+            --key-id "agent-steward-2026"
+          echo "::endgroup::"
+
+          # Call 2: ios-mobile-bundle (binary mode → builds + binary_manifests + function_manifests).
+          # Two separate `builds` rows per release is fine; they're keyed on
+          # build_hash which differs because the `binaries` map differs.
+          echo "::group::register ios-mobile-bundle (binary mode)"
+          ciris-build-sign register \
+            --project ciris-agent \
+            --binary-version "$VERSION" \
+            --build-id "$GIT_SHA-mobile" \
+            --target ios-mobile-bundle:./build-manifest-mobile.json \
+            --modules ios \
+            --source-repo "https://github.com/CIRISAI/CIRISAgent" \
+            --source-commit "$GIT_SHA" \
+            --ed25519-seed "$ED_KEY_PATH" \
+            --mldsa-secret "$MLDSA_KEY_PATH" \
+            --key-id "agent-steward-2026"
+          echo "::endgroup::"
+
+          # Wipe key files immediately after register.
+          shred -uz "$ED_KEY_PATH" "$MLDSA_KEY_PATH" 2>/dev/null || rm -f "$ED_KEY_PATH" "$MLDSA_KEY_PATH"
+
+      - name: Verify per-target builds rows registered (CIRISVerify v2.0.3+ contract)
+        # Asserts the CanonicalBuild v2 + per-target row dispatcher landed
+        # correctly. Pre-v2.0.3, both register calls shared one builds row
+        # and whichever ran second silently overwrote the first in version-
+        # lookup — every non-iOS agent failed L4 against the live registry.
+        # v2.0.3+: each target gets its own row; default GET returns the
+        # python-source-tree (canonical Python-file manifest) by default;
+        # ?target= filter returns the requested target. See CIRISVerify#8,
+        # CIRISRegistry#11, CIRISAgent#749.
+        env:
+          # Use the SAME REGISTRY_URL the register step posted to (vars-driven),
+          # so a staging cutover can't have register hit one backend while the
+          # smoke check validates a different one. Codex feedback on PR #750.
+          REGISTRY_URL: ${{ vars.REGISTRY_URL }}
+        run: |
+          set -eux
+          # Strip channel suffix; mirrors the sign step's normalization
+          VERSION=$(awk -F'"' '/^CIRIS_VERSION = /{print $2; exit}' ciris_engine/constants.py | sed -E 's/-(stable|rc[0-9]*|beta[0-9]*|alpha[0-9]*)$//')
+          # Tolerate trailing slash on the configured registry URL
+          REGISTRY="${REGISTRY_URL%/}"
+          if [ -z "$REGISTRY" ]; then
+            echo "::error::vars.REGISTRY_URL is not configured — smoke step cannot run"
+            exit 1
+          fi
+          BASE="$REGISTRY/v1/builds/$VERSION?project=ciris-agent"
+
+          # POLL, DO NOT ASSERT INSTANTLY (2.9.23 failure).
+          #
+          # This asserted the read-back the moment the write returned. On 2.9.23
+          # BOTH registrations reported success —
+          #
+          #   OK (200 OK): Build registered ... (ios-mobile-bundle), build_id=785e663e-...
+          #   OK: registered ciris-agent 2.9.23 (1 target, all 3 tables written)
+          #
+          # — and the ios row still read back EMPTY seconds later, failing the
+          # release job on a build that had in fact published. A registry that
+          # acknowledges a write before it is queryable is not broken; asserting
+          # against it with zero tolerance is.
+          #
+          # Same shape as the shared-task claim in #1057: a write that reports
+          # success and cannot immediately be read back. There the fix was to
+          # verify; here it is to verify WITH PATIENCE, then say plainly which
+          # target is missing.
+          #
+          # set +e around the polling: a curl failure is a retry, not a job kill.
+          poll_target() {   # $1 = query suffix, $2 = expected target
+            local url="$BASE$1" want="$2" got="" waited=0
+            while [ "$waited" -lt 90 ]; do
+              got=$(curl -fsS "$url" 2>/dev/null | jq -r '.target // ""' || echo "")
+              [ "$got" = "$want" ] && { echo "$want"; return 0; }
+              sleep 5; waited=$((waited + 5))
+            done
+            echo "${got:-EMPTY}"
+            return 1
+          }
+
+          set +e
+          PY_TARGET=$(poll_target "" "python-source-tree");            PY_RC=$?
+          IOS_TARGET=$(poll_target "&target=ios-mobile-bundle" "ios-mobile-bundle"); IOS_RC=$?
+          set -e
+
+          # Report BOTH before failing. Exiting at the first miss hid whether the
+          # other row was fine, which is half the diagnosis on a re-run.
+          echo "python-source-tree : $PY_TARGET (rc=$PY_RC)"
+          echo "ios-mobile-bundle  : $IOS_TARGET (rc=$IOS_RC)"
+
+          if [ "$PY_RC" -ne 0 ] || [ "$IOS_RC" -ne 0 ]; then
+            echo "::error::Registry rows did not become queryable within 90s."
+            echo "::error::python-source-tree=$PY_TARGET ios-mobile-bundle=$IOS_TARGET"
+            echo "::error::Both register calls reported 200 OK — if a row is still missing,"
+            echo "::error::the write was acknowledged but not indexed. Re-running this job is"
+            echo "::error::SAFE and idempotent: registration is keyed on build_hash, so a"
+            echo "::error::repeat POST of an identical build is an upsert, not a duplicate."
+            exit 1
+          fi
+
+          echo "✓ Both target rows registered and queryable (python-source-tree + ios-mobile-bundle)"
+
   deploy:
     name: Notify CIRISManager of Update
-    needs: build
+    needs: [release-gate, build, register-build]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.repository == 'CIRISAI/CIRISAgent'
+    timeout-minutes: 10
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
     environment: production
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 1  # Just need the latest commit message
 
@@ -422,3 +1830,112 @@ jobs:
           echo ""
           echo "CIRISManager will handle the deployment orchestration."
           echo "Agents will be notified based on the canary deployment strategy."
+
+  # Build Android debug APK + attach Windows installer, create the GitHub
+  # release for the pushed tag. Single release per version with both APK and
+  # Windows .exe as assets. The tag already exists (it triggered this run), so
+  # the release attaches to it rather than minting one on github.sha.
+  android-release:
+    name: Publish Release (Android APK + Windows Installer)
+    needs: [release-gate, build, register-build, build-windows-installer]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-stable') && github.repository == 'CIRISAI/CIRISAgent'
+    permissions:
+      contents: write  # Required for creating releases and tags
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Gradle (with distribution + dependency cache)
+        # 2.8.11 Tier 2 CI hardening — Android job. Caches the Gradle
+        # distribution + the Android Gradle Plugin dependency tree.
+        # First run downloads + caches; subsequent runs are warm.
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Set up Python 3.10 (required by Chaquopy)
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Symlink python3.10 for Chaquopy
+        run: |
+          PYTHON_PATH=$(which python3.10)
+          if [ ! -f /usr/bin/python3.10 ] && [ -n "$PYTHON_PATH" ]; then
+            sudo ln -s "$PYTHON_PATH" /usr/bin/python3.10
+          fi
+
+      - name: Get version from constants
+        id: version
+        run: |
+          VERSION=$(grep "^CIRIS_VERSION = " ciris_engine/constants.py | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Fetch the published CIRISClient AAR
+        # WITHOUT THIS THE APK CANNOT BUILD, and it has not since the client
+        # migration. `apps/android/libs/*.aar` is gitignored on purpose — it is a
+        # 15 MB pre-built binary of another repo's source, exactly what the
+        # repo-size rule excludes ("distribute via GitHub Releases and fetch on
+        # install"). So a clean CI checkout has no AAR at all, and Gradle fails
+        # to resolve it:
+        #
+        #     Execution failed for task ':android:checkDebugAarMetadata'.
+        #     > Could not find :ciris-client-0.5.194:.
+        #       Searched in: apps/android/libs/ciris-client-0.5.194.aar
+        #
+        # That is why v2.9.42 published no Android APK. The failure is in the
+        # release job only, so nothing on a PR catches it — the artifact simply
+        # never appears, which looks the same as a release that had none.
+        #
+        # The version comes from requirements.txt's `ciris-client==` pin, so this
+        # cannot drift from the wheel's client.
+        run: python3 tools/fetch_client_artifacts.py --platform android
+        env:
+          # The fetcher resolves the asset URL with `gh release view`, which
+          # needs a token on a runner even for a public repo. Without this it
+          # fails auth and the APK build fails one step later anyway.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build debug APK
+        run: |
+          cd apps
+          ./gradlew :android:syncPythonSources
+          ./gradlew :android:assembleDebug
+
+          # Copy APK with version name
+          VERSION="${{ steps.version.outputs.version }}"
+          cp android/build/outputs/apk/debug/android-debug.apk \
+             android/build/outputs/apk/debug/CIRIS-$VERSION-debug.apk
+
+          ls -lh android/build/outputs/apk/debug/
+
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-installer
+          path: dist-windows/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: CIRIS Agent v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            apps/android/build/outputs/apk/debug/CIRIS-${{ steps.version.outputs.version }}-debug.apk
+            dist-windows/CIRIS-Setup-*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

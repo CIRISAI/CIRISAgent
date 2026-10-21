@@ -21,7 +21,7 @@ python tools/qa_runner/test_billing_qa.py
 **How QA Runner Works (Option 1):**
 1. **Auto-starts** the API server (python main.py --adapter api --mock-llm --port 8000)
 2. **Waits** for agent to reach WORK state (~30-45s for TSDB consolidation)
-3. **Auto-authenticates** with admin credentials (admin/ciris_admin_password)
+3. **Auto-authenticates** with admin credentials (admin/qa_test_password_12345)
 4. **Runs** all 5 billing tests via SDK client
 5. **Auto-stops** the server gracefully
 6. **Reports** results with pass/fail summary
@@ -41,7 +41,7 @@ from ciris_sdk.client import CIRISClient
 
 async with CIRISClient(base_url="http://localhost:8000") as client:
     # Login with admin credentials
-    await client.login("admin", "ciris_admin_password")
+    await client.login("admin", "qa_test_password_12345")
 
     # Get credit status
     status = await client.billing.get_credits()
@@ -216,7 +216,7 @@ async def test_local():
 
     # Local server with SimpleCreditProvider
     async with CIRISClient(base_url="http://localhost:8000") as client:
-        await client.login("admin", "ciris_admin_password")
+        await client.login("admin", "qa_test_password_12345")
 
         tests = BillingTests(client, console)
         await tests.run()

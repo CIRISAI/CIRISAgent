@@ -165,9 +165,15 @@ async def runtime_control_service(mock_runtime, mock_adapter_manager, mock_time_
 
 @pytest_asyncio.fixture
 async def task_scheduler_service(mock_time_service):
-    """Create task scheduler service with mocked dependencies."""
-    with patch("ciris_engine.logic.services.lifecycle.scheduler.service.get_db_connection"):
-        service = TaskSchedulerService(db_path=":memory:", time_service=mock_time_service, check_interval_seconds=60)
+    """Create task scheduler service with mocked dependencies.
+
+    Post-A1 absorption: the scheduler service is persist-routed; the
+    legacy `get_db_connection` patch was removed because the symbol is
+    no longer imported by the migrated module. Tests below assert on
+    in-memory counters, so the DB layer is transparent.
+    """
+    service = TaskSchedulerService(db_path=":memory:", time_service=mock_time_service, check_interval_seconds=60)
+    if True:
 
         # Simulate some activity
         service._tasks_scheduled = 5

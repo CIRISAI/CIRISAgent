@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.schemas.api.telemetry import ServiceMetrics, TimeSyncStatus
+from ciris_engine.schemas.runtime.accord_halt import AccordHaltState
 from ciris_engine.schemas.runtime.manifest import ConfigurationStep
 from ciris_engine.schemas.services.resources_core import ResourceBudget, ResourceSnapshot
 from ciris_engine.schemas.types import JSONDict
@@ -20,20 +21,100 @@ from ...constants import DESC_CURRENT_COGNITIVE_STATE, DESC_HUMAN_READABLE_STATU
 # Health & Time Response Models
 
 
+class SystemWarning(BaseModel):
+    """A system-level warning that requires user attention."""
+
+    code: str = Field(..., description="Warning code (e.g., 'no_llm_provider', 'adapter_needs_reauth')")
+    message: str = Field(..., description="Human-readable warning message")
+    severity: str = Field("warning", description="Severity: 'info', 'warning', 'error'")
+    action_url: Optional[str] = Field(None, description="URL path to resolve the warning (e.g., '/settings/llm')")
+
+
 class SystemHealthResponse(BaseModel):
     """Overall system health status."""
 
     status: str = Field(..., description="Overall health status (healthy/degraded/critical)")
+    accord_halt: Optional[AccordHaltState] = Field(
+        None,
+        description=(
+            "The constitutional-halt latch as the agent's act gate last read it (CC 4.2.1.1). "
+            "`halted: true` with reading `in_effect` is a halt the node reports; `halted: true` "
+            "with any other reading means the latch could not be read and the agent fails closed. "
+            "A client renders those two differently: unknown is not a halt."
+        ),
+    )
+    role: str = Field(
+        "agent",
+        description=(
+            "What this runtime IS, declared rather than inferred. An agent is a node "
+            "with a brain added, so a bare node answers 'fabric-node' here and we answer "
+            "'agent'. Clients key their surface on this instead of guessing from "
+            "cognitive_state/services, which is how a half-started brain once read as a "
+            "full agent (#1075) and a brain-carrying home read as a bare node."
+        ),
+    )
     version: str = Field(..., description="System version")
     uptime_seconds: float = Field(..., description="System uptime in seconds")
     services: Dict[str, Dict[str, int]] = Field(..., description="Service health summary")
     initialization_complete: bool = Field(..., description="Whether system initialization is complete")
     cognitive_state: Optional[str] = Field(None, description="Current cognitive state if available")
     timestamp: datetime = Field(..., description="Current server time")
+    warnings: List[SystemWarning] = Field(default_factory=list, description="System warnings requiring attention")
+    degraded_mode: bool = Field(False, description="True when running without a working LLM provider")
+    agent: Optional[Dict[str, bool]] = Field(
+        None,
+        description=(
+            "Whether this agent's node is folded in and answering, in the shape the "
+            'node itself reports it: {"folded": bool, "reachable": bool}. The '
+            "client resolves AGENT vs NODE mode from these — a node has no brain to "
+            "configure, so getting this wrong costs the user the LLM setup screen. "
+            "Mirrored here so the agent is ONE address: the client should not need "
+            "to know the node's port to find out whether the brain it is talking to "
+            "is really there. None when the node fold is disabled or unreachable, "
+            "which is distinct from {folded: false} — could-not-determine is not the "
+            "same fact as is-not-folded."
+        ),
+    )
+    agent_capabilities: Optional[List[str]] = Field(
+        None,
+        description=(
+            "What the BRAIN can do, as distinct from what the node is conferred. "
+            "FOUR STATES, and the middle two are different facts: the key ABSENT "
+            "means this agent predates the field (upgrade it); `null` means the "
+            "agent could not read its own service registry (retry); `[]` means it "
+            "read and holds nothing (use another agent); a list is the set. "
+            "Collapsing null into [] tells an operator a still-initialising brain "
+            "can do nothing, permanently. "
+            "Named distinctly from the node's conferred `capabilities` ON PURPOSE: "
+            "this document is the node's health merged with the brain's, so a bare "
+            "`capabilities` here could not be attributed to either tier by a reader "
+            "holding only the parsed set. Conferred scopes are signed by the trust "
+            "root; these are not, and the two must never be unioned. Read by "
+            "CIRISClient's CapabilityWire as FIELD_AGENT."
+        ),
+    )
 
     @field_serializer("timestamp")
     def serialize_ts(self, timestamp: datetime, _info: Any) -> Optional[str]:
         return serialize_timestamp(timestamp, _info)
+
+
+class FederationAddressResponse(BaseModel):
+    """Local agent's federation identity (CIRISEdge signer_key_id).
+
+    Operators share this with peers who want to seed `federation_keys`
+    rows for them — it's the addressable identity used by Edge's
+    send_durable_inline_text(recipient_key_id=...) Reticulum routing.
+    """
+
+    available: bool = Field(..., description="True when Edge runtime is initialized and key_id queryable")
+    key_id: Optional[str] = Field(
+        None,
+        description="Federation key_id (the local agent's federation address); null when Edge runtime is disabled or not yet initialized",
+    )
+    edge_version: Optional[str] = Field(
+        None, description="Live ciris-edge crate version, or null when Edge runtime unavailable"
+    )
 
 
 class SystemTimeResponse(BaseModel):
@@ -171,6 +252,13 @@ class AdapterActionRequest(BaseModel):
 
     config: Optional[Any] = Field(None, description="Adapter configuration")
     force: bool = Field(False, description="Force the operation")
+    auto_start: bool = Field(
+        True,
+        description="Whether to start the adapter immediately after loading. "
+        "When False the adapter is registered but adapter.start() is NOT "
+        "called — it binds no network ports and opens no connections. Used "
+        "to verify a manifest loads without side effects.",
+    )
     persist: bool = Field(
         False,
         description="Whether to persist this adapter config for auto-load on restart. "
@@ -188,7 +276,11 @@ class ConfigStepInfo(BaseModel):
     step_type: str = Field(..., description="Type of step (discovery, oauth, select, confirm)")
     title: str = Field(..., description="Step title")
     description: str = Field(..., description="Step description")
-    optional: bool = Field(False, description="Whether this step is optional")
+    required: bool = Field(False, description="Whether this step is required")
+    # DERIVED, NEVER SET. Kept on the wire for any consumer that still reads it,
+    # but computed from `required` so the two cannot disagree -- which is the
+    # whole reason the manifest schema no longer has both.
+    optional: bool = Field(True, description="DEPRECATED: derived as `not required`; read `required`")
 
 
 class ConfigurableAdapterInfo(BaseModel):
@@ -208,6 +300,38 @@ class ConfigurableAdaptersResponse(BaseModel):
 
     adapters: List[ConfigurableAdapterInfo] = Field(..., description="List of configurable adapters")
     total_count: int = Field(..., description="Total number of configurable adapters")
+
+
+class LoadableAdapterInfo(BaseModel):
+    """Information about an adapter that can be loaded (with or without configuration)."""
+
+    adapter_type: str = Field(..., description="Type identifier for the adapter")
+    name: str = Field(..., description="Human-readable name")
+    description: str = Field(..., description="Description of the adapter")
+    requires_configuration: bool = Field(..., description="Whether this adapter needs configuration before loading")
+    # For adapters that require configuration
+    workflow_type: Optional[str] = Field(None, description="Type of configuration workflow (if requires_configuration)")
+    step_count: int = Field(0, description="Number of steps in the configuration workflow")
+    requires_oauth: bool = Field(False, description="Whether this adapter requires OAuth authentication")
+    steps: List[ConfigStepInfo] = Field(default_factory=list, description="Configuration steps (if any)")
+    # For all adapters
+    service_types: List[str] = Field(default_factory=list, description="Service types this adapter provides")
+    platform_available: bool = Field(True, description="Whether platform requirements are satisfied")
+    # External dependency checking
+    external_dependencies: List[str] = Field(default_factory=list, description="Required CLI tools or binaries")
+    dependencies_available: bool = Field(True, description="Whether all external dependencies are available")
+    missing_dependencies: List[str] = Field(default_factory=list, description="List of missing dependencies")
+    # Loaded instance tracking
+    loaded_instances: int = Field(0, description="Number of instances currently loaded for this adapter type")
+
+
+class LoadableAdaptersResponse(BaseModel):
+    """Response containing all loadable adapters."""
+
+    adapters: List[LoadableAdapterInfo] = Field(..., description="List of loadable adapters")
+    total_count: int = Field(..., description="Total number of loadable adapters")
+    configurable_count: int = Field(0, description="Number that require configuration")
+    direct_load_count: int = Field(0, description="Number that can be loaded directly")
 
 
 class ConfigurationSessionResponse(BaseModel):
@@ -298,6 +422,25 @@ class RemovePersistedResponse(BaseModel):
     message: str = Field(..., description="Status message")
 
 
+# Startup Status Models
+
+
+class StartupStatusResponse(BaseModel):
+    """Startup progress for desktop/client polling during boot."""
+
+    phase: str = Field(..., description="Current startup phase (STARTUP, FIRST_RUN, RESUME)")
+    services_online: int = Field(..., description="Number of services started")
+    services_total: int = Field(..., description="Total services expected")
+    service_names: List[str] = Field(default_factory=list, description="Names of started services in order")
+    api_status: str = Field(
+        default="",
+        description="API server startup status (creating_api, configuring_middleware, registering_routes, server_ready, etc.)",
+    )
+    api_status_history: List[str] = Field(
+        default_factory=list, description="Full history of API status phases for catch-up"
+    )
+
+
 # Tool Models
 
 
@@ -311,3 +454,80 @@ class ToolInfoResponse(BaseModel):
     category: str = Field("general", description="Tool category")
     cost: float = Field(0.0, description="Cost to execute the tool")
     when_to_use: Optional[str] = Field(None, description="Guidance on when to use the tool")
+
+
+class CanonicalReceipt(BaseModel):
+    """What ONE canonical said when asked whether it holds our newest trace.
+
+    Fields mirror `ciris_server.delivery_receipt()`'s `canonicals[]` entries.
+    Everything is optional because a canonical that could not be reached, whose
+    receipt did not verify, or whose answer was not bound to our ask, still
+    appears here — carrying the reason instead of the numbers. A missing value
+    is "we do not know", never "zero".
+    """
+
+    key_id: Optional[str] = Field(None, description="The canonical's node key id")
+    holds_newest: Optional[bool] = Field(
+        None,
+        description=(
+            "Does it hold the newest trace we authored? Projected from whichever spelling the "
+            "accessor used (newest_authored_held / holds_trace); null means the payload carried "
+            "none of them, NOT that the canonical said no — check raw_json."
+        ),
+    )
+    shipped_any: Optional[bool] = Field(
+        None,
+        description=(
+            "Has anything from this agent ever landed there? With holds_newest false, "
+            "True means the plane works and is behind; False means nothing ever landed."
+        ),
+    )
+    url: Optional[str] = Field(None, description="The read URL asked")
+    url_source: Optional[str] = Field(None, description="How that URL was derived (baked ip hint, or config override)")
+    error: Optional[str] = Field(None, description="Why this canonical contributed no numbers")
+
+
+class TraceDeliveryReceipt(BaseModel):
+    """The RECEIVER's signed assertion that our traces landed.
+
+    `delivery_status()` reports the producer's preconditions — rooted, KEX
+    present, envelopes sent. Those can all be green while nothing was stored at
+    the far end, which is why the five-platform gate's trace rung was keyed on a
+    counter the node did not expose over HTTP (CIRISServer#487). This carries the
+    other side's answer instead: each canonical signs `GET /v1/traces/receipt`
+    with its node key, and our node verifies it against its own directory,
+    checks the key's standing at the instant of the ask, and accepts only a
+    receipt whose signed agent, trace id and nonce are exactly what it asked.
+
+    `held_by_every_answering_canonical` is deliberately TRI-STATE:
+      True  — delivered.
+      False — a canonical that answered does not hold it; read `canonicals[]`.
+      None  — UNKNOWN, NOT ZERO. Nothing may read this as a failure.
+    """
+
+    available: bool = Field(..., description="False when this build has no delivery_receipt accessor")
+    held_by_every_answering_canonical: Optional[bool] = Field(
+        None, description="verdict.newest_authored_held_by_every_answering_canonical — tri-state"
+    )
+    agent_id_hash: Optional[str] = Field(None, description="The hash asked for; named rather than discovered")
+    canonicals_unreachable: Optional[int] = Field(None, description="Could not be asked")
+    canonicals_unverified: Optional[int] = Field(None, description="Answered, but the receipt did not verify")
+    canonicals_partial: Optional[int] = Field(None, description="Answered for some of what was asked")
+    canonicals_answered: Optional[int] = Field(
+        None,
+        description=(
+            "How many canonicals answered at all. Zero with a null verdict means nobody was "
+            "reached, which reads very differently from everyone answering and agreeing."
+        ),
+    )
+    discovery_incomplete: Optional[bool] = Field(None, description="The canonical set itself is not fully known")
+    identity_unavailable: Optional[bool] = Field(None, description="This node could not resolve its own identity")
+    canonicals: List[CanonicalReceipt] = Field(default_factory=list, description="Per-canonical detail")
+    error: Optional[str] = Field(None, description="Set when the accessor itself refused (e.g. no engine handle)")
+    raw_json: str = Field(
+        "",
+        description=(
+            "The accessor's verbatim payload. Kept as a string on purpose: the shape is upstream's "
+            "to change, and a diagnosis a week from now wants what it actually said, not our projection of it."
+        ),
+    )

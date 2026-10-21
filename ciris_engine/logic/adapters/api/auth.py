@@ -8,6 +8,10 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 
 from .models import TokenData
+from ciris_engine.logic.adapters.api.dependencies.auth import (
+    SUBSTRATE_SESSION_PREFIX,
+    resolve_substrate_session,
+)
 
 # HTTP Bearer token security scheme
 security = HTTPBearer(auto_error=False)
@@ -31,9 +35,15 @@ def _get_auth_services(request: Request) -> tuple[Optional[Any], Optional[Any]]:
     return wa_auth_service, api_auth_service
 
 
-def _create_fallback_token_data() -> TokenData:
-    """Create fallback token data for development mode."""
-    return TokenData(username="admin", email="admin@ciris.ai", role="SYSTEM_ADMIN")
+def _ensure_auth_services_available(wa_auth_service: Optional[Any], api_auth_service: Optional[Any]) -> None:
+    """Fail closed when authentication backends are unavailable."""
+    if wa_auth_service is not None or api_auth_service is not None:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Authentication service unavailable",
+    )
 
 
 def _try_api_key_validation(token_str: str, api_auth_service: Optional[Any], logger: Any) -> Optional[TokenData]:
@@ -125,9 +135,23 @@ async def get_current_user(request: Request, token: Optional[str] = Depends(secu
         f"[AUTH] WA auth service available: {wa_auth_service is not None}, API auth service available: {api_auth_service is not None}"
     )
 
-    # Fallback to development mode if no services available
-    if not wa_auth_service and not api_auth_service:
-        return _create_fallback_token_data()
+    # Fail closed if no auth services available
+    _ensure_auth_services_available(wa_auth_service, api_auth_service)
+
+    # A SUBSTRATE-minted session token is verified by the substrate, before the
+    # local strategies are tried. This module authenticates a different family of
+    # routes (/v1/partnership, /v1/dsar, /v1/my_data, /v1/connectors) than
+    # dependencies/auth.py, and when only that one learned about node-issued
+    # tokens these answered 401 "Invalid or expired token" for a credential the
+    # rest of the API accepted. Same resolver, so the two cannot drift.
+    if token_str.startswith(SUBSTRATE_SESSION_PREFIX):
+        resolved = resolve_substrate_session(token_str)
+        return TokenData(
+            username=resolved.get("name") or resolved["wa_id"],
+            email=None,
+            role=resolved.get("role") or "OBSERVER",
+            exp=None,
+        )
 
     try:
         # Try API key validation first

@@ -4,7 +4,7 @@ Enhanced with proper context building and service passing.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.utils.jsondict_helpers import get_int
 from ciris_engine.schemas.types import JSONDict
@@ -17,6 +17,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.task_manager import TaskManager
 from ciris_engine.logic.processors.support.thought_manager import ThoughtManager
+from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 
 # ServiceProtocol import removed - processors aren't services
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
@@ -24,8 +25,13 @@ from ciris_engine.schemas.processors.results import WorkResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task
+from ciris_engine.schemas.services.budget_envelope import PROPOSAL_TICKET_STATUS
+from ciris_engine.schemas.services.resources_core import ResourceAction
 
 logger = logging.getLogger(__name__)
+
+#: Tasks handled by their own processors; a failed thought never closes them here.
+_TASKS_NOT_CLOSED_ON_FAILURE = frozenset({"WAKEUP_ROOT", "SYSTEM_TASK"})
 
 
 class WorkProcessor(BaseProcessor):
@@ -78,6 +84,36 @@ class WorkProcessor(BaseProcessor):
         self.last_activity_time = self.time_service.now()
         self.idle_rounds = 0
 
+    async def _admit_new_work(self) -> Tuple[int, int]:
+        """Phases 0 and 1 -- take on new work -- unless a resource is holding SHED.
+
+        SHED is admission control. Nothing new is taken on: no shared ticket is
+        claimed (a pressured occurrence must not take work a healthy peer
+        could do), no continuation task is created, and queued tasks stay
+        PENDING. Tasks already active keep generating and processing their
+        thoughts, so in-flight work finishes and the pressure can drain. The
+        gate lifts SHED once the resource falls clearly back below CRITICAL.
+
+        Returns (tickets_discovered, tasks_activated).
+        """
+        gate = pressure_gate_of(self.resource_monitor)
+        if gate is not None:
+            holders = gate.resources(ResourceAction.SHED)
+            if holders:
+                gate.note_shed_round()
+                logger.debug("Phases 0-1 skipped: admission closed by resource pressure (shed: %s)", ", ".join(holders))
+                return 0, 0
+
+        # Phase 0: Ticket discovery (claims shared tickets, creates tasks for incomplete tickets)
+        logger.debug("Phase 0: Discovering incomplete tickets...")
+        tickets_discovered = await self._discover_incomplete_tickets()
+        logger.debug(f"Discovered {tickets_discovered} incomplete tickets")
+
+        # Phase 1: Task activation
+        logger.debug("Phase 1: Activating pending tasks...")
+        activated = self.task_manager.activate_pending_tasks()
+        return tickets_discovered, activated
+
     def get_supported_states(self) -> List[AgentState]:
         """Work processor handles WORK and PLAY states."""
         return [AgentState.WORK, AgentState.PLAY]
@@ -101,14 +137,8 @@ class WorkProcessor(BaseProcessor):
         }
 
         try:
-            # Phase 0: Ticket discovery (create tasks for incomplete tickets)
-            logger.debug("Phase 0: Discovering incomplete tickets...")
-            tickets_discovered = await self._discover_incomplete_tickets()
-            logger.debug(f"Discovered {tickets_discovered} incomplete tickets")
-
-            # Phase 1: Task activation
-            logger.debug("Phase 1: Activating pending tasks...")
-            activated = self.task_manager.activate_pending_tasks()
+            # Phases 0-1: take on new work (ticket discovery, task activation) -- gated by SHED
+            _tickets_discovered, activated = await self._admit_new_work()
             logger.debug(f"Activated {activated} tasks")
             round_metrics["tasks_activated"] = activated
 
@@ -132,6 +162,10 @@ class WorkProcessor(BaseProcessor):
                 # Add recovery thoughts to total (generated was set on line 121)
                 round_metrics["thoughts_generated"] = generated + recovery_generated
 
+            # Phase 2.6: a message that arrived while the agent was refusing a task
+            # gets its own task — the refusal is never rewritten (#1250).
+            self.task_manager.requeue_updates_from_rejected_tasks()
+
             # Phase 3: Populate processing queue
             logger.debug("Phase 3: Populating processing queue...")
             queue_size = self.thought_manager.populate_queue(round_number)
@@ -151,11 +185,8 @@ class WorkProcessor(BaseProcessor):
                 self.idle_rounds = 0
                 round_metrics["was_idle"] = False
             else:
-                # Handle idle state - DISABLED
+                # Idle mode is disabled - no automatic transitions.
                 round_metrics["was_idle"] = True
-                # Idle mode disabled - no automatic transitions
-                # self.idle_rounds += 1
-                # await self._handle_idle_state(round_number)
 
             # Update metrics
             self.metrics.rounds_completed += 1
@@ -190,33 +221,42 @@ class WorkProcessor(BaseProcessor):
         )
 
     async def _process_batch(self, batch: List[Any], round_number: int) -> int:
-        """Process a batch of thoughts."""
+        """Process a batch of thoughts in PARALLEL using asyncio.gather."""
+        import asyncio
+
         if not batch:
             return 0
 
-        logger.debug(f"Processing batch of {len(batch)} thoughts")
+        logger.info(f"[BATCH] Processing {len(batch)} thoughts in PARALLEL")
 
         batch = self.thought_manager.mark_thoughts_processing(batch, round_number)
         if not batch:
             logger.warning("No thoughts could be marked as PROCESSING")
             return 0
 
+        # Create tasks for parallel execution
+        tasks = [self._process_single_thought(item) for item in batch]
+
+        # Execute all thoughts in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
         processed_count = 0
-
-        for item in batch:
+        for item, result in zip(batch, results):
             try:
-                result = await self._process_single_thought(item)
-                processed_count += 1
-
-                if result is None:
-                    logger.debug(f"Thought {item.thought_id} was re-queued")
+                if isinstance(result, Exception):
+                    logger.error(f"Error processing thought {item.thought_id}: {result}", exc_info=True)
+                    await self._fail_thought(item, str(result))
                 else:
-                    await self._dispatch_thought_result(item, result)
-
+                    processed_count += 1
+                    if result is None:
+                        logger.debug(f"Thought {item.thought_id} was re-queued")
+                    else:
+                        await self._dispatch_thought_result(item, result)
             except Exception as e:
-                logger.error(f"Error processing thought {item.thought_id}: {e}", exc_info=True)
-                self._mark_thought_failed(item.thought_id, str(e))
+                logger.error(f"Error handling result for thought {item.thought_id}: {e}", exc_info=True)
+                await self._fail_thought(item, str(e))
 
+        logger.info(f"[BATCH] Completed {processed_count}/{len(batch)} thoughts")
         return processed_count
 
     async def _process_single_thought(self, item: Any) -> Any:
@@ -255,34 +295,101 @@ class WorkProcessor(BaseProcessor):
             logger.error(f"Error dispatching action for thought {thought_id}: {e}")
             self._mark_thought_failed(thought_id, f"Dispatch failed: {str(e)}")
 
-    def _handle_idle_state(self, round_number: int) -> None:
-        """Handle idle state when no thoughts are pending."""
-        logger.info(f"Round {round_number}: No thoughts to process (idle rounds: {self.idle_rounds})")
-
-        # Create job thought if needed
-        created_job = self.thought_manager.handle_idle_state(round_number)
-
-        if created_job:
-            logger.info("Created job thought for idle monitoring")
-        else:
-            logger.debug("No job thought needed")
-
     def _mark_thought_failed(self, thought_id: str, error: str) -> None:
         """Mark a thought as failed."""
         persistence.update_thought_status(
             thought_id=thought_id, status=ThoughtStatus.FAILED, final_action={"error": error}
         )
 
-    def _should_skip_ticket_by_status(self, ticket_status: str) -> bool:
-        """Check if ticket should be skipped based on status."""
-        return ticket_status in ["blocked", "deferred", "completed", "failed", "cancelled"]
+    async def _fail_thought(self, item: Any, error: str) -> None:
+        """Mark a thought FAILED, and close its task if nothing else can answer it."""
+        self._mark_thought_failed(item.thought_id, error)
+        source_task_id = getattr(item, "source_task_id", None)
+        if source_task_id:
+            await self._close_task_left_without_thoughts(str(source_task_id), item.thought_id, error)
 
-    def _attempt_claim_pending_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+    async def _close_task_left_without_thoughts(self, task_id: str, thought_id: str, error: str) -> None:
+        """A task whose last live thought failed must not stay ACTIVE (CIRISAgent#1264).
+
+        Nothing re-seeds an ACTIVE task once it has thoughts, so a task whose only
+        live thought raised (a DMA that exhausted its LLM retries, say) sat ACTIVE
+        with no work: no reply, no completion, and an interact() caller waiting out
+        its whole window for an answer that could never come. The task is marked
+        FAILED, and the channel is told unless the task already spoke. The notice is
+        sent under this task's scope, so the API adapter hands it only to a request
+        this task owns, never to the next request on the channel.
+        """
+        task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)
+        if task is None or task.status not in (TaskStatus.ACTIVE, TaskStatus.PENDING):
+            return
+        if task.task_id in _TASKS_NOT_CLOSED_ON_FAILURE or task.parent_task_id == "WAKEUP_ROOT":
+            return
+        thoughts = persistence.get_thoughts_by_task_id(task_id, self.agent_occurrence_id)
+        if any(t.status in (ThoughtStatus.PENDING, ThoughtStatus.PROCESSING) for t in thoughts):
+            return  # another thought is still live and can answer
+
+        persistence.update_task_status(task_id, TaskStatus.FAILED, self.agent_occurrence_id)
+        logger.warning(
+            "Task %s FAILED: its last live thought %s failed (%s); no thought is left to answer it",
+            task_id,
+            thought_id,
+            error[:200],
+        )
+
+        already_spoke = any(
+            t.final_action is not None and str(t.final_action.action_type).lower() == "speak" for t in thoughts
+        )
+        if already_spoke:
+            return
+        await self._notify_task_failed(task, thought_id)
+
+    async def _notify_task_failed(self, task: Task, thought_id: str) -> None:
+        """Tell the task's channel the request could not be processed (best-effort)."""
+        bus = getattr(self.services, "communication_bus", None)
+        channel_id = task.channel_id
+        if bus is None or not channel_id or channel_id.startswith("__") or channel_id == "system":
+            return
+        from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+
+        # CC 4.2.1.1: the notice is the agent speaking, from outside the act gate.
+        from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+        from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
+
+        if await refuse_agent_send_under_halt(AgentSendSurface.TASK_FAILURE_NOTICE, channel_id):
+            return
+
+        message = get_string(get_preferred_language(), "agent.error_generic")
+        try:
+            with reasoning_scope(task_id=task.task_id, thought_id=thought_id, phase="task_failure_notice"):
+                await bus.send_message_sync(channel_id=channel_id, content=message, handler_name="WorkProcessor")
+        except Exception as e:  # noqa: BLE001 - the task is already FAILED; the notice is best-effort
+            logger.warning("Could not notify channel %s that task %s failed: %s", channel_id, task.task_id, e)
+
+    def _should_skip_ticket_by_status(self, ticket_status: str) -> bool:
+        """Check if ticket should be skipped based on status.
+
+        Note (#938): agent-created *proposals* ride ``blocked`` — the persist
+        substrate's ticket-status enum is closed, so there is no ``proposed``
+        variant to add without a CIRISPersist change. ``blocked`` is already
+        skipped here and is not listed by either discovery query, which is what
+        makes "a proposal never becomes an executing task" hold. Do not remove
+        ``blocked`` from this list without re-reading
+        ``ciris_engine/schemas/services/budget_envelope.py``.
+        """
+        return ticket_status in [
+            PROPOSAL_TICKET_STATUS,  # == "blocked"; proposals awaiting human approval
+            "deferred",
+            "completed",
+            "failed",
+            "cancelled",
+        ]
+
+    def _attempt_claim_pending_ticket(self, ticket: Dict[str, Any]) -> bool:
         """Attempt to atomically claim a pending ticket.
 
         Args:
             ticket: Ticket dictionary
-            db_path: Database path
 
         Returns:
             True if claim succeeded, False otherwise
@@ -310,7 +417,6 @@ class WorkProcessor(BaseProcessor):
             notes=f"Claimed by occurrence {self.agent_occurrence_id}",
             agent_occurrence_id=self.agent_occurrence_id,
             require_current_occurrence_id="__shared__",
-            db_path=db_path,
         )
 
         if not success:
@@ -319,19 +425,22 @@ class WorkProcessor(BaseProcessor):
 
         return True
 
-    def _create_seed_task_for_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+    def _create_seed_task_for_ticket(self, ticket: Dict[str, Any]) -> bool:
         """Create seed task for newly claimed ticket.
 
         Args:
             ticket: Ticket dictionary
-            db_path: Database path
 
         Returns:
             True if task creation succeeded, False otherwise
         """
+        # Routed through persist substrate (CIRISAgent#763); ticket-context
+        # carry-through happens via task.context.__agent_ticket__ which the
+        # migrated _task_to_persist_payload mirrors into context_json.
         import json
+        import uuid
 
-        from ciris_engine.logic.persistence.db.core import get_db_connection
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         ticket_id = ticket.get("ticket_id")
         if not ticket_id:
@@ -342,7 +451,7 @@ class WorkProcessor(BaseProcessor):
         ticket_sop = ticket.get("sop", "UNKNOWN")
         current_stage = ticket_metadata.get("current_stage", "starting")
 
-        task_context = {
+        ticket_context_payload = {
             "ticket_id": ticket_id,
             "ticket_sop": ticket_sop,
             "ticket_type": ticket.get("ticket_type"),
@@ -352,50 +461,33 @@ class WorkProcessor(BaseProcessor):
             "ticket_email": ticket.get("email"),
             "ticket_user_identifier": ticket.get("user_identifier"),
             "is_ticket_task": True,
+            # Required TaskContext fields synthesized so downstream readers
+            # that load the row via map_row_to_task get a valid context.
+            "correlation_id": str(uuid.uuid4()),
+            "channel_id": self.startup_channel_id or "ticket_processing",
+            "agent_occurrence_id": self.agent_occurrence_id,
         }
 
-        # Create Task object
         now = self.time_service.now().isoformat()
-        task = Task(
-            task_id=task_id,
-            channel_id=self.startup_channel_id or "ticket_processing",
-            agent_occurrence_id=self.agent_occurrence_id,
-            description=f"Process ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
-            status=TaskStatus.PENDING,
-            priority=ticket.get("priority", 5),
-            created_at=now,
-            updated_at=now,
-            context=None,
-        )
-
-        task_dict = task.model_dump(mode="json")
-        task_dict["context"] = task_context
-
-        sql = """
-            INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
-                              created_at, updated_at, parent_task_id, context_json, outcome_json,
-                              signed_by, signature, signed_at, updated_info_available, updated_info_content)
-            VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
-                    :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                    :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
-        """
-        params = {
-            **task_dict,
-            "status": task.status.value,
-            "context": json.dumps(task_context),
-            "outcome": None,
-            "signed_by": None,
-            "signature": None,
-            "signed_at": None,
+        payload = {
+            "task_id": task_id,
+            "channel_id": self.startup_channel_id or "ticket_processing",
+            "agent_occurrence_id": self.agent_occurrence_id,
+            "description": f"Process ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
+            "status": TaskStatus.PENDING.value,
+            "priority": ticket.get("priority", 5),
+            "created_at": now,
+            "updated_at": now,
             "parent_task_id": None,
-            "updated_info_available": 0,
-            "updated_info_content": None,
+            "context": ticket_context_payload,
         }
 
         try:
-            with get_db_connection(db_path=db_path) as conn:
-                conn.execute(sql, params)
-                conn.commit()
+            engine = get_persist_engine()
+            if engine is None:
+                logger.error(f"Failed to create task {task_id}: persist engine not initialized")
+                return False
+            engine.task_upsert(json.dumps(payload))
             logger.info(f"Claimed ticket {ticket_id} and created seed task {task_id}")
             return True
         except Exception as e:
@@ -427,39 +519,30 @@ class WorkProcessor(BaseProcessor):
 
         return True
 
-    def _has_existing_task_for_ticket(self, ticket_id: str, db_path: Optional[str]) -> bool:
+    def _has_existing_task_for_ticket(self, ticket_id: str) -> bool:
         """Check if there's already a pending or active task for this ticket.
 
         Args:
             ticket_id: Ticket ID
-            db_path: Database path
 
         Returns:
             True if task exists, False otherwise
         """
-        from ciris_engine.logic.persistence.db import get_db_connection
+        # Routed through persist substrate (CIRISAgent#763); paginate
+        # PENDING + ACTIVE tasks for the occurrence and prefix-match on
+        # task_id. Persist's `task_list` filter is equality-only, so the
+        # `LIKE TICKET-<id>-%` prefix match happens client-side here.
+        from ciris_engine.logic.persistence.models.tasks import get_tasks_by_status
 
-        sql = (
-            "SELECT COUNT(*) as count FROM tasks WHERE task_id LIKE ? AND agent_occurrence_id = ? AND status IN (?, ?)"
-        )
-        task_prefix = f"TICKET-{ticket_id}-%"
+        task_prefix = f"TICKET-{ticket_id}-"
 
         try:
-            with get_db_connection(db_path=db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    sql,
-                    (task_prefix, self.agent_occurrence_id, TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
-                )
-                row = cursor.fetchone()
-                # PostgreSQL returns RealDictRow (dict), SQLite returns tuple
-                count = row["count"] if isinstance(row, dict) else row[0]
-                has_task = bool(count > 0)
-
-                if has_task:
+            for status in (TaskStatus.PENDING, TaskStatus.ACTIVE):
+                tasks = get_tasks_by_status(status, self.agent_occurrence_id)
+                if any(t.task_id.startswith(task_prefix) for t in tasks):
                     logger.debug(f"Ticket {ticket_id} already has pending/active task, skipping")
-
-                return has_task
+                    return True
+            return False
         except Exception as e:
             logger.warning(f"Failed to check for existing tasks for ticket {ticket_id}: {e}")
             return False
@@ -498,19 +581,20 @@ class WorkProcessor(BaseProcessor):
 
         return False
 
-    def _create_continuation_task_for_ticket(self, ticket: Dict[str, Any], db_path: Optional[str]) -> bool:
+    def _create_continuation_task_for_ticket(self, ticket: Dict[str, Any]) -> bool:
         """Create continuation task for active ticket.
 
         Args:
             ticket: Ticket dictionary
-            db_path: Database path
 
         Returns:
             True if task creation succeeded, False otherwise
         """
+        # Routed through persist substrate (CIRISAgent#763).
         import json
+        import uuid
 
-        from ciris_engine.logic.persistence.db import get_db_connection
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
         ticket_id = ticket.get("ticket_id")
         if not ticket_id:
@@ -524,7 +608,7 @@ class WorkProcessor(BaseProcessor):
         continuation_task_id = f"TICKET-{ticket_id}-{self.time_service.now().strftime('%Y%m%d%H%M%S')}"
         ticket_channel_id = self.startup_channel_id or "ticket_processing"
 
-        task_context = {
+        ticket_context_payload = {
             "channel_id": ticket_channel_id,
             "ticket_id": ticket_id,
             "ticket_sop": ticket_sop,
@@ -535,43 +619,32 @@ class WorkProcessor(BaseProcessor):
             "ticket_email": ticket.get("email"),
             "ticket_user_identifier": ticket.get("user_identifier"),
             "is_ticket_task": True,
+            "correlation_id": str(uuid.uuid4()),
+            "agent_occurrence_id": self.agent_occurrence_id,
         }
 
         now = self.time_service.now().isoformat()
-        task = Task(
-            task_id=continuation_task_id,
-            channel_id=ticket_channel_id,
-            agent_occurrence_id=self.agent_occurrence_id,
-            description=f"Continue ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
-            status=TaskStatus.PENDING,
-            priority=ticket.get("priority", 5),
-            created_at=now,
-            updated_at=now,
-            context=None,
-        )
-
-        task_dict = task.model_dump(mode="json")
-
-        sql = """
-            INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
-                              created_at, updated_at, parent_task_id, context_json, outcome_json,
-                              signed_by, signature, signed_at, updated_info_available, updated_info_content)
-            VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
-                    :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                    :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content)
-        """
-        params = {
-            **task_dict,
-            "status": task.status.value,
-            "context": json.dumps(task_context),
-            "outcome": json.dumps(task_dict.get("outcome")) if task_dict.get("outcome") is not None else None,
-            "updated_info_available": 1 if task_dict.get("updated_info_available") else 0,
+        payload = {
+            "task_id": continuation_task_id,
+            "channel_id": ticket_channel_id,
+            "agent_occurrence_id": self.agent_occurrence_id,
+            "description": f"Continue ticket {ticket_id} (SOP: {ticket_sop}, Stage: {current_stage})",
+            "status": TaskStatus.PENDING.value,
+            "priority": ticket.get("priority", 5),
+            "created_at": now,
+            "updated_at": now,
+            "parent_task_id": None,
+            "context": ticket_context_payload,
         }
 
         try:
-            with get_db_connection(db_path=db_path) as conn:
-                conn.execute(sql, params)
-                conn.commit()
+            engine = get_persist_engine()
+            if engine is None:
+                logger.error(
+                    f"Failed to create continuation task {continuation_task_id}: persist engine not initialized"
+                )
+                return False
+            engine.task_upsert(json.dumps(payload))
             logger.info(f"Created continuation task {continuation_task_id} for ticket {ticket_id}")
             return True
         except Exception as e:
@@ -591,14 +664,13 @@ class WorkProcessor(BaseProcessor):
         from ciris_engine.logic.persistence.models.tickets import list_tickets
 
         tasks_created = 0
-        db_path = getattr(self.config, "db_path", None)
 
         try:
             # Phase 1: Claim PENDING tickets with __shared__
-            tasks_created += await self._process_pending_tickets(db_path)
+            tasks_created += await self._process_pending_tickets()
 
             # Phase 2: Create continuation tasks for ASSIGNED/IN_PROGRESS tickets
-            tasks_created += await self._process_active_tickets(db_path)
+            tasks_created += await self._process_active_tickets()
 
             if tasks_created > 0:
                 logger.info(f"Ticket discovery: created {tasks_created} tasks (claimed + continued)")
@@ -608,11 +680,8 @@ class WorkProcessor(BaseProcessor):
 
         return tasks_created
 
-    async def _process_pending_tickets(self, db_path: Optional[str]) -> int:
+    async def _process_pending_tickets(self) -> int:
         """Process PENDING tickets and claim them atomically.
-
-        Args:
-            db_path: Database path
 
         Returns:
             Number of tasks created
@@ -620,15 +689,15 @@ class WorkProcessor(BaseProcessor):
         from ciris_engine.logic.persistence.models.tickets import list_tickets
 
         tasks_created = 0
-        pending_tickets = list_tickets(status="pending", db_path=db_path)
+        pending_tickets = list_tickets(status="pending")
 
         for ticket in pending_tickets:
             # Attempt to claim the ticket
-            if not self._attempt_claim_pending_ticket(ticket, db_path):
+            if not self._attempt_claim_pending_ticket(ticket):
                 continue
 
             # Create seed task for newly claimed ticket
-            if self._create_seed_task_for_ticket(ticket, db_path):
+            if self._create_seed_task_for_ticket(ticket):
                 tasks_created += 1
             else:
                 ticket_id = ticket.get("ticket_id", "unknown")
@@ -636,11 +705,8 @@ class WorkProcessor(BaseProcessor):
 
         return tasks_created
 
-    async def _process_active_tickets(self, db_path: Optional[str]) -> int:
+    async def _process_active_tickets(self) -> int:
         """Process ASSIGNED/IN_PROGRESS tickets and create continuation tasks.
-
-        Args:
-            db_path: Database path
 
         Returns:
             Number of tasks created
@@ -648,8 +714,8 @@ class WorkProcessor(BaseProcessor):
         from ciris_engine.logic.persistence.models.tickets import list_tickets
 
         tasks_created = 0
-        assigned_tickets = list_tickets(status="assigned", db_path=db_path)
-        in_progress_tickets = list_tickets(status="in_progress", db_path=db_path)
+        assigned_tickets = list_tickets(status="assigned")
+        in_progress_tickets = list_tickets(status="in_progress")
         active_tickets = assigned_tickets + in_progress_tickets
 
         for ticket in active_tickets:
@@ -662,7 +728,7 @@ class WorkProcessor(BaseProcessor):
                 continue
 
             # Check for existing tasks
-            if self._has_existing_task_for_ticket(ticket_id, db_path):
+            if self._has_existing_task_for_ticket(ticket_id):
                 continue
 
             # Check for deferral
@@ -671,7 +737,7 @@ class WorkProcessor(BaseProcessor):
                 continue
 
             # Create continuation task
-            if self._create_continuation_task_for_ticket(ticket, db_path):
+            if self._create_continuation_task_for_ticket(ticket):
                 tasks_created += 1
             else:
                 logger.warning(f"Failed to create continuation task for ticket {ticket_id}")

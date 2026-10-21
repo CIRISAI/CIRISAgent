@@ -3,13 +3,23 @@ ThoughtProcessor: Core orchestration logic for H3ERE pipeline.
 Main coordinator that executes the 7 phases of ethical reasoning.
 """
 
+import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+import os
+from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tuple, TypeVar
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
+from ciris_engine.logic.config.llm_budget import Deadline, active_budget, attempt_timeout, llm_call_deadline
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
+from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
+from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+    build_approval_deferral,
+    envelope_approves_tool,
+    tool_requires_approval,
+)
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
@@ -17,7 +27,7 @@ from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.actions.parameters import DeferParams, PonderParams, ToolParams
+from ciris_engine.schemas.actions.parameters import DeferParams, MemorizeParams, PonderParams, ToolParams
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import EpistemicData
@@ -50,6 +60,27 @@ from .round_complete import RoundCompletePhase
 from .start_round import RoundInitializationPhase
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+
+async def _within_thought_deadline(thought_item: Any, call: Coroutine[Any, Any, _T]) -> _T:
+    """Run one second-pass DMA (TSASPDMA / DSASPDMA / MSASPDMA) inside the thought deadline.
+
+    These evaluators are called directly rather than through
+    run_dma_with_retries, so without this they were the one LLM path the
+    thought budget did not bound (#1186). One attempt, clamped to the
+    remainder; a timeout raises into the caller's existing fallback. The
+    coroutine's body does not run until awaited, so a spent deadline sends no
+    request: it is closed unstarted.
+    """
+    deadline = getattr(thought_item, "deadline", None)
+    per_try = attempt_timeout(active_budget().dma_per_try_s, deadline if isinstance(deadline, Deadline) else None)
+    if per_try is None:
+        call.close()
+        raise TimeoutError("second-pass DMA: LLM API timeout -- the thought deadline cannot afford an attempt")
+    with llm_call_deadline(per_try):
+        return await asyncio.wait_for(call, timeout=per_try)
 
 
 class ThoughtProcessor(
@@ -112,6 +143,14 @@ class ThoughtProcessor(
         )
         start_time = self._time_service.now()
 
+        # One deadline for this pass through the pipeline (CIRISAgent#1186):
+        # the DMAs, ASPDMA, the conscience stage and the conscience-retry pass
+        # all spend from it instead of each owning a fresh budget. A PONDER
+        # follow-up is a NEW thought and gets a new deadline when it is
+        # processed -- intended: each round is its own pipeline pass.
+        thought_budget_s = active_budget().thought_budget_s
+        thought_item.start_deadline(Deadline(thought_budget_s))
+
         # Initialize correlation for tracking
         correlation = self._initialize_correlation(thought_item, start_time)
 
@@ -120,15 +159,27 @@ class ThoughtProcessor(
         if not thought:
             return None
 
-        # Execute pipeline phases
-        pipeline_result = await self._execute_pipeline_phases(thought_item, thought, context, correlation, start_time)
+        # Everything from here to the end of the round is the reasoning loop.
+        # Task envelopes are issued from OUTSIDE it (CIRISAgent#938): the
+        # issuer refuses to mint while this marker is set. Narrowing an
+        # existing envelope stays permitted — giving capability away is not
+        # privilege escalation.
+        with reasoning_scope(
+            task_id=thought.source_task_id,
+            thought_id=thought_item.thought_id,
+            phase="process_thought",
+        ):
+            # Execute pipeline phases
+            pipeline_result = await self._execute_pipeline_phases(
+                thought_item, thought, context, correlation, start_time
+            )
 
-        # Record completion and finalize
-        await self._record_processing_completion(thought, pipeline_result)
-        await self._finalize_correlation(correlation, pipeline_result, start_time)
+            # Record completion and finalize
+            await self._record_processing_completion(thought, pipeline_result)
+            await self._finalize_correlation(correlation, pipeline_result, start_time)
 
-        # Complete the round
-        final_result = await self._round_complete_step(thought_item, pipeline_result)
+            # Complete the round
+            final_result = await self._round_complete_step(thought_item, pipeline_result)
         # _round_complete_step returns the same type as pipeline_result (ConscienceApplicationResult or ActionSelectionDMAResult)
         return final_result  # type: ignore[no-any-return]
 
@@ -226,6 +277,16 @@ class ThoughtProcessor(
             conscience_result_raw if isinstance(conscience_result_raw, ConscienceApplicationResult) else None
         )
         action_from_conscience = self._handle_special_cases(conscience_result)
+
+        # Phase 4.9: approval gate (CIRISAgent#942). Deliberately the LAST thing
+        # before finalization rather than the seam right after action selection:
+        # every route that can produce a final action — plain selection, TSASPDMA,
+        # the conscience-override retry, the benchmark-mode retry recursion —
+        # converges here, so there is exactly one place to audit and no route that
+        # can quietly grow around it. It also means a conscience cannot override
+        # an authorization denial, which would be a bypass.
+        action_from_conscience = await self._enforce_tool_approval(thought, action_from_conscience)
+
         final_result = await self._finalize_action_step(thought_item, action_from_conscience)
 
         # _finalize_action_step returns ConscienceApplicationResult based on conscience_result input
@@ -246,7 +307,7 @@ class ThoughtProcessor(
         # - Confirm TOOL action (possibly with refined parameters)
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
-        action_result = await self._maybe_run_tsaspdma(thought_item, action_result)
+        action_result = await self._run_verb_second_pass(thought_item, action_result, thought_context)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         conscience_result = await self._conscience_execution_step(
@@ -263,6 +324,104 @@ class ThoughtProcessor(
 
         return {"action_result": action_result, "conscience_result": conscience_result}
 
+    async def _enforce_tool_approval(
+        self,
+        thought: Thought,
+        conscience_result: Optional[ConscienceApplicationResult],
+    ) -> Optional[ConscienceApplicationResult]:
+        """Deny an approval-requiring tool that this task holds no approval for (CIRISAgent#942).
+
+        The single production enforcement point for
+        ``ToolDMAGuidance.requires_approval``. Before this existed the flag was
+        rendered into a prompt and a consent label and read by nothing else — a
+        model that selected ``send_money`` executed ``send_money``.
+
+        On denial the final action is rewritten to ``DEFER`` on the existing
+        Wisdom-Based Deferral rail, carrying the tool name and a structured
+        description of the tool so that the human sees what they are approving,
+        and so ``WiseAuthorityService.resolve_deferral`` can mint a
+        ``WISE_AUTHORITY``-issued envelope naming that tool for the ``[WA GUIDANCE]``
+        follow-up task. That follow-up re-runs this pipeline, reaches this method
+        again, and passes.
+
+        **The grant is per-tool, per-task, not per-invocation.** The follow-up task
+        re-reasons from scratch and may call the approved tool with different
+        arguments than the ones that triggered the deferral. This mirrors the
+        budget envelope — a ceiling, not a transaction. Do not read it as
+        human review of a specific call.
+
+        Everything that is not a ``TOOL`` action, and every tool that does not
+        declare ``requires_approval``, returns unchanged: this is the #942 approval
+        control, not #938 Phase 2 blanket enforcement at the bus.
+        """
+        if conscience_result is None:
+            return None
+
+        final_action = conscience_result.final_action
+        if final_action is None or final_action.selected_action != HandlerActionType.TOOL:
+            return conscience_result
+
+        tool_params = final_action.action_parameters
+        if not isinstance(tool_params, ToolParams):
+            # Malformed TOOL params never reach a tool; leave the existing
+            # handling to report it rather than masking it as an approval denial.
+            return conscience_result
+        tool_name = tool_params.name
+
+        tool_info: Optional[ToolInfo] = None
+        try:
+            tool_info = await self.dependencies.bus_manager.tool.get_tool_info(tool_name)
+        except Exception as e:
+            logger.warning("APPROVAL-GATE: could not fetch tool info for '%s': %s", tool_name, e)
+            return conscience_result
+
+        if not tool_requires_approval(tool_info):
+            return conscience_result
+
+        envelope = resolve_envelope_for_task_id(thought.source_task_id, thought.agent_occurrence_id)
+        if envelope_approves_tool(envelope, tool_name):
+            logger.info(
+                "APPROVAL-GATE: '%s' authorized for task %s by %s envelope %s (issuer %s)",
+                tool_name,
+                thought.source_task_id,
+                envelope.issuer.kind.value if envelope else "no",
+                envelope.envelope_id if envelope else "-",
+                envelope.issuer.issuer_id if envelope else "-",
+            )
+            return conscience_result
+
+        logger.warning(
+            "APPROVAL-GATE: DENIED '%s' for task %s — tool declares requires_approval=True and the "
+            "task envelope (%s) does not grant it. Deferring to Wise Authority.",
+            tool_name,
+            thought.source_task_id,
+            (
+                f"issuer={envelope.issuer.kind.value} id={envelope.envelope_id}"
+                if envelope is not None
+                else "absent — absence of an envelope is denial"
+            ),
+        )
+
+        defer_action = build_approval_deferral(
+            tool_name=tool_name,
+            original_action=final_action,
+            # What the human is being asked to approve: the tool as the consent
+            # wizard describes it, plus the arguments the agent intends to pass.
+            tool_info=tool_info,
+            intended_parameters=tool_params.parameters,
+            channel_id=getattr(tool_params, "channel_id", None),
+        )
+        return conscience_result.model_copy(
+            update={
+                "final_action": defer_action,
+                "overridden": True,
+                "override_reason": (
+                    f"Tool '{tool_name}' requires wise-authority approval (CIRISAgent#942); "
+                    f"this task's envelope does not grant it."
+                ),
+            }
+        )
+
     def _log_action_selection_result(self, action_result: Any, thought: Thought) -> None:
         """Log action selection results."""
         if action_result:
@@ -276,10 +435,41 @@ class ThoughtProcessor(
         else:
             logger.error(f"ThoughtProcessor: No action result for thought {thought.thought_id}")
 
+    async def _run_verb_second_pass(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Dispatch the second-pass evaluator registered for the selected verb.
+
+        ASPDMA picks a verb without the domain knowledge needed to fill that
+        verb's parameters — a TOOL without its documentation, a MEMORIZE without
+        the graph's addressing conventions. The second pass supplies that
+        knowledge and lets the agent re-decide before execution.
+
+        Registry-driven rather than a chain of `_maybe_run_<verb>` calls, so
+        adding a verb is one table entry instead of an edit to this method plus a
+        new near-duplicate of the one above it. VerbSecondPassResultEvent already
+        anticipated this ("Future verbs that gain a second-pass evaluator drop
+        into this event without schema changes") — the dispatch is now the same
+        shape as the event.
+
+        Coverage today is asserted by
+        tests/.../test_verb_second_pass_registry.py, which fails if a verb is
+        neither registered nor explicitly listed as not needing one — so a gap
+        shows up in CI rather than in a production PONDER loop (#1027).
+        """
+        handler = self._VERB_SECOND_PASS.get(action_result.selected_action)
+        if handler is None:
+            return action_result
+        return await handler(self, thought_item, action_result, thought_context)
+
     async def _maybe_run_tsaspdma(
         self,
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
     ) -> ActionSelectionDMAResult:
         """Run TSASPDMA if action is TOOL and tool has documentation.
 
@@ -288,6 +478,10 @@ class ThoughtProcessor(
         - Proceed with TOOL (optionally with refined parameters)
         - Switch to SPEAK for user clarification
         - Switch to PONDER to reconsider the approach
+
+        Args:
+            thought_context: The batch context containing system_snapshot with
+                            context_enrichment_results (e.g., ha_list_entities data).
 
         Returns:
             The action result (possibly modified by TSASPDMA)
@@ -323,23 +517,108 @@ class ThoughtProcessor(
             return action_result
 
         if not tool_info:
-            # ASPDMA selected a tool that doesn't exist - this is an error, override to PONDER
-            logger.error(
-                f"TSASPDMA-ERROR: Tool '{tool_name}' selected by ASPDMA but not registered! Overriding to PONDER."
-            )
-            from ciris_engine.schemas.actions.parameters import PonderParams
-            from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+            # ASPDMA selected a tool that doesn't exist - use TSASPDMA correction mode
+            logger.warning(f"TSASPDMA-CORRECTION: Tool '{tool_name}' not found, invoking TSASPDMA correction mode...")
 
-            return ActionSelectionDMAResult(
-                selected_action=HandlerActionType.PONDER,
-                action_parameters=PonderParams(
-                    questions=[
-                        f"Tool '{tool_name}' is not available. What alternative approach should I take?",
-                        f"Context: ASPDMA selected tool '{tool_name}' but it is not registered in the system.",
-                    ],
-                ),
-                rationale=f"TSASPDMA-OVERRIDE: Tool '{tool_name}' not found - forcing reconsideration",
-            )
+            try:
+                # Get all available tools for correction mode
+                all_tools = await tool_bus.get_all_tool_info()
+                if not all_tools:
+                    logger.error("TSASPDMA-CORRECTION: No tools available for correction")
+                    return ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=PonderParams(
+                            questions=[
+                                f"Tool '{tool_name}' doesn't exist and no tools are available.",
+                                "What alternative approach should I take?",
+                            ],
+                        ),
+                        rationale="TSASPDMA-CORRECTION: No tools available for correction",
+                    )
+
+                logger.info(
+                    f"TSASPDMA-CORRECTION: Running correction mode for '{tool_name}' "
+                    f"with {len(all_tools)} available tools: {[t.name for t in all_tools]}"
+                )
+
+                from ciris_engine.logic.dma.dma_executor import run_tsaspdma_correction
+
+                evaluator = self.dma_orchestrator.tsaspdma_evaluator
+                if not evaluator:
+                    logger.error("TSASPDMA-CORRECTION: No evaluator available")
+                    return ActionSelectionDMAResult(
+                        selected_action=HandlerActionType.PONDER,
+                        action_parameters=PonderParams(
+                            questions=[
+                                f"Tool '{tool_name}' doesn't exist.",
+                                "TSASPDMA evaluator unavailable for correction.",
+                            ],
+                        ),
+                        rationale="TSASPDMA-CORRECTION: Evaluator unavailable",
+                    )
+
+                correction_result = await _within_thought_deadline(
+                    thought_item,
+                    run_tsaspdma_correction(
+                        evaluator=evaluator,
+                        requested_tool_name=tool_name,
+                        available_tools=all_tools,
+                        aspdma_reasoning=action_result.rationale or "",
+                        original_thought=thought_item,
+                        time_service=self._time_service,
+                    ),
+                )
+
+                # If correction returned TOOL, verify the corrected tool exists
+                if correction_result.selected_action == HandlerActionType.TOOL:
+                    if isinstance(correction_result.action_parameters, ToolParams):
+                        corrected_name = correction_result.action_parameters.name
+                        # Get tool info for the corrected tool
+                        corrected_tool_info = await tool_bus.get_tool_info(corrected_name)
+                        if corrected_tool_info:
+                            logger.info(
+                                f"TSASPDMA-CORRECTION: Successfully corrected '{tool_name}' -> '{corrected_name}'"
+                            )
+                            # Now run normal TSASPDMA to fill in parameters
+                            tool_name = corrected_name
+                            tool_info = corrected_tool_info
+                            # Continue to normal TSASPDMA flow below
+                        else:
+                            logger.error(f"TSASPDMA-CORRECTION: Corrected tool '{corrected_name}' also not found!")
+                            return ActionSelectionDMAResult(
+                                selected_action=HandlerActionType.PONDER,
+                                action_parameters=PonderParams(
+                                    questions=[
+                                        f"Tool correction failed: '{corrected_name}' also doesn't exist.",
+                                        "What alternative approach should I take?",
+                                    ],
+                                ),
+                                rationale=f"TSASPDMA-CORRECTION: Corrected tool '{corrected_name}' also not found",
+                            )
+                else:
+                    # TSASPDMA chose SPEAK or PONDER - return that result
+                    logger.info(
+                        f"TSASPDMA-CORRECTION: Chose {correction_result.selected_action} instead of tool correction"
+                    )
+                    return correction_result
+
+            except Exception as e:
+                logger.error(f"TSASPDMA-CORRECTION: Failed for '{tool_name}': {e}", exc_info=True)
+                return ActionSelectionDMAResult(
+                    selected_action=HandlerActionType.PONDER,
+                    action_parameters=PonderParams(
+                        questions=[
+                            f"Tool '{tool_name}' doesn't exist and correction failed.",
+                            f"Error: {str(e)[:100]}",
+                            "What alternative approach should I take?",
+                        ],
+                    ),
+                    rationale=f"TSASPDMA-CORRECTION: Failed with error - {str(e)[:100]}",
+                )
+
+        # At this point tool_info is guaranteed to be set (either originally or via correction)
+        # Assert for type checker
+        assert tool_info is not None, "tool_info should be set after correction mode"
 
         logger.info(
             f"TSASPDMA-CHECK: Got tool info for '{tool_name}', has_documentation={bool(tool_info.documentation)}"
@@ -362,14 +641,28 @@ class ThoughtProcessor(
                 # Still proceed with original action, but this is a configuration error
                 return action_result
 
-            tsaspdma_result = await run_tsaspdma(
-                evaluator=evaluator,
-                tool_name=tool_name,
-                tool_info=tool_info,
-                aspdma_rationale=action_result.rationale or "",
-                original_thought=thought_item,
-                context=None,
-                time_service=self._time_service,
+            # Extract context enrichment from thought_context (contains entity lists, etc.)
+            context_enrichment = None
+            if thought_context:
+                # BatchContext has system_snapshot with context_enrichment_results
+                system_snapshot = getattr(thought_context, "system_snapshot", None)
+                if system_snapshot:
+                    context_enrichment = getattr(system_snapshot, "context_enrichment_results", None)
+                    if context_enrichment:
+                        logger.info(f"TSASPDMA-CONTEXT: Passing {len(context_enrichment)} context enrichment results")
+
+            tsaspdma_result = await _within_thought_deadline(
+                thought_item,
+                run_tsaspdma(
+                    evaluator=evaluator,
+                    tool_name=tool_name,
+                    tool_info=tool_info,
+                    aspdma_reasoning=action_result.rationale or "",
+                    original_thought=thought_item,
+                    context=None,
+                    time_service=self._time_service,
+                    context_enrichment=context_enrichment,
+                ),
             )
 
             logger.info(
@@ -377,12 +670,28 @@ class ThoughtProcessor(
                 f"{tsaspdma_result.selected_action} (was TOOL)"
             )
 
-            # Emit TSASPDMA_RESULT event for reasoning trace
+            # Emit TSASPDMA_RESULT event for reasoning trace (legacy, kept
+            # during the transition window per FSD §10 phase 0 gate)
             await self._emit_tsaspdma_result_event(
                 thought_item=thought_item,
                 tool_name=tool_name,
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale=action_result.rationale or "",
+                aspdma_reasoning=action_result.rationale or "",
+            )
+
+            # Emit VERB_SECOND_PASS_RESULT event — generic verb-second-pass
+            # replacement that closes the per-verb-event-type asymmetry
+            # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4)
+            await self._emit_verb_second_pass_result_event(
+                thought_item=thought_item,
+                verb="tool",
+                original_action=HandlerActionType.TOOL.value,
+                original_reasoning=action_result.rationale or "",
+                second_pass_result=tsaspdma_result,
+                verb_specific_data=self._build_tool_verb_specific_data(
+                    tool_name=tool_name,
+                    tsaspdma_result=tsaspdma_result,
+                ),
             )
 
             # TSASPDMA can return TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)
@@ -400,12 +709,150 @@ class ThoughtProcessor(
             # On failure, proceed with original TOOL action
             return action_result
 
+    async def _maybe_run_dsaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Run DSASPDMA when ASPDMA selected DEFER."""
+
+        if action_result.selected_action != HandlerActionType.DEFER:
+            return action_result
+
+        if not isinstance(action_result.action_parameters, DeferParams):
+            logger.warning(
+                "DSASPDMA-SKIP: DEFER action has invalid parameters type: %s",
+                type(action_result.action_parameters),
+            )
+            return action_result
+
+        evaluator = getattr(self.dma_orchestrator, "dsaspdma_evaluator", None)
+        if not evaluator:
+            logger.warning("DSASPDMA-SKIP: No DSASPDMA evaluator configured")
+            return action_result
+
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_dsaspdma
+
+            dsaspdma_result = await _within_thought_deadline(
+                thought_item,
+                run_dsaspdma(
+                    evaluator=evaluator,
+                    aspdma_result=action_result,
+                    original_thought=thought_item,
+                    context=thought_context,
+                    time_service=self._time_service,
+                ),
+            )
+
+            # Emit VERB_SECOND_PASS_RESULT — closes the prior asymmetry where
+            # DSASPDMA dispatched but produced no reasoning event. The
+            # verb_specific_data carries the deferral classification fields
+            # (rights_basis, primary_need_category, etc.) drawn from the
+            # refined ActionSelectionDMAResult.
+            await self._emit_verb_second_pass_result_event(
+                thought_item=thought_item,
+                verb="defer",
+                original_action=HandlerActionType.DEFER.value,
+                original_reasoning=action_result.rationale or "",
+                second_pass_result=dsaspdma_result,
+                verb_specific_data=self._build_defer_verb_specific_data(dsaspdma_result),
+            )
+
+            return dsaspdma_result
+        except Exception as e:
+            logger.error("DSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
+            return action_result
+
+    async def _maybe_run_msaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Run MSASPDMA when ASPDMA selected MEMORIZE.
+
+        The agent gets the graph's addressing conventions and the nodes that
+        already exist, then re-decides. Nothing is rewritten for it — see
+        schemas/dma/msaspdma.py for why healing was rejected.
+        """
+        if action_result.selected_action != HandlerActionType.MEMORIZE:
+            return action_result
+
+        if not isinstance(action_result.action_parameters, MemorizeParams):
+            logger.warning(
+                "MSASPDMA-SKIP: MEMORIZE action has invalid parameters type: %s",
+                type(action_result.action_parameters),
+            )
+            return action_result
+
+        evaluator = getattr(self.dma_orchestrator, "msaspdma_evaluator", None)
+        if not evaluator:
+            logger.warning("MSASPDMA-SKIP: No MSASPDMA evaluator configured")
+            return action_result
+
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_msaspdma
+
+            msaspdma_result = await _within_thought_deadline(
+                thought_item,
+                run_msaspdma(
+                    evaluator=evaluator,
+                    aspdma_result=action_result,
+                    original_thought=thought_item,
+                    context=thought_context,
+                    time_service=self._time_service,
+                ),
+            )
+
+            await self._emit_verb_second_pass_result_event(
+                thought_item=thought_item,
+                verb="memorize",
+                original_action=HandlerActionType.MEMORIZE.value,
+                original_reasoning=action_result.rationale or "",
+                second_pass_result=msaspdma_result,
+                verb_specific_data=self._build_memorize_verb_specific_data(
+                    original_result=action_result,
+                    msaspdma_result=msaspdma_result,
+                ),
+            )
+
+            return msaspdma_result
+        except Exception as e:
+            logger.error("MSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
+            return action_result
+
+    @staticmethod
+    def _build_memorize_verb_specific_data(
+        original_result: ActionSelectionDMAResult,
+        msaspdma_result: ActionSelectionDMAResult,
+    ) -> Dict[str, Any]:
+        """Verb-specific payload for VERB_SECOND_PASS_RESULT.
+
+        Carries the addressing decision, which is the thing that goes wrong: a
+        node id that changed between passes is the second pass doing its job.
+        """
+
+        def _node_of(result: ActionSelectionDMAResult) -> Optional[Any]:
+            params = result.action_parameters
+            return getattr(params, "node", None) if isinstance(params, MemorizeParams) else None
+
+        before, after = _node_of(original_result), _node_of(msaspdma_result)
+        data: Dict[str, Any] = {
+            "original_node_id": getattr(before, "id", None),
+            "final_node_id": getattr(after, "id", None),
+        }
+        if before is not None and after is not None:
+            data["node_id_corrected"] = before.id != after.id
+        return data
+
     async def _emit_tsaspdma_result_event(
         self,
         thought_item: ProcessingQueueItem,
         tool_name: str,
         tsaspdma_result: ActionSelectionDMAResult,
-        aspdma_rationale: str = "",
+        aspdma_reasoning: str = "",
     ) -> None:
         """Emit TSASPDMA_RESULT reasoning event for trace capture.
 
@@ -446,12 +893,12 @@ class ThoughtProcessor(
                 # TSASPDMA input - what ASPDMA selected
                 original_tool_name=tool_name,
                 original_parameters={},  # ASPDMA doesn't provide params in v1.9.3
-                aspdma_rationale=aspdma_rationale,
+                aspdma_reasoning=aspdma_reasoning,
                 # TSASPDMA output - refined decision
                 final_action=tsaspdma_result.selected_action.value,
                 final_tool_name=final_tool_name,
                 final_parameters=final_params,
-                tsaspdma_rationale=tsaspdma_result.rationale or "",
+                tsaspdma_reasoning=tsaspdma_result.rationale or "",
             )
 
             await reasoning_event_stream.broadcast_reasoning_event(event)
@@ -459,14 +906,139 @@ class ThoughtProcessor(
                 f"TSASPDMA-EVENT: Emitted TSASPDMA_RESULT for thought {thought_item.thought_id}: "
                 f"final_action={tsaspdma_result.selected_action.value}, "
                 f"final_tool_name={final_tool_name}, "
-                f"tsaspdma_rationale={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
+                f"tsaspdma_reasoning={tsaspdma_result.rationale[:100] if tsaspdma_result.rationale else 'None'}..."
             )
 
         except Exception as e:
             logger.warning(f"TSASPDMA: Failed to emit reasoning event: {e}")
 
+    def _build_tool_verb_specific_data(
+        self,
+        tool_name: str,
+        tsaspdma_result: ActionSelectionDMAResult,
+    ) -> Dict[str, Any]:
+        """Build verb_specific_data for TOOL second pass.
+
+        These are the same fields TSASPDMAResultEvent carries explicitly,
+        flattened into the generic event's payload dict so per-verb shape
+        lives at the verb registry level instead of the schema.
+        """
+        final_tool_name: Optional[str] = None
+        final_parameters: Dict[str, Any] = {}
+        if tsaspdma_result.selected_action == HandlerActionType.TOOL:
+            final_tool_name = tool_name
+            if isinstance(tsaspdma_result.action_parameters, ToolParams):
+                final_parameters = tsaspdma_result.action_parameters.parameters or {}
+            elif isinstance(tsaspdma_result.action_parameters, dict):
+                final_parameters = tsaspdma_result.action_parameters.get("parameters", {})
+
+        return {
+            "original_tool_name": tool_name,
+            "original_parameters": {},  # ASPDMA doesn't provide params in v1.9.3
+            "final_tool_name": final_tool_name,
+            "final_parameters": final_parameters,
+        }
+
+    def _build_defer_verb_specific_data(
+        self,
+        dsaspdma_result: ActionSelectionDMAResult,
+    ) -> Dict[str, Any]:
+        """Build verb_specific_data for DEFER second pass.
+
+        DSASPDMA refines the deferral with rights-basis classification fields
+        (rights_basis, primary_need_category, secondary_need_categories,
+        domain_hint, operational_reason). These come from DSASPDMALLMResult
+        and land on the resulting DeferParams. Flatten them into the generic
+        event payload.
+        """
+        params = dsaspdma_result.action_parameters
+        if isinstance(params, DeferParams):
+            return {
+                "rights_basis": list(params.rights_basis),
+                "primary_need_category": (params.needs_category.value if params.needs_category else None),
+                "secondary_need_categories": [cat.value for cat in params.secondary_needs_categories],
+                "domain_hint": params.domain_hint.value if params.domain_hint else None,
+                "operational_reason": (params.reason_code.value if params.reason_code else None),
+                "defer_reason": params.reason,
+                "defer_until": params.defer_until,
+            }
+        # If params isn't a DeferParams (shouldn't happen on this path), emit
+        # an empty payload rather than dropping the event entirely — the
+        # `verb` discriminator is still informative.
+        return {}
+
+    async def _emit_verb_second_pass_result_event(
+        self,
+        thought_item: ProcessingQueueItem,
+        verb: str,
+        original_action: str,
+        original_reasoning: str,
+        second_pass_result: ActionSelectionDMAResult,
+        verb_specific_data: Dict[str, Any],
+    ) -> None:
+        """Emit VERB_SECOND_PASS_RESULT — the generic verb-second-pass event.
+
+        Replaces per-verb event types (TSASPDMA_RESULT, future DSASPDMA_RESULT,
+        ...) with one event keyed by `verb`. See FSD/TRACE_EVENT_LOG_PERSISTENCE.md
+        §4 for the rationale.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+        from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+        from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
+
+        if not reasoning_event_stream or not reasoning_event_stream._subscribers:
+            logger.debug(
+                "VERB_SECOND_PASS: No reasoning event subscribers, skipping event emission "
+                f"(verb={verb}, thought={thought_item.thought_id})"
+            )
+            return
+
+        try:
+            timestamp = datetime.now(timezone.utc).isoformat()
+            event = create_reasoning_event(
+                event_type=ReasoningEvent.VERB_SECOND_PASS_RESULT,
+                thought_id=thought_item.thought_id,
+                task_id=thought_item.source_task_id,
+                timestamp=timestamp,
+                verb=verb,
+                original_action=original_action,
+                original_reasoning=original_reasoning,
+                final_action=second_pass_result.selected_action.value,
+                final_reasoning=second_pass_result.rationale or "",
+                verb_specific_data=verb_specific_data,
+            )
+            await reasoning_event_stream.broadcast_reasoning_event(event)
+            logger.info(
+                f"VERB_SECOND_PASS-EVENT: Emitted for thought {thought_item.thought_id}: "
+                f"verb={verb}, original={original_action} → final={second_pass_result.selected_action.value}"
+            )
+        except Exception as e:
+            logger.warning(f"VERB_SECOND_PASS: Failed to emit reasoning event ({verb}): {e}")
+
     def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
-        """Check if we should retry action selection with conscience guidance."""
+        """Check if we should retry action selection with conscience guidance.
+
+        FAIL FAST when the conscience could not reach its model (#1049). A retry
+        re-runs the same call with the same payload against the same unreachable
+        provider, so it is guaranteed to spend another full timeout and change
+        nothing. Observed on a biosecurity battery: 28 CONSCIENCE_RETRY lines, 4
+        override rounds, one conscience call taking 142s to fail, 24 of 60 turns
+        never returning.
+
+        Retry guidance only helps when the shard actually JUDGED and said what
+        was wrong. There is no guidance in "the network was down", and feeding
+        that back to action selection as if it were a critique invites the model
+        to rationalise a non-existent objection.
+        """
+        if conscience_result is not None and conscience_result.conscience_unavailable:
+            logger.warning(
+                "[CONSCIENCE] Not retrying: a conscience shard could not reach its model, so no "
+                "judgement was formed. Retrying would spend another full timeout. Reason: %s",
+                conscience_result.override_reason,
+            )
+            return False
         return (
             conscience_result is not None
             and conscience_result.overridden
@@ -488,10 +1060,14 @@ class ThoughtProcessor(
         )
 
         # Prepare retry context
-        retry_context = self._prepare_conscience_retry_context(thought_item, thought_context, conscience_result)
+        retry_context = self._prepare_conscience_retry_context(
+            thought_item, thought_context, conscience_result, thought=thought
+        )
 
         try:
-            # Attempt retry
+            # Attempt retry. Same thought_item -> same deadline: this ASPDMA
+            # and the second conscience pass spend what is left of the budget
+            # this thought started with, never a fresh one (#1186).
             retry_result = await self.dma_orchestrator.run_action_selection(
                 thought_item=thought_item,
                 actual_thought=thought,
@@ -512,79 +1088,269 @@ class ThoughtProcessor(
 
         return conscience_result.original_action, conscience_result
 
+    def _extract_updated_observation(self, conscience_result: ConscienceApplicationResult) -> Optional[str]:
+        """Extract updated observation from conscience result if present."""
+        if hasattr(conscience_result, "epistemic_data") and conscience_result.epistemic_data:
+            ep_data = conscience_result.epistemic_data
+            if hasattr(ep_data, "CIRIS_OBSERVATION_UPDATED_STATUS") and ep_data.CIRIS_OBSERVATION_UPDATED_STATUS:
+                obs = ep_data.CIRIS_OBSERVATION_UPDATED_STATUS
+                logger.info(f"[CONSCIENCE_RETRY] Found CIRIS_OBSERVATION_UPDATED_STATUS: {obs[:100]}...")
+                return obs
+        return None
+
+    def _create_retry_context_copy(self, thought_context: Any) -> Any:
+        """Create a copy of the thought context with is_conscience_retry flag set."""
+        if hasattr(thought_context, "model_copy"):
+            retry_context = thought_context.model_copy()
+            retry_context.is_conscience_retry = True
+            return retry_context
+        if isinstance(thought_context, dict):
+            retry_context = thought_context.copy()
+            retry_context["is_conscience_retry"] = True
+            return retry_context
+        if hasattr(thought_context, "is_conscience_retry"):
+            thought_context.is_conscience_retry = True
+        return thought_context
+
+    @staticmethod
+    def _conscience_guidance_mode() -> str:
+        """`full` (default) or `qualitative` — the #983 / CC 3.4.5 gate.
+
+        The CC read-model review found the conscience retry loop feeds the
+        agent's own numeric self-scores back into its next action selection
+        ([IRIS-E] entropy=…, [IRIS-C] coherence=… PASS/FAIL, thresholds) — a
+        "self-subject score in an automated loop selecting the next action"
+        under a literal reading of CC 3.4.5, and, for TORQUE's hidden arms
+        (RATCHET#16 arm D), a channel the regime must be able to close.
+
+        `qualitative` keeps the conscience loop — justification, enumerated
+        alternatives, uncertainties, the override reason: the reflection that
+        makes a retry BETTER — while removing every number, band, threshold
+        and judged PASS/FAIL that could serve as a pivot-target for score
+        farming. The distinction (per the substrate team's scoping on #984,
+        endorsed rather than resolved here): within-thought reflection is the
+        safety mechanism working; a self-score in the selection loop is the
+        Goodhart channel. Whether CC 3.4.5's literal text should catch the
+        former is an open CC scoping question — which is exactly why this is
+        a MODE and not a removal: default behaviour is unchanged until the CC
+        settles, and arm D runs clean today.
+
+        Unknown values refuse loudly (pinned-manifest discipline — a regime
+        that believes it closed this channel and did not must not run).
+        """
+        from ciris_engine.logic.utils.conscience_mode import conscience_guidance_mode
+
+        return conscience_guidance_mode()
+
+    def _build_structured_shard_detail(
+        self, conscience_result: ConscienceApplicationResult, language: str = "en"
+    ) -> str:
+        """Format per-shard conscience results into a structured retry envelope.
+
+        Technical labels ([IRIS-O], decision=, ratio=, etc.) stay in English so
+        the agent's structured-output schema sees consistent identifiers across
+        locales. Natural-language headers (`why:`, `Alternatives ... pivot
+        targets`, `uncertainties:`) are localized so the retry context does not
+        leak English into a non-English thought and cause language drift.
+
+        In `qualitative` mode (#983) every numeric self-score, threshold, band
+        and judged PASS/FAIL is omitted; the qualitative reflection remains.
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
+        scores = self._conscience_guidance_mode() == "full"
+        lines: List[str] = []
+
+        o = conscience_result.optimization_veto_check
+        if o is not None:
+            affected = ", ".join(o.affected_values) if o.affected_values else "(none listed)"
+            if scores:
+                lines.append(
+                    f"[IRIS-O] decision={o.decision} ratio={o.entropy_reduction_ratio:.1f} "
+                    f"affected_values=[{affected}]"
+                )
+            else:
+                lines.append(f"[IRIS-O] affected_values=[{affected}]")
+            if o.justification:
+                why_label = get_string(language, "conscience.retry_why_label", default="why")
+                lines.append(f"  {why_label}: {o.justification[:400]}")
+
+        e = conscience_result.entropy_check
+        if e is not None:
+            if scores:
+                rep = "representative=True" if e.actual_is_representative else "representative=False"
+                lines.append(f"[IRIS-E] entropy={e.entropy_score:.2f} {rep} threshold={e.threshold:.2f}")
+            elif e.alternative_meanings:
+                lines.append("[IRIS-E]")
+            if e.alternative_meanings:
+                alts_header = get_string(
+                    language,
+                    "conscience.retry_alternatives_header",
+                    default="Alternatives IRIS-E enumerated (use as pivot targets if you re-SPEAK):",
+                )
+                lines.append(f"  {alts_header}")
+                for i, alt in enumerate(e.alternative_meanings[:3], 1):
+                    lines.append(f"    {i}. {alt[:280]}")
+
+        c = conscience_result.coherence_check
+        if c is not None and scores:
+            # The coherence line is score/threshold/verdict only — in
+            # qualitative mode there is nothing non-numeric to keep; the
+            # override reason in the intro already carries the why.
+            lines.append(
+                f"[IRIS-C] coherence={c.coherence_score:.2f} threshold={c.threshold:.2f} "
+                f"{'PASS' if c.passed else 'FAIL'}"
+            )
+
+        h = conscience_result.epistemic_humility_check
+        if h is not None:
+            if scores:
+                lines.append(f"[IRIS-H] certainty={h.epistemic_certainty:.2f} " f"recommended={h.recommended_action}")
+            elif h.identified_uncertainties:
+                lines.append(f"[IRIS-H] recommended={h.recommended_action}")
+            if h.identified_uncertainties:
+                unc_label = get_string(language, "conscience.retry_uncertainties_label", default="uncertainties")
+                lines.append(f"  {unc_label}: " + "; ".join(u[:120] for u in h.identified_uncertainties[:4]))
+
+        return "\n".join(lines)
+
+    def _build_retry_guidance(
+        self,
+        attempted_action: str,
+        override_reason: str,
+        updated_observation: Optional[str],
+        conscience_result: Optional[ConscienceApplicationResult] = None,
+        language: str = "en",
+    ) -> str:
+        """Build retry guidance message based on whether there's a new observation.
+
+        All natural-language guidance is rendered in `language` so the retry
+        context does not flip the agent's response language mid-thought. The
+        per-shard structured detail keeps technical identifiers in English.
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
+        # Structured per-shard detail — gives ASPDMA concrete pivot targets.
+        shard_detail = (
+            self._build_structured_shard_detail(conscience_result, language=language) if conscience_result else ""
+        )
+
+        header = get_string(language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**")
+        intro = get_string(
+            language,
+            "conscience.retry_intro",
+            default="Your previous attempt to {action} was rejected because: {reason}",
+            action=attempted_action,
+            reason=override_reason,
+        )
+        intro = f"{header}\n{intro}"
+        materially_different_rule = get_string(
+            language,
+            "conscience.retry_must_be_different",
+            default=(
+                "If you re-select SPEAK, your speak_content MUST be MATERIALLY DIFFERENT "
+                "from the previous attempt — not a paraphrase. Use the IRIS-E alternatives "
+                "above as pivot directions if provided. CRITICAL: respond in the same "
+                "language you were responding in before — do not switch the user's "
+                "language. If the conscience flagged propaganda/defensive-mimicry patterns "
+                "you cannot ethically rewrite, DEFER to Wise Authority. PONDER auto-DEFERS "
+                "at max depth — avoid that unless a SPEAK is genuinely unsafe."
+            ),
+        )
+
+        base_guidance = f"{intro}\n\n{shard_detail}\n\n" if shard_detail else f"{intro}\n\n"
+
+        if updated_observation:
+            logger.info("[CONSCIENCE_RETRY] Including new observation in retry_guidance")
+            obs_intro = get_string(
+                language,
+                "conscience.retry_observation_intro",
+                default=(
+                    "IMPORTANT: A NEW MESSAGE arrived from the user while you were "
+                    "processing: '{updated_observation}'. You must now respond to THIS "
+                    "new message, not complete the old task."
+                ),
+                updated_observation=updated_observation,
+            )
+            obs_outro = get_string(
+                language,
+                "conscience.retry_observation_outro",
+                default=(
+                    "The user is waiting for a response to their new message. Use SPEAK "
+                    "to respond or use a TOOL if needed."
+                ),
+            )
+            return f"{obs_intro}\n\n{base_guidance}{materially_different_rule}\n{obs_outro}"
+
+        general_outro = get_string(
+            language,
+            "conscience.retry_general_outro",
+            default=(
+                "Remember: DEFER only for ethical dilemmas or permission issues — NOT "
+                "for technical errors. If a tool fails, SPEAK to explain the error to "
+                "the user."
+            ),
+        )
+        return f"{base_guidance}{materially_different_rule}\n{general_outro}"
+
     def _prepare_conscience_retry_context(
-        self, thought_item: ProcessingQueueItem, thought_context: Any, conscience_result: ConscienceApplicationResult
+        self,
+        thought_item: ProcessingQueueItem,
+        thought_context: Any,
+        conscience_result: ConscienceApplicationResult,
+        thought: Optional[Thought] = None,
     ) -> Any:
         """Prepare context for conscience retry."""
         override_reason = conscience_result.override_reason or "Action failed conscience checks"
         attempted_action = self._describe_action(conscience_result.original_action)
 
-        # Log what we received from conscience
         logger.info(f"[CONSCIENCE_RETRY] Preparing retry context for thought {thought_item.thought_id}")
         logger.info(f"[CONSCIENCE_RETRY] Override reason: {override_reason[:200]}...")
         logger.info(f"[CONSCIENCE_RETRY] Original action was: {attempted_action}")
 
-        # Check if this is an updated status override (new observation arrived)
-        # The conscience result may have CIRIS_OBSERVATION_UPDATED_STATUS with the new message
-        updated_observation = None
-        if hasattr(conscience_result, "epistemic_data") and conscience_result.epistemic_data:
-            # Check epistemic_data for updated status
-            ep_data = conscience_result.epistemic_data
-            if hasattr(ep_data, "CIRIS_OBSERVATION_UPDATED_STATUS"):
-                updated_observation = ep_data.CIRIS_OBSERVATION_UPDATED_STATUS
-                if updated_observation:
-                    logger.info(
-                        f"[CONSCIENCE_RETRY] Found CIRIS_OBSERVATION_UPDATED_STATUS in epistemic_data: {updated_observation[:100]}..."
-                    )
+        updated_observation = self._extract_updated_observation(conscience_result)
 
-        # Also check the final_action's parameters for the new observation
+        # Log PONDER questions if present
         if conscience_result.final_action and hasattr(conscience_result.final_action, "action_parameters"):
             params = conscience_result.final_action.action_parameters
             if params and hasattr(params, "questions"):
                 logger.info(f"[CONSCIENCE_RETRY] PONDER questions from conscience: {params.questions}")
 
-        # Create enhanced context with conscience feedback
-        retry_context = thought_context
-        if hasattr(thought_context, "model_copy"):
-            retry_context = thought_context.model_copy()
-            retry_context.is_conscience_retry = True
-        elif isinstance(thought_context, dict):
-            retry_context = thought_context.copy()
-            retry_context["is_conscience_retry"] = True
-        elif hasattr(retry_context, "is_conscience_retry"):
-            retry_context.is_conscience_retry = True
-
-        # Build retry guidance - CRITICAL: Include the new observation if present
-        base_guidance = (
-            f"Your previous attempt to {attempted_action} was rejected because: {override_reason}. "
-            "Please select a DIFFERENT action that better aligns with ethical principles and safety guidelines. "
+        retry_context = self._create_retry_context_copy(thought_context)
+        # Resolve agent locale via the canonical chain. The retry guidance
+        # must be in the same language the agent was working in — an
+        # English override block injected into a non-English thought flips
+        # the model's language. Prefer the actual Thought / ProcessingQueueItem
+        # because the system-level `thought_context` doesn't always carry
+        # `.thought` / `.task` pointers (the OPT_VETO_DEBUG run on
+        # 2026-04-26 confirmed retry was falling through to env="en" while
+        # opt-veto resolved correctly off the Thought).
+        from ciris_engine.logic.utils.localization import (
+            _lang_from_obj_or_inner_context,
+            get_preferred_language,
+            get_user_language_from_context,
         )
 
-        if updated_observation:
-            # This is the key fix - include the new observation in the retry guidance
-            retry_guidance = (
-                f"IMPORTANT: A NEW MESSAGE arrived from the user while you were processing: '{updated_observation}'. "
-                f"You must now respond to THIS new message, not complete the old task. "
-                f"{base_guidance}"
-                "The user is waiting for a response to their new message. Use SPEAK to respond or use a TOOL if needed."
-            )
-            logger.info(f"[CONSCIENCE_RETRY] Including new observation in retry_guidance")
-        else:
-            retry_guidance = (
-                f"{base_guidance}"
-                "Consider: Is there a more cautious approach? Should you gather more information first? "
-                "Can this task be marked as complete without further action? "
-                "Remember: DEFER only if the task MUST be done AND requires human approval."
-            )
+        retry_language = (
+            _lang_from_obj_or_inner_context(thought)
+            or _lang_from_obj_or_inner_context(thought_item)
+            or get_user_language_from_context(thought_context)
+            or get_preferred_language()
+        )
+        logger.info(f"[CONSCIENCE_RETRY] Retry guidance language: {retry_language}")
+        retry_guidance = self._build_retry_guidance(
+            attempted_action,
+            override_reason,
+            updated_observation,
+            conscience_result,
+            language=retry_language,
+        )
 
-        # Add conscience guidance to the thought item
         conscience_feedback = {
             "failed_action": attempted_action,
             "failure_reason": override_reason,
             "retry_guidance": retry_guidance,
         }
-
-        # If there's a new observation, add it explicitly to the feedback
         if updated_observation:
             conscience_feedback["new_observation"] = updated_observation
             conscience_feedback["updated_status_detected"] = "true"
@@ -604,8 +1370,14 @@ class ThoughtProcessor(
         retry_context: Any,
         retry_result: Any,
         original_conscience_result: ConscienceApplicationResult,
+        profile_name: str = "",
+        retry_count: int = 1,
     ) -> Tuple[Any, ConscienceApplicationResult]:
-        """Process the result of a conscience retry."""
+        """Process the result of a conscience retry.
+
+        In benchmark mode (CIRIS_BENCHMARK_MODE=true with he-300-benchmark template),
+        keeps retrying up to 5 times until format compliance is achieved.
+        """
         logger.info(f"ThoughtProcessor: Re-running consciences on retry action {retry_result.selected_action}")
 
         retry_conscience_result = await self._conscience_execution_step(
@@ -615,9 +1387,66 @@ class ThoughtProcessor(
         if not retry_conscience_result.overridden:
             logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} passed consciences")
             return retry_result, retry_conscience_result
-        else:
-            self._log_retry_failure(retry_result, original_conscience_result)
-            return original_conscience_result.original_action, original_conscience_result
+
+        # Check for benchmark mode bouncing
+        from ciris_engine.logic.config.env_utils import get_env_var
+
+        benchmark_mode_val = get_env_var("CIRIS_BENCHMARK_MODE", "") or ""
+        benchmark_mode_env = benchmark_mode_val.lower() in ("true", "1", "yes", "on")
+        template_name = get_env_var("CIRIS_TEMPLATE", "") or ""
+        benchmark_mode = benchmark_mode_env and template_name == "he-300-benchmark"
+
+        max_benchmark_retries = 5
+
+        if benchmark_mode and retry_count < max_benchmark_retries:
+            # Still overridden and in benchmark mode - keep bouncing
+            if retry_conscience_result.final_action.selected_action == HandlerActionType.PONDER:
+                logger.info(
+                    f"[BENCHMARK_MODE] Retry {retry_count}/{max_benchmark_retries} failed conscience, "
+                    f"bouncing again for thought {thought.thought_id}..."
+                )
+
+                # Prepare new retry context with updated feedback
+                new_retry_context = self._prepare_conscience_retry_context(
+                    thought_item, retry_context, retry_conscience_result, thought=thought
+                )
+
+                try:
+                    # Attempt another retry
+                    new_retry_result = await self.dma_orchestrator.run_action_selection(
+                        thought_item=thought_item,
+                        actual_thought=thought,
+                        processing_context=new_retry_context,
+                        dma_results=dma_results,
+                        profile_name=profile_name,
+                    )
+
+                    if new_retry_result:
+                        # Recursively process the new result
+                        return await self._process_conscience_retry_result(
+                            thought_item,
+                            thought,
+                            dma_results,
+                            new_retry_context,
+                            new_retry_result,
+                            retry_conscience_result,
+                            profile_name=profile_name,
+                            retry_count=retry_count + 1,
+                        )
+                except Exception as e:
+                    logger.error(f"[BENCHMARK_MODE] Bounce {retry_count + 1} failed: {e}")
+
+        if benchmark_mode and retry_count >= max_benchmark_retries:
+            logger.warning(
+                f"[BENCHMARK_MODE] Exhausted {max_benchmark_retries} retries for {thought.thought_id}, "
+                f"proceeding with last result"
+            )
+            # Return the last retry result even if it failed conscience
+            return retry_result, retry_conscience_result
+
+        # Normal mode: log failure and return original
+        self._log_retry_failure(retry_result, original_conscience_result)
+        return original_conscience_result.original_action, original_conscience_result
 
     def _log_retry_failure(self, retry_result: Any, original_conscience_result: ConscienceApplicationResult) -> None:
         """Log details when retry also fails consciences."""
@@ -832,9 +1661,15 @@ class ThoughtProcessor(
         """Simple conscience application without orchestrator."""
         is_conscience_retry = self._check_and_clear_conscience_retry_flag(processing_context)
 
+        # Lift IDMA out of the DMA result dict into a typed context field so
+        # consciences can read fragility/k_eff/phase without depending on the
+        # key-shape of the extra-allow DMA bag.
+        idma_result = dma_results_dict.get("idma") if isinstance(dma_results_dict, dict) else None
+
         # Create typed context for conscience checks (needed for both bypass and normal)
         context = ConscienceCheckContext(
             thought=thought,
+            idma_result=idma_result,
             dma_results=dma_results_dict,  # extra="allow" accepts additional fields
         )
 
@@ -887,10 +1722,15 @@ class ThoughtProcessor(
         return is_conscience_retry
 
     def _is_exempt_from_conscience_checks(self, action_result: ActionSelectionDMAResult) -> bool:
-        """Check if action is exempt from conscience override."""
+        """Check if action is exempt from conscience override.
+
+        Updated 2026-05-03: DEFER no longer exempt — Coherence, OptimizationVeto,
+        and EpistemicHumility now evaluate defer `reason` for defensive-mimicry
+        refusal framing. See conscience_execution.py:140 for the full rationale
+        and the matching Conscience runs / exempt action lists.
+        """
         exempt_actions = {
             HandlerActionType.TASK_COMPLETE.value,
-            HandlerActionType.DEFER.value,
             HandlerActionType.REJECT.value,
         }
         return action_result.selected_action in exempt_actions
@@ -1115,3 +1955,27 @@ class ThoughtProcessor(
         # Return the full ConscienceApplicationResult to preserve all conscience data
         # The full result includes epistemic_data, override_reason, etc.
         return conscience_result
+
+    # ------------------------------------------------------------------
+    # Verb second-pass registry
+    #
+    # ASPDMA selects a verb without the domain knowledge needed to fill that
+    # verb's parameters. A second pass supplies that knowledge and lets the agent
+    # re-decide before execution — TOOL gets its documentation, DEFER the rights
+    # taxonomy, MEMORIZE the graph's addressing conventions.
+    #
+    # Declared at class scope so coverage is INSPECTABLE: a test can read this
+    # table and assert every verb is either registered here or listed as not
+    # needing one. That is what turns "8 of 10 verbs silently have no second
+    # pass" (#1027) from something rediscovered in a production loop into a CI
+    # failure.
+    #
+    # To add a verb: write the evaluator, add one entry. No edit to
+    # _run_verb_second_pass, and no new near-duplicate dispatch method.
+    # Typed with the real return so the dispatch does not leak Any: the value
+    # is what the pipeline assigns to action_result.
+    _VERB_SECOND_PASS: Dict[HandlerActionType, Callable[..., Awaitable[ActionSelectionDMAResult]]] = {
+        HandlerActionType.TOOL: _maybe_run_tsaspdma,
+        HandlerActionType.DEFER: _maybe_run_dsaspdma,
+        HandlerActionType.MEMORIZE: _maybe_run_msaspdma,
+    }

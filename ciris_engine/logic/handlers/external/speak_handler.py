@@ -125,7 +125,12 @@ class SpeakHandler(BaseActionHandler):
 
             follow_up_id = self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content=f"SPEAK action failed for thought {thought_id}. Reason: {e}",
+                follow_up_content=self._localized_followup(
+                    "speak_action_failed_with_reason",
+                    default=f"SPEAK action failed for thought {thought_id}. Reason: {e}",
+                    thought_id=thought_id,
+                    reason=str(e),
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
@@ -225,15 +230,55 @@ class SpeakHandler(BaseActionHandler):
     def _complete_speak_action(
         self, thought: Thought, result: ActionSelectionDMAResult, channel_id: str, success: bool
     ) -> str:
-        """Complete the speak action and create follow-up thought."""
+        """Complete the speak action and create follow-up thought (or auto-complete in benchmark mode)."""
+        from ciris_engine.logic.config.env_utils import get_env_var
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        # Check for benchmark mode - skip follow-up and auto-complete parent task
+        benchmark_mode_val = get_env_var("CIRIS_BENCHMARK_MODE", "") or ""
+        benchmark_mode = benchmark_mode_val.lower() in ("true", "1", "yes", "on")
+
+        if benchmark_mode and success:
+            # In benchmark mode, auto-complete the parent task after SPEAK
+            logger.info(f"[BENCHMARK_MODE] SPEAK successful, auto-completing task {thought.source_task_id}")
+
+            # Mark the thought as completed
+            persistence.update_thought_status(
+                thought_id=thought.thought_id,
+                status=ThoughtStatus.COMPLETED,
+                final_action=result.model_dump(),
+            )
+
+            # Mark the parent task as completed
+            if thought.source_task_id:
+                persistence.update_task_status(
+                    thought.source_task_id,
+                    TaskStatus.COMPLETED,
+                    thought.agent_occurrence_id,
+                )
+
+            self._update_trace_correlation(True, f"[BENCHMARK] Message sent to {channel_id}, task auto-completed")
+            return f"benchmark_complete_{thought.thought_id}"
+
+        # Normal mode: create follow-up thought (localized via handlers.* keys)
         if success:
-            follow_up_text = (
-                f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK SUCCESSFUL! Message delivered to channel {channel_id}. "
-                "Speaking repeatedly on the same task is not useful - if you have nothing new to add, use TASK_COMPLETE. "
-                "New user messages will create new tasks automatically."
+            follow_up_text = self._localized_followup(
+                "speak_followup_success",
+                default=(
+                    f"SPEAK SUCCESSFUL! Message delivered to channel {channel_id}. "
+                    "Speaking repeatedly on the same task is usually incorrect. "
+                    "Unless you need to use a tool to follow up on the task, the next choice is almost certainly TASK_COMPLETE. "
+                    "Do not SPEAK again unless a correction is truly necessary. "
+                    "New user messages will create new tasks automatically."
+                ),
+                channel_id=channel_id,
             )
         else:
-            follow_up_text = f"CIRIS_FOLLOW_UP_THOUGHT: SPEAK action failed for thought {thought.thought_id}."
+            follow_up_text = self._localized_followup(
+                "speak_followup_failure",
+                default=f"SPEAK action failed for thought {thought.thought_id}.",
+                thought_id=thought.thought_id,
+            )
 
         final_status = ThoughtStatus.COMPLETED if success else ThoughtStatus.FAILED
 

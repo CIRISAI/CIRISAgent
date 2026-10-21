@@ -1,5 +1,6 @@
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
@@ -9,6 +10,37 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LOG_FORMAT = "%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s"
 DEFAULT_LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def _cleanup_old_logs(log_path: Path, prefix: str, keep_count: int = 5) -> None:
+    """Remove old log files, keeping only the most recent ones.
+
+    Args:
+        log_path: Directory containing log files
+        prefix: Filename prefix to match (e.g., 'ciris_agent_')
+        keep_count: Number of recent log sessions to keep
+    """
+    try:
+        # Find all log files with the prefix (including rotation backups)
+        log_files = list(log_path.glob(f"{prefix}*.log*"))
+        if len(log_files) <= keep_count:
+            return
+
+        # Sort by modification time (oldest first)
+        log_files.sort(key=lambda f: f.stat().st_mtime)
+
+        # Remove oldest files, keeping keep_count
+        files_to_remove = log_files[:-keep_count]
+        for log_file in files_to_remove:
+            try:
+                log_file.unlink()
+            except Exception:
+                pass  # Ignore errors deleting individual files
+    except Exception:
+        pass  # Cleanup is best-effort
+
+
+from ciris_engine.logic.utils.log_dedup import RepeatCollapsingFilter
 
 
 def setup_basic_logging(
@@ -69,8 +101,17 @@ def setup_basic_logging(
     target_logger.handlers = []
 
     if console_output:
+        # Ensure stdout is UTF-8 before the handler captures a reference to it,
+        # so status glyphs (✓, ⚠, …) don't crash a cp1252 Windows console.
+        from ciris_engine.logic.utils import win_console
+
+        win_console.setup()
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
+        # Collapse identical consecutive lines (see log_dedup). The first
+        # occurrence always emits and the count is always reported, so this
+        # removes repetition without removing information.
+        console_handler.addFilter(RepeatCollapsingFilter())
         target_logger.addHandler(console_handler)
 
     if log_to_file:
@@ -79,20 +120,32 @@ def setup_basic_logging(
 
         if not time_service:
             raise RuntimeError("CRITICAL: TimeService is required for logging setup")
+
+        # Clean up old log files on startup (keep last 5 sessions)
+        _cleanup_old_logs(log_path, prefix="ciris_agent_", keep_count=2)
+
         timestamp = time_service.now().strftime("%Y%m%d_%H%M%S")
         log_filename = log_path / f"ciris_agent_{timestamp}.log"
 
-        file_handler = logging.FileHandler(log_filename, encoding="utf-8")
+        # Use RotatingFileHandler: 5MB max, keep 3 backups (20MB total per session)
+        file_handler = RotatingFileHandler(
+            log_filename,
+            maxBytes=5 * 1024 * 1024,  # 5MB
+            backupCount=3,
+            encoding="utf-8",
+        )
         file_handler.setFormatter(formatter)
+        # Same collapsing on the file: latest.log is the artefact users send us,
+        # and it is the one that most needs to be readable end to end.
+        file_handler.addFilter(RepeatCollapsingFilter())
         target_logger.addHandler(file_handler)
 
-        latest_link = log_path / "latest.log"
-        if latest_link.exists():
-            latest_link.unlink()
-        try:
-            latest_link.symlink_to(log_filename.name)
-        except Exception:
-            pass
+        # Symlink where permitted, hardlink or a pointer file where not. On
+        # Windows an unprivileged symlink raises WinError 1314, and this used to
+        # swallow that -- so Windows users had no latest.log at all.
+        from ciris_engine.logic.utils.latest_link import link_latest
+
+        link_latest(log_path / "latest.log", log_filename)
 
         # Store the actual log filename for the telemetry endpoint
         actual_log_path = log_path / ".current_log"
@@ -123,6 +176,15 @@ def setup_basic_logging(
     logging.getLogger("discord").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
 
+    # #937 — install the substrate's Rust tracing subscriber at the moment
+    # logging becomes real. Without it persist/edge events are discarded at
+    # the source, which is why a 15-minute migration-phase block logged
+    # nothing. Idempotent, never raises, and adds NO Python logging handler —
+    # so substrate output cannot reach incidents_latest.log (#935).
+    from ciris_engine.logic.utils.substrate_logging import install_substrate_tracing
+
+    install_substrate_tracing(log_dir=log_dir if log_to_file else None)
+
     log_msg = f"Logging configured. Level: {logging.getLevelName(level)}"
     if log_to_file:
         log_msg += f", Log file: {log_filename}"
@@ -133,10 +195,12 @@ def setup_basic_logging(
     # Print to stdout regardless of console_output setting
     if log_to_file and not console_output:
         print("\n" + "=" * 80)
-        print(f"🔍 LOGGING INITIALIZED - SEE DETAILED LOGS AT: {log_filename}")
-        print(f"🔗 Symlinked to: {latest_link}")
+        print(f" LOGGING INITIALIZED - SEE DETAILED LOGS AT: {log_filename}")
+        # Not necessarily a symlink: on Windows an unprivileged symlink is
+        # refused, so this may be a hardlink or a pointer file.
+        print(f" Latest: {log_path / 'latest.log'}")
         if enable_incident_capture:
-            print(f"⚠️  Incident capture: {log_dir}/incidents_latest.log (WARNING/ERROR messages captured as incidents)")
+            print(f"[WARN] Incident capture: {log_dir}/incidents_latest.log (WARNING/ERROR messages captured as incidents)")
         print("=" * 80 + "\n")
         sys.stdout.flush()
 

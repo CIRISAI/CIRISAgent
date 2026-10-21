@@ -70,12 +70,12 @@ def generate_root_wa_keypair():
         json.dump(key_metadata, f, indent=2)
     metadata_file.chmod(0o600)
 
-    print("✅ Generated new root WA key pair")
-    print("📄 Public key saved to: seed/root_pub.json")
-    print(f"🔐 Private key saved to: {private_key_file}")
-    print(f"📋 Metadata saved to: {metadata_file}")
-    print("\n⚠️  IMPORTANT: The private key must NEVER be committed to git!")
-    print(f"📦 Public key (base64): {public_key_b64}")
+    print("[OK] Generated new root WA key pair")
+    print(" Public key saved to: seed/root_pub.json")
+    print(f" Private key saved to: {private_key_file}")
+    print(f" Metadata saved to: {metadata_file}")
+    print("\n[WARN] IMPORTANT: The private key must NEVER be committed to git!")
+    print(f" Public key (base64): {public_key_b64}")
 
     return root_cert, private_bytes
 

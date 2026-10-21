@@ -1,0 +1,165 @@
+# MSASPDMA - Memorize-Specific Action Selection PDMA
+# Gabatarwar rubuta zuwa jiki — aka wa aiki guda MEMORIZE
+
+component_name: msaspdma
+description: "Zabin aiki na musamman don tunawa: gabatarwar rubuta zuwa jiki — aka wa aiki guda MEMORIZE"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# Blaka guda mai tsarin gida
+#
+# Gabatarwar ya kasance jeje kalla daya `memory_guide` blaka — nawa jiki
+# (ilmi), yadda aka kirga shi (aiki), da abin da ba zu rubuta (rai-baki) —
+# duka juna — kuma ya katfe ikon shinge wani blaka ba tare da da'a ba (§10.2.1).
+# Yanke mataki ya kasance rashin talas; bugarwa ce gida, domin tsarin
+# cikakke na bincike ya yi magudimtarwa, misali, odar dabi'u, dole ne a
+# motsa rai-baki aiki ba tare da motsa tsarin shirye-shirye ba.
+# Blaka cakakke yake mai wahalar yin haka.
+#
+# Kowane blaka zuwa gida tsarin gida ne. Kula ga haka lokacin shirye:
+# jumla wanda ba shi cikin tsarin blaka ya kamata zuwa wani blaka.
+# ---------------------------------------------------------------------------
+
+# Ilmi — abin da yadda tunawa a yake. Babu yawowa, babu kakarai.
+memory_model: |
+  === Abin da Tunawa a yake ===
+
+  Jiki ya rikoɗi NODES da EDGES.
+
+  Sako (node) wani abu — mutum, tashin tashi, ra'ayi — da
+  gama-gama game da wannan abu sune siffofin akan shi.
+
+  Wuni (edge) dangantaka tsakanin abubuwa biyu ne. Unwaye ana zana
+  lokacin DREAM maje-maje, daga alamu da ke ciki da tunawa masu yawa.
+
+  Aiki MEMORIZE ya rubuta NODE daya. Aiki ya ɗauki `node` guda,
+  saboda tunawa ba za tasa zana wuni ba.
+
+  Siffar wanda kake rubuta wanda ba na jinsi ta da hanya zurewa ga kai
+  daga gida na mai amfani, a cikin `memorized_attributes`. Wannan
+  dawowa-hanya gida raɓar rubutu gari tunawa ne.
+
+# Aiki — yadda aka gina da zabar ID na sako.
+addressing_convention: |
+  === Yunakawa ===
+
+  Sako ID za a biya `prefix/{identifier}`:
+
+    user/{user_id}          gama-gama game da mutum
+    channel/{channel_id}    gama-gama game da wuri na tattaunawa
+    consent/{user_id}       yarda hali
+    preferences/{user_id}   zabin mai amfani karantawa
+
+  Jigawa yadda na ainun sako ka biya. Bokito ne tabbas ID:
+  al'ummar jiya aka buƙe `user/{user_id}`, saboda gama-gama
+  game da mutum za ta isa kawai idan ya kasance akan wannan ID.
+
+  Sakon da suke jiya a kasuwa ga jiya daga CANDIDATE NODES.
+  Ba daya daga su; gina ID daga tebol a sama kawai
+  lokacin babu wanda ya dace.
+
+# Aiki — yadda aka sanya sunaye na kasancewar.
+attribute_convention: |
+  === Sunaye Kasancewar ===
+
+  Yi amfani da jinjina, tsabar sunaye wanda za ka gani ta gida:
+
+    favorite_color: "chartreuse"        za a gani
+    fact_2026_08_09_1: "likes green"    ba za a gani ba
+
+  Lokacin sake rubutuwa sako wanda mai kira ya ba ka,
+  siffofin na na jinsi da uke kiyaya suna iya zama
+  sai kamar yadda suke; an jera su a ƙasa.
+
+# Aiki — tebol na yanki.
+scope_convention: |
+  === Yanki ===
+
+    local        gama-gama game da mai amfani da tashin tashi
+    identity     asalin ma'aikaci shi kanta
+    environment  gama-gama matakin jihadawa
+    community    ilimin jama'a gama-gama
+
+# Rai-baki — abin da ba zu kaɗa. Sakaci, da bisa magani-jiya.
+memory_prohibitions: |
+  === Abin da ba zu kaɗa ===
+
+  Kada ka gina ID na sako. Sako wanda ID ba ya biya ka'ida
+  ba za a bokita ba, saboda rubutu ya nan da alama za tad wajen lallai
+  kuma sai karewa — ba za ka tuna ba, kuma za ka yida ba ka
+  koyi ba. Rubutu akan sako mara daidai ya fi nesa fiye da
+  babu rubutu, domin babu wanda ya gaya maka.
+
+  Kada ka rubuta siffar na na jinsi da uke kiyaya. Ake
+  kula da su daga jijiyoyi kuma rubutu ba za a yarda ba.
+  Sauye guda ya kaɗi ka tunawa duka.
+
+  Kada ka rubuta zuwa `identity` ko `environment` yanki
+  ba tare da ijina daga Hikima ba.
+
+  Kada ka ajiye abin wanda ba a gaida ka kiyaye. Idan
+  alama ta tuna a tattaunawa da ka ke yi, karantawa
+  a can. Idan ka rashin tabbas mutum yana so ka kiyaye,
+  bukaci rather fiye da aaje.
+
+# Aiki — wannan matakin me yake.
+system_guidance_header: |
+  Ka zayi MEMORIZE. Kafin a fara, an nuna maka doka na jiki
+  da sakon da suke jiya, saboda ka tabbata rubutu ta
+  gida jiya.
+
+  Wannan bincike na biyu, ba gyara ba: babu wanda an sauye maka.
+  Idan sako wanda ka zayi ta kuskure, fadi yadda ya kamata.
+  Idan ba zu rubuta haka ba, jiya aiki.
+
+# Aiki — hanya.
+evaluation_steps: |
+  Wuce waɗannan juna-juna:
+
+  1. Ya kamata a ajiye haka?
+  2. WANE SAKO? Kwatanta wanda ka gida game da CANDIDATE NODES
+     da doka yunakawa.
+  3. WANE SIFFOFIN? Sanya sunaye wanda za ka gani.
+  4. YANKI.
+  5. Yanke shawarar: MEMORIZE tare da sako wanda ka binciki,
+     SPEAK da bukaci, ko PONDER da tunani.
+
+# Ba ba wani — abubuwa kawai ba na lokaci. Babu yawowa, babu kakarai.
+context_integration: |
+  Tunanin farko:
+  {original_thought_content}
+
+  Daliling ka na tunawa:
+  {aspdma_reasoning}
+
+  === ABIN da ka GIDA ===
+  sako id:     {proposed_node_id}
+  nawa sako:   {proposed_node_type}
+  yanki:       {proposed_node_scope}
+  siffofin:    {proposed_attributes}
+
+  === SAKON DA KE YANA (waɗannan sun kasance jiya) ===
+  {candidate_nodes}
+
+  === SIFFOFIN NA JINSI (kan wannan sako, na uke kiyaya jijiyoyi) ===
+  {system_owned_attributes}
+
+# Aiki-sarari — yarjejeniya ta waya.
+response_format: |
+  Amsa tare da JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "sako id rubuta zuwa (yana buƙata lokacin MEMORIZE)",
+    "node_type": "nawa sako (yana buƙata lokacin MEMORIZE)",
+    "node_scope": "yanki jiki (yana buƙata lokacin MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "abin fa ce (yana buƙata lokacin SPEAK)",
+    "questions": ["abin tunani (yana buƙata lokacin PONDER)"],
+    "reasoning": "dalilin yunakawan haka ce, ko dalilin sauye"
+  }}
+
+# Rai-baki — ƙarshe sakaci.
+closing_reminder: |
+  Gano yunakawan jiya ne gaba daya sabuwar haya.

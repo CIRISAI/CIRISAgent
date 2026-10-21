@@ -7,28 +7,27 @@ Adds runtime queue, service management, and processor state endpoints.
 import copy
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Annotated, Any, Dict, List, Optional, Union
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.schemas.api.auth import AuthContext
-from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
+from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.services.core.runtime import (
     ProcessorQueueStatus,
     ServiceHealthStatus,
     ServiceSelectionExplanation,
 )
 from ciris_engine.schemas.services.runtime_control import PipelineState, StepPoint
-from ciris_engine.schemas.services.runtime_control import StepResultUnion as StepResult
 from ciris_engine.schemas.types import JSONDict
 
 from ..constants import (
     DESC_CURRENT_COGNITIVE_STATE,
     DESC_HUMAN_READABLE_STATUS,
+    DESC_STATUS_MESSAGE,
     ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE,
 )
-from ..dependencies.auth import require_admin, require_observer
+from ._common import RESPONSES_500_503, AuthAdminDep, AuthObserverDep
 
 router = APIRouter(prefix="/system", tags=["system-extensions"])
 logger = logging.getLogger(__name__)
@@ -37,10 +36,8 @@ logger = logging.getLogger(__name__)
 # Runtime Control Extensions
 
 
-@router.get("/runtime/queue", response_model=SuccessResponse[ProcessorQueueStatus])
-async def get_processing_queue_status(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[ProcessorQueueStatus]:
+@router.get("/runtime/queue", responses=RESPONSES_500_503)
+async def get_processing_queue_status(request: Request, auth: AuthObserverDep) -> SuccessResponse[ProcessorQueueStatus]:
     """
     Get processing queue status.
 
@@ -292,9 +289,9 @@ def _consolidate_step_results(result: Any) -> Optional[JSONDict]:
     }
 
 
-@router.post("/runtime/step", response_model=SuccessResponse[SingleStepResponse])
+@router.post("/runtime/step", responses=RESPONSES_500_503)
 async def single_step_processor(
-    request: Request, auth: AuthContext = Depends(require_admin), body: JSONDict = Body(default={})
+    request: Request, auth: AuthAdminDep, body: Annotated[JSONDict, Body()] = {}
 ) -> SuccessResponse[SingleStepResponse]:
     """
     Execute a single processing step.
@@ -352,10 +349,8 @@ class ServicePriorityUpdateRequest(BaseModel):
     strategy: Optional[str] = Field(None, description="Selection strategy (FALLBACK, ROUND_ROBIN)")
 
 
-@router.get("/services/health", response_model=SuccessResponse[ServiceHealthStatus])
-async def get_service_health_details(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[ServiceHealthStatus]:
+@router.get("/services/health", responses=RESPONSES_500_503)
+async def get_service_health_details(request: Request, auth: AuthObserverDep) -> SuccessResponse[ServiceHealthStatus]:
     """
     Get detailed service health status.
 
@@ -387,12 +382,12 @@ class ServicePriorityUpdateResponse(BaseModel):
     new_priority_group: Optional[int] = Field(None, description="New priority group")
     old_strategy: Optional[str] = Field(None, description="Previous selection strategy")
     new_strategy: Optional[str] = Field(None, description="New selection strategy")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
-@router.put("/services/{provider_name}/priority", response_model=SuccessResponse[ServicePriorityUpdateResponse])
+@router.put("/services/{provider_name}/priority", responses=RESPONSES_500_503)
 async def update_service_priority(
-    provider_name: str, body: ServicePriorityUpdateRequest, request: Request, auth: AuthContext = Depends(require_admin)
+    provider_name: str, body: ServicePriorityUpdateRequest, request: Request, auth: AuthAdminDep
 ) -> SuccessResponse[ServicePriorityUpdateResponse]:
     """
     Update service provider priority.
@@ -443,12 +438,12 @@ class CircuitBreakerResetResponse(BaseModel):
     service_type: Optional[str] = Field(None, description="Service type that was reset")
     reset_count: int = Field(..., description="Number of circuit breakers reset")
     services_affected: List[str] = Field(default_factory=list, description="List of affected services")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description=DESC_STATUS_MESSAGE)
 
 
-@router.post("/services/circuit-breakers/reset", response_model=SuccessResponse[CircuitBreakerResetResponse])
+@router.post("/services/circuit-breakers/reset", responses=RESPONSES_500_503)
 async def reset_service_circuit_breakers(
-    body: CircuitBreakerResetRequest, request: Request, auth: AuthContext = Depends(require_admin)
+    body: CircuitBreakerResetRequest, request: Request, auth: AuthAdminDep
 ) -> SuccessResponse[CircuitBreakerResetResponse]:
     """
     Reset circuit breakers.
@@ -479,9 +474,9 @@ async def reset_service_circuit_breakers(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/services/selection-logic", response_model=SuccessResponse[ServiceSelectionExplanation])
+@router.get("/services/selection-logic", responses=RESPONSES_500_503)
 async def get_service_selection_explanation(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request, auth: AuthObserverDep
 ) -> SuccessResponse[ServiceSelectionExplanation]:
     """
     Get service selection logic explanation.
@@ -583,10 +578,8 @@ def _get_processor_state_definitions(current_state_name: Optional[str]) -> List[
     ]
 
 
-@router.get("/processors", response_model=SuccessResponse[List[ProcessorStateInfo]])
-async def get_processor_states(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[List[ProcessorStateInfo]]:
+@router.get("/processors", responses=RESPONSES_500_503)
+async def get_processor_states(request: Request, auth: AuthObserverDep) -> SuccessResponse[List[ProcessorStateInfo]]:
     """
     Get information about all processor states.
 
@@ -620,46 +613,13 @@ def _determine_user_role(current_user: JSONDict) -> Any:
     return user_role
 
 
-async def _get_user_allowed_channel_ids(auth_service: Any, user_id: str) -> set[str]:
-    """Get set of channel IDs user is allowed to see (user_id + OAuth links + API-prefixed versions)."""
-    import sqlite3
+async def _get_user_allowed_channel_ids(user_id: str) -> set[str]:
+    """Channel ids this user may see: their id, and the API adapter's `api_` prefix of it.
 
-    allowed_channel_ids = {user_id}
-    # BUGFIX: API adapter prefixes channel_id with "api_"
-    # See agent.py:221: channel_id = f"api_{auth.user_id}"
-    allowed_channel_ids.add(f"api_{user_id}")
-
-    try:
-        # Use database abstraction layer to support both SQLite and PostgreSQL
-        from ciris_engine.logic.persistence.db.core import get_db_connection
-
-        db_path = auth_service.db_path
-        query = """
-            SELECT oauth_provider, oauth_external_id
-            FROM wa_cert
-            WHERE wa_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL AND active = 1
-        """
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, (user_id,))
-            rows = cursor.fetchall()
-            for row in rows:
-                # Handle both SQLite Row and PostgreSQL RealDictRow
-                if hasattr(row, "keys"):
-                    oauth_provider, oauth_external_id = row["oauth_provider"], row["oauth_external_id"]
-                else:
-                    oauth_provider, oauth_external_id = row
-                # Add OAuth channel ID formats
-                oauth_channel = f"{oauth_provider}:{oauth_external_id}"
-                allowed_channel_ids.add(oauth_channel)
-                allowed_channel_ids.add(oauth_external_id)
-                # BUGFIX: Also add API-prefixed versions for SSE filtering
-                allowed_channel_ids.add(f"api_{oauth_channel}")
-                allowed_channel_ids.add(f"api_{oauth_external_id}")
-    except Exception as e:
-        logger.error(f"Error fetching OAuth links for user {user_id}: {e}", exc_info=True)
-
-    return allowed_channel_ids
+    A user has one id, the wa_id every node login resolves to; no OAuth-derived alias.
+    """
+    # The API adapter prefixes channel_id with "api_" (agent.py: channel_id = f"api_{auth.user_id}").
+    return {user_id, f"api_{user_id}"}
 
 
 async def _batch_fetch_task_channel_ids(task_ids: List[str]) -> Dict[str, str]:
@@ -669,34 +629,18 @@ async def _batch_fetch_task_channel_ids(task_ids: List[str]) -> Dict[str, str]:
         return task_channel_map
 
     try:
-        # Tasks are stored in the main database
-        # Use the proper database path helper which gets config from ServiceRegistry
-        from ciris_engine.logic.persistence import get_sqlite_db_full_path
-        from ciris_engine.logic.persistence.db.core import get_db_connection
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        # Post-A1 absorption (CIRISAgent#763): batch-fetch task channel_ids
+        # through persist's task_get substrate. Persist doesn't expose an
+        # IN-list query, so we do N point lookups; task_ids is typically
+        # small (one per active SSE subscription).
+        from ciris_engine.logic.persistence.models.tasks import get_task_by_id_any_occurrence
 
-        main_db_path = get_sqlite_db_full_path()  # Gets main DB path from config via registry
-        logger.debug(f"SSE Filter: Fetching from main_db_path={main_db_path}")
-
-        # Get database adapter for proper placeholder handling
-        adapter = get_adapter()
-        placeholder = "%s" if adapter.is_postgresql() else "?"
-        placeholders = ",".join([placeholder] * len(task_ids))
-        query = f"SELECT task_id, channel_id FROM tasks WHERE task_id IN ({placeholders})"
-
-        with get_db_connection(main_db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, task_ids)
-            rows = cursor.fetchall()
-            logger.debug(f"SSE Filter: Query returned {len(rows)} rows")
-            for row in rows:
-                # Handle both SQLite Row (tuple) and PostgreSQL RealDictRow (dict)
-                if hasattr(row, "keys"):
-                    tid, cid = row["task_id"], row["channel_id"]
-                else:
-                    tid, cid = row
-                task_channel_map[tid] = cid
-                logger.debug(f"SSE Filter: Found task_id={tid} -> channel_id={cid}")
+        for task_id in task_ids:
+            task = get_task_by_id_any_occurrence(task_id)
+            if task is not None and task.channel_id:
+                task_channel_map[task_id] = task.channel_id
+                logger.debug(f"SSE Filter: Found task_id={task_id} -> channel_id={task.channel_id}")
+        logger.debug(f"SSE Filter: Resolved {len(task_channel_map)}/{len(task_ids)} task channel_ids")
     except Exception as e:
         logger.error(f"Error batch fetching task channel_ids: {e}", exc_info=True)
 
@@ -794,8 +738,172 @@ def _redact_observer_sensitive_data(events: List[Any], allowed_user_ids: set[str
     return redacted_events
 
 
-@router.get("/runtime/reasoning-stream")
-async def reasoning_stream(request: Request, auth: AuthContext = Depends(require_observer)) -> Any:
+# ============================================================================
+# Reasoning Stream Helper Functions (reduce cognitive complexity - SonarCloud)
+# ============================================================================
+
+
+def _get_runtime_control_service(request: Request) -> Any:
+    """Get runtime control service from request state, raising 503 if unavailable."""
+    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
+    if not runtime_control:
+        runtime_control = getattr(request.app.state, "runtime_control_service", None)
+    if not runtime_control:
+        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
+    return runtime_control
+
+
+def _get_auth_service_for_stream(request: Request) -> Any:
+    """Get authentication service from request state, raising 503 if unavailable."""
+    auth_service = getattr(request.app.state, "authentication_service", None)
+    if not auth_service:
+        raise HTTPException(status_code=503, detail="Authentication service not available")
+    return auth_service
+
+
+async def _setup_stream_permissions(auth: Any) -> tuple[bool, set[str], set[str]]:
+    """Set up permissions for SSE stream filtering.
+
+    Returns:
+        Tuple of (can_see_all, allowed_channel_ids, allowed_user_ids)
+    """
+    from ciris_engine.schemas.api.auth import UserRole
+
+    user_role = auth.role
+    can_see_all = user_role in (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
+
+    if can_see_all:
+        return (True, set(), set())
+
+    user_id = auth.user_id
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+
+    allowed_channel_ids = await _get_user_allowed_channel_ids(user_id)
+    allowed_user_ids = {user_id}
+
+    logger.info(f"SSE Filter: OBSERVER user_id={user_id}, allowed_channel_ids={allowed_channel_ids}")
+    return (False, allowed_channel_ids, allowed_user_ids)
+
+
+async def _fetch_uncached_channel_ids(events: List[Any], task_channel_cache: dict[str, str]) -> None:
+    """Batch fetch channel IDs for uncached task IDs and update cache."""
+    uncached_task_ids = [
+        event.get("task_id")
+        for event in events
+        if event.get("task_id") and event.get("task_id") not in task_channel_cache
+    ]
+
+    if uncached_task_ids:
+        logger.info(f"SSE Filter: Fetching channel_ids for uncached tasks: {uncached_task_ids}")
+        new_mappings = await _batch_fetch_task_channel_ids(uncached_task_ids)
+        logger.info(f"SSE Filter: Fetched task->channel mappings: {new_mappings}")
+        task_channel_cache.update(new_mappings)
+
+
+def _log_event_filtering(events: List[Any], task_channel_cache: dict[str, str]) -> None:
+    """Log event task IDs before filtering for debugging."""
+    event_task_ids = [event.get("task_id") for event in events if event.get("task_id")]
+    logger.info(f"SSE Filter: Processing {len(events)} events with task_ids: {event_task_ids}")
+    logger.info(f"SSE Filter: Current task_channel_cache: {task_channel_cache}")
+
+
+async def _filter_events_for_observer(
+    step_update: JSONDict,
+    user_role: Any,
+    allowed_channel_ids: set[str],
+    allowed_user_ids: set[str],
+    task_channel_cache: dict[str, str],
+) -> Optional[JSONDict]:
+    """Filter events for OBSERVER users, returning None if all filtered out."""
+    from ciris_engine.schemas.api.auth import UserRole
+
+    raw_events = step_update.get("events", [])
+    if not raw_events:
+        logger.debug(" SSE no events in update, skipping")
+        return None
+
+    # Cast to list for type safety (JSONDict values are union types)
+    events: List[Any] = list(raw_events) if isinstance(raw_events, list) else []
+    if not events:
+        return None
+
+    # Batch lookup uncached task IDs
+    await _fetch_uncached_channel_ids(events, task_channel_cache)
+
+    # Log for debugging
+    _log_event_filtering(events, task_channel_cache)
+
+    # Filter events based on channel_id whitelist
+    filtered_events = _filter_events_by_channel_access(events, allowed_channel_ids, task_channel_cache)
+
+    logger.info(f"SSE Filter: Filtered to {len(filtered_events)}/{len(events)} events")
+
+    # Redact sensitive data for OBSERVER users
+    if filtered_events and user_role == UserRole.OBSERVER:
+        filtered_events = _redact_observer_sensitive_data(filtered_events, allowed_user_ids)
+
+    if not filtered_events:
+        logger.debug(" SSE all events filtered out, skipping update")
+        return None
+
+    logger.debug(f" SSE sending {len(filtered_events)} events to client")
+    return {"events": filtered_events}
+
+
+def _make_sse_event(event_type: str, data: Any) -> str:
+    """Generate SSE formatted event string."""
+    import json
+
+    return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+async def _process_stream_event(
+    stream_queue: Any,
+    can_see_all: bool,
+    user_role: Any,
+    allowed_channel_ids: set[str],
+    allowed_user_ids: set[str],
+    task_channel_cache: dict[str, str],
+) -> Optional[str]:
+    """Process a single stream event, returning SSE string or None to skip.
+
+    Handles:
+    - Waiting for events with 30s timeout (sends keepalive on timeout)
+    - Filtering events for OBSERVER users
+    - Error handling with SSE error events
+    """
+    import asyncio
+
+    try:
+        step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
+
+        logger.debug(
+            f" SSE received update from queue - events_count={len(step_update.get('events', []))}, "
+            f"can_see_all={can_see_all}"
+        )
+
+        # SECURITY: Filter events for OBSERVER users (ADMIN+ bypass filtering)
+        if not can_see_all:
+            filtered_update = await _filter_events_for_observer(
+                step_update, user_role, allowed_channel_ids, allowed_user_ids, task_channel_cache
+            )
+            if filtered_update is None:
+                return None
+            step_update = filtered_update
+
+        return _make_sse_event("step_update", step_update)
+
+    except asyncio.TimeoutError:
+        return _make_sse_event("keepalive", {"timestamp": datetime.now().isoformat()})
+
+    except Exception as step_error:
+        logger.error(f"Error processing step result in stream: {step_error}")
+        return _make_sse_event("error", {"error": str(step_error)})
+
+
+@router.get("/runtime/reasoning-stream", responses=RESPONSES_500_503)
+async def reasoning_stream(request: Request, auth: AuthObserverDep) -> Any:
     """
     Stream live H3ERE reasoning steps as they occur.
 
@@ -804,141 +912,49 @@ async def reasoning_stream(request: Request, auth: AuthContext = Depends(require
     Requires OBSERVER role or higher.
     """
     import asyncio
-    import json
 
     from fastapi.responses import StreamingResponse
 
-    from ciris_engine.schemas.api.auth import UserRole
+    # Validate services are available (raises 503 if not)
+    _get_runtime_control_service(request)
+    _get_auth_service_for_stream(request)
 
-    # Get runtime control service
-    runtime_control = getattr(request.app.state, "main_runtime_control_service", None)
-    if not runtime_control:
-        runtime_control = getattr(request.app.state, "runtime_control_service", None)
-    if not runtime_control:
-        raise HTTPException(status_code=503, detail=ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE)
-
-    # Get authentication service for OAuth lookup
-    auth_service = getattr(request.app.state, "authentication_service", None)
-    if not auth_service:
-        raise HTTPException(status_code=503, detail="Authentication service not available")
-
-    # SECURITY: Determine if user can see all events (ADMIN or higher)
+    # SECURITY: Set up permissions for this user
+    can_see_all, allowed_channel_ids, allowed_user_ids = await _setup_stream_permissions(auth)
     user_role = auth.role
-    can_see_all = user_role in (UserRole.ADMIN, UserRole.SYSTEM_ADMIN, UserRole.AUTHORITY)
-
-    # SECURITY: Get user's allowed channel IDs (user_id + linked OAuth accounts)
-    allowed_channel_ids: set[str] = set()
-    allowed_user_ids: set[str] = set()  # User IDs for profile filtering
-    task_channel_cache: dict[str, str] = {}  # Cache task_id -> channel_id lookups
-
-    if not can_see_all:
-        user_id = auth.user_id
-        if not user_id:
-            raise HTTPException(status_code=401, detail="User ID not found in token")
-
-        allowed_channel_ids = await _get_user_allowed_channel_ids(auth_service, user_id)
-        allowed_user_ids = {user_id}  # User can only see their own profile
-
-        # DEBUG: Log allowed channel IDs for OBSERVER users
-        logger.info(f"SSE Filter: OBSERVER user_id={user_id}, allowed_channel_ids={allowed_channel_ids}")
+    task_channel_cache: dict[str, str] = {}
 
     async def stream_reasoning_steps() -> Any:
         """Generate Server-Sent Events for live reasoning steps."""
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+
+        # 1000 matches the cirisnode + accord_metrics subscriber queues. The
+        # original 100 was sized for pre-2.7.8 event volume (~6 events/thought);
+        # LLM_CALL adds 5-15 sub-events per thought, so wakeup-state bursts
+        # exceed 100 and drop thought_start during high-throughput streaming
+        # verification (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2).
+        stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=1000)
+        reasoning_event_stream.subscribe(stream_queue)
+
+        logger.debug(
+            f" SSE stream connected - user_id={auth.user_id}, role={user_role}, "
+            f"can_see_all={can_see_all}, allowed_channel_ids={allowed_channel_ids}"
+        )
+
         try:
-            # Subscribe to the global reasoning event stream
-            from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+            yield _make_sse_event("connected", {"status": "connected", "timestamp": datetime.now().isoformat()})
 
-            # Create a queue for this client
-            stream_queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=100)
-            reasoning_event_stream.subscribe(stream_queue)
+            while True:
+                step_update = await _process_stream_event(
+                    stream_queue, can_see_all, user_role, allowed_channel_ids, allowed_user_ids, task_channel_cache
+                )
+                if step_update is not None:
+                    yield step_update
 
-            logger.debug(
-                f" SSE stream connected - user_id={auth.user_id}, role={user_role}, can_see_all={can_see_all}, allowed_channel_ids={allowed_channel_ids}"
-            )
-
-            try:
-                # Send initial connection event
-                yield f"event: connected\ndata: {json.dumps({'status': 'connected', 'timestamp': datetime.now().isoformat()})}\n\n"
-
-                # Stream live step results as they occur
-                while True:
-                    try:
-                        # Wait for step results with timeout to send keepalive
-                        step_update = await asyncio.wait_for(stream_queue.get(), timeout=30.0)
-
-                        logger.debug(
-                            f" SSE received update from queue - events_count={len(step_update.get('events', []))}, can_see_all={can_see_all}"
-                        )
-
-                        # SECURITY: Filter events for OBSERVER users
-                        # ADMIN+ users bypass filtering and see all events
-                        if not can_see_all:
-                            events = step_update.get("events", [])
-                            if not events:
-                                logger.debug(" SSE no events in update, skipping")
-                                continue
-
-                            # Batch lookup uncached task IDs
-                            uncached_task_ids = [
-                                event.get("task_id")
-                                for event in events
-                                if event.get("task_id") and event.get("task_id") not in task_channel_cache
-                            ]
-
-                            # SECURITY: Batch fetch channel_ids for efficiency
-                            if uncached_task_ids:
-                                logger.info(f"SSE Filter: Fetching channel_ids for uncached tasks: {uncached_task_ids}")
-                                new_mappings = await _batch_fetch_task_channel_ids(uncached_task_ids)
-                                logger.info(f"SSE Filter: Fetched task->channel mappings: {new_mappings}")
-                                task_channel_cache.update(new_mappings)
-
-                            # DEBUG: Log event task_ids before filtering
-                            event_task_ids = [event.get("task_id") for event in events if event.get("task_id")]
-                            logger.info(f"SSE Filter: Processing {len(events)} events with task_ids: {event_task_ids}")
-                            logger.info(f"SSE Filter: Current task_channel_cache: {task_channel_cache}")
-
-                            # Filter events based on channel_id whitelist
-                            filtered_events = _filter_events_by_channel_access(
-                                events, allowed_channel_ids, task_channel_cache
-                            )
-
-                            # DEBUG: Log filtering results
-                            logger.info(f"SSE Filter: Filtered to {len(filtered_events)}/{len(events)} events")
-
-                            # SECURITY: Redact sensitive task information for OBSERVER users
-                            # This removes recently_completed_tasks and pending_tasks from snapshots
-                            # and filters user_profiles to only show user's OWN profile
-                            if filtered_events and user_role == UserRole.OBSERVER:
-                                filtered_events = _redact_observer_sensitive_data(filtered_events, allowed_user_ids)
-
-                            # Replace events with filtered list
-                            if filtered_events:
-                                step_update = {"events": filtered_events}
-                                logger.debug(f" SSE sending {len(filtered_events)} events to client")
-                            else:
-                                # No events for this user, skip this update silently
-                                logger.debug(" SSE all events filtered out, skipping update")
-                                continue
-
-                        # Stream the step update
-                        yield f"event: step_update\ndata: {json.dumps(step_update, default=str)}\n\n"
-
-                    except asyncio.TimeoutError:
-                        # Send keepalive every 30 seconds
-                        yield f"event: keepalive\ndata: {json.dumps({'timestamp': datetime.now().isoformat()})}\n\n"
-
-                    except Exception as step_error:
-                        logger.error(f"Error processing step result in stream: {step_error}")
-                        yield f"event: error\ndata: {json.dumps({'error': str(step_error)})}\n\n"
-                        break
-
-            finally:
-                # Clean up subscription
-                reasoning_event_stream.unsubscribe(stream_queue)
-
-        except Exception as e:
-            logger.error(f"Error in reasoning stream: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            reasoning_event_stream.unsubscribe(stream_queue)
 
     return StreamingResponse(
         stream_reasoning_steps(),

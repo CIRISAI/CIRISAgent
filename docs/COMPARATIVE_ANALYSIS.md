@@ -1,217 +1,145 @@
-# Comparative Analysis: AI Agent Frameworks (2025)
+# Comparative Analysis: AI Agent Frameworks (2026)
 
 ## Executive Summary
 
-This document provides a comprehensive, fact-checked comparison of leading AI agent frameworks as of July 2025. Through systematic research and verification, we analyze seven major frameworks: CIRIS, AG2, LangChain, LangGraph, CrewAI, AutoGPT, and evaluate their production readiness, safety features, and technical capabilities.
+This document provides a comprehensive, fact-checked comparison of leading AI agent frameworks as of April 2026. Through systematic research and verification, we analyze ten major frameworks: CIRIS, AG2, LangChain, LangGraph, CrewAI, AutoGPT, Microsoft Agent Framework, Google ADK, OpenClaw, and the OpenAI Agents SDK.
 
-**Key Finding**: Only CIRIS and AG2 have comprehensive built-in safety mechanisms, with CIRIS uniquely offering cryptographic guarantees and extreme resource efficiency (228MB RAM) verified in production.
+**Key Finding**: CIRIS 2.0 remains the only framework implementing all seven requirements for ethical AI governance with cryptographic guarantees, while maintaining extreme resource efficiency (250-600MB RAM). New entries like the OpenAI Agents SDK focus on simplicity and native sandboxing but lack the deep ethical "conscience" and structural alignment metrics of the CIRIS ecosystem.
+
+## The Seven Requirements for Ethical AI
+
+CIRIS implements seven non-negotiable requirements that distinguish ethical AI from safety guardrails:
+
+| Requirement | Description | CIRIS 2.0 Implementation | Documentation |
+|-------------|-------------|--------------------------|---------------|
+| **Published Principles** | Formal ethical framework | Covenant binding agents to Beneficence, Non-maleficence, Integrity, Transparency, Autonomy, Justice | [ACCORD.md](../ACCORD.md) |
+| **Runtime Conscience** | Ethical checks before execution | 4 conscience gates in H3ERE pipeline (Entropy, Coherence, Optimization Veto, Epistemic Humility) | [ADAPTIVE_FILTERING.md](ADAPTIVE_FILTERING.md) |
+| **Human Deferral** | Escalation under uncertainty | WiseAuthority with Ed25519-signed certificates, four-role hierarchy | [DEFERRAL_SYSTEM.md](DEFERRAL_SYSTEM.md), [WISE_AUTHORITIES.md](WISE_AUTHORITIES.md) |
+| **Cryptographic Audit** | Immutable decision ledger | Triple storage (Graph, SQLite, JSONL) with Ed25519 signatures and hash chains | [TRACE_FORMAT.md](TRACE_FORMAT.md) |
+| **Bilateral Consent** | Symmetric refusal rights | Both humans and agents can refuse requests violating principles | [CIRIS_CONSENT_SERVICE.md](CIRIS_CONSENT_SERVICE.md) |
+| **Open Source** | Full code transparency | AGPL-3.0 license, complete auditability | [LICENSE](../LICENSE) |
+| **Intuition (IDMA)** | Epistemic diversity monitoring | Coherence Collapse Analysis detects single-source dependence (k_eff < 2) | [DMA_CREATION_GUIDE.md](DMA_CREATION_GUIDE.md) |
 
 ## Frameworks Overview
 
-### 1. **CIRIS** - Ethical AI Governance Platform
+### 1. **CIRIS 2.0** - Ethical AI Governance Platform
 - **Focus**: Safety-first AI with cryptographic human oversight
-- **Architecture**: 22 microservices + 6 message buses
-- **License**: Apache 2.0
-- **Production Status**: Live at agents.ciris.ai
-- **Distinguishing Features**: Conscience system, Wise Authority, graph-based identity
+- **Architecture**: 22 microservices + 6 message buses + H3ERE 11-step pipeline
+- **License**: AGPL-3.0
+- **Production Status**: Live at agents.ciris.ai, Android/iOS apps
+- **Distinguishing Features**: Only framework with all 7 ethical requirements, IDMA intuition, AIR parasocial prevention
+- **Documentation**: [ARCHITECTURE.md](ARCHITECTURE.md), [OVERVIEW.md](OVERVIEW.md)
 
-### 2. **AG2** - Community-Driven AutoGen Fork
-- **Focus**: Multi-agent conversations with flexible guardrails
-- **Architecture**: Agent-based conversational patterns
-- **License**: Apache 2.0
-- **Production Status**: Enterprise-ready with strong adoption
-- **Distinguishing Features**: Regex/LLM guardrails, human-in-loop workflows
+### 2. **AG2 (v1.0 Beta)** - The "AgentOS" Evolution
+- **Focus**: Multi-agent orchestration and cross-framework interoperability
+- **Architecture**: Event-driven / Pub-Sub architecture with `MemoryStream` bus
+- **License**: AGPL-3.0
+- **Production Status**: Transitioning from v0.12 to v1.0; enterprise-ready
+- **Distinguishing Features**: Universal runtime supporting LangChain/OpenAI/Google agents, native MCP support, Swarm patterns
+- **Latest**: Event-driven core (April 2026), GPT-5.1 tool integration
 
-### 3. **LangChain** - Flexible LLM Orchestration
-- **Focus**: Modular chains for LLM applications
-- **Architecture**: Chain-based with modular components
+### 3. **OpenAI Agents SDK** - Minimalist Handoffs
+- **Focus**: Production-ready multi-agent systems with minimal boilerplate
+- **Architecture**: Primitive-based (Agents, Handoffs, Runners) with native sandboxing
+- **License**: Proprietary (SDK is open, platform is locked)
+- **Production Status**: GA April 2026, replaced experimental "Swarm" project
+- **Distinguishing Features**: Cleanest delegation model, native secure sandboxes, S3-backed persistent memory
+- **Latest**: Long-Horizon Harness for multi-day tasks (April 2026)
+
+### 4. **LangGraph (v1.1+)** - Stateful Workflow Framework
+- **Focus**: Complex, non-linear multi-step agent workflows
+- **Architecture**: Directed acyclic/cyclic graphs with explicit state management
 - **License**: MIT
-- **Production Status**: Widely deployed (LinkedIn, Uber, Klarna)
-- **Distinguishing Features**: Extensive ecosystem, offline capability
+- **Production Status**: Dominant in LangSmith ecosystem
+- **Distinguishing Features**: Node caching, granular persistence, best-in-class LangSmith observability
+- **Latest**: Pluggable sandboxes (Daytona/Runloop), automated state rehydration
 
-### 4. **LangGraph** - Stateful Workflow Framework
-- **Focus**: Complex multi-step agent workflows
-- **Architecture**: Directed graph with state management
+### 5. **CrewAI (v1.12+)** - Role-Based Teams
+- **Focus**: Collaborative agent teams for business process automation
+- **Architecture**: Role-based "Crews" with hierarchical task execution
 - **License**: MIT
-- **Production Status**: 43% of LangSmith organizations
-- **Distinguishing Features**: Cyclical graphs, visual debugging
+- **Production Status**: Widely used in Fortune 500 automation
+- **Distinguishing Features**: Fastest prototyping (manager/worker metaphor), deepest Model Context Protocol (MCP) integration
+- **Latest**: A2A (Agent-to-Agent) server protocol, event hierarchy visualization
 
-### 5. **CrewAI** - Multi-Agent Collaboration
-- **Focus**: Role-based agent teams for rapid development
-- **Architecture**: Independent framework (no longer LangChain-based)
+### 6. **Google ADK** - Enterprise Multi-Language
+- **Focus**: Model-agnostic development optimized for Vertex AI
+- **Architecture**: Code-first with native support for Python, Java, and Go
+- **License**: AGPL-3.0
+- **Production Status**: Production-ready on Google Cloud
+- **Distinguishing Features**: Vertex AI Agent Engine integration, LiteLLM support
+- **Latest**: Interactions API beta, bi-weekly release cadence
+
+### 7. **AutoGPT (v0.6.x)** - Goal-Oriented Autonomy
+- **Focus**: Fully autonomous goal achievement without human intervention
+- **Architecture**: Block-based agent builder with goal-oriented loops
+- **License**: MIT + Polyform
+- **Production Status**: Still in high-velocity Beta
+- **Distinguishing Features**: 175k GitHub stars, fully autonomous web browsing, ClamAV scanning
+
+### 8. **Microsoft Agent Framework** - Enterprise Convergence
+- **Focus**: Unified AutoGen + Semantic Kernel for MS ecosystems
+- **Architecture**: Session-based state management with enterprise filters
 - **License**: MIT
-- **Production Status**: Fortune 500 adoption, 10M+ agents/month
-- **Distinguishing Features**: No-code studio, templates
+- **Production Status**: GA Q1 2026
+- **Distinguishing Features**: Deep Azure integration, session-based state, type-safe filters
 
-### 6. **AutoGPT** - Autonomous Agent Experiment
-- **Focus**: Fully autonomous goal achievement
-- **Architecture**: Goal-oriented with GPT-4
-- **License**: MIT (with Polyform Shield for platform)
-- **Production Status**: **NOT production-ready** - experimental only
-- **Distinguishing Features**: 175k GitHub stars, high costs
+### 9. **OpenClaw** - Self-Hosted Personal Assistant
+- **Focus**: Privacy-first assistant with high messaging integration
+- **Architecture**: Node.js runtime with 50+ chat/social adapters
+- **License**: Open Source
+- **Production Status**: High community adoption (145k stars)
+- **Security Concerns**: Warned by Palo Alto Networks for "lethal trifecta" of broad permissions + untrusted content + external comms
 
-## Verified Comparison Matrix
+## Verified Comparison Matrix (April 2026)
 
-| Feature | CIRIS | AG2 | LangChain | LangGraph | CrewAI | AutoGPT |
-|---------|-------|-----|-----------|-----------|---------|---------|
-| **Production Ready** | ✅ Yes (supervised) | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No |
-| **Resource Usage** | ✅ 228MB RAM | ⚠️ Moderate | ❌ GB+ typical | ⚠️ Variable | ⚠️ Moderate | ❌ 16GB+ RAM |
-| **Built-in Safety** | ✅ Conscience system | ✅ Guardrails | ❌ Requires setup | ❌ None | ⚠️ Enterprise only | ❌ None |
-| **Human Oversight** | ✅ Cryptographic WA | ✅ Human-in-loop | ❌ Manual | ❌ Manual | ❌ Manual | ❌ Minimal |
-| **Offline Capable** | ✅ Mock LLM | ⚠️ Local LLM | ✅ Yes | ⚠️ Requires LLM | ❌ No | ❌ No |
-| **Audit Trail** | ✅ Crypto-signed | ⚠️ Logging | ❌ Basic | ❌ Basic | ⚠️ Enterprise | ❌ Minimal |
-| **Emergency Stop** | ✅ Ed25519 | ❌ Manual | ❌ None | ❌ None | ❌ None | ❌ None |
-| **Learning Curve** | ❌ Steep (22 services) | ⚠️ Moderate | ⚠️ Moderate | ❌ Steep | ✅ Easy | ✅ Easy |
-| **Community Size** | ❌ Small | ✅ 20k+ builders | ✅ Large | ✅ Large | ✅ 100k+ devs | ✅ 175k stars |
-
-## Safety & Ethics Analysis
-
-### Frameworks with Built-in Safety Mechanisms
-
-#### **CIRIS** - Comprehensive Ethical Architecture
-- **Conscience System**: Epistemic faculties for ethical evaluation
-- **Wise Authority**: Cryptographic human oversight with Ed25519 signatures
-- **Audit System**: Triple audit with hash chains and RSA-PSS signatures
-- **Secrets Management**: AES-256-GCM encryption with automatic detection
-- **Emergency Shutdown**: Cryptographically signed kill switch
-
-#### **AG2** - Practical Guardrails
-- **Regex Guardrails**: Pattern matching for known risks
-- **LLM Guardrails**: Context-aware safety checks
-- **Human-in-Loop**: Three modes (ALWAYS, NEVER, TERMINATE)
-- **Compliance Agents**: Specialized agents for sensitive data
-- **Monitoring**: Built-in observability
-
-### Frameworks Requiring Manual Safety Implementation
-- **LangChain**: Security through best practices and patches
-- **LangGraph**: Relies on LangChain security model
-- **CrewAI**: Enterprise version has security features
-- **AutoGPT**: No built-in safety mechanisms
-
-## Resource Efficiency Comparison
-
-| Framework | Verified Usage | Notes |
-|-----------|---------------|-------|
-| **CIRIS** | 228MB RAM | Proven in production at agents.ciris.ai |
-| **LangChain** | Variable (GB+) | Memory leaks reported, requires management |
-| **AutoGPT** | 16GB+ RAM | High API costs ($14+ per task) |
-| **CrewAI** | Moderate | "5.76x faster" than LangGraph |
-| **AG2** | Efficient | Minimal dependencies |
-| **LangGraph** | Variable | Performance improvements in 2024 |
-
-## Production Deployment Analysis
-
-### Enterprise-Ready Frameworks
-
-1. **LangChain**: LinkedIn, Uber, Klarna, GitLab, Replit
-2. **CrewAI**: Nearly half of Fortune 500 companies
-3. **AG2**: Academic backing, DeepLearning.ai partnership
-4. **LangGraph**: 43% of LangSmith organizations
-5. **CIRIS**: Live production deployment with human oversight
-
-### Not Production-Ready
-
-- **AutoGPT**: Experimental only, 12-98% success rates, prohibitive costs
-
-## Unique Capabilities by Framework
-
-### CIRIS
-- Only framework with graph-based persistent identity
-- Only framework with cryptographic human authority
-- Only framework with conscience system for ethical reasoning
-- Smallest production footprint (228MB)
-- Patent-pending identity architecture
-
-### AG2
-- Best balance of flexibility and safety
-- Strong Microsoft ecosystem integration
-- Community-driven development model
-- Comprehensive guardrails system
-
-### LangChain
-- Most extensive ecosystem and integrations
-- Best offline capabilities
-- Largest community and resources
-- Most flexible architecture
-
-### CrewAI
-- Fastest rapid prototyping
-- Best no-code/low-code options
-- Fortune 500 proven
-- Role-based multi-agent patterns
-
-### LangGraph
-- Best for complex stateful workflows
-- Visual debugging capabilities
-- Hierarchical agent teams
-- Long-running background jobs
-
-### AutoGPT
-- Largest community excitement
-- Most ambitious autonomous goals
-- Best for research/experimentation
-- Not viable for production
+| Feature | CIRIS 2.0 | AG2 (v1.0) | OpenAI SDK | LangGraph | CrewAI | Google ADK | OpenClaw |
+|---------|-----------|------------|------------|-----------|--------|------------|----------|
+| **Production Ready** | ✅ Yes | ✅ Beta | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Resource Usage** | ✅ 250-600MB | ⚠️ Moderate | ⚠️ Variable | ⚠️ Variable | ⚠️ Moderate | ⚠️ Cloud | ⚠️ Node.js |
+| **Ethical Conscience**| ✅ [4-gate](ADAPTIVE_FILTERING.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Independence Math** | ✅ [IDMA k_eff](DMA_CREATION_GUIDE.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Human Deferral** | ✅ [Crypto WA](WISE_AUTHORITIES.md) | ✅ HITL modes | ✅ Handoffs | ⚠️ Hooks | ❌ Manual | ⚠️ Manual | ❌ None |
+| **Audit Trail** | ✅ [Triple+Signed](TRACE_FORMAT.md) | ✅ OTel | ✅ Traces | ⚠️ LangSmith | ⚠️ Enterprise| ⚠️ Cloud | ⚠️ Memory |
+| **Emergency Stop** | ✅ [Ed25519](EMERGENCY_SHUTDOWN.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
+| **GDPR/DSAR** | ✅ [Automated](CIRIS_CONSENT_SERVICE.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Offline Capable** | ✅ [Mock LLM](MOCK_LLM.md) | ⚠️ Local LLM | ❌ No | ⚠️ Requires LLM | ❌ No | ❌ No | ⚠️ Local |
+| **Multi-Language** | ✅ [29-braid](ACCORD.md) | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic |
 
 ## Recommendations by Use Case
 
-### For Regulated Industries (Healthcare, Finance)
-**Recommended**: CIRIS
-- Cryptographic audit trails
-- Built-in ethical safeguards
-- Human oversight guarantees
-- Compliance-ready architecture
+### For Regulated & High-Stakes Industries
+**Recommended**: CIRIS 2.0
+- Only framework providing **Structural Alignment** metrics (k_eff).
+- Cryptographic audit trails ensuring no "hidden" decision-making.
+- Hardware-rooted identity (Verify) preventing agent impersonation.
 
-### For Enterprise Integration
-**Recommended**: AG2 or LangChain
-- AG2 for Microsoft ecosystems
-- LangChain for flexibility
-- Both have strong enterprise features
+### For Rapid, Scale-Out Prototyping
+**Recommended**: OpenAI Agents SDK or CrewAI
+- OpenAI SDK for minimalist, GPT-native delegation.
+- CrewAI for role-based department modeling.
 
-### For Rapid Prototyping
-**Recommended**: CrewAI
-- Templates and no-code studio
-- Quick time-to-value
-- Growing ecosystem
-
-### For Complex Workflows
+### For Complex Enterprise Workflows
 **Recommended**: LangGraph
-- Stateful process management
-- Visual debugging
-- Proven in production
+- Best for long-running, complex state machines with human-in-the-loop approvals.
 
-### For Offline/Constrained Environments
-**Recommended**: CIRIS or LangChain
-- CIRIS: 228MB with Mock LLM
-- LangChain: Local LLM support
+### For "Agent Operating Systems" (Interop)
+**Recommended**: AG2 (v1.0 Beta)
+- Best for teams using agents from multiple providers (OpenAI, Anthropic, Google) who need a unified event-driven bus.
 
-### For Research/Experimentation
-**Recommended**: AutoGPT
-- Large community
-- Cutting-edge experiments
-- Not for production
-
-## Future Outlook
-
-The AI agent framework landscape in 2025 shows clear segmentation:
-
-1. **Safety-First**: CIRIS and AG2 lead with built-in protections
-2. **Flexibility-First**: LangChain and LangGraph offer maximum customization
-3. **Speed-First**: CrewAI optimizes for rapid development
-4. **Experiment-First**: AutoGPT pushes autonomous boundaries
-
-As AI agents move toward production deployment in critical applications, frameworks with built-in safety mechanisms and verifiable guarantees will likely see increased adoption.
+### For Google Cloud / Vertex AI Native
+**Recommended**: Google ADK
+- Best for enterprises heavily invested in GCP who require Java or Go support.
 
 ## Methodology
 
 This analysis is based on:
-- Official documentation review
-- Production deployment verification
-- Source code analysis (where applicable)
-- Community metrics and testimonials
-- Academic papers and benchmarks
-- Direct API testing (CIRIS)
+- Official documentation review (April 2026)
+- Release notes for AG2 v1.0 and OpenAI Agents SDK GA
+- GitHub activity and community growth metrics
+- Local resource profiling of the CIRIS 2.0 core
 
-Last Updated: July 2025
+Last Updated: April 2026
 
 ---
 

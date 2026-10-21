@@ -28,7 +28,8 @@ def test_ciris_runtime_initialization(monkeypatch):
     mock_runtime_class = MagicMock()
     mock_runtime_instance = MagicMock()
     mock_runtime_class.return_value = mock_runtime_instance
-    monkeypatch.setattr("main.CIRISRuntime", mock_runtime_class)
+    # Use module object directly, not string path
+    monkeypatch.setattr(main_module, "CIRISRuntime", mock_runtime_class)
 
     # Test Discord adapter type
     main_module.CIRISRuntime(adapter_types=["discord"])

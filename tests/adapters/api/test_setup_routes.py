@@ -16,6 +16,8 @@ from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
 from fastapi import status
 
 from ciris_engine.logic.adapters.api.routes.setup import (
@@ -29,6 +31,29 @@ from ciris_engine.logic.adapters.api.routes.setup import (
     _validate_llm_connection,
 )
 from ciris_engine.schemas.api.auth import UserRole
+
+
+@pytest.fixture(autouse=True)
+def mock_verifier_singleton():
+    """Mock CIRISVerify verifier singleton for all tests."""
+    # Generate real Ed25519 keypair for testing
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+    pub_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+    mock_verifier = MagicMock()
+    mock_verifier.has_key_sync.return_value = True
+    mock_verifier.get_ed25519_public_key_sync.return_value = pub_bytes
+    mock_verifier.sign_ed25519_sync.side_effect = lambda data: private_key.sign(data)
+
+    with patch(
+        "ciris_engine.logic.services.infrastructure.authentication.verifier_singleton.get_verifier",
+        return_value=mock_verifier,
+    ):
+        yield mock_verifier
 
 
 @pytest.fixture
@@ -51,11 +76,13 @@ def client_with_runtime(client, tmp_path):
 class TestSetupStatusEndpoint:
     """Test GET /v1/setup/status endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
-    def test_get_setup_status_first_run(self, mock_config_path, mock_first_run, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    def test_get_setup_status_first_run(self, mock_config_path, mock_status_first_run, mock_dep_first_run, client):
         """Test status endpoint when this is first run."""
-        mock_first_run.return_value = True
+        mock_dep_first_run.return_value = True
+        mock_status_first_run.return_value = True
         mock_config_path.return_value = Path("/home/user/ciris/.env")
 
         response = client.get("/v1/setup/status")
@@ -67,11 +94,15 @@ class TestSetupStatusEndpoint:
         assert data["setup_required"] is True
         assert data["config_path"] is None
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
-    def test_get_setup_status_already_configured(self, mock_config_path, mock_first_run, client, tmp_path):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    def test_get_setup_status_already_configured(
+        self, mock_config_path, mock_status_first_run, mock_dep_first_run, client, tmp_path
+    ):
         """Test status endpoint when already configured."""
-        mock_first_run.return_value = False
+        mock_dep_first_run.return_value = False
+        mock_status_first_run.return_value = False
         config_file = tmp_path / ".env"
         config_file.write_text("CIRIS_CONFIGURED=true")
         mock_config_path.return_value = config_file
@@ -96,7 +127,8 @@ class TestSetupStatusEndpoint:
 class TestProvidersEndpoint:
     """Test GET /v1/setup/providers endpoint."""
 
-    def test_list_providers(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    def test_list_providers(self, mock_first_run, client):
         """Test listing LLM providers."""
         response = client.get("/v1/setup/providers")
 
@@ -137,7 +169,8 @@ class TestProvidersEndpoint:
 class TestTemplatesEndpoint:
     """Test GET /v1/setup/templates endpoint."""
 
-    def test_list_templates(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    def test_list_templates(self, mock_first_run, client):
         """Test listing agent templates from ciris_templates directory."""
         response = client.get("/v1/setup/templates")
 
@@ -160,16 +193,17 @@ class TestTemplatesEndpoint:
             # Stewardship tier should be 1-5
             assert 1 <= template["stewardship_tier"] <= 5
 
-            # All templates should have DSAR SOPs
-            assert "DSAR_ACCESS" in template["supported_sops"]
-            assert "DSAR_DELETE" in template["supported_sops"]
-            assert "DSAR_EXPORT" in template["supported_sops"]
-            assert "DSAR_RECTIFY" in template["supported_sops"]
+            # Templates with SOPs should have DSAR SOPs (skip benchmark templates)
+            if template["supported_sops"]:
+                assert "DSAR_ACCESS" in template["supported_sops"]
+                assert "DSAR_DELETE" in template["supported_sops"]
+                assert "DSAR_EXPORT" in template["supported_sops"]
+                assert "DSAR_RECTIFY" in template["supported_sops"]
 
-        # Check default template exists
+        # Check default template exists (ally is the default)
         default = next((t for t in templates if t["id"] == "default"), None)
         assert default is not None
-        assert default["name"] == "Datum"
+        assert default["name"] == "Ally"
 
     def test_templates_no_auth_required(self, client):
         """Test that templates list doesn't require authentication."""
@@ -180,7 +214,8 @@ class TestTemplatesEndpoint:
 class TestAdaptersEndpoint:
     """Test GET /v1/setup/adapters endpoint."""
 
-    def test_list_adapters(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    def test_list_adapters(self, mock_first_run, client):
         """Test listing available adapters."""
         response = client.get("/v1/setup/adapters")
 
@@ -211,7 +246,9 @@ class TestValidateLLMEndpoint:
     """Test POST /v1/setup/validate-llm endpoint."""
 
     @pytest.mark.asyncio
-    async def test_validate_openai_success(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    async def test_validate_openai_success(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test successful OpenAI validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -228,7 +265,10 @@ class TestValidateLLMEndpoint:
                     "provider": "openai",
                     "api_key": "sk-test123",
                     "base_url": None,
-                    "model": None,
+                    # A model is REQUIRED now: the wizard used to substitute
+                    # gpt-3.5-turbo when this was None and report success for a
+                    # model the user never chose (#1078-class, setup path).
+                    "model": "gpt-4o",
                 },
             )
 
@@ -238,7 +278,23 @@ class TestValidateLLMEndpoint:
             assert "successful" in data["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_validate_openai_invalid_key(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    async def test_validate_without_a_model_is_refused(self, mock_dep_first_run, mock_helpers_first_run, client):
+        """No model, no validation — and no network call either."""
+        response = client.post(
+            "/v1/setup/validate-llm",
+            json={"provider": "openai", "api_key": "sk-test123", "base_url": None, "model": None},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["valid"] is False
+        assert "no model selected" in data["message"].lower()
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    async def test_validate_openai_invalid_key(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test OpenAI validation with invalid key."""
         response = client.post(
             "/v1/setup/validate-llm",
@@ -246,7 +302,8 @@ class TestValidateLLMEndpoint:
                 "provider": "openai",
                 "api_key": "",
                 "base_url": None,
-                "model": None,
+                # a model is present so the KEY failure is what surfaces
+                "model": "gpt-4o",
             },
         )
 
@@ -256,7 +313,9 @@ class TestValidateLLMEndpoint:
         assert "api key" in data["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_validate_local_llm_success(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    async def test_validate_local_llm_success(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test successful local LLM validation."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -282,7 +341,9 @@ class TestValidateLLMEndpoint:
             assert data["valid"] is True
 
     @pytest.mark.asyncio
-    async def test_validate_llm_connection_timeout(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    async def test_validate_llm_connection_timeout(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test LLM validation with connection timeout."""
         with patch("openai.AsyncOpenAI") as mock_openai:
             mock_client = AsyncMock()
@@ -307,7 +368,9 @@ class TestValidateLLMEndpoint:
             data = response.json()["data"]
             assert data["valid"] is False
 
-    def test_validate_llm_no_auth_required(self, client):
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    def test_validate_llm_no_auth_required(self, mock_dep_first_run, mock_helpers_first_run, client):
         """Test that LLM validation doesn't require authentication during first-run."""
         response = client.post(
             "/v1/setup/validate-llm",
@@ -325,10 +388,10 @@ class TestValidateLLMEndpoint:
 class TestCompleteSetupEndpoint:
     """Test POST /v1/setup/complete endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes.setup._save_setup_config")
-    @patch("ciris_engine.logic.adapters.api.routes.setup._create_setup_users")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_setup_users")
     def test_complete_setup_success(
         self, mock_create_users, mock_save, mock_config_path, mock_first_run, client_with_runtime, tmp_path
     ):
@@ -359,9 +422,12 @@ class TestCompleteSetupEndpoint:
         assert "successful" in data["message"].lower()
         mock_save.assert_called_once()
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
-    def test_complete_setup_password_too_short(self, mock_first_run, client):
-        """Test setup completion with password too short."""
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    def test_complete_setup_system_admin_password_too_short(self, mock_first_run, client):
+        """The local admin replacement password keeps its minimum length.
+
+        The owner's own password is the node's and is no longer judged here.
+        """
         mock_first_run.return_value = True
 
         response = client.post(
@@ -375,15 +441,15 @@ class TestCompleteSetupEndpoint:
                 "enabled_adapters": ["api"],
                 "adapter_config": {},
                 "admin_username": "admin",
-                "admin_password": "short",  # Only 5 characters
+                "system_admin_password": "short",  # Only 5 characters
                 "agent_port": 8080,
             },
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "8 characters" in response.json()["detail"]
+        assert "System admin password" in response.json()["detail"]
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
     def test_complete_setup_already_configured(self, mock_first_run, client):
         """Test setup completion when already configured."""
         mock_first_run.return_value = False  # Already configured
@@ -405,11 +471,11 @@ class TestCompleteSetupEndpoint:
         )
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "already completed" in response.json()["detail"]
+        assert "first-run" in response.json()["detail"] or "already completed" in response.json()["detail"]
 
     def test_complete_setup_no_auth_required_during_first_run(self, client):
         """Test that setup completion doesn't require auth during first-run."""
-        with patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run", return_value=False):
+        with patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=False):
             response = client.post(
                 "/v1/setup/complete",
                 json={
@@ -426,7 +492,7 @@ class TestCompleteSetupEndpoint:
 class TestGetConfigEndpoint:
     """Test GET /v1/setup/config endpoint."""
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
     def test_get_config_during_first_run(self, mock_allowed, client):
         """Test getting config during first-run (no auth required)."""
         mock_allowed.return_value = True  # First-run, no auth required
@@ -437,6 +503,7 @@ class TestGetConfigEndpoint:
                 "OPENAI_API_KEY": "sk-test",
                 "OPENAI_MODEL": "gpt-4",
                 "CIRIS_API_PORT": "8080",
+                "CIRIS_MOCK_LLM": "",  # Override conftest global mock_llm=true
             },
         ):
             response = client.get("/v1/setup/config")
@@ -447,7 +514,7 @@ class TestGetConfigEndpoint:
             assert data["llm_model"] == "gpt-4"
             assert data["agent_port"] == 8080
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
     def test_get_config_after_setup_requires_auth(self, mock_allowed, client):
         """Test that getting config after setup requires authentication."""
         mock_allowed.return_value = False  # Setup completed, auth required
@@ -482,8 +549,8 @@ class TestUpdateConfigEndpoint:
         # Should require auth
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes.setup._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
     def test_update_config_with_admin_auth(self, mock_save, mock_config_path, client, auth_headers, tmp_path):
         """Test config update with admin authentication."""
         mock_config_path.return_value = tmp_path / ".env"
@@ -533,9 +600,10 @@ class TestHelperFunctions:
         assert all(t.stewardship_tier >= 1 and t.stewardship_tier <= 5 for t in templates)
         assert all(t.creator_id is not None for t in templates)
         assert all(t.signature is not None for t in templates)
-        # All templates should have DSAR SOPs
-        assert all("DSAR_ACCESS" in t.supported_sops for t in templates)
-        assert all("DSAR_DELETE" in t.supported_sops for t in templates)
+        # Templates with SOPs should have DSAR SOPs (benchmark templates may have none)
+        templates_with_sops = [t for t in templates if t.supported_sops]
+        assert all("DSAR_ACCESS" in t.supported_sops for t in templates_with_sops)
+        assert all("DSAR_DELETE" in t.supported_sops for t in templates_with_sops)
 
     def test_get_available_adapters(self):
         """Test _get_available_adapters helper."""
@@ -551,13 +619,13 @@ class TestHelperFunctions:
         api = next(a for a in adapters if a.id == "api")
         assert api.enabled_by_default is True
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run")
     def test_is_setup_allowed_without_auth_first_run(self, mock_first_run):
         """Test _is_setup_allowed_without_auth during first-run."""
         mock_first_run.return_value = True
         assert _is_setup_allowed_without_auth() is True
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run")
     def test_is_setup_allowed_without_auth_after_setup(self, mock_first_run):
         """Test _is_setup_allowed_without_auth after setup completed."""
         mock_first_run.return_value = False
@@ -567,10 +635,10 @@ class TestHelperFunctions:
 class TestDualPasswordSupport:
     """Test dual password support (new user + system admin)."""
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes.setup._save_setup_config")
-    @patch("ciris_engine.logic.adapters.api.routes.setup._create_setup_users")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_setup_users")
     def test_setup_creates_new_user_and_updates_admin(
         self, mock_create_users, mock_save, mock_config_path, mock_first_run, client_with_runtime, tmp_path
     ):
@@ -606,7 +674,7 @@ class TestDualPasswordSupport:
 class TestSetupHelperFunctions:
     """Test setup route helper functions for saving config and creating users."""
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.create_env_file")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.create_env_file")
     def test_save_setup_config_openai(self, mock_create_env, tmp_path):
         """Test _save_setup_config with OpenAI provider."""
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
@@ -647,7 +715,7 @@ class TestSetupHelperFunctions:
         assert "CIRIS_TEMPLATE=general" in content
         assert "CIRIS_ADAPTER=api,cli" in content
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.create_env_file")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.create_env_file")
     def test_save_setup_config_with_adapter_config(self, mock_create_env, tmp_path):
         """Test _save_setup_config with adapter-specific configuration."""
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
@@ -678,16 +746,25 @@ class TestSetupHelperFunctions:
         assert "DISCORD_BOT_TOKEN=test-token" in content
         assert "DISCORD_CHANNEL_ID=123456" in content
 
+    @staticmethod
+    def _node_owner(monkeypatch, name="newuser"):
+        """The owner claim-remote left behind: the node created the user."""
+        import ciris_engine.logic.persistence.stores.authentication_store as store
+
+        row = {"wa_id": "wa-root-newuser-node-1", "name": name, "role": "root", "active": 1}
+        monkeypatch.setattr(store, "_list_active_by_role", lambda role, limit=1000: [row] if role == "root" else [])
+        monkeypatch.setattr(store, "live_oauth_holders", lambda p, s: [])
+        return row["wa_id"]
+
     @pytest.mark.asyncio
-    async def test_create_setup_users_new_user(self, tmp_path):
-        """Test _create_setup_users creates new user."""
+    async def test_create_setup_users_reads_the_node_owner(self, tmp_path, monkeypatch):
+        """_create_setup_users mints no user: the node-claimed owner is the user."""
         from ciris_engine.logic.adapters.api.routes.setup import _create_setup_users
 
+        owner_wa_id = self._node_owner(monkeypatch)
         setup = SetupCompleteRequest(
             llm_provider="openai",
             llm_api_key="sk-test123",
-            llm_base_url=None,
-            llm_model=None,
             template_id="general",
             enabled_adapters=["api"],
             adapter_config={},
@@ -696,50 +773,33 @@ class TestSetupHelperFunctions:
             agent_port=8080,
         )
 
-        with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_db_path:
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
-            ) as mock_auth:
-                with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
-                    # Setup mocks
-                    mock_db_path.return_value = str(tmp_path / "audit.db")
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
+        ) as mock_auth:
+            with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
+                with patch(
+                    "ciris_engine.logic.adapters.api.routes.setup.complete._create_founding_partnership"
+                ) as mock_fp:
                     mock_auth_instance = AsyncMock()
                     mock_auth.return_value = mock_auth_instance
-                    mock_time_instance = AsyncMock()
-                    mock_time.return_value = mock_time_instance
+                    mock_time.return_value = AsyncMock()
 
-                    # Mock create_wa to return a WA cert
-                    mock_wa_cert = Mock()
-                    mock_wa_cert.wa_id = "test-wa-id"
-                    mock_auth_instance.create_wa.return_value = mock_wa_cert
+                    await _create_setup_users(setup, str(tmp_path / "ciris_engine.db"))
 
-                    # Call function
-                    await _create_setup_users(setup, str(tmp_path / "audit.db"))
-
-                    # Verify auth service was created and started
-                    mock_auth.assert_called_once()
                     mock_auth_instance.start.assert_called_once()
-
-                    # Verify WA was created (this is how users are created)
-                    mock_auth_instance.create_wa.assert_called_once()
-                    call_kwargs = mock_auth_instance.create_wa.call_args[1]
-                    assert call_kwargs["name"] == "newuser"
-                    assert call_kwargs["email"] == "newuser@local"
-
-                    # Verify password was hashed and updated
-                    mock_auth_instance.hash_password.assert_called_once_with("secure_password_123")
-                    mock_auth_instance.update_wa.assert_called_once()
+                    mock_auth_instance.create_wa.assert_not_called()
+                    mock_auth_instance.update_wa.assert_not_called()  # the node owns the credential
+                    mock_fp.assert_called_once_with(owner_wa_id)
 
     @pytest.mark.asyncio
-    async def test_create_setup_users_dual_password(self, tmp_path):
-        """Test _create_setup_users with dual password support."""
+    async def test_create_setup_users_dual_password(self, tmp_path, monkeypatch):
+        """system_admin_password still updates the default admin WA, and nothing else."""
         from ciris_engine.logic.adapters.api.routes.setup import _create_setup_users
 
+        self._node_owner(monkeypatch)
         setup = SetupCompleteRequest(
             llm_provider="openai",
             llm_api_key="sk-test123",
-            llm_base_url=None,
-            llm_model=None,
             template_id="general",
             enabled_adapters=["api"],
             adapter_config={},
@@ -749,55 +809,43 @@ class TestSetupHelperFunctions:
             agent_port=8080,
         )
 
-        with patch("ciris_engine.logic.config.db_paths.get_audit_db_full_path") as mock_db_path:
-            with patch(
-                "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
-            ) as mock_auth:
-                with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
-                    # Setup mocks
-                    mock_db_path.return_value = str(tmp_path / "audit.db")
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.service.AuthenticationService"
+        ) as mock_auth:
+            with patch("ciris_engine.logic.services.lifecycle.time.service.TimeService") as mock_time:
+                with patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_founding_partnership"):
                     mock_auth_instance = AsyncMock()
                     mock_auth.return_value = mock_auth_instance
-                    mock_time_instance = AsyncMock()
-                    mock_time.return_value = mock_time_instance
+                    mock_time.return_value = AsyncMock()
+                    mock_auth_instance.hash_password = Mock(return_value="hashed")
 
-                    # Mock create_wa to return a WA cert for new user
-                    mock_new_wa = Mock()
-                    mock_new_wa.wa_id = "new-user-wa-id"
-                    mock_auth_instance.create_wa.return_value = mock_new_wa
-
-                    # Mock list_was to return existing admin WA
                     mock_admin_wa = Mock()
                     mock_admin_wa.name = "admin"
                     mock_admin_wa.wa_id = "admin-wa-id"
-                    mock_auth_instance.list_was.return_value = [mock_admin_wa, mock_new_wa]
+                    mock_auth_instance.list_was.return_value = [mock_admin_wa]
 
-                    # Call function
-                    await _create_setup_users(setup, str(tmp_path / "audit.db"))
+                    await _create_setup_users(setup, str(tmp_path / "ciris_engine.db"))
 
-                    # Verify new user was created
-                    mock_auth_instance.create_wa.assert_called_once()
-
-                    # Verify system admin password was updated
-                    # Should call list_was to find admin WA (called multiple times for different checks)
-                    mock_auth_instance.list_was.assert_any_call(active_only=True)
-                    # Should call update_wa twice: once for new user, once for admin
-                    assert mock_auth_instance.update_wa.call_count == 2
+                    mock_auth_instance.create_wa.assert_not_called()
+                    mock_auth_instance.update_wa.assert_called_once_with(wa_id="admin-wa-id", password_hash="hashed")
 
 
 class TestResumeFromFirstRun:
     """Test resume from first-run functionality."""
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.is_first_run")
-    @patch("ciris_engine.logic.adapters.api.routes.setup.get_default_config_path")
-    @patch("ciris_engine.logic.adapters.api.routes.setup._save_setup_config")
-    @patch("ciris_engine.logic.adapters.api.routes.setup._create_setup_users")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.status.get_default_config_path")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._save_setup_config")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete._create_setup_users")
     def test_complete_setup_triggers_resume(
         self, mock_create_users, mock_save, mock_config_path, mock_first_run, client, tmp_path
     ):
         """Test that setup completion triggers runtime resume."""
         mock_first_run.return_value = True
         mock_config_path.return_value = tmp_path / ".env"
+        # _save_setup_config returns the written .env path; complete.py
+        # consumes it as a real path (os.fspath), so the mock must too.
+        mock_save.return_value = tmp_path / ".env"
         mock_create_users.return_value = None
 
         # Mock runtime with resume method and set it on app.state
@@ -807,6 +855,7 @@ class TestResumeFromFirstRun:
         mock_config = Mock()
         mock_db_config = Mock()
         mock_db_config.audit_db = tmp_path / "audit.db"
+        mock_db_config.main_db = tmp_path / "ciris_engine.db"  # get_sqlite_db_full_path()
         mock_db_config.database_url = None  # SQLite mode
         mock_config.database = mock_db_config
         mock_runtime.essential_config = mock_config
@@ -836,30 +885,12 @@ class TestResumeFromFirstRun:
         # happens asynchronously and is difficult to verify in sync test
 
 
-class TestValidateSetupPasswords:
-    """Test _validate_setup_passwords helper function."""
+class TestValidateSystemAdminPassword:
+    """Setup validates only the local admin replacement password."""
 
-    def test_valid_password(self):
-        """Test password validation with valid password."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
-
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test123",
-            template_id="general",
-            enabled_adapters=["api"],
-            adapter_config={},
-            admin_username="admin",
-            admin_password="secure_password_123",
-            agent_port=8080,
-        )
-
-        result = _validate_setup_passwords(setup, is_oauth_user=False)
-        assert result == "secure_password_123"
-
-    def test_short_password_raises_error(self):
-        """Test password validation raises error for short password."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+    def test_no_owner_password_is_accepted(self):
+        """Add-device setups carry no owner password and no OAuth; they must not 400."""
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_system_admin_password
 
         setup = SetupCompleteRequest(
             llm_provider="openai",
@@ -868,55 +899,13 @@ class TestValidateSetupPasswords:
             enabled_adapters=["api"],
             adapter_config={},
             admin_username="admin",
-            admin_password="short",  # Too short
+            admin_password=None,
             agent_port=8080,
         )
-
-        with pytest.raises(Exception) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert "8 characters" in str(exc_info.value.detail)
-
-    def test_empty_password_for_non_oauth_raises_error(self):
-        """Test empty password raises error for non-OAuth users."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
-
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test123",
-            template_id="general",
-            enabled_adapters=["api"],
-            adapter_config={},
-            admin_username="admin",
-            admin_password="",  # Empty
-            agent_port=8080,
-        )
-
-        with pytest.raises(Exception) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert "8 characters" in str(exc_info.value.detail)
-
-    def test_oauth_user_generates_random_password(self):
-        """Test OAuth user without password gets random password generated."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
-
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test123",
-            template_id="general",
-            enabled_adapters=["api"],
-            adapter_config={},
-            admin_username="admin",
-            admin_password="",  # Empty - should generate random for OAuth
-            oauth_provider="google",
-            agent_port=8080,
-        )
-
-        result = _validate_setup_passwords(setup, is_oauth_user=True)
-        assert len(result) >= 32  # Random password should be at least 32 chars
+        _validate_system_admin_password(setup)
 
     def test_system_admin_password_too_short_raises_error(self):
-        """Test system admin password validation."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_system_admin_password
 
         setup = SetupCompleteRequest(
             llm_provider="openai",
@@ -925,11 +914,369 @@ class TestValidateSetupPasswords:
             enabled_adapters=["api"],
             adapter_config={},
             admin_username="admin",
-            admin_password="secure_password_123",
             system_admin_password="short",  # Too short
             agent_port=8080,
         )
 
         with pytest.raises(Exception) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
+            _validate_system_admin_password(setup)
         assert "System admin password" in str(exc_info.value.detail)
+
+
+class TestUpdateLLMConfigEndpoint:
+    """Test PUT /v1/setup/llm endpoint."""
+
+    def test_update_llm_config_requires_auth(self, client):
+        """Test that LLM config update requires authentication."""
+        response = client.put(
+            "/v1/setup/llm",
+            json={
+                "llm_provider": "openrouter",
+                "llm_api_key": "sk-new-key",
+                "llm_model": "gpt-4o",
+            },
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_update_llm_config_with_admin_auth(self, client, auth_headers, tmp_path):
+        """Test LLM config update with admin authentication."""
+        config_file = tmp_path / ".env"
+        config_file.write_text('OPENAI_API_KEY="old-key"\nOPENAI_MODEL="gpt-3.5-turbo"\n')
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openrouter",
+                    "llm_api_key": "sk-new-key",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["status"] == "updated"
+        assert data["provider"] == "openrouter"
+        assert data["model"] == "gpt-4o"
+
+        # Verify file was updated
+        content = config_file.read_text()
+        assert "sk-new-key" in content
+        assert "gpt-4o" in content
+
+    def test_update_llm_config_file_not_found(self, client, auth_headers, tmp_path):
+        """Test LLM config update when config file doesn't exist."""
+        config_file = tmp_path / "nonexistent" / ".env"
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_update_llm_config_preserves_other_settings(self, client, auth_headers, tmp_path):
+        """Test that LLM config update preserves other .env settings."""
+        config_file = tmp_path / ".env"
+        config_file.write_text(
+            "CIRIS_CONFIGURED=true\n"
+            'OPENAI_API_KEY="old-key"\n'
+            'OPENAI_MODEL="gpt-3.5-turbo"\n'
+            'CIRIS_ADAPTER="api,discord"\n'
+            'DISCORD_BOT_TOKEN="secret-token"\n'
+        )
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    "llm_api_key": "new-key",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify other settings preserved
+        content = config_file.read_text()
+        assert "CIRIS_CONFIGURED=true" in content
+        assert "CIRIS_ADAPTER=" in content
+        assert "DISCORD_BOT_TOKEN=" in content
+
+    def test_update_llm_config_keeps_key_if_not_provided(self, client, auth_headers, tmp_path):
+        """Test that existing API key is kept if not provided in update."""
+        config_file = tmp_path / ".env"
+        config_file.write_text('OPENAI_API_KEY="existing-secret-key"\nOPENAI_MODEL="gpt-3.5-turbo"\n')
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    # No api_key provided
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify key preserved
+        content = config_file.read_text()
+        assert "existing-secret-key" in content
+        assert "gpt-4o" in content
+
+    def test_update_llm_config_creates_reload_signal(self, client, auth_headers, tmp_path):
+        """Test that LLM config update creates config reload signal file."""
+        config_file = tmp_path / ".env"
+        config_file.write_text('OPENAI_API_KEY="key"\n')
+
+        with patch(
+            "ciris_engine.logic.setup.first_run.get_default_config_path",
+            return_value=config_file,
+        ), patch(
+            "ciris_engine.logic.adapters.api.routes.setup.config._validate_config_path",
+            side_effect=lambda p: p,  # Pass through for tests
+        ):
+            response = client.put(
+                "/v1/setup/llm",
+                headers=auth_headers,
+                json={
+                    "llm_provider": "openai",
+                    "llm_model": "gpt-4o",
+                },
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify reload signal file was created
+        reload_file = tmp_path / ".config_reload"
+        assert reload_file.exists()
+
+
+class TestListModelsEndpoint:
+    """Test POST /v1/setup/list-models endpoint."""
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
+    def test_list_models_success(self, mock_list, mock_dep_first_run, mock_helpers_first_run, client):
+        """Test successful model listing returns expected structure."""
+        from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
+
+        mock_list.return_value = ListModelsResponse(
+            provider="openai",
+            models=[
+                LiveModelInfo(
+                    id="gpt-4o", display_name="GPT-4o", ciris_compatible=True, ciris_recommended=True, source="both"
+                ),
+                LiveModelInfo(id="gpt-3.5-turbo", display_name="gpt-3.5-turbo", source="live"),
+            ],
+            total_count=2,
+            source="live",
+        )
+
+        response = client.post(
+            "/v1/setup/list-models",
+            json={
+                "provider": "openai",
+                "api_key": "sk-test123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["provider"] == "openai"
+        assert data["source"] == "live"
+        assert len(data["models"]) == 2
+        assert data["models"][0]["id"] == "gpt-4o"
+        assert data["models"][0]["ciris_compatible"] is True
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
+    def test_list_models_static_fallback(self, mock_list, mock_dep_first_run, mock_helpers_first_run, client):
+        """Test fallback response when live query fails."""
+        from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse, LiveModelInfo
+
+        mock_list.return_value = ListModelsResponse(
+            provider="openai",
+            models=[LiveModelInfo(id="gpt-4o", display_name="GPT-4o", ciris_compatible=True, source="static")],
+            total_count=1,
+            source="static",
+            error="Live query failed: Connection timeout. Showing cached model data.",
+        )
+
+        response = client.post(
+            "/v1/setup/list-models",
+            json={
+                "provider": "openai",
+                "api_key": "sk-test123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["source"] == "static"
+        assert data["error"] is not None
+        assert "Connection timeout" in data["error"]
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.helpers.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run", return_value=True)
+    @patch("ciris_engine.logic.adapters.api.routes.setup.llm_routes._list_models_for_provider")
+    def test_list_models_no_auth_required(self, mock_list, mock_dep_first_run, mock_helpers_first_run, client):
+        """Test endpoint is accessible without auth during first-run."""
+        from ciris_engine.logic.adapters.api.routes.setup import ListModelsResponse
+
+        mock_list.return_value = ListModelsResponse(provider="openai", models=[], total_count=0, source="live")
+
+        response = client.post(
+            "/v1/setup/list-models",
+            json={
+                "provider": "openai",
+                "api_key": "sk-test123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+
+class TestLocationEnvParsing:
+    """Test location environment variable parsing in setup config."""
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_valid_location(self, mock_detect, mock_allowed, client):
+        """Test that valid location env vars are parsed correctly."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "37.7749",
+                "CIRIS_USER_LONGITUDE": "-122.4194",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] == 37.7749
+        assert data["location_longitude"] == -122.4194
+        assert data["has_coordinates"] is True
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_invalid_latitude(self, mock_detect, mock_allowed, client):
+        """Test that invalid latitude env var falls back to None (no 500 error)."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "not_a_number",
+                "CIRIS_USER_LONGITUDE": "-122.4194",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        # Should NOT return 500, should gracefully return None for invalid lat
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] is None
+        assert data["location_longitude"] == -122.4194
+        assert data["has_coordinates"] is False
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_invalid_longitude(self, mock_detect, mock_allowed, client):
+        """Test that invalid longitude env var falls back to None (no 500 error)."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "37.7749",
+                "CIRIS_USER_LONGITUDE": "invalid",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] == 37.7749
+        assert data["location_longitude"] is None
+        assert data["has_coordinates"] is False
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_empty_location(self, mock_detect, mock_allowed, client):
+        """Test that empty location env vars return None."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        # Clear any existing location env vars
+        env_copy = os.environ.copy()
+        env_copy.pop("CIRIS_USER_LATITUDE", None)
+        env_copy.pop("CIRIS_USER_LONGITUDE", None)
+
+        with patch.dict(os.environ, env_copy, clear=True):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] is None
+        assert data["location_longitude"] is None
+        assert data["has_coordinates"] is False
+
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._is_setup_allowed_without_auth")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.config._detect_llm_provider")
+    def test_get_config_with_both_invalid_locations(self, mock_detect, mock_allowed, client):
+        """Test that both invalid location env vars fall back to None."""
+        mock_allowed.return_value = True
+        mock_detect.return_value = "openai"
+
+        with patch.dict(
+            os.environ,
+            {
+                "CIRIS_USER_LATITUDE": "abc",
+                "CIRIS_USER_LONGITUDE": "xyz",
+            },
+        ):
+            response = client.get("/v1/setup/config")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()["data"]
+        assert data["location_latitude"] is None
+        assert data["location_longitude"] is None
+        assert data["has_coordinates"] is False

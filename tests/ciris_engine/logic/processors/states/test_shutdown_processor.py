@@ -8,7 +8,7 @@ Target: 80%+ coverage (currently 32.4%)
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -24,6 +24,43 @@ from ciris_engine.schemas.runtime.models import Task, TaskContext
 # ============================================================================
 # FIXTURES
 # ============================================================================
+
+
+@pytest.fixture(autouse=True)
+def _wire_persist_engine():
+    """Auto-wire a temp ciris-persist Engine for each test.
+
+    Post-2.9.0 absorption (CIRISAgent#763) `update_task_context_and_signing`,
+    `try_claim_shared_task`, etc. route through persist substrates rather
+    than raw sqlite3. Existing shutdown_processor tests mock most paths but
+    leak through to the real persist call sites — wire a per-test Engine
+    so those calls succeed against an isolated temp DB.
+    """
+    import os
+    import tempfile
+
+    import ciris_engine.logic.persistence.models.graph as _graph_mod
+    from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
+    from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+    with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
+        db_path = pf.name
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
+    engine = Engine(f"sqlite:///{db_path}", "test-key")
+    set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
+
+    try:
+        yield engine
+    finally:
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
+        try:
+            os.unlink(db_path)
+        except OSError:
+            pass
 
 
 @pytest.fixture
@@ -470,37 +507,14 @@ class TestShutdownProcessing:
         assert result.shutdown_ready is True
         assert shutdown_processor.shutdown_complete is True
 
-    @pytest.mark.asyncio
-    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
-    async def test_process_shutdown_failed_task_rejected(
-        self,
-        mock_persistence,
-        shutdown_processor,
-        sample_task,
-        sample_thought,
-    ):
-        """Test processing when task failed due to REJECT"""
-        # Setup
-        sample_task.status = TaskStatus.FAILED
-        shutdown_processor.shutdown_task = sample_task
-        mock_persistence.get_task_by_id.return_value = sample_task
-
-        # Mock final action as REJECT
-        action = Mock()
-        action.action_type = "REJECT"
-        action.action_params = {"reason": "Not ready to shutdown"}
-        sample_thought.final_action = action
-
-        mock_persistence.get_thoughts_by_task_id.return_value = [sample_thought]
-
-        # Execute
-        result = await shutdown_processor.process(round_number=1)
-
-        # Verify
-        assert isinstance(result, ShutdownResult)
-        assert result.shutdown_ready is False  # Rejected, not ready
-        assert shutdown_processor.shutdown_complete is True
-        assert shutdown_processor.shutdown_result.status == "rejected"
+    # test_process_shutdown_failed_task_rejected was removed (#1250). It mocked the
+    # task as FAILED with action_type "REJECT", a state RejectHandler never
+    # produces. RejectHandler writes REJECTED, writes it under the task's own
+    # occurrence, and the persisted action_type is "reject". It stayed green while
+    # every real refusal of a shutdown was lost. The replacement drives the real
+    # handler against a real persist engine:
+    # tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py::
+    #     test_agent_reject_of_shutdown_is_recorded_as_an_objection_not_consent
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
@@ -924,7 +938,9 @@ class TestValidationErrors:
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
-        """Test process returns error when validate fails (line 200)"""
+        """#863-A: a missing shutdown task RECOVERS (recreates) instead of
+        spinning on status=error forever. With no peer decision, the stale
+        handle is cleared and the task is recreated next round."""
         # Setup
         mock_is_completed.return_value = False
         sample_task = Task(
@@ -950,9 +966,107 @@ class TestValidationErrors:
         # Execute
         result = await shutdown_processor.process(round_number=1)
 
-        # Verify
-        assert result.status == "error"
-        assert "validate" in result.message.lower()
+        # Verify: NOT an error spin — recovery clears the handle to recreate.
+        assert result.status == "in_progress"
+        assert "recreat" in result.message.lower()
+        assert shutdown_processor.shutdown_task is None
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.persistence.models.tasks.get_latest_shared_task")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_missing_task_adopts_peer_completion(
+        self,
+        mock_persistence,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        mock_get_latest,
+        shutdown_processor,
+    ):
+        """#863-A: if the local task vanished but a PEER occurrence already
+        completed the shutdown decision, adopt it (terminal completed)."""
+        sample_task = Task(
+            task_id="test_123",
+            channel_id="test_channel",
+            description="Test",
+            priority=10,
+            status=TaskStatus.ACTIVE,
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="default",
+        )
+        # During creation no peer decision; after the task disappears a peer
+        # has completed it.
+        mock_is_completed.side_effect = [False, True]
+        mock_get_latest.return_value = sample_task
+        mock_try_claim.return_value = (sample_task, True)
+
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "Test"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        mock_persistence.get_task_by_id.return_value = None  # local task gone
+
+        result = await shutdown_processor.process(round_number=1)
+
+        assert result.status == "completed"
+        assert result.shutdown_ready is True
+        assert shutdown_processor.shutdown_complete is True
+
+    @pytest.mark.asyncio
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
+    @patch("ciris_engine.logic.persistence.models.tasks.is_shared_task_completed")
+    @patch("ciris_engine.logic.persistence.models.tasks.try_claim_shared_task")
+    @patch("ciris_engine.logic.processors.states.shutdown_processor.persistence")
+    async def test_negotiation_timeout_forces_graceful_shutdown(
+        self,
+        mock_persistence,
+        mock_try_claim,
+        mock_is_completed,
+        mock_get_shutdown_manager,
+        shutdown_processor,
+        mock_time_service,
+    ):
+        """#863-B: a shutdown task stuck non-terminal (e.g. DEFERRED) past the
+        negotiation timeout forces a graceful shutdown instead of polling
+        'Waiting for agent response' forever."""
+        from ciris_engine.logic.processors.states.shutdown_processor import SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS
+
+        mock_is_completed.return_value = False
+        deferred_task = Task(
+            task_id="test_123",
+            channel_id="test_channel",
+            description="Test",
+            priority=10,
+            status=TaskStatus.DEFERRED,  # stuck — agent neither accepted nor rejected
+            created_at="2025-10-07T12:00:00+00:00",
+            updated_at="2025-10-07T12:00:00+00:00",
+            agent_occurrence_id="default",
+        )
+        mock_try_claim.return_value = (deferred_task, True)
+        mock_persistence.get_task_by_id.return_value = deferred_task
+        mock_persistence.get_thoughts_by_task_id.return_value = []
+
+        shutdown_manager = Mock()
+        shutdown_manager.get_shutdown_reason.return_value = "Test"
+        shutdown_manager.is_force_shutdown.return_value = False
+        mock_get_shutdown_manager.return_value = shutdown_manager
+
+        # Pretend negotiation began well beyond the timeout.
+        start = datetime(2025, 10, 7, 12, 0, 0, tzinfo=timezone.utc)
+        shutdown_processor._negotiation_started_at = start
+        mock_time_service.now.return_value = start + timedelta(seconds=SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS + 5)
+
+        result = await shutdown_processor.process(round_number=999_999)
+
+        assert result.status == "completed"
+        assert result.shutdown_ready is True
+        assert result.action == "shutdown_negotiation_timeout"
+        assert shutdown_processor.shutdown_complete is True
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")

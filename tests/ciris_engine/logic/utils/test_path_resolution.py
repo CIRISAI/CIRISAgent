@@ -1,12 +1,15 @@
 """Unit tests for CIRIS path resolution utility."""
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from ciris_engine.logic.utils.path_resolution import (
+    _sanitize_env_value,
+    _validate_env_var_name,
     find_template_file,
     get_ciris_home,
     get_config_dir,
@@ -15,6 +18,8 @@ from ciris_engine.logic.utils.path_resolution import (
     get_package_root,
     get_template_directory,
     is_development_mode,
+    sync_env_var,
+    validate_path_safety,
 )
 
 
@@ -37,7 +42,14 @@ class TestGetCirisHome:
     """Test CIRIS home directory resolution."""
 
     def test_development_mode_uses_cwd(self, tmp_path, monkeypatch):
-        """Development mode should use current directory."""
+        """Development mode should use current directory.
+
+        Clears CIRIS_HOME so this test is robust against env-var leakage
+        from sibling tests in the same xdist worker. Post-2.9.4 CIRIS_HOME
+        (priority 2) wins above dev-mode (priority 4), so a leaked value
+        would shadow Path.cwd() resolution.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_ciris_home() == tmp_path
@@ -72,19 +84,26 @@ class TestDirectoryHelpers:
     """Test directory helper functions."""
 
     def test_get_data_dir(self, tmp_path, monkeypatch):
-        """get_data_dir should return CIRIS_HOME/data/."""
+        """get_data_dir should return CIRIS_HOME/data/.
+
+        Clears CIRIS_HOME for env-leakage isolation — see
+        ``test_development_mode_uses_cwd`` for the rationale.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_data_dir() == tmp_path / "data"
 
     def test_get_logs_dir(self, tmp_path, monkeypatch):
         """get_logs_dir should return CIRIS_HOME/logs/."""
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_logs_dir() == tmp_path / "logs"
 
     def test_get_config_dir(self, tmp_path, monkeypatch):
         """get_config_dir should return CIRIS_HOME/config/."""
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
         assert get_config_dir() == tmp_path / "config"
@@ -251,11 +270,99 @@ class TestGetTemplateDirectory:
         assert result in (user_templates, package_templates)
 
 
+class TestValidatePathSafety:
+    """Test path safety validation."""
+
+    def test_accepts_valid_paths(self, tmp_path):
+        """Should accept normal paths in non-system directories."""
+        valid_path = tmp_path / "ciris" / "data"
+        result = validate_path_safety(valid_path, "test")
+        assert result == valid_path.resolve()
+
+    def test_accepts_home_directory_paths(self):
+        """Should accept paths under home directory."""
+        home_path = Path.home() / "ciris" / "config"
+        result = validate_path_safety(home_path, "test")
+        assert result == home_path.resolve()
+
+    @pytest.mark.skipif(sys.platform == "darwin", reason="/etc -> /private/etc on macOS")
+    def test_rejects_etc_paths(self):
+        """Should reject paths in /etc."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/etc/ciris/config"), "test")
+
+    def test_rejects_bin_paths(self):
+        """Should reject paths in /bin."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/bin/ciris"), "test")
+
+    def test_rejects_usr_bin_paths(self):
+        """Should reject paths in /usr/bin."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/usr/bin/evil"), "test")
+
+    def test_rejects_root_paths(self):
+        """Should reject paths in /root."""
+        with pytest.raises(ValueError, match="forbidden system directory"):
+            validate_path_safety(Path("/root/.ciris"), "test")
+
+    def test_null_bytes_rejected_by_system(self):
+        """Null bytes are rejected at the system level (Path.resolve)."""
+        # Note: Python's pathlib.Path.resolve() raises ValueError for null bytes
+        # before our custom validation runs, which is the desired behavior
+        # Error message varies: "embedded null byte" or "embedded null character"
+        with pytest.raises(ValueError, match="embedded null"):
+            validate_path_safety(Path("/tmp/safe\x00/attack"), "test")
+
+    def test_resolves_relative_paths(self, tmp_path, monkeypatch):
+        """Should resolve relative paths to absolute."""
+        monkeypatch.chdir(tmp_path)
+        relative_path = Path("./data")
+        result = validate_path_safety(relative_path, "test")
+        assert result.is_absolute()
+        assert result == (tmp_path / "data").resolve()
+
+    @pytest.mark.skipif(sys.platform == "darwin", reason="/etc -> /private/etc on macOS")
+    def test_context_appears_in_error_message(self):
+        """Error messages should include context parameter."""
+        with pytest.raises(ValueError, match="CIRIS_HOME"):
+            validate_path_safety(Path("/etc/passwd"), "CIRIS_HOME")
+
+
+class TestGetCirisHomeWithInvalidPath:
+    """Test CIRIS home with invalid CIRIS_HOME env var."""
+
+    @pytest.mark.skipif(sys.platform == "darwin", reason="/etc -> /private/etc on macOS")
+    def test_ignores_forbidden_ciris_home(self, tmp_path, monkeypatch):
+        """Should ignore CIRIS_HOME pointing to forbidden directory."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("CIRIS_HOME", "/etc/ciris")
+        # Should fall back to default, not use /etc/ciris
+        result = get_ciris_home()
+        assert "/etc" not in str(result)
+        # Should fall back to ~/ciris (not in dev mode)
+        assert result == Path.home() / "ciris"
+
+    def test_null_byte_in_env_rejected_by_os(self, tmp_path, monkeypatch):
+        """Null bytes in environment variables are rejected by the OS."""
+        # Note: The OS rejects null bytes in environment variable values,
+        # so this attack vector is already blocked at the system level
+        # Error message varies: "embedded null byte" or "embedded null character"
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="embedded null"):
+            monkeypatch.setenv("CIRIS_HOME", f"{tmp_path}/safe\x00/evil")
+
+
 class TestIntegration:
     """Integration tests for path resolution."""
 
     def test_paths_consistent_in_dev_mode(self, tmp_path, monkeypatch):
-        """All paths should be consistent in development mode."""
+        """All paths should be consistent in development mode.
+
+        Clears CIRIS_HOME for env-leakage isolation — see
+        ``test_development_mode_uses_cwd`` for the rationale.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".git").mkdir()
 
@@ -287,3 +394,134 @@ class TestIntegration:
         assert get_data_dir() == custom_home / "data"
         assert get_logs_dir() == custom_home / "logs"
         assert get_config_dir() == custom_home / "config"
+
+
+class TestSanitizeEnvValue:
+    """Test environment value sanitization for .env file security."""
+
+    def test_sanitize_removes_newlines(self):
+        """Newlines should be removed to prevent injection."""
+        assert _sanitize_env_value("hello\nworld") == "helloworld"
+        assert _sanitize_env_value("line1\nline2\nline3") == "line1line2line3"
+
+    def test_sanitize_removes_carriage_returns(self):
+        """Carriage returns should be removed."""
+        assert _sanitize_env_value("hello\rworld") == "helloworld"
+        assert _sanitize_env_value("line1\r\nline2") == "line1line2"
+
+    def test_sanitize_escapes_double_quotes(self):
+        """Double quotes should be escaped."""
+        assert _sanitize_env_value('say "hello"') == 'say \\"hello\\"'
+        assert _sanitize_env_value('"quoted"') == '\\"quoted\\"'
+
+    def test_sanitize_handles_empty_string(self):
+        """Empty string should remain empty."""
+        assert _sanitize_env_value("") == ""
+
+    def test_sanitize_preserves_safe_characters(self):
+        """Safe characters should be preserved."""
+        safe = "abcXYZ123-_.!@#$%^&*()+=[]{}|;:',<>/?"
+        result = _sanitize_env_value(safe)
+        # Only double quotes would be escaped
+        assert result == safe
+
+    def test_sanitize_injection_attempt(self):
+        """Test against actual injection attempt."""
+        # Attempt to inject a new variable
+        malicious = 'value"\nMALICIOUS_VAR="evil'
+        result = _sanitize_env_value(malicious)
+        assert "\n" not in result
+        assert result == 'value\\"MALICIOUS_VAR=\\"evil'
+
+
+class TestValidateEnvVarName:
+    """Test environment variable name validation."""
+
+    def test_valid_simple_name(self):
+        """Simple alphanumeric names should be valid."""
+        assert _validate_env_var_name("MY_VAR") is True
+        assert _validate_env_var_name("CIRIS_HOME") is True
+        assert _validate_env_var_name("var123") is True
+
+    def test_valid_starts_with_underscore(self):
+        """Names starting with underscore should be valid."""
+        assert _validate_env_var_name("_PRIVATE") is True
+        assert _validate_env_var_name("__dunder__") is True
+
+    def test_invalid_starts_with_number(self):
+        """Names starting with number should be invalid."""
+        assert _validate_env_var_name("123VAR") is False
+        assert _validate_env_var_name("1") is False
+
+    def test_invalid_contains_special_chars(self):
+        """Names with special characters should be invalid."""
+        assert _validate_env_var_name("MY-VAR") is False
+        assert _validate_env_var_name("MY.VAR") is False
+        assert _validate_env_var_name("MY VAR") is False
+        assert _validate_env_var_name("MY=VAR") is False
+
+    def test_invalid_empty_name(self):
+        """Empty name should be invalid."""
+        assert _validate_env_var_name("") is False
+
+    def test_injection_via_var_name(self):
+        """Injection attempts via var name should be rejected."""
+        assert _validate_env_var_name("VAR\nEVIL=bad") is False
+        assert _validate_env_var_name("VAR;echo bad") is False
+        assert _validate_env_var_name("$(whoami)") is False
+
+
+class TestSyncEnvVarSecurity:
+    """Test sync_env_var security measures."""
+
+    def test_rejects_invalid_var_name(self, monkeypatch):
+        """Should raise ValueError for invalid var names."""
+        with pytest.raises(ValueError, match="Invalid environment variable name"):
+            sync_env_var("INVALID-NAME", "value", persist_to_file=False)
+
+    def test_rejects_injection_in_var_name(self, monkeypatch):
+        """Should reject injection attempts in var name."""
+        with pytest.raises(ValueError):
+            sync_env_var("VAR\nEVIL=x", "value", persist_to_file=False)
+
+    def test_accepts_valid_var_name(self, monkeypatch):
+        """Should accept valid var names."""
+        # Just test that it doesn't raise - actual env update happens
+        result = sync_env_var("VALID_VAR_123", "test_value", persist_to_file=False)
+        assert result is True
+        assert os.environ.get("VALID_VAR_123") == "test_value"
+
+    def test_sanitizes_value_in_env_file(self, tmp_path, monkeypatch):
+        """Values written to .env file should be sanitized."""
+        # Create a mock .env file
+        env_file = tmp_path / ".env"
+        env_file.write_text("EXISTING=value\n")
+
+        # Patch to use our test .env file
+        monkeypatch.setattr("ciris_engine.logic.utils.path_resolution.get_env_file_path", lambda: env_file)
+        # Patch allowlist check to allow tmp_path for testing
+        monkeypatch.setattr("ciris_engine.logic.utils.path_resolution._is_path_in_allowed_env_dirs", lambda p: True)
+
+        # Try to inject via value - attacker tries to close quotes, add newline, set new var
+        sync_env_var("TEST_VAR", 'value"\nINJECTED=evil', persist_to_file=True)
+
+        # Read back and verify no injection occurred
+        content = env_file.read_text()
+        lines = content.strip().split("\n")
+
+        # Should only have 2 lines (original + new), not 3
+        # The newline in the value should have been stripped
+        assert len(lines) == 2, f"Expected 2 lines, got {len(lines)}: {lines}"
+
+        # Verify the structure - only 2 variable assignments
+        # INJECTED should be inside TEST_VAR's value, not a separate var
+        assert "TEST_VAR=" in content
+        assert "EXISTING=" in content
+
+        # The key security check: INJECTED should NOT be at the start of a line
+        # (which would make it its own variable)
+        for line in lines:
+            assert not line.startswith("INJECTED="), "Injection attack succeeded!"
+
+        # The embedded quote should be escaped
+        assert '\\"' in content

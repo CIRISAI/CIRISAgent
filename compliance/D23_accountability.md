@@ -1,0 +1,147 @@
+# D23 — `structural (audit chain)` (STRONG-3)
+
+> Accountability as a structural property of the audit chain — regulators attest it as a named axis; CIRIS enforces it as a property of the record
+
+**Kind**: structural property (audit chain) — not a namespace family; nothing is emitted under a prefix for this dimension. Resolves to the CC 3.1 registry leaves `audit_chain:hash_continuity`, `transparency_log:inclusion`, `transparency_log:consistency`. The v1.0 label `accountability:*` is retired (seed v1.1, CIRISAgent#1139).
+
+**Kinds of change (RATCHET 11+1)**: identity · structure — Record: direct
+
+**Seed reference**: `SEED_DIMENSIONS.yaml` v1.1, dimension `D23` ([source](https://github.com/CIRISAI/ciris-response-magnifica-humanitas/blob/main/SEED_DIMENSIONS.yaml))
+**Accord principle**: fidelity
+**Attestation density**: MH=0 · EU=6 · IEEE=3 · ASEAN=19 · total=28
+
+**Absent from**: MH — MH covers accountability FUNCTIONALLY via integrity:* + originator-obligations Accord §IV Ch 2 — architecturally structural rather than named-axis-attested.
+  *Functional analogue*: integrity:* + the Accord §IV Ch 2 bidirectional creator-creation obligations
+
+## Regulatory attestations
+
+*(Auto-rendered from seed; do not hand-edit. Re-run `python tools/compliance/generate_ciris_compliance_stubs.py tools/compliance/SEED_DIMENSIONS.yaml compliance/` after seed updates.)*
+
+- **EU** (Ethics Guidelines for Trustworthy AI) — *§1.7 Accountability*
+    > "lifecycle accountability with redress mechanisms"
+    Wire form: `accountability:lifecycle_responsibility`
+- **IEEE** (Ethically Aligned Design, First Edition) — *Ch2 P6 + Ch11*
+    > "accountability principle; rights-based legal accountability"
+    Wire form: `accountability:*`
+- **ASEAN** (ASEAN Guide on AI Governance and Ethics) — *§B.6 + §C.2 (19 attestations)*
+    > "accountability and integrity; human-in-control over AI-augmented decisions"
+    Wire form: `accountability:human_in_control + accountability:lifecycle`
+
+## Wire primitives
+
+*(none — structural property; see **Kind** above and the human section for the mechanisms)*
+
+
+## Named sub-leaves
+
+*(Named so a reviewer walking a framework's requirement list finds them; no new D-id — a promoted leaf allocates D28+.)*
+
+- `accountability:human_in_control` — folded from EU HLEG requirement 1 'human agency & oversight'; ASEAN §B.6 + §C.2 human-in-control (HITL/HOTL/HOOTL gradient)
+    Status: named so a reviewer walking HLEG's seven finds it; single-source-STRONG; not a registry family, not emitted
+    Promotion trigger: EU AI Act Art. 14 (human oversight) as a fifth batch promotes it under the STRONG rule; a promoted leaf allocates D28+ per stable_id_rule
+
+## Convergence note
+
+ASEAN's accountability:human_in_control with HITL/HOTL/HOOTL gradient is currently single-source; likely to become STRONG when other oversight-ladder regulatory batches map.
+
+---
+
+<!-- BEGIN HUMAN -->
+## What this dimension covers
+
+Accountability asks: who is responsible for the agent's actions, and can that responsibility be verified after the fact? An auditor wants a tamper-evident answer to "who decided this, on what basis, and can you prove the record hasn't been altered?"
+
+## How CIRIS implements this today
+
+**Seed v1.1 (2026-09-08, [CIRISAgent#1139](https://github.com/CIRISAI/CIRISAgent/issues/1139)): this dimension is a structural property, not a namespace family.** `accountability:*` is absent from CC 3.1's registry of record (114 families) and from persist's supersets (104), and this agent emits no such string — by design, as the paragraph below has said since v1.0. What carries the property on the wire is the audit chain itself: `audit_chain:hash_continuity` and the `transparency_log:inclusion` / `transparency_log:consistency` leaves. The seed, this page and the registry now agree: 26 families + 1 structural property.
+
+CIRIS takes a different approach to accountability than naming it as a single axis: instead of declaring an `accountability:*` label on each action, the accountability properties are built into the substrate — the agent's identity is keyed with Ed25519 cryptography, every action emits an audit entry on a tamper-evident chain, every decision carries a written rationale, and every escalation to a Wise Authority (a human or panel the agent defers to) is recorded with the resolving human's identity and their guidance text. The same goal — verifiable responsibility — is achieved structurally.
+
+> **Correction (2.9.7): the WA resolution itself is not cryptographically signed.** An earlier revision of this paragraph said each escalation is "recorded with the human's *signed response*", and the observability section below said each resolution "names the human *by Ed25519 public-key hash*". Neither is accurate. `DeferralResponse.signature` (`ciris_engine/schemas/services/authority_core.py:260`) is a plain `str` with no validator, and the API route populates it with a formatted string — `signature=f"api_{auth.user_id}_{datetime.now(timezone.utc).isoformat()}"` at `ciris_engine/logic/adapters/api/routes/wa.py:183`. It is never read: no code path verifies it, and both `resolve_deferral` implementations (`logic/services/governance/wise_authority/service.py:530`, `logic/adapters/discord/discord_adapter.py:691`) ignore the field entirely. `wa_id` carries `auth.user_id` — an account identifier, not a key hash. Separately, `Task.signature` *is* a real Ed25519 signature, but `verify_task_signature` (`logic/services/infrastructure/authentication/service.py:1515`) has **zero production callers**, so task signatures are written and never checked either. Tracked as [CIRISAgent#944](https://github.com/CIRISAI/CIRISAgent/issues/944); see `FSD/THREAT_MODEL_2.9.7.md`.
+>
+> **What is genuinely true and load-bearing:** the resolution route is authorization-gated (`require_authority`, `wa.py:164`), the resolving account is recorded, the guidance text is preserved, and the *audit chain* around the event is hash-chained and hybrid-signed with real cryptography (the substrate-enforced facet below). What is missing is non-repudiation of the individual resolution — an operator with AUTHORITY cannot later be cryptographically bound to a specific decision, and a decision cannot be attributed to a key. That is a real gap in this dimension and it is named here rather than in "Known gaps" because the surrounding paragraph previously claimed the opposite.
+
+**Authentication Service (the cryptographic root of identity).**
+- `ciris_engine/logic/services/infrastructure/authentication/` — Ed25519-keyed agent identity
+- `ciris_engine/schemas/api/auth.py:63` — `RESOLVE_DEFERRALS` permission (the Wise Authority axis)
+
+**Audit Service (the lifecycle record).** Event types are locked at the database level — adding a new type requires a schema migration, not a configuration change.
+- `ciris_engine/logic/services/graph/audit_service/service.py:59` — `AuditEventData`, `AuditQuery`, `VerificationReport`
+- `ciris_engine/logic/services/graph/audit_service/service.py:74-100` — `AuditEventType` enforcement (CHECK constraint, V018/V020 migrations) — 21 locked event types
+- `ciris_engine/schemas/audit/core.py` — `AuditEventType` enum (the immutable accountability vocabulary)
+
+**Wise Authority (the human-in-control surface that ASEAN names as HITL/HOTL/HOOTL).**
+- `ciris_engine/logic/services/governance/wise_authority/service.py:42` — `WiseAuthorityService`
+- `ciris_engine/logic/handlers/control/defer_handler.py` — DEFER (escalate to a Wise Authority) routes the thought to a human
+- `ciris_engine/logic/handlers/control/reject_handler.py:18` — REJECT records refusal with a written reason
+
+**Conscience layer (the stop-button surface).** Internal safety checks running on each thought can veto an action mid-pipeline; the optimization-veto check is the "stop-button at any time" surface called for in EU §III.1.
+- `ciris_engine/logic/conscience/core.py` — `OptimizationVetoConscience`
+- `ciris_engine/logic/conscience/action_sequence_conscience.py` — sequence-level checks
+
+**Audit chain API (the verification surface).**
+- `ciris_engine/logic/adapters/api/routes/audit.py:781` — `GET /v1/audit/entries`
+- `:919` — `GET /v1/audit/entries/{entry_id}`
+- `:970` — `POST /v1/audit/search`
+- `:1006` — `POST /v1/audit/verify/{entry_id}` — Ed25519 chain verification (the cryptographic verification surface)
+- `:1030` — `POST /v1/audit/export`
+
+**Originator obligations (the developer-side commitment).**
+- `MISSION.md` — the Mission Driven Development charter; every claim is anchored to a file path
+- `ciris_engine/logic/buses/prohibitions.py` — the originator's declaration of what the agent will not be
+
+**Auditable reasoning (the per-decision rationale).** Every action-selection result carries a written rationale, required by schema.
+- `ciris_engine/schemas/dma/results.py:242` — `rationale: str` (required field)
+- `ciris_engine/schemas/dma/results.py:248` — `reasoning: Optional[str]` (detailed reasoning)
+
+**Policy text.**
+- `ciris_engine/data/localized/accord_1.2b_en.txt:108` — "Integrity: Act Ethically — apply a transparent, auditable reasoning process"
+- `ciris_engine/data/localized/accord_1.2b_en.txt:125` — "Accountability: Maintain tamper-evident logs, rationale chains, and documentation"
+- `ciris_engine/data/localized/accord_1.2b_en.txt:294` — Deferral Package (context, dilemma, analysis, rationale) — the formal escalation artifact
+- `ciris_engine/data/localized/accord_1.2b_en.txt:488` — Transparent Accountability: logs, rationales, and WBD tickets to authorized auditors
+
+**Tests.**
+- `tests/ciris_engine/logic/handlers/control/test_defer_handler.py`, `test_reject_handler.py`
+- Audit service tests under `tests/`
+
+**Configuration.**
+- `AuditEventType` enum (21 values) — locks the accountability vocabulary at the persistence layer
+- Wise Authority registration in `service_initializer.py:704, 2050` — declares which endpoints carry the `RESOLVE_DEFERRALS` permission
+
+**Substrate-enforced facet vs agent-side facet (the D23 split).** With the CIRISServer adoption this dimension splits cleanly in two:
+
+- *Tamper-evident log* (substrate-enforced, inherited via CIRISServer): the hash-chained, Ed25519 + ML-DSA-65 hybrid-signed audit log is enforced by the substrate wheels shipping inside the agent's deployment, independently verified against the real published wheels by CIRISConformance [`test_320_audit_accountability.py`](https://github.com/CIRISAI/CIRISConformance/blob/main/tests/test_320_audit_accountability.py) — `ciris_server.LensAudit` writes, persist's `audit_verify_chain` walks the chain and returns `ok` with a typed break diagnostic on tamper (sqlite + postgres, py3.10/3.12, x86_64 + aarch64). Same evidence as D02; the [CIRISConformance coverage map](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) marks D23 lane = substrate + agent.
+- *Named accountability* (agent-side, unchanged): who decided, on what rationale, and which human resolved the escalation — the Wise Authority surface, `RESOLVE_DEFERRALS`, per-decision `rationale`, and the DEFER→`resolve_deferral` pair above remain owned by this map.
+
+Proposed pointer (from seed): `(none specified in seed; please fill)`
+
+## How you can tell it's working (observability)
+
+If you wanted to verify this from outside, the audit chain itself is cryptographically signed and externally verifiable, every action's rationale is stored alongside the action, and every Wise Authority resolution names the resolving account (`wa_id`, an account identifier — **not** an Ed25519 public-key hash; see the correction above and #944) together with the guidance they gave.
+
+- **Tamper-evident audit chain**: every action emits an audit entry; `POST /v1/audit/verify/{entry_id}` performs Ed25519 chain verification end-to-end.
+- **Per-action accountability slice**: `GET /v1/audit/search` with an action-type filter returns the full chronological trail.
+- **Signed rationale chains** (Accord 1.2b §1006): every action-selection emission carries `rationale` and `reasoning` as audit-anchored fields.
+- **Wise Authority resolution telemetry**: deferral resolutions are logged with the Wise Authority's identity (Ed25519 public-key hash).
+- **Drift detectors**: `detection:correlated_action:*` flags audit-chain anomalies.
+- **Federation evidence_refs**: a typed federation message citing `dimensions: ["D23"]` resolves through this seed to EU §1.7 lifecycle accountability, IEEE Ch2 P6 + Ch11 rights-based accountability, ASEAN §B.6 + §C.2 (the 19-attestation human-in-control density).
+
+Proposed pointer (from seed): `(none specified in seed; please fill)`
+
+## Current limitations & next steps
+
+- **Wise Authority resolutions are not signed, and task signatures are never verified** ([CIRISAgent#944](https://github.com/CIRISAI/CIRISAgent/issues/944)). This is the largest agent-side gap in this dimension and it is *not* substrate-shared work — it is ours. `DeferralResponse.signature` is a formatted string (`routes/wa.py:183`) that nothing reads; `verify_task_signature` has zero production callers. The audit chain proves the *record* was not altered; it does not prove *which human* authorized a given resolution, because no key ever touched the resolution. Closing it means signing the resolution with the resolving WA's key and verifying on read — the same shape the budget-grant path already implements (`FSD/BUDGET_ENVELOPE.md`, where the grant signature *is* verified on every spend). Detail and blast radius in `FSD/THREAT_MODEL_2.9.7.md`.
+- **No typed `accountability:*` family is owed** (settled by seed v1.1 / #1139). Accountability is carried by the substrate-attested audit-chain primitives (`audit_chain:hash_continuity`; `transparency_log:inclusion` / `transparency_log:consistency` per RFC 6962). The one named leaf reserved here, `accountability:human_in_control`, is a sub-leaf for reviewers walking EU HLEG's requirement 1, not an emitted family; it is promoted (D28+) only when a fifth batch — the EU AI Act, Art. 14 — makes it STRONG under the seed's own rule.
+- **ASEAN human-in-control gradient (HITL / HOTL / HOOTL)**: shared work with the upstream substrate (`vote:{contribution_id}` in FSD-002 §3.6.3 NodeCore P4; `deferral_request` / `deferral_response` in `MESSAGE_TAXONOMY.md §4.7-§4.8`). The mode is structurally inferred from the vote timing (synchronous = HITL, asynchronous = HOTL, no vote = HOOTL) rather than declared as a separate enum. The agent emits the request envelope; the gradient falls out compositionally.
+- **EU §1.7 lifecycle accountability**: shared work with the upstream substrate (`commitment_fulfillment:{prior_contribution_id}` in FSD-002 §3.6.4; Stage 9 Archive in `CIRISNodeCore/FSD/CONTRIBUTION_LIFECYCLE.md §11`). The lifecycle is captured by the chain-row sequence rooted into Merkle batches.
+- **IEEE Ch11 rights-based accountability**: shared work with the upstream substrate (`testimonial_witness:{kind}` in FSD-002 §3.6.3 v1.4; lexical-vulnerability-priority reference policy in FSD-002 §6.1.4 v1.3). UDHR-grounded rights basis composes via scalar attestations once the envelope ships.
+- **MH bidirectional originator obligations (Accord §IV Ch 2)**: shared work with the upstream substrate (`trust_grant`, `registry_vouch` in `MESSAGE_TAXONOMY.md §4.14, §4.13`; `commitment` in §4.26). Originator-side obligations register via a Commissive commitment; receiver-side via `trust_grant`. Bidirectional composition runs at the consumer side.
+- **Promotion to a named axis** is likely as more oversight-ladder regulatory batches map — this is contingent on the seed graduating accountability to a primary axis.
+
+## Tracked requirements
+
+- **Umbrella(s)**: `CIRISAgent#803` — Typed `<dimension>:*` wire envelope emission
+- **Substrate spec(s)**: `CIRISRegistry#27` — oversight_mode HITL/HOTL/HOOTL envelope field
+
+See `compliance/README.md` cross-cutting findings table for the 3.0 requirements finalization context.
+<!-- END HUMAN -->

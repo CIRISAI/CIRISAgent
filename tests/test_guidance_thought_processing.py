@@ -327,13 +327,11 @@ class TestGuidanceThoughtProcessing:
                         shutdown_task.task_id,
                         TaskStatus.COMPLETED,
                         shutdown_task.agent_occurrence_id,
-                        time_service,
                     )
                     mock_update_task.assert_called_with(
                         shutdown_task.task_id,
                         TaskStatus.COMPLETED,
                         shutdown_task.agent_occurrence_id,
-                        time_service,
                     )
 
 

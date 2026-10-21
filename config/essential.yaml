@@ -11,25 +11,28 @@ database:
 services:
   llm_endpoint: "https://api.openai.com/v1"
   llm_model: "gpt-4o-mini"
-  llm_timeout: 30
+  # Not read for the HTTP timeout any more: timeouts come from the LLM budget
+  # profile (ciris_engine/logic/config/llm_budget.py; #1186) so desktop and
+  # mobile (which never loads this file) match. Override with CIRIS_LLM_TIMEOUT.
+  llm_timeout: 60
+  # Remediation attempts for fixable 400s only; transport errors are not retried here.
   llm_max_retries: 3
 
 # Security and audit settings
 security:
   audit_retention_days: 90
   secrets_encryption_key_env: "CIRIS_MASTER_KEY"
-  audit_key_path: "audit_keys"
   enable_signed_audit: true
-  max_thought_depth: 7
+  max_thought_depth: 5
 
 # Operational limits
 limits:
   max_active_tasks: 10
   max_active_thoughts: 50
-  round_delay_seconds: 5.0
+  round_delay_seconds: 0.5
   mock_llm_round_delay: 0.1
   dma_retry_limit: 3
-  dma_timeout_seconds: 30.0
+  dma_timeout_seconds: 120.0
   conscience_retry_limit: 2
 
 # Telemetry (disabled by default)

@@ -38,7 +38,7 @@ class WACLIDisplayService:
                 await self._display_table(all_was)
 
         except Exception as e:
-            self.console.print(f"❌ Error listing WAs: {e}")
+            self.console.print(f"[FAIL] Error listing WAs: {e}")
 
     async def _display_table(self, was: List[WACertificate]) -> None:
         """Display WAs in a table format."""
@@ -105,7 +105,7 @@ class WACLIDisplayService:
         try:
             wa = await self.auth_service.get_wa(wa_id)
             if not wa:
-                self.console.print(f"❌ WA not found: {wa_id}")
+                self.console.print(f"[FAIL] WA not found: {wa_id}")
                 return
 
             # Create details table
@@ -173,4 +173,4 @@ class WACLIDisplayService:
                     self.console.print(f"  • {child.name} ({child.wa_id}) - {child.role.value}")
 
         except Exception as e:
-            self.console.print(f"❌ Error showing WA details: {e}")
+            self.console.print(f"[FAIL] Error showing WA details: {e}")

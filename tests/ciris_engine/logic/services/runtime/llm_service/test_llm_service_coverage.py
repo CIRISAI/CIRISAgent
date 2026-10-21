@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from ciris_engine.schemas.services.llm import JSONExtractionResult
+from ciris_engine.schemas.services.llm import JSONExtractionResult, RetryState
 
 
 class TestExtractJSON:
@@ -83,7 +83,7 @@ class TestOpenAIConfig:
         assert config.base_url is None
         assert config.instructor_mode == "JSON"
         assert config.max_retries == 3
-        assert config.timeout_seconds == 5
+        assert config.timeout_seconds == 60
 
     def test_custom_values(self):
         """OpenAIConfig accepts custom values."""
@@ -275,3 +275,212 @@ class TestInstructorModes:
         assert mode_map["json"] == instructor.Mode.JSON
         assert mode_map["tools"] == instructor.Mode.TOOLS
         assert "md_json" in mode_map
+
+
+class TestReasoningModeDisabling:
+    """Reasoning/thinking is disabled per-endpoint via the static
+    ``_build_reasoning_off_extras(base_url, model_name)`` dispatcher.
+
+    There is no universal off-switch — every provider has its own enum and
+    422s on keys it doesn't know (verified live 2.7.4: Groq 422'd the
+    ``reasoning_effort=minimal`` value and circuit-broke every scout call).
+    Pydantic AI and OpenRouter both do the same per-provider dispatch
+    internally. These tests pin the per-endpoint expected keys.
+    """
+
+    @staticmethod
+    def _build_for(base_url: str, model_name: str = "test-model") -> dict:
+        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+
+        config = OpenAIConfig(api_key="test-key", model_name=model_name, base_url=base_url)
+        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
+        client.openai_config = config
+        client.model_name = config.model_name
+        return client._build_extra_kwargs(
+            task_id="test-task-123",
+            thought_id="test-thought-456",
+            resp_model_name="EthicalDMAResult",
+            retry_state=RetryState(),
+        )
+
+    # ------------------------------------------------------------------
+    # Per-endpoint expected keys (positive assertions)
+    # ------------------------------------------------------------------
+
+    def test_together_gemma_carries_both_kimi_and_vllm_keys(self):
+        """2.7.4 incident pin: gemma-4 needs the vLLM key (Kimi alone is
+        silently ignored — live A/B showed ~20s vs ~3s)."""
+        extra_body = self._build_for("https://api.together.xyz/v1", "google/gemma-4-31B-it")["extra_body"]
+        assert extra_body["thinking"] == {"type": "disabled"}
+        assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
+
+    def test_together_kimi_carries_both_keys(self):
+        """Kimi K2 family on Together also gets dual-key — its own key
+        works; the vLLM key is silently ignored."""
+        extra_body = self._build_for("https://api.together.xyz/v1", "moonshotai/Kimi-K2-Instruct")["extra_body"]
+        assert extra_body["thinking"] == {"type": "disabled"}
+
+    def test_deepinfra_carries_vllm_and_reasoning_enabled_keys(self):
+        extra_body = self._build_for("https://api.deepinfra.com/v1/openai", "Qwen/Qwen3.6-35B-A3B")["extra_body"]
+        assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
+        assert extra_body["reasoning"] == {"enabled": False}
+
+    def test_openrouter_carries_reasoning_enabled_false(self):
+        extra_body = self._build_for("https://openrouter.ai/api/v1", "kimi/k2-0130-preview")["extra_body"]
+        assert extra_body["reasoning"] == {"enabled": False}
+
+    def test_local_endpoint_carries_vllm_key(self):
+        extra_body = self._build_for("http://localhost:8080/v1", "llama")["extra_body"]
+        assert extra_body["chat_template_kwargs"] == {"enable_thinking": False}
+
+    def test_openai_reasoning_families_each_carry_their_own_floor(self):
+        """"minimal" was one value for two different enums, and it is a 400 on
+        the newer one:
+
+            gpt-5.2 + "minimal" -> 400 `does not support 'minimal' with this
+                                   model. Supported values are: 'none'...`
+
+        so every gpt-5 call was failing outright, not merely reasoning. Measured
+        floors: gpt-5 takes "none" (0 reasoning tokens, 563ms); the o-series
+        enum is low|medium|high, so "low" is as quiet as it gets there.
+        """
+        o_series = self._build_for("https://api.openai.com/v1", "o3-mini")["extra_body"]
+        assert o_series["reasoning_effort"] == "low"
+
+        gpt5 = self._build_for("https://api.openai.com/v1", "gpt-5.2")["extra_body"]
+        assert gpt5["reasoning_effort"] == "none"
+
+    def test_openai_with_no_base_url_still_gets_its_floor(self):
+        """An empty base_url IS OpenAI — the SDK defaults there, and it is the
+        commonest configuration we ship. It used to fall through to the
+        unknown-endpoint branch and suppress nothing at all."""
+        extra_body = self._build_for("", "gpt-5.2")["extra_body"]
+        assert extra_body["reasoning_effort"] == "none"
+
+    # ------------------------------------------------------------------
+    # Per-endpoint forbidden keys (negative assertions — 2.7.4 regressions)
+    # ------------------------------------------------------------------
+
+    def test_groq_sends_no_reasoning_keys(self):
+        """2.7.4 Groq 422 incident pin, still live for NON-reasoning models.
+
+        Llama-4-scout doesn't reason, and the field itself is rejected, so it
+        must receive no toggle keys at all.
+
+        What changed since this pin was written: Groq's reasoning models are no
+        longer covered by it. They used to get {} as well, which is how gpt-oss
+        shipped reasoning at full effort. They now get ``reasoning_effort=low``
+        — measured 103 reasoning tokens -> 11. Note the enum in the original
+        note was wrong: Groq has NO "none" (`must be one of low, medium, or
+        high`), which is why "low" is the floor and not "none".
+        """
+        extra_body = self._build_for(
+            "https://api.groq.com/openai/v1", "meta-llama/llama-4-scout-17b-16e-instruct"
+        )["extra_body"]
+        forbidden = {"thinking", "chat_template_kwargs", "reasoning", "reasoning_effort", "reasoning_format"}
+        leaked = forbidden & set(extra_body.keys())
+        assert not leaked, (
+            f"Groq must not receive reasoning toggle keys ({leaked} leaked) — "
+            "this re-introduces the 2.7.4 Groq 422 → circuit-breaker regression"
+        )
+
+    def test_openai_4o_does_not_get_reasoning_effort(self):
+        """``reasoning_effort`` is only valid on OpenAI o-series / gpt-5.
+        4o/4-turbo 422 the field — must not be sent."""
+        extra_body = self._build_for("https://api.openai.com/v1", "gpt-4o")["extra_body"]
+        assert "reasoning_effort" not in extra_body
+
+    def test_ciris_proxy_no_reasoning_extras(self):
+        """CIRIS proxy is a pre-wrapped LLM service; no native reasoning toggle
+        applies. Only the metadata block layers in."""
+        extra_body = self._build_for("https://lens.ciris-services-1.ai/lens-api/api/v1", "datum")["extra_body"]
+        for k in ("thinking", "chat_template_kwargs", "reasoning", "reasoning_effort"):
+            assert k not in extra_body, f"CIRIS proxy unexpectedly carries {k}"
+
+    @pytest.mark.parametrize(
+        "base_url,model_name",
+        [
+            ("https://api.groq.com/openai/v1", "meta-llama/llama-4-scout-17b-16e-instruct"),
+            ("https://api.together.xyz/v1", "google/gemma-4-31B-it"),
+            ("https://api.deepinfra.com/v1/openai", "Qwen/Qwen3.6-35B-A3B"),
+            ("https://api.openai.com/v1", "gpt-4o"),
+            ("https://openrouter.ai/api/v1", "anthropic/claude-3.5-sonnet"),
+        ],
+    )
+    def test_reasoning_effort_minimal_only_on_openai_o_series(self, base_url, model_name):
+        """``reasoning_effort=minimal`` is OpenAI o-series only. Sending it
+        anywhere else either does nothing (silent ignore) or 422s (Groq).
+        Be conservative: only OpenAI o-series gets this key."""
+        extra_body = self._build_for(base_url, model_name)["extra_body"]
+        assert extra_body.get("reasoning_effort") != "minimal", (
+            f"reasoning_effort=minimal leaked to {base_url} model={model_name} — "
+            "only OpenAI o-series / gpt-5 accept this enum value"
+        )
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "",  # OpenAIConfig.base_url unset → defaults to OpenAI
+            "https://example.com/v1",  # unknown cloud provider
+            "https://my-private-llm.corp.acme.com/v1",  # non-local corp endpoint
+        ],
+    )
+    def test_unknown_endpoint_does_not_get_vllm_key(self, base_url):
+        """PR review pin (release/2.7.4): unknown / unrecognized base_urls
+        must NOT receive ``chat_template_kwargs.enable_thinking`` by default.
+        Strict OpenAI-compatible providers commonly 400 on unknown request
+        keys, and an empty base_url is OpenAI's default — sending the vLLM
+        key there breaks every call. Only positively-identified local
+        endpoints (localhost, RFC1918, *.local, vLLM/ollama/llama.cpp/LM
+        Studio default ports) should receive it."""
+        extra_body = self._build_for(base_url, "test-model")["extra_body"]
+        assert "chat_template_kwargs" not in extra_body, (
+            f"chat_template_kwargs leaked to unknown endpoint {base_url!r}; "
+            "the dispatcher's fallthrough should be empty for non-local URLs."
+        )
+
+    def test_local_endpoint_still_gets_vllm_key(self):
+        """Counterpart to the unknown-endpoint test: positively-identified
+        local URLs DO need the vLLM key (CIRIS owns reasoning via the DMA
+        pipeline; we turn the model's own reasoning off, and Gemma-4 puts
+        responses in `reasoning_content` instead of `content` when
+        thinking is on — see docs/GEMMA_4_COMPATIBILITY.md)."""
+        for url in (
+            "http://localhost:8000/v1",
+            "http://127.0.0.1:11434/v1",
+            "http://192.168.1.50:1234/v1",
+            "http://my-server.local:8080/v1",
+        ):
+            extra_body = self._build_for(url, "llama")["extra_body"]
+            assert extra_body.get("chat_template_kwargs") == {"enable_thinking": False}, (
+                f"local endpoint {url} should receive chat_template_kwargs, got {extra_body!r}"
+            )
+
+    def test_openrouter_includes_provider_config(self):
+        """OpenRouter requests should include both provider config and reasoning disabled."""
+        from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient, OpenAIConfig
+
+        # Create minimal client for testing with proper config
+        config = OpenAIConfig(
+            api_key="test-key",
+            model_name="openai/gpt-4o",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        client = OpenAICompatibleClient.__new__(OpenAICompatibleClient)
+        client.openai_config = config
+        client.model_name = config.model_name
+
+        # Call the method that builds extra kwargs
+        extra_kwargs = client._build_extra_kwargs(
+            task_id="test-task-123",
+            thought_id="test-thought-456",
+            resp_model_name="ActionSelectionDMAResult",
+            retry_state=RetryState(),
+        )
+
+        # Verify reasoning is disabled
+        assert "extra_body" in extra_kwargs
+        extra_body = extra_kwargs["extra_body"]
+        # Provider config may or may not be present depending on env
+        assert "reasoning" in extra_body
+        assert extra_body["reasoning"]["enabled"] is False

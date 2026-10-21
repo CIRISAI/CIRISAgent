@@ -95,10 +95,17 @@ class TestBuildSystemSnapshot:
     """Test build_system_snapshot function."""
 
     @pytest.mark.asyncio
-    async def test_build_minimal_snapshot(self, mock_resource_monitor, mock_time_service):
+    async def test_build_minimal_snapshot(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test building snapshot with minimal required inputs."""
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         assert isinstance(snapshot, SystemSnapshot)
@@ -107,7 +114,7 @@ class TestBuildSystemSnapshot:
 
     @pytest.mark.asyncio
     async def test_build_with_task_and_thought(
-        self, sample_task, sample_thought, mock_resource_monitor, mock_time_service
+        self, sample_task, sample_thought, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
     ):
         """Test building snapshot with task and thought."""
         # Ensure the sample_task doesn't have channel_context that would cause validation error
@@ -122,6 +129,8 @@ class TestBuildSystemSnapshot:
             thought=sample_thought,
             resource_monitor=mock_resource_monitor,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         assert isinstance(snapshot, SystemSnapshot)
@@ -135,7 +144,9 @@ class TestBuildSystemSnapshot:
         assert snapshot.channel_id == "fallback_channel"
 
     @pytest.mark.asyncio
-    async def test_channel_id_extraction_priority(self, mock_resource_monitor, mock_time_service):
+    async def test_channel_id_extraction_priority(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test channel_id extraction follows correct priority.
 
         New priority order:
@@ -163,30 +174,44 @@ class TestBuildSystemSnapshot:
         task.context = context
 
         snapshot = await build_system_snapshot(
-            task=task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=task,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Should use task.channel_id (highest priority)
         assert snapshot.channel_id == "task_channel"
 
     @pytest.mark.asyncio
-    async def test_critical_resource_alerts(self, mock_resource_monitor, mock_time_service):
+    async def test_critical_resource_alerts(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test critical resource alerts are properly captured."""
         # Set critical resource state
         mock_resource_monitor.snapshot.healthy = False
         mock_resource_monitor.snapshot.critical = ["Memory usage at 95%", "Disk space critically low"]
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=None,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Should have critical alerts
         assert len(snapshot.resource_alerts) >= 2
-        assert any("CRITICAL" in alert for alert in snapshot.resource_alerts)
-        assert any("REJECT OR DEFER" in alert for alert in snapshot.resource_alerts)
+        assert any("critical threshold" in alert for alert in snapshot.resource_alerts)
+        assert not any("DEFER" in alert or "REJECT" in alert for alert in snapshot.resource_alerts)
 
     @pytest.mark.asyncio
-    async def test_memory_service_integration(self, mock_resource_monitor, mock_time_service, mock_memory_service):
+    async def test_memory_service_integration(
+        self, mock_resource_monitor, mock_time_service, mock_memory_service, mock_runtime, mock_service_registry
+    ):
         """Test memory service queries for identity and channel context."""
         # Setup mock identity node
         identity_node = GraphNode(
@@ -217,6 +242,8 @@ class TestBuildSystemSnapshot:
             resource_monitor=mock_resource_monitor,
             memory_service=mock_memory_service,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Check identity was retrieved - can be IdentityData model or dict
@@ -237,7 +264,9 @@ class TestBuildSystemSnapshot:
         assert "tool" in snapshot.identity_restrictions
 
     @pytest.mark.asyncio
-    async def test_secrets_service_integration(self, mock_resource_monitor, mock_time_service):
+    async def test_secrets_service_integration(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test secrets service integration."""
         mock_secrets = AsyncMock()
 
@@ -257,6 +286,8 @@ class TestBuildSystemSnapshot:
                 resource_monitor=mock_resource_monitor,
                 secrets_service=mock_secrets,
                 time_service=mock_time_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
             # Check secrets snapshot was integrated
@@ -265,10 +296,11 @@ class TestBuildSystemSnapshot:
             assert snapshot.secrets_filter_version == 2
 
     @pytest.mark.asyncio
-    async def test_service_health_tracking(self, mock_resource_monitor, mock_time_service):
+    async def test_service_health_tracking(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test service health and circuit breaker tracking."""
-        mock_registry = MagicMock()
-
+        mock_registry = mock_service_registry
         # Mock registry provider info
         mock_registry.get_provider_info.return_value = {
             "handlers": {"speak": {"communication": [MagicMock()]}, "memory": {"memory": [MagicMock()]}}
@@ -287,6 +319,7 @@ class TestBuildSystemSnapshot:
             task=None,
             thought=None,
             resource_monitor=mock_resource_monitor,
+            runtime=mock_runtime,
             service_registry=mock_registry,
             time_service=mock_time_service,
         )
@@ -298,7 +331,9 @@ class TestBuildSystemSnapshot:
         assert snapshot.circuit_breaker_status["speak.communication"] == "CLOSED"
 
     @pytest.mark.asyncio
-    async def test_telemetry_summary_integration(self, mock_resource_monitor, mock_time_service):
+    async def test_telemetry_summary_integration(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test telemetry service integration."""
         mock_telemetry = MockTelemetryService()
 
@@ -308,6 +343,8 @@ class TestBuildSystemSnapshot:
             resource_monitor=mock_resource_monitor,
             telemetry_service=mock_telemetry,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Check telemetry was integrated
@@ -317,7 +354,9 @@ class TestBuildSystemSnapshot:
         assert snapshot.telemetry_summary.cost_last_hour_cents == 15.0
 
     @pytest.mark.asyncio
-    async def test_thought_without_id_gets_default(self, mock_resource_monitor, mock_time_service):
+    async def test_thought_without_id_gets_default(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test that thought without ID gets 'unknown' default."""
         thought = MagicMock()
         thought.thought_id = None  # Missing ID
@@ -329,7 +368,12 @@ class TestBuildSystemSnapshot:
         thought.context = None  # No context to avoid channel extraction issues
 
         snapshot = await build_system_snapshot(
-            task=None, thought=thought, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=None,
+            thought=thought,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Should have thought summary with default ID
@@ -342,7 +386,9 @@ class TestUserProfileEnrichment:
     """Test user profile enrichment from memory graph (lines 496-686)."""
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_from_thought_content(self, mock_resource_monitor, mock_time_service):
+    async def test_enrich_user_profiles_from_thought_content(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test extracting and enriching user profiles from thought content."""
         mock_memory = AsyncMock()
 
@@ -413,6 +459,8 @@ class TestUserProfileEnrichment:
                 resource_monitor=mock_resource_monitor,
                 memory_service=mock_memory,
                 time_service=mock_time_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
         # Should have enriched 3 user profiles
@@ -436,8 +484,25 @@ class TestUserProfileEnrichment:
         assert user_555555.display_name == "ContextUser"
 
     @pytest.mark.asyncio
-    async def test_user_profile_with_cross_channel_messages(self, mock_resource_monitor, mock_time_service):
-        """Test enriching user profiles with messages from other channels."""
+    async def test_user_profile_with_cross_channel_messages(
+        self, persist_engine, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
+        """Test enriching user profiles with messages from other channels.
+
+        Post-A1 (CIRISAgent#763): `_collect_cross_channel_messages` paginates
+        persist's correlation substrate filtered by service_type='communication',
+        then checks tags.user_id + tags.channel_id client-side. Seed an
+        ObserveHandler correlation in `other_channel` for the target user.
+        """
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         mock_memory = AsyncMock()
 
         mock_thought = MagicMock()
@@ -453,6 +518,7 @@ class TestUserProfileEnrichment:
         mock_task = MagicMock()
         mock_task.context = MagicMock()
         mock_task.context.user_id = None  # Explicitly set to None
+        mock_task.context.correlation_id = None  # Avoid correlation history path
         mock_task.context.system_snapshot = MagicMock()
         mock_task.context.system_snapshot.channel_id = "current_channel"
         mock_task.context.system_snapshot.channel_context = None  # Avoid MagicMock validation issues
@@ -469,37 +535,51 @@ class TestUserProfileEnrichment:
             ]
         )
 
-        # Mock database connection for cross-channel messages
-        with patch("ciris_engine.logic.persistence.get_db_connection") as mock_db_conn:
-            mock_conn = MagicMock()
-            mock_cursor = MagicMock()
+        # Seed a cross-channel communication correlation via persist.
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="cross_channel_msg_1",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="other_channel",
+                    request_timestamp=now,
+                    parameters={"content": "Hello from other channel"},
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "999888", "channel_id": "other_channel"},
+                retention_policy="raw",
+            )
+        )
 
-            # Mock fetchall to return messages from other channels
-            mock_cursor.fetchall.return_value = [
-                {
-                    "tags": json.dumps({"user_id": "999888", "channel_id": "other_channel"}),
-                    "request_data": json.dumps({"content": "Hello from other channel"}),
-                    "created_at": datetime.now(timezone.utc),
-                }
-            ]
+        with patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node") as mock_edges:
+            mock_edges.return_value = []
 
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-            mock_conn.__exit__ = MagicMock(return_value=None)
-            mock_db_conn.return_value = mock_conn
+            snapshot = await build_system_snapshot(
+                task=mock_task,
+                thought=mock_thought,
+                resource_monitor=mock_resource_monitor,
+                memory_service=mock_memory,
+                time_service=mock_time_service,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
+            )
 
-            with patch("ciris_engine.logic.persistence.models.graph.get_edges_for_node") as mock_edges:
-                mock_edges.return_value = []
-
-                snapshot = await build_system_snapshot(
-                    task=mock_task,
-                    thought=mock_thought,
-                    resource_monitor=mock_resource_monitor,
-                    memory_service=mock_memory,
-                    time_service=mock_time_service,
-                )
-
-        # Verify user profile was enriched with cross-channel messages
+        # Verify user profile was enriched with the cross-channel message.
+        # Post-A1 (CIRISAgent#763), the cross-channel reader pulls
+        # `req_data["parameters"]["content"]` from each row's request_data
+        # (ServiceRequestData stores call args in `parameters: Dict[str,str]`).
         assert len(snapshot.user_profiles) == 1
         user_profile = snapshot.user_profiles[0]
         assert "other_channel" in user_profile.notes
@@ -510,9 +590,10 @@ class TestAdapterIntegration:
     """Test adapter channels and tools collection with FAIL FAST behavior."""
 
     @pytest.mark.asyncio
-    async def test_adapter_channels_collection_success(self, mock_resource_monitor, mock_time_service):
+    async def test_adapter_channels_collection_success(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test successful collection of adapter channels."""
-        mock_runtime = MagicMock()
         mock_adapter_manager = MagicMock()
 
         # Create mock adapters with channels
@@ -544,6 +625,7 @@ class TestAdapterIntegration:
             resource_monitor=mock_resource_monitor,
             runtime=mock_runtime,
             time_service=mock_time_service,
+            service_registry=mock_service_registry,
         )
 
         # Verify adapter channels were collected
@@ -553,9 +635,10 @@ class TestAdapterIntegration:
         assert len(snapshot.adapter_channels["api"]) == 1
 
     @pytest.mark.asyncio
-    async def test_adapter_channels_fail_fast_on_invalid_type(self, mock_resource_monitor, mock_time_service):
+    async def test_adapter_channels_fail_fast_on_invalid_type(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test FAIL FAST when adapter returns invalid channel type."""
-        mock_runtime = MagicMock()
         mock_adapter_manager = MagicMock()
 
         # Create adapter that returns wrong type
@@ -570,17 +653,22 @@ class TestAdapterIntegration:
         # Should raise TypeError - FAIL FAST AND LOUD
         with pytest.raises(TypeError) as exc_info:
             await build_system_snapshot(
-                task=None, thought=None, resource_monitor=mock_resource_monitor, runtime=mock_runtime
+                task=None,
+                thought=None,
+                resource_monitor=mock_resource_monitor,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
         assert "returned invalid channel list type" in str(exc_info.value)
         assert "expected ChannelContext" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_available_tools_collection_success(self, mock_resource_monitor, mock_time_service):
+    async def test_available_tools_collection_success(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test successful collection of available tools."""
-        mock_runtime = MagicMock()
-        mock_service_registry = MagicMock()
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Create mock tool service
         mock_tool_service = MagicMock()
@@ -606,7 +694,13 @@ class TestAdapterIntegration:
 
         mock_tool_service.get_tool_info = get_tool_info
 
-        mock_service_registry.get_services_by_type.return_value = [mock_tool_service]
+        # Create provider wrapper with instance and metadata
+        provider = MagicMock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "discord"}
+
+        # Set up _services dict
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         mock_runtime.bus_manager = MagicMock()
         mock_runtime.service_registry = mock_service_registry
@@ -618,6 +712,7 @@ class TestAdapterIntegration:
             resource_monitor=mock_resource_monitor,
             runtime=mock_runtime,
             time_service=mock_time_service,
+            service_registry=mock_service_registry,
         )
 
         # Verify tools were collected
@@ -628,10 +723,11 @@ class TestAdapterIntegration:
         assert "observe" in tool_names
 
     @pytest.mark.asyncio
-    async def test_available_tools_fail_fast_on_invalid_type(self, mock_resource_monitor, mock_time_service):
+    async def test_available_tools_fail_fast_on_invalid_type(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test FAIL FAST when tool service returns invalid type."""
-        mock_runtime = MagicMock()
-        mock_service_registry = MagicMock()
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
         # Create tool service that returns wrong type
         mock_bad_tool_service = MagicMock()
@@ -639,7 +735,12 @@ class TestAdapterIntegration:
         mock_bad_tool_service.get_available_tools.return_value = ["tool1"]
         mock_bad_tool_service.get_tool_info.return_value = {"name": "tool1"}  # Not ToolInfo!
 
-        mock_service_registry.get_services_by_type.return_value = [mock_bad_tool_service]
+        # Create provider wrapper
+        provider = MagicMock()
+        provider.instance = mock_bad_tool_service
+        provider.metadata = {"adapter": "bad"}
+
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         mock_runtime.bus_manager = MagicMock()
         mock_runtime.service_registry = mock_service_registry
@@ -648,7 +749,11 @@ class TestAdapterIntegration:
         # Should raise TypeError - FAIL FAST AND LOUD
         with pytest.raises(TypeError) as exc_info:
             await build_system_snapshot(
-                task=None, thought=None, resource_monitor=mock_resource_monitor, runtime=mock_runtime
+                task=None,
+                thought=None,
+                resource_monitor=mock_resource_monitor,
+                runtime=mock_runtime,
+                service_registry=mock_service_registry,
             )
 
         assert "returned invalid type" in str(exc_info.value)
@@ -659,7 +764,9 @@ class TestChannelContextExtraction:
     """Test channel context extraction logic and edge cases."""
 
     @pytest.mark.asyncio
-    async def test_channel_search_fallback(self, mock_resource_monitor, mock_time_service):
+    async def test_channel_search_fallback(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test channel search when direct lookup fails."""
         mock_memory = AsyncMock()
 
@@ -689,6 +796,8 @@ class TestChannelContextExtraction:
             resource_monitor=mock_resource_monitor,
             memory_service=mock_memory,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Verify search was called as fallback
@@ -696,19 +805,28 @@ class TestChannelContextExtraction:
         assert snapshot.channel_id == "found_channel"
 
     @pytest.mark.asyncio
-    async def test_channel_extraction_from_dict_context(self, mock_resource_monitor, mock_time_service):
+    async def test_channel_extraction_from_dict_context(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test channel extraction when context is a dict."""
         mock_task = MagicMock()
         mock_task.context = {"channel_id": "dict_channel"}
 
         snapshot = await build_system_snapshot(
-            task=mock_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=mock_task,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         assert snapshot.channel_id == "dict_channel"
 
     @pytest.mark.asyncio
-    async def test_channel_extraction_handles_exception(self, mock_resource_monitor, mock_time_service):
+    async def test_channel_extraction_handles_exception(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test channel extraction handles exceptions gracefully."""
         mock_task = MagicMock()
 
@@ -722,7 +840,12 @@ class TestChannelContextExtraction:
 
         # Should handle exception and continue
         snapshot = await build_system_snapshot(
-            task=mock_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=mock_task,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         assert snapshot.channel_id is None
@@ -732,7 +855,9 @@ class TestGraphQLIntegration:
     """Test GraphQL provider integration for user profiles."""
 
     @pytest.mark.asyncio
-    async def test_graphql_user_profile_conversion(self, mock_resource_monitor, mock_time_service):
+    async def test_graphql_user_profile_conversion(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test conversion of GraphQL profiles to UserProfile."""
         mock_graphql = AsyncMock()
 
@@ -767,6 +892,8 @@ class TestGraphQLIntegration:
             resource_monitor=mock_resource_monitor,
             graphql_provider=mock_graphql,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Verify GraphQL profiles were converted
@@ -782,7 +909,9 @@ class TestGraphQLIntegration:
         # They would need to be added to the schema if needed
 
     @pytest.mark.asyncio
-    async def test_graphql_consent_attributes_extraction(self, mock_resource_monitor, mock_time_service):
+    async def test_graphql_consent_attributes_extraction(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test extraction of consent attributes from GraphQL profiles."""
         mock_graphql = AsyncMock()
         mock_enriched = MagicMock()
@@ -819,6 +948,8 @@ class TestGraphQLIntegration:
             resource_monitor=mock_resource_monitor,
             graphql_provider=mock_graphql,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Verify consent attributes were extracted
@@ -829,7 +960,9 @@ class TestGraphQLIntegration:
         assert profile.partnership_requested_at is not None
 
     @pytest.mark.asyncio
-    async def test_graphql_consent_invalid_dates(self, mock_resource_monitor, mock_time_service):
+    async def test_graphql_consent_invalid_dates(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test handling of invalid dates in consent attributes."""
         mock_graphql = AsyncMock()
         mock_enriched = MagicMock()
@@ -862,6 +995,8 @@ class TestGraphQLIntegration:
             resource_monitor=mock_resource_monitor,
             graphql_provider=mock_graphql,
             time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Profile created but dates are None
@@ -875,10 +1010,11 @@ class TestServiceHealthCollection:
     """Test service health and circuit breaker status collection."""
 
     @pytest.mark.asyncio
-    async def test_global_services_health_collection(self, mock_resource_monitor, mock_time_service):
+    async def test_global_services_health_collection(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test collecting health from global services."""
-        mock_registry = MagicMock()
-
+        mock_registry = mock_service_registry
         # Create mock global service with ServiceProtocol is_healthy method
         mock_global_service = MagicMock()
         mock_global_service.is_healthy = AsyncMock(return_value=True)
@@ -894,6 +1030,7 @@ class TestServiceHealthCollection:
             task=None,
             thought=None,
             resource_monitor=mock_resource_monitor,
+            runtime=mock_runtime,
             service_registry=mock_registry,
             time_service=mock_time_service,
         )
@@ -909,25 +1046,35 @@ class TestResourceMonitorEdgeCases:
     """Test resource monitor unavailability and exceptions."""
 
     @pytest.mark.asyncio
-    async def test_resource_monitor_unavailable(self, mock_time_service):
+    async def test_resource_monitor_unavailable(self, mock_time_service, mock_runtime, mock_service_registry):
         """Test when resource monitor is None."""
         # Should handle None resource monitor
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=None, time_service=mock_time_service
+            task=None,
+            thought=None,
+            resource_monitor=None,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )  # Unavailable
 
         # Should have warning in alerts
         assert len(snapshot.resource_alerts) == 0  # No alerts when monitor unavailable
 
     @pytest.mark.asyncio
-    async def test_resource_monitor_exception(self, mock_time_service):
+    async def test_resource_monitor_exception(self, mock_time_service, mock_runtime, mock_service_registry):
         """Test when resource monitor throws exception."""
         mock_monitor = MagicMock()
         # Make snapshot a property that throws exception when accessed
         mock_monitor.snapshot = property(lambda self: (_ for _ in ()).throw(RuntimeError("Monitor failed")))
 
         snapshot = await build_system_snapshot(
-            task=None, thought=None, resource_monitor=mock_monitor, time_service=mock_time_service
+            task=None,
+            thought=None,
+            resource_monitor=mock_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Should have critical alert about failure
@@ -939,14 +1086,29 @@ class TestToolServiceValidation:
     """Test tool service validation and error handling."""
 
     @pytest.mark.asyncio
-    async def test_tool_services_non_iterable(self, mock_resource_monitor, mock_time_service):
-        """Test handling when get_services_by_type returns non-iterable."""
-        mock_runtime = MagicMock()
-        mock_registry = MagicMock()
+    async def test_tool_services_non_iterable(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
+        """Test handling when get_services_by_type returns non-iterable for TOOL.
 
-        # Return non-iterable (single object instead of list)
-        mock_registry.get_services_by_type.return_value = MagicMock()  # Not iterable!
+        Wraps the centralized registry's `get_services_by_type` so the
+        TOOL service-type lookup returns a non-iterable, while
+        WISE_AUTHORITY still returns the attestation-aware auth service
+        the strict gate (2.7.1) requires. Without that side-effect split
+        the strict gate would short-circuit before tool discovery and we'd
+        never exercise the branch this test is for.
+        """
+        from ciris_engine.schemas.runtime.enums import ServiceType
 
+        mock_registry = mock_service_registry
+        original = mock_registry.get_services_by_type
+
+        def lookup(service_type):
+            if service_type == ServiceType.TOOL:
+                return MagicMock()  # Not iterable!
+            return original(service_type)
+
+        mock_registry.get_services_by_type = MagicMock(side_effect=lookup)
         mock_runtime.service_registry = mock_registry
         mock_runtime.bus_manager = MagicMock()
         mock_runtime.current_shutdown_context = None
@@ -958,6 +1120,7 @@ class TestToolServiceValidation:
             resource_monitor=mock_resource_monitor,
             runtime=mock_runtime,
             time_service=mock_time_service,
+            service_registry=mock_service_registry,
         )
 
         # Should have empty tools (fallback to empty list)
@@ -968,7 +1131,9 @@ class TestChannelContextExtraction:
     """Test channel context extraction including system_snapshot.channel_context."""
 
     @pytest.mark.asyncio
-    async def test_channel_context_object_extraction(self, mock_resource_monitor, mock_time_service):
+    async def test_channel_context_object_extraction(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test extracting channel_context object from system_snapshot."""
         mock_task = MagicMock()
         # Set task.channel_id explicitly (it's a MagicMock attribute)
@@ -992,7 +1157,12 @@ class TestChannelContextExtraction:
         mock_task.context = mock_context
 
         snapshot = await build_system_snapshot(
-            task=mock_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=mock_task,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Should extract channel_id from task.channel_id
@@ -1005,18 +1175,20 @@ class TestTypeEnforcement:
     """Test that type safety is enforced (fail fast and loud)."""
 
     @pytest.mark.asyncio
-    async def test_snapshot_requires_resource_monitor(self):
+    async def test_snapshot_requires_resource_monitor(self, mock_runtime, mock_service_registry):
         """Test that resource_monitor is required."""
         # Should fail without resource_monitor
         with pytest.raises(TypeError):
             await build_system_snapshot(
                 task=None,
                 thought=None,
-                # Missing required resource_monitor
+                # Missing required resource_monitor, service_registry=mock_service_registry,
             )
 
     @pytest.mark.asyncio
-    async def test_invalid_task_type_fails(self, mock_resource_monitor, mock_time_service):
+    async def test_invalid_task_type_fails(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test that invalid task type is handled gracefully."""
         # Create an object that looks like a task but isn't a proper Task
         invalid_task = MagicMock()
@@ -1026,14 +1198,21 @@ class TestTypeEnforcement:
 
         # Should handle gracefully
         snapshot = await build_system_snapshot(
-            task=invalid_task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=invalid_task,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # The function handles this by checking attributes
         assert snapshot.channel_id is None  # No channel extracted from invalid object
 
     @pytest.mark.asyncio
-    async def test_channel_context_type_preservation(self, mock_resource_monitor, mock_time_service):
+    async def test_channel_context_type_preservation(
+        self, mock_resource_monitor, mock_time_service, mock_runtime, mock_service_registry
+    ):
         """Test that channel_id is properly extracted from task.channel_id (highest priority)."""
         # Create task WITH channel_id (highest priority)
         task = Task(
@@ -1054,7 +1233,12 @@ class TestTypeEnforcement:
         task.context = context
 
         snapshot = await build_system_snapshot(
-            task=task, thought=None, resource_monitor=mock_resource_monitor, time_service=mock_time_service
+            task=task,
+            thought=None,
+            resource_monitor=mock_resource_monitor,
+            time_service=mock_time_service,
+            runtime=mock_runtime,
+            service_registry=mock_service_registry,
         )
 
         # Channel ID should be extracted from task.channel_id (highest priority)

@@ -119,8 +119,8 @@ class CIRISHostedToolService:
 
         Args:
             config: Optional configuration dictionary with:
-                - proxy_url: Base URL for CIRIS proxy (default: proxy1.ciris-services-1.ai)
-                - proxy_fallback_url: Fallback proxy URL (default: proxy1.ciris-services-2.ai)
+                - proxy_url: Base URL for CIRIS proxy (default: llm01.ciris-services-1.ai)
+                - proxy_fallback_url: Fallback proxy URL (default: llm01.ciris-services-eu-1.com)
                 - billing_url: Base URL for billing service (default: billing1.ciris-services-1.ai)
                 - billing_fallback_url: Fallback billing URL (default: billing1.ciris-services-2.ai)
                 - timeout: Request timeout in seconds (default: 30)
@@ -142,6 +142,20 @@ class CIRISHostedToolService:
         """Start the service."""
         logger.info("CIRISHostedToolService started")
 
+    async def is_healthy(self) -> bool:
+        """Whether this service can serve tool calls.
+
+        Every registered service must be health-checkable. Without this the API
+        health check cannot ask, `check_provider_health` returns None, and the
+        provider counts as NOT healthy on every poll (#943) — four adapter
+        services lacking it held a working agent at 15/19 and reported
+        "critical" purely from missing methods.
+
+        Reports the real precondition: these tools are proxied, so without a
+        proxy URL there is nothing this service can do.
+        """
+        return bool(self._proxy_url)
+
     async def stop(self) -> None:
         """Stop the service."""
         logger.info("CIRISHostedToolService stopped")
@@ -159,10 +173,16 @@ class CIRISHostedToolService:
         Returns:
             Google ID token if available, None otherwise
         """
-        # First try environment (direct or loaded at startup)
-        token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
+        # Same selector as billing and the LLM services. Reading only the
+        # Google name here meant that after a desktop client refreshed under a
+        # different variable, hosted tools and tool-balance requests went on
+        # sending the stale setup token — or none — while the rest of the agent
+        # had already recovered.
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        token, source_var = read_proxy_token()
         if token:
-            logger.info(f"[HOSTED_TOOLS] Got token from env CIRIS_BILLING_GOOGLE_ID_TOKEN (len={len(token)})")
+            logger.info(f"[HOSTED_TOOLS] Got token from env {source_var} (len={len(token)})")
         else:
             token = os.environ.get("GOOGLE_ID_TOKEN")
             if token:
@@ -175,20 +195,41 @@ class CIRISHostedToolService:
             try:
                 from pathlib import Path
 
+                from ciris_engine.logic.utils.path_resolution import validate_path_safety
+
                 # Try common .env locations - Android path first
                 env_paths = [
                     Path("/data/data/ai.ciris.mobile/files/ciris/.env"),  # Android
-                    Path(os.environ.get("CIRIS_HOME", ".")) / ".env",
                     Path.home() / ".env",
                     Path(".env"),
                 ]
+
+                # Add CIRIS_HOME if set and valid
+                ciris_home = os.environ.get("CIRIS_HOME")
+                if ciris_home:
+                    try:
+                        validated_home = validate_path_safety(Path(ciris_home).expanduser())
+                        env_paths.insert(1, validated_home / ".env")
+                    except ValueError as e:
+                        logger.warning(f"[HOSTED_TOOLS] Invalid CIRIS_HOME, skipping: {e}")
                 for env_path in env_paths:
                     logger.info(f"[HOSTED_TOOLS] Checking {env_path} exists={env_path.exists()}")
                     if env_path.exists():
                         with open(env_path) as f:
+                            # SAME NAMES AS THE SELECTOR. Scanning only for
+                            # CIRIS_BILLING_GOOGLE_ID_TOKEN here is the same
+                            # drift one level deeper: a desktop client that
+                            # refreshed under a different variable wrote it
+                            # into this very file, and this loop would walk
+                            # straight past it.
+                            from ciris_engine.logic.utils.token_handshake import PROXY_TOKEN_VARS
+
+                            found: dict[str, str] = {}
                             for line in f:
                                 line = line.strip()
-                                if line.startswith("CIRIS_BILLING_GOOGLE_ID_TOKEN="):
+                                for var in PROXY_TOKEN_VARS:
+                                    if not line.startswith(f"{var}="):
+                                        continue
                                     # Handle quoted and unquoted values
                                     value = line.split("=", 1)[1].strip()
                                     if value.startswith('"') and value.endswith('"'):
@@ -196,22 +237,40 @@ class CIRISHostedToolService:
                                     elif value.startswith("'") and value.endswith("'"):
                                         value = value[1:-1]
                                     if value:
-                                        token = value
-                                        logger.info(
-                                            f"[HOSTED_TOOLS] ✓ Loaded fresh token from {env_path} (len={len(value)})"
-                                        )
-                                        break
+                                        found[var] = value
+                            if found:
+                                # THE SAME RANKING, not a second one that
+                                # happens to agree on the easy cases. Comparing
+                                # expiry alone here left the opaque tie to
+                                # dictionary insertion order — Google first —
+                                # while the shared selector resolves that same
+                                # tie toward the legacy-desktop name. The file
+                                # path and the environment path would then pick
+                                # different tokens from identical inputs, so
+                                # hosted tools sent the stale credential while
+                                # billing and the LLM used the refreshed one.
+                                from ciris_engine.logic.utils.token_handshake import rank_candidates
+
+                                var, value = rank_candidates(list(found.items()))[0]
+                                token = value
+                                logger.info(
+                                    f"[HOSTED_TOOLS] Loaded fresh token from {env_path} under {var} (len={len(value)})"
+                                )
                         if token:
                             break
                         else:
                             logger.warning(f"[HOSTED_TOOLS] .env exists but no CIRIS_BILLING_GOOGLE_ID_TOKEN found")
 
                 if not token:
-                    logger.error("[HOSTED_TOOLS] ✗ No token found in any .env location!")
+                    logger.error("[HOSTED_TOOLS] [FAIL] No token found in any .env location!")
             except Exception as e:
-                logger.error(f"[HOSTED_TOOLS] ✗ Failed to read .env file: {e}")
+                logger.error(f"[HOSTED_TOOLS] [FAIL] Failed to read .env file: {e}")
 
         return token
+
+    def get_service_metadata(self) -> Dict[str, Any]:
+        """Return service metadata for DSAR and data source discovery."""
+        return {"data_source": False, "service_type": "system"}
 
     async def get_available_tools(self) -> List[str]:
         """Get available tool names."""
@@ -538,19 +597,19 @@ class CIRISHostedToolService:
             response = await self._make_request(
                 "POST", "/v1/web/search", json_data=payload, use_fallback=use_fallback, service="proxy"
             )
-            logger.info(f"[WEB_SEARCH] ✓ Request succeeded via {region}")
+            logger.info(f"[WEB_SEARCH] [OK] Request succeeded via {region}")
             return response, None
         except httpx.ConnectTimeout as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} TIMEOUT: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} TIMEOUT: {e}")
             return None, e
         except httpx.ConnectError as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} CONNECTION_ERROR: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} CONNECTION_ERROR: {e}")
             return None, e
         except httpx.TimeoutException as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} TIMEOUT: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} TIMEOUT: {e}")
             return None, e
         except httpx.RequestError as e:
-            logger.warning(f"[WEB_SEARCH] ✗ {region} NETWORK_ERROR: {e}")
+            logger.warning(f"[WEB_SEARCH] [FAIL] {region} NETWORK_ERROR: {e}")
             return None, e
 
     @staticmethod

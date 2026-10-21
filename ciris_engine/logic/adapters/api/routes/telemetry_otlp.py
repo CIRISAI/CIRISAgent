@@ -298,19 +298,19 @@ def add_service_metrics(services_data: JSONDict, current_time_ns: int) -> List[J
     return metrics
 
 
-def add_covenant_metrics(covenant_data: JSONDict, current_time_ns: int) -> List[JSONDict]:
-    """Extract and create covenant-related metrics from covenant data."""
+def add_accord_metrics(accord_data: JSONDict, current_time_ns: int) -> List[JSONDict]:
+    """Extract and create accord-related metrics from accord data."""
     metrics = []
 
-    if not isinstance(covenant_data, dict):
+    if not isinstance(accord_data, dict):
         return metrics
 
     # Wise Authority deferrals
-    deferrals = safe_telemetry_get(covenant_data, "wise_authority_deferrals")
+    deferrals = safe_telemetry_get(accord_data, "wise_authority_deferrals")
     if deferrals is not None:
         metrics.append(
             _create_counter_metric(
-                "covenant.wise_authority.deferrals",
+                "accord.wise_authority.deferrals",
                 "Number of decisions deferred to Wise Authority",
                 "1",
                 float(deferrals),
@@ -319,11 +319,11 @@ def add_covenant_metrics(covenant_data: JSONDict, current_time_ns: int) -> List[
         )
 
     # Filter matches
-    filter_matches = safe_telemetry_get(covenant_data, "filter_matches")
+    filter_matches = safe_telemetry_get(accord_data, "filter_matches")
     if filter_matches is not None:
         metrics.append(
             _create_counter_metric(
-                "covenant.filter.matches",
+                "accord.filter.matches",
                 "Number of safety filter matches",
                 "1",
                 float(filter_matches),
@@ -332,11 +332,11 @@ def add_covenant_metrics(covenant_data: JSONDict, current_time_ns: int) -> List[
         )
 
     # Thoughts processed
-    thoughts_processed = safe_telemetry_get(covenant_data, "thoughts_processed")
+    thoughts_processed = safe_telemetry_get(accord_data, "thoughts_processed")
     if thoughts_processed is not None:
         metrics.append(
             _create_counter_metric(
-                "covenant.thoughts.processed",
+                "accord.thoughts.processed",
                 "Number of thoughts processed",
                 "1",
                 float(thoughts_processed),
@@ -345,11 +345,11 @@ def add_covenant_metrics(covenant_data: JSONDict, current_time_ns: int) -> List[
         )
 
     # Self-observation insights
-    insights = safe_telemetry_get(covenant_data, "self_observation_insights")
+    insights = safe_telemetry_get(accord_data, "self_observation_insights")
     if insights is not None:
         metrics.append(
             _create_counter_metric(
-                "covenant.insights.generated",
+                "accord.insights.generated",
                 "Number of self-observation insights generated",
                 "1",
                 float(insights),
@@ -397,10 +397,10 @@ def convert_to_otlp_json(
     if services_data:
         metrics.extend(add_service_metrics(services_data, current_time_ns))
 
-    # Covenant metrics if present
-    covenant_data = safe_telemetry_get(telemetry_data, "covenant_metrics")
-    if covenant_data:
-        metrics.extend(add_covenant_metrics(covenant_data, current_time_ns))
+    # Accord metrics if present
+    accord_data = safe_telemetry_get(telemetry_data, "accord_metrics")
+    if accord_data:
+        metrics.extend(add_accord_metrics(accord_data, current_time_ns))
 
     # Build the OTLP JSON structure
     otlp_json: JSONDict = {

@@ -34,6 +34,7 @@ from .resources.agent import (
     AgentStatus,
     ConversationHistory,
     ConversationMessage,
+    InteractOutcome,
     InteractResponse,
     MessageRequest,
     MessageSubmissionResponse,
@@ -63,6 +64,7 @@ __all__ = [
     "WebSocketClient",
     "EventChannel",
     # Agent interaction types
+    "InteractOutcome",
     "InteractResponse",
     "MessageRequest",
     "MessageSubmissionResponse",

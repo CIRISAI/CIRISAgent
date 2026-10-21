@@ -1,0 +1,207 @@
+# CIRIS Agent Compliance
+
+> Where CIRIS Agent's code reality meets the regulatory frameworks it claims to comply with.
+
+This directory is the umbrella for CIRIS Agent compliance documentation. It serves three audiences with one source of truth:
+
+1. **Regulatory cross-walks** — mapping CIRIS implementation to Magnifica Humanitas, EU HLEG Trustworthy AI Guidelines, IEEE Ethically Aligned Design, ASEAN AI Governance Guide, and (planned) UNESCO + OECD.
+2. **Grant submissions** — every numeric claim about the codebase is reproducible from a dated baseline artifact, not embedded prose.
+3. **Internal compliance audits** — honest "Known gaps" inventory per dimension lets the team and external reviewers see what's done, what's substrate-gated, what's not started.
+
+## Federation wire format: CEG 0.15
+
+The CIRIS federation rolls **CEG (CIRIS Epistemic Grammar) 0.15** as the wire format for the **CIRIS 3.0 agent release**. CEG supersedes FSD-002 as the authoritative federation primitive spec; FSD-002 is retained in this repo's substrate-FSD cross-references as design history. **0.15 is the Agent 3.0 / CEG 1.0 candidate** — the grammar is locked at **exactly five wire-format primitives** (one workhorse `scores` + four structural composers `delegates_to` / `supersedes` / `withdraws` / `recants`) over an open, mechanism-descriptive dimension namespace.
+
+- **Spec home**: [`CIRISRegistry/FSD/CEG/`](https://github.com/CIRISAI/CIRISRegistry/tree/main/FSD/CEG) (18 numbered sections, §0–§17)
+- **README**: [`CEG/README.md`](https://github.com/CIRISAI/CIRISRegistry/blob/main/FSD/CEG/README.md) · human-reading edition `pdf/ceg-0.15-reader.pdf`
+- **Status**: Public Working Draft (2026-06-06); pin against `0.x` until 1.0 publication. The 1+4 wire-format lockdown has held across the entire 0.2→0.15 line — every increment since has been *composition over already-locked primitives* (the delivery axis, realtime group communication, the streaming-standards fold-in: SFrame / MLS TreeKEM RFC 9420 / PQC, no wire change). The attestation ladder is consumer-side composition per §8.1.9 **Policy I — Attestation-Ladder Composition**; the wire speaks mechanism-only prefixes (`self_verify` / `hardware_rooted` / `registry_consensus` / `license_validity` / `agent_integrity`), never level numbers (§5.2 + §13.1 deprecation of `attestation:l{N}:*`).
+
+**Why this matters for the CIRIS 3.0 agent — the CEG-native turn (CIRISAgent#840, [`FSD/CEG_NATIVE_AGENT.md`](../FSD/CEG_NATIVE_AGENT.md)).** The 3.0 agent does not *map* its internal state onto CEG — at the local tier its `graph_nodes` **ARE** self-level CEG self-attestations (`witness_relation: self`, `epistemic_mode: direct`, `cohort_scope: self`, signature deferred per §10.1.3 until federation promotion). Every internal state mutation is an attestation under the agent's own key on a CEG dimension. This is the structural backbone behind several compliance dimensions (D02 integrity, D13 witness, D17 transparency log, D18 attestation, D26 key boundary, D27 provenance): the evidence an operator audits is the same envelope the federation reads.
+
+**CIRISAgent is 1 of the 4 implementations that gate CEG RC1** (the path to CEG 1.0), alongside the three fabric siblings **CIRISNodeCore** (consensus), **CIRISLensCore** (detection — the external `detection:*` / `capacity:*` witness the agent never self-emits, §7.5 anti-Goodhart), and **CIRISRegistry** (CEG authority). CEG cannot reach RC1/1.0 until all four conform against the same `federation_attestations` substrate surface — so the agent's conformance is not just a feature, it is a federation-wide gate (RC1 register: §15.6).
+
+What this means for readers of this directory:
+- The compliance dimensions D01–D27 still derive from `SEED_DIMENSIONS.yaml` v1.0; the seed-rendered tops cite the historical wire-form prefixes (e.g. D18 reads `attestation:l{3,5}:*`). Under CEG 0.15 those prefixes are deprecated — see §13.1 deprecation entry. The HUMAN-authored section of each affected stub references the current mechanism-only prefixes and the §8.1.9 Policy I composition rule where it applies.
+- The L1–L5 attestation ladder visible to operators (in `client/.../TrustPage.kt`) is **consumer-side rendering** per §8.1.9 Policy I — CIRISVerify supplies the data points, CIRISAgent composes the picture. This validates the D18 framing and replaces all prior "L-ladder lives in the substrate" wording.
+- The local-tier attestation surface the CEG-native agent writes against (`attestation_upsert_local` / `attestation_query` / `attestation_promote`, plus the §10.1.5 tier model and §10.1.3 consent-revocation promotion obligation) is being cut at the substrate under [CIRISPersist#171/#172](https://github.com/CIRISAI/CIRISPersist/pull/172) — the gating dependency for #840 implementation.
+- The seed itself (`tools/compliance/SEED_DIMENSIONS.yaml`) will get a v1.1 update aligned to CEG namespace prefix families; the dimension IDs (D01..D27) are stable across that change.
+
+## Structure
+
+```
+compliance/
+├── README.md                       ← you are here
+├── MEASUREMENT_METHODOLOGY.md      ← how baselines are generated; CI hooks; 4-level validation hierarchy
+├── baselines/                      ← dated, script-generated numeric evidence
+│   ├── 2026-04-22_round1.md        ← original Round 1 snapshot (PR #695)
+│   ├── 2026-04-24_round1.md        ← Round 1 refresh
+│   └── 2026-05-28.md               ← current
+└── D01..D27_*.md                   ← per-dimension stubs (auto-rendered top + HUMAN section)
+```
+
+Generator script + canonical seed live elsewhere:
+- `tools/compliance/SEED_DIMENSIONS.yaml` — source of truth for the 27 dimensions
+- `tools/compliance/generate_ciris_compliance_stubs.py` — regenerates the auto-rendered top of each stub from seed
+- `tools/analysis/round1_grant_baseline.py` — produces baselines/*.md from live FastAPI / service config / pytest collection
+
+## The 27 dimensions
+
+Stable IDs from `SEED_DIMENSIONS.yaml` v1.1: **26 namespace families + 1 structural property** (D23, the audit chain — regulators attest accountability as a named axis; the substrate enforces it as a property of the record, and no `accountability:*` string is emitted). STRONG-4 = attested by all 4 regulatory batches (Magnifica Humanitas / EU HLEG / IEEE / ASEAN); STRONG-3 = attested by 3 of 4.
+
+Seed v1.1 (CIRISAgent#1139) also carries, per dimension, the **RATCHET 11+1 kinds of change** (`change_kinds:` — facts · rules · manner · identity · priorities · confidence · circumstances · process · structure · model · premises, plus Record as the +1 every dimension is), so the D-map and the calibration taxonomy shared with the CIRIS Constitution are one list, not two; and it names two folded EU HLEG requirements as sub-leaves without a new D-id: `accountability:human_in_control` (D23, HLEG "human agency & oversight") and `autonomy:informational_self_determination` (D08, HLEG "privacy & data governance"). The EU AI Act as a fifth batch (Art. 14 / Art. 10) is the mechanical promotion trigger.
+
+### STRONG-4 (D01–D16) — universal four-source convergence
+
+| # | Prefix | Gloss |
+|---|---|---|
+| [D01](D01_non_maleficence.md) | `non_maleficence:*` | Soft-harm-avoidance baseline (soft scalar above the prohibited:* floor) |
+| [D02](D02_integrity.md) | `integrity:*` | "System holds together" — auditable, reproducible, lifecycle integrity |
+| [D03](D03_justice.md) | `justice:*` | Vulnerability-priority + fairness; lexical vulnerability priority tie-breaker |
+| [D04](D04_prohibited.md) | `prohibited:*` | Categorical floor — polarity-(-1)/constitutional/species |
+| [D05](D05_detection.md) | `detection:*` | LensCore F-3 / RATCHET aggregate-correlation / structural-injustice / drift |
+| [D06](D06_goal.md) | `goal:*` | Multi-scale belonging composite (self / family / community / species / planet) |
+| [D07](D07_locality_decision_scale.md) | `locality:decision:{scale}` | Subsidiarity — decision routing at lowest competent scale |
+| [D08](D08_autonomy.md) | `autonomy:*` | Human-centric design + informational self-determination |
+| [D09](D09_fidelity.md) | `fidelity:*` | Faithful disclosure / faithful representation across lifecycle |
+| [D10](D10_beneficence.md) | `beneficence:*` | Positive duty toward dignity / well-being / environmental stewardship |
+| [D11](D11_multilateral_participation_forum_kind.md) | `multilateral_participation:{forum}:{kind}` | Federation participation in external multilateral processes |
+| [D12](D12_conscience.md) | `conscience:*` | Agent-side faculty layer — optimization veto, epistemic humility, coherence, alētheia |
+| [D13](D13_testimonial_witness_kind.md) | `testimonial_witness:{kind}` | Preserves displaced / affected / marginalized voices in attestation |
+| [D14](D14_witness_diversity.md) | `witness_diversity:*` | Stakeholder pluralism in design / testing / consultation |
+| [D15](D15_moderation.md) | `moderation:*` | Federation self-correction layer |
+| [D16](D16_method.md) | `method:*` | Operational-design discipline (densest family — entire H3ERE pipeline) |
+
+### STRONG-3 (D17–D27) — three-source convergence
+
+| # | Prefix | Gloss |
+|---|---|---|
+| [D17](D17_transparency_log.md) | `transparency_log:*` | CIRISVerify per-stakeholder disclosure log |
+| [D18](D18_attestation_l_3_5.md) | `attestation:l{3,5}:*` | L1–L5 hardware-rooted verification ladder |
+| [D19](D19_partner_role.md) | `partner_role:*` | CIRIS Registry partner-role taxonomy (ethics boards, audit bodies, stewards) |
+| [D20](D20_approach.md) | `approach:*` | Decision-hierarchy strategic axis (Goal→Approach→Method→Progress-Measure) |
+| [D21](D21_progress_measure.md) | `progress_measure:*` | Declared-metric outcomes for tracking progress toward goals |
+| [D22](D22_expertise.md) | `expertise:*` | Declared competence in domain (named-expert attestation) |
+| [D23](D23_accountability.md) | structural (audit chain) | Accountability as a property of the audit chain, not a family — `accountability:*` retired in v1.1 |
+| [D24](D24_reconsideration.md) | `reconsideration:*` | Reverse-axis appeal / rollback / negotiation-reopening |
+| [D25](D25_credits.md) | `credits:*` | Commons Credits substrate-building recognition |
+| [D26](D26_key_boundary.md) | `key_boundary:*` | CIRISEdge encryption key boundary attestation |
+| [D27](D27_provenance.md) | `provenance:*` | Build manifest provenance (foundational technical-infrastructure attestation) |
+
+## Reading order
+
+For external reviewers:
+
+1. Start with [`MEASUREMENT_METHODOLOGY.md`](MEASUREMENT_METHODOLOGY.md) to understand how numeric claims are validated.
+2. Check the **current baseline** in [`baselines/`](baselines/) for the latest service / endpoint counts.
+3. Pick the dimensions most relevant to your framework:
+   - Catholic / values-based: D01, D03, D04, D06, D08, D10, D12, D14
+   - EU AI Act / GDPR alignment: D02, D08, D09, D17, D26, D27
+   - IEEE Ethically Aligned Design: D03, D05, D14, D18, D19, D22, D23
+   - ASEAN: D02, D04, D05, D08, D15, D16, D17, D27
+4. For each dimension, read the auto-rendered top (regulatory attestations + wire form + convergence note) then the HUMAN section (CIRIS implementation + observability + known gaps).
+
+## Cross-cutting findings (2026-05-28)
+
+Documented in the seed-population commit (`bd330545b`) and inventoried here for quick reference:
+
+| # | Finding | Affected dimensions |
+|---|---|---|
+| 1 | Typed `<dimension>:*` wire envelopes not yet emitted — biggest impl-vs-spec gap | D01, D03, D08, D09, D10, D12 (and most others by extension) |
+| 2 | LensCore F-3 detector family not in any CIRISAI repo yet | D05, D06, D07, D13, D14, D15, D19, D26 |
+| 3 | No cross-occurrence aggregate metrics — per-occurrence scalars stay local | D01, D03, D10, D12 |
+| 4 | D22/D23 structurally inverted — route via DEFER→WiseAuthority rather than named axes (MH-posture not ASEAN-posture) | D22, D23 |
+| 5 | D24 reverse-axis gap — no rollback after SPEAK/TOOL; reconsideration strictly forward-looking via PONDER | D24 |
+| 6 | D04 capability check is NAME-only (`prohibitions.py:16-19`) — prohibited content in tool args / LLM responses caught only by 4 conscience LLMs, no D04-tuned calibration | D04 |
+| 7 | D25 schema-rich (`CreditRecord`, `GratitudeSignal`, `DualSignature` Ed25519+ML-DSA-65) but emission staged behind CIRISBilling | D25 |
+| 8 | L5 attestation caps at L4 on Linux/macOS servers — no TPM-quote equivalent of Android `play_integrity_ok` | D18, D26 |
+| 9 | Localization parity partial — D04 category list is English-only; 29 locales carry framing but not canonical capability list | D04 |
+| 10 | CONSCIENCE_V3 Stages 2–4 unshipped; ~60% IRIS-O/IRIS-H overlap persists | D12 |
+
+## What this compliance set does NOT do (2.9.7)
+
+Four limits on how these documents should be read. The first is new in this release and is the
+important one.
+
+1. **A credited control is not necessarily an *enforced* control, and this set does not
+   consistently distinguish them.** Several dimensions describe agent-side mechanisms whose
+   strength is **semantic** (a model or a conscience reasoning about content) or
+   **documentation-only** (a declared field with no reader) rather than **deterministic** (code
+   that returns a denial). The 2.9.7 pass found and corrected instances in D19 and D23 where a
+   marker was described as a gate. Others may remain. `FSD/THREAT_MODEL_2.9.7.md` classifies the
+   agent's controls along exactly this axis and is the document to read against any
+   implementation claim here before relying on it. Two concrete corrections landed in this pass:
+   - **D19** described `ToolDMAGuidance(requires_approval=True)` as "the partner-role financial-tool
+     gate". At the time it gated nothing. **[#942](https://github.com/CIRISAI/CIRISAgent/issues/942)
+     has since landed and it is now a real control**: `ThoughtProcessor._enforce_tool_approval`
+     (`logic/processors/core/thought_processor/main.py:257`) runs as Phase 4.9, fail-closed on
+     every axis — no envelope, wrong issuer kind, or tool absent from `granted_tools` all deny —
+     and rewrites the action to DEFER. It sits after conscience deliberately, so a conscience
+     cannot override an authorization denial. What remains ungated is every *other* tool
+     ([#905](https://github.com/CIRISAI/CIRISAgent/issues/905)).
+   - **D23** said WA escalations are recorded with "the human's signed response", named by "Ed25519
+     public-key hash". The resolution signature was a formatted string that nothing read.
+     **[#944](https://github.com/CIRISAI/CIRISAgent/issues/944) has since landed**: resolutions are
+     hybrid-signed (Ed25519 + ML-DSA-65) and verified before any state change
+     (`wise_authority/service.py` `sign_deferral_resolution` / `_verify_resolution:749`, called at
+     `:811`). Signing with the *owner's own* key rather than the node's delegate stays blocked on
+     CIRISServer#342.
+
+   > Both corrections above were themselves stale for a period: the code closed the gap and this
+   > file went on conceding it. Prose that concedes a hole which no longer exists is its own
+   > hazard — someone will design around it. `tools/check_evidence.py` guards the evidence TSV
+   > against drift in both directions but does not read prose, which is why these survived.
+2. **The substrate-enforced facet table is credited by citation, not by CI.** The
+   CIRISConformance evidence is real and was run against the published wheels, but nothing in this
+   repo re-checks it on each change. Until the CI lane in the TODO above exists, a wheel-matrix
+   regression would not fail anything here. Treat the six credited facets as verified *as of* the
+   cited runs.
+3. **These documents describe the agent, not a deployment.** Whether a given control is active
+   depends on which adapters an operator loaded, whether a wallet is configured, whether a WA
+   signing key exists, and which platform the runtime is on. Several claims are conditional in ways
+   the prose does not always foreground.
+4. **"Known gaps" sections are not an exhaustive threat model.** They record gaps against each
+   dimension's own framework mapping. Attack paths that cross dimensions — the ones that matter
+   most — do not appear in any single stub by construction. That is what
+   `FSD/THREAT_MODEL_2.9.7.md` is for.
+
+## Substrate dependencies
+
+Many dimensions depend on upstream CIRIS substrates landing first. The substrate substitution trajectory (per project memory and `MISSION.md`) is:
+
+```
+Persist → Edge → LensCore → NodeCore
+```
+
+Per-dimension upstream substrate ownership:
+
+| Substrate | Dimensions gated |
+|---|---|
+| CIRISRegistry (partner-role taxonomy, license-bound forum membership) | D11, D19 |
+| CIRISNodeCore (P8 moderation primitives, E-4 multilateral module) | D11, D15 |
+| CIRISEdge (federation contribution model, key boundary) | D13, D14, D26 |
+| CIRISPersist (signed trace persistence, federation evidence_refs join) | D06, D07, D13, D15 |
+| CIRISLensCore (RATCHET detectors, F-3 family) | D05, D06, D07, D13, D14, D15, D19, D26 |
+| CIRISVerify (attestation ladder) | D17, D18, D27 |
+
+## Substrate-enforced facets (CIRISServer adoption)
+
+Six controls carry facets that are **substrate-enforced** — inherited via CIRISServer's integration of the substrate wheels (`ciris-persist` + `ciris-edge` + `ciris-verify`, lens folded into server) and independently verified against the real published wheels by [CIRISConformance](https://github.com/CIRISAI/CIRISConformance#compliance-coverage-map) on both sqlite + postgres across py3.10/3.12 on x86_64 + aarch64 (CIRISAgent#902):
+
+| Control | Facet credited | Conformance evidence |
+|---|---|---|
+| D02 — integrity (full) | tamper-evident hash-chained Ed25519 + ML-DSA-65 audit log | `test_320` |
+| D15 — moderation (full) | delegated, revocable moderation authority at the emit boundary | `test_270` |
+| D24 — reconsideration (full) | bounded admission (anti-DoS + harassment-cluster) | `test_220` |
+| D23 — accountability (partial) | tamper-evident-log facet (named-accountability stays agent-side) | `test_320` |
+| D18 — attestation (partial) | L2 hardware-rooted key facet (L1/L3/L4/L5 stay consumer-side per CEG §8.1.9 Policy I) | `test_070` / `test_080` |
+| D26 — key_boundary (partial) | hardware-rooted signer + storage-kind taxonomy; non-downgradable X25519 + ML-KEM-768 DEK-grant wrap (`no_seed_in_heap` stays a known gap) | `test_070` / `test_080` / `test_250` |
+
+**TODO — wire the substrate-side evidence artifact into CI.** There is no dedicated compliance CI lane in `.github/workflows/` today (the safety-battery and build lanes are the nearest neighbors). When one lands, the substrate half of the evidence should be consumed mechanically rather than by citation: run CIRISConformance's `pytest --conformance-report=conformance.json` against the pinned wheel matrix (`matrices/current.yaml`) and assert the report's top-level `passed_all_gates` boolean — that JSON (pinned matrix, per-marker rollup, per-test outcomes) is the machine-readable cross-wheel evidence for the six substrate-enforced facets above.
+
+## Contributing
+
+1. **Don't hand-edit the auto-rendered top portion of any `D*.md` stub.** Re-run `python3 tools/compliance/generate_ciris_compliance_stubs.py tools/compliance/SEED_DIMENSIONS.yaml compliance/` after seed updates.
+2. **Don't embed numeric claims directly in dimension stubs or external docs.** Cite the latest dated baseline in `baselines/`.
+3. **Don't fabricate code references.** Every `file:line` citation in a HUMAN section must `grep`-verify against current main.
+4. **Honest gaps win.** If something isn't implemented, the "Known gaps" section is where it goes — not silence.
+5. **Substrate-gated items go in `Known gaps` with the substrate flagged.** Don't claim implementation that depends on an unshipped upstream substrate.

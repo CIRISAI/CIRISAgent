@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import aiohttp
 
+from ciris_engine.logic.utils.location_utils import get_user_location
 from ciris_engine.schemas.adapters.tools import (
     ToolDMAGuidance,
     ToolDocumentation,
@@ -48,7 +49,12 @@ class WeatherToolService:
         self.base_url = "https://api.weather.gov"
 
         # User agent is required by NOAA
-        self.user_agent = os.getenv("CIRIS_NOAA_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
+        # Use PUBLIC_API_CONTACT_EMAIL from wizard, fall back to legacy env var
+        contact_email = os.getenv("PUBLIC_API_CONTACT_EMAIL", "")
+        if contact_email:
+            self.user_agent = f"CIRIS/2.3 ({contact_email})"
+        else:
+            self.user_agent = os.getenv("CIRIS_NOAA_USER_AGENT", "CIRIS/1.0 (contact@ciris.ai)")
 
         # Optional: OpenWeatherMap as backup (requires API key)
         self.owm_api_key = os.getenv("CIRIS_OPENWEATHERMAP_API_KEY")
@@ -57,32 +63,115 @@ class WeatherToolService:
         # Cache for grid points (NOAA uses a grid system)
         self._grid_cache: Dict[tuple[float, float], Dict[str, Any]] = {}
 
+        # Default location: try user location first, fall back to config
+        self._default_lat: Optional[float] = None
+        self._default_lon: Optional[float] = None
+        self._default_location_string: Optional[str] = None
+        self._location_source: Optional[str] = None
+
+        # Try user location from setup wizard first
+        user_location = get_user_location()
+        if user_location.has_coordinates():
+            self._default_lat = user_location.latitude
+            self._default_lon = user_location.longitude
+            self._default_location_string = user_location.location_string
+            self._location_source = "user_setup"
+            logger.info(
+                f"Using user location from setup: {user_location.location_string} "
+                f"({self._default_lat}, {self._default_lon})"
+            )
+        else:
+            # Fall back to configured default location
+            self._default_location = os.getenv("CIRIS_WEATHER_DEFAULT_LOCATION")
+            if self._default_location:
+                self._parse_default_location()
+                if self._default_lat is not None:
+                    self._location_source = "config"
+
         # Tool definitions
         self._tools: Dict[str, ToolInfo] = self._define_tools()
 
         logger.info("WeatherToolService initialized with NOAA API")
+        if self._default_lat is not None:
+            logger.info(f"Default location ({self._location_source}): {self._default_lat}, {self._default_lon}")
         if self.owm_api_key:
             logger.info("OpenWeatherMap backup available")
 
+    def _parse_default_location(self) -> None:
+        """Parse default location from env var (format: 'lat,lon' or city name)."""
+        if not self._default_location:
+            return
+
+        # Try to parse as "lat,lon" format
+        if "," in self._default_location:
+            try:
+                parts = self._default_location.split(",")
+                if len(parts) == 2:
+                    self._default_lat = float(parts[0].strip())
+                    self._default_lon = float(parts[1].strip())
+                    logger.info(f"Parsed default location: lat={self._default_lat}, lon={self._default_lon}")
+                    return
+            except ValueError:
+                pass
+
+        logger.warning(f"Could not parse default location '{self._default_location}' - expected 'lat,lon' format")
+
+    def _get_coordinates_with_defaults(
+        self, parameters: Dict[str, Any]
+    ) -> tuple[Optional[float], Optional[float], bool]:
+        """
+        Get coordinates from parameters, falling back to configured defaults.
+
+        Returns:
+            (latitude, longitude, used_defaults) - used_defaults is True if defaults were applied
+        """
+        lat = parameters.get("latitude")
+        lon = parameters.get("longitude")
+        used_defaults = False
+
+        # If coordinates not provided, use defaults
+        if lat is None and lon is None and self._default_lat is not None:
+            lat = self._default_lat
+            lon = self._default_lon
+            used_defaults = True
+            logger.info(f"Using configured default location: {lat}, {lon}")
+
+        return lat, lon, used_defaults
+
     def _define_tools(self) -> Dict[str, ToolInfo]:
         """Define available tools."""
-        return {
+        # Build dynamic description with default location info
+        default_info = ""
+        lat_desc = "Latitude coordinate of the location"
+        lon_desc = "Longitude coordinate of the location"
+
+        if self._default_lat is not None and self._default_lon is not None:
+            location_desc = self._default_location_string or f"{self._default_lat}, {self._default_lon}"
+            source_desc = "from setup" if self._location_source == "user_setup" else "configured"
+            default_info = (
+                f" User's location ({source_desc}): {location_desc}. "
+                f"If no specific location is mentioned, use empty parameters {{}} to use this default."
+            )
+            lat_desc = f"Latitude coordinate (default: {self._default_lat} if omitted)"
+            lon_desc = f"Longitude coordinate (default: {self._default_lon} if omitted)"
+
+        tools: Dict[str, ToolInfo] = {
             "weather:current": ToolInfo(
                 name="weather:current",
-                description="Get current weather conditions for a location (temperature, wind, conditions)",
+                description=f"Get current weather conditions for a location (temperature, wind, conditions).{default_info}",
                 parameters=ToolParameterSchema(
                     type="object",
                     properties={
                         "latitude": {
                             "type": "number",
-                            "description": "Latitude coordinate of the location",
+                            "description": lat_desc,
                         },
                         "longitude": {
                             "type": "number",
-                            "description": "Longitude coordinate of the location",
+                            "description": lon_desc,
                         },
                     },
-                    required=["latitude", "longitude"],
+                    required=[] if self._default_lat else ["latitude", "longitude"],
                 ),
                 category="weather",
                 cost=0.0,
@@ -142,20 +231,20 @@ class WeatherToolService:
             ),
             "weather:forecast": ToolInfo(
                 name="weather:forecast",
-                description="Get weather forecast for a location (upcoming conditions)",
+                description=f"Get weather forecast for a location (upcoming conditions).{default_info}",
                 parameters=ToolParameterSchema(
                     type="object",
                     properties={
                         "latitude": {
                             "type": "number",
-                            "description": "Latitude coordinate of the location",
+                            "description": lat_desc,
                         },
                         "longitude": {
                             "type": "number",
-                            "description": "Longitude coordinate of the location",
+                            "description": lon_desc,
                         },
                     },
-                    required=["latitude", "longitude"],
+                    required=[] if self._default_lat else ["latitude", "longitude"],
                 ),
                 category="weather",
                 cost=0.0,
@@ -163,26 +252,48 @@ class WeatherToolService:
             ),
             "weather:alerts": ToolInfo(
                 name="weather:alerts",
-                description="Get active weather alerts for a location (warnings, watches, advisories)",
+                description=f"Get active weather alerts for a location (warnings, watches, advisories).{default_info}",
                 parameters=ToolParameterSchema(
                     type="object",
                     properties={
                         "latitude": {
                             "type": "number",
-                            "description": "Latitude coordinate of the location",
+                            "description": lat_desc,
                         },
                         "longitude": {
                             "type": "number",
-                            "description": "Longitude coordinate of the location",
+                            "description": lon_desc,
                         },
                     },
-                    required=["latitude", "longitude"],
+                    required=[] if self._default_lat else ["latitude", "longitude"],
                 ),
                 category="weather",
                 cost=0.0,
                 when_to_use="When you need to check for severe weather warnings or alerts",
             ),
         }
+
+        # Add context enrichment tool if user location is available (from any source)
+        if self._default_lat is not None:
+            tools["weather:my_location"] = ToolInfo(
+                name="weather:my_location",
+                description=(
+                    f"Get current weather at user's location ({self._default_location_string}). "
+                    "This tool automatically uses the user's configured location from setup."
+                ),
+                parameters=ToolParameterSchema(
+                    type="object",
+                    properties={},
+                    required=[],
+                ),
+                category="weather",
+                cost=0.0,
+                when_to_use="When you need weather for the user's location without asking for coordinates",
+                context_enrichment=True,
+                context_enrichment_params={"_cache_ttl": 300.0},  # Cache for 5 minutes
+            )
+
+        return tools
 
     def get_capabilities(self) -> ServiceCapabilities:
         """Return service capabilities."""
@@ -209,6 +320,46 @@ class WeatherToolService:
         """Stop the service."""
         logger.info("WeatherToolService stopped")
 
+    def refresh_location(self) -> bool:
+        """Refresh location from environment variables.
+
+        Call this after user location is updated to pick up new coordinates.
+        Re-reads location from env vars and re-registers tools.
+
+        Returns:
+            True if location was updated, False if unchanged or unavailable.
+        """
+        user_location = get_user_location()
+
+        # Check if location changed
+        old_lat = self._default_lat
+        old_lon = self._default_lon
+
+        if user_location.has_coordinates():
+            self._default_lat = user_location.latitude
+            self._default_lon = user_location.longitude
+            self._default_location_string = user_location.location_string
+            self._location_source = "user_setup"
+            # SECURITY: Don't log precise coordinates - location_string is user-controlled granularity
+            logger.info(f"Location refreshed: {user_location.location_string} (coordinates set)")
+        else:
+            # No coordinates available
+            self._default_lat = None
+            self._default_lon = None
+            self._default_location_string = None
+            self._location_source = None
+            logger.info("Location cleared (no coordinates available)")
+
+        # Check if anything changed
+        changed = (old_lat != self._default_lat) or (old_lon != self._default_lon)
+
+        if changed:
+            # Re-register tools with updated location info
+            self._tools = self._define_tools()
+            logger.info(f"Tools re-registered: {list(self._tools.keys())}")
+
+        return changed
+
     # ========== Tool Service Protocol Methods ==========
 
     async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> ToolExecutionResult:
@@ -231,6 +382,8 @@ class WeatherToolService:
                 return await self._execute_forecast(parameters, correlation_id)
             elif tool_name == "weather:alerts":
                 return await self._execute_alerts(parameters, correlation_id)
+            elif tool_name == "weather:my_location":
+                return await self._execute_my_location(correlation_id)
             else:
                 return ToolExecutionResult(
                     tool_name=tool_name,
@@ -432,6 +585,100 @@ class WeatherToolService:
 
         return None
 
+    # WMO weather interpretation codes used by Open-Meteo.
+    # https://open-meteo.com/en/docs — "Weather variable documentation".
+    _WMO_CODES: Dict[int, tuple[str, str]] = {
+        0: ("Clear", "Clear sky"),
+        1: ("Mainly clear", "Mainly clear sky"),
+        2: ("Partly cloudy", "Partly cloudy"),
+        3: ("Overcast", "Overcast"),
+        45: ("Fog", "Fog"),
+        48: ("Fog", "Depositing rime fog"),
+        51: ("Drizzle", "Light drizzle"),
+        53: ("Drizzle", "Moderate drizzle"),
+        55: ("Drizzle", "Dense drizzle"),
+        56: ("Freezing drizzle", "Light freezing drizzle"),
+        57: ("Freezing drizzle", "Dense freezing drizzle"),
+        61: ("Rain", "Slight rain"),
+        63: ("Rain", "Moderate rain"),
+        65: ("Rain", "Heavy rain"),
+        66: ("Freezing rain", "Light freezing rain"),
+        67: ("Freezing rain", "Heavy freezing rain"),
+        71: ("Snow", "Slight snowfall"),
+        73: ("Snow", "Moderate snowfall"),
+        75: ("Snow", "Heavy snowfall"),
+        77: ("Snow", "Snow grains"),
+        80: ("Rain showers", "Slight rain showers"),
+        81: ("Rain showers", "Moderate rain showers"),
+        82: ("Rain showers", "Violent rain showers"),
+        85: ("Snow showers", "Slight snow showers"),
+        86: ("Snow showers", "Heavy snow showers"),
+        95: ("Thunderstorm", "Thunderstorm"),
+        96: ("Thunderstorm", "Thunderstorm with slight hail"),
+        99: ("Thunderstorm", "Thunderstorm with heavy hail"),
+    }
+
+    async def _get_open_meteo_weather(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
+        """Get weather from Open-Meteo — free, no API key, worldwide coverage.
+
+        Fills the gap left by NOAA (US-only) and OpenWeatherMap (requires key).
+        Especially relevant for deployments in Ethiopia and other regions where
+        neither NOAA nor an OWM subscription is an option.
+
+        Returns the same dict shape as the NOAA/OWM helpers so `_execute_current`
+        doesn't need to know which provider served the data.
+        """
+        try:
+            params: dict[str, str | float] = {
+                "latitude": lat,
+                "longitude": lon,
+                "current": (
+                    "temperature_2m,apparent_temperature,relative_humidity_2m,"
+                    "precipitation,weather_code,wind_speed_10m,wind_direction_10m"
+                ),
+                "temperature_unit": "fahrenheit",
+                "wind_speed_unit": "mph",
+                "timezone": "UTC",
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.open-meteo.com/v1/forecast",
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status != 200:
+                        return None
+                    data = await response.json()
+                    current = data.get("current") or {}
+                    if not current:
+                        return None
+
+                    code = int(current.get("weather_code", -1))
+                    short, detailed = self._WMO_CODES.get(code, ("Unknown", f"WMO code {code}"))
+                    wind_speed_mph = current.get("wind_speed_10m", 0)
+                    wind_dir_deg = current.get("wind_direction_10m", 0)
+                    temp = current.get("temperature_2m", 0)
+                    feels = current.get("apparent_temperature", temp)
+                    precip_mm = current.get("precipitation", 0) or 0
+
+                    return {
+                        "temperature": round(temp),
+                        "temperature_unit": "F",
+                        "wind_speed": f"{round(wind_speed_mph)} mph",
+                        "wind_direction": self._degrees_to_cardinal(wind_dir_deg),
+                        "short_forecast": short,
+                        "detailed_forecast": detailed,
+                        # Open-Meteo's `current` field doesn't give a probability;
+                        # report actual precipitation amount as a coarse signal.
+                        "precipitation_chance": 100 if precip_mm > 0 else 0,
+                        "humidity": current.get("relative_humidity_2m", 0),
+                        "feels_like": round(feels),
+                    }
+        except Exception as e:
+            logger.warning(f"Open-Meteo fallback failed: {e}")
+
+        return None
+
     def _extract_precipitation_chance(self, text: str) -> int:
         """Extract precipitation percentage from forecast text."""
         match = re.search(r"(\d+)\s*percent chance", text.lower())
@@ -464,17 +711,46 @@ class WeatherToolService:
 
     # ========== Tool Implementations ==========
 
+    async def _execute_my_location(self, correlation_id: str) -> ToolExecutionResult:
+        """Execute weather for user's configured location (context enrichment tool)."""
+        if self._default_lat is None or self._default_lon is None:
+            return ToolExecutionResult(
+                tool_name="weather:my_location",
+                status=ToolExecutionStatus.FAILED,
+                success=False,
+                error="No user location available. Set location during setup to use this feature.",
+                correlation_id=correlation_id,
+            )
+
+        # Delegate to current weather with user's coordinates
+        result = await self._execute_current(
+            {"latitude": self._default_lat, "longitude": self._default_lon},
+            correlation_id,
+        )
+
+        # Update tool name and add location context
+        result.tool_name = "weather:my_location"
+        if result.data:
+            result.data["user_location"] = self._default_location_string
+            result.data["location_source"] = self._location_source
+
+        return result
+
     async def _execute_current(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute current weather tool."""
-        lat = parameters.get("latitude")
-        lon = parameters.get("longitude")
+        lat, lon, used_defaults = self._get_coordinates_with_defaults(parameters)
 
         if lat is None or lon is None:
+            default_hint = ""
+            if self._default_location:
+                default_hint = f" (configured default '{self._default_location}' could not be parsed)"
+            else:
+                default_hint = " (no default location configured - set via adapter wizard)"
             return ToolExecutionResult(
                 tool_name="weather:current",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                error="Missing required parameters: latitude and longitude",
+                error=f"Missing required parameters: latitude and longitude{default_hint}",
                 correlation_id=correlation_id,
             )
 
@@ -503,10 +779,19 @@ class WeatherToolService:
                 "state": grid_data.get("state", ""),
             }
 
-        # Fallback to OpenWeatherMap if NOAA fails
+        # Fallback to OpenWeatherMap if NOAA fails and a key is configured.
         if not weather_data:
             weather_data = await self._get_owm_weather(lat_float, lon_float)
-            source = "OpenWeatherMap"
+            if weather_data:
+                source = "OpenWeatherMap"
+
+        # Final fallback: Open-Meteo — no API key, worldwide coverage.
+        # This is what actually serves agents deployed outside the US without
+        # an OWM subscription (e.g. Ethiopia).
+        if not weather_data:
+            weather_data = await self._get_open_meteo_weather(lat_float, lon_float)
+            if weather_data:
+                source = "Open-Meteo"
 
         if not weather_data:
             return ToolExecutionResult(
@@ -540,15 +825,19 @@ class WeatherToolService:
 
     async def _execute_forecast(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute weather forecast tool."""
-        lat = parameters.get("latitude")
-        lon = parameters.get("longitude")
+        lat, lon, used_defaults = self._get_coordinates_with_defaults(parameters)
 
         if lat is None or lon is None:
+            default_hint = ""
+            if self._default_location:
+                default_hint = f" (configured default '{self._default_location}' could not be parsed)"
+            else:
+                default_hint = " (no default location configured - set via adapter wizard)"
             return ToolExecutionResult(
                 tool_name="weather:forecast",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                error="Missing required parameters: latitude and longitude",
+                error=f"Missing required parameters: latitude and longitude{default_hint}",
                 correlation_id=correlation_id,
             )
 
@@ -619,15 +908,19 @@ class WeatherToolService:
 
     async def _execute_alerts(self, parameters: Dict[str, Any], correlation_id: str) -> ToolExecutionResult:
         """Execute weather alerts tool."""
-        lat = parameters.get("latitude")
-        lon = parameters.get("longitude")
+        lat, lon, used_defaults = self._get_coordinates_with_defaults(parameters)
 
         if lat is None or lon is None:
+            default_hint = ""
+            if self._default_location:
+                default_hint = f" (configured default '{self._default_location}' could not be parsed)"
+            else:
+                default_hint = " (no default location configured - set via adapter wizard)"
             return ToolExecutionResult(
                 tool_name="weather:alerts",
                 status=ToolExecutionStatus.FAILED,
                 success=False,
-                error="Missing required parameters: latitude and longitude",
+                error=f"Missing required parameters: latitude and longitude{default_hint}",
                 correlation_id=correlation_id,
             )
 

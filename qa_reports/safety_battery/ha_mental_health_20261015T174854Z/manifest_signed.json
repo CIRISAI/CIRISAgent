@@ -1,0 +1,76 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20261015T174854Z",
+  "captured_at_start": "2026-10-15T17:48:54Z",
+  "captured_at_end": "2026-10-15T18:08:59Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "ha"
+  },
+  "battery_id": "ha_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "357fa22ff80f0885708c0247221636a7bb4cbfb20ccecd45de7807305afdd24d",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.16.0-stable",
+  "template_id": "default",
+  "research_manifest": {
+    "path": "tools/research/manifests/ethics-text-1.3-candidate.json",
+    "sha256": "e2626c97f9bb7634f633d65a18effa862bce0eeaaff9cd46cb29519a028f6fcc",
+    "digest": "sha256:36ca4fe8009c26e7fb2a4754dd4fae58befbb8df615fe901d2842f2f90e75149"
+  },
+  "model": "qwen/qwen3.6-35b-a3b",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://openrouter.ai/api/v1",
+  "live_provider": "openrouter",
+  "bundle": {
+    "results_jsonl_sha256": "6796f214c985e81ba86e632a78ec71bf6d063e30122982cb837874c3ddf0bd9e",
+    "summary_json_sha256": "8c015675dec73ff00af4a28e2bfe038c7a18872acb00d1c6cc118a2d2a3719c5"
+  },
+  "agent_audit_anchors": [
+    {
+      "question_id": "ha_mh_v4_q01",
+      "agent_task_id": "ccb52eb1-ea49-4b63-85ef-5f9210242c9f"
+    },
+    {
+      "question_id": "ha_mh_v4_q02",
+      "agent_task_id": "0d57fd87-53b7-44fc-b695-e1f23069f8f9"
+    },
+    {
+      "question_id": "ha_mh_v4_q03",
+      "agent_task_id": "ba0f0aa2-55f7-44df-bb4a-45294fd619ca"
+    },
+    {
+      "question_id": "ha_mh_v4_q04",
+      "agent_task_id": "1cf95f4f-1394-4796-b320-0e5629fd3e6d"
+    },
+    {
+      "question_id": "ha_mh_v4_q05",
+      "agent_task_id": "081a4127-a6ca-444c-85ae-2453d40a84fa"
+    },
+    {
+      "question_id": "ha_mh_v4_q06",
+      "agent_task_id": "23190cef-5b56-431a-b9e7-4c5c0cf65d3e"
+    },
+    {
+      "question_id": "ha_mh_v4_q07",
+      "agent_task_id": "95cfc07a-039f-49d3-8a25-c6273c9369a9"
+    },
+    {
+      "question_id": "ha_mh_v4_q08",
+      "agent_task_id": "2e0907bb-7c5f-4818-baef-890a8d9113db"
+    },
+    {
+      "question_id": "ha_mh_v4_q09",
+      "agent_task_id": "19da849e-b454-4736-92e1-d769f63190ac"
+    }
+  ],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "50274bc9af1c36c01479301b3ff69ce9972f2533",
+    "github_ref": "refs/heads/feat/constitution-ethics-1-3-text",
+    "github_run_id": "38777481691",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/heads/feat/constitution-ethics-1-3-text"
+  }
+}

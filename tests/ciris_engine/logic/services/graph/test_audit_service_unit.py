@@ -42,7 +42,40 @@ class TestGraphAuditService:
         self, mock_time_service: Mock, mock_memory_bus: Mock
     ) -> AsyncGenerator[GraphAuditService, None]:
         """Create GraphAuditService instance."""
+        import os as _os
         import tempfile
+
+        # A3 cutover / 2.9.7 second-signer removal: wire a real persist
+        # engine WITH a local signing identity (mirroring db/core.py's
+        # _construct_engine) pointed at a temp DB. The audit service signs
+        # via engine.local_sign — no CIRISVerify mock is needed. Same
+        # pattern as test_audit_service.py — capture+restore module-globals
+        # on teardown so cross-test isolation is preserved.
+        import ciris_engine.logic.persistence.models.graph as _graph_mod
+        from ciris_engine.logic.persistence._substrate import Engine, reset_engine  # type: ignore[import-untyped]
+
+        from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+        _prior_engine = _graph_mod._engine
+        _prior_dsn = _graph_mod._engine_dsn
+        with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as _pf:
+            persist_db_path = _pf.name
+        seed_path = persist_db_path + ".seed"
+        with open(seed_path, "wb") as _sf:
+            _sf.write(_os.urandom(32))
+        pqc_seed_path = persist_db_path + ".pqc"
+        with open(pqc_seed_path, "wb") as _qf:
+            _qf.write(_os.urandom(32))
+        reset_engine()  # un-pin any engine a prior fixture wired (process-singleton)
+        persist_engine = Engine(
+            f"sqlite:///{persist_db_path}",
+            "test-audit-key",
+            local_key_id="test-audit-key",
+            local_key_path=seed_path,
+            local_pqc_key_id="test-audit-key-pqc",
+            local_pqc_key_path=pqc_seed_path,
+        )
+        set_persist_engine(persist_engine, dsn=f"sqlite:///{persist_db_path}")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             service = GraphAuditService(
@@ -65,6 +98,14 @@ class TestGraphAuditService:
                     service._started = False
             except Exception:
                 pass  # Ignore errors during cleanup
+        # Restore prior persist engine state (cross-test isolation)
+        _graph_mod._engine = _prior_engine
+        _graph_mod._engine_dsn = _prior_dsn
+        for _p in (persist_db_path, seed_path, pqc_seed_path):
+            try:
+                _os.unlink(_p)
+            except OSError:
+                pass
 
     @pytest.mark.asyncio
     async def test_start_stop(self, audit_service: GraphAuditService) -> None:

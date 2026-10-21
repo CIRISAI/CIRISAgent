@@ -20,7 +20,7 @@ class BaseActionContext(BaseModel):
     channel_id: str = Field(..., description="Channel where action occurs")
     user_id: Optional[str] = Field(None, description="User requesting action")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class SpeakContext(BaseActionContext):
@@ -28,6 +28,8 @@ class SpeakContext(BaseActionContext):
 
     message_type: Literal["response", "notification", "error"] = Field("response", description="Type of message")
     reply_to_message_id: Optional[str] = Field(None, description="Message being replied to")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ToolContext(BaseActionContext):
@@ -37,12 +39,16 @@ class ToolContext(BaseActionContext):
     tool_version: Optional[str] = Field(None, description="Tool version")
     execution_timeout: Optional[float] = Field(30.0, description="Timeout in seconds")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ObserveContext(BaseActionContext):
     """Context for OBSERVE action."""
 
     observation_type: Literal["channel", "user", "system"] = Field("channel", description="What to observe")
     observation_window: Optional[int] = Field(100, description="Number of messages to observe")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class MemorizeContext(BaseActionContext):
@@ -52,6 +58,8 @@ class MemorizeContext(BaseActionContext):
     memory_scope: Literal["task", "conversation", "global"] = Field("task", description="Scope of memory")
     retention_policy: Optional[str] = Field(None, description="How long to retain")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class RecallContext(BaseActionContext):
     """Context for RECALL action."""
@@ -60,6 +68,8 @@ class RecallContext(BaseActionContext):
     memory_scope: Literal["task", "conversation", "global"] = Field("task", description="Scope to search")
     time_range: Optional[Dict[str, datetime]] = Field(None, description="Time range to search")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ForgetContext(BaseActionContext):
     """Context for FORGET action."""
@@ -67,6 +77,8 @@ class ForgetContext(BaseActionContext):
     memory_type: str = Field(..., description="Type of memory to forget")
     reason: str = Field(..., description="Reason for forgetting")
     permanent: bool = Field(False, description="Whether deletion is permanent")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class RejectContext(BaseActionContext):
@@ -77,12 +89,16 @@ class RejectContext(BaseActionContext):
         "safety", description="Category of rejection"
     )
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class PonderContext(BaseActionContext):
     """Context for PONDER action."""
 
     questions: List[str] = Field(..., description="Questions to ponder")
     ponder_depth: int = Field(1, description="Depth of pondering")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class DeferContext(BaseActionContext):
@@ -92,9 +108,13 @@ class DeferContext(BaseActionContext):
     required_authority: str = Field("AUTHORITY", description="Required authority level")
     urgency: Literal["low", "medium", "high"] = Field("medium", description="Urgency level")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class TaskCompleteContext(BaseActionContext):
     """Context for TASK_COMPLETE action."""
 
     completion_status: Literal["success", "partial", "failure"] = Field("success", description="Completion status")
     completion_message: Optional[str] = Field(None, description="Completion message")
+
+    model_config = ConfigDict(defer_build=True)

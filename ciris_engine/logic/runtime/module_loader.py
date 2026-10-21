@@ -35,7 +35,7 @@ class ModuleLoader:
             return False
 
         try:
-            with open(manifest_path) as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest_data = json.load(f)
 
             # Parse into typed manifest
@@ -62,10 +62,16 @@ class ModuleLoader:
     def _handle_mock_module(self, module_name: str, manifest: ServiceManifest, disable_core: bool) -> None:
         """Handle loading of MOCK modules with safety warnings."""
         self.mock_modules.add(module_name)
+        # CIRISAgent#1244: a mock LLM module means mock-authored traces; latch
+        # it for the trace-export guard (one-way, never cleared).
+        if any(service.type == ServiceType.LLM for service in manifest.services):
+            from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+            mark_mock_llm_active(f"module_loader:{module_name}")
 
         # Emit LOUD warnings
         logger.warning("=" * 80)
-        logger.warning("🚨 MOCK MODULE DETECTED 🚨")
+        logger.warning("[ALERT] MOCK MODULE DETECTED [ALERT]")
         logger.warning(f"Loading MOCK module: {module_name}")
         logger.warning("THIS IS FOR TESTING ONLY - NOT FOR PRODUCTION")
         logger.warning("=" * 80)
@@ -75,8 +81,8 @@ class ModuleLoader:
             self.disabled_service_types.add(service.type)
 
             if disable_core:
-                logger.warning(f"⚠️  DISABLING all non-mock {service.type.value} services")
-                logger.warning(f"⚠️  ONLY {module_name} will provide {service.type.value} services")
+                logger.warning(f"[WARN] DISABLING all non-mock {service.type.value} services")
+                logger.warning(f"[WARN] ONLY {module_name} will provide {service.type.value} services")
 
         # Log to audit trail
         logger.critical(
@@ -183,13 +189,13 @@ class ModuleLoader:
                 initialized_services.append(service_metadata)
 
                 if manifest.module.is_mock:
-                    logger.warning(f"⚠️  MOCK service registered: {service_class.__name__}")
+                    logger.warning(f"[WARN] MOCK service registered: {service_class.__name__}")
                     result.warnings.append(f"MOCK service registered: {service_class.__name__}")
                     # Log SERVICE X/22 for mock LLM services (replaces real LLM service #14)
                     if service_decl.type == ServiceType.LLM:
-                        msg = "[SERVICE 14/22] MockLLMService STARTED"
-                        logger.warning(msg)
-                        print(msg)  # Also print to console for Android logcat
+                        from ciris_engine.logic.runtime.startup_logging import _log_service_started
+
+                        _log_service_started(14, "MockLLMService")
                 else:
                     logger.info(f"Service registered: {service_class.__name__}")
 

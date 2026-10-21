@@ -20,7 +20,7 @@ class ConnectedNodeInfo(BaseModel):
     direction: str = Field(..., description="Direction of the relationship (incoming/outgoing)")
     attributes: JSONDict = Field(default_factory=dict, description="Attributes of the connected node")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class RecalledNodeInfo(BaseModel):
@@ -31,7 +31,7 @@ class RecalledNodeInfo(BaseModel):
     attributes: JSONDict = Field(default_factory=dict, description="Node attributes")
     connected_nodes: Optional[List[ConnectedNodeInfo]] = Field(None, description="Connected nodes information")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class RecallResult(BaseModel):
@@ -43,7 +43,7 @@ class RecallResult(BaseModel):
     total_results: int = Field(0, description="Total number of results found")
     truncated: bool = Field(False, description="Whether results were truncated")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
     def to_follow_up_content(self) -> str:
         """Convert recall result to follow-up thought content."""

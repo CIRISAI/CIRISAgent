@@ -11,9 +11,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
 from ciris_engine.schemas.config.tickets import TicketsConfig
 
+# Field description constants to avoid duplication
+_DESC_SYSTEM_PROMPT = "Override system prompt"
+_DESC_USER_PROMPT_TEMPLATE = "Override user prompt template"
+_DESC_ACCORD_HEADER = "Accord mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'"
+
 
 class StewardshipCalculation(BaseModel):
     """Schema for the Stewardship Tier calculation details."""
+
+    model_config = ConfigDict(defer_build=True)
 
     creator_influence_score: int = Field(..., description="Creator-Influence Score (CIS)")
     risk_magnitude: int = Field(..., description="Risk Magnitude (RM)")
@@ -24,9 +31,11 @@ class StewardshipCalculation(BaseModel):
 class CreatorLedgerEntry(BaseModel):
     """Schema for the Creator Ledger entry."""
 
+    model_config = ConfigDict(defer_build=True)
+
     creator_id: str = Field(..., description="Identifier for the creator or creating team")
     creation_timestamp: str = Field(..., description="ISO 8601 timestamp of the creation entry")
-    covenant_version: str = Field(..., description="Version of the Covenant applied")
+    accord_version: str = Field(..., description="Version of the Accord applied")
     book_vi_compliance_check: str = Field(..., description="Status of the Book VI compliance check")
     stewardship_tier_calculation: StewardshipCalculation = Field(..., description="Details of the ST calculation")
     public_key_fingerprint: str = Field(..., description="Fingerprint of the public key used for signing")
@@ -36,6 +45,8 @@ class CreatorLedgerEntry(BaseModel):
 class CreatorIntentStatement(BaseModel):
     """Schema for the Creator Intent Statement (CIS)."""
 
+    model_config = ConfigDict(defer_build=True)
+
     purpose_and_functionalities: List[str] = Field(..., description="The intended purpose and functionalities")
     limitations_and_design_choices: List[str] = Field(..., description="Known limitations and key design choices")
     anticipated_benefits: List[str] = Field(..., description="Anticipated benefits of the creation")
@@ -44,6 +55,8 @@ class CreatorIntentStatement(BaseModel):
 
 class Stewardship(BaseModel):
     """Schema for Book VI Stewardship information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     stewardship_tier: int = Field(..., description="Calculated Stewardship Tier (ST) for the agent")
     creator_intent_statement: CreatorIntentStatement = Field(..., description="The Creator Intent Statement (CIS)")
@@ -56,13 +69,25 @@ class AgentTemplate(BaseModel):
     name: str = Field(..., description="Agent name/identifier")
     description: str = Field(..., description="Agent description")
     role_description: str = Field(..., description="Agent's role")
+    domain: Optional[str] = Field(
+        None,
+        description=(
+            "Domain of expertise this agent operates in (e.g. 'Personal Assistance', "
+            "'Community Moderation', 'CIRIS Outreach'). Surfaced to the DSDMA prompt "
+            "as `{domain_name}` so the LLM has a concrete domain framing instead of "
+            "the agent's identity name. Falls back to `name` when unset."
+        ),
+    )
+    internal_only: bool = Field(False, description="If true, template is internal/development only")
 
     # Permissions
     permitted_actions: List[str] = Field(default_factory=list, description="List of permitted handler actions")
+    auto_load_adapters: bool = Field(False, description="Whether to auto-load adapters")
 
     # DMA overrides
     dsdma_kwargs: Optional["DSDMAConfiguration"] = Field(None, description="Domain-specific DMA configuration")
     csdma_overrides: Optional["CSDMAOverrides"] = Field(None, description="Common sense DMA prompt overrides")
+    pdma_overrides: Optional["PDMAOverrides"] = Field(None, description="Ethical PDMA prompt overrides")
     action_selection_pdma_overrides: Optional["ActionSelectionOverrides"] = Field(
         None, description="Action selection prompt overrides"
     )
@@ -83,13 +108,13 @@ class AgentTemplate(BaseModel):
         description="Ticket system configuration with SOPs (DSAR always present)",
     )
 
-    # Cognitive state transition configuration (Covenant Sections V, VIII)
+    # Cognitive state transition configuration (Accord Sections V, VIII)
     cognitive_state_behaviors: Optional["CognitiveStateBehaviors"] = Field(
         None,
         description="Template-driven cognitive state transition configuration",
     )
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for extensibility
+    model_config = ConfigDict(defer_build=True, extra="allow")  # Allow additional fields for extensibility
 
     @field_validator("stewardship", mode="before")
     @classmethod
@@ -120,6 +145,16 @@ class AgentTemplate(BaseModel):
         if isinstance(v, dict):
             return CSDMAOverrides(**v)
         return v  # type: ignore[no-any-return]  # Already a CSDMAOverrides instance
+
+    @field_validator("pdma_overrides", mode="before")
+    @classmethod
+    def convert_pdma_overrides(cls, v: Any) -> Optional["PDMAOverrides"]:
+        """Convert dict to PDMAOverrides if needed."""
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return PDMAOverrides(**v)
+        return v  # type: ignore[no-any-return]  # Already a PDMAOverrides instance
 
     @field_validator("action_selection_pdma_overrides", mode="before")
     @classmethod
@@ -204,10 +239,10 @@ class AgentTemplate(BaseModel):
         """Convert dict to CognitiveStateBehaviors if needed.
 
         If not provided, returns default CognitiveStateBehaviors which preserves
-        full Covenant compliance (wakeup enabled, always_consent shutdown).
+        full Accord compliance (wakeup enabled, always_consent shutdown).
         """
         if v is None:
-            # Default: full Covenant compliance
+            # Default: full Accord compliance
             return CognitiveStateBehaviors()
 
         if isinstance(v, dict):
@@ -223,24 +258,35 @@ class DSDMAConfiguration(BaseModel):
     domain_specific_knowledge: Optional[Dict[str, Union[str, List[str], Dict[str, str]]]] = Field(
         None, description="Domain-specific knowledge like rules, principles, examples"
     )
-    model_config = ConfigDict(extra="allow")  # Allow domain-specific fields
+    model_config = ConfigDict(defer_build=True, extra="allow")  # Allow domain-specific fields
 
 
 class CSDMAOverrides(BaseModel):
     """Common Sense DMA prompt overrides."""
 
-    system_prompt: Optional[str] = Field(None, description="Override system prompt")
-    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
-    model_config = ConfigDict(extra="forbid")  # Strict validation
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
+
+
+class PDMAOverrides(BaseModel):
+    """Ethical PDMA prompt overrides."""
+
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Strict validation
 
 
 class ActionSelectionOverrides(BaseModel):
     """Action selection prompt overrides."""
 
-    system_prompt: Optional[str] = Field(None, description="Override system prompt")
-    user_prompt_template: Optional[str] = Field(None, description="Override user prompt template")
+    system_prompt: Optional[str] = Field(None, description=_DESC_SYSTEM_PROMPT)
+    user_prompt_template: Optional[str] = Field(None, description=_DESC_USER_PROMPT_TEMPLATE)
     action_descriptions: Optional[Dict[str, str]] = Field(None, description="Override action descriptions")
-    model_config = ConfigDict(extra="allow")  # Allow for additional, template-specific guidance
+    accord_header: Optional[str] = Field(None, description=_DESC_ACCORD_HEADER)
+    model_config = ConfigDict(defer_build=True, extra="allow")  # Allow for additional, template-specific guidance
 
 
 class DiscordAdapterOverrides(BaseModel):
@@ -252,7 +298,7 @@ class DiscordAdapterOverrides(BaseModel):
     monitored_channel_ids: Optional[List[str]] = Field(None, description="Override monitored channels")
     allowed_user_ids: Optional[List[str]] = Field(None, description="Override allowed users")
     allowed_role_ids: Optional[List[str]] = Field(None, description="Override allowed roles")
-    model_config = ConfigDict(extra="forbid")  # Only allow known overrides
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Only allow known overrides
 
 
 class APIAdapterOverrides(BaseModel):
@@ -262,7 +308,7 @@ class APIAdapterOverrides(BaseModel):
     rate_limit_per_minute: Optional[int] = Field(None, description="Override rate limit")
     max_request_size: Optional[int] = Field(None, description="Override max request size")
     cors_origins: Optional[List[str]] = Field(None, description="Override CORS origins")
-    model_config = ConfigDict(extra="forbid")  # Only allow known overrides
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Only allow known overrides
 
 
 class CLIAdapterOverrides(BaseModel):
@@ -272,7 +318,7 @@ class CLIAdapterOverrides(BaseModel):
     prompt_prefix: Optional[str] = Field(None, description="Override prompt prefix")
     enable_colors: Optional[bool] = Field(None, description="Override color output")
     max_history_entries: Optional[int] = Field(None, description="Override history size")
-    model_config = ConfigDict(extra="forbid")  # Only allow known overrides
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # Only allow known overrides
 
 
 # Update forward references

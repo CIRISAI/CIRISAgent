@@ -9,8 +9,27 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.runtime.accord_halt import AccordRowForward
+
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import ImageContent
+
+
+class MessageType(str, Enum):
+    """Typed classification of FetchedMessage origin.
+
+    Replaces the historical free-string `message_type` field on
+    FetchedMessage — string values kept identical for backward
+    compatibility with existing adapters that still write the raw
+    strings. New code (EdgeCommunicationService and beyond) should
+    pass MessageType.* explicitly.
+    """
+
+    USER = "user"
+    AGENT = "agent"
+    SYSTEM = "system"
+    ERROR = "error"
+    INLINE_TEXT = "inline_text"  # CIRISEdge federation inline-text (Tier 2, v0.9.0+)
 
 
 class MessageHandlingStatus(str, Enum):
@@ -25,6 +44,8 @@ class MessageHandlingStatus(str, Enum):
     RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
     UPDATED_EXISTING_TASK = "UPDATED_EXISTING_TASK"  # Flagged existing task with new info
+    RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
+    ACCORD_ROW_FORWARDED = "ACCORD_ROW_FORWARDED"  # A v2 accord row, handed to the node (CC 4.2.1.1); no task
 
 
 class PassiveObservationResult(BaseModel):
@@ -34,6 +55,8 @@ class PassiveObservationResult(BaseModel):
     task_created: bool = Field(..., description="True if new task created, False if existing task updated")
     thought_id: Optional[str] = Field(None, description="Thought ID if created")
     existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class MessageHandlingResult(BaseModel):
@@ -49,6 +72,14 @@ class MessageHandlingResult(BaseModel):
     credit_denial_reason: Optional[str] = Field(None, description="Credit denial reason")
     task_priority: int = Field(default=0, description="Priority of created task (0=passive, 5=high, 10=critical)")
     existing_task_updated: bool = Field(default=False, description="Whether an existing task was updated")
+    shed_resources: List[str] = Field(
+        default_factory=list, description="Resources holding admission closed (status RESOURCE_SHED)"
+    )
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict on a forwarded accord row (status ACCORD_ROW_FORWARDED)"
+    )
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class IncomingMessage(BaseModel):
@@ -63,8 +94,19 @@ class IncomingMessage(BaseModel):
     timestamp: Optional[str] = Field(None, description="Message timestamp")
     # Native multimodal support - images attached to the message
     images: List[Any] = Field(default_factory=list, description="Images attached to this message (List[ImageContent])")
+    # Optional channel-/message-level locale set by adapter from caller metadata.
+    # Flows into TaskContext.preferred_language at task creation, which puts
+    # this at the top of the localization chain for the resulting thoughts.
+    preferred_language: Optional[str] = Field(
+        default=None,
+        description=(
+            "ISO 639-1 language code declared by the adapter for this message "
+            "(e.g. from MessageContext.metadata.language on the API). When set, "
+            "becomes TaskContext.preferred_language for the task created here."
+        ),
+    )
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    model_config = ConfigDict(populate_by_name=True, extra="allow", defer_build=True)
 
     @property
     def channel_id(self) -> Optional[str]:
@@ -96,10 +138,11 @@ class FetchedMessage(BaseModel):
     is_bot: Optional[bool] = False
     message_type: Optional[str] = Field(default="user", description="Type of message (user, agent, system, error)")
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    model_config = ConfigDict(populate_by_name=True, extra="allow", defer_build=True)
 
 
 __all__ = [
+    "MessageType",
     "MessageHandlingStatus",
     "PassiveObservationResult",
     "MessageHandlingResult",

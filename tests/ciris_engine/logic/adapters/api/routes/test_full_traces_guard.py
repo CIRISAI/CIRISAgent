@@ -1,0 +1,233 @@
+"""`full_traces` must refuse loudly rather than persist nothing.
+
+THE BUG IT GUARDS (CIRISServer#418). The agent constructs persist's Engine from
+Python with `scrubber=None`, which persist fills in with `NullScrubber` — it
+redacts nothing and honestly reports `ner_ran: false`. persist v32.1.0 turned
+that combination into a hard rejection at `full_traces`:
+
+    ValueError: ('scrub_treatment_mismatch', 'label=full_traces treated_as=full_traces')
+
+Every batch refused. Zero traces persisted. `detailed` — what production runs —
+still passes with a warning, which is why this is scoped to one opt-in setting
+rather than being a release blocker.
+
+WHY REFUSE INSTEAD OF DOWNGRADE. Silently applying `detailed` when the user
+asked for `full_traces` would leave the UI showing a level the agent is not
+using. Refusing is the only option that cannot be misread.
+
+WHY PROBE, NOT VERSION-COMPARE. `egress_scrub` existing is precisely the
+condition that makes `full_traces` safe. Pinning a version number would mean
+editing this guard again on the exact release that fixes the problem, and
+getting that edit wrong reintroduces silent total trace loss.
+"""
+
+from __future__ import annotations
+
+import sys
+import types
+
+import pathlib
+
+import pytest
+from fastapi import HTTPException
+
+from ciris_engine.logic.adapters.api.routes import my_data
+
+
+class _Metrics:
+    _trace_level = None
+
+
+class _Adapter:
+    metrics_service = _Metrics()
+
+
+@pytest.fixture
+def adapter() -> _Adapter:
+    return _Adapter()
+
+
+def _fake_substrate(monkeypatch: pytest.MonkeyPatch, *, has_scrub: bool) -> None:
+    """Install a substrate module that does or does not expose egress_scrub.
+
+    Kept because the tests below still need to prove a BINDING ALONE changes
+    nothing. It no longer moves the answer on its own — see _agent_wires_scrubber.
+    """
+    mod = types.ModuleType("ciris_server")
+    if has_scrub:
+        mod.egress_scrub = lambda *a, **k: None  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ciris_server", mod)
+
+
+def _agent_wires_scrubber(monkeypatch: pytest.MonkeyPatch, wired: bool) -> None:
+    """Set whether the AGENT passes a scrubber to the Engine.
+
+    This is the fact the guard turns on, and since 2.9.23 it is True in
+    production: persistence/db/core.py constructs the Engine with
+    `scrubber=egress_scrub`. The tests below set it explicitly rather than
+    inheriting the shipped value, so they keep asserting BOTH directions of the
+    invariant no matter which way the constant currently points.
+    """
+    monkeypatch.setattr(
+        "ciris_engine.logic.utils.substrate_caps._AGENT_INSTALLS_SCRUBBER", wired, raising=True
+    )
+
+
+def test_full_traces_is_refused_without_a_scrubber(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
+) -> None:
+    _fake_substrate(monkeypatch, has_scrub=False)
+    _agent_wires_scrubber(monkeypatch, False)
+
+    with pytest.raises(HTTPException) as exc:
+        my_data._apply_trace_level_change(adapter, "full_traces")
+
+    assert exc.value.status_code == 400
+    detail = str(exc.value.detail)
+    # The message must say what happens if we DIDN'T refuse, or the user will
+    # read it as an arbitrary restriction and go looking for a flag.
+    assert "stop trace persistence" in detail
+    assert "detailed" in detail
+    assert "CIRISServer#418" in detail
+
+
+def test_the_refusal_does_not_half_apply_the_change(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
+) -> None:
+    """A rejected request must leave the adapter exactly as it was."""
+    _fake_substrate(monkeypatch, has_scrub=False)
+    _agent_wires_scrubber(monkeypatch, False)
+    adapter.metrics_service._trace_level = "detailed"
+
+    with pytest.raises(HTTPException):
+        my_data._apply_trace_level_change(adapter, "full_traces")
+
+    assert adapter.metrics_service._trace_level == "detailed"
+
+
+def test_full_traces_is_allowed_once_the_agent_INSTALLS_a_scrubber(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
+) -> None:
+    """The gate is what the AGENT wires, not what the substrate offers.
+
+    This test used to fake a `ciris_server` module carrying `egress_scrub` and
+    expect the guard to lift. That encoded the bug: from 0.5.174 the binding
+    exists on every supported pin, so a substrate-capability probe answers True
+    while the agent still builds `Engine(scrubber=None)` — persist installs
+    NullScrubber and full_traces is refused. A dependency bump would have
+    silently disabled the guard.
+
+    So the seam is now `substrate_can_scrub()`, which reports whether WE install
+    a scrubber, and this patches that.
+    """
+    import ciris_engine.logic.utils.substrate_caps as caps
+
+    # Both halves: we wire it AND the binding is importable. The capability fails
+    # closed without the second, because core.py falls back to scrubber=None on
+    # ImportError and the two must never disagree.
+    _fake_substrate(monkeypatch, has_scrub=True)
+    monkeypatch.setattr(caps, "_AGENT_INSTALLS_SCRUBBER", True, raising=True)
+
+    my_data._apply_trace_level_change(adapter, "full_traces")
+
+    assert adapter.metrics_service._trace_level.value == "full_traces"
+
+
+def test_a_substrate_binding_alone_does_NOT_lift_the_guard(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
+) -> None:
+    """The regression this file now exists to prevent.
+
+    A `ciris_server` exposing `egress_scrub` must NOT be enough. Until the agent
+    passes it to the Engine, nothing is redacted, and full_traces would be
+    refused by persist with scrub_treatment_mismatch.
+    """
+    import sys
+    import types
+
+    mod = types.ModuleType("ciris_server")
+    mod.egress_scrub = lambda *a, **k: None  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ciris_server", mod)
+    # ...but the agent is NOT passing it to the Engine.
+    _agent_wires_scrubber(monkeypatch, False)
+
+    with pytest.raises(HTTPException) as exc:
+        my_data._apply_trace_level_change(adapter, "full_traces")
+
+    assert exc.value.status_code == 400
+
+
+def test_wiring_the_scrubber_is_what_lifts_the_guard(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
+) -> None:
+    """The other direction, which 2.9.23 made true in production.
+
+    Once the agent constructs Engine(scrubber=egress_scrub), persist redacts what
+    it stores and full_traces is no longer a claim we cannot back. The guard must
+    then get out of the way — a guard that never lifts is just a ban, and would
+    have quietly kept full_traces unreachable after the wiring landed.
+    """
+    _fake_substrate(monkeypatch, has_scrub=True)
+    _agent_wires_scrubber(monkeypatch, True)
+
+    my_data._apply_trace_level_change(adapter, "full_traces")
+
+    assert adapter.metrics_service._trace_level.value == "full_traces"
+
+
+def test_the_shipped_default_actually_wires_it() -> None:
+    """Pin the production value, so flipping it back is a deliberate act.
+
+    substrate_caps documents that this constant and the Engine construction are
+    "the same fact stated twice". This asserts they agree.
+    """
+    import ciris_engine.logic.utils.substrate_caps as caps
+
+    # Assert the AGENT'S decision and the wiring, NOT the resolved capability:
+    # the latter also depends on the installed substrate, and a dev box can lag
+    # the pin (this one had 0.5.173 installed against a 0.5.176 pin, so the
+    # capability correctly reported False locally while CI would say True).
+    # HELD for 2.9.23 pending measurement of egress_scrub's per-trace cost.
+    # Flip this and the two sites it names together — that pairing is the whole
+    # point of the constant.
+    assert caps._AGENT_INSTALLS_SCRUBBER is False
+
+    src = pathlib.Path(caps.__file__).parent.parent / "persistence" / "db" / "core.py"
+    body = src.read_text(encoding="utf-8")
+    # The Engine call still takes a `scrubber` argument; it is currently None.
+    assert "scrubber=scrubber" in body
+    assert "scrubber = None" in body
+
+
+@pytest.mark.parametrize("level", ["generic", "detailed"])
+def test_the_unaffected_levels_are_untouched(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter, level: str
+) -> None:
+    """`detailed` is what production runs; it passes persist's check unchanged."""
+    _fake_substrate(monkeypatch, has_scrub=False)
+    _agent_wires_scrubber(monkeypatch, False)
+
+    my_data._apply_trace_level_change(adapter, level)
+
+    assert adapter.metrics_service._trace_level.value == level
+
+
+def test_an_unknown_level_still_400s(monkeypatch: pytest.MonkeyPatch, adapter: _Adapter) -> None:
+    """The pre-existing validation must survive the new branch above it."""
+    _fake_substrate(monkeypatch, has_scrub=False)
+    _agent_wires_scrubber(monkeypatch, False)
+
+    with pytest.raises(HTTPException) as exc:
+        my_data._apply_trace_level_change(adapter, "sideways")
+
+    assert exc.value.status_code == 400
+    assert "Invalid trace_level" in str(exc.value.detail)
+
+
+def test_an_unimportable_substrate_is_treated_as_cannot_scrub(
+    monkeypatch: pytest.MonkeyPatch, adapter: _Adapter
+) -> None:
+    """Fail closed. An import error is not evidence that scrubbing works."""
+    monkeypatch.setitem(sys.modules, "ciris_server", None)  # import raises
+
+    assert my_data._substrate_can_scrub() is False

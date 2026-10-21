@@ -464,8 +464,12 @@ class TestRejectHandler:
                 follow_up_id = await reject_handler.handle(result, test_thought, dispatch_context)
 
                 # Verify thought was marked as failed
+                # Written under the thought's own occurrence, never an assumed "default" (#1250).
                 mock_persistence.update_thought_status.assert_called_with(
-                    thought_id="thought_123", status=ThoughtStatus.FAILED, final_action=result
+                    thought_id="thought_123",
+                    status=ThoughtStatus.FAILED,
+                    occurrence_id=test_thought.agent_occurrence_id,
+                    final_action=result,
                 )
 
                 # REJECT is terminal - no follow-up even on error

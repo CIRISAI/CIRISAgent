@@ -189,7 +189,7 @@ class TestTelemetryUnifiedEndpoint:
         async def mock_get_aggregated_telemetry(**kwargs):
             if "view" in kwargs:
                 raise TypeError("get_aggregated_telemetry() got an unexpected keyword argument 'view'")
-            return {"bus": {}, "type": {}, "instance": {}, "covenant": {}}
+            return {"bus": {}, "type": {}, "instance": {}, "accord": {}}
 
         mock_telemetry.get_aggregated_telemetry = mock_get_aggregated_telemetry
 
@@ -211,7 +211,7 @@ class TestTelemetryUnifiedEndpoint:
                 "bus": {"communication": {"messages": 10}},
                 "type": {"service": {"count": 5}},
                 "instance": {"api_0": {"uptime": 3600}},
-                "covenant": {"benevolence": 0.95},
+                "accord": {"benevolence": 0.95},
             }
         )
 
@@ -361,15 +361,15 @@ class TestTelemetryResourcesEndpoint:
         assert data["data"]["current"]["active_threads"] == 0
 
 
-class TestCovenantMetrics:
-    """Test covenant metrics aggregation."""
+class TestAccordMetrics:
+    """Test accord metrics aggregation."""
 
-    def test_covenant_metrics_in_aggregation(self, client, mock_app_state):
-        """Test that covenant metrics are included in telemetry aggregation."""
-        # Setup: Mock telemetry with covenant metrics
+    def test_accord_metrics_in_aggregation(self, client, mock_app_state):
+        """Test that accord metrics are included in telemetry aggregation."""
+        # Setup: Mock telemetry with accord metrics
         mock_app_state.telemetry_service.get_aggregated_telemetry = AsyncMock(
             return_value={
-                "covenant": {
+                "accord": {
                     "benevolence": 0.95,
                     "integrity": 0.98,
                     "wisdom": 0.87,
@@ -385,15 +385,15 @@ class TestCovenantMetrics:
         # Act: Get aggregated telemetry
         response = client.get("/telemetry/unified", headers={"Authorization": "Bearer admin:test"})
 
-        # Assert: Covenant metrics should be present
+        # Assert: Accord metrics should be present
         if response.status_code == 200:
             data = response.json()
-            # Check if covenant metrics are in response
-            if "covenant" in data:
-                assert "benevolence" in data["covenant"]
-                assert data["covenant"]["benevolence"] == 0.95
-            elif "data" in data and "covenant" in data["data"]:
-                assert "benevolence" in data["data"]["covenant"]
+            # Check if accord metrics are in response
+            if "accord" in data:
+                assert "benevolence" in data["accord"]
+                assert data["accord"]["benevolence"] == 0.95
+            elif "data" in data and "accord" in data["data"]:
+                assert "benevolence" in data["data"]["accord"]
 
 
 class TestEdgeCases:
@@ -445,7 +445,7 @@ def test_all_production_bugs_have_tests():
         "unexpected keyword argument view",
         "empty logs response",
         "null tags in metrics",
-        "covenant metrics missing",
+        "accord metrics missing",
     ]
 
     test_methods = [
@@ -453,7 +453,7 @@ def test_all_production_bugs_have_tests():
         "test_unified_handles_unexpected_view_parameter",
         "test_logs_returns_empty_when_no_logging",
         "test_metrics_with_null_tags",
-        "test_covenant_metrics_in_aggregation",
+        "test_accord_metrics_in_aggregation",
     ]
 
     # Verify each bug has a test

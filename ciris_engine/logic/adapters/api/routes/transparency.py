@@ -150,7 +150,14 @@ async def _get_active_agents(request: Request) -> int:
     return 1  # Default to 1
 
 
-@router.get("/feed", response_model=TransparencyStats)
+@router.get(
+    "/feed",
+    responses={
+        400: {"description": "Hours must be between 1 and 168 (7 days)"},
+        500: {"description": "Failed to retrieve transparency statistics"},
+        503: {"description": "Audit service not available"},
+    },
+)
 async def get_transparency_feed(
     request: Request,
     hours: int = 24,
@@ -234,7 +241,7 @@ async def get_transparency_feed(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve transparency statistics: {str(e)}")
 
 
-@router.get("/policy", response_model=TransparencyPolicy)
+@router.get("/policy")
 async def get_transparency_policy() -> TransparencyPolicy:
     """
     Get transparency policy information.
@@ -317,7 +324,7 @@ class TracesListResponse(BaseModel):
     consent_given: bool = Field(..., description="Whether metrics consent is active")
 
 
-@router.get("/traces", response_model=TracesListResponse)
+@router.get("/traces")
 async def get_coherence_traces(
     request: Request,
     limit: int = 10,
@@ -330,24 +337,24 @@ async def get_coherence_traces(
 
     Requires metrics consent to be enabled.
     """
-    # Try to get covenant metrics service from adapter registry
-    covenant_service = None
+    # Try to get accord metrics service from adapter registry
+    accord_service = None
 
     # Check if we have access to the runtime's adapter services
     runtime = getattr(request.app.state, "runtime", None)
     if runtime:
-        # Try to find the covenant metrics service in loaded adapters
+        # Try to find the accord metrics service in loaded adapters
         # Adapters are stored in runtime.adapters (a list)
         for adapter in getattr(runtime, "adapters", []):
             if hasattr(adapter, "metrics_service"):
-                covenant_service = adapter.metrics_service
+                accord_service = adapter.metrics_service
                 break
 
     # Also check app.state directly
-    if not covenant_service:
-        covenant_service = getattr(request.app.state, "covenant_metrics_service", None)
+    if not accord_service:
+        accord_service = getattr(request.app.state, "accord_metrics_service", None)
 
-    if not covenant_service:
+    if not accord_service:
         # Return empty response if service not loaded
         return TracesListResponse(
             traces=[],
@@ -356,12 +363,12 @@ async def get_coherence_traces(
         )
 
     # Get consent status
-    consent_given = getattr(covenant_service, "_consent_given", False)
+    consent_given = getattr(accord_service, "_consent_given", False)
 
     # Get completed traces
     traces = []
-    if hasattr(covenant_service, "get_completed_traces"):
-        raw_traces = covenant_service.get_completed_traces()
+    if hasattr(accord_service, "get_completed_traces"):
+        raw_traces = accord_service.get_completed_traces()
         for trace in raw_traces[-limit:]:  # Get last N traces
             trace_dict = trace.to_dict() if hasattr(trace, "to_dict") else trace
             traces.append(
@@ -393,8 +400,8 @@ async def get_coherence_traces(
     )
 
 
-def _find_covenant_service_from_registry(request: Request) -> Optional[Any]:
-    """Find covenant service from ServiceRegistry."""
+def _find_accord_service_from_registry(request: Request) -> Optional[Any]:
+    """Find accord service from ServiceRegistry."""
     from ciris_engine.schemas.runtime.enums import ServiceType
 
     service_registry = getattr(request.app.state, "service_registry", None)
@@ -405,7 +412,7 @@ def _find_covenant_service_from_registry(request: Request) -> Optional[Any]:
         providers = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
         for provider in providers:
             if hasattr(provider, "get_latest_trace"):
-                logger.info(f"[TRACE_API] Found covenant service via ServiceRegistry: {provider.__class__.__name__}")
+                logger.info(f"[TRACE_API] Found accord service via ServiceRegistry: {provider.__class__.__name__}")
                 return provider
     except Exception as e:
         logger.warning(f"[TRACE_API] Error querying ServiceRegistry: {e}")
@@ -413,34 +420,34 @@ def _find_covenant_service_from_registry(request: Request) -> Optional[Any]:
     return None
 
 
-def _find_covenant_service_from_runtime(request: Request) -> Optional[Any]:
-    """Find covenant service from runtime.adapters."""
+def _find_accord_service_from_runtime(request: Request) -> Optional[Any]:
+    """Find accord service from runtime.adapters."""
     runtime = getattr(request.app.state, "runtime", None)
     if not runtime:
         return None
 
     for adapter in getattr(runtime, "adapters", []):
         if hasattr(adapter, "metrics_service"):
-            logger.info("[TRACE_API] Found covenant service via runtime.adapters")
+            logger.info("[TRACE_API] Found accord service via runtime.adapters")
             return adapter.metrics_service
 
     return None
 
 
-def _find_covenant_service(request: Request) -> Optional[Any]:
-    """Find covenant service using all available lookup methods."""
+def _find_accord_service(request: Request) -> Optional[Any]:
+    """Find accord service using all available lookup methods."""
     # Try ServiceRegistry first (modular adapters)
-    service = _find_covenant_service_from_registry(request)
+    service = _find_accord_service_from_registry(request)
     if service:
         return service
 
     # Fallback: check runtime.adapters (core adapters)
-    service = _find_covenant_service_from_runtime(request)
+    service = _find_accord_service_from_runtime(request)
     if service:
         return service
 
     # Final fallback: direct app.state
-    return getattr(request.app.state, "covenant_metrics_service", None)
+    return getattr(request.app.state, "accord_metrics_service", None)
 
 
 def _trace_to_response(trace: Any) -> CompleteTraceResponse:
@@ -468,20 +475,20 @@ def _trace_to_response(trace: Any) -> CompleteTraceResponse:
     )
 
 
-@router.get("/traces/latest", response_model=Optional[CompleteTraceResponse])
+@router.get("/traces/latest")
 async def get_latest_trace(request: Request) -> Optional[CompleteTraceResponse]:
     """
     Get the most recently captured reasoning trace.
 
     Returns the latest complete trace with all 6 components.
     """
-    covenant_service = _find_covenant_service(request)
+    accord_service = _find_accord_service(request)
 
-    if not covenant_service or not hasattr(covenant_service, "get_latest_trace"):
-        logger.warning("[TRACE_API] No covenant service found or no get_latest_trace method")
+    if not accord_service or not hasattr(accord_service, "get_latest_trace"):
+        logger.warning("[TRACE_API] No accord service found or no get_latest_trace method")
         return None
 
-    trace = covenant_service.get_latest_trace()
+    trace = accord_service.get_latest_trace()
     logger.debug(f"[TRACE_API] get_latest_trace returned: {trace is not None}")
 
     if not trace:

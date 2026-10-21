@@ -7,24 +7,15 @@ from .correlations import (
     update_correlation,
 )
 from .deferral import get_deferral_report_context, save_deferral_report_mapping
-
-# Backwards compatibility - DSAR functions now use universal tickets table
-from .dsar import (
-    create_dsar_ticket,
-    get_dsar_ticket,
-    list_dsar_tickets_by_email,
-    list_dsar_tickets_by_status,
-    update_dsar_ticket_status,
-)
 from .graph import (
     add_graph_edge,
     add_graph_node,
-    delete_graph_edge,
     delete_graph_node,
     get_all_graph_nodes,
     get_edges_for_node,
     get_graph_node,
     get_nodes_by_type,
+    get_persist_engine,
 )
 from .identity import (
     get_identity_for_context,
@@ -44,6 +35,7 @@ from .tasks import (
     get_recent_completed_tasks,
     get_task_by_id,
     get_task_by_id_any_occurrence,
+    get_task_raw_context,
     get_tasks_by_status,
     get_tasks_older_than,
     get_top_tasks,
@@ -83,6 +75,7 @@ __all__ = [
     "get_all_tasks",
     "get_task_by_id",
     "get_task_by_id_any_occurrence",
+    "get_task_raw_context",
     "get_tasks_by_status",
     "get_recent_completed_tasks",
     "get_top_tasks",
@@ -111,7 +104,6 @@ __all__ = [
     "get_nodes_by_type",
     "delete_graph_node",
     "add_graph_edge",
-    "delete_graph_edge",
     "get_edges_for_node",
     "add_correlation",
     "add_correlation_with_telemetry",
@@ -134,10 +126,6 @@ __all__ = [
     "list_tickets",
     "delete_ticket",
     "get_tickets_by_correlation_id",
-    # DSAR backwards compatibility (deprecated - use tickets)
-    "create_dsar_ticket",
-    "get_dsar_ticket",
-    "update_dsar_ticket_status",
-    "list_dsar_tickets_by_status",
-    "list_dsar_tickets_by_email",
+    # 2.9.0: persist Engine accessor (CIRISAgent#763 Lane A wiring)
+    "get_persist_engine",
 ]

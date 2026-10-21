@@ -394,6 +394,22 @@ class TestPricingConfigLoading:
 class TestGetPricingConfig:
     """Test suite for global pricing configuration management."""
 
+    @pytest.fixture(autouse=True)
+    def _restore_global_pricing_config(self):
+        """Put the module-global pricing config back after each test.
+
+        These tests set `_pricing_config` to a MagicMock. Left in place, every
+        later LLMPricingCalculator in the same xdist worker prices calls with a
+        mock and the cost f-string raises TypeError — which surfaced as a failure
+        in test_llm_budget_wiring whenever pytest-split put both files on one
+        worker.
+        """
+        import ciris_engine.config.pricing_models as pricing_models
+
+        saved = pricing_models._pricing_config
+        yield
+        pricing_models._pricing_config = saved
+
     @patch("ciris_engine.config.pricing_models.PricingConfig.load_from_file")
     def test_get_pricing_config_first_call(self, mock_load):
         """Test first call to get_pricing_config loads from file."""

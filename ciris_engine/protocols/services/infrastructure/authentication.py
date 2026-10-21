@@ -6,15 +6,17 @@ Authentication = "Who are you?"
 
 from abc import abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Protocol, Tuple, Union
 
 from ...runtime.base import ServiceProtocol
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import Task
+    from ciris_engine.schemas.services.attestation import AttestationCacheStatus, AttestationResult
     from ciris_engine.schemas.services.authority_core import TokenType, WACertificate, WARole
 else:
     from ciris_engine.schemas.services.authority_core import WACertificate, WARole, TokenType
+    from ciris_engine.schemas.services.attestation import AttestationCacheStatus, AttestationResult
 
 from ciris_engine.schemas.services.authority.wise_authority import AuthenticationResult, TokenVerification, WAUpdate
 
@@ -82,7 +84,7 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    def verify_token_sync(self, token: str) -> Optional[Dict[str, Any]]:
+    def verify_token_sync(self, token: str) -> Optional[TokenVerification]:
         """Synchronously verify a token (for non-async contexts)."""
         ...
 
@@ -145,6 +147,19 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
+    async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
+        """Sign arbitrary data with a WA's private key.
+
+        Args:
+            wa_id: The WA ID to sign with
+            data: The data to sign
+
+        Returns:
+            Base64-encoded signature
+        """
+        ...
+
+    @abstractmethod
     async def verify_task_signature(self, task: "Task") -> bool:
         """Verify a task's signature.
 
@@ -156,4 +171,57 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
     @abstractmethod
     async def get_system_wa_id(self) -> Optional[str]:
         """Get the system WA ID for signing system tasks."""
+        ...
+
+    # Attestation methods (CIRISVerify integration)
+
+    @abstractmethod
+    async def run_attestation(
+        self,
+        mode: str = "partial",
+        play_integrity_token: Optional[str] = None,
+        play_integrity_nonce: Optional[str] = None,
+        force_refresh: bool = False,
+    ) -> "AttestationResult":
+        """Run full attestation check and cache the result.
+
+        This wraps calls to CIRISVerify and caches the result for subsequent
+        calls. The cache is used by both the startup badge and Trust page.
+
+        Args:
+            mode: Attestation mode - 'full' or 'partial' (default)
+            play_integrity_token: Optional Google Play Integrity token
+            play_integrity_nonce: Nonce used for Play Integrity request
+            force_refresh: Force re-run even if cache is valid
+
+        Returns:
+            AttestationResult with all verification details
+        """
+        ...
+
+    @abstractmethod
+    def get_cached_attestation(self) -> Optional["AttestationResult"]:
+        """Get the cached attestation result if available and not expired.
+
+        Returns:
+            Cached AttestationResult or None if cache is empty/expired
+        """
+        ...
+
+    @abstractmethod
+    def get_attestation_cache_status(self) -> "AttestationCacheStatus":
+        """Get status of the attestation cache.
+
+        Returns:
+            AttestationCacheStatus with cache metadata
+        """
+        ...
+
+    @abstractmethod
+    def is_attestation_in_progress(self) -> bool:
+        """Check if attestation is currently running.
+
+        Returns:
+            True if attestation is in progress
+        """
         ...

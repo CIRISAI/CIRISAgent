@@ -6,11 +6,13 @@ These replace all Dict[str, Any] usage in logic/telemetry/comprehensive_collecto
 
 from typing import Any, Dict, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthDetails(BaseModel):
     """Health details for system components."""
+
+    model_config = ConfigDict(defer_build=True)
 
     adapters: str = Field("unknown", description="Adapter health status")
     services: str = Field("unknown", description="Service health status")
@@ -20,6 +22,8 @@ class HealthDetails(BaseModel):
 
 class HealthStatus(BaseModel):
     """Overall system health status."""
+
+    model_config = ConfigDict(defer_build=True)
 
     overall: str = Field("unknown", description="Overall health: healthy, degraded, critical, error, unknown")
     details: HealthDetails = Field(
@@ -31,6 +35,8 @@ class HealthStatus(BaseModel):
 class MetricEntry(BaseModel):
     """A single metric history entry."""
 
+    model_config = ConfigDict(defer_build=True)
+
     timestamp: str = Field(..., description="ISO timestamp")
     value: float = Field(..., description="Metric value")
     tags: Dict[str, str] = Field(default_factory=dict, description="Metric tags")
@@ -39,6 +45,8 @@ class MetricEntry(BaseModel):
 class ProcessorStateSnapshot(BaseModel):
     """Snapshot of processor state."""
 
+    model_config = ConfigDict(defer_build=True)
+
     thoughts_pending: int = Field(0, description="Thoughts pending")
     thoughts_processing: int = Field(0, description="Thoughts processing")
     current_round: int = Field(0, description="Current round number")
@@ -46,6 +54,8 @@ class ProcessorStateSnapshot(BaseModel):
 
 class SingleStepResult(BaseModel):
     """Result from executing a single processing step."""
+
+    model_config = ConfigDict(defer_build=True)
 
     status: str = Field(..., description="Status: completed, error")
     error: Optional[str] = Field(None, description="Error message if failed")
@@ -60,6 +70,8 @@ class SingleStepResult(BaseModel):
 
 class ProcessingQueueStatus(BaseModel):
     """Status of the processing queue."""
+
+    model_config = ConfigDict(defer_build=True)
 
     status: Optional[str] = Field(None, description="Status: available, unavailable")
     size: Optional[int] = Field(None, description="Queue size")

@@ -267,8 +267,8 @@ class TestAPICommunicationMetadata:
         # Start the service
         await communication_service.start()
 
-        # Set up message channel mapping
-        app_state.message_channel_map = {"api_127.0.0.1_8080": "msg-123"}
+        # Set up message channel mapping — per-channel FIFO queue of pending ids
+        app_state.message_channel_map = {"api_127.0.0.1_8080": ["msg-123"]}
 
         # Mock notify function
         with patch("ciris_engine.logic.adapters.api.routes.agent.store_message_response") as mock_notify:
@@ -278,7 +278,7 @@ class TestAPICommunicationMetadata:
                 )
 
                 # Verify notification was attempted
-                mock_notify.assert_called_once_with("msg-123", "Message with notification")
+                mock_notify.assert_called_once_with("msg-123", "Message with notification", task_id=None)
 
     @pytest.mark.asyncio
     async def test_service_health_check(self, communication_service):

@@ -184,6 +184,33 @@ class TestRuntimeAdapterManager:
             assert result.error == "Load failed"
 
     @pytest.mark.asyncio
+    def test_unload_absent_adapter_is_marked_not_loaded_not_a_hard_error(self, adapter_manager):
+        """Unloading an already-absent adapter must be distinguishable from a real failure.
+
+        Unload converges to absent, so "it was already gone" satisfies the
+        caller's intent — DELETE semantics. It happens routinely: a retry, a
+        double-unload during teardown, two callers racing one id.
+
+        It used to log WARNING here and ERROR again at the API route, so ordinary
+        teardown emitted incidents. On 2026-08-02 a Staged QA run with a **100%
+        pass rate** failed anyway because the incident gate counted them — and
+        the postgres leg passed the same code, which is what exposed it as a
+        race rather than a defect.
+
+        `details["reason"] == "not_loaded"` is the load-bearing part: it is what
+        lets the route keep ERROR for genuine unload failures while staying quiet
+        about this one. Assert it explicitly, or the two halves drift apart and
+        the incidents come back.
+        """
+        result = adapter_manager._validate_adapter_unload_eligibility("never_loaded")
+
+        assert result is not None, "an absent adapter must not be treated as eligible"
+        assert result.success is False
+        assert (result.details or {}).get("reason") == "not_loaded", (
+            "the route keys on details['reason'] to decide INFO vs ERROR; without "
+            "it, routine teardown logs ERROR and trips the incident gate again"
+        )
+
     async def test_unload_adapter_success(self, adapter_manager, mock_time_service):
         """Test successful adapter unloading."""
         # Setup - add an adapter
@@ -540,6 +567,12 @@ class TestRuntimeAdapterManager:
             return_value={"adapter.test_id.config": {"test": "value"}, "adapter.test_id.type": "cli"}
         )
 
+        # Mock get_config to return occurrence_id="default" for multi-occurrence safety check
+        mock_occurrence_entry = Mock()
+        mock_occurrence_entry.value = Mock()
+        mock_occurrence_entry.value.str_value = "default"  # Must match current occurrence
+        mock_config.get_config = AsyncMock(return_value=mock_occurrence_entry)
+
         mock_initializer = Mock()
         mock_initializer.config_service = mock_config
         mock_runtime.service_initializer = mock_initializer
@@ -550,11 +583,47 @@ class TestRuntimeAdapterManager:
         await adapter_manager._save_adapter_config_to_graph("test_id", "cli", config)
         mock_config.set_config.assert_called()
 
-        # Test remove - now uses list_configs and set_config to None
+        # Test remove - now uses get_config for occurrence check, then list_configs and set_config to None
         await adapter_manager._remove_adapter_config_from_graph("test_id")
+        # Should have called get_config for occurrence check
+        mock_config.get_config.assert_called()
         mock_config.list_configs.assert_called_once_with(prefix="adapter.test_id")
         # Should set each config to None to clear it
         assert mock_config.set_config.call_count >= 2  # At least 2 configs to clear
+
+    @pytest.mark.asyncio
+    async def test_remove_config_blocks_for_different_occurrence(self, adapter_manager, mock_runtime):
+        """Test that removing adapter config is blocked when adapter belongs to different occurrence.
+
+        This tests the multi-occurrence safety mechanism that prevents cross-contamination
+        in shared database deployments where multiple occurrences share the same PostgreSQL database.
+        """
+        # Setup mock config service on service_initializer
+        mock_config = AsyncMock()
+        mock_config.set_config = AsyncMock()
+        mock_config.list_configs = AsyncMock(
+            return_value={"adapter.other_id.config": {"test": "value"}, "adapter.other_id.type": "cli"}
+        )
+
+        # Mock get_config to return occurrence_id="other_occurrence" (different from current "default")
+        mock_occurrence_entry = Mock()
+        mock_occurrence_entry.value = Mock()
+        mock_occurrence_entry.value.str_value = "other_occurrence"  # Different from current occurrence
+        mock_config.get_config = AsyncMock(return_value=mock_occurrence_entry)
+
+        mock_initializer = Mock()
+        mock_initializer.config_service = mock_config
+        mock_runtime.service_initializer = mock_initializer
+
+        # Test remove - should be blocked because adapter belongs to "other_occurrence"
+        await adapter_manager._remove_adapter_config_from_graph("other_id")
+
+        # Should have called get_config for occurrence check
+        mock_config.get_config.assert_called_once()
+        # list_configs should NOT be called because the check fails early
+        mock_config.list_configs.assert_not_called()
+        # set_config should only have the initial calls, not the removal calls
+        # (set_config is not called after save during this test)
 
     @pytest.mark.asyncio
     async def test_config_listener_registration(self, adapter_manager, mock_runtime):
@@ -1408,9 +1477,10 @@ class TestSanitizeConfigParamsRefactored:
 
         result = adapter_manager._sanitize_config_params("api", config)
 
-        assert result.adapter_config is not None
-        assert result.adapter_config["api_key"] == MASKED_VALUE
-        assert result.adapter_config["endpoint"] == "https://api.example.com"
+        # adapter_config is now flattened into settings
+        assert result.adapter_config is None
+        assert result.settings["api_key"] == MASKED_VALUE
+        assert result.settings["endpoint"] == "https://api.example.com"
 
     def test_sanitize_config_params_uses_default_patterns(self, adapter_manager):
         """Test unknown adapter types use default patterns."""
@@ -1450,3 +1520,580 @@ class TestSanitizeConfigParamsRefactored:
 
         assert result.adapter_config is None
         assert result.settings["password"] == MASKED_VALUE
+
+
+class TestEnvVarPersistence:
+    """Tests for environment variable persistence functionality."""
+
+    @pytest.fixture
+    def adapter_manager_with_runtime(self):
+        """Create adapter manager with mock runtime."""
+        mock_runtime = Mock()
+        mock_runtime.bus_manager = Mock()
+        mock_runtime.adapters = []
+        mock_runtime.essential_config = Mock()
+        mock_runtime.modules_to_load = []
+        mock_runtime.startup_channel_id = "test_channel"
+        mock_runtime.debug = False
+        mock_runtime.service_registry = Mock()
+
+        mock_time_service = Mock(spec=TimeServiceProtocol)
+        mock_time_service.now.return_value = datetime.now(timezone.utc)
+
+        manager = RuntimeAdapterManager(mock_runtime, mock_time_service)
+        return manager, mock_runtime
+
+    def test_get_env_map_for_adapter_specific(self, adapter_manager_with_runtime):
+        """Test that adapter-specific env mappings are returned."""
+        manager, _ = adapter_manager_with_runtime
+
+        # Home assistant should have specific mappings
+        ha_map = manager._get_env_map_for_adapter("home_assistant")
+        assert "access_token" in ha_map
+        assert ha_map["access_token"] == "HOME_ASSISTANT_TOKEN"
+
+        # Ciris accord metrics should have specific mappings
+        accord_map = manager._get_env_map_for_adapter("ciris_accord_metrics")
+        assert "endpoint_url" in accord_map
+        assert accord_map["endpoint_url"] == "CIRIS_LENS_ENDPOINT"
+
+    def test_get_env_map_for_adapter_default(self, adapter_manager_with_runtime):
+        """Test that unknown adapters get default mappings."""
+        manager, _ = adapter_manager_with_runtime
+
+        # Unknown adapter should get default mappings
+        unknown_map = manager._get_env_map_for_adapter("unknown_adapter")
+        assert "access_token" in unknown_map  # Default mapping
+
+    def test_restore_env_vars_from_config_basic(self, adapter_manager_with_runtime):
+        """Test basic env var restoration from config."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Clear any existing env vars
+        for var in ["HOME_ASSISTANT_TOKEN", "HOME_ASSISTANT_URL"]:
+            os.environ.pop(var, None)
+
+        config = {
+            "access_token": "test_token_123",
+            "base_url": "http://localhost:8123",
+        }
+
+        manager._restore_env_vars_from_config("test_adapter", config, adapter_type="home_assistant")
+
+        assert os.environ.get("HOME_ASSISTANT_TOKEN") == "test_token_123"
+        assert os.environ.get("HOME_ASSISTANT_URL") == "http://localhost:8123"
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+    def test_restore_env_vars_from_saved_env_vars(self, adapter_manager_with_runtime):
+        """Test env var restoration from _saved_env_vars dict."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Clear any existing env vars
+        os.environ.pop("CIRIS_LENS_ENDPOINT", None)
+
+        config = {
+            "_saved_env_vars": {
+                "CIRIS_LENS_ENDPOINT": "https://lens.test.ai/api/v1",
+            },
+        }
+
+        manager._restore_env_vars_from_config("accord_metrics", config, adapter_type="ciris_accord_metrics")
+
+        assert os.environ.get("CIRIS_LENS_ENDPOINT") == "https://lens.test.ai/api/v1"
+
+        # Cleanup
+        os.environ.pop("CIRIS_LENS_ENDPOINT", None)
+
+    def test_restore_env_vars_handles_booleans(self, adapter_manager_with_runtime):
+        """Test that boolean values are converted to strings."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        os.environ.pop("CIRIS_ACCORD_METRICS_CONSENT", None)
+
+        config = {
+            "consent_given": True,
+        }
+
+        manager._restore_env_vars_from_config("accord_metrics", config, adapter_type="ciris_accord_metrics")
+
+        assert os.environ.get("CIRIS_ACCORD_METRICS_CONSENT") == "true"
+
+        # Cleanup
+        os.environ.pop("CIRIS_ACCORD_METRICS_CONSENT", None)
+
+    def test_restore_env_vars_from_oauth_tokens(self, adapter_manager_with_runtime):
+        """Test env var restoration from nested oauth_tokens dict."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_REFRESH_TOKEN", None)
+
+        config = {
+            "oauth_tokens": {
+                "access_token": "oauth_access_token",
+                "refresh_token": "oauth_refresh_token",
+            },
+        }
+
+        manager._restore_env_vars_from_config("ha_adapter", config, adapter_type="home_assistant")
+
+        assert os.environ.get("HOME_ASSISTANT_TOKEN") == "oauth_access_token"
+        assert os.environ.get("HOME_ASSISTANT_REFRESH_TOKEN") == "oauth_refresh_token"
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_REFRESH_TOKEN", None)
+
+    def test_capture_env_vars_for_adapter(self, adapter_manager_with_runtime):
+        """Test capturing current env vars for an adapter."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Set some env vars
+        os.environ["HOME_ASSISTANT_TOKEN"] = "captured_token"
+        os.environ["HOME_ASSISTANT_URL"] = "http://captured.local"
+
+        captured = manager._capture_env_vars_for_adapter("home_assistant")
+
+        assert "HOME_ASSISTANT_TOKEN" in captured
+        assert captured["HOME_ASSISTANT_TOKEN"] == "captured_token"
+        assert "HOME_ASSISTANT_URL" in captured
+        assert captured["HOME_ASSISTANT_URL"] == "http://captured.local"
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+    def test_capture_env_vars_skips_unset(self, adapter_manager_with_runtime):
+        """Test that unset env vars are not captured."""
+        import os
+
+        manager, _ = adapter_manager_with_runtime
+
+        # Ensure env vars are not set
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+        captured = manager._capture_env_vars_for_adapter("home_assistant")
+
+        # Should be empty since nothing is set
+        assert "HOME_ASSISTANT_TOKEN" not in captured
+        assert "HOME_ASSISTANT_URL" not in captured
+
+    @pytest.mark.asyncio
+    async def test_save_adapter_config_captures_env_vars(self, adapter_manager_with_runtime):
+        """Test that saving adapter config also captures env vars."""
+        import os
+
+        manager, mock_runtime = adapter_manager_with_runtime
+
+        # Set env vars
+        os.environ["HOME_ASSISTANT_TOKEN"] = "persist_token"
+        os.environ["HOME_ASSISTANT_URL"] = "http://persist.local"
+
+        # Setup mock config service
+        mock_config = AsyncMock()
+        mock_config.set_config = AsyncMock()
+
+        mock_initializer = Mock()
+        mock_initializer.config_service = mock_config
+        mock_runtime.service_initializer = mock_initializer
+
+        config = AdapterConfig(adapter_type="home_assistant", persist=True)
+
+        await manager._save_adapter_config_to_graph("ha_test", "home_assistant", config)
+
+        # Should have saved env_vars
+        calls = mock_config.set_config.call_args_list
+        env_vars_call = next((c for c in calls if "env_vars" in str(c)), None)
+        assert env_vars_call is not None
+
+        # Cleanup
+        os.environ.pop("HOME_ASSISTANT_TOKEN", None)
+        os.environ.pop("HOME_ASSISTANT_URL", None)
+
+    @pytest.mark.asyncio
+    async def test_save_adapter_config_skips_without_persist(self, adapter_manager_with_runtime):
+        """Test that adapter config is not saved without persist flag."""
+        manager, mock_runtime = adapter_manager_with_runtime
+
+        # Setup mock config service
+        mock_config = AsyncMock()
+        mock_config.set_config = AsyncMock()
+
+        mock_initializer = Mock()
+        mock_initializer.config_service = mock_config
+        mock_runtime.service_initializer = mock_initializer
+
+        config = AdapterConfig(adapter_type="cli", persist=False)
+
+        await manager._save_adapter_config_to_graph("cli_test", "cli", config)
+
+        # Should NOT have called set_config since persist=False
+        mock_config.set_config.assert_not_called()
+
+
+class TestEnrichmentCacheRefresh:
+    """Tests for the _refresh_enrichment_cache_for_adapter method."""
+
+    @pytest.fixture
+    def mock_time_service(self):
+        """Create a mock time service."""
+        mock = Mock(spec=TimeServiceProtocol)
+        mock.now.return_value = datetime.now(timezone.utc)
+        return mock
+
+    @pytest.fixture
+    def mock_runtime_with_enrichment(self):
+        """Create a mock runtime with enrichment tool support."""
+        from ciris_engine.schemas.config.essential import EssentialConfig
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock = Mock()
+        mock.service_registry = Mock()
+        # Initialize _services as empty dict (will be set per-test)
+        mock.service_registry._services = {}
+        mock.config_service = None
+        mock.adapters = []
+        mock.essential_config = EssentialConfig()
+        mock.modules_to_load = []
+        mock.startup_channel_id = "test_channel"
+        mock.debug = False
+        mock.bus_manager = Mock()
+        mock.agent_name = "test"
+        mock.agent_version = "1.0.0"
+        return mock
+
+    @pytest.fixture
+    def adapter_manager(self, mock_runtime_with_enrichment, mock_time_service):
+        """Create an adapter manager instance."""
+        return RuntimeAdapterManager(mock_runtime_with_enrichment, mock_time_service)
+
+    @pytest.fixture
+    def mock_adapter_instance(self, mock_time_service):
+        """Create a mock adapter instance."""
+        adapter = MockAdapter(None)
+        return AdapterInstance(
+            adapter_id="test_adapter",
+            adapter_type="home_assistant",
+            adapter=adapter,
+            config_params=AdapterConfig(adapter_type="home_assistant"),
+            loaded_at=mock_time_service.now(),
+            is_running=True,
+        )
+
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        cache.clear()
+        yield
+        cache.clear()
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_no_tools(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test refresh when no tools are available."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Setup - no tool services (empty _services dict)
+        mock_runtime_with_enrichment.service_registry._services = {}
+
+        # Get initial cache state
+        cache = get_enrichment_cache()
+        initial_entries = len(cache.get_all_entries())
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Cache should not have new entries when no tools available
+        assert len(cache.get_all_entries()) == initial_entries
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_no_enrichment_tools(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test refresh when tools exist but none are marked for enrichment."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create non-enrichment tool
+        tool_info = ToolInfo(
+            name="regular_tool",
+            description="A regular tool",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=False,
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["regular_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
+
+        # Get initial cache state
+        cache = get_enrichment_cache()
+        initial_entries = len(cache.get_all_entries())
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Cache should not have new entries for non-enrichment tools
+        assert len(cache.get_all_entries()) == initial_entries
+        # execute_tool should never be called
+        tool_service.execute_tool = AsyncMock()  # Not called
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_executes_tool(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment, caplog
+    ):
+        """Test that refresh executes enrichment tools and caches results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create enrichment tool
+        tool_info = ToolInfo(
+            name="ha_list_entities",
+            description="List HA entities",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_result = ToolExecutionResult(
+            tool_name="ha_list_entities",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"entities": ["light.living_room", "switch.garage"]},
+            error=None,
+            correlation_id="test-123",
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["ha_list_entities"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(return_value=tool_result)
+
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Verify cache was populated
+        cache = get_enrichment_cache()
+        cached = cache.get("test:ha_list_entities")
+        assert cached is not None
+        assert cached["entities"] == ["light.living_room", "switch.garage"]
+
+        # Verify logging
+        assert "[ENRICHMENT_CACHE] Cached test:ha_list_entities after adapter load" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_skips_existing(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test that refresh skips tools already in cache."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Pre-populate cache
+        cache = get_enrichment_cache()
+        cache.set("test:cached_tool", {"already": "cached"})
+
+        # Create enrichment tool
+        tool_info = ToolInfo(
+            name="cached_tool",
+            description="Already cached",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["cached_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock()  # Should not be called
+
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # execute_tool should not have been called since it's already cached
+        tool_service.execute_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_handles_tool_error(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment, caplog
+    ):
+        """Test that refresh handles tool execution errors gracefully."""
+        from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create enrichment tool
+        tool_info = ToolInfo(
+            name="failing_tool",
+            description="Tool that fails",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["failing_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(side_effect=Exception("Tool execution failed"))
+
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
+
+        # Should not raise
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Should log warning
+        assert "[ENRICHMENT_CACHE] Failed to cache test:failing_tool" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_with_ttl(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment
+    ):
+        """Test that refresh respects TTL in enrichment params."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Create enrichment tool with TTL
+        tool_info = ToolInfo(
+            name="ttl_tool",
+            description="Tool with TTL",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={"_cache_ttl": 60.0},
+        )
+
+        tool_result = ToolExecutionResult(
+            tool_name="ttl_tool",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"value": 42},
+            error=None,
+            correlation_id="test-456",
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["ttl_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(return_value=tool_result)
+
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Verify cache was populated
+        cache = get_enrichment_cache()
+        cached = cache.get("test:ttl_tool")
+        assert cached is not None
+        assert cached["value"] == 42
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_logs_stats(
+        self, adapter_manager, mock_adapter_instance, mock_runtime_with_enrichment, caplog
+    ):
+        """Test that refresh logs cache stats after completion."""
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        tool_info = ToolInfo(
+            name="stats_tool",
+            description="Tool for stats test",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        tool_result = ToolExecutionResult(
+            tool_name="stats_tool",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"result": "ok"},
+            error=None,
+            correlation_id="test-789",
+        )
+
+        tool_service = Mock()
+        tool_service.adapter_id = "test_adapter"
+        tool_service.get_available_tools = AsyncMock(return_value=["stats_tool"])
+        tool_service.get_tool_info = AsyncMock(return_value=tool_info)
+        tool_service.execute_tool = AsyncMock(return_value=tool_result)
+
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "test"}
+
+        mock_runtime_with_enrichment.service_registry._services = {ServiceType.TOOL: [provider]}
+
+        await adapter_manager._refresh_enrichment_cache_for_adapter(mock_adapter_instance)
+
+        # Verify stats were logged
+        assert "[ENRICHMENT_CACHE] Refreshed cache after loading test_adapter" in caplog.text
+        assert "stats:" in caplog.text

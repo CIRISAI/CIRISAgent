@@ -107,7 +107,7 @@ These scripts can be integrated into CI/CD pipelines for automated testing:
 ## Default Credentials
 
 - Username: `admin`
-- Password: `ciris_admin_password`
+- Password: `qa_test_password_12345`
 - Role: `SYSTEM_ADMIN`
 
 ## Notes

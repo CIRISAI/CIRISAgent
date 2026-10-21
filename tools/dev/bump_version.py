@@ -10,6 +10,8 @@ Usage:
 
 This tool updates version in:
     - ciris_engine/constants.py (main version source)
+    - apps/ios/iosApp/Info.plist (iOS CFBundleVersion)
+    - apps/android/build.gradle (Android versionCode + versionName)
     - CIRISGUI/apps/agui/package.json (GUI version)
     - CIRISGUI/apps/agui/lib/ciris-sdk/version.ts (SDK version)
     - README.md (automatically switches between STABLE/BETA RELEASE based on version stage)
@@ -144,6 +146,96 @@ def bump_version(bump_type: str):
         with open(readme_file, "w") as f:
             f.write(readme_content)
         print(f"  Updated README.md to {release_type} {new_version}")
+
+    # Update iOS Info.plist CFBundleVersion + CFBundleShortVersionString
+    ios_plist_file = Path(__file__).parent.parent.parent / "apps" / "ios" / "iosApp" / "Info.plist"
+    if ios_plist_file.exists():
+        with open(ios_plist_file, "r") as f:
+            plist_content = f.read()
+
+        # Update CFBundleVersion (build number, always increment)
+        bundle_version_match = re.search(r"<key>CFBundleVersion</key>\s*<string>(\d+)</string>", plist_content)
+        if bundle_version_match:
+            old_build = int(bundle_version_match.group(1))
+            new_build = old_build + 1
+            plist_content = re.sub(
+                r"(<key>CFBundleVersion</key>\s*<string>)\d+(</string>)",
+                rf"\g<1>{new_build}\2",
+                plist_content,
+            )
+            print(f"  Updated iOS CFBundleVersion: {old_build} -> {new_build}")
+
+        # Update CFBundleShortVersionString (display version, sync with engine)
+        display_version = f"{major}.{minor}.{patch}"
+        old_short_match = re.search(r"<key>CFBundleShortVersionString</key>\s*<string>([^<]+)</string>", plist_content)
+        old_short = old_short_match.group(1) if old_short_match else "unknown"
+        plist_content = re.sub(
+            r"(<key>CFBundleShortVersionString</key>\s*<string>)[^<]+(</string>)",
+            rf"\g<1>{display_version}\2",
+            plist_content,
+        )
+        if old_short != display_version:
+            print(f"  Updated iOS CFBundleShortVersionString: {old_short} -> {display_version}")
+
+        with open(ios_plist_file, "w") as f:
+            f.write(plist_content)
+
+    # Update Android build.gradle
+    android_gradle_file = Path(__file__).parent.parent.parent / "apps" / "android" / "build.gradle"
+    if android_gradle_file.exists():
+        with open(android_gradle_file, "r") as f:
+            gradle_content = f.read()
+
+        # Extract and increment versionCode
+        version_code_match = re.search(r"versionCode (\d+)", gradle_content)
+        if version_code_match:
+            old_code = int(version_code_match.group(1))
+            new_code = old_code + 1
+            gradle_content = re.sub(r"versionCode \d+", f"versionCode {new_code}", gradle_content)
+            print(f"  Updated Android versionCode: {old_code} -> {new_code}")
+
+        # Update versionName (use version without stage suffix for cleaner display)
+        display_version = f"{major}.{minor}.{patch}"
+        gradle_content = re.sub(r'versionName "[^"]+"', f'versionName "{display_version}"', gradle_content)
+        print(f"  Updated Android versionName: {display_version}")
+
+        with open(android_gradle_file, "w") as f:
+            f.write(gradle_content)
+
+    # Update the DESKTOP Compose packageVersion.
+    #
+    # Desktop versioning moved UPSTREAM with the client. The desktop app is now
+    # the uber-jar inside the `ciris-client` wheel, built by CIRISAI/CIRISClient,
+    # so neither desktopApp/build.gradle.kts nor DESKTOP_VERSION_FALLBACK exists
+    # in this tree any more. The blocks that maintained them were removed rather
+    # than left to no-op: a version check that cannot fire reads as coverage.
+    #
+    # NOTE for whoever bumps the client pin: upstream's uber-jar manifest carries
+    # only Main-Class, exactly as ours did, so their build has the same structural
+    # trap that made desktop report 2.3.2 on 2.9.x builds here.
+    # Update client Python version files (android + iOS)
+    display_version = f"{major}.{minor}.{patch}"
+    client_version_files = [
+        ("apps/android/src/main/python/version.py", f"android-{display_version}"),
+        ("android/app/src/main/python/version.py", f"android-{display_version}"),
+        ("ios/CirisiOS/src/ciris_ios/version.py", f"ios-{display_version}"),
+    ]
+    for rel_path, platform_version in client_version_files:
+        version_file = Path(__file__).parent.parent.parent / rel_path
+        if version_file.exists():
+            with open(version_file, "r") as f:
+                content_vf = f.read()
+            old_match = re.search(r'__version__ = "([^"]+)"', content_vf)
+            old_ver = old_match.group(1) if old_match else "unknown"
+            content_vf = re.sub(
+                r'__version__ = "[^"]+"',
+                f'__version__ = "{platform_version}"',
+                content_vf,
+            )
+            with open(version_file, "w") as f:
+                f.write(content_vf)
+            if old_ver != platform_version:
+                print(f"  Updated {rel_path}: {old_ver} -> {platform_version}")
 
     print(f"Version bumped to {new_version}")
     return True

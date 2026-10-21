@@ -1,0 +1,1596 @@
+"""
+My Data endpoints for DSAR self-service.
+
+Allows authenticated users to:
+1. View their hashed agent ID (lens identifier) so they know which traces are theirs
+2. View current accord metrics consent/settings status
+3. Request deletion of their traces from CIRISLens
+4. Update accord metrics settings (trace level, consent)
+
+These endpoints enable GDPR Article 17 (Right to Erasure) self-service
+for data sent to the CIRISLens repository via the accord metrics adapter.
+"""
+
+import asyncio
+import hashlib
+import logging
+import os
+import threading
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Any, Dict, List, Optional, Tuple
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
+
+
+from ..auth import get_current_user
+from ..models import StandardResponse, TokenData
+
+logger = logging.getLogger(__name__)
+
+CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
+
+router = APIRouter(prefix="/my-data", tags=["My Data"])
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
+
+class LensIdentifierResponse(BaseModel):
+    """Response containing the user's lens identifier and accord metrics status."""
+
+    agent_id_hash: str = Field(
+        ..., description="SHA-256 hash (first 16 hex chars) of agent ID used in CIRISLens traces"
+    )
+    agent_id: str = Field(..., description="Raw agent ID (so user can verify the hash)")
+    consent_given: bool = Field(..., description="Whether accord metrics consent is currently active")
+    consent_timestamp: Optional[str] = Field(None, description="When consent was last granted/revoked")
+    # CONSENT DRY (v22): the resolved federation consent set — capture alone
+    # does not ship or score traces. None = resolver unavailable on this wheel.
+    federation_consents: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Resolved v22 consent set {capture, replication, analyze, canonical, aligned} "
+        "via the engine's own readers; 'aligned' False => the Manage Consent card should "
+        "offer a one-tap confirm (authorFederationConsent).",
+    )
+    trace_level: Optional[str] = Field(None, description="Current trace detail level (generic/detailed/full_traces)")
+    traces_sent: int = Field(0, description="Approximate number of trace events sent this session")
+    endpoint_url: Optional[str] = Field(None, description="CIRISLens endpoint traces are sent to")
+
+
+class LensDeletionRequest(BaseModel):
+    """Request to delete traces from CIRISLens."""
+
+    confirm: bool = Field(
+        ...,
+        description="Must be true to confirm deletion. This action is irreversible.",
+    )
+    reason: Optional[str] = Field(
+        None,
+        description="Optional reason for deletion request",
+        max_length=500,
+    )
+
+
+class LensDeletionResponse(BaseModel):
+    """Response for a lens trace deletion request."""
+
+    agent_id_hash: str = Field(..., description="The hashed agent ID whose traces were requested for deletion")
+    status: str = Field(..., description="Status of the deletion request")
+    message: str = Field(..., description="Human-readable status message")
+    lens_request_accepted: bool = Field(
+        False,
+        description="Whether CIRISLens accepted the deletion request",
+    )
+    local_consent_revoked: bool = Field(
+        False,
+        description="Whether local accord metrics consent was also revoked",
+    )
+
+
+class AccordSettingsUpdate(BaseModel):
+    """Request to update accord metrics settings."""
+
+    trace_level: Optional[str] = Field(
+        None,
+        description="Trace detail level: generic, detailed, or full_traces",
+        pattern="^(generic|detailed|full_traces)$",
+    )
+    consent_given: Optional[bool] = Field(
+        None,
+        description="Update consent state. Setting to false stops all trace collection.",
+    )
+
+
+class CapacityFactor(BaseModel):
+    """A single CIRIS capacity factor from CIRISLens scoring."""
+
+    score: float = Field(..., description="Factor score in [0, 1]")
+    components: Dict[str, Any] = Field(default_factory=dict, description="Sub-component values")
+    trace_count: int = Field(0, description="Number of traces contributing to this score")
+    confidence: str = Field("low", description="Confidence level: low | medium | high")
+
+
+class CapacityFactors(BaseModel):
+    """The five CIRIS acronym factors: Consistency, Integrity, Reliability, Incalibration, Steering."""
+
+    C: CapacityFactor = Field(..., description="Core identity / Consistency")
+    I_int: CapacityFactor = Field(..., description="Integrity (signing, chain verification)")
+    R: CapacityFactor = Field(..., description="Resilience / Reliability (drift stability)")
+    I_inc: CapacityFactor = Field(..., description="Incompleteness / Incalibration (humility, deferral)")
+    S: CapacityFactor = Field(..., description="Signalling gratitude / Steering (ethical faculties)")
+
+
+class CapacityMetadata(BaseModel):
+    """Metadata describing the scoring window."""
+
+    window_start: Optional[str] = None
+    window_end: Optional[str] = None
+    total_traces: int = 0
+    non_exempt_traces: int = 0
+
+
+class CapacityResponse(BaseModel):
+    """User-facing CIRIS capacity reading for the current agent's template.
+
+    Driven by CIRISLens fleet scoring (composite_score/factors/category) and
+    — optionally — a **local** score computed from this occurrence's live
+    signals. Presented to the user via the cell visualization; intentionally
+    NOT exposed to the agent's own reasoning context to avoid score-chasing
+    / self-monitoring anxiety.
+    """
+
+    agent_name: str = Field(..., description="Template name this score is for (e.g. Ally, Scout)")
+    composite_score: float = Field(..., description="Aggregate fleet CIRIS score in [0, 1]")
+    fragility_index: float = Field(..., description="Higher = more fragile; unbounded")
+    category: str = Field(..., description="Fleet: high_capacity | healthy | moderate | high_fragility")
+    factors: CapacityFactors = Field(..., description="Fleet per-factor breakdown")
+    metadata: CapacityMetadata = Field(default_factory=CapacityMetadata)
+    cached: bool = Field(False, description="True if served from local cache rather than live lens fetch")
+    # Local score — populated when the request uses ?scope=local|both.
+    # Null when scope=fleet (default) so the existing client contract is
+    # unchanged. The local computation is a CCA approximation in the
+    # Accord 1.3 form (J = μ·k_eff·λ·σ·τ, correlation folded into k_eff)
+    # over fast-to-read runtime signals.
+    local_score: Optional[float] = Field(
+        None, description="This occurrence's own capacity score in [0, 1]; null when scope=fleet."
+    )
+    local_category: Optional[str] = Field(None, description="This occurrence's category; null when scope=fleet.")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_agent_id_hash_from_signer() -> str:
+    """Compute agent_id_hash from the persist Engine's local signer.
+
+    2.9.7 (second-signer removal): derived from the engine's federation
+    signing pubkey — the ONE signer identity. This CHANGES the hash from
+    the pre-2.9.7 CIRISVerify-key derivation (accepted breakage).
+
+    This hash is unique per agent instance (based on the signing key),
+    not per template name. This ensures multiple instances of the same
+    template (e.g., 30 "Ally" agents) have distinct hashes.
+
+    Must stay in sync with ciris_adapters/ciris_accord_metrics/services.py
+    (_compute_instance_hash).
+    """
+    try:
+        import base64
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not wired")
+        pubkey_bytes = base64.b64decode(engine.local_public_key_b64())
+        return hashlib.sha256(pubkey_bytes).hexdigest()[:16]
+    except Exception as e:
+        logger.warning(f"Could not compute agent_id_hash from engine signer: {e}")
+        return "unknown"
+
+
+def _compute_agent_id_hash(agent_id: str) -> str:
+    """DEPRECATED: Legacy hash from agent name.
+
+    New code should use _compute_agent_id_hash_from_signer() or get
+    agent_id_hash from the metrics service.
+
+    This is kept for backward compatibility in tests.
+    """
+    return hashlib.sha256(agent_id.encode()).hexdigest()[:16]
+
+
+def _get_accord_adapter(request: Request) -> Any:
+    """Get the accord metrics adapter from app state, or None if not loaded.
+
+    Searches multiple locations:
+    1. adapter_manager.loaded_adapters (dynamically loaded adapters)
+    2. runtime.adapters (bootstrap adapters loaded at startup)
+    """
+    # 1. Check adapter_manager.loaded_adapters (dynamically loaded)
+    adapter_manager = None
+    for attr in ("main_runtime_control_service", "runtime_control_service"):
+        svc = getattr(request.app.state, attr, None)
+        if svc:
+            adapter_manager = getattr(svc, "adapter_manager", None)
+            if adapter_manager:
+                break
+
+    if not adapter_manager:
+        runtime = getattr(request.app.state, "runtime", None)
+        if runtime:
+            adapter_manager = getattr(runtime, "adapter_manager", None)
+
+    if adapter_manager:
+        loaded = getattr(adapter_manager, "loaded_adapters", {})
+        for adapter_id, instance in loaded.items():
+            adapter = getattr(instance, "adapter", instance)
+            type_name = type(adapter).__name__
+            if "AccordMetrics" in type_name or "accord_metrics" in adapter_id:
+                logger.debug(f"_get_accord_adapter: Found in adapter_manager: {adapter_id}")
+                return adapter
+
+    # 2. Check runtime.adapters (bootstrap adapters)
+    runtime = getattr(request.app.state, "runtime", None)
+    if runtime:
+        for adapter in getattr(runtime, "adapters", []):
+            type_name = type(adapter).__name__
+            if "AccordMetrics" in type_name:
+                logger.debug(f"_get_accord_adapter: Found in runtime.adapters: {type_name}")
+                return adapter
+
+    logger.debug("_get_accord_adapter: No AccordMetrics adapter found")
+    return None
+
+
+def _get_agent_id(request: Request) -> Optional[str]:
+    """Get the current agent ID from runtime.
+
+    Checks multiple paths since identity may be populated at different stages.
+    The signing key (via CIRISVerify) is always available and provides a
+    deterministic agent identifier, so this function should never return None.
+    """
+    runtime = getattr(request.app.state, "runtime", None)
+    if not runtime:
+        logger.error(
+            "_get_agent_id: runtime MISSING from app.state! "
+            f"app.state attrs: {[a for a in dir(request.app.state) if not a.startswith('_')]}"
+        )
+        return None
+
+    # Primary path: runtime.agent_identity.agent_id
+    identity = getattr(runtime, "agent_identity", None)
+    if identity and hasattr(identity, "agent_id"):
+        agent_id = identity.agent_id
+        if agent_id is not None:
+            logger.debug(f"_get_agent_id: Found via runtime.agent_identity: {agent_id}")
+            return str(agent_id)
+        else:
+            logger.debug("_get_agent_id: runtime.agent_identity exists but agent_id is None")
+    else:
+        logger.debug(
+            f"_get_agent_id: runtime.agent_identity not available "
+            f"(identity={identity}, type={type(identity).__name__ if identity else 'None'})"
+        )
+
+    # Fallback: identity_manager.agent_identity
+    identity_mgr = getattr(runtime, "identity_manager", None)
+    if identity_mgr:
+        mgr_identity = getattr(identity_mgr, "agent_identity", None)
+        if mgr_identity and hasattr(mgr_identity, "agent_id") and mgr_identity.agent_id:
+            logger.debug(f"_get_agent_id: Found via identity_manager: {mgr_identity.agent_id}")
+            return str(mgr_identity.agent_id)
+        else:
+            logger.debug(
+                f"_get_agent_id: identity_manager exists but no agent_id (mgr_identity={mgr_identity is not None})"
+            )
+
+    # Fallback: essential_config.agent_name (always set)
+    essential = getattr(runtime, "essential_config", None)
+    if essential:
+        agent_name = getattr(essential, "agent_name", None)
+        if agent_name:
+            logger.info(f"_get_agent_id: Using essential_config.agent_name={agent_name}")
+            return str(agent_name)
+        else:
+            logger.debug("_get_agent_id: essential_config exists but agent_name is None/empty")
+    else:
+        logger.debug("_get_agent_id: no essential_config on runtime")
+
+    # Legacy fallback
+    legacy = getattr(runtime, "agent_id", None)
+    if legacy:
+        logger.debug(f"_get_agent_id: Using legacy runtime.agent_id={legacy}")
+        return str(legacy)
+
+    # Signing key fallback: the engine's derived key id is deterministic
+    # from the local Ed25519 signing identity (2.9.7: the ONE signer).
+    try:
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is not None:
+            key_id = str(engine.local_derived_key_id())
+            logger.info(f"_get_agent_id: Using engine signer key_id={key_id}")
+            return key_id
+        else:
+            logger.warning("_get_agent_id: persist engine not wired")
+    except Exception as e:
+        logger.error(f"_get_agent_id: Engine signer fallback FAILED: {e}", exc_info=True)
+
+    logger.error(
+        "_get_agent_id: ALL fallbacks exhausted! Could not determine agent_id. "
+        f"runtime={type(runtime).__name__}, "
+        f"has_identity={identity is not None}, "
+        f"has_identity_mgr={identity_mgr is not None}, "
+        f"has_essential={essential is not None}, "
+        f"runtime_attrs={[a for a in dir(runtime) if not a.startswith('_') and 'agent' in a.lower()]}"
+    )
+    return None
+
+
+def _update_env_consent(consent_given: bool) -> None:
+    """Update CIRIS_ACCORD_METRICS_CONSENT in the .env file.
+
+    This persists consent changes so they survive app restarts.
+
+    Args:
+        consent_given: New consent state to persist
+    """
+    import os
+    import re
+    from pathlib import Path
+
+    # Find the .env file (same logic as setup wizard)
+    config_dir = Path(os.environ.get("CIRIS_CONFIG_DIR", "."))
+    env_path = config_dir / ".env"
+
+    if not env_path.exists():
+        logger.warning(f"Cannot persist consent: .env file not found at {env_path}")
+        return
+
+    # Read current contents
+    with open(env_path) as f:
+        content = f.read()
+
+    consent_value = "true" if consent_given else "false"
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    # Update CIRIS_ACCORD_METRICS_CONSENT
+    if "CIRIS_ACCORD_METRICS_CONSENT=" in content:
+        content = re.sub(r"CIRIS_ACCORD_METRICS_CONSENT=\w+", f"CIRIS_ACCORD_METRICS_CONSENT={consent_value}", content)
+    else:
+        # Add if not present
+        content += f"\nCIRIS_ACCORD_METRICS_CONSENT={consent_value}\n"
+
+    # Update CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP
+    if "CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP=" in content:
+        content = re.sub(
+            r"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP=[^\n]+",
+            f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={timestamp}",
+            content,
+        )
+    else:
+        content += f"CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={timestamp}\n"
+
+    # Write back
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Also update the current process environment
+    os.environ["CIRIS_ACCORD_METRICS_CONSENT"] = consent_value
+    os.environ["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = timestamp
+
+    logger.info(f"Updated .env: CIRIS_ACCORD_METRICS_CONSENT={consent_value}")
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/lens-identifier",
+    responses={
+        404: {"description": "Accord metrics adapter not loaded or agent ID unavailable"},
+    },
+)
+async def get_lens_identifier(
+    current_user: CurrentUserDep,
+    request: Request,
+) -> StandardResponse:
+    """
+    Get your CIRISLens trace identifier.
+
+    Returns the hashed agent ID that your traces are stored under in CIRISLens,
+    along with current consent status and trace settings. Use this identifier
+    if you need to request deletion of your traces.
+
+    This is a self-service endpoint — no admin approval needed.
+    """
+    logger.info("[lens-identifier] Request received, resolving agent_id...")
+    agent_id = _get_agent_id(request)
+    if not agent_id:
+        logger.error(
+            "[lens-identifier] agent_id could not be resolved! "
+            "This should never happen — the signing key is always available."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent identity not available. The agent may not be fully initialized.",
+        )
+
+    # Get accord metrics adapter status if available
+    adapter = _get_accord_adapter(request)
+    consent_given = False
+    consent_timestamp = None
+    trace_level = None
+    traces_sent = 0
+    endpoint_url = None
+    agent_id_hash = None
+
+    if adapter and hasattr(adapter, "metrics_service"):
+        svc = adapter.metrics_service
+        metrics = svc.get_metrics()
+        consent_given = metrics.get("consent_given", False)
+        trace_level = metrics.get("trace_level")
+        traces_sent = metrics.get("events_sent", 0)
+        # Get unique instance hash from metrics service (signing key based)
+        agent_id_hash = metrics.get("agent_id_hash")
+        consent_timestamp = getattr(adapter, "_consent_timestamp", None)
+        endpoint_url = getattr(svc, "_endpoint_url", None)
+    elif adapter:
+        consent_given = getattr(adapter, "_consent_given", False)
+        consent_timestamp = getattr(adapter, "_consent_timestamp", None)
+
+    # Fallback: compute hash directly from signing key if not available from adapter
+    if not agent_id_hash:
+        agent_id_hash = _compute_agent_id_hash_from_signer()
+
+    # CONSENT DRY: resolve the full v22 consent set through the engine's own
+    # readers so the card can offer the one-tap confirm when misaligned.
+    _fed_consents = None
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            federation_consent_status,
+        )
+
+        _fed_consents = federation_consent_status()
+    except Exception:  # noqa: BLE001 — advisory only
+        pass
+
+    data = LensIdentifierResponse(
+        agent_id_hash=agent_id_hash,
+        agent_id=agent_id,
+        consent_given=consent_given,
+        consent_timestamp=consent_timestamp,
+        federation_consents=_fed_consents,
+        trace_level=trace_level,
+        traces_sent=traces_sent,
+        endpoint_url=endpoint_url,
+    )
+
+    return StandardResponse(
+        success=True,
+        data=data.model_dump(),
+        message=(
+            f"Your traces in CIRISLens are stored under agent_id_hash: {agent_id_hash}. "
+            "Use DELETE /v1/my-data/lens-traces to request deletion."
+        ),
+        metadata={"timestamp": datetime.now(timezone.utc).isoformat()},
+    )
+
+
+@router.delete(
+    "/lens-traces",
+    responses={
+        400: {"description": "Confirmation not provided"},
+        404: {"description": "Agent identity or accord adapter not available"},
+        502: {"description": "CIRISLens API rejected the deletion request"},
+    },
+)
+async def delete_lens_traces(
+    deletion: LensDeletionRequest,
+    current_user: CurrentUserDep,
+    request: Request,
+) -> StandardResponse:
+    """
+    Request deletion of your traces from CIRISLens.
+
+    This endpoint:
+    1. Computes your agent_id_hash from your authenticated identity
+    2. Sends a signed deletion request to the CIRISLens API
+    3. Revokes local accord metrics consent (stops future trace collection)
+    4. Records the request in the audit trail
+
+    The deletion is irreversible. CIRISLens will remove all traces
+    associated with your agent_id_hash.
+
+    You must set confirm=true to proceed.
+    """
+    if not deletion.confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must set confirm=true to request trace deletion. This action is irreversible.",
+        )
+
+    agent_id = _get_agent_id(request)
+    if not agent_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent identity not available.",
+        )
+
+    adapter = _get_accord_adapter(request)
+
+    # Get unique instance hash from metrics service (signing key based)
+    agent_id_hash = None
+    if adapter and hasattr(adapter, "metrics_service"):
+        metrics = adapter.metrics_service.get_metrics()
+        agent_id_hash = metrics.get("agent_id_hash")
+
+    # Fallback: compute hash directly from signing key
+    if not agent_id_hash:
+        agent_id_hash = _compute_agent_id_hash_from_signer()
+
+    # Step 1: Send deletion request to CIRISLens
+    lens_accepted = False
+    lens_message = "Accord metrics adapter not loaded — no traces to delete."
+
+    if adapter and hasattr(adapter, "metrics_service"):
+        svc = adapter.metrics_service
+        lens_accepted, lens_message = await _send_lens_deletion_request(svc, agent_id_hash, deletion.reason)
+
+    # Step 2: Revoke local consent (stops future collection)
+    # If the direct lens API call failed, use request_lens_deletion=True so the
+    # deletion event is queued in the event buffer and retried on the next flush.
+    local_revoked = False
+    if adapter:
+        adapter.update_consent(False, request_lens_deletion=not lens_accepted)
+        local_revoked = True
+        logger.info(f"Local accord consent revoked for agent {agent_id_hash} via DSAR self-service")
+
+    # CEG-native: "Revoke and Delete" is a RECANT (mistake / delete my data) — the
+    # structural primitive that triggers the DSAR deletion cascade (the lens
+    # deletion above). Emit + promote the recants attestation so the withdrawal
+    # is federation-announceable. Best-effort + flag-gated.
+    try:
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            RevocationIntent,
+            current_community_grant_id,
+            emit_community_consent_revocation,
+        )
+
+        target = current_community_grant_id()
+        if target:
+            emit_community_consent_revocation(RevocationIntent.RECANT, target, reason=deletion.reason)
+    except Exception as e:  # never break the deletion flow
+        logger.debug(f"consent-CEG: recant emit skipped: {e}")
+
+    # Step 3: Audit trail
+    logger.info(
+        "DSAR lens deletion requested",
+        extra={
+            "agent_id_hash": agent_id_hash,
+            "reason": deletion.reason or "not provided",
+            "lens_accepted": lens_accepted,
+            "local_revoked": local_revoked,
+            "username": current_user.username,
+        },
+    )
+
+    data = LensDeletionResponse(
+        agent_id_hash=agent_id_hash,
+        status="accepted" if lens_accepted else "local_only",
+        message=lens_message,
+        lens_request_accepted=lens_accepted,
+        local_consent_revoked=local_revoked,
+    )
+
+    return StandardResponse(
+        success=True,
+        data=data.model_dump(),
+        message=(
+            "Deletion request processed. "
+            + ("CIRISLens accepted the request. " if lens_accepted else "")
+            + ("Local consent revoked — no further traces will be sent." if local_revoked else "")
+        ),
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent_id_hash": agent_id_hash,
+        },
+    )
+
+
+@router.get(
+    "/accord-settings",
+    responses={
+        404: {"description": "Accord metrics adapter not loaded"},
+    },
+)
+async def get_accord_settings(
+    current_user: CurrentUserDep,
+    request: Request,
+) -> StandardResponse:
+    """
+    Get current accord metrics adapter settings.
+
+    Shows consent status, trace detail level, event counters,
+    and signing key information.
+    """
+    adapter = _get_accord_adapter(request)
+    if not adapter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Accord metrics adapter is not loaded. Load it with --adapter ciris_accord_metrics.",
+        )
+
+    agent_id = _get_agent_id(request)
+
+    settings: dict[str, Any] = {
+        "agent_name": agent_id,  # Template name for display
+    }
+
+    # Get metrics and unique instance hash from metrics service (signing key based)
+    if hasattr(adapter, "metrics_service"):
+        metrics = adapter.metrics_service.get_metrics()
+        settings["agent_id_hash"] = metrics.get("agent_id_hash", "unknown")
+        settings.update(metrics)
+        settings["endpoint_url"] = getattr(adapter.metrics_service, "_endpoint_url", None)
+        # Check if adapter is actually started (has active session)
+        svc = adapter.metrics_service
+        settings["adapter_started"] = getattr(svc, "_started", False)
+        settings["session_active"] = (
+            svc._session is not None and not svc._session.closed if hasattr(svc, "_session") else False
+        )
+    else:
+        # Fallback: compute hash directly from signing key
+        settings["agent_id_hash"] = _compute_agent_id_hash_from_signer()
+
+    settings["consent_given"] = getattr(adapter, "_consent_given", False)
+    settings["consent_timestamp"] = getattr(adapter, "_consent_timestamp", None)
+
+    # Check if services were registered (only happens when consent is given)
+    services_registered = (
+        len(adapter.get_services_to_register()) > 0 if hasattr(adapter, "get_services_to_register") else False
+    )
+    settings["services_registered"] = services_registered
+
+    return StandardResponse(
+        success=True,
+        data=settings,
+        message="Accord metrics settings",
+        metadata={"timestamp": datetime.now(timezone.utc).isoformat()},
+    )
+
+
+def _apply_consent_change(adapter: Any, consent_given: bool) -> None:
+    """Apply a consent flip: adapter state + .env persistence + CEG artifact.
+
+    CEG-native consent object (#869): grant on opt-in; the switch-off is a
+    WITHDRAW (stop going forward, retain history) — NOT a recant/delete.
+    Both side-channels are best-effort and never break the settings update.
+    """
+    adapter.update_consent(consent_given)
+
+    # CRITICAL: Persist consent change to .env file so it survives restart
+    try:
+        _update_env_consent(consent_given)
+        logger.info(f"Persisted consent={consent_given} to .env file")
+    except Exception as e:
+        logger.warning(f"Failed to persist consent to .env: {e}")
+
+    # The post-wizard opt-in goes through the one trace-sharing handle, so this
+    # card grants BOTH the capture gate and the ship gate. It used to emit the
+    # community-trust grant alone, which left traces sealing locally forever
+    # while the card reported sharing as on.
+    #
+    # require_opt_in=False: the toggle IS the owner's act, and _update_env_consent
+    # above has already written it — but the grant must not depend on that write
+    # having succeeded (it is best-effort and logs its own failure).
+    try:
+        from ciris_engine.logic.services.governance.consent.trace_sharing import (
+            grant_trace_sharing,
+            revoke_trace_sharing,
+        )
+        from ciris_engine.schemas.consent.trace_sharing import TraceConsentSource
+
+        if consent_given:
+            grant_trace_sharing(TraceConsentSource.DATA_CARD, require_opt_in=False)
+        else:
+            revoke_trace_sharing(TraceConsentSource.DATA_CARD)
+    except Exception as e:
+        logger.debug(f"consent-CEG: accord-settings emit skipped: {e}")
+
+
+def _substrate_can_scrub() -> bool:
+    """Delegates to the shared probe — see `utils/substrate_caps`.
+
+    Kept as a thin local name because the tests monkeypatch it here, and because
+    the interactive route's behaviour on a False answer (REFUSE) differs from the
+    adapter bootstrap's (downgrade), so the two call sites read differently even
+    though they ask the same question.
+    """
+    from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
+
+    return substrate_can_scrub()
+
+
+def _apply_trace_level_change(adapter: Any, trace_level: str) -> None:
+    """Apply a trace-level change; 400 on an unknown or unsupportable level."""
+    from ciris_adapters.ciris_accord_metrics.services import TraceDetailLevel
+
+    if trace_level == "full_traces" and not _substrate_can_scrub():
+        # Refusing loudly beats accepting and dropping everything. The user
+        # asked for MORE trace detail; silently returning none is the worst
+        # possible answer to that request, and it would look like the
+        # federation link had broken rather than like a setting had failed.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "trace_level 'full_traces' is unavailable on this build: the pinned "
+                "substrate has no egress scrubber, and it rejects unscrubbed "
+                "full-detail batches outright — selecting it would stop trace "
+                "persistence entirely rather than increase detail. Use 'detailed'. "
+                "See CIRISServer#418."
+            ),
+        )
+
+    try:
+        adapter.metrics_service._trace_level = TraceDetailLevel(trace_level)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid trace_level: {trace_level}",
+        )
+
+
+@router.put(
+    "/accord-settings",
+    responses={
+        400: {"description": "Invalid settings"},
+        404: {"description": "Accord metrics adapter not loaded"},
+    },
+)
+async def update_accord_settings(
+    settings: AccordSettingsUpdate,
+    current_user: CurrentUserDep,
+    request: Request,
+) -> StandardResponse:
+    """
+    Update accord metrics adapter settings.
+
+    Allows changing:
+    - consent_given: Enable/disable trace collection
+    - trace_level: Change detail level (generic/detailed/full_traces)
+
+    Changes take effect immediately for new traces.
+    """
+    adapter = _get_accord_adapter(request)
+    if not adapter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Accord metrics adapter is not loaded.",
+        )
+
+    changes: list[str] = []
+
+    if settings.consent_given is not None:
+        _apply_consent_change(adapter, settings.consent_given)
+        changes.append(f"consent_given={settings.consent_given}")
+
+    if settings.trace_level is not None and hasattr(adapter, "metrics_service"):
+        _apply_trace_level_change(adapter, settings.trace_level)
+        changes.append(f"trace_level={settings.trace_level}")
+
+    if not changes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No settings provided to update.",
+        )
+
+    # Log only field names (not values) to prevent log injection (CWE-117)
+    # The 'changes' list contains strings like "consent_given=true" - extract only the field names
+    safe_field_names = [c.split("=")[0] for c in changes if "=" in c]
+    logger.info(f"Accord settings updated (role={current_user.role}): {', '.join(safe_field_names)}")
+
+    return StandardResponse(
+        success=True,
+        data={"changes": changes},
+        message=f"Settings updated: {', '.join(changes)}",
+        metadata={"timestamp": datetime.now(timezone.utc).isoformat()},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CIRIS capacity (ratchet) proxy
+# ---------------------------------------------------------------------------
+#
+# Cache discipline: this route uses its OWN module-level TTL dict rather
+# than the shared `ContextEnrichmentCache`. The enrichment cache is tied
+# into the agent's context pipeline AND exposed via /v1/system/environment
+# (the "Context Enrichment" screen in the UI), so entries there implicitly
+# count as "things the agent sees about itself". Capacity is explicitly
+# user-facing only — the agent must never read its own score (Goodhart /
+# self-monitoring). Isolating to a local cache keeps the anti-Goodhart
+# gate structural, not incidental.
+#
+# Pattern mirrors `CirisBillingProvider._cache` (dict[str, tuple[value,
+# expiry]] + manual expiry check) — the standard local-TTL idiom in this
+# repo.
+
+
+_CAPACITY_CACHE_TTL_SECONDS = 900.0  # 15 min — matches the 7-day lens scoring window cadence
+_CAPACITY_CACHE: Dict[str, Tuple[Dict[str, Any], datetime]] = {}
+_CAPACITY_CACHE_LOCK = threading.Lock()
+
+
+def _capacity_cache_get(template: str) -> Optional[Dict[str, Any]]:
+    """Return the cached lens payload for `template` if still fresh, else None.
+
+    Thread-safe and side-effect-free except for evicting expired entries.
+    """
+    now = datetime.now(timezone.utc)
+    with _CAPACITY_CACHE_LOCK:
+        hit = _CAPACITY_CACHE.get(template)
+        if hit is None:
+            return None
+        payload, expiry = hit
+        if now >= expiry:
+            # Evict expired entry so the dict doesn't grow unbounded over
+            # long-running deployments (one per template, but still).
+            _CAPACITY_CACHE.pop(template, None)
+            return None
+        return payload
+
+
+def _capacity_cache_set(template: str, payload: Dict[str, Any]) -> None:
+    """Store `payload` for `template` with a TTL-based expiry."""
+    from datetime import timedelta
+
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=_CAPACITY_CACHE_TTL_SECONDS)
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE[template] = (payload, expiry)
+
+
+def _capacity_cache_clear() -> None:
+    """Clear the capacity cache — used by tests to get clean starts."""
+    with _CAPACITY_CACHE_LOCK:
+        _CAPACITY_CACHE.clear()
+
+
+def _capacity_base_url() -> str:
+    """Base URL for CIRISLens capacity scoring endpoints.
+
+    Defaults to the public production lens. Same env var as the accord metrics
+    adapter so operators have a single knob to redirect both streams.
+    """
+    return os.getenv(
+        "CIRIS_ACCORD_METRICS_ENDPOINT",
+        "https://lens.ciris-services-1.ai/lens-api/api/v1",
+    ).rstrip("/")
+
+
+# Epistemic humility constants for the OCCURRENCE (local) score.
+#
+# An occurrence grading itself can never claim certainty — a perfect 1.0
+# from a self-assessment is, definitionally, a measurement error or a
+# Goodhart artifact (the formula degenerating, not the system being
+# perfect). τ (tau) encodes that as the trust term:
+#
+#   * TAU_ATTESTED (0.95) — a live trust edge exists: either the CEG
+#     community-trust grant is in force (consent:community_trust:v1,
+#     newest-wins — the same artifact that drives lens-core's consent gate:
+#     directly in the sovereign path, via the adapter's config-fallback
+#     derivation in the cohabitation path — see _newest_community_trust_row)
+#     or at least one federation peer is reachable. The occurrence's claim
+#     is anchored to something outside itself, but still self-reported:
+#     capped below 1.0 forever.
+#   * TAU_ISOLATED (0.60) — no trust edge. An isolated occurrence's
+#     health claim is unattested self-report; it can be "probably fine"
+#     (0.6 · everything-else) but never "healthy" on its own say-so.
+#
+# Because J multiplies τ in, J < 1.0 BY CONSTRUCTION — no clamp needed.
+# The cohort score (CIRISLens, computed from many agents' signed traces)
+# is the only score that may legitimately approach 1.0.
+TAU_ATTESTED = 0.95
+TAU_ISOLATED = 0.60
+
+
+def _newest_community_trust_row(engine: Any, key_id: str) -> Optional[Dict[str, Any]]:
+    """Newest attestation row on ``consent:community_trust:v1`` by key_id.
+
+    Uses persist's ``list_scores`` (v17.4 FSD-005 Appendix C, bundled in
+    ciris-server 0.5.117): the durable newest-by-(subject, dimension) seek
+    over the V106 ``scores`` projection. ``dimension_exact`` filters at the
+    substrate and rows come back newest-first, so ``limit=1`` IS the head —
+    no Python-side fetch-100-then-fold (the old ``list_attestations``
+    dimension filter silently no-op'd, forcing the fold). Structural rows
+    (withdraws/recants/supersedes) are included in the seek, so a severed
+    edge surfaces as the newest row and ``_community_grant_edge`` reads it.
+
+    Scope note — this reads the FEDERATION-TIER projection: an interim
+    LOCAL-TIER grant (unpromoted sentinel row, canonical community key
+    unpublished) is absent here. That is exactly what
+    ``_community_grant_edge`` discounts anyway (a self-authored row with no
+    counterparty is the solipsism τ exists to discount), so the "None here"
+    path and the old "sentinel excluded" path collapse to the same verdict.
+    Contrast ``current_community_grant_id`` in consent/attestation.py, which
+    MUST keep the fetch-fold to stay local-tier-visible for revocation
+    targeting (list_scores would silently fail to find the interim grant and
+    break consent withdrawal — CIRISPersist ask: local-tier dimension seek).
+    """
+    import json as _json
+
+    try:
+        raw = engine.list_scores(_json.dumps({"dimension_exact": "consent:community_trust:v1"}), None, 1, key_id)
+    except Exception:  # pragma: no cover - defensive (pre-0.5.117 wheels lack list_scores)
+        return None
+    items = _json.loads(raw).get("items", [])
+    if not items:
+        return None
+    newest: Dict[str, Any] = items[0]
+    return newest
+
+
+def _community_grant_edge() -> bool:
+    """True when the newest community-trust row is a standing DIRECTED grant.
+
+    The interim local-tier grant (sentinel counterparty, written while the
+    canonical community key is unpublished) does NOT count: a self-authored
+    row with no counterparty is precisely the solipsism τ exists to
+    discount. withdraws/recants = the edge was explicitly severed.
+    """
+    try:
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.runtime.edge_runtime import get_federation_address
+        from ciris_engine.logic.services.governance.consent.attestation import (
+            _PENDING_COMMUNITY_SENTINEL,
+        )
+
+        engine = get_persist_engine()
+        key_id = get_federation_address()
+        if engine is None or not key_id:
+            return False
+        newest = _newest_community_trust_row(engine, key_id)
+        if newest is None or newest.get("attestation_type") not in ("scores", "supersedes"):
+            return False
+        claim = ((newest.get("attestation_envelope") or {}).get("claim")) or {}
+        return claim.get("user_id") != _PENDING_COMMUNITY_SENTINEL
+    except Exception as e:
+        logger.debug(f"[capacity.trust] community-grant probe failed: {type(e).__name__}: {e}")
+        return False
+
+
+def _reachable_peer_edge() -> bool:
+    """True when the edge runtime can see at least one federation peer."""
+    try:
+        from ciris_engine.logic.runtime.edge_runtime import try_get_edge
+
+        edge = try_get_edge()
+        if edge is None:
+            return False
+        peers = getattr(edge, "list_peers", None)
+        if callable(peers):
+            return len(peers() or []) > 0
+        snapshot = getattr(edge, "metrics_snapshot", None)
+        if callable(snapshot):
+            metrics = snapshot() or {}
+            return isinstance(metrics, dict) and int(metrics.get("peers", 0) or 0) > 0
+        return False
+    except Exception as e:
+        logger.debug(f"[capacity.trust] peer probe failed: {type(e).__name__}: {e}")
+        return False
+
+
+def _occurrence_trust_edge(request: Request) -> Tuple[bool, str]:
+    """Is this occurrence's health claim anchored to a trusted peer?
+
+    Returns (attested, source) with source ∈ {"community_grant", "peer",
+    "none"}: first the CEG community-trust consent artifact (newest-wins,
+    mirroring lens-core's gate), then any reachable federation peer.
+
+    Sync FFI work runs in this thread — callers in async context must wrap
+    with ``asyncio.to_thread`` (``_compute_local_capacity`` does).
+    """
+    if _community_grant_edge():
+        return True, "community_grant"
+    if _reachable_peer_edge():
+        return True, "peer"
+    return False, "none"
+
+
+async def _probe_service_health(s: Any) -> Optional[bool]:
+    """True/False when the service exposes health; None = unmeasurable.
+
+    No health surface is missing EVIDENCE, not health — the pre-2.9.6
+    default-True here is what minted the erroneous 1.0 scores. A probe
+    that raises IS evidence of unhealth.
+    """
+    try:
+        is_healthy = getattr(s, "is_healthy", None)
+        if callable(is_healthy):
+            result = is_healthy()
+            if hasattr(result, "__await__"):
+                return bool(await result)
+            return bool(result)
+        healthy_attr = getattr(s, "healthy", None)
+        if healthy_attr is None:
+            return None
+        return bool(healthy_attr)
+    except Exception:
+        return False
+
+
+def _k_eff_terms(healthy: int, measurable: int) -> Tuple[float, float, float]:
+    """(k_raw, 1−ρ, k_eff) over the measurable services.
+
+    ρ proxy: a single failure is normal operational variance (ρ ≈ 0);
+    many failing *simultaneously* is correlated systemic stress (ρ → 1).
+    Accord 1.3 (A2): correlation enters THROUGH k_eff — the discount
+    k/(1 + ρ·(k−1)) IS the diversity term; a separate (1−ρ) factor
+    double-counted it. Our proxy form k_eff = k_raw · (1 − ρ) is
+    numerically identical to the pre-1.3 product, correctly framed.
+    """
+    k_raw = (healthy / measurable) if measurable else 0.0
+    failures = measurable - healthy
+    rho = 0.0 if measurable <= 1 else max(0.0, min(1.0, (failures - 1) / (measurable - 1)))
+    rho_complement = 1.0 - rho
+    return k_raw, rho_complement, k_raw * rho_complement
+
+
+def _lambda_from_wise_authority(services: List[Any], health_results: List[Optional[bool]]) -> float:
+    """λ strictness: 1.0 iff the Wise Authority service is present AND
+    healthy (conscience is baked into the thought processor), else 0.7."""
+    for s, h in zip(services, health_results):
+        if not h:
+            continue
+        class_name = type(s).__name__.lower()
+        svc_name = getattr(s, "service_name", "").lower()
+        if "wiseauthority" in class_name or "wise_authority" in svc_name:
+            return 1.0
+    return 0.7
+
+
+async def _compute_local_capacity(request: Request) -> Tuple[float, str, Dict[str, Any]]:
+    """Compute this OCCURRENCE's capacity score in [0, 1) — never 1.0.
+
+    Occurrence vs cohort (the load-bearing distinction):
+
+      * The OCCURRENCE score (this function) is runtime vitals — services
+        up, ethical faculties enforcing, recent positive moments —
+        self-reported by this process about itself. It is epistemically
+        capped (τ < 1) and contingent on a trust edge: an isolated
+        occurrence cannot certify its own health.
+      * The COHORT score (CIRISLens) is computed from many agents' signed
+        traces by an external evaluator. It is the only score that may
+        legitimately approach 1.0, and the only one rendered as the five
+        CIRIS factors.
+
+    Implements the trust-gated CCA approximation (Accord 1.3 form —
+    Book IX Ch 4: J = k_eff · λ · σ, where correlation enters THROUGH
+    k_eff rather than as a separate (1 − ρ̄) factor, which double-counted
+    it; our k_eff below is the raw healthy fraction discounted by the
+    correlation proxy, i.e. an approximation of k/(1 + ρ̄·(k−1))):
+
+        J = μ · k_eff · λ · σ · τ        with k_eff = k_raw · (1 − ρ_proxy)
+
+      * ``μ`` (coverage) = fraction of registry services that actually
+        expose a health surface. Missing instrumentation is missing
+        EVIDENCE, not failure — but it discounts the claim (pre-2.9.6
+        the formula treated unmeasured services as healthy, which is how
+        the erroneous 1.0s were minted).
+      * ``k_eff`` = healthy / MEASURABLE services (unknowns excluded from
+        both numerator and denominator).
+      * ``(1 − ρ)`` = correlation proxy over measurable services: one
+        failure is operational variance; many simultaneous failures are
+        correlated systemic stress.
+      * ``λ`` = strictness — 1.0 if Wise Authority is present AND healthy
+        (conscience is in-processor, so agent-running implies conscience
+        on), else 0.7.
+      * ``σ`` = sustainability from task_complete positive moments
+        (30-over-30 ramp; the ramp may reach 1.0 — τ keeps J below it).
+      * ``τ`` = trust term: TAU_ATTESTED with a live trust edge
+        (community grant or reachable peer), TAU_ISOLATED without.
+
+    Returns (score, category, components) — components carries every term
+    so the response can show its work instead of smearing one synthetic
+    scalar across the five cohort factors.
+
+    Anti-Goodhart guardrails unchanged: never fed to the agent's own
+    context, never cached in ``ContextEnrichmentCache``. The τ cap is
+    itself an anti-Goodhart device — the metric admits its own limits.
+    """
+    degraded: Dict[str, Any] = {"degraded": True}
+    try:
+        svc_registry = getattr(request.app.state, "service_registry", None)
+        if svc_registry is None:
+            # No registry = degraded state, not healthy
+            return 0.30, "high_fragility", degraded
+
+        # --- health probes (service registry walk) -------------------------
+        services = svc_registry.get_all_services() if hasattr(svc_registry, "get_all_services") else []
+        total = max(1, len(services))
+
+        health_results = await asyncio.gather(*(_probe_service_health(s) for s in services), return_exceptions=False)
+        measurable = [h for h in health_results if h is not None]
+        healthy = sum(1 for h in measurable if h)
+        coverage = len(measurable) / total if total else 0.0
+        k_raw_frac, rho_complement, k_eff_frac = _k_eff_terms(healthy, len(measurable))
+        lam = _lambda_from_wise_authority(services, health_results)
+
+        # --- σ from recent task_complete positive moments ------------------
+        sigma = await _sigma_from_positive_moments(request)
+
+        # --- τ: trust edge (occurrence health is a relational property) ----
+        # to_thread: the probe does real persist-FFI roundtrips.
+        attested, trust_source = await asyncio.to_thread(_occurrence_trust_edge, request)
+        tau = TAU_ATTESTED if attested else TAU_ISOLATED
+
+        j = coverage * k_eff_frac * lam * sigma * tau
+        j = max(0.0, min(1.0, j))  # defensive; τ < 1 already bounds it
+
+        category = (
+            "high_capacity" if j >= 0.90 else "healthy" if j >= 0.75 else "moderate" if j >= 0.55 else "high_fragility"
+        )
+        components: Dict[str, Any] = {
+            "coverage": round(coverage, 4),
+            "k_raw": round(k_raw_frac, 4),
+            "k_eff": round(k_eff_frac, 4),
+            "rho_complement": round(rho_complement, 4),
+            "lambda": round(lam, 4),
+            "sigma": round(sigma, 4),
+            "tau_trust": round(tau, 4),
+            "trust_attested": attested,
+            "trust_source": trust_source,
+            "services_total": total,
+            "services_measurable": len(measurable),
+            "services_healthy": healthy,
+        }
+        return j, category, components
+    except Exception as e:
+        logger.debug(f"[capacity] local compute failed, returning degraded: {type(e).__name__}: {e}")
+        # Errors = degraded state, not healthy
+        return 0.30, "high_fragility", degraded
+
+
+# σ (sustainability) maturity window — see _sigma_from_positive_moments docstring.
+# The 30-interactions-over-30-days story is what the client's capacity-score
+# card explains to operators ("you need ~30 interactions over 30 days for
+# your local score to fully compute"). Keep these constants here so the
+# user-facing copy and the formula are pinned to the same values.
+SIGMA_WINDOW_DAYS = 30
+SIGMA_TARGET_COMPLETIONS = 30
+SIGMA_FLOOR = 0.30
+
+
+def _count_recent_task_completes_sqlite(days: int = SIGMA_WINDOW_DAYS) -> int:
+    """Count ``task_complete`` events in the audit SQLite DB over the last
+    ``days`` days. Synchronous; called via run_in_executor.
+
+    Routes through persist's `audit_list_entries` substrate filtering on
+    `action_type='task_complete'` and `recorded_after`. The 2.9.0 A3
+    cutover moved every audit write to `cirislens_audit_log`; the legacy
+    `audit_log` table (in `ciris_audit.db`) is empty on fresh deployments.
+    """
+    try:
+        import json as _json
+        import os
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            return 0
+        tenant_id = os.environ.get("CIRIS_AGENT_TENANT", "agent-default")
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        filter_json = _json.dumps({
+            "tenant_id": tenant_id,
+            "action_type": "task_complete",
+            "recorded_after": since,
+        })
+
+        # Page through and count. The σ proxy caps at ~30 completions, so
+        # a single page of 500 is more than sufficient as a fast bound.
+        cursor_json: Optional[str] = None
+        count = 0
+        for _ in range(20):  # hard ceiling — sigma proxy bounded at 30
+            raw = engine.audit_list_entries(filter_json, cursor_json, 500)
+            parsed = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            items = parsed.get("items", []) if isinstance(parsed, dict) else []
+            count += len(items)
+            if len(items) < 500:
+                break
+            next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+            if not next_cursor:
+                break
+            cursor_json = next_cursor if isinstance(next_cursor, str) else _json.dumps(next_cursor)
+        return count
+    except Exception as e:
+        logger.debug(f"[capacity.sigma] persist audit count failed: {type(e).__name__}: {e}")
+        return 0
+
+
+async def _sigma_from_positive_moments(request: Request) -> float:
+    """σ (sustainability) proxied by the ``task_complete`` rate.
+
+    The Accord models task completion as a *positive moment* — the system
+    closed a loop cleanly, which is the CIRIS "gratitude token" signal
+    and the closest cheap proxy we have for the CCA σ term (maintenance
+    capacity / sustainable operation).
+
+    Window: last 30 days. Target: 30 completions. Mapping:
+
+      * 0 completions   → σ = 0.30 (floor — fresh install / idle agent)
+      * 15 completions  → σ ≈ 0.65
+      * ≥ 30 completions → σ = 1.00 (target — fully-matured operation)
+
+    Linear ramp. One bounded COUNT on the audit SQLite DB, ~ms, run in
+    the default executor so we never block the event loop. Degrades to
+    the floor on any error.
+
+    The 30-over-30 shape is intentional: it matches the user-facing
+    capacity-score explainer card on the cell-viz badge ("you need ~30
+    interactions over 30 days before your local score can fully compute")
+    and prevents a fresh install from showing 1.00 immediately just
+    because all services happen to be healthy at boot.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        successes = await loop.run_in_executor(
+            None, _count_recent_task_completes_sqlite, SIGMA_WINDOW_DAYS
+        )
+        logger.debug(
+            f"[capacity.sigma] {successes} task_complete(s) in last {SIGMA_WINDOW_DAYS}d "
+            f"(target={SIGMA_TARGET_COMPLETIONS})"
+        )
+        return max(
+            SIGMA_FLOOR,
+            min(1.0, SIGMA_FLOOR + (1.0 - SIGMA_FLOOR) * (successes / SIGMA_TARGET_COMPLETIONS)),
+        )
+    except Exception as e:
+        logger.debug(f"[capacity.sigma] probe failed, returning floor: {type(e).__name__}: {e}")
+        return SIGMA_FLOOR
+
+
+async def _fetch_capacity_from_lens(template: str) -> Dict[str, Any]:
+    """Call CIRISLens for a template's capacity record. Raises on non-200.
+
+    Uses a short 3s timeout to fail fast on slow connections - caller should
+    fall back to local-only scoring when this times out.
+    """
+    import httpx
+
+    url = f"{_capacity_base_url()}/scoring/capacity/{template}"
+    try:
+        # 8s timeout to handle Chaquopy/Android async overhead. The lens
+        # itself responds in <0.3s, but Android Python runtime can add
+        # several seconds of DNS resolution and connection setup latency.
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                body = resp.text[:200]
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"CIRISLens returned {resp.status_code} for capacity/{template}: {body}",
+                )
+            return resp.json()  # type: ignore[no-any-return]
+    except httpx.TimeoutException as e:
+        logger.warning(f"[capacity] Lens timeout (8s) for template={template}")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"CIRISLens timeout for capacity/{template}",
+        )
+    except httpx.RequestError as e:
+        logger.warning(f"[capacity] Lens request error for template={template}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not reach CIRISLens: {type(e).__name__}",
+        )
+
+
+@router.get(
+    "/capacity",
+    responses={
+        404: {"description": "Agent template unavailable"},
+        502: {"description": "CIRISLens unreachable or returned an error"},
+    },
+)
+async def get_capacity(
+    current_user: CurrentUserDep,
+    request: Request,
+    scope: str = "fleet",
+) -> StandardResponse:
+    """
+    Get the current CIRIS capacity (C/I_int/R/I_inc/S) for this agent's template.
+
+    Query parameters:
+      * ``scope=fleet`` (default) — template-aggregate score from CIRISLens.
+        This is the "Ally-everywhere" score across all instances of the
+        same agent template. Existing behaviour, unchanged contract.
+      * ``scope=local`` — this occurrence's own score, computed from live
+        runtime signals using a minimal CCA approximation
+        (J = k_eff · (1 − ρ) · λ · σ, Moore 2026). No lens call.
+      * ``scope=both`` — returns both; ``composite_score`` is fleet,
+        ``local_score`` is this occurrence. Preferred for the cell-viz
+        CapacityBadge so the user sees ``● 0.92 · 0.90``.
+
+    Data flows:
+        CIRISLens fleet scoring
+            -> proxy fetch here (cached 15 min in a route-local TTL dict)
+            -> KMP client /v1/my-data/capacity
+            -> cell visualization ambient state (user-facing)
+
+    Anti-Goodhart guardrails (structural, not incidental):
+      - NOT registered as a context enrichment tool.
+      - NOT stored in the shared ContextEnrichmentCache — that cache is
+        also surfaced via /v1/system/environment ("Context Enrichment"
+        screen), which would leak the agent's own score into its own
+        view of its environment. Uses a module-local TTL dict instead.
+      - Local score is ALSO never written anywhere the agent can read.
+
+    The signed audit history is the real coherence ratchet; this is just
+    the viewing angle for the human.
+    """
+    # Validate scope first before logging to prevent log injection
+    scope_norm = (scope or "fleet").strip().lower()
+    if scope_norm not in {"fleet", "local", "both"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scope must be one of: fleet, local, both",
+        )
+    # Log after validation with sanitized value (prevents log injection)
+    logger.info(f"[capacity] GET /capacity scope={scope_norm}")
+
+    # For lens lookups, we need the TEMPLATE name (e.g., "Ally"), not the
+    # agent instance ID (e.g., "agent-c1303b26541d"). The template name is
+    # what lens aggregates scores by. Default to "Ally" for CIRIS proxy mode.
+    runtime = getattr(request.app.state, "runtime", None)
+    template: str = "Ally"
+    if runtime:
+        essential = getattr(runtime, "essential_config", None)
+        if essential:
+            agent_name = getattr(essential, "agent_name", None)
+            # Ensure we have an actual string, not a Mock object
+            if agent_name and isinstance(agent_name, str):
+                template = agent_name
+    if template == "Ally":
+        logger.info(f"[capacity] Using default template 'Ally' for lens lookup")
+
+    # --- Local-only: skip the lens hop entirely -----------------------------
+    if scope_norm == "local":
+        local_j, local_cat, local_terms = await _compute_local_capacity(request)
+        # The occurrence score is ONE scalar with its term breakdown — it is
+        # NOT the five cohort factors (those are lens-computed from signed
+        # traces across the fleet). The factor slots carry the same scalar
+        # for client-shape compatibility, but each shows its work via
+        # components and stays confidence="low" (self-reported vitals).
+        occurrence_factor = CapacityFactor(score=local_j, components=local_terms, trace_count=0, confidence="low")
+        attested = bool(local_terms.get("trust_attested", False))
+        parsed = CapacityResponse(
+            agent_name=template,
+            composite_score=local_j,
+            fragility_index=0.0,
+            category=local_cat,
+            factors=CapacityFactors(
+                C=occurrence_factor,
+                I_int=occurrence_factor,
+                R=occurrence_factor,
+                I_inc=occurrence_factor,
+                S=occurrence_factor,
+            ),
+            metadata=CapacityMetadata(),
+            cached=False,
+            local_score=local_j,
+            local_category=local_cat,
+        )
+        return StandardResponse(
+            success=True,
+            data=parsed.model_dump(),
+            message=(
+                f"Occurrence capacity ({'attested via ' + str(local_terms.get('trust_source')) if attested else 'UNATTESTED — no trust edge'}): "
+                f"{local_cat} (score={local_j:.3f})"
+            ),
+            metadata={
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "cached": False,
+                "scope": "local",
+                "trust_attested": attested,
+                "trust_source": local_terms.get("trust_source", "none"),
+            },
+        )
+
+    # --- Fleet or both: fetch lens payload (cached) -------------------------
+    # On slow devices (arm32), lens fetch may timeout. Fall back to local-only
+    # gracefully rather than failing the whole request.
+    served_from_cache = True
+    payload = _capacity_cache_get(template)
+    lens_failed = False
+    if payload is None:
+        served_from_cache = False
+        try:
+            logger.info(f"[capacity] Fetching from lens for template={template}")
+            payload = await _fetch_capacity_from_lens(template)
+            logger.info(f"[capacity] Lens fetch OK for template={template}")
+            _capacity_cache_set(template, payload)
+        except HTTPException as e:
+            # Timeout or connection error - fall back to local-only
+            logger.warning(f"[capacity] Lens unavailable ({e.status_code}), falling back to local-only")
+            lens_failed = True
+        except Exception as e:
+            logger.warning(f"[capacity] Lens fetch failed for template={template}: {e}, falling back to local-only")
+            lens_failed = True
+
+    # If lens failed, return local-only score instead of erroring
+    if lens_failed:
+        local_j, local_cat, local_terms = await _compute_local_capacity(request)
+        occurrence_factor = CapacityFactor(score=local_j, components=local_terms, trace_count=0, confidence="low")
+        attested = bool(local_terms.get("trust_attested", False))
+        parsed = CapacityResponse(
+            agent_name=template,
+            composite_score=local_j,
+            fragility_index=0.0,
+            category=local_cat,
+            factors=CapacityFactors(
+                C=occurrence_factor,
+                I_int=occurrence_factor,
+                R=occurrence_factor,
+                I_inc=occurrence_factor,
+                S=occurrence_factor,
+            ),
+            metadata=CapacityMetadata(),
+            cached=False,
+            local_score=local_j,
+            local_category=local_cat,
+        )
+        return StandardResponse(
+            success=True,
+            data=parsed.model_dump(),
+            message=f"Occurrence capacity (cohort lens unavailable): {local_cat} (score={local_j:.3f})",
+            metadata={
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "cached": False,
+                "scope": "local_fallback",
+                "trust_attested": attested,
+                "trust_source": local_terms.get("trust_source", "none"),
+            },
+        )
+
+    local_score: Optional[float] = None
+    local_category: Optional[str] = None
+    if scope_norm == "both":
+        local_score, local_category, _local_terms = await _compute_local_capacity(request)
+
+    # At this point payload cannot be None: either cache hit or successful fetch
+    # (lens_failed returns early above)
+    assert payload is not None, "payload should be set after lens fetch or cache hit"
+
+    try:
+        parsed = CapacityResponse(
+            agent_name=payload.get("agent_name", template),
+            composite_score=float(payload.get("composite_score", 0.0)),
+            fragility_index=float(payload.get("fragility_index", 0.0)),
+            category=str(payload.get("category", "moderate")),
+            factors=CapacityFactors(**payload["factors"]),
+            metadata=CapacityMetadata(**payload.get("metadata", {})),
+            cached=served_from_cache,
+            local_score=local_score,
+            local_category=local_category,
+        )
+    except Exception as e:
+        logger.error(f"[capacity] Could not parse lens payload for {template}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"CIRISLens returned an unexpected shape: {type(e).__name__}",
+        )
+
+    return StandardResponse(
+        success=True,
+        data=parsed.model_dump(),
+        message=f"CIRIS capacity for template {template}: {parsed.category} (score={parsed.composite_score:.3f})",
+        metadata={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "cached": served_from_cache,
+            "scope": scope_norm,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# CIRISLens deletion request sender
+# ---------------------------------------------------------------------------
+
+
+async def _send_lens_deletion_request(
+    metrics_service: Any,
+    agent_id_hash: str,
+    reason: Optional[str],
+) -> tuple[bool, str]:
+    """Send a deletion request to the CIRISLens API.
+
+    Args:
+        metrics_service: The AccordMetricsService instance (has HTTP session + signer)
+        agent_id_hash: The hashed agent ID to delete traces for
+        reason: Optional reason for deletion
+
+    Returns:
+        Tuple of (accepted: bool, message: str)
+    """
+    import aiohttp
+
+    endpoint_url = getattr(metrics_service, "_endpoint_url", None)
+    if not endpoint_url:
+        return False, "No CIRISLens endpoint configured."
+
+    session = getattr(metrics_service, "_session", None)
+    if not session or session.closed:
+        return False, "CIRISLens HTTP session not available. Adapter may not be started."
+
+    signer = getattr(metrics_service, "_signer", None)
+
+    # Build deletion payload
+    import json
+
+    requested_at = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "agent_id_hash": agent_id_hash,
+        "request_type": "delete_all_traces",
+        "reason": reason or "User DSAR self-service request",
+        "requested_at": requested_at,
+    }
+
+    # Sign the request if signer is available
+    # Signature must be over canonical JSON of: {agent_id_hash, request_type, requested_at}
+    if signer and hasattr(signer, "has_signing_key") and signer.has_signing_key:
+        try:
+            # Build canonical payload for signing (only required fields, alphabetically sorted)
+            canonical_payload = {
+                "agent_id_hash": agent_id_hash,
+                "request_type": "delete_all_traces",
+                "requested_at": requested_at,
+            }
+            content_bytes = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+            # Use the unified signing key from the signer
+            unified_key = getattr(signer, "_unified_key", None)
+            if unified_key is None:
+                # Try to load it
+                signer._ensure_unified_key()
+                unified_key = getattr(signer, "_unified_key", None)
+
+            if unified_key and hasattr(unified_key, "sign_base64"):
+                payload["signature"] = unified_key.sign_base64(content_bytes)
+                payload["signature_key_id"] = signer.key_id
+                logger.info(f"Signed deletion request with key {signer.key_id}")
+            else:
+                logger.warning("Could not sign deletion request: unified key not available")
+        except Exception as e:
+            logger.warning(f"Could not sign deletion request: {e}")
+
+    url = f"{endpoint_url}/accord/dsar/delete"
+
+    try:
+        async with session.post(url, json=payload) as response:
+            if response.status == 200:
+                logger.info(f"CIRISLens deletion request ACCEPTED (200) for agent {agent_id_hash}")
+                return True, "CIRISLens accepted the deletion request. Traces will be removed."
+            elif response.status == 202:
+                logger.info(f"CIRISLens deletion request QUEUED (202) for agent {agent_id_hash}")
+                return True, "CIRISLens queued the deletion request for processing."
+            elif response.status == 404:
+                logger.info(f"CIRISLens deletion request: no traces found (404) for agent {agent_id_hash}")
+                return True, "No traces found for this agent_id_hash in CIRISLens (nothing to delete)."
+            else:
+                error_text = await response.text()
+                logger.error(f"CIRISLens deletion request failed: {response.status} - {error_text}")
+                return False, f"CIRISLens returned status {response.status}. Request logged locally for retry."
+    except aiohttp.ClientConnectorError:
+        return False, "Could not connect to CIRISLens. Deletion request saved locally for retry."
+    except Exception as e:
+        logger.error(f"Error sending deletion request to CIRISLens: {e}")
+        return False, f"Error contacting CIRISLens: {type(e).__name__}. Request saved locally for retry."

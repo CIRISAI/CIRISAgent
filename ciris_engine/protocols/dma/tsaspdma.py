@@ -35,7 +35,7 @@ class TSASPDMAProtocol(Protocol):
         self,
         tool_name: str,
         tool_info: "ToolInfo",
-        aspdma_rationale: str,
+        aspdma_reasoning: str,
         original_thought: Any,
         context: Optional[Any] = None,
     ) -> "ActionSelectionDMAResult":
@@ -44,7 +44,7 @@ class TSASPDMAProtocol(Protocol):
         Args:
             tool_name: Name of the tool selected by ASPDMA
             tool_info: Full ToolInfo with documentation, examples, gotchas
-            aspdma_rationale: ASPDMA's reasoning for selecting this tool
+            aspdma_reasoning: ASPDMA's reasoning for selecting this tool
             original_thought: The ProcessingQueueItem being processed
             context: Optional additional processing context
 

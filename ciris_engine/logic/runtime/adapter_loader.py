@@ -40,7 +40,7 @@ class AdapterLoader:
             manifest_path = service_dir / "manifest.json"
             if manifest_path.exists():
                 try:
-                    with open(manifest_path) as f:
+                    with open(manifest_path, encoding="utf-8") as f:
                         manifest_data = json.load(f)
 
                     # Parse into typed manifest
@@ -48,9 +48,19 @@ class AdapterLoader:
                     # Store path separately for loading
                     setattr(manifest, "_path", service_dir)
                     services.append(manifest)
-                    logger.info(f"Discovered adapter: {manifest.module.name}")
+                    # DEBUG, not INFO. A user reporting a startup failure has to scroll
+                    # past 63 of these to reach the line that matters, and did. The count
+                    # is logged once below; the names are a debugging detail.
+                    logger.debug(f"Discovered adapter: {manifest.module.name}")
                 except Exception as e:
                     logger.error(f"Failed to load manifest from {service_dir}: {e}")
+
+        if services:
+            logger.info(
+                "Discovered %d adapters: %s",
+                len(services),
+                ", ".join(sorted(m.module.name for m in services)),
+            )
 
         return services
 
@@ -109,28 +119,62 @@ class AdapterLoader:
             logger.error(f"Dependencies not satisfied for {manifest.module.name}")
             return None
 
-        # Add service directory to Python path temporarily
+        parts = class_path.split(".")
+        module_path = ".".join(parts[:-1])
+        class_name = parts[-1]
+
+        # Prefer fully-qualified package import (e.g. "ciris_adapters.<name>.<module>")
+        # so the module is identity-equal with any other import site — loading the
+        # same adapter under multiple adapter_ids must not create sibling module
+        # instances, which leaks duplicate loggers, duplicate isinstance classes,
+        # and duplicated module-level state.
+        services_pkg = self.services_dir.name
+        candidate_paths = []
+        if services_pkg and not module_path.startswith(f"{services_pkg}."):
+            candidate_paths.append(f"{services_pkg}.{module_path}")
+        candidate_paths.append(module_path)
+
+        for candidate in candidate_paths:
+            try:
+                module = importlib.import_module(candidate)
+                service_class = getattr(module, class_name)
+                logger.info(
+                    f"Successfully loaded service class: {class_name} from {manifest.module.name} "
+                    f"(module={candidate})"
+                )
+                return cast(type[ServiceProtocol], service_class)
+            except ModuleNotFoundError:
+                continue
+            except Exception as e:
+                logger.error(
+                    f"Failed to load service class {class_path} from {manifest.module.name} "
+                    f"via {candidate}: {type(e).__name__}: {e!r}",
+                    exc_info=True,
+                )
+                return None
+
+        # Final fallback: sys.path-based import for non-package layouts (e.g. tests
+        # pointing services_dir at a plain directory without __init__.py).
         import sys
 
         sys.path.insert(0, str(self.services_dir))
-
         try:
-            parts = class_path.split(".")
-            module_path = ".".join(parts[:-1])
-            class_name = parts[-1]
-
-            # Import module
             module = importlib.import_module(module_path)
             service_class = getattr(module, class_name)
-
-            logger.info(f"Successfully loaded service class: {class_name} from {manifest.module.name}")
+            logger.warning(
+                f"Loaded {class_name} from {manifest.module.name} via sys.path fallback "
+                f"(module={module_path}); consider making {services_pkg!r} a package to avoid "
+                f"duplicate module instances"
+            )
             return cast(type[ServiceProtocol], service_class)
-
         except Exception as e:
-            logger.error(f"Failed to load service class {class_path} from {manifest.module.name}: {e}")
+            logger.error(
+                f"Failed to load service class {class_path} from {manifest.module.name}: "
+                f"{type(e).__name__}: {e!r}",
+                exc_info=True,
+            )
             return None
         finally:
-            # Remove from path
             sys.path.pop(0)
 
     def load_service(self, manifest: ServiceManifest) -> Optional[type[ServiceProtocol]]:
@@ -242,7 +286,9 @@ class AdapterLoader:
         if manifest.module.is_mock:
             for service_decl in manifest.services:
                 if service_decl.type == ServiceType.LLM:
-                    logger.warning("[SERVICE 14/22] MockLLMService STARTED")
+                    from ciris_engine.logic.runtime.startup_logging import _log_service_started
+
+                    _log_service_started(14, "MockLLMService")
 
     async def _initialize_single_adapter(self, manifest: Any, service_registry: Any, result: ModuleLoadResult) -> None:
         """Initialize a single adapter from manifest."""

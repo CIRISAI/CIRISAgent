@@ -5,13 +5,15 @@ Audit API response schemas - fully typed replacements for Dict[str, Any].
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import JSONDict
 
 
 class AuditContext(BaseModel):
     """Structured audit context information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     entity_id: Optional[str] = Field(None, description="Entity being audited")
     entity_type: Optional[str] = Field(None, description="Type of entity")
@@ -24,11 +26,14 @@ class AuditContext(BaseModel):
     user_agent: Optional[str] = Field(None, description="User agent if applicable")
     result: Optional[str] = Field(None, description="Operation result")
     error: Optional[str] = Field(None, description="Error message if failed")
+    outcome: Optional[str] = Field(None, description="Action outcome (success, failure, etc.)")
     metadata: Optional[JSONDict] = Field(None, description="Additional metadata")
 
 
 class EntryVerification(BaseModel):
     """Audit entry verification details."""
+
+    model_config = ConfigDict(defer_build=True)
 
     signature_valid: bool = Field(..., description="Whether signature is valid")
     hash_chain_valid: bool = Field(..., description="Whether hash chain is intact")

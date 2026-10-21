@@ -12,7 +12,10 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.processors.core.thought_processor import ThoughtProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
+from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch
+from ciris_engine.logic.utils.node_ownership import hold_until_node_owned
 from ciris_engine.logic.utils.shutdown_manager import (
     get_global_shutdown_reason,
     is_global_shutdown_requested,
@@ -27,6 +30,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.services.resources_core import ResourceAction
 from ciris_engine.schemas.services.runtime_control import PipelineState
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
@@ -40,7 +44,7 @@ from ciris_engine.schemas.types import JSONDict
 if TYPE_CHECKING:
     from ciris_engine.logic.infrastructure.handlers.action_dispatcher import ActionDispatcher
 
-from ciris_engine.logic.processors.states.dream_processor import DreamProcessor
+from ciris_engine.logic.processors.states.minimal_dream_processor import MinimalDreamProcessor
 from ciris_engine.logic.processors.states.play_processor import PlayProcessor
 from ciris_engine.logic.processors.states.shutdown_processor import ShutdownProcessor
 from ciris_engine.logic.processors.states.solitude_processor import SolitudeProcessor
@@ -147,25 +151,13 @@ class AgentProcessor:
             services=services,
         )
 
-        # Enhanced dream processor with self-configuration and memory consolidation
-        # Cast services for type safety
-        from typing import cast
-
-        from ciris_engine.logic.registries.base import ServiceRegistry
-        from ciris_engine.logic.runtime.identity_manager import IdentityManager
-
-        service_registry_typed = cast(ServiceRegistry, services.service_registry) if services.service_registry else None
-        identity_manager_typed = cast(IdentityManager, services.identity_manager) if services.identity_manager else None
-
-        self.dream_processor = DreamProcessor(
+        # Minimal dream processor - uses standard H3ERE pipeline with 3-edge consolidation
+        self.dream_processor = MinimalDreamProcessor(
             config_accessor=app_config,
             thought_processor=thought_processor,
             action_dispatcher=self._action_dispatcher,
             services=services,
-            service_registry=service_registry_typed,
-            identity_manager=identity_manager_typed,
             startup_channel_id=startup_channel_id,
-            cirisnode_url="https://localhost:8001",  # Default since cirisnode config not in essential
             agent_occurrence_id=agent_occurrence_id,
         )
 
@@ -292,6 +284,12 @@ class AgentProcessor:
             self._stop_event.clear()
         logger.info(f"Starting agent processing (rounds: {num_rounds or 'infinite'})")
 
+        # EVERY NODE IS ALWAYS CLAIMED: no WAKEUP or WORK on an unowned node.
+        # Held here, re-reading on a tick, until the deployer claims it.
+        if not await hold_until_node_owned(self._stop_event):
+            logger.info("Stopped while held on an unowned node; the processor never started")
+            return
+
         # Determine startup target state based on cognitive behaviors
         # When wakeup is bypassed, transition directly to WORK (partnership model)
         startup_state = self.state_manager.startup_target_state
@@ -318,7 +316,7 @@ class AgentProcessor:
 
         # Skip wakeup sequence if bypassed
         if wakeup_bypassed:
-            logger.info("✓ Wakeup bypassed - proceeding directly to WORK state")
+            logger.info("[OK] Wakeup bypassed - proceeding directly to WORK state")
             self.state_manager.update_state_metadata("wakeup_complete", True)
             self.state_manager.update_state_metadata("wakeup_bypassed", True)
         else:
@@ -333,6 +331,16 @@ class AgentProcessor:
                 and not (self._stop_event is not None and self._stop_event.is_set())
                 and (num_rounds is None or self.current_round_number < num_rounds)
             ):
+                # CC 4.2.1.1: a standing constitutional halt holds wakeup too.
+                # Fail closed, so this also holds the boot window until the
+                # node answers. Nothing is created or advanced while held.
+                if await self._hold_for_accord_halt(let_shutdown_through=False):
+                    if is_global_shutdown_requested():
+                        logger.info("Shutdown requested while wakeup is held by a constitutional halt; stopping")
+                        await self.state_manager.transition_to(AgentState.SHUTDOWN)
+                        return
+                    continue
+
                 logger.info(f"Wakeup round {wakeup_round}")
 
                 wakeup_result = await self.wakeup_processor.process(wakeup_round)
@@ -357,7 +365,7 @@ class AgentProcessor:
                     round_delay = 0.1 if is_mock_llm else 5.0
                     await asyncio.sleep(round_delay)
                 else:
-                    logger.info("✓ Wakeup sequence completed successfully!")
+                    logger.info("[OK] Wakeup sequence completed successfully!")
 
                 wakeup_round += 1
                 self.current_round_number += 1
@@ -434,9 +442,16 @@ class AgentProcessor:
                 pending_thoughts = shutdown_thoughts
                 logger.info(f"In SHUTDOWN state - filtering to {len(shutdown_thoughts)} shutdown-related thoughts only")
 
+            # limits.max_active_thoughts (OperationalLimitsConfig). Reading it
+            # off `workflow`, where it does not exist, pinned every agent at 10
+            # regardless of config (#1186). This caps thoughts taken per round;
+            # LLM burst concurrency is still thought_batch_size below.
             max_active = 10
-            if hasattr(self.app_config, "workflow") and self.app_config.workflow:
-                max_active = getattr(self.app_config.workflow, "max_active_thoughts", 10)
+            limits_cfg = getattr(self.app_config, "limits", None)
+            if limits_cfg is not None:
+                configured_max = getattr(limits_cfg, "max_active_thoughts", 10)
+                if isinstance(configured_max, int) and configured_max >= 1:
+                    max_active = configured_max
 
             limited_thoughts = pending_thoughts[:max_active]
 
@@ -450,7 +465,20 @@ class AgentProcessor:
             processed_count = 0
             failed_count = 0
 
-            batch_size = 5
+            # Read from EssentialConfig.limits.thought_batch_size (it lives on
+            # OperationalLimitsConfig; reading it off `workflow` always fell
+            # back to 3). Each thought fans out to ~4 parallel conscience LLM
+            # calls, so a batch of N produces ~4N concurrent structured-output
+            # requests in burst. Default 3 (=12 concurrent LLM calls) sized
+            # for rate-limited backends; bump up only if your backend can
+            # absorb the burst without queueing past the conscience
+            # timeout. See essential.py:thought_batch_size.
+            batch_size = 3
+            limits = getattr(self.app_config, "limits", None)
+            if limits is not None:
+                configured = getattr(limits, "thought_batch_size", 3)
+                if isinstance(configured, int) and configured >= 1:
+                    batch_size = configured
 
             for i in range(0, len(limited_thoughts), batch_size):
                 try:
@@ -838,6 +866,13 @@ class AgentProcessor:
         """
         logger.debug(f"[DEBUG] resume_processing() called, current _is_paused: {self._is_paused}")
 
+        # The halt is not an operator pause and no operator tier reaches it
+        # (CC 4.2.1.1): an operator resume under a standing halt is refused.
+        halt = await read_halt_latch()
+        if halt.halted:
+            logger.warning(f"Operator resume refused: {halt.refusal_reason()}")
+            return False
+
         if not self._is_paused:
             logger.info("AgentProcessor not paused")
             logger.debug(f"[DEBUG] Returning False from resume_processing, _is_paused: {self._is_paused}")
@@ -882,6 +917,11 @@ class AgentProcessor:
 
         if not self._is_paused:
             raise RuntimeError("Cannot single-step unless processor is paused")
+
+        # Single-step would advance a thought past the round hold (CC 4.2.1.1).
+        halt = await read_halt_latch()
+        if halt.halted:
+            raise RuntimeError(f"Cannot single-step under a constitutional halt ({halt.refusal_reason()})")
 
         if not self._pipeline_controller:
             raise RuntimeError("No pipeline controller available")
@@ -970,6 +1010,36 @@ class AgentProcessor:
             # Safety fallback - wait a bit and check again
             await asyncio.sleep(0.1)
             return False
+        return True
+
+    async def _hold_for_accord_halt(self, *, let_shutdown_through: bool) -> bool:
+        """Hold one round under a standing constitutional halt (CC 4.2.1.1).
+
+        Returns True when the round is held, after one hold tick. While held no
+        thought is picked up or advanced and no DMA or LLM call is made: thoughts
+        and tasks keep their status in the database, and the next round after the
+        halt ends re-deliberates them from there.
+
+        Separate from the operator pause (`_check_pause_state`), which an operator
+        may lift; nothing here can be lifted except by the node's latch.
+
+        `let_shutdown_through`: a shutdown still proceeds under the halt — anyone
+        may turn the agent off — and the shutdown processor reads the same latch
+        and skips the closing dialogue. A requested shutdown is moved to SHUTDOWN
+        here, inside the held round, because the ordinary path would first run
+        one more round of the state it is leaving.
+        """
+        halt = await read_halt_latch()
+        if not halt.halted:
+            return False
+        if let_shutdown_through:
+            current_state = self.state_manager.get_state()
+            if current_state == AgentState.SHUTDOWN:
+                return False
+            if is_global_shutdown_requested():
+                await self._handle_shutdown_transitions(current_state)
+                return True
+        await hold_tick(self._stop_event)
         return True
 
     async def _handle_shutdown_transitions(self, current_state: AgentState) -> bool:
@@ -1143,6 +1213,21 @@ class AgentProcessor:
             elif current_state == AgentState.DREAM:
                 delay = 5.0  # Check dream state periodically
 
+        # THROTTLE: a resource past its threshold slows the loop by a bounded
+        # amount. Never applied to SHUTDOWN, which must not be slowed down.
+        if current_state != AgentState.SHUTDOWN:
+            gate = pressure_gate_of(self.services.resource_monitor)
+            if gate is not None:
+                extra = gate.throttle_extra_delay(delay)
+                if extra > 0:
+                    logger.debug(
+                        "Round delay %.1fs + %.1fs throttle (resource pressure: %s)",
+                        delay,
+                        extra,
+                        ", ".join(gate.resources(ResourceAction.THROTTLE)),
+                    )
+                    delay += extra
+
         return delay
 
     async def _handle_delay_with_stop_check(self, delay: float) -> bool:
@@ -1179,8 +1264,13 @@ class AgentProcessor:
         if self._should_stop_after_target_rounds(round_count, num_rounds):
             return round_count, consecutive_errors, True
 
-        # COVENANT COMPLIANCE: Check pause state before processing
+        # ACCORD COMPLIANCE: Check pause state before processing
         if not await self._check_pause_state():
+            return round_count, consecutive_errors, False
+
+        # CC 4.2.1.1: a standing constitutional halt holds the round. The round
+        # number does not advance and nothing runs.
+        if await self._hold_for_accord_halt(let_shutdown_through=True):
             return round_count, consecutive_errors, False
 
         # Update round number
@@ -1198,7 +1288,10 @@ class AgentProcessor:
         if should_break:
             return round_count, consecutive_errors, True
 
-        # Handle delay between rounds
+        # Handle delay between rounds. Re-read the state: this round may have
+        # transitioned (a DRAIN or any shutdown request moves to SHUTDOWN), and
+        # the throttle must never slow a shutdown on the strength of a stale WORK.
+        current_state = self.state_manager.get_state()
         if not await self._handle_round_delay(current_state):
             return round_count, consecutive_errors, True
 

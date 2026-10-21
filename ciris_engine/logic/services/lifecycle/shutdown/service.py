@@ -34,6 +34,13 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         self._async_shutdown_handlers: List[Callable[[], Awaitable[None]]] = []
         self._lock = Lock()
         self._shutdown_event: Optional[asyncio.Event] = None
+        #: The loop `_shutdown_event` is bound to. An asyncio.Event binds to the loop
+        #: that first awaits it; awaiting it from a later loop (an in-process runtime
+        #: RESTART -- mobile resume, CIRISAgent#1122) raises `RuntimeError: ... is
+        #: bound to a different event loop`, and the restarted runtime never comes
+        #: back. So the event is re-created whenever the running loop is not the one
+        #: it was made for, carrying the requested-state over.
+        self._event_loop: Optional[asyncio.AbstractEventLoop] = None
         self._emergency_mode = False
         self._force_kill_task: Optional[asyncio.Task[Any]] = None
 
@@ -46,11 +53,32 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
         """Start the service."""
         await super().start()
         try:
-            # Create shutdown event if in async context
-            self._shutdown_event = asyncio.Event()
+            self._event_for_current_loop()
         except RuntimeError:
             # Not in async context yet
             pass
+
+    def _event_for_current_loop(self) -> asyncio.Event:
+        """Return `_shutdown_event`, re-made if it belongs to another loop (#1122).
+
+        A fresh event is created when there is none or when the running loop is
+        not the one the existing event was made for; a pending shutdown request
+        is carried over by setting it immediately. Must be called from a running
+        loop (raises RuntimeError otherwise, like `asyncio.get_running_loop`).
+        """
+        loop = asyncio.get_running_loop()
+        if self._shutdown_event is None or self._event_loop is not loop:
+            if self._shutdown_event is not None and self._event_loop is not None:
+                logger.info(
+                    "ShutdownService: shutdown event re-created for a new event loop "
+                    "(in-process runtime restart) -- pending request carried over: %s",
+                    self._shutdown_requested,
+                )
+            self._shutdown_event = asyncio.Event()
+            self._event_loop = loop
+            if self._shutdown_requested:
+                self._shutdown_event.set()
+        return self._shutdown_event
 
     async def stop(self) -> None:
         """Stop the service."""
@@ -210,15 +238,7 @@ class ShutdownService(BaseInfrastructureService, ShutdownServiceProtocol):
 
     async def _wait_for_shutdown(self) -> None:
         """Wait for shutdown signal (async) - internal method."""
-        if not self._shutdown_event:
-            # Create event if not exists
-            self._shutdown_event = asyncio.Event()
-
-            # If shutdown already requested, set the event
-            if self._shutdown_requested:
-                self._shutdown_event.set()
-
-        await self._shutdown_event.wait()
+        await self._event_for_current_loop().wait()
 
     def get_shutdown_reason(self) -> Optional[str]:
         """Get the reason for shutdown."""

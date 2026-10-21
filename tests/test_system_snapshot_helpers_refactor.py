@@ -46,6 +46,8 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_with_sync_methods(self):
         """Test tool collection when service methods are synchronous."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create mock tool service with sync methods
         mock_tool_service = Mock()
         mock_tool_service.adapter_id = "discord_adapter"
@@ -60,9 +62,14 @@ class TestCollectAvailableToolsBeforeRefactor:
 
         mock_tool_service.get_tool_info = Mock(side_effect=mock_get_tool_info)
 
-        # Create mock service registry
+        # Create provider wrapper with instance and metadata
+        provider = Mock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "discord"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[mock_tool_service])
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -82,6 +89,8 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_with_async_methods(self):
         """Test tool collection when service methods are asynchronous."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create mock tool service with async methods
         mock_tool_service = Mock()
         mock_tool_service.adapter_id = "api_service"
@@ -96,9 +105,14 @@ class TestCollectAvailableToolsBeforeRefactor:
 
         mock_tool_service.get_tool_info = AsyncMock(side_effect=mock_get_tool_info)
 
-        # Create mock service registry
+        # Create provider wrapper with instance and metadata
+        provider = Mock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "api"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[mock_tool_service])
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -131,15 +145,22 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_invalid_tool_info_type(self):
         """Test tool collection when get_tool_info returns wrong type."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create mock tool service that returns wrong type
         mock_tool_service = Mock()
         mock_tool_service.adapter_id = "bad_adapter"
         mock_tool_service.get_available_tools = Mock(return_value=["bad_tool"])
         mock_tool_service.get_tool_info = Mock(return_value={"not": "a_tool_info"})  # Wrong type!
 
-        # Create mock service registry
+        # Create provider wrapper
+        provider = Mock()
+        provider.instance = mock_tool_service
+        provider.metadata = {"adapter": "bad"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[mock_tool_service])
+        mock_service_registry._services = {ServiceType.TOOL: [provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -152,10 +173,10 @@ class TestCollectAvailableToolsBeforeRefactor:
 
     @pytest.mark.asyncio
     async def test_collect_tools_non_iterable_services(self):
-        """Test tool collection when get_services_by_type returns non-iterable."""
-        # Create mock service registry that returns non-iterable
+        """Test tool collection when _services is empty."""
+        # Create mock service registry with empty _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=MagicMock())  # Not iterable!
+        mock_service_registry._services = {}  # Empty _services dict
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -169,6 +190,8 @@ class TestCollectAvailableToolsBeforeRefactor:
     @pytest.mark.asyncio
     async def test_collect_tools_mixed_sync_async(self):
         """Test tool collection with mixed sync/async tool services."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         # Create sync tool service
         sync_service = Mock()
         sync_service.adapter_id = "sync_adapter"
@@ -189,9 +212,18 @@ class TestCollectAvailableToolsBeforeRefactor:
             )
         )
 
-        # Create mock service registry
+        # Create provider wrappers
+        sync_provider = Mock()
+        sync_provider.instance = sync_service
+        sync_provider.metadata = {"adapter": "sync"}
+
+        async_provider = Mock()
+        async_provider.instance = async_service
+        async_provider.metadata = {"adapter": "async"}
+
+        # Create mock service registry with _services
         mock_service_registry = Mock()
-        mock_service_registry.get_services_by_type = Mock(return_value=[sync_service, async_service])
+        mock_service_registry._services = {ServiceType.TOOL: [sync_provider, async_provider]}
 
         # Create mock runtime
         mock_runtime = Mock()
@@ -232,31 +264,39 @@ class TestHelperFunctions:
 
     def test_get_tool_services_valid(self):
         """Test getting tool services with valid registry."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         mock_registry = Mock()
-        mock_services = [Mock(), Mock()]
-        mock_registry.get_services_by_type.return_value = mock_services
+        mock_service1 = Mock()
+        mock_service2 = Mock()
+
+        # Create provider wrappers
+        provider1 = Mock()
+        provider1.instance = mock_service1
+        provider1.metadata = {"adapter": "test1"}
+
+        provider2 = Mock()
+        provider2.instance = mock_service2
+        provider2.metadata = {"adapter": "test2"}
+
+        mock_registry._services = {ServiceType.TOOL: [provider1, provider2]}
 
         result = _get_tool_services(mock_registry)
-        assert result == mock_services
-        mock_registry.get_services_by_type.assert_called_once_with("tool")
+        assert len(result) == 2
+        assert mock_service1 in result
+        assert mock_service2 in result
 
     def test_get_tool_services_non_iterable(self):
-        """Test getting tool services with non-iterable response."""
-        mock_registry = Mock()
-
-        # Create a non-iterable object
-        class NonIterable:
-            pass
-
-        mock_registry.get_services_by_type.return_value = NonIterable()
+        """Test getting tool services with missing _services."""
+        mock_registry = Mock(spec=[])  # No _services attribute
 
         result = _get_tool_services(mock_registry)
         assert result == []
 
     def test_get_tool_services_string(self):
-        """Test getting tool services with string response."""
+        """Test getting tool services with empty _services."""
         mock_registry = Mock()
-        mock_registry.get_services_by_type.return_value = "not_a_list"
+        mock_registry._services = {}  # Empty dict
 
         result = _get_tool_services(mock_registry)
         assert result == []
@@ -322,14 +362,23 @@ class TestHelperFunctions:
         assert result is None
 
     def test_extract_adapter_type_with_underscore(self):
-        """Test extracting adapter type with underscore."""
-        assert _extract_adapter_type("discord_adapter") == "discord"
-        assert _extract_adapter_type("api_service_v2") == "api"
+        """Test extracting adapter type with underscore - now preserves name."""
+        # The function now returns adapter_id as-is, only stripping numeric suffixes
+        assert _extract_adapter_type("discord_adapter") == "discord_adapter"
+        assert _extract_adapter_type("api_service_v2") == "api_service_v2"
+        # Known adapters are preserved
+        assert _extract_adapter_type("home_assistant") == "home_assistant"
+        assert _extract_adapter_type("wallet") == "wallet"
 
     def test_extract_adapter_type_without_underscore(self):
         """Test extracting adapter type without underscore."""
         assert _extract_adapter_type("cli") == "cli"
         assert _extract_adapter_type("mock") == "mock"
+
+    def test_extract_adapter_type_strips_numeric_suffix(self):
+        """Test that numeric suffixes are stripped."""
+        assert _extract_adapter_type("wallet_12345") == "wallet"
+        assert _extract_adapter_type("test_123") == "test"
 
     def test_validate_tool_infos_success(self):
         """Test validating tool infos successfully."""
@@ -947,35 +996,61 @@ class TestUserExtractionHelperFunctions:
         _extract_user_from_thought_context(mock_thought, user_ids)
         assert user_ids == set()
 
-    def test_extract_users_from_correlation_history_success(self):
-        """Test extracting users from correlation history."""
+    def test_extract_users_from_correlation_history_success(self, persist_engine):
+        """Test extracting users from correlation history.
+
+        Post-A1 (CIRISAgent#763): `_extract_users_from_correlation_history` routes
+        through `engine.correlation_query({"correlation_id": ...})` and reads
+        `tags.user_id` from rows. Persist's correlation_query filter is exact-
+        match on correlation_id (one row per id), so we seed one correlation
+        carrying the user_id tag and verify the helper extracts it.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         # Mock task with correlation ID
         mock_task = Mock()
         mock_task.context = Mock()
         mock_task.context.correlation_id = "corr_123"
 
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="c1",
+                    request_timestamp=now,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "user_123"},
+                retention_policy="raw",
+            )
+        )
+
         user_ids = set()
+        _extract_users_from_correlation_history(mock_task, user_ids)
 
-        # Mock the database connection and cursor
-        import unittest.mock
-
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = [
-                {"user_id": "user_123"},
-                {"user_id": "user_456"},
-                {"user_id": "user_123"},  # Duplicate
-            ]
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = Mock(return_value=mock_conn)
-            mock_conn.__exit__ = Mock(return_value=None)
-            mock_persistence.get_db_connection.return_value = mock_conn
-
-            _extract_users_from_correlation_history(mock_task, user_ids)
-
-        # Should have extracted unique user IDs
-        assert user_ids == {"user_123", "user_456"}
+        assert user_ids == {"user_123"}
 
     def test_extract_users_from_correlation_history_no_correlation_id(self):
         """Test extracting users from correlation history without correlation_id."""
@@ -987,20 +1062,30 @@ class TestUserExtractionHelperFunctions:
         _extract_users_from_correlation_history(mock_task, user_ids)
         assert user_ids == set()
 
-    def test_extract_users_from_correlation_history_exception(self):
-        """Test extracting users from correlation history when exception occurs."""
+    def test_extract_users_from_correlation_history_exception(self, persist_engine):
+        """Test extracting users from correlation history when exception occurs.
+
+        Post-A1 (CIRISAgent#763): the helper wraps the persist `correlation_query`
+        call in try/except; force an exception by patching `get_persist_engine`
+        to return a stub whose `correlation_query` raises. The helper should
+        swallow the exception and leave user_ids unchanged.
+        """
+        from unittest.mock import patch as _patch
+
+        class _RaisingEngine:
+            def correlation_query(self, *args, **kwargs):
+                raise Exception("Database error")
+
         mock_task = Mock()
         mock_task.context = Mock()
         mock_task.context.correlation_id = "corr_123"
 
         user_ids = set()
 
-        # Mock database connection to raise exception
-        import unittest.mock
-
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_persistence.get_db_connection.side_effect = Exception("Database error")
-
+        with _patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=_RaisingEngine(),
+        ):
             _extract_users_from_correlation_history(mock_task, user_ids)
 
         # Should handle exception gracefully
@@ -1060,8 +1145,23 @@ class TestUserExtractionHelperFunctions:
         _extract_users_from_thought_content(mock_thought, user_ids)
         assert user_ids == set()
 
-    def test_extract_user_ids_from_context_combined(self):
-        """Test extracting user IDs from combined context sources."""
+    def test_extract_user_ids_from_context_combined(self, persist_engine):
+        """Test extracting user IDs from combined context sources.
+
+        Post-A1 (CIRISAgent#763): seed a correlation via persist for the
+        correlation-history branch; other branches stay pure-Python.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         # Mock task with user and correlation ID
         mock_task = Mock()
         mock_task.context = Mock()
@@ -1074,19 +1174,33 @@ class TestUserExtractionHelperFunctions:
         mock_thought.context.user_id = "user_from_thought"
         mock_thought.content = "Hello <@999888777>, check this out. ID: 111222333"
 
-        # Mock database for correlation history
-        import unittest.mock
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="c1",
+                    request_timestamp=now,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "user_from_correlation"},
+                retention_policy="raw",
+            )
+        )
 
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = [{"user_id": "user_from_correlation"}]
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = Mock(return_value=mock_conn)
-            mock_conn.__exit__ = Mock(return_value=None)
-            mock_persistence.get_db_connection.return_value = mock_conn
-
-            result = _extract_user_ids_from_context(mock_task, mock_thought)
+        result = _extract_user_ids_from_context(mock_task, mock_thought)
 
         # Should return all unique user IDs from all sources
         expected_users = {"user_from_task", "user_from_thought", "999888777", "111222333", "user_from_correlation"}
@@ -1105,8 +1219,24 @@ class TestUserExtractionHelperFunctions:
         result = _extract_user_ids_from_context(mock_task, mock_thought)
         assert result == set()
 
-    def test_extract_user_ids_from_context_duplicate_removal(self):
-        """Test that duplicate user IDs are removed."""
+    def test_extract_user_ids_from_context_duplicate_removal(self, persist_engine):
+        """Test that duplicate user IDs are removed.
+
+        Post-A1 (CIRISAgent#763): correlation history routes through persist.
+        Seed a single correlation tagged with the same user as task/thought to
+        verify the union dedupes.
+        """
+        from datetime import datetime, timezone
+
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         # Mock task with user ID
         mock_task = Mock()
         mock_task.context = Mock()
@@ -1119,19 +1249,33 @@ class TestUserExtractionHelperFunctions:
         mock_thought.context.user_id = "duplicate_user"
         mock_thought.content = "Hello <@duplicate_user>, self-mention."
 
-        # Mock database for correlation history with same user
-        import unittest.mock
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication",
+                    method_name="observe",
+                    channel_id="c1",
+                    request_timestamp=now,
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "duplicate_user"},
+                retention_policy="raw",
+            )
+        )
 
-        with unittest.mock.patch("ciris_engine.logic.context.system_snapshot_helpers.persistence") as mock_persistence:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = [{"user_id": "duplicate_user"}]
-            mock_conn.cursor.return_value = mock_cursor
-            mock_conn.__enter__ = Mock(return_value=mock_conn)
-            mock_conn.__exit__ = Mock(return_value=None)
-            mock_persistence.get_db_connection.return_value = mock_conn
-
-            result = _extract_user_ids_from_context(mock_task, mock_thought)
+        result = _extract_user_ids_from_context(mock_task, mock_thought)
 
         # Should only appear once despite being in all sources
         assert result == {"duplicate_user"}

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 
 from ciris_engine.logic.runtime.adapter_manager import RuntimeAdapterManager
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch
 from ciris_engine.protocols.services import RuntimeControlService as RuntimeControlServiceProtocol
 from ciris_engine.protocols.services import TimeServiceProtocol
 from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
@@ -48,15 +50,26 @@ from ciris_engine.schemas.services.runtime_control import (
     ServiceProviderInfo,
     ServiceProviderUpdate,
     ServiceRegistryInfoResponse,
-    WAPublicKeyMap,
 )
 from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, KillSwitchConfig, WASignedCommand
-from ciris_engine.schemas.types import ConfigDict, ConfigValue
+from ciris_engine.schemas.types import ConfigMapping, ConfigValue
 
 # GraphConfigService is injected via dependency injection to avoid circular imports
 
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
 
 # Error message constants
 _ERROR_AGENT_PROCESSOR_NOT_AVAILABLE = "Agent processor not available"
@@ -74,6 +87,66 @@ class _ProviderLookupResult:
     provider: Any
     providers_list: List[Any]
     service_type: str
+
+
+def _map_circuit_breaker_state(state_str: str) -> CircuitBreakerState:
+    """Map circuit breaker state string to enum.
+
+    This is a module-level helper used by multiple methods to avoid
+    duplicating the state mapping logic.
+
+    Args:
+        state_str: The state string from provider info ("closed", "open", "half_open")
+
+    Returns:
+        The corresponding CircuitBreakerState enum value
+    """
+    if state_str == "closed":
+        return CircuitBreakerState.CLOSED
+    elif state_str == "open":
+        return CircuitBreakerState.OPEN
+    else:
+        return CircuitBreakerState.HALF_OPEN
+
+
+# Type alias for clarity
+AgentProcessorType = Any  # Would be AgentProcessor but avoiding circular import
+
+
+def _build_service_health_detail(
+    is_healthy: bool,
+    circuit_breaker_state: str = "closed",
+    priority: str = "DIRECT",
+    priority_group: int = -1,
+    strategy: str = "DIRECT",
+    error: Optional[str] = None,
+) -> ConfigMapping:
+    """Build a standardized service health detail dict.
+
+    This helper centralizes the service health detail construction
+    used by get_service_health_status for both direct and registry services.
+
+    Args:
+        is_healthy: Whether the service is healthy
+        circuit_breaker_state: Circuit breaker state ("closed", "open", "half_open", "error")
+        priority: Service priority level
+        priority_group: Service priority group (-1 for direct services)
+        strategy: Service selection strategy
+        error: Optional error message if service is unhealthy
+
+    Returns:
+        A ConfigMapping with standardized health detail fields
+    """
+    detail: ConfigMapping = {
+        "healthy": is_healthy,
+        "circuit_breaker_state": circuit_breaker_state,
+        "priority": priority,
+        "priority_group": priority_group,
+        "strategy": strategy,
+    }
+    if error is not None:
+        detail["error"] = error
+    return detail
 
 
 class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
@@ -122,7 +195,28 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         self._state_transitions = 0
         self._commands_processed = 0
 
-        # Kill switch configuration
+        # Kill switch — LEGACY (#998).
+        #
+        # This service used to keep its OWN authority list: `_wa_key_map`, a
+        # WAPublicKeyMap constructed empty here whose only writer was
+        # `_configure_kill_switch`, which nothing ever called. So
+        # `_verify_wa_signature` rejected EVERY WA-signed emergency shutdown
+        # regardless of signature validity, while `GET /v1/emergency/kill-switch/status`
+        # reported `enabled: true` off a hardcoded default. A live endpoint that
+        # could never succeed, describing a control that was not the one
+        # protecting the system.
+        #
+        # Authorities now come from EmergencyAuthorities (accord/authorities.py)
+        # — ONE authority source for the WASignedCommand this API accepts. (The
+        # stego AccordPayload that shared it is retired, #1231: the CC 4.2.1.1
+        # halt is verified and latched by the node.)
+        #
+        # REDUNDANT BY DESIGN: the substrate carries its own, separate kill
+        # switch that halts the node itself. These are not competing paths —
+        # this one stops the agent, the substrate's stops the node underneath
+        # it. Defence in depth: either alone is sufficient to stop the system.
+        #
+        # TODO(#998): today's authority set is Ed25519 over the steward keys.
         self._kill_switch_config = KillSwitchConfig(
             enabled=True,
             trust_tree_depth=3,
@@ -133,8 +227,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             log_to_audit=True,
             allow_override=False,
         )
-        # Initialize WA public key map
-        self._wa_key_map = WAPublicKeyMap()
 
     def _get_config_manager(self) -> "GraphConfigService":
         """Get config manager with lazy initialization to avoid circular imports."""
@@ -142,6 +234,54 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             # Config manager must be injected, cannot create without dependencies
             raise RuntimeError("Config manager not available - must be injected via dependency injection")
         return self.config_manager
+
+    def _get_agent_processor(self) -> Optional[AgentProcessorType]:
+        """Get the agent processor if available.
+
+        This helper centralizes the agent processor availability check
+        used by multiple processor control methods.
+
+        Returns:
+            The agent processor if available, None otherwise
+        """
+        if not self.runtime or not hasattr(self.runtime, "agent_processor"):
+            return None
+        return self.runtime.agent_processor
+
+    def _processor_not_available_response(self, operation: str) -> ProcessorControlResponse:
+        """Build a standard error response when agent processor is not available.
+
+        Args:
+            operation: The operation that was attempted (e.g., "single_step", "pause")
+
+        Returns:
+            ProcessorControlResponse with error set
+        """
+        return ProcessorControlResponse(
+            success=False,
+            processor_name="agent",
+            operation=operation,
+            new_status=self._processor_status,
+            error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
+        )
+
+    async def _refused_under_accord_halt(self, operation: str) -> Optional[ProcessorControlResponse]:
+        """Refuse an operator step past a standing constitutional halt (CC 4.2.1.1).
+
+        The halt is not an operator pause: no oversight or administrative tier
+        may resume it or step past it. Only the node's latch ends it.
+        """
+        halt = await read_halt_latch(fresh=True)
+        if not halt.halted:
+            return None
+        await self._record_event("processor_control", operation, success=False, error=halt.refusal_reason())
+        return ProcessorControlResponse(
+            success=False,
+            processor_name="agent",
+            operation=operation,
+            new_status=self._processor_status,
+            error=halt.refusal_reason(),
+        )
 
     async def _initialize(self) -> None:
         """Initialize the runtime control service."""
@@ -158,17 +298,16 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             _start_time = self._now()
 
             # Get the agent processor from runtime
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorControlResponse(
-                    success=False,
-                    processor_name="agent",
-                    operation="single_step",
-                    new_status=self._processor_status,
-                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
-                )
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
+                return self._processor_not_available_response("single_step")
+
+            halt_refusal = await self._refused_under_accord_halt("single_step")
+            if halt_refusal is not None:
+                return halt_refusal
 
             # Ensure processor is paused
-            if not self.runtime.agent_processor.is_paused():
+            if not agent_processor.is_paused():
                 return ProcessorControlResponse(
                     success=False,
                     processor_name="agent",
@@ -177,7 +316,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     error="Cannot single-step unless processor is paused",
                 )
 
-            result = await self.runtime.agent_processor.single_step()
+            result = await agent_processor.single_step()
 
             # Track thought processing time if a thought was processed
             if result.success and result.processing_time_ms:
@@ -207,6 +346,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             raw_step_results = result.step_results if hasattr(result, "step_results") else []
             validated_step_results = []
 
+            from pydantic import ValidationError
+
             from ciris_engine.schemas.services.runtime_control import StepResultData
 
             for step_result in raw_step_results:
@@ -217,9 +358,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                         validated_step_results.append(validated)
                     elif isinstance(step_result, StepResultData):
                         validated_step_results.append(step_result)
-                except Exception:
+                except (ValidationError, TypeError, KeyError):
                     # Skip invalid results - this happens during thought initiation
                     # when step_results only contain {"thought_id": ..., "initiated": True}
+                    # ValidationError: schema mismatch, TypeError: wrong type, KeyError: missing field
                     pass
 
             # Map SingleStepResult fields to ProcessorControlResponse
@@ -260,16 +402,11 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             _start_time = self._now()
 
             # Get the agent processor from runtime
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorControlResponse(
-                    success=False,
-                    processor_name="agent",
-                    operation="pause",
-                    new_status=self._processor_status,
-                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
-                )
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
+                return self._processor_not_available_response("pause")
 
-            success = await self.runtime.agent_processor.pause_processing()
+            success = await agent_processor.pause_processing()
             if success:
                 old_status = self._processor_status
                 self._processor_status = ProcessorStatus.PAUSED
@@ -304,16 +441,28 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             _start_time = self._now()
 
             # Get the agent processor from runtime
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorControlResponse(
-                    success=False,
-                    processor_name="agent",
-                    operation="resume",
-                    new_status=self._processor_status,
-                    error=_ERROR_AGENT_PROCESSOR_NOT_AVAILABLE,
-                )
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
+                return self._processor_not_available_response("resume")
 
-            success = await self.runtime.agent_processor.resume_processing()
+            halt_refusal = await self._refused_under_accord_halt("resume")
+            if halt_refusal is not None:
+                return halt_refusal
+
+            # Resuming normal processing must ALWAYS exit single-step mode —
+            # unconditionally, before the resume call, regardless of whether
+            # the processor resume itself succeeds. single_step() enables it
+            # (step_decorators._single_step_mode) but nothing else cleared it,
+            # so once a client stepped even once, every @step_point kept
+            # pausing forever even after resume(): the processor was stranded,
+            # subsequent work never ran, and /v1/agent/interact callers hit
+            # their full timeout. `resume` is the explicit return to
+            # free-running; single-step mode is part of what it must clear.
+            from ciris_engine.logic.processors.core.step_decorators import disable_single_step_mode
+
+            disable_single_step_mode()
+
+            success = await agent_processor.resume_processing()
             if success:
                 old_status = self._processor_status
                 self._processor_status = ProcessorStatus.RUNNING
@@ -353,13 +502,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             True if transition was successful, False otherwise
         """
         try:
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
                 logger.error("Cannot transition state: agent processor not available")
-                return False
-
-            agent_processor = self.runtime.agent_processor
-            if not agent_processor:
-                logger.error("Cannot transition state: agent processor is None")
                 return False
 
             # Convert string to AgentState enum (values are lowercase)
@@ -399,18 +544,8 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
     async def get_processor_queue_status(self) -> ProcessorQueueStatus:
         """Get processor queue status."""
         try:
-            if not self.runtime or not hasattr(self.runtime, "agent_processor"):
-                return ProcessorQueueStatus(
-                    processor_name="unknown",
-                    queue_size=0,
-                    max_size=0,
-                    processing_rate=0.0,
-                    average_latency_ms=0.0,
-                    oldest_message_age_seconds=None,
-                )
-
-            # Check if agent processor is available
-            if not hasattr(self.runtime, "agent_processor") or self.runtime.agent_processor is None:
+            agent_processor = self._get_agent_processor()
+            if agent_processor is None:
                 logger.debug("Agent processor not yet initialized, returning empty queue status")
                 return ProcessorQueueStatus(
                     processor_name="agent",
@@ -422,7 +557,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 )
 
             # Get queue status from agent processor
-            queue_status = self.runtime.agent_processor.get_queue_status()
+            queue_status = agent_processor.get_queue_status()
 
             await self._record_event("processor_query", "queue_status", success=True)
 
@@ -575,25 +710,18 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             True if signature is valid, False otherwise
         """
         try:
-            # Check if WA is authorized
-            if not self._wa_key_map.has_key(command.wa_id):
-                logger.error(f"WA {command.wa_id} not in authorized keys")
-                return False
-
-            # Get public key PEM and convert to key object
-            key_pem = self._wa_key_map.get_key(command.wa_id)
-            if not key_pem:
-                return False
-
-            from cryptography.hazmat.primitives import serialization
+            # Authority resolved from EmergencyAuthorities (#998). An empty
+            # roster resolves no key, so every command is refused (fail closed).
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-            public_key = serialization.load_pem_public_key(key_pem.encode("utf-8"))
+            from ciris_engine.logic.accord.authorities import EmergencyAuthorities
 
-            # Ensure it's an Ed25519 key
-            if not isinstance(public_key, Ed25519PublicKey):
-                logger.error(f"WA {command.wa_id} key is not Ed25519")
+            key_bytes = EmergencyAuthorities().public_key_for(command.wa_id)
+            if key_bytes is None:
+                logger.error(f"WA {command.wa_id} is not a trusted accord authority")
                 return False
+
+            public_key = Ed25519PublicKey.from_public_bytes(key_bytes)
 
             # Reconstruct signed data (canonical form)
             signed_data = "|".join(
@@ -619,39 +747,19 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             except InvalidSignature:
                 logger.error("Invalid signature on emergency command")
                 return False
+            except ValueError as e:
+                # bytes.fromhex can raise ValueError for invalid hex
+                logger.error(f"Invalid signature format (not valid hex): {e}")
+                return False
 
-        except Exception as e:
-            logger.error(f"Signature verification failed: {e}")
+        except (ValueError, TypeError) as e:
+            # ValueError: invalid key format, TypeError: wrong key type
+            logger.error(f"Signature verification failed due to format error: {e}")
             return False
-
-    def _configure_kill_switch(self, config: KillSwitchConfig) -> None:
-        """
-        Configure the emergency kill switch.
-
-        Args:
-            config: Kill switch configuration including root WA keys
-        """
-        self._kill_switch_config = config
-
-        # Parse and store WA public keys
-        from cryptography.hazmat.primitives import serialization
-
-        self._wa_key_map.clear()
-        for key_pem in config.root_wa_public_keys:
-            try:
-                # Validate that it's a valid Ed25519 key
-                public_key = serialization.load_pem_public_key(key_pem.encode("utf-8"))
-                # Import the actual type for isinstance check
-                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey as Ed25519PublicKeyImpl
-
-                if isinstance(public_key, Ed25519PublicKeyImpl):
-                    # Extract WA ID from comment or use hash
-                    wa_id = self._extract_wa_id_from_pem(key_pem)
-                    self._wa_key_map.add_key(wa_id, key_pem)
-            except Exception as e:
-                logger.error(f"Failed to load WA public key: {e}")
-
-        logger.info(f"Kill switch configured with {self._wa_key_map.count()} root WA keys")
+        except Exception as e:
+            # Catch-all for unexpected errors (e.g., cryptography library errors)
+            logger.error(f"Signature verification failed unexpectedly: {e}")
+            return False
 
     def _extract_wa_id_from_pem(self, key_pem: str) -> str:
         """Extract WA ID from PEM comment or generate from hash."""
@@ -727,7 +835,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
 
         assert self.adapter_manager is not None  # Guaranteed by _ensure_adapter_manager
         adapter_config = self._convert_to_adapter_config(adapter_type, config)
-        result = await self.adapter_manager.load_adapter(adapter_type, adapter_id or "", adapter_config)
+        result = await self.adapter_manager.load_adapter(
+            adapter_type, adapter_id or "", adapter_config, auto_start=auto_start
+        )
 
         return AdapterOperationResponse(
             success=result.success,
@@ -761,23 +871,42 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         assert self.adapter_manager is not None  # Guaranteed by _ensure_adapter_manager
         result = await self.adapter_manager.unload_adapter(adapter_id)
 
+        # An adapter that was never loaded is STOPPED, not ERROR. That is the
+        # honest status — "absent" is the state unload converges to — and it is
+        # the only part of the manager's richer result that survives into
+        # AdapterOperationResponse, which has no `details` field. Callers key on
+        # `status` to tell a real unload failure from a benign no-op; the marker
+        # has to be translated HERE because this is where the two schemas meet.
+        already_absent = (result.details or {}).get("reason") == "not_loaded"
+
         return AdapterOperationResponse(
             success=result.success,
             adapter_id=result.adapter_id,
             adapter_type=result.adapter_type or "unknown",
             timestamp=self._now(),
-            status=AdapterStatus.STOPPED if result.success else AdapterStatus.ERROR,
+            status=AdapterStatus.STOPPED if (result.success or already_absent) else AdapterStatus.ERROR,
             error=result.error,
         )
 
-    async def list_adapters(self) -> List[AdapterInfo]:
-        """List all loaded adapters including bootstrap adapters."""
+    async def list_adapters(self) -> List[Any]:
+        """List all loaded adapters including bootstrap adapters.
+
+        Returns a mix of AdapterInfo (bootstrap) and RuntimeAdapterStatus (managed).
+        RuntimeAdapterStatus preserves needs_reauth, has_auth_step, auth_step_id fields.
+        """
+        logger.debug("[LIST_ADAPTERS_SVC] Starting list_adapters")
         self._ensure_adapter_manager_initialized()
 
-        adapters_list: List[AdapterInfo] = []
-        adapters_list.extend(await self._get_bootstrap_adapters())
-        adapters_list.extend(await self._get_managed_adapters())
+        adapters_list: List[Any] = []
+        bootstrap = await self._get_bootstrap_adapters()
+        logger.debug("[LIST_ADAPTERS_SVC] Got %d bootstrap adapters", len(bootstrap))
+        adapters_list.extend(bootstrap)
 
+        managed = await self._get_managed_adapters()
+        logger.debug("[LIST_ADAPTERS_SVC] Got %d managed adapters", len(managed))
+        adapters_list.extend(managed)
+
+        logger.debug("[LIST_ADAPTERS_SVC] Total: %d adapters", len(adapters_list))
         return adapters_list
 
     def _ensure_adapter_manager_initialized(self) -> None:
@@ -800,7 +929,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         if not (self.runtime and hasattr(self.runtime, "adapters")):
             return adapters
 
-        for adapter in self.runtime.adapters:
+        for idx, adapter in enumerate(self.runtime.adapters):
             adapter_type = self._extract_adapter_type(adapter)
 
             if await self._should_skip_bootstrap_adapter(adapter_type):
@@ -828,6 +957,63 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         """Create AdapterInfo for a bootstrap adapter."""
         tools = await self._extract_adapter_tools(adapter, adapter_type)
 
+        # Extract services_registered from adapter if available
+        # This includes both service types (TOOL, COMMUNICATION) and capabilities
+        services_registered: List[str] = []
+        if hasattr(adapter, "get_services_to_register"):
+            try:
+                svc_list = adapter.get_services_to_register()
+                for reg in svc_list:
+                    # Extract service_type name (e.g., "TOOL", "COMMUNICATION")
+                    if hasattr(reg, "service_type"):
+                        svc_type = reg.service_type
+                        if hasattr(svc_type, "value"):
+                            services_registered.append(str(svc_type.value).upper())
+                        else:
+                            services_registered.append(str(svc_type).upper())
+                    # Extract capabilities and add them to services_registered
+                    if hasattr(reg, "capabilities") and reg.capabilities:
+                        services_registered.extend(reg.capabilities)
+            except Exception as e:
+                logger.debug(f"get_services_to_register failed for {adapter_type}: {e}")
+        elif hasattr(adapter, "services_registered"):
+            services_registered = list(adapter.services_registered)
+
+        # Extract config from adapter if available
+        config_params = None
+        if hasattr(adapter, "config") and adapter.config:
+            try:
+                from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
+
+                cfg = adapter.config
+                if hasattr(cfg, "model_dump"):
+                    config_dict = cfg.model_dump()
+                    settings = {
+                        k: str(v)
+                        for k, v in config_dict.items()
+                        if v is not None
+                        and k not in ["adapter_type", "enabled", "persist", "settings", "adapter_config"]
+                    }
+                elif isinstance(cfg, dict):
+                    settings = {k: str(v) for k, v in cfg.items() if v is not None}
+                else:
+                    settings = {}
+                # Carry over adapter_config and persist from the stored AdapterConfig
+                stored = (
+                    self.runtime.adapter_configs.get(adapter_type)
+                    if self.runtime and hasattr(self.runtime, "adapter_configs")
+                    else None
+                )
+                config_params = AdapterConfig(
+                    adapter_type=adapter_type,
+                    enabled=True,
+                    settings=settings,
+                    adapter_config=stored.adapter_config if stored else None,
+                    persist=stored.persist if stored else False,
+                )
+            except Exception as e:
+                logger.warning(f"[BOOTSTRAP_INFO] Could not extract config from {adapter_type}: {e}")
+
         return AdapterInfo(
             adapter_id=f"{adapter_type}_bootstrap",
             adapter_type=adapter_type,
@@ -837,31 +1023,45 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             error_count=0,
             last_error=None,
             tools=tools,
+            services_registered=services_registered,
+            config_params=config_params,
         )
 
     async def _extract_adapter_tools(self, adapter: Any, adapter_type: str) -> List[ToolInfo]:
         """Extract tools from adapter tool service."""
         tools: List[ToolInfo] = []
+        tool_services = []
 
         # Check for tool_service (public) or _tool_service (private, e.g., MCP adapter)
-        tool_service = None
         if hasattr(adapter, "tool_service") and adapter.tool_service:
-            tool_service = adapter.tool_service
-        elif hasattr(adapter, "_tool_service") and adapter._tool_service:
-            tool_service = adapter._tool_service
+            tool_services.append(adapter.tool_service)
+        if hasattr(adapter, "_tool_service") and adapter._tool_service:
+            tool_services.append(adapter._tool_service)
 
-        if not tool_service:
+        # Also check service registrations for TOOL type providers
+        if hasattr(adapter, "get_services_to_register"):
+            try:
+                for reg in adapter.get_services_to_register():
+                    if hasattr(reg, "service_type"):
+                        svc_type = str(getattr(reg.service_type, "value", reg.service_type)).lower()
+                        if svc_type == "tool" and hasattr(reg, "provider") and reg.provider:
+                            tool_services.append(reg.provider)
+            except Exception as e:
+                logger.debug(f"Could not check service registrations for tools: {e}")
+
+        if not tool_services:
             return tools
 
-        try:
-            if hasattr(tool_service, "list_tools"):
-                tool_names = await tool_service.list_tools()
-                for tool_name in tool_names:
-                    tool_info = await self._create_tool_info(tool_service, tool_name)
-                    if tool_info:
-                        tools.append(tool_info)
-        except Exception as e:
-            logger.debug(f"Could not get tools from {adapter_type}: {e}")
+        for tool_service in tool_services:
+            try:
+                if hasattr(tool_service, "list_tools"):
+                    tool_names = await tool_service.list_tools()
+                    for tool_name in tool_names:
+                        tool_info = await self._create_tool_info(tool_service, tool_name)
+                        if tool_info:
+                            tools.append(tool_info)
+            except Exception as e:
+                logger.debug(f"Could not get tools from {adapter_type}: {e}")
 
         return tools
 
@@ -904,19 +1104,18 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             logger.debug(f"Could not create ToolInfo for {tool_name}: {e}")
             return None
 
-    async def _get_managed_adapters(self) -> List[AdapterInfo]:
-        """Get adapters from adapter manager."""
+    async def _get_managed_adapters(self) -> List[Any]:
+        """Get adapters from adapter manager.
+
+        Returns RuntimeAdapterStatus objects directly to preserve
+        needs_reauth, has_auth_step, auth_step_id fields.
+        """
         if not self.adapter_manager:
             return []
 
-        adapters = []
-        adapters_raw = await self.adapter_manager.list_adapters()
-
-        for adapter_status in adapters_raw:
-            adapter_info = self._convert_managed_adapter_status(adapter_status)
-            adapters.append(adapter_info)
-
-        return adapters
+        # Return RuntimeAdapterStatus directly - don't convert to AdapterInfo
+        # This preserves needs_reauth, has_auth_step, auth_step_id fields
+        return await self.adapter_manager.list_adapters()
 
     def _convert_managed_adapter_status(self, adapter_status: Any) -> AdapterInfo:
         """Convert adapter manager status to AdapterInfo."""
@@ -983,38 +1182,41 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         return tools, config_params, services_registered
 
     async def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
-        """Get detailed information about a specific adapter."""
-        if not self._ensure_adapter_manager():
-            return None
+        """Get detailed information about a specific adapter.
 
-        info = self.adapter_manager.get_adapter_info(adapter_id)  # type: ignore[union-attr]
-        if info is None:
-            return None
+        Handles both:
+        1. Regular adapters from adapter_manager (e.g., "weather", "navigation")
+        2. Bootstrap adapters with synthetic IDs (e.g., "cirisverify_bootstrap", "api_bootstrap")
 
-        # Convert adapter_management.AdapterInfo to core.runtime.AdapterInfo
-        from datetime import datetime
+        Returns the full AdapterInfo which includes:
+        - status: Current adapter status
+        - started_at: When adapter was loaded
+        - tools: List of tools provided by the adapter
+        - config_params: Sanitized adapter configuration
+        - services_registered: List of services registered by adapter
+        - metrics: messages_processed, error_count, last_error
+        """
+        # First try the adapter_manager for regular adapters
+        if self._ensure_adapter_manager():
+            result = await self.adapter_manager.get_adapter_info(adapter_id)  # type: ignore[union-attr]
+            if result:
+                return result
 
-        # Extract tools, config, and services_registered from the actual adapter instance
-        try:
-            tools, config_params, services_registered = await self._extract_adapter_instance_data(
-                adapter_id, info.adapter_type
-            )
-        except Exception as e:
-            logger.debug(f"Could not extract tools/config for adapter {adapter_id}: {e}")
-            tools, config_params, services_registered = None, None, []
+        # Check if this is a bootstrap adapter (ID ends with _bootstrap)
+        if adapter_id.endswith("_bootstrap"):
+            adapter_type_from_id = adapter_id[:-10]  # Remove "_bootstrap" suffix
 
-        return AdapterInfo(
-            adapter_id=info.adapter_id,
-            adapter_type=info.adapter_type,
-            status=AdapterStatus.RUNNING if info.is_running else AdapterStatus.STOPPED,
-            started_at=datetime.fromisoformat(info.load_time) if info.load_time else None,
-            messages_processed=0,  # Not tracked in adapter_management.AdapterInfo
-            error_count=0,  # Not tracked in adapter_management.AdapterInfo
-            last_error=None,
-            tools=tools,
-            config_params=config_params,
-            services_registered=services_registered if services_registered else [],
-        )
+            # Search in runtime.adapters list (same as _get_bootstrap_adapters does)
+            if self.runtime and hasattr(self.runtime, "adapters"):
+                for adapter in self.runtime.adapters:
+                    extracted_type = self._extract_adapter_type(adapter)
+                    # Match either the exact type or common variants
+                    if extracted_type == adapter_type_from_id or extracted_type.replace(
+                        "_", ""
+                    ) == adapter_type_from_id.replace("_", ""):
+                        return await self._create_bootstrap_adapter_info(adapter, extracted_type)
+
+        return None
 
     # Configuration Management Methods
     async def get_config(self, path: Optional[str] = None, include_sensitive: bool = False) -> ConfigSnapshot:
@@ -1180,7 +1382,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 error=str(e),
             )
 
-    def _extract_backup_configs(self, backup_config: Any) -> ConfigDict:
+    def _extract_backup_configs(self, backup_config: Any) -> ConfigMapping:
         """Extract backup configuration data from ConfigValue wrapper."""
         backup_raw = backup_config.value
         backup_value = backup_raw.value if hasattr(backup_raw, "value") else backup_raw
@@ -1189,7 +1391,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             return self._parse_structured_backup(backup_value)
         elif isinstance(backup_value, dict):
             # Filter out None values to match the expected type
-            result: ConfigDict = {}
+            result: ConfigMapping = {}
             for k, v in backup_value.items():
                 if v is not None and isinstance(v, (str, int, float, bool, list, dict)):
                     result[k] = v
@@ -1197,7 +1399,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         else:
             raise ValueError("Backup data is not in expected format")
 
-    def _parse_structured_backup(self, backup_value: JSONDict) -> ConfigDict:
+    def _parse_structured_backup(self, backup_value: JSONDict) -> ConfigMapping:
         """Parse structured backup data with metadata."""
         timestamp_str = backup_value.get("backup_timestamp")
         if not isinstance(timestamp_str, str):
@@ -1211,7 +1413,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         )
         return backup_data.configs
 
-    async def _restore_configs_from_backup(self, configs: ConfigDict) -> None:
+    async def _restore_configs_from_backup(self, configs: ConfigMapping) -> None:
         """Restore individual configuration values from backup."""
         for key, value in configs.items():
             if not key.startswith("backup_"):  # Don't restore backups
@@ -1510,8 +1712,10 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
             "service_management", "update_priority", success=True, result=updated_info.model_dump()
         )
         logger.info(
-            f"Updated service provider '{provider_name}' priority from "
-            f"{updated_info.old_priority} to {updated_info.new_priority}"
+            "Updated service provider '%s' priority from %s to %s",
+            _sanitize_for_log(provider_name),
+            updated_info.old_priority,
+            updated_info.new_priority,
         )
 
         return ServicePriorityUpdateResponse(
@@ -1700,14 +1904,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                     for provider in providers:
                         service_name = f"{handler}.{svc_type}.{provider['name']}"
                         cb_state_str = provider.get("circuit_breaker_state", "closed")
-
-                        # Map string state to enum
-                        if cb_state_str == "closed":
-                            cb_state = CircuitBreakerState.CLOSED
-                        elif cb_state_str == "open":
-                            cb_state = CircuitBreakerState.OPEN
-                        else:
-                            cb_state = CircuitBreakerState.HALF_OPEN
+                        cb_state = _map_circuit_breaker_state(cb_state_str)
 
                         circuit_breakers[service_name] = CircuitBreakerStatus(
                             state=cb_state,
@@ -1725,14 +1922,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 for provider in providers:
                     service_name = f"global.{svc_type}.{provider['name']}"
                     cb_state_str = provider.get("circuit_breaker_state", "closed")
-
-                    # Map string state to enum
-                    if cb_state_str == "closed":
-                        cb_state = CircuitBreakerState.CLOSED
-                    elif cb_state_str == "open":
-                        cb_state = CircuitBreakerState.OPEN
-                    else:
-                        cb_state = CircuitBreakerState.HALF_OPEN
+                    cb_state = _map_circuit_breaker_state(cb_state_str)
 
                     circuit_breakers[service_name] = CircuitBreakerStatus(
                         state=cb_state,
@@ -1893,13 +2083,7 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                         else:
                             is_healthy = True  # Assume healthy if no health check
 
-                        service_details[service_key] = {
-                            "healthy": is_healthy,
-                            "circuit_breaker_state": "closed",  # Direct services don't use circuit breakers
-                            "priority": "DIRECT",  # Direct call, no priority
-                            "priority_group": -1,  # Not applicable
-                            "strategy": "DIRECT",  # Direct call
-                        }
+                        service_details[service_key] = _build_service_health_detail(is_healthy=is_healthy)
 
                         if is_healthy:
                             healthy_count += 1
@@ -1907,14 +2091,9 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                             unhealthy_count += 1
                     except Exception as e:
                         logger.error(f"Error checking health of {display_name}: {e}")
-                        service_details[service_key] = {
-                            "healthy": False,
-                            "circuit_breaker_state": "error",
-                            "priority": "DIRECT",
-                            "priority_group": -1,
-                            "strategy": "DIRECT",
-                            "error": str(e),
-                        }
+                        service_details[service_key] = _build_service_health_detail(
+                            is_healthy=False, circuit_breaker_state="error", error=str(e)
+                        )
                         unhealthy_count += 1
 
             # Then get registry services (bus-based services)
@@ -1932,13 +2111,13 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                         cb_state = provider.get("circuit_breaker_state", "closed")
                         is_healthy = cb_state == "closed"
 
-                        service_details[service_key] = {
-                            "healthy": is_healthy,
-                            "circuit_breaker_state": cb_state,
-                            "priority": provider.get("priority", "NORMAL"),
-                            "priority_group": provider.get("priority_group", 0),
-                            "strategy": provider.get("strategy", "FALLBACK"),
-                        }
+                        service_details[service_key] = _build_service_health_detail(
+                            is_healthy=is_healthy,
+                            circuit_breaker_state=cb_state,
+                            priority=provider.get("priority", "NORMAL"),
+                            priority_group=provider.get("priority_group", 0),
+                            strategy=provider.get("strategy", "FALLBACK"),
+                        )
 
                         if is_healthy:
                             healthy_count += 1

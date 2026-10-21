@@ -93,8 +93,10 @@ class UpdatedStatusConscience(ConscienceInterface):
 
         # Check if updated_info_available flag is set
         updated_flag = getattr(task, "updated_info_available", False)
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] Task {task_id} updated_info_available={updated_flag}")
         if not updated_flag:
             # No update - pass
+            logger.info(f"[UPDATED_STATUS_CONSCIENCE] PASSED - no update detected for task {task_id}")
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
@@ -103,8 +105,33 @@ class UpdatedStatusConscience(ConscienceInterface):
                 updated_status_detected=False,
             )
 
+        # A refusal is never rewritten (CC 1.9, plain rule 5c; #1250). This is a
+        # bypass conscience — it runs BEFORE the REJECT exemption in
+        # conscience_execution — so without this guard a message arriving
+        # mid-thought turned the agent's REJECT into a PONDER and invited it to
+        # reconsider. The refusal stands. The flag is deliberately NOT cleared:
+        # the new message is still owed an answer, and the work processor
+        # re-queues it as a fresh task once the refused task is terminal
+        # (TaskManager.requeue_updates_from_rejected_tasks).
+        if action.selected_action == HandlerActionType.REJECT:
+            logger.info(
+                f"[UPDATED_STATUS_CONSCIENCE] Update for task {task_id} arrived during a REJECT — "
+                "the refusal stands; the new message is re-queued after the task is rejected."
+            )
+            return ConscienceCheckResult(
+                status=ConscienceStatus.PASSED,
+                passed=True,
+                check_timestamp=ts_datetime,
+                reason="REJECT is never rewritten; the update is handled after the refusal",
+                original_action=action.model_dump(),
+                updated_status_detected=True,
+            )
+
         # Update detected! Clear the flag and force PONDER
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] FAILED - update detected for task {task_id}!")
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] Original action was: {action.selected_action}")
         updated_content = getattr(task, "updated_info_content", "New observation received")
+        logger.info(f"[UPDATED_STATUS_CONSCIENCE] Updated content: {updated_content[:100]}...")
 
         # Get the original action description and channel info
         original_action_desc = (
@@ -112,14 +139,25 @@ class UpdatedStatusConscience(ConscienceInterface):
         )
         channel_id = getattr(task, "channel_id", "this channel")
 
-        # Clear the flag so this only triggers once
-        from ciris_engine.logic.persistence.db import get_db_connection
-
+        # Clear the flag so this only triggers once. Route through persist
+        # so we don't reintroduce a second libsqlite writer on the DB
+        # (CIRISAgent#763 / CIRISPersist#58).
         try:
-            with get_db_connection() as conn:
-                conn.execute("UPDATE tasks SET updated_info_available = 0 WHERE task_id = ?", (task_id,))
-                conn.commit()
-                logger.info(f"Cleared updated_info_available flag for task {task_id}")
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import _persist_row_to_task, _task_to_persist_payload
+
+            engine = get_persist_engine()
+            if engine is not None:
+                raw = engine.task_get(task_id)
+                if raw is not None:
+                    import json as _json
+
+                    row = _json.loads(raw) if isinstance(raw, str) else raw
+                    if isinstance(row, dict):
+                        existing_task = _persist_row_to_task(row)
+                        existing_task.updated_info_available = False
+                        engine.task_upsert(_json.dumps(_task_to_persist_payload(existing_task)))
+                        logger.info(f"Cleared updated_info_available flag for task {task_id}")
         except Exception as e:
             logger.error(f"Failed to clear updated_info_available flag for task {task_id}: {e}")
 

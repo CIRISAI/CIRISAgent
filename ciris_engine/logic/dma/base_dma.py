@@ -32,6 +32,38 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
     with backward compatibility for existing DMAs.
     """
 
+    def _get_prompt_value(self, key: str) -> Optional[str]:
+        """Read a prompt block from PromptCollection or dict overrides.
+
+        Lives HERE, not on individual evaluators. It was defined on DSASPDMA
+        alone, so MSASPDMA — written against the same `prompt_template_data`
+        contract, using the same blocks — type-checked clean locally and failed
+        CI with six "has no attribute" errors. Prompt access is a BaseDMA
+        concern: every evaluator with a template needs it, and the next one
+        should inherit it rather than rediscover the omission.
+        """
+        # getattr, not attribute access: `prompt_template_data` is supplied by
+        # subclasses that HAVE a template, and not every DMA does. Declaring it
+        # on the base would assert a property this class cannot provide.
+        template = getattr(self, "prompt_template_data", None)
+        if isinstance(template, PromptCollection):
+            return template.get_prompt(key)
+        if isinstance(template, dict):
+            value = template.get(key)
+            return str(value) if isinstance(value, str) else None
+        return None
+
+    def _require_prompt_value(self, key: str) -> str:
+        """Read a required prompt block, or fail loudly during construction.
+
+        Names the evaluator class in the error so a missing key points at the
+        template that lacks it, rather than at whichever base method read it.
+        """
+        value = self._get_prompt_value(key)
+        if value is None:
+            raise ValueError(f"{type(self).__name__} prompt template missing required key: {key}")
+        return value
+
     def __init__(
         self,
         service_registry: ServiceRegistry,
@@ -74,10 +106,38 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
                     self.prompts = overrides
                     return
 
-                with open(prompt_file, "r") as f:
+                # encoding="utf-8" is REQUIRED, not tidiness. Without it Python
+                # uses the locale default, which on Windows is cp1252, and the
+                # prompt YAML failed to load entirely:
+                #
+                #   Failed to load prompts from ...\action_selection_pdma.yml:
+                #   'charmap' codec can't decode byte 0x8f in position 7288
+                #
+                # It is caught and logged as a WARNING below, so the agent then
+                # reasoned with fallback prompts and kept running -- a silent
+                # behavioural change on one platform, not a crash anyone chases.
+                with open(prompt_file, "r", encoding="utf-8") as f:
                     file_prompts = yaml.safe_load(f) or {}
 
-                # Support both dict and PromptCollection
+                # Research-override application (#989). This path reads the YAML
+                # directly and keeps a plain dict, so it never passed through
+                # DMAPromptLoader — which meant thirteen dma_prompt keys were
+                # silently unapplied while the loader logged successful
+                # replacements for their siblings. A manifest that reports a
+                # swap it did not perform is worse than one that cannot swap:
+                # the campaign reads a success line and runs the original value.
+                #
+                # No-op when the research gate is closed (the helper returns the
+                # mapping unchanged), so production composition is unaffected —
+                # the #972 golden bytes prove it.
+                from ciris_engine.logic.dma.prompt_loader import apply_research_overrides_to_mapping
+
+                template_name = Path(prompt_file).stem
+                file_prompts = apply_research_overrides_to_mapping(template_name, file_prompts)
+
+                # Support both dict and PromptCollection. Caller-supplied
+                # overrides still win over the manifest: they are explicit
+                # construction arguments, not experiment configuration.
                 if isinstance(overrides, dict):
                     self.prompts = {**file_prompts, **overrides}
                 else:
@@ -104,6 +164,23 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             self.prompts = {**defaults, **overrides}
         else:
             self.prompts = defaults
+
+    def get_accord_mode(self) -> str:
+        """Get the accord mode from prompts configuration.
+
+        Returns:
+            'full' (default), 'compressed', or 'none'
+        """
+        if isinstance(self.prompts, PromptCollection):
+            return getattr(self.prompts, "accord_mode", "full")
+        elif isinstance(self.prompts, dict):
+            # Check for accord_header key (legacy) or accord_mode
+            accord_value = self.prompts.get("accord_header", self.prompts.get("accord_mode", "full"))
+            if isinstance(accord_value, bool):
+                # Legacy boolean - True means 'full', False means 'none'
+                return "full" if accord_value else "none"
+            return str(accord_value) if accord_value else "full"
+        return "full"
 
     async def get_llm_service(self) -> Optional[LLMService]:
         """Return the LLM service for this DMA from the service registry."""

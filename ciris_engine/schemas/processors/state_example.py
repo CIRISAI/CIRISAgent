@@ -78,12 +78,12 @@ def example_state_result() -> None:
     for result in [success_result, failure_result]:
         if result.success:
             if result.to_state is not None:
-                print(f"✓ Transitioned to {result.to_state.value}")
+                print(f"[OK] Transitioned to {result.to_state.value}")
             else:
-                print("✓ Transitioned to unknown state")
+                print("[OK] Transitioned to unknown state")
             print(f"  Spent {result.duration_in_previous_state:.1f}s in {result.from_state.value}")
         else:
-            print(f"✗ Failed to transition from {result.from_state.value}")
+            print(f"[FAIL] Failed to transition from {result.from_state.value}")
             print(f"  Reason: {result.reason}")
 
 

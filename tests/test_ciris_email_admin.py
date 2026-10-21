@@ -120,8 +120,11 @@ class TestCIRISEmailAdminAssignment:
 
             assert user_role == expected_role, f"Edge case email {email} should get {expected_role} role"
 
-    @patch("ciris_engine.logic.adapters.api.routes.auth.logger")
-    def test_logging_for_ciris_email(self, mock_logger):
+    def test_logging_for_ciris_email(self):
+        # The @patch of routes.auth.logger was removed with routes/auth.py. It was
+        # already decorative: this test re-implements the role rule inline and
+        # asserts on its own simulation, and the mock it patched was only ever
+        # asserted NOT to have been called.
         """Test that granting ADMIN role to @ciris.ai users is logged."""
         email = "admin@ciris.ai"
 
@@ -130,7 +133,6 @@ class TestCIRISEmailAdminAssignment:
             user_role = UserRole.ADMIN
             # In the actual code, this would be:
             # logger.info(f"Granting ADMIN role to @ciris.ai user: {email}")
-            mock_logger.info.assert_not_called()  # Not called in this test context
 
         assert user_role == UserRole.ADMIN
 

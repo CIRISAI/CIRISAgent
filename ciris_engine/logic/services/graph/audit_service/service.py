@@ -14,17 +14,16 @@ This service provides:
 """
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
-import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import uuid4
 
-from ciris_engine.logic.persistence.db.dialect import get_adapter
-from ciris_engine.logic.persistence.db.query_builder import ConflictResolution
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.schemas.types import JSONDict
 
@@ -34,27 +33,22 @@ try:
 
     PSUTIL_AVAILABLE = True
 except ImportError:
-    psutil = None  # type: ignore
+    psutil = None  # type: ignore[assignment,unused-ignore]
     PSUTIL_AVAILABLE = False
-
-# SQLite PRAGMA constants (avoid duplicate literals)
-PRAGMA_JOURNAL_MODE_WAL = "PRAGMA journal_mode=WAL"
-PRAGMA_BUSY_TIMEOUT_5000 = "PRAGMA busy_timeout=5000"
-PRAGMA_SYNCHRONOUS_NORMAL = "PRAGMA synchronous=NORMAL"
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
     from ciris_engine.schemas.audit.core import EventPayload, AuditLogEntry
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.audit.hash_chain import AuditHashChain
-from ciris_engine.logic.audit.verifier import AuditVerifier
+from ciris_engine.logic.audit import resolve_tenant_id as _audit_tenant_id
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.services.base_graph_service import BaseGraphService
 from ciris_engine.protocols.infrastructure.base import RegistryAwareServiceProtocol, ServiceRegistryProtocol
 from ciris_engine.protocols.services import AuditService as AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
+from ciris_engine.schemas.audit.verification import CompleteVerificationResult
 from ciris_engine.schemas.runtime.audit import AuditActionContext, AuditRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ServiceType
 from ciris_engine.schemas.runtime.memory import TimeSeriesDataPoint
@@ -71,11 +65,36 @@ AuditEntry = AuditEntryNode
 
 logger = logging.getLogger(__name__)
 
-try:
-    from ciris_engine.logic.audit.signature_manager import AuditSignatureManager
-except ImportError as e:
-    logger.error(f"Failed to import AuditSignatureManager: {e}")
-    raise
+
+def _resolve_action_type(event_type: str) -> str:
+    """Map an AuditRequest.event_type onto a valid AuditEventType value.
+
+    Persist's audit_log enforces a CHECK constraint (migrations V018/V020)
+    locking action_type to the 21 AuditEventType values; the SQLite arm has
+    no such CHECK. log_action passes a bare HandlerActionType value
+    ('speak'); log_event passes an arbitrary event name ('agent_configured').
+    Neither is directly a valid AuditEventType, so normalize both. The
+    precise event name is always preserved in the persist payload's
+    event_type field.
+    """
+    from ciris_engine.schemas.audit.core import AuditEventType
+
+    try:
+        return AuditEventType(event_type).value
+    except ValueError:
+        pass
+    try:
+        return AuditEventType(f"handler_action_{event_type}").value
+    except ValueError:
+        pass
+    return AuditEventType.SYSTEM_EVENT.value
+
+
+# 2.9.7: audit entries are signed by the persist Engine's local signer
+# (engine.local_sign) — CIRISVerify is out of the audit write path, so the
+# only retryable failure left is a chain-state desync ("sequence gap").
+_AUDIT_SIGN_MAX_RETRIES = 3
+_AUDIT_SIGN_RETRY_DELAY_S = 0.5
 
 
 class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareServiceProtocol):
@@ -100,7 +119,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         # Hash chain options
         enable_hash_chain: bool = True,
         db_path: str = "ciris_audit.db",
-        key_path: str = "audit_keys",
         # Retention options
         retention_days: int = 90,
         cache_size: int = 1000,
@@ -115,7 +133,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             export_format: Format for exports (jsonl, csv, sqlite)
             enable_hash_chain: Whether to maintain cryptographic hash chain
             db_path: Path for hash chain database
-            key_path: Directory for signing keys
             retention_days: How long to retain audit data
             cache_size: Size of in-memory cache
         """
@@ -139,20 +156,19 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             self.db_path = db_path
         else:
             self.db_path = Path(db_path)
-        self.key_path = Path(key_path)
 
-        # Retention configuration
+        # Retention configuration (cleanup implemented in cleanup_old_entries)
         self.retention_days = retention_days
 
         # Cache for recent entries
         self._recent_entries: List[AuditRequest] = []
         self._max_cached_entries = cache_size
 
-        # Hash chain components
-        self.hash_chain: Optional[AuditHashChain] = None
-        self.signature_manager: Optional[AuditSignatureManager] = None
-        self.verifier: Optional[AuditVerifier] = None
-        self._db_connection: Optional[sqlite3.Connection] = None
+        # Hash chain — A3 cutover: writes go through persist's
+        # cirislens_audit_log substrate (`_write_to_persist_chain`); reads
+        # go through `_verify_complete_chain` which delegates to persist's
+        # `audit_verify_chain`. The legacy AuditHashChain /
+        # AuditSignatureManager / raw sqlite3 connection are gone.
 
         # Export buffer
         self._export_buffer: List[AuditRequest] = []
@@ -166,6 +182,13 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         # Lock for hash chain operations
         self._hash_chain_lock = asyncio.Lock()
+
+        # A3 cutover: persist-routed chain state. Lazy-loaded on first
+        # write via _refresh_persist_chain_state. _next_seq=None signals
+        # "not yet primed from persist"; sequence_number values written
+        # are always >= 1 (1 == fresh genesis, 2+ == post-A0b-bridge).
+        self._next_seq: Optional[int] = None
+        self._last_entry_hash_b64: Optional[str] = None
 
     async def attach_registry(self, registry: "ServiceRegistryProtocol") -> None:
         """
@@ -200,9 +223,8 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         else:
             self._start_time = datetime.now()
 
-        # Initialize hash chain if enabled
-        if self.enable_hash_chain:
-            await self._initialize_hash_chain()
+        # Hash chain needs no Python-side init — persist owns the
+        # cirislens_audit_log table, signing keys, and chain state.
 
         # Create export directory if needed
         if self.export_path:
@@ -243,9 +265,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         except Exception as e:
             logger.warning(f"Failed to log shutdown event: {e}")
 
-        # Close database connection AFTER logging
-        if self._db_connection:
-            self._db_connection.close()
+        # Persist owns the connection pool — nothing to close here.
 
         logger.info("GraphAuditService stopped")
 
@@ -611,11 +631,100 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
 
         return audit_entries[start:end]
 
+    def _verify_complete_chain(self) -> CompleteVerificationResult:
+        """Walk the full audit chain via persist's `audit_verify_chain`.
+
+        Inlined from the deleted `logic/audit/verifier.py` shim (#896):
+        persist owns the chain state; the agent shapes persist's outcome
+        into the existing CompleteVerificationResult schema. Persist
+        combines hash + signature verification under a single outcome,
+        so both flags report the same value.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        start_time = self._time_service.now() if self._time_service else datetime.now()
+
+        try:
+            engine = get_persist_engine()
+            if engine is None:
+                raise RuntimeError("persist engine not wired")
+
+            tenant_id = _audit_tenant_id()
+
+            # Resolve the chain tail. audit_list_entries paginates DESC by
+            # recorded_at — NOT by sequence_number — so take the max over a
+            # window (same rationale as _refresh_persist_chain_state).
+            filter_json = json.dumps({"tenant_id": tenant_id})
+            cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
+            raw_list = engine.audit_list_entries(filter_json, cursor_json, 256)
+            parsed = json.loads(raw_list) if isinstance(raw_list, (bytes, str)) else raw_list
+            items = (parsed.get("items") if isinstance(parsed, dict) else parsed) or []
+            last_seq = max(
+                (int(it.get("sequence_number", 0)) for it in items if isinstance(it, dict)),
+                default=0,
+            )
+
+            end_time = self._time_service.now() if self._time_service else datetime.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+
+            if last_seq < 1:
+                return CompleteVerificationResult(
+                    valid=True,
+                    entries_verified=0,
+                    hash_chain_valid=True,
+                    signatures_valid=True,
+                    verification_time_ms=verification_time,
+                    summary="Empty audit log",
+                )
+
+            raw = engine.audit_verify_chain(tenant_id, 1, last_seq)
+            payload = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            outcome = payload.get("outcome", {}) if isinstance(payload, dict) else {}
+            walked = int(payload.get("entries_walked", 0)) if isinstance(payload, dict) else 0
+            ok = isinstance(outcome, dict) and outcome.get("outcome") == "ok"
+
+            errors: List[str] = []
+            if not ok and isinstance(outcome, dict):
+                at_seq = outcome.get("at_sequence")
+                reason = outcome.get("reason", "unknown")
+                detail = outcome.get("detail", "")
+                errors.append(f"chain break at sequence {at_seq}: {reason} ({detail})")
+
+            end_time = self._time_service.now() if self._time_service else datetime.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+
+            if ok:
+                logger.info(f"Audit verification passed: {walked} entries in {verification_time}ms")
+            else:
+                logger.error(f"Audit verification FAILED: {errors}")
+
+            return CompleteVerificationResult(
+                valid=ok,
+                entries_verified=walked,
+                hash_chain_valid=ok,
+                signatures_valid=ok,
+                verification_time_ms=verification_time,
+                hash_chain_errors=errors,
+                signature_errors=[],
+            )
+        except Exception as e:
+            end_time = self._time_service.now() if self._time_service else datetime.now()
+            verification_time = int((end_time - start_time).total_seconds() * 1000)
+            logger.exception("persist audit_verify_chain failed")
+            return CompleteVerificationResult(
+                valid=False,
+                entries_verified=0,
+                hash_chain_valid=False,
+                signatures_valid=False,
+                verification_time_ms=verification_time,
+                error=f"verify_complete_chain error: {type(e).__name__}: {e}",
+            )
+
     async def verify_audit_integrity(self) -> VerificationReport:
         """Verify the integrity of the audit trail."""
         start_time = self._time_service.now() if self._time_service else datetime.now()
 
-        if not self.enable_hash_chain or not self.verifier:
+        if not self.enable_hash_chain:
             return VerificationReport(
                 verified=False,
                 total_entries=0,
@@ -629,7 +738,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             )
 
         try:
-            result = await asyncio.to_thread(self.verifier.verify_complete_chain)
+            result = await asyncio.to_thread(self._verify_complete_chain)
             end_time = self._time_service.now() if self._time_service else datetime.now()
 
             # Extract all errors
@@ -672,7 +781,7 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         """Generate a comprehensive audit verification report."""
         start_time = self._time_service.now() if self._time_service else datetime.now()
 
-        if not self.enable_hash_chain or not self.verifier:
+        if not self.enable_hash_chain:
             return VerificationReport(
                 verified=False,
                 total_entries=0,
@@ -751,11 +860,146 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
         elif format == "csv":
             await self._export_csv(audit_requests, filename)
         elif format == "sqlite":
-            await self._export_sqlite(audit_requests, filename)
+            # 2.9.0: the SQLite-format export was removed from the core
+            # audit service because it required `import sqlite3` outside
+            # `ciris_adapters/`. Re-add via a dedicated archive adapter if
+            # the use case returns. Users who want SQLite-format export
+            # can pipe the JSONL output through a one-liner converter.
+            raise ValueError(
+                "SQLite-format export was removed in 2.9.0. "
+                "Use format='jsonl' or 'csv' instead."
+            )
         else:
             raise ValueError(f"Unsupported export format: {format}")
 
         return str(filename)
+
+    async def cleanup_old_entries(self, retention_days: Optional[int] = None) -> int:
+        """
+        Clean up audit entries older than retention threshold.
+
+        This method deletes audit entries older than the specified retention period
+        while preserving hash chain integrity by re-anchoring the chain at the oldest
+        remaining entry.
+
+        Args:
+            retention_days: Days to retain (defaults to self.retention_days, typically 90)
+
+        Returns:
+            Number of entries deleted
+
+        Note:
+            After truncation, the oldest remaining entry's previous_hash is updated to
+            "REANCHOR_{timestamp}" to mark it as the new chain anchor. This maintains
+            audit integrity while allowing old data to be purged.
+        """
+        days = retention_days or self.retention_days
+        if days <= 0:
+            logger.warning("Invalid retention_days, skipping cleanup")
+            return 0
+
+        cutoff_time = (self._time_service.now() if self._time_service else datetime.now()) - __import__(
+            "datetime"
+        ).timedelta(days=days)
+        cutoff_iso = cutoff_time.isoformat()
+
+        deleted_count = 0
+
+        # Step 1: Prune the persist-owned audit chain via maintenance_prune_audit_chain.
+        if self.enable_hash_chain:
+            try:
+                deleted_count = await self._prune_persist_audit_chain(cutoff_iso)
+            except Exception as e:
+                logger.error(f"Failed to prune persist audit chain: {e}", exc_info=True)
+
+        # Step 2: Delete old audit graph nodes via memory bus
+        if self._memory_bus:
+            try:
+                graph_deleted = await self._cleanup_audit_graph_nodes(cutoff_time)
+                logger.info(f"Audit cleanup: deleted {graph_deleted} graph nodes older than {days} days")
+            except Exception as e:
+                logger.error(f"Failed to cleanup audit graph nodes: {e}", exc_info=True)
+
+        # Step 3: Clear expired entries from cache
+        self._recent_entries = [e for e in self._recent_entries if e.timestamp >= cutoff_time]
+
+        if deleted_count > 0:
+            logger.info(f"Audit retention cleanup complete: deleted {deleted_count} entries older than {days} days")
+
+        return deleted_count
+
+    async def _prune_persist_audit_chain(self, cutoff_iso: str) -> int:
+        """Prune persist's cirislens_audit_log via maintenance substrate.
+
+        Persist's `maintenance_prune_audit_chain(tenant_id, cutoff_iso)`
+        handles re-anchoring + deletion atomically. Returns the count of
+        deleted entries.
+        """
+
+        def _do_prune() -> int:
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                return 0
+            tenant_id = _audit_tenant_id()
+            try:
+                raw = engine.maintenance_prune_audit_chain(tenant_id, cutoff_iso)
+            except Exception as e:
+                logger.warning(f"persist maintenance_prune_audit_chain failed: {e}")
+                return 0
+            # Persist returns either an int or a small JSON envelope; tolerate both.
+            if isinstance(raw, int):
+                return raw
+            if isinstance(raw, (bytes, str)):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, int):
+                        return parsed
+                    if isinstance(parsed, dict):
+                        for key in ("deleted", "removed", "pruned"):
+                            v = parsed.get(key)
+                            if isinstance(v, int):
+                                return v
+                except Exception:
+                    return 0
+            return 0
+
+        return await asyncio.to_thread(_do_prune)
+
+    async def _cleanup_audit_graph_nodes(self, cutoff_time: datetime) -> int:
+        """Delete audit nodes older than cutoff from graph storage."""
+        if not self._memory_bus:
+            return 0
+
+        deleted = 0
+
+        # Query for old audit nodes
+        from ciris_engine.schemas.services.graph_core import NodeType
+
+        search_query = f"type:{NodeType.AUDIT_ENTRY.value} scope:{GraphScope.LOCAL.value}"
+        try:
+            nodes = await self._memory_bus.search(search_query, filters=None, handler_name="audit_service")
+
+            for node in nodes:
+                # Extract timestamp from node (updated_at at node level, or created_at in attributes)
+                node_timestamp = node.updated_at
+                if node_timestamp is None and hasattr(node.attributes, "created_at"):
+                    node_timestamp = node.attributes.created_at
+                if node_timestamp and node_timestamp < cutoff_time:
+                    # Delete via forget - pass the full node
+                    result = await self._memory_bus.forget(
+                        node=node,
+                        handler_name="audit_service",
+                        metadata={"reason": f"retention_cleanup_{self.retention_days}d"},
+                    )
+                    if result.status == MemoryOpStatus.OK:
+                        deleted += 1
+
+        except Exception as e:
+            logger.error(f"Error querying/deleting audit graph nodes: {e}")
+
+        return deleted
 
     # ========== GraphServiceProtocol Implementation ==========
 
@@ -989,228 +1233,209 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
             logger.error(f"Failed to create trace correlation: {e}", exc_info=True)
             # Don't fail the audit operation if trace creation fails
 
-    async def _initialize_hash_chain(self) -> None:
-        """Initialize hash chain components."""
-        try:
-            # Ensure directories exist
-            self.key_path.mkdir(parents=True, exist_ok=True)
-
-            # Initialize database
-            await self._init_database()
-
-            # Initialize components
-            self.hash_chain = AuditHashChain(str(self.db_path))
-            logger.debug(
-                f"Initializing AuditSignatureManager with key_path={self.key_path}, db_path={self.db_path}, time_service={self._time_service}"
-            )
-
-            # Ensure time_service is not None
-            if not self._time_service:
-                raise RuntimeError("TimeService is None - cannot initialize AuditSignatureManager")
-
-            # Check actual types
-            logger.debug(
-                f"Types: key_path={type(self.key_path)}, db_path={type(self.db_path)}, time_service={type(self._time_service)}"
-            )
-
-            self.signature_manager = AuditSignatureManager(str(self.key_path), str(self.db_path), self._time_service)
-            self.verifier = AuditVerifier(str(self.db_path), str(self.key_path), self._time_service)
-
-            # Initialize in thread
-            await asyncio.to_thread(self._init_components_sync)
-
-            logger.info("Hash chain audit system initialized")
-
-        except Exception as e:
-            logger.error(f"CRITICAL: Failed to initialize hash chain: {e}", exc_info=True)
-            # Hash chain is REQUIRED for audit integrity - do not allow fallback
-            raise RuntimeError(f"Audit hash chain initialization failed: {e}") from e
-
-    def _init_components_sync(self) -> None:
-        """Synchronous initialization of audit components."""
-        if not self.hash_chain or not self.signature_manager or not self.verifier:
-            raise RuntimeError("Hash chain components not initialized")
-
-        self.hash_chain.initialize()
-        self.signature_manager.initialize()
-        self.verifier.initialize()
-
-        if not self.signature_manager.test_signing():
-            raise RuntimeError("Signing test failed")
-
-    async def _init_database(self) -> None:
-        """Initialize the audit database."""
-
-        def _create_tables() -> None:
-            conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
-            cursor = conn.cursor()
-
-            # Set PRAGMA statements for stability and corruption prevention
-            cursor.execute(PRAGMA_JOURNAL_MODE_WAL)
-            cursor.execute(PRAGMA_BUSY_TIMEOUT_5000)
-            cursor.execute(PRAGMA_SYNCHRONOUS_NORMAL)
-            cursor.execute("PRAGMA foreign_keys=ON")
-
-            # Check database integrity
-            integrity_result = cursor.execute("PRAGMA integrity_check").fetchone()
-            if integrity_result[0] != "ok":
-                logger.error(f"Audit database integrity check failed: {integrity_result}")
-                # Close and recreate the database
-                conn.close()
-                import os
-
-                db_path_str = str(self.db_path)
-                # Remove corrupted database and WAL/SHM files
-                for ext in ["", "-wal", "-shm"]:
-                    try:
-                        os.remove(db_path_str + ext)
-                    except OSError:
-                        pass
-                logger.warning("Corrupted audit database removed, recreating...")
-                conn = sqlite3.connect(db_path_str, check_same_thread=False)
-                cursor = conn.cursor()
-                cursor.execute(PRAGMA_JOURNAL_MODE_WAL)
-                cursor.execute(PRAGMA_BUSY_TIMEOUT_5000)
-                cursor.execute(PRAGMA_SYNCHRONOUS_NORMAL)
-
-            # Audit log table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_log (
-                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_id TEXT NOT NULL UNIQUE,
-                    event_timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    originator_id TEXT NOT NULL,
-                    target_id TEXT,
-                    event_summary TEXT,
-                    event_payload TEXT,
-                    sequence_number INTEGER NOT NULL,
-                    previous_hash TEXT NOT NULL,
-                    entry_hash TEXT NOT NULL,
-                    signature TEXT NOT NULL,
-                    signing_key_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(sequence_number)
-                )
-            """
-            )
-
-            # Signing keys table
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_signing_keys (
-                    key_id TEXT PRIMARY KEY,
-                    public_key TEXT NOT NULL,
-                    algorithm TEXT NOT NULL DEFAULT 'rsa-pss',
-                    key_size INTEGER NOT NULL DEFAULT 2048,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    revoked_at TEXT
-                )
-            """
-            )
-
-            # Indexes
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_audit_log_event_timestamp
-                ON audit_log(event_timestamp)
-            """
-            )
-
-            cursor.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_audit_log_event_type
-                ON audit_log(event_type)
-            """
-            )
-
-            conn.commit()
-            conn.close()
-
-        await asyncio.to_thread(_create_tables)
-        self._db_connection = sqlite3.connect(str(self.db_path), check_same_thread=False)
-        # Apply PRAGMA settings to persistent connection
-        self._db_connection.execute(PRAGMA_JOURNAL_MODE_WAL)
-        self._db_connection.execute(PRAGMA_BUSY_TIMEOUT_5000)
-        self._db_connection.execute(PRAGMA_SYNCHRONOUS_NORMAL)
-
     async def _add_to_hash_chain(self, entry: AuditRequest) -> Optional[JSONDict]:
-        """Add an entry to the hash chain.
+        """Add an entry to the hash chain via persist.
+
+        A3 cutover (CIRISAgent#763 Lane A): the agent no longer writes to
+        the legacy `ciris_audit.db` audit_log table. All writes route
+        through persist's `cirislens_audit_log` substrate via the
+        canonicalize-hash → sign → record_entry pattern that A0b
+        established for the bridge entry.
 
         Returns:
-            Dict with hash chain data (sequence_number, entry_hash, previous_hash, signature, signing_key_id)
-            or None if hash chain is disabled
+            Dict with hash chain data (sequence_number, entry_hash,
+            previous_hash, signature, signing_key_id) or None if hash
+            chain is disabled.
         """
         if not self.enable_hash_chain:
             return None
 
+        # The persist-chain write mutates no chain state (_next_seq /
+        # _last_entry_hash_b64) until its final audit_record_entry — so the
+        # whole write is safe to retry on a chain-state desync.
         async with self._hash_chain_lock:
-            hash_chain_data: Optional[JSONDict] = None
+            for attempt in range(_AUDIT_SIGN_MAX_RETRIES):
+                try:
+                    return await asyncio.to_thread(self._write_to_persist_chain, entry)
+                except Exception as e:
+                    last_attempt = attempt >= _AUDIT_SIGN_MAX_RETRIES - 1
+                    msg = str(e)
+                    # persist raises "chain integrity: sequence gap ..." when
+                    # the cached _next_seq has drifted from the chain tail.
+                    # Self-heal: drop the cache so the retry re-reads the head
+                    # — otherwise one drift cascades into unbounded failures.
+                    is_chain_desync = "chain integrity" in msg or "sequence gap" in msg
 
-            def _write_to_chain() -> JSONDict:
-                entry_dict: JSONDict = {
-                    "event_id": entry.entry_id,
-                    "event_timestamp": entry.timestamp.isoformat(),
-                    "event_type": entry.event_type,
-                    "originator_id": entry.entity_id,
-                    "event_payload": json.dumps(entry.details),
-                }
+                    if last_attempt or not is_chain_desync:
+                        logger.exception("Failed to add to persist audit chain")
+                        return None
 
-                if not self.hash_chain or not self.signature_manager:
-                    raise RuntimeError("Hash chain not available")
+                    logger.warning(
+                        "audit chain desync (%s) — re-syncing chain state from persist and retrying",
+                        msg,
+                    )
+                    self._next_seq = None
+                    self._last_entry_hash_b64 = None
+            return None
 
-                prepared = self.hash_chain.prepare_entry(entry_dict)
-                entry_hash_val = get_str(prepared, "entry_hash", "")
-                signature = self.signature_manager.sign_entry(entry_hash_val)
+    def _write_to_persist_chain(self, entry: AuditRequest) -> JSONDict:
+        """Synchronous persist-routed write — assemble, hash, sign, record.
 
-                if not self._db_connection:
-                    raise RuntimeError("Database connection not available")
+        Runs in a worker thread (called via asyncio.to_thread from the
+        async wrapper). Holds the chain-state cache under the service's
+        async lock, so we never race on `_next_seq` / `_last_entry_hash_b64`.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-                cursor = self._db_connection.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO audit_log
-                    (event_id, event_timestamp, event_type, originator_id,
-                     event_summary, event_payload, sequence_number, previous_hash,
-                     entry_hash, signature, signing_key_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        entry.entry_id,
-                        entry.timestamp.isoformat(),
-                        entry.event_type,
-                        entry.entity_id,
-                        f"{entry.event_type} by {entry.actor}",
-                        json.dumps(entry.details),
-                        prepared["sequence_number"],
-                        prepared["previous_hash"],
-                        prepared["entry_hash"],
-                        signature,
-                        self.signature_manager.key_id or "unknown",
-                    ),
-                )
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError(
+                "persist engine not wired — A3 audit cutover requires the "
+                "engine to be initialized by ServiceInitializer first"
+            )
 
-                self._db_connection.commit()
+        # Lazy-load chain state (next sequence + last entry hash) on first call.
+        if self._next_seq is None or self._last_entry_hash_b64 is None:
+            self._refresh_persist_chain_state(engine)
 
-                # Return hash chain data
-                result_dict: JSONDict = {
-                    "sequence_number": get_int(prepared, "sequence_number", 0),
-                    "entry_hash": entry_hash_val,
-                    "previous_hash": get_str(prepared, "previous_hash", ""),
-                    "signature": signature,
-                    "signing_key_id": self.signature_manager.key_id or "unknown",
-                }
-                return result_dict
+        # 2.9.7: sign with the persist Engine's federation-registered local
+        # signer — the ONE signer identity. local_derived_key_id() is the id
+        # the substrate verifies against (bare aliases and the old CIRISVerify
+        # "agent-{sha12}" ids land verify_unknown_key on peer nodes).
+        actor_id_b64 = engine.local_public_key_b64()
+        signing_key_id = engine.local_derived_key_id()
+        tenant_id = _audit_tenant_id()
 
+        recorded_at = entry.timestamp.isoformat().replace("+00:00", "Z")
+        if not recorded_at.endswith("Z"):
+            recorded_at = recorded_at + "Z" if "T" in recorded_at and "+" not in recorded_at else recorded_at
+
+        payload_obj: JSONDict = {
+            "event_type": entry.event_type,
+            "actor": entry.actor,
+            "details": entry.details,
+            "outcome": entry.outcome,
+        }
+
+        # action_type must be one of the 21 AuditEventType values — persist's
+        # audit_log CHECK constraint (V018/V020) enforces this on Postgres.
+        persist_entry: JSONDict = {
+            "entry_id": entry.entry_id,
+            "sequence_number": self._next_seq,
+            "tenant_id": tenant_id,
+            "actor_id": actor_id_b64,
+            "action_type": _resolve_action_type(entry.event_type),
+            "subject_kind": "agent_event",
+            "subject_id": entry.entity_id,
+            "payload": json.dumps(payload_obj, sort_keys=True, separators=(",", ":")),
+            "prev_hash": self._last_entry_hash_b64,
+            "recorded_at": recorded_at,
+            "signing_key_id": signing_key_id,
+            "entry_hash": "",
+            "signature": "",
+        }
+
+        # Persist owns canonicalization for hash + signing.
+        hash_canon = engine.audit_canonicalize_for_hash(json.dumps(persist_entry))
+        hash_bytes = hash_canon if isinstance(hash_canon, bytes) else hash_canon.encode()
+        entry_hash_b64 = base64.b64encode(hashlib.sha256(hash_bytes).digest()).decode()
+        persist_entry["entry_hash"] = entry_hash_b64
+
+        sign_canon = engine.audit_canonicalize_for_signing(json.dumps(persist_entry))
+        sign_bytes = sign_canon if isinstance(sign_canon, bytes) else sign_canon.encode()
+        # `local_sign` is unusable once the node's classical key is custodied in
+        # the sealed keystore rather than held as a bare seed: that signer's
+        # `HardwareSigner::sign` is async, so persist refuses the synchronous
+        # verb outright —
+        #
+        #   RuntimeError: classical (Ed25519) sign: synchronous sign_ed25519 is
+        #   unavailable for a hardware-custodied classical key ...; use sign_hybrid
+        #
+        # and the whole audit chain fails closed behind it: "Failed to add to
+        # persist audit chain" -> "Hash chain data not generated for action
+        # speak" -> no ACTION_RESULT events -> no traces captured.
+        #
+        # `local_sign_hybrid` is persist's SINGLE hybrid-sign verb (v17.7.0 /
+        # CIRISPersist#470) and works for both custody models. Its
+        # `classical_sig` is the same 64-byte Ed25519 signature `local_sign`
+        # returned, so the chain's wire shape is unchanged — this swaps how the
+        # signature is obtained, not what is written.
+        from ciris_engine.logic.utils import substrate_signing
+
+        signature_b64 = base64.b64encode(substrate_signing.sign_classical(engine, sign_bytes)).decode()
+        persist_entry["signature"] = signature_b64
+
+        engine.audit_record_entry(json.dumps(persist_entry))
+
+        result: JSONDict = {
+            "sequence_number": self._next_seq,
+            "entry_hash": entry_hash_b64,
+            "previous_hash": self._last_entry_hash_b64,
+            "signature": signature_b64,
+            "signing_key_id": signing_key_id,
+        }
+
+        # Advance chain-state cache for the next write.
+        self._last_entry_hash_b64 = entry_hash_b64
+        self._next_seq = (self._next_seq or 0) + 1
+        return result
+
+    def _refresh_persist_chain_state(self, engine: Any) -> None:
+        """Query persist for the last entry; set _next_seq and _last_entry_hash_b64.
+
+        Called once per service lifetime on the first write. The bridge
+        entry written by A0b is sequence_number=1; the first agent-emitted
+        entry is therefore sequence_number=2 with prev_hash = bridge
+        entry's entry_hash. On a fresh install (no bridge, no prior
+        writes), start at sequence_number=1 with the all-zeros prev_hash.
+
+        persist's `audit_list_entries` paginates with an AuditCursor
+        (`version`, `last_ts`, `last_id`); setting last_ts to a far-future
+        timestamp + empty last_id returns the latest entry first (DESC by
+        recorded_at). Response is a JSON string `{"items": [...]}`.
+        """
+        filter_json = json.dumps({"tenant_id": _audit_tenant_id()})
+        cursor_json = json.dumps(
+            {"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}
+        )
+        # Fetch a window, not just 1: audit_list_entries paginates DESC by
+        # recorded_at — NOT by sequence_number. On sub-millisecond writes
+        # (equal recorded_at) or any clock skew, items[0] is NOT the true
+        # chain tail, which would set _next_seq one short and every write
+        # would then fail "sequence gap" forever.
+        raw = engine.audit_list_entries(filter_json, cursor_json, 256)
+
+        items: List[Any] = []
+        if isinstance(raw, str):
             try:
-                logger.debug(f"About to write to hash chain for entry {entry.entry_id}")
-                hash_chain_data = await asyncio.to_thread(_write_to_chain)
-                logger.debug(f"Successfully wrote to hash chain for entry {entry.entry_id}")
-                return hash_chain_data
-            except Exception as e:
-                logger.error(f"Failed to add to hash chain: {e}", exc_info=True)
-                return None
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                items = list(parsed.get("items") or [])
+
+        # The chain's authoritative order is sequence_number — select the
+        # max-sequence entry as the true tail regardless of recorded_at order.
+        head = max(
+            (it for it in items if isinstance(it, dict)),
+            key=lambda it: int(it.get("sequence_number", 0)),
+            default=None,
+        )
+
+        if head is None:
+            self._next_seq = 1
+            self._last_entry_hash_b64 = base64.b64encode(b"\x00" * 32).decode()
+            logger.info("audit chain state: fresh genesis (no prior entries in persist)")
+            return
+
+        last_seq = int(head.get("sequence_number", 0))
+        last_hash = str(head.get("entry_hash", ""))
+        self._next_seq = last_seq + 1
+        self._last_entry_hash_b64 = last_hash
+        logger.info(
+            "audit chain state: resumed at seq=%d after last_entry=%s...",
+            self._next_seq, last_hash[:16],
+        )
 
     def _cache_entry(self, entry: AuditRequest) -> None:
         """Add entry to cache."""
@@ -1241,8 +1466,9 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                 await self._export_jsonl(self._export_buffer, self.export_path)
             elif self.export_format == "csv":
                 await self._export_csv(self._export_buffer, self.export_path)
-            elif self.export_format == "sqlite":
-                await self._export_sqlite(self._export_buffer, self.export_path)
+            # 2.9.0: sqlite export removed (audit service must not depend on
+            # sqlite3 outside ciris_adapters/). See export_audit_data for
+            # the user-facing error.
 
             self._export_buffer.clear()
         except Exception as e:
@@ -1286,60 +1512,6 @@ class GraphAuditService(BaseGraphService, AuditServiceProtocol, RegistryAwareSer
                     )
 
         await asyncio.to_thread(_write_csv)
-
-    async def _export_sqlite(self, entries: List[AuditRequest], path: Path) -> None:
-        """Export entries to SQLite format."""
-
-        def _write_sqlite() -> None:
-            conn = sqlite3.connect(str(path), check_same_thread=False)
-            cursor = conn.cursor()
-
-            # Create table if needed
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS audit_export (
-                    entry_id TEXT PRIMARY KEY,
-                    timestamp TEXT NOT NULL,
-                    entity_id TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    actor TEXT NOT NULL,
-                    outcome TEXT,
-                    details TEXT
-                )
-            """
-            )
-
-            # Use dialect-aware query builder for UPSERT
-            adapter = get_adapter()
-            builder = adapter.get_query_builder()
-
-            query = builder.insert(
-                table="audit_export",
-                columns=["entry_id", "timestamp", "entity_id", "event_type", "actor", "outcome", "details"],
-                conflict_resolution=ConflictResolution.REPLACE,
-                conflict_columns=["entry_id"],
-            )
-            sql = query.to_sql(adapter)
-
-            # Insert entries
-            for entry in entries:
-                cursor.execute(
-                    sql,
-                    (
-                        entry.entry_id,
-                        entry.timestamp.isoformat(),
-                        entry.entity_id,
-                        entry.event_type,
-                        entry.actor,
-                        entry.outcome,
-                        json.dumps(entry.details),
-                    ),
-                )
-
-            conn.commit()
-            conn.close()
-
-        await asyncio.to_thread(_write_sqlite)
 
     def _get_severity(self, action: HandlerActionType) -> str:
         """Determine severity level for an action."""

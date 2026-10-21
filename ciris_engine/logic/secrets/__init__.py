@@ -2,28 +2,22 @@
 CIRIS Agent Secrets Management System
 
 Provides secure detection, storage, and access control for sensitive information.
-All secrets are encrypted at rest and access is audited.
+Detection, encryption-at-rest, decapsulation, and audit are all owned by
+persist's `secrets_*` substrate (2.9.7 DRY purge, wave 2 — the Python
+`SecretsFilter` duplicate was deleted; seed the substrate filter catalog
+via `SecretsService.update_filter_config`).
 
 Key components:
-- SecretsFilter: Detects and filters secrets from content
-- SecretsStore: Encrypted storage and retrieval of secrets
-- SecretsService: Main service coordinating secrets management
-- SecretTools: Agent tools for managing secrets
+- SecretsService: Typed facade driving persist's secrets substrate
 """
 
 from ciris_engine.schemas.secrets.core import DetectedSecret, SecretAccessLog, SecretPattern, SecretRecord
 
-from .encryption import SecretsEncryption
-from .filter import SecretsFilter
 from .service import SecretsService
-from .store import SecretsStore
 
 __all__ = [
-    "SecretsFilter",
     "SecretPattern",
     "DetectedSecret",
-    "SecretsStore",
-    "SecretsEncryption",
     "SecretRecord",
     "SecretAccessLog",
     "SecretsService",

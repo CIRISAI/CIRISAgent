@@ -4,11 +4,13 @@ Runtime API response schemas - fully typed replacements for Dict[str, Any].
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StateTransitionResult(BaseModel):
     """Result of state transition request."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether transition succeeded")
     target_state: str = Field(..., description="Requested target state")
@@ -19,6 +21,8 @@ class StateTransitionResult(BaseModel):
 
 class ProcessingSpeedResult(BaseModel):
     """Result of processing speed change."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether speed change succeeded")
     multiplier: float = Field(..., description="New speed multiplier")

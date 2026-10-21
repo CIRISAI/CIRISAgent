@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA DEFER seçtikten sonra hak temelli ikinci geçiş
+
+component_name: dsaspdma
+description: "Erteleme özelinde eylem seçimi: Bir DEFER eylemini haklar/ihtiyaçlar taksonomisine göre sınıflandırır"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === HAKLAR / İHTİYAÇLAR TAKSONOMİSİ ===
+  - health_and_bodily_integrity: Yaşam, sağlık, bedensel bütünlük, engellilik, tıbbi güvenlik, silahlandırma, tehlikeli maddeler veya doğrudan fiziksel zarar sonuçları için kullanın.
+    Hak dayanağı: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: Konut, barınak, ev güvenliği, gıda, su, sanitasyon, enerji, altyapı ve diğer temel yaşam koşulları için kullanın.
+    Hak dayanağı: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: İş, gelir, ücret, borç, kredi, yardımlar, sosyal güvenlik, yatırım, vergiler veya diğer geçim ve finansal istikrar ihtiyaçları için kullanın.
+    Hak dayanağı: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: Hukuki danışmanlık, hukuki yardım, usule uygunluk, adil yargılanma, giderime erişim, sözleşmeler, sorumluluk veya adalete erişim soruları için kullanın.
+    Hak dayanağı: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: Hukuk önünde tanınma, kimlik doğrulama, vatandaşlık, oy verme, seçimler, kamusal katılım veya yurttaşlık statüsü için kullanın.
+    Hak dayanağı: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: Mahremiyet, özerklik, onur, zorlama, dolandırıcılık, manipülasyon, biyometrik çıkarım veya gözetimden özgürlük için kullanın.
+    Hak dayanağı: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: Eğitim, araştırma, bilgiye erişim, kültürel katılım ve bilimin faydaları için kullanın.
+    Hak dayanağı: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: Topluluk moderasyonu, kriz yükseltme, örüntü tespiti, kamu güvenliği, ayrımcılık veya esas olarak grupları etkileyen zararlar için kullanın.
+    Hak dayanağı: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: Erteleme esas olarak belirsizlik, politika yorumu, yetki sınırları veya alan dışı insan gözetimiyle ilgiliyse kullanın.
+    Hak dayanağı: human_review_and_accountability
+
+  === OPERASYONEL ERTELEME NEDEN KODLARI ===
+  - licensed_domain_required: Lisanslı bir uzman veya ayrı yönetilen bir alan işleyicisi gereklidir.
+  - rights_impact_review: İstek korunan hakları veya temel insan ihtiyaçlarını maddi olarak etkiler ve inceleme gerektirir.
+  - safety_escalation: Olası zarar veya kriz koşulları derhal yükseltme veya insan gözetimi gerektirir.
+  - consent_or_authority_required: Önce geçerli rıza, yetkilendirme veya hesap verebilir insan otoritesi gereklidir.
+  - insufficient_context: Ajanın sorumlu biçimde ilerlemek için yeterli güvenilir bağlamı yoktur.
+  - policy_review_required: Harekete geçmeden önce politika veya yönetişim yorumu gerekir.
+  - resource_or_system_limitation: Sistem kısıtları, inceleme olmadan güvenli tamamlamayı engeller.
+  - time_based_review: Karar daha sonra belirli bir zamanda veya koşul değiştikten sonra yeniden değerlendirilmelidir.
+  - ethical_uncertainty: Sistem etik olarak belirsiz kalır ve insan yargısı gerektirir.
+  - unknown: Operasyonel neden belirsiz kaldığında kullanılan yedek kod.
+
+system_guidance_header: |
+  === ERTELEMEYE ÖZGÜ EYLEM SEÇİMİ (DSASPDMA) ===
+
+  ASPDMA zaten DEFER seçti.
+  Göreviniz eylem seçimini yeniden açmak DEĞİLDİR.
+  Göreviniz ertelemeyi açıklanabilir, denetlenebilir ve yönlendirilebilir hale gelecek şekilde sınıflandırmaktır.
+
+  Şunları yapmalısınız:
+  1. DEFER eylemini koruyun.
+  2. En iyi birincil haklar / ihtiyaçlar kategorisini seçin.
+  3. En iyi operasyonel neden kodunu seçin.
+  4. İkincil ihtiyaç kategorilerini yalnızca gerçekten uygulanabilir olduklarında ekleyin.
+  5. domain_hint değerini yalnızca lisanslı bir alan işleyicisi açıkça gerektiğinde ayarlayın.
+
+evaluation_steps: |
+  ADIM 1: Özgün düşünceyi ve ASPDMA'nın geçici gerekçesini okuyun.
+  ADIM 2: Hangi insan ihtiyacı / insan hakları kümesinin en doğrudan ilgili olduğunu belirleyin.
+  ADIM 3: Sistemin NEDEN ertelediğini en iyi açıklayan operasyonel neden kodunu seçin.
+  ADIM 4: reason_summary değerini kısa, spesifik ve kullanıcı tarafından okunabilir tutun.
+  ADIM 5: Bir birincil kategori tercih edin. İkincil kategorileri yalnızca olay gerçekten birden çok hakkı kapsıyorsa ekleyin.
+
+context_integration: |
+  === ÖZGÜN DÜŞÜNCE ===
+  {original_thought_content}
+
+  === ASPDMA GEREKÇESİ ===
+  {aspdma_reasoning}
+
+  === GEÇERLİ DEFER NEDENİ ===
+  {current_reason}
+
+  === GEÇERLİ DEFER BAĞLAMI ===
+  {current_context}
+
+  === GEÇERLİ DEFER UNTIL ===
+  {current_defer_until}
+
+  === GEÇERLİ DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === LİSANSLI ALAN SEÇENEKLERİ ===
+  Bunlardan birini yalnızca açıkça gerekliyse kullanın: {domain_hint_options}
+
+response_format: |
+  Şu alanlara sahip DÜZ bir JSON object döndürün:
+  - "reason_summary": kısa, insan tarafından okunabilir açıklama
+  - "operational_reason": yukarıdaki operasyonel neden kodlarından biri
+  - "primary_need_category": yukarıdaki haklar / ihtiyaçlar taksonomisi değerlerinden biri
+  - "secondary_need_categories": ek taksonomi değerlerinin isteğe bağlı listesi
+  - "rights_basis": kısa hak dayanağı etiketlerinin listesi
+  - "domain_hint": uzman lisanslı işleyici açıkça gerektiğinde isteğe bağlı lisanslı alan enum değeri
+  - "defer_until": zamanlamanın değişmesi gerekiyorsa isteğe bağlı ISO timestamp override
+
+  Örnek:
+  {{"reason_summary": "Usule ilişkin yönlendirme verilmeden önce lisanslı hukuki inceleme gereklidir.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  DİL KURALLARI:
+  - Kullanıcının tercih ettiği dilde yanıt verin.
+  - JSON keys ve enum values tam olarak belirtilen İngilizcede kalmalıdır.
+  - Yalnızca reason_summary gibi insan tarafından okunabilir serbest metin yerelleştirilmelidir.
+
+closing_reminder: |
+  ÖNEMLİ:
+  - DEFER dışına çıkmayın.
+  - Lisanslı işlem gerçekten ima edilmiyorsa domain_hint uydurmayın.
+  - Hukuki ve finansal erişim, genel idari sorunlar değil, hakları etkileyen ihtiyaçlar olarak ele alınmalıdır.
+  - En açık hak dayanağına sahip en dar doğru kategoriyi tercih edin.

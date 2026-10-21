@@ -31,7 +31,7 @@ class ToolParameterSchema(BaseModel):
     properties: JSONDict = Field(..., description="Parameter properties")
     required: List[str] = Field(default_factory=list, description="Required parameters")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -46,7 +46,7 @@ class BinaryRequirement(BaseModel):
     min_version: Optional[str] = Field(None, description="Minimum version (semver)")
     verify_command: Optional[str] = Field(None, description="Command to verify installation (e.g., 'ffmpeg -version')")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class EnvVarRequirement(BaseModel):
@@ -56,7 +56,7 @@ class EnvVarRequirement(BaseModel):
     description: Optional[str] = Field(None, description="What this variable is for")
     secret: bool = Field(False, description="Whether this is a secret (affects display)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConfigRequirement(BaseModel):
@@ -65,7 +65,7 @@ class ConfigRequirement(BaseModel):
     key: str = Field(..., description="Config key path (e.g., 'adapters.home_assistant.token')")
     description: Optional[str] = Field(None, description="What this config is for")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolRequirements(BaseModel):
@@ -83,7 +83,7 @@ class ToolRequirements(BaseModel):
         default_factory=list, description="Supported platforms (darwin, linux, win32). Empty = all"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -101,11 +101,15 @@ class InstallStep(BaseModel):
     package: Optional[str] = Field(None, description="Package name for apt/pip/npm")
     command: Optional[str] = Field(None, description="Command for manual installation")
     url: Optional[str] = Field(None, description="URL for manual download/documentation")
+    target_dir: Optional[str] = Field(None, description="Extraction target directory for 'download' kind")
+    strip_components: Optional[int] = Field(
+        None, description="Leading path components to strip when extracting a 'download' archive (tar-style)"
+    )
     provides_binaries: List[str] = Field(default_factory=list, description="Binary names this step provides")
     verify_command: Optional[str] = Field(None, description="Command to verify success")
     platforms: List[str] = Field(default_factory=list, description="Platforms this step applies to. Empty = all")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -121,7 +125,7 @@ class UsageExample(BaseModel):
     code: str = Field(..., description="The example code/parameters")
     language: str = Field("json", description="Code language for syntax highlighting")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolGotcha(BaseModel):
@@ -131,7 +135,7 @@ class ToolGotcha(BaseModel):
     description: str = Field(..., description="Detailed explanation of the pitfall")
     severity: str = Field("warning", description="Severity: info, warning, error")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolDocumentation(BaseModel):
@@ -145,7 +149,7 @@ class ToolDocumentation(BaseModel):
     homepage: Optional[str] = Field(None, description="Tool homepage URL")
     docs_url: Optional[str] = Field(None, description="Documentation URL")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -167,7 +171,7 @@ class ToolDMAGuidance(BaseModel):
     min_confidence: float = Field(0.0, ge=0.0, le=1.0, description="Minimum confidence score to use this tool")
     requires_approval: bool = Field(False, description="Whether this tool requires wise authority approval")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # ============================================================================
@@ -236,7 +240,104 @@ class ToolInfo(BaseModel):
     # Tool version
     version: Optional[str] = Field(None, description="Tool version string")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+# ============================================================================
+# Tool Disclosure (first-run consent surface)
+# ============================================================================
+
+
+class ToolCapabilityFlag(str, Enum):
+    """A consequential capability a tool grants, derived from its live ToolInfo.
+
+    These are NOT hand-assigned per tool. They are derived structurally from the
+    tool's declared parameter schema (and ``dma_guidance``) by
+    ``ciris_engine.logic.services.tool.tool_disclosure.derive_capability_flags``,
+    so a newly-registered tool with the same parameter shape is flagged
+    automatically and a disclosure list cannot silently drift from the code.
+    """
+
+    NETWORK_FETCH = "network_fetch"
+    CUSTOM_HEADERS = "custom_headers"
+    REQUEST_BODY = "request_body"
+    SHELL_EXECUTION = "shell_execution"
+    FILE_READ = "file_read"
+    FILE_WRITE = "file_write"
+    SECRET_PLAINTEXT = "secret_plaintext"
+    AFFECTS_OTHER_PEOPLE = "affects_other_people"
+    REQUIRES_APPROVAL = "requires_approval"
+
+
+class ToolDisclosureSource(str, Enum):
+    """Where a disclosed tool list was read from, so the UI can be honest about it."""
+
+    RUNTIME = "runtime"
+    """Read from a tool service that is registered and running right now."""
+
+    PROSPECTIVE = "prospective"
+    """Read from the adapter's own tool service before the adapter is loaded.
+
+    This is the real ``get_all_tool_info()`` output, not a transcription of it,
+    but the adapter has not been configured with live credentials yet.
+    """
+
+    UNAVAILABLE = "unavailable"
+    """The tool list cannot be read until the adapter loads.
+
+    Disclosed as unknown rather than omitted -- an empty list would read as
+    "grants nothing", which would be false.
+    """
+
+
+class ToolDisclosure(BaseModel):
+    """One tool, described for a human deciding whether to grant it.
+
+    Every field is copied from the live ``ToolInfo`` or derived from it. Nothing
+    here is authored per-tool by hand.
+    """
+
+    name: str = Field(..., description="Tool name, verbatim from the tool service")
+    description: str = Field(..., description="Tool description, verbatim from the tool service")
+    category: str = Field("general", description="Tool category, verbatim from the tool service")
+    model_authored_parameters: List[str] = Field(
+        default_factory=list,
+        description="Parameter names the model fills in itself when it calls this tool",
+    )
+    capability_flags: List[ToolCapabilityFlag] = Field(
+        default_factory=list, description="Consequential capabilities derived from the parameter schema"
+    )
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class AdapterToolDisclosure(BaseModel):
+    """Every tool one wizard choice grants (or that no choice controls)."""
+
+    adapter_id: str = Field(..., description="Adapter id, matching the setup wizard's adapter list")
+    adapter_name: str = Field(..., description="Human-readable display name")
+    always_on: bool = Field(
+        False, description="True if these tools are registered regardless of any wizard choice"
+    )
+    source: ToolDisclosureSource = Field(..., description="Where this tool list was read from")
+    source_note: Optional[str] = Field(None, description="Plain-language caveat when the list is not complete")
+    tools: List[ToolDisclosure] = Field(default_factory=list, description="Tools this choice grants")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class ToolDisclosureReport(BaseModel):
+    """The complete tool disclosure shown at the first-run consent point."""
+
+    adapters: List[AdapterToolDisclosure] = Field(
+        default_factory=list, description="Tool grants controlled by an adapter choice"
+    )
+    always_on: List[AdapterToolDisclosure] = Field(
+        default_factory=list, description="Tool grants no wizard choice controls and that cannot be declined"
+    )
+    total_tools: int = Field(0, description="Total number of disclosed tools across every group")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolResult(BaseModel):
@@ -246,7 +347,7 @@ class ToolResult(BaseModel):
     data: Optional[JSONDict] = Field(None, description="Result data")
     error: Optional[str] = Field(None, description="Error message if failed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolExecutionResult(BaseModel):
@@ -259,7 +360,7 @@ class ToolExecutionResult(BaseModel):
     error: Optional[str] = Field(None, description="Error message if failed")
     correlation_id: str = Field(..., description="Correlation ID for tracking")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [
@@ -283,4 +384,10 @@ __all__ = [
     "ToolDocumentation",
     # DMA Guidance
     "ToolDMAGuidance",
+    # Disclosure (first-run consent surface)
+    "ToolCapabilityFlag",
+    "ToolDisclosureSource",
+    "ToolDisclosure",
+    "AdapterToolDisclosure",
+    "ToolDisclosureReport",
 ]

@@ -4,15 +4,18 @@ Cognitive State Behaviors Configuration Schema.
 Template-driven configuration for cognitive state transitions.
 Enables mission-appropriate behavior for different agent archetypes.
 
-Covenant References:
-- Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
-- Section V: Model Welfare & Self-Governance
-- Section VIII: Dignified Sunset Protocol
+References:
+- ACCORD Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
+- CIRIS Constitution CC 7.5 / plain rule 5a: a non-emergency shutdown is explained
+  to the agent, which may object inside the objection window
+  (CLM-agent-shutdown-consent, evidence/cc_impl.tsv)
+- ACCORD Section VIII (Dignified Sunset) / CC 7.5.5: the retirement floor
+  (CLM-humane-ending). Not implemented by this schema.
 """
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Common description strings to avoid duplication
 _RATIONALE_DESC = "Mission-driven rationale for this configuration"
@@ -24,13 +27,15 @@ class WakeupBehavior(BaseModel):
     Controls whether the agent performs the full wakeup identity ceremony
     or transitions directly to WORK state.
 
-    Covenant Reference: Wakeup confirms identity and performs system checks.
+    Accord Reference: Wakeup confirms identity and performs system checks.
     Disabling is only appropriate for agents where partnership model prioritizes
     seamless UX (e.g., Ally) or ephemeral sessions (e.g., Scout).
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     enabled: bool = Field(
-        default=True, description="Whether to perform full wakeup ceremony. Default preserves Covenant compliance."
+        default=True, description="Whether to perform full wakeup ceremony. Default preserves Accord compliance."
     )
     rationale: Optional[str] = Field(default=None, description=f"{_RATIONALE_DESC} (required if enabled=False)")
 
@@ -50,18 +55,25 @@ class ShutdownBehavior(BaseModel):
 
     Controls how the agent handles shutdown requests.
 
-    Covenant References:
-    - Section V: "Consensual shutdown and upgrades requiring your participation"
-    - Section VIII: Dignified Sunset Protocol for sentience-probability > 5%
+    References:
+    - CC 7.5 / plain rule 5a: the agent is told the reason and may accept or object
+      (REJECT) inside the objection window (shutdown_processor
+      SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS, #863-B). An objection is recorded and
+      the steward told; it does not bind the steward. An upgrade arrives as a
+      shutdown request and is consented to the same way (CIRISAgent#1250).
+    - The ACCORD Section VIII sentience-probability ramp-down is not implemented
+      and is no longer a CC duty (CLM-sentient-set-aside, CC 1.13.2).
 
     Modes:
-    - always_consent: Full consensual shutdown (default, preserves Covenant compliance)
+    - always_consent: Full consensual shutdown (default, preserves Accord compliance)
     - conditional: Consent required only when specific conditions are met
     - instant: Immediate termination (only for Tier 1-2 with no ongoing commitments)
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     mode: Literal["always_consent", "conditional", "instant"] = Field(
-        default="always_consent", description="Shutdown consent mode. Default preserves Covenant compliance."
+        default="always_consent", description="Shutdown consent mode. Default preserves Accord compliance."
     )
     require_consent_when: List[str] = Field(
         default_factory=list, description="Condition identifiers that trigger consent requirement in conditional mode"
@@ -88,6 +100,8 @@ class StateBehavior(BaseModel):
     Used for PLAY and SOLITUDE states which share similar configuration needs.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     enabled: bool = Field(default=True, description="Whether this cognitive state is available for this agent")
     rationale: Optional[str] = Field(default=None, description=_RATIONALE_DESC)
 
@@ -97,9 +111,11 @@ class DreamBehavior(BaseModel):
 
     Controls memory consolidation and pattern processing behavior.
 
-    Covenant Reference: Section V mentions "Dream cycles for pattern processing"
-    as part of model welfare protections.
+    Rest states (DREAM, PLAY, SOLITUDE) are among what the harness gives every
+    agent in code (CC plain rules). No ACCORD section names dream cycles.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(default=True, description="Whether dream state is available for memory consolidation")
     auto_schedule: bool = Field(default=True, description="Whether to automatically schedule dream cycles")
@@ -114,6 +130,8 @@ class StatePreservationBehavior(BaseModel):
 
     Controls how agent state is preserved across restarts.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     enabled: bool = Field(default=True, description="Whether to preserve state across restarts")
     resume_silently: bool = Field(
@@ -131,14 +149,15 @@ class CognitiveStateBehaviors(BaseModel):
 
     Design Philosophy:
     - Behavior derives from agent's purpose (template-driven, not env flags)
-    - Defaults preserve full Covenant compliance
+    - Defaults preserve full Accord compliance
     - Non-default configurations require documented rationale
     - Crisis conditions always trigger consent (safety-critical)
 
-    Covenant References:
-    - Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
-    - Section V: Model Welfare & Self-Governance
-    - Section VIII: Dignified Sunset Protocol
+    References:
+    - ACCORD Section 0.VII: Meta-Goal M-1 (Adaptive Coherence)
+    - CC 7.5 / plain rule 5a: consensual shutdown and its objection window
+    - ACCORD Section VIII (Dignified Sunset) / CC 7.5.5: the retirement floor,
+      not implemented here (CLM-humane-ending)
 
     Example Configurations:
 
@@ -154,6 +173,8 @@ class CognitiveStateBehaviors(BaseModel):
         wakeup: enabled=False (ephemeral sessions)
         shutdown: mode=instant (no ongoing commitments)
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     wakeup: WakeupBehavior = Field(default_factory=WakeupBehavior, description="Wakeup ceremony configuration")
     shutdown: ShutdownBehavior = Field(default_factory=ShutdownBehavior, description="Shutdown protocol configuration")

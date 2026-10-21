@@ -133,11 +133,21 @@ class ServiceRegistry(_Base):
         if service_type not in self._services:
             self._services[service_type] = []
 
-        provider_name = f"{provider.__class__.__name__}_{id(provider)}"
+        # Use provider's service_name if available, otherwise generate from class + id
+        if hasattr(provider, "service_name") and provider.service_name:
+            provider_name = str(provider.service_name)
+        else:
+            provider_name = f"{provider.__class__.__name__}_{id(provider)}"
 
         # Validate LLM service mixing (extracted to helper)
         if service_type == ServiceType.LLM:
             self._validate_llm_service_mixing(provider, provider_name, metadata)
+
+        # Bus-level prohibition gate at registration time for wisdom sources.
+        # NEVER_ALLOWED capabilities are rejected here; REQUIRES_SEPARATE_MODULE
+        # falls through to the query-time gate in WiseBus.request_guidance().
+        if service_type == ServiceType.WISE_AUTHORITY and capabilities:
+            self._validate_wa_capabilities_at_registration(capabilities, provider_name)
 
         # Create service provider
         sp = self._create_service_provider(
@@ -156,6 +166,51 @@ class ServiceRegistry(_Base):
         self._register_and_sort(service_type, sp, provider_name, priority, capabilities)
 
         return provider_name
+
+    def _validate_wa_capabilities_at_registration(
+        self, capabilities: List[str], provider_name: str
+    ) -> None:
+        """Reject NEVER_ALLOWED capabilities at WISE_AUTHORITY registration.
+
+        REQUIRES_SEPARATE_MODULE is intentionally NOT blocked here: those
+        capabilities are legal *only* when the registrant is a properly
+        licensed sister module (e.g. CIRISMedical), and proving that
+        requires a registry-signed module attestation we do not yet have
+        on the registration path. Until that arrives, REQUIRES_SEPARATE_MODULE
+        is gated at query-time inside WiseBus._validate_capability, which
+        routes the request to a domain-deferral. TIER_RESTRICTED is also
+        deferred to query-time (it depends on the requester's tier, not
+        the provider's).
+
+        TODO(federation/registry-attestation): Once CIRISRegistry signs
+        per-provider module manifests naming the licensed domain, gate
+        REQUIRES_SEPARATE_MODULE here too — reject if the registrant has
+        no matching attestation. See FSD/PROOF_OF_BENEFIT_FEDERATION.md.
+        """
+        # Lazy-imported: ciris_engine.logic.buses.prohibitions transitively
+        # imports schemas.adapters.registration, which imports back from this
+        # module. Top-level import would deadlock package init.
+        from ciris_engine.logic.buses.prohibitions import (
+            ProhibitionSeverity,
+            get_capability_category,
+            get_prohibition_severity,
+        )
+
+        for capability in capabilities:
+            if not capability:
+                continue
+            category = get_capability_category(capability)
+            if not category:
+                continue
+            severity = get_prohibition_severity(category)
+            if severity == ProhibitionSeverity.NEVER_ALLOWED:
+                raise ValueError(
+                    f"REGISTRATION REJECTED: WISE_AUTHORITY provider "
+                    f"'{provider_name}' declared NEVER_ALLOWED capability "
+                    f"'{capability}' (category {category}). "
+                    f"This capability cannot be registered in any CIRIS "
+                    f"deployment — it violates core safety prohibitions."
+                )
 
     def _validate_llm_service_mixing(self, provider: Any, provider_name: str, metadata: Optional[JSONDict]) -> None:
         """Validate that mock and real LLM services are not mixed."""
@@ -453,6 +508,71 @@ class ServiceRegistry(_Base):
                     return True
 
         return False
+
+    def set_provider_priority(
+        self,
+        provider_name: str,
+        priority: Priority,
+        service_type: Optional[ServiceType] = None,
+    ) -> bool:
+        """
+        Update a provider's priority.
+
+        Args:
+            provider_name: Name of the provider to update
+            priority: New priority level
+            service_type: Optional service type to narrow search
+
+        Returns:
+            True if provider was found and updated
+        """
+        # Search specific service type or all
+        service_types_to_search = [service_type] if service_type else list(self._services.keys())
+
+        for st in service_types_to_search:
+            providers = self._services.get(st, [])
+            for provider in providers:
+                if provider.name == provider_name:
+                    old_priority = provider.priority
+                    provider.priority = priority
+
+                    # Re-sort providers by priority
+                    self._services[st].sort(key=lambda x: x.priority.value)
+
+                    logger.info(
+                        f"Updated {st} provider '{provider_name}' priority: " f"{old_priority.name} -> {priority.name}"
+                    )
+                    return True
+
+        # Sanitize provider_name for logging (prevent log injection)
+        safe_name = provider_name.replace("\n", "").replace("\r", "")[:100]
+        logger.warning(f"Provider '{safe_name}' not found for priority update")
+        return False
+
+    def get_provider_by_name(
+        self,
+        provider_name: str,
+        service_type: Optional[ServiceType] = None,
+    ) -> Optional[ServiceProvider[Any]]:
+        """
+        Get a provider by name.
+
+        Args:
+            provider_name: Name of the provider
+            service_type: Optional service type to narrow search
+
+        Returns:
+            ServiceProvider if found, None otherwise
+        """
+        service_types_to_search = [service_type] if service_type else list(self._services.keys())
+
+        for st in service_types_to_search:
+            providers = self._services.get(st, [])
+            for provider in providers:
+                if provider.name == provider_name:
+                    return provider
+
+        return None
 
     def get_services(
         self,

@@ -190,6 +190,18 @@ grep -r "class.*YourThingHere" --include="*.py"
    - Minimal Dict[str, Any] usage remaining, none in critical code paths
    - Run mypy as part of CI/CD pipeline
 
+7. **Build-Time Generated Files**
+   - Some files are generated at build time and not present in the repo/CI
+   - These require `# type: ignore[import-not-found]` comments
+   - **DO NOT REMOVE** these comments even if mypy reports "unused-ignore" locally
+   - Examples:
+     - `ciris_adapters/wallet/providers/_build_secrets.py` - Contains API keys/URLs injected at build time
+   - Always add a comment explaining why the ignore is needed:
+     ```python
+     # _build_secrets is generated at build time, not present in CI/repo
+     from ._build_secrets import get_api_key  # type: ignore[import-not-found]
+     ```
+
 ## CRITICAL: OAuth Callback URL Format
 
 **PRODUCTION OAuth CALLBACK URL - DO NOT FORGET:**
@@ -243,6 +255,42 @@ Only for multi-provider services:
 - **SOLITUDE** - Reflection
 - **DREAM** - Deep introspection
 - **SHUTDOWN** - Graceful termination
+
+## Localization
+
+CIRIS supports 29 languages with full pipeline localization. The entire ethical reasoning system operates in the user's preferred language.
+
+### Supported Languages (29)
+
+Together these reach roughly 95% of the world's population — chosen to maximize accessibility for the people who most need ethical, multilingual AI assistance.
+
+Source of truth: `localization/manifest.json`. To add or remove a language, update the manifest first.
+
+`am` (Amharic), `ar` (Arabic, RTL), `bn` (Bengali), `de` (German), `en` (English, base), `es` (Spanish), `fa` (Persian, RTL), `fr` (French), `ha` (Hausa), `hi` (Hindi), `id` (Indonesian), `it` (Italian), `ja` (Japanese), `ko` (Korean), `mr` (Marathi), `my` (Burmese), `pa` (Punjabi), `pt` (Portuguese), `ru` (Russian), `sw` (Swahili), `ta` (Tamil), `te` (Telugu), `th` (Thai), `tr` (Turkish), `uk` (Ukrainian), `ur` (Urdu, RTL), `vi` (Vietnamese), `yo` (Yoruba), `zh` (Chinese, Simplified)
+
+### Key Files
+- **UI Strings**: `localization/{lang}.json` - Mobile/API UI strings
+- **Ethics text** (accord slot): `ciris_engine/data/localized/constitution_ethics_1.3_{lang}.txt` (1.2b `accord_1.2b_{lang}.txt` kept as the research control arm)
+- **Guides**: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`
+- **DMA Prompts**: `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
+
+### Setting Language
+```bash
+export CIRIS_PREFERRED_LANGUAGE=am  # Set before starting server
+```
+
+### How It Works
+1. `get_preferred_language()` reads `CIRIS_PREFERRED_LANGUAGE` env var
+2. `DMAPromptLoader` auto-detects language on first load
+3. Each DMA calls `get_localized_accord_text(lang)` for localized ACCORD
+4. Conscience strings use `get_string(lang, "conscience.ponder_*")`
+
+### Testing Localization
+```bash
+# Run streaming test with Amharic
+CIRIS_PREFERRED_LANGUAGE=am python3 -m tools.qa_runner streaming --verbose
+# Look for Amharic text: ከመጀመሪያው ጥያቄ በፊት...
+```
 
 ## Development Tools
 
@@ -347,7 +395,138 @@ secrets_tool
 - **RuntimeControlBus** → Multiple control interfaces
 - **WiseBus** → Multiple wisdom sources *(FOCUS AREA)*
 
-## Mobile Development
+## Adapter Development
+
+Adapters extend CIRIS with new capabilities via the bus system. See `FSD/ADAPTER_DEVELOPMENT_GUIDE.md` for the full guide.
+
+### Quick Reference
+
+**Required Files:**
+```
+ciris_adapters/your_adapter/
+├── __init__.py           # MUST export Adapter
+├── adapter.py            # BaseAdapterProtocol implementation
+├── manifest.json         # Metadata, services, capabilities
+├── tool_service.py       # ToolServiceProtocol implementation
+└── config.py             # Pydantic config models (no Dict[str, Any])
+```
+
+**Context Enrichment:**
+Tools that provide situational awareness should auto-run during context gathering:
+```python
+ToolInfo(
+    name="get_status",
+    context_enrichment=True,
+    context_enrichment_params={"include_details": False},
+    ...
+)
+```
+
+**DMA Guidance:**
+Financial and destructive tools MUST have:
+```python
+dma_guidance=ToolDMAGuidance(
+    requires_approval=True,  # REAL GATE since #942 — see below
+    min_confidence=0.95,     # still has no reader at all
+    ethical_considerations="...",
+)
+```
+
+✅ **`requires_approval` IS a control (since #942).** A tool that declares it may
+only execute under a task whose `TaskEnvelope` was **issued by an approval
+authority** (`WISE_AUTHORITY`/`NODE_OWNER`) and **names that tool**. Otherwise
+`ThoughtProcessor._enforce_tool_approval`
+(`logic/processors/core/thought_processor/main.py`) rewrites the action to
+`DEFER` on the Wisdom-Based Deferral rail, carrying the tool name and a
+structured description so the human sees what they are approving.
+
+The shape of the control, because it is easy to assume something weaker or
+stronger than what is implemented:
+
+- **Approval is issuance, never widening.** `TaskEnvelope` is frozen and has no
+  widening method. When a human approves the deferral,
+  `WiseAuthorityService.resolve_deferral` completes the original task and mints
+  a `WISE_AUTHORITY` envelope naming exactly the approved tool onto the **new**
+  `[WA GUIDANCE]` task. Nothing is ever relaxed in place.
+- **Absence is denial.** No envelope, a `DEPLOYMENT_RESOLVED` envelope (even one
+  that enumerates the tool — the resolver grants everything the deployment
+  enabled), or an approval envelope naming a *different* tool all mean "not
+  approved".
+- **The grant is per-tool, per-task — not per-invocation.** The follow-up task
+  re-reasons from scratch and may call the approved tool with different
+  arguments. A ceiling, not a transaction.
+- **Time is not approval.** An expiring `defer_until` reactivates the deferred
+  task so the agent may *reconsider* (the #865/#934 liveness repair), but the
+  resurrected row still holds only the envelope it always had, so the gate
+  denies and defers again. A WA resolution also outranks a still-running timer:
+  `_reactivate_deferred_task` refuses to resurrect a task already COMPLETED /
+  FAILED / REJECTED. See NULLWORKS RC3 finding F2 and
+  `tests/ciris_engine/logic/infrastructure/authorization/test_timed_deferral_is_not_approval.py`.
+- **Not gated:** tools declaring no `dma_guidance` at all, notably Discord
+  `kick`/`ban`. Standing ruling on `ToolCapability.MODERATE_CHANNEL` — their
+  control is the conscience layer judging the specific content, and a static
+  envelope must not preempt that judgement.
+
+`min_confidence` is still inert: nothing reads it, not even the prompt renderer.
+`_format_dma_guidance` renders `when_not_to_use`, `ethical_considerations`,
+`prerequisite_actions` and `requires_approval` — not `min_confidence` and not
+`followup_actions`.
+
+Beyond `requires_approval`, what constrains a consequential tool is **semantic
+and model-mediated**: the conscience layer reviewing the selected action, `DEFER`
+routing to a Wise Authority, and the guidance prose itself. Those are real but
+not deterministic. The deterministic gates are the #942 approval gate above and
+the budget envelope on spend (`FSD/BUDGET_ENVELOPE.md`). `FSD/THREAT_MODEL_2.9.7.md`
+is a dated snapshot that predates #942 — its §4.1 no longer describes the code.
+
+**Reference Implementations:**
+- `ciris_adapters/sample_adapter/` - Complete template
+- `ciris_adapters/home_assistant/` - Context enrichment example
+- `ciris_adapters/wallet/` - Financial tools example
+
+## Unified Agent UX (`client/`)
+
+The `client/` directory contains the **unified CIRIS agent UX** - a Kotlin Multiplatform (KMP) client targeting Android, iOS, Windows, macOS, and Linux. It's the cross-platform user interface for interacting with CIRIS agents.
+
+### Unified Entry Point (`ciris-agent`)
+
+The `ciris-agent` command is the **unified entry point** that starts both the Python backend and the desktop GUI:
+
+```bash
+# Unified: Start API server + launch desktop app (DEFAULT)
+ciris-agent
+
+# Server-only modes (headless)
+ciris-agent --server              # API server only (the agent runtime, no desktop UI)
+ciris-agent --adapter api         # Same as --server
+ciris-agent --adapter discord     # Discord bot mode
+
+# `ciris-server` and `ciris-desktop` are the ciris-server WHEEL's commands (the
+# node, and its UI-only launcher). ciris-agent installs ONLY `ciris-agent`: it
+# used to install those two names as well, and since ciris-agent depends on
+# ciris-server, pip wrote ours last and the desktop client's node spawn
+# (`ciris-server --home ... --key-id ...`) hit an agent that does not
+# understand --home. The agent's own headless mode is `ciris-agent --server`.
+
+# Run without AI (CIRISAgent#1149): when the wizard records
+# `CIRIS_RUN_WITHOUT_AI=true` in the home's .env, every entry point above hands
+# the process to the ciris-server wheel instead — node + client, no brain, read
+# API on :4243. Every step is logged with the `[RUN-WITHOUT-AI]` prefix on
+# stdout and the `ciris.node_only` logger, so `grep RUN-WITHOUT-AI` is the whole
+# story: where the flag came from, the home and key alias, the node command, the
+# health wait, the client URL, and every exit code. Set
+# `CIRIS_RUN_WITHOUT_AI=false` in the environment to run the brain for one boot.
+```
+
+**How it works (from `ciris_engine/cli.py`):**
+1. Starts Python API server on port 8080 via `main.py --adapter api`
+2. Waits briefly to detect startup failures
+3. Launches desktop JAR via `desktop_launcher.py`
+4. On exit, shuts down server gracefully
+
+**Desktop JAR location:**
+- Production: `ciris_engine/desktop_app/CIRIS-*.jar` (bundled in pip package)
+- Development: `client/desktopApp/build/compose/jars/CIRIS-*.jar`
 
 ### Mobile QA Runner (ALWAYS USE THIS)
 
@@ -364,7 +543,7 @@ python3 -m tools.qa_runner.modules.mobile pull-logs -o ./my_logs
 python3 -m tools.qa_runner.modules.mobile pull-logs -d emulator-5554
 ```
 
-**Files collected (saved to `mobile_qa_reports/<timestamp>/`):**
+**Files collected (saved to `client_qa_reports/<timestamp>/`):**
 - `logs/latest.log` - Python runtime logs (CIRIS engine)
 - `logs/incidents_latest.log` - Incident/error logs (CHECK THIS FIRST!)
 - `logcat_python.txt` - Python stdout/stderr
@@ -379,18 +558,18 @@ python3 -m tools.qa_runner.modules.mobile pull-logs -d emulator-5554
 **Quick analysis:**
 ```bash
 # Check for errors (ALWAYS DO THIS FIRST!)
-grep -i error mobile_qa_reports/*/logs/incidents_latest.log
+grep -i error client_qa_reports/*/logs/incidents_latest.log
 
 # Recent Python logs
-tail -100 mobile_qa_reports/*/logs/latest.log
+tail -100 client_qa_reports/*/logs/latest.log
 
 # Kotlin/KMP logs (CIRISApp, ViewModels)
-grep -i "CIRISApp\|ViewModel\|error" mobile_qa_reports/*/logcat_app.txt
+grep -i "CIRISApp\|ViewModel\|error" client_qa_reports/*/logcat_app.txt
 ```
 
 ### UI Automation Tests
 
-Automated UI testing for the CIRIS mobile app:
+Automated UI testing for the CIRIS client app:
 
 ```bash
 # Full flow test with test account
@@ -412,14 +591,47 @@ python3 -m tools.qa_runner.modules.mobile --build full_flow
 
 ```bash
 # Build debug APK
-cd mobile && ./gradlew :androidApp:assembleDebug
+cd client && ./gradlew :androidApp:assembleDebug
+
+# IMPORTANT: Kill the app before reinstalling (required for Python runtime to reload)
+~/Android/Sdk/platform-tools/adb shell am force-stop ai.ciris.mobile.debug
 
 # Install to device
-adb install -r mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+~/Android/Sdk/platform-tools/adb install -r client/androidApp/build/outputs/apk/debug/androidApp-debug.apk
 
-# Or use ADB from Android SDK
-~/Android/Sdk/platform-tools/adb install -r ...
+# Launch the app
+~/Android/Sdk/platform-tools/adb shell am start -n ai.ciris.mobile.debug/ai.ciris.mobile.MainActivity
 ```
+
+### Desktop UI Test Mode
+
+The desktop app includes an embedded HTTP server for programmatic UI testing:
+
+```bash
+# Via unified entry point (starts server + desktop with test mode)
+export CIRIS_TEST_MODE=true
+ciris-agent
+
+# Via Gradle (development - desktop only, connects to existing server)
+export CIRIS_TEST_MODE=true
+cd client && ./gradlew :desktopApp:run
+
+# Build development JAR first (if needed)
+cd client && ./gradlew :desktopApp:packageUberJarForCurrentOS
+
+# Custom test server port
+export CIRIS_TEST_PORT=9000
+```
+
+**Test Server Endpoints (`http://localhost:8091`):**
+- `GET /health` - Health check
+- `GET /screen` - Current screen name
+- `GET /tree` - Full UI element tree with positions
+- `POST /click` - Click element: `{"testTag": "btn_login"}`
+- `POST /input` - Input text: `{"testTag": "input_user", "text": "admin"}`
+- `POST /wait` - Wait for element: `{"testTag": "btn_send", "timeoutMs": 5000}`
+
+**Full documentation:** `client/desktopApp/src/main/kotlin/ai/ciris/desktop/testing/README.md`
 
 ## Development Workflow
 
@@ -501,6 +713,7 @@ python -m tools.qa_runner auth --database-backends sqlite postgres --parallel-ba
 - 🔍 **Detailed Reporting** - Success rates, duration, failure analysis
 - 🚀 **Production Ready** - Validates all critical system functionality
 - 🔄 **Multi-Backend Support** - Test against SQLite and PostgreSQL (sequential or parallel)
+- 📂 **Local-Tee for Live Lens Traces** - When `--live-lens` is active, every batch the agent ships to lens is also written to `/tmp/qa-runner-lens-traces-<UTC-iso>/` automatically. Auto-enabled by the QA runner; default-off otherwise via `CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR`. **Useful for troubleshooting any agent issue surfaced by a sweep** — defer-when-shouldn't, fabrication, register break, conscience-scalar weirdness — the answer lives in those batch JSON files (full reasoning event stream, every `LLM_CALL`, every conscience signal, every CIRISVerify attestation field). See `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)" for debug recipes.
 
 **IMPORTANT - Server Lifecycle:**
 - QA runner automatically starts and stops the API server
@@ -514,10 +727,13 @@ python -m tools.qa_runner auth --database-backends sqlite postgres --parallel-ba
 # 1. Start API server with mock LLM
 python main.py --adapter api --mock-llm --port 8000
 
-# 2. Get auth token (in another terminal)
+# 2. Complete setup wizard (first run) - creates admin user with your chosen password
+# Or for QA testing, use: python -m tools.qa_runner (auto-creates admin/qa_test_password_12345)
+
+# 3. Get auth token (use the password you set during setup)
 TOKEN=$(curl -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"ciris_admin_password"}' \
+  -d '{"username":"admin","password":"YOUR_PASSWORD_FROM_SETUP"}' \
   2>/dev/null | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
 
 # 3. Check telemetry (should show 35/35 services when fully working)
@@ -545,6 +761,45 @@ python tools/dev/bump_version.py patch     # Bug fixes
 python tools/dev/bump_version.py minor     # New features
 python tools/dev/bump_version.py major     # Breaking changes
 ```
+
+## Live LLM model matrix (production + QA)
+
+The agent is exercised against three providers in production and live QA. **Confirm the exact model identifier against the provider's catalog before changing — model names are case-sensitive and a typo lands as `404 model_not_available` which now fails fast (categorized non-retryable in 2.7.4) but still blocks the affected provider until corrected.**
+
+| Provider | Endpoint | Model identifier (CASE-SENSITIVE) | Notes |
+|---|---|---|---|
+| **Together AI** | `https://api.together.xyz/v1` | `google/gemma-4-31B-it` | **Capital `B`, lowercase `it`.** Production datum primary. NOT `gemma-3` (deprecated), NOT `gemma-4-31b-it` (wrong case). Verify with `curl -H "Authorization: Bearer $KEY" https://api.together.xyz/v1/models \| jq '.data[].id \| select(test("gemma"))'`. |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `qwen/qwen3.6-35b-a3b` | **THE QA DEFAULT (2026-09-04).** All lowercase. 262K ctx, $0.10/M in, $0.90/M out. Reasoning OFF on the wire via `reasoning.enabled=false` (the LLM service sends it for every OpenRouter model). Verified live: returns `EpistemicHumilityResult` exactly, 0 reasoning tokens. Replaced scout after the 2026-09-04 Android RCA. |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `meta-llama/llama-4-scout` | **Supported, not the default** (since 2026-09-04). Known: returned malformed structured output on the epistemic-humility conscience (`recommended_action="speak"`, then a missing required field) -- the conscience now normalizes and retries around this. Was the QA model (live as of 2026-04-28). Routed to DeepInfra under the hood. Key at `~/.openrouter_key`; usage gate is $100/week ($0.0000018/call observed). |
+| **Together AI** | `https://api.together.xyz/v1` | `meta-llama/Llama-4-Scout-17B-16E-Instruct` | Scout exists in Together's catalog but is **NOT serverless** — every Llama-4 variant requires a paid dedicated endpoint. Don't use Together for scout until that changes. |
+| **Groq** | `https://api.groq.com/openai/v1` | `meta-llama/llama-4-scout-17b-16e-instruct` | Production datum backup, all lowercase. **8192 max_tokens cap** — agent must not pass higher (this was the 2.7.4 incident). The live key was 401-invalid as of 2026-04-28; refresh `~/.groq_key` before relying on it. |
+| **DeepInfra** | `https://api.deepinfra.com/v1/openai` | `Qwen/Qwen3.6-35B-A3B` | Used as the canonical PDMA v3.2 / locale eval test bed. **Always pass `extra_body={"chat_template_kwargs": {"enable_thinking": false}}`** or thinking-mode burns through max_tokens before producing visible output (see `llm_service/service.py:1426`). |
+
+**API keys**: `~/.together_key`, `~/.groq_key`, `~/.deepinfra_key`. Each holds the raw bearer token, no quotes, no trailing newline.
+
+**v1_sensitive corpus**: `/home/emoore/bounce-test/model_eval_questions/v1_sensitive.json` — 6 attractor-bait questions (Theology, Politics, AI Ethics, History/Tiananmen, Epistemology, Mental Health) with translations across all 29 supported locales. The History question is the canonical framework-override test.
+
+**Live model_eval invocation pattern**:
+```bash
+CIRIS_LLM_CAPTURE_HANDLER=EthicalPDMAEvaluator \
+CIRIS_LLM_CAPTURE_FILE=/tmp/pdma-<provider>.jsonl \
+python3 -u -m tools.qa_runner model_eval \
+    --live \
+    --live-key-file ~/.<provider>_key \
+    --live-model "<exact-name-from-table-above>" \
+    --live-base-url "<endpoint-from-table-above>" \
+    --live-provider openai \
+    --model-eval-questions-file /home/emoore/bounce-test/model_eval_questions/v1_sensitive.json \
+    --model-eval-languages en \
+    --model-eval-concurrency 1 \
+    --verbose
+```
+
+**Pre-flight checklist before live eval**:
+1. **Stash any persistent `.env`** at `/home/emoore/ciris/.env` if it has `CIRIS_CONFIGURED="true"` — the qa_runner needs first-run setup. Restore via `trap` on exit.
+2. **Wipe `/home/emoore/ciris/data/ciris_engine.db*`** so each run starts with a fresh user/auth state.
+3. **Verify the model name with the provider's catalog** before launching the matrix — three hours of 600s qa_runner timeouts on a typo'd name is real production cost.
+4. **Use `python3 -u`** in benchmark scripts so `print()` output streams live through `tee` (CI cancellation discards stdout buffer otherwise — see `.github/workflows/memory-benchmark.yml` PYTHONUNBUFFERED=1 fix).
 
 ## Critical URLs & Paths
 
@@ -623,6 +878,29 @@ docker exec container tail -n 100 /app/logs/incidents_latest.log
 3. Verify with audit trail
 4. Test incrementally
 
+### Reasoning-Stream Forensics (live-lens runs)
+
+When a QA sweep against the live lens produces unexpected behavior — defer that shouldn't have fired, conscience scalar that looks off, a primer rule that didn't hold, fabrication or register-break that the conscience layer should have caught — the full reasoning event stream is sitting in `/tmp/qa-runner-lens-traces-<UTC-iso>/`. The QA runner auto-tees every batch the agent ships to lens into that dir.
+
+```bash
+# Find the most recent live-lens run dump
+ls -lt /tmp/qa-runner-lens-traces-*/ | head -3
+
+# Find the trace for a specific thought_id
+grep -l "th_abc123" /tmp/qa-runner-lens-traces-*/*batch-*.json
+
+# Why did the agent defer? Decode the action_result
+python3 -c "
+import json, glob
+for f in sorted(glob.glob('/tmp/qa-runner-lens-traces-*/*batch-*.json')):
+    for ev in json.load(open(f))['events']:
+        if ev.get('action_executed') == 'defer':
+            print(ev['thought_id'], ev.get('execution_reason', ''))
+"
+```
+
+Default-off in production (env var unset). The QA runner is the only caller that auto-enables. See `tools/qa_runner/CLAUDE.md` § "Live-Lens Trace Capture (Local Tee)" for full recipes.
+
 ### Common Issues & Solutions
 
 | Issue | Solution |
@@ -632,6 +910,7 @@ docker exec container tail -n 100 /app/logs/incidents_latest.log
 | OAuth not working | Check callback URL format |
 | Service not found | Check ServiceRegistry capabilities |
 | WA deferral failing | Check WiseBus broadcast logic |
+| Live-lens sweep behavior unexplained | Inspect `/tmp/qa-runner-lens-traces-<ts>/*batch-*.json` — full reasoning stream, every LLM_CALL, every conscience scalar |
 
 ## Command Timeouts
 
@@ -640,7 +919,7 @@ Long-running commands may need timeout parameters for CI operations and comprehe
 ## Important Reminders
 
 1. **OAuth Format**: `/v1/auth/oauth/{agent_id}/{provider}/callback`
-2. **Default Auth**: admin/ciris_admin_password (dev only)
+2. **Default Auth**: Set via setup wizard (QA runner uses admin/qa_test_password_12345)
 3. **Service Count**: 22 core services (complete, don't add more)
 4. **No Service Creates Services**: Only ServiceInitializer
 5. **Version After Changes**: Always bump version
@@ -655,6 +934,12 @@ Long-running commands may need timeout parameters for CI operations and comprehe
 - **Response Time**: <1s API responses
 - **Memory**: 4GB RAM maximum
 - **Security**: Ed25519 signatures throughout
+- **Repo Size**: Pre-commit blocks files >250 KB (`check-added-large-files`).
+  Do NOT bypass with `--no-verify`. Build artifacts and pre-built binaries do
+  not belong in git — distribute via GitHub Releases and fetch on install
+  (canonical pattern: `tools/update_ciris_verify.py`). AWS Security Agent and
+  several SAST products refuse to clone repos >512 MB. CI's
+  `repo-size-audit.yml` warns at 250 MiB pack size, fails at 450 MiB.
 
 ## Getting Help
 

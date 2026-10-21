@@ -11,6 +11,7 @@ For multi-source DSAR, use this orchestrator.
 """
 
 import logging
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, cast
 
@@ -18,8 +19,10 @@ from fastapi import HTTPException, status
 
 from ciris_engine.logic.buses.memory_bus import MemoryBus
 from ciris_engine.logic.buses.tool_bus import ToolBus
+from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_system_component_envelope
 from ciris_engine.logic.services.governance.consent import ConsentService
 from ciris_engine.logic.services.governance.consent.dsar_automation import DSARAutomationService
+from ciris_engine.logic.services.governance.consent.exceptions import ConsentNotFoundError
 from ciris_engine.protocols.services.graph.memory import MemoryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.consent.core import (
@@ -29,6 +32,7 @@ from ciris_engine.schemas.consent.core import (
     ConsentStream,
     DSARExportFormat,
 )
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolCapability, ToolInvocationSubject
 
 from .schemas import (
     DataSourceDeletion,
@@ -40,6 +44,49 @@ from .schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+_DSAR_COMPONENT = "DSARModificationOrchestrator"
+
+# The exact SQL tools this orchestrator's code calls. Written out here rather
+# than inherited from the deployment grant, so DSAR runs *narrower* than a
+# reasoning task, not as an exemption from authorization (CIRISAgent#938).
+_DSAR_TOOLS = (
+    "sql_anonymize_user",
+    "sql_export_user",
+    "sql_delete_user",
+    "sql_verify_deletion",
+)
+
+
+def _dsar_subject(request_id: Optional[str]) -> ToolInvocationSubject:
+    """The authorization subject for one DSAR request (CIRISAgent#938).
+
+    DSAR acts on a statutory obligation. It reaches ToolBus with no task and no
+    thought, so under a fail-closed Phase 2 gate it would be denied on day one —
+    and that denial would take GDPR erasure with it. It therefore carries a
+    SYSTEM_COMPONENT envelope: non-model-authored, bound to the DSAR request id,
+    granting exactly the four SQL tools above.
+
+    Issuance failure degrades to an envelope-less subject rather than blocking
+    the erasure: in Phase 1 nothing enforces, and a compliance operation must
+    not fail because authorization bookkeeping did.
+    """
+    work_unit_id = (request_id or "").strip() or f"DSAR-UNIDENTIFIED-{uuid.uuid4().hex[:12]}"
+    try:
+        envelope = issue_system_component_envelope(
+            component=_DSAR_COMPONENT,
+            work_unit_id=work_unit_id,
+            granted_tools=_DSAR_TOOLS,
+            capabilities=(ToolCapability.OBSERVE_LOCAL, ToolCapability.WRITE_TARGET),
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("DSAR %s: could not issue component envelope: %s", work_unit_id, exc)
+        envelope = None
+    return ToolInvocationSubject.for_component(
+        origin=ToolCallOrigin.GOVERNANCE_SERVICE,
+        component=_DSAR_COMPONENT,
+        envelope=envelope,
+    )
 
 
 class DSAROrchestrator:
@@ -120,7 +167,7 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-ACCESS-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(f"Starting multi-source access request {request_id} for {user_identifier}")
+        logger.info(f"Starting multi-source access request {request_id}")
 
         # Step 1: Resolve user identity across all systems
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
@@ -129,7 +176,7 @@ class DSAROrchestrator:
         try:
             ciris_data = await self._dsar_automation.handle_access_request(user_identifier)
         except Exception as e:
-            logger.exception(f"Failed to get CIRIS data for {user_identifier}: {e}")
+            logger.exception(f"Failed to get CIRIS data: {e}")
             # Create empty package as fallback
             from ciris_engine.schemas.consent.core import ConsentAuditEntry, DSARAccessPackage
 
@@ -166,7 +213,7 @@ class DSAROrchestrator:
 
         for connector_id in sql_connectors:
             try:
-                export = await self._export_from_sql(connector_id, user_identifier)
+                export = await self._export_from_sql(connector_id, user_identifier, request_id=request_id)
                 external_sources.append(export)
             except Exception as e:
                 logger.error(f"Failed to export from SQL connector {connector_id}: {e}")
@@ -255,9 +302,7 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-EXPORT-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(
-            f"Starting multi-source export request {request_id} for {user_identifier} (format: {export_format})"
-        )
+        logger.info(f"Starting multi-source export request {request_id}")
 
         # Step 1: Resolve user identity
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
@@ -266,7 +311,7 @@ class DSAROrchestrator:
         try:
             ciris_export = await self._dsar_automation.handle_export_request(user_identifier, export_format)
         except Exception as e:
-            logger.exception(f"Failed to get CIRIS export for {user_identifier}: {e}")
+            logger.exception(f"Failed to get CIRIS export: {e}")
             # Create empty export as fallback
             from ciris_engine.schemas.consent.core import DSARExportPackage
 
@@ -288,7 +333,7 @@ class DSAROrchestrator:
 
         for connector_id in sql_connectors:
             try:
-                export = await self._export_from_sql(connector_id, user_identifier)
+                export = await self._export_from_sql(connector_id, user_identifier, request_id=request_id)
                 external_exports.append(export)
             except Exception as e:
                 logger.error(f"Failed to export from SQL connector {connector_id}: {e}")
@@ -377,27 +422,27 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-DELETE-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(f"Starting multi-source deletion request {request_id} for {user_identifier}")
+        logger.info(f"Starting multi-source deletion request {request_id}")
 
         # Step 1: Resolve user identity
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
 
         # Step 2: Initiate CIRIS deletion (90-day decay protocol)
+        from ciris_engine.schemas.consent.core import DSARDeletionStatus
+
         try:
             # Revoke consent to initiate decay protocol
             await self._consent_service.revoke_consent(
                 user_id=user_identifier,
                 reason=f"GDPR Article 17 - Multi-source deletion request {request_id}",
             )
-            logger.info(f"Initiated consent revocation and decay protocol for {user_identifier}")
+            logger.info(f"Initiated consent revocation and decay protocol for request {request_id}")
 
             # Get actual deletion status from DSAR automation
             ciris_deletion = await self._dsar_automation.get_deletion_status(user_identifier, request_id)
 
             # If no status found yet, create initial status
             if ciris_deletion is None:
-                from ciris_engine.schemas.consent.core import DSARDeletionStatus
-
                 ciris_deletion = DSARDeletionStatus(
                     ticket_id=request_id,
                     user_id=user_identifier,
@@ -409,8 +454,23 @@ class DSAROrchestrator:
                     next_milestone="interaction_history_purged",
                     safety_patterns_retained=0,
                 )
+        except ConsentNotFoundError:
+            # User has no CIRIS consent - this is valid for external-only users
+            # Create a "no_ciris_data" status and proceed with external deletions
+            logger.info(f"No CIRIS consent found for request {request_id} - proceeding with external deletions only")
+            ciris_deletion = DSARDeletionStatus(
+                ticket_id=request_id,
+                user_id=user_identifier,
+                decay_started=self._now(),
+                current_phase="no_ciris_data",  # User had no CIRIS data to delete
+                completion_percentage=100.0,  # CIRIS portion complete (nothing to do)
+                estimated_completion=self._now(),  # Already complete
+                milestones_completed=["no_ciris_data_found"],
+                next_milestone=None,
+                safety_patterns_retained=0,
+            )
         except Exception as e:
-            logger.exception(f"Failed to initiate consent revocation for {user_identifier}: {e}")
+            logger.exception(f"Failed to initiate consent revocation: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to initiate CIRIS deletion: {str(e)}",
@@ -422,7 +482,9 @@ class DSAROrchestrator:
 
         for connector_id in sql_connectors:
             try:
-                deletion = await self._delete_from_sql(connector_id, user_identifier, verify=True)
+                deletion = await self._delete_from_sql(
+                    connector_id, user_identifier, verify=True, request_id=request_id
+                )
                 external_deletions.append(deletion)
             except Exception as e:
                 logger.error(f"Failed to delete from SQL connector {connector_id}: {e}")
@@ -508,7 +570,7 @@ class DSAROrchestrator:
         if not request_id:
             request_id = f"DSAR-CORRECT-{self._now().strftime('%Y%m%d-%H%M%S')}"
 
-        logger.info(f"Starting multi-source correction request {request_id} for {user_identifier}")
+        logger.info(f"Starting multi-source correction request {request_id}")
 
         # Step 1: Resolve user identity
         identity_node = await resolve_user_identity(user_identifier, cast(MemoryServiceProtocol, self._memory_bus))
@@ -536,9 +598,9 @@ class DSAROrchestrator:
             # Track CIRIS corrections
             corrections_by_source["ciris"] = corrections
             total_corrections_applied += len(corrections)
-            logger.info(f"Applied {len(corrections)} corrections to CIRIS for {user_identifier}")
+            logger.info(f"Applied {len(corrections)} corrections to CIRIS")
         except Exception as e:
-            logger.exception(f"Failed to apply CIRIS corrections for {user_identifier}: {e}")
+            logger.exception(f"Failed to apply CIRIS corrections: {e}")
             corrections_by_source["ciris"] = {}
             total_corrections_rejected += len(corrections)
 
@@ -548,20 +610,30 @@ class DSAROrchestrator:
         sql_connectors = await self._discover_sql_connectors()
         for connector_id in sql_connectors:
             try:
-                # TODO Phase 2: Implement SQL UPDATE via tool_bus
-                # Implementation:
-                # 1. Create sql_update_user tool that accepts corrections dict
-                # 2. Call await tool_bus.execute_tool("sql_update_user", {
-                #        "connector_id": connector_id,
-                #        "user_identifier": user_identifier,
-                #        "corrections": corrections
-                #    })
-                # 3. Parse result to determine which corrections were applied/rejected
-                # 4. Update corrections_by_source and counters accordingly
-                # For now, mark as rejected
-                corrections_by_source[connector_id] = {}
-                total_corrections_rejected += len(corrections)
-                logger.warning(f"SQL corrections not yet implemented for {connector_id}")
+                # Apply corrections via sql_anonymize_user tool (uses UPDATE statements)
+                # Note: Full correction support requires sql_update_user tool in adapter
+                update_result = await self._tool_bus.execute_tool(
+                    "sql_anonymize_user",
+                    {
+                        "connector_id": connector_id,
+                        "user_identifier": user_identifier,
+                        "strategy": "correct",  # Use correction mode if supported
+                        "corrections": corrections,
+                    },
+                    handler_name="default",
+                    subject=_dsar_subject(request_id),
+                )
+
+                if update_result.success and update_result.data:
+                    raw_applied = update_result.data.get("columns_anonymized", {})
+                    applied: Dict[str, Any] = raw_applied if isinstance(raw_applied, dict) else {}
+                    corrections_by_source[connector_id] = applied
+                    total_corrections_applied += len(applied)
+                    logger.info(f"Applied {len(applied)} corrections to {connector_id}")
+                else:
+                    corrections_by_source[connector_id] = {}
+                    total_corrections_rejected += len(corrections)
+                    logger.warning(f"Corrections not applied to {connector_id}: {update_result.error}")
             except Exception as e:
                 logger.error(f"Failed to apply corrections to SQL connector {connector_id}: {e}")
                 corrections_by_source[connector_id] = {}
@@ -655,7 +727,9 @@ class DSAROrchestrator:
         for connector_id in sql_connectors:
             try:
                 # Verify deletion for this connector
-                verification_passed = await self._verify_deletion_sql(connector_id, user_identifier)
+                verification_passed = await self._verify_deletion_sql(
+                    connector_id, user_identifier, request_id=request_id
+                )
 
                 # Create deletion status entry
                 external_deletions.append(
@@ -789,7 +863,9 @@ class DSAROrchestrator:
         # TODO: Implement HL7 connector discovery
         raise NotImplementedError("HL7 connector discovery not yet implemented")
 
-    async def _export_from_sql(self, connector_id: str, user_identifier: str) -> DataSourceExport:
+    async def _export_from_sql(
+        self, connector_id: str, user_identifier: str, request_id: Optional[str] = None
+    ) -> DataSourceExport:
         """Export user data from SQL connector.
 
         Args:
@@ -814,6 +890,7 @@ class DSAROrchestrator:
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
                 handler_name="default",
+                subject=_dsar_subject(request_id),
             )
 
             # Parse export result from ToolExecutionResult
@@ -854,7 +931,7 @@ class DSAROrchestrator:
             )
 
     async def _delete_from_sql(
-        self, connector_id: str, user_identifier: str, verify: bool = True
+        self, connector_id: str, user_identifier: str, verify: bool = True, request_id: Optional[str] = None
     ) -> DataSourceDeletion:
         """Delete user data from SQL connector.
 
@@ -879,6 +956,7 @@ class DSAROrchestrator:
                     "verify": verify,
                 },
                 handler_name="default",
+                subject=_dsar_subject(request_id),
             )
 
             # Parse deletion result from ToolExecutionResult
@@ -895,7 +973,9 @@ class DSAROrchestrator:
             # Verify deletion if requested
             verification_passed = False
             if verify and success:
-                verification_passed = await self._verify_deletion_sql(connector_id, user_identifier)
+                verification_passed = await self._verify_deletion_sql(
+                    connector_id, user_identifier, request_id=request_id
+                )
 
             return DataSourceDeletion(
                 source_id=connector_id,
@@ -920,7 +1000,9 @@ class DSAROrchestrator:
                 errors=[str(e)],
             )
 
-    async def _verify_deletion_sql(self, connector_id: str, user_identifier: str) -> bool:
+    async def _verify_deletion_sql(
+        self, connector_id: str, user_identifier: str, request_id: Optional[str] = None
+    ) -> bool:
         """Verify user data deletion from SQL connector.
 
         Args:
@@ -942,6 +1024,7 @@ class DSAROrchestrator:
                     "identifier_type": "email",  # Default to email for DSAR requests
                 },
                 handler_name="default",
+                subject=_dsar_subject(request_id),
             )
 
             # Parse verification result from ToolExecutionResult

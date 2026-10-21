@@ -1,13 +1,13 @@
 """Unit tests for Config Service."""
 
 import os
-import sqlite3
 import tempfile
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.services.graph.config_service import GraphConfigService
 from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
 from ciris_engine.logic.services.lifecycle.time import TimeService
@@ -23,36 +23,26 @@ def time_service():
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database for testing."""
+    """Create a temporary database for testing with persist wired."""
+    from ciris_engine.logic.persistence.models import graph as _graph_mod
+
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
+
+    prior_engine = _graph_mod._engine
+    prior_dsn = _graph_mod._engine_dsn
+    initialize_database(db_path)
+
     yield db_path
+
+    _graph_mod._engine = prior_engine
+    _graph_mod._engine_dsn = prior_dsn
     os.unlink(db_path)
 
 
 @pytest_asyncio.fixture
 async def memory_service(temp_db, time_service):
     """Create a memory service for testing."""
-    # Initialize the database
-    conn = sqlite3.connect(temp_db)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS graph_nodes (
-            node_id TEXT NOT NULL,
-            scope TEXT NOT NULL,
-            node_type TEXT NOT NULL,
-            attributes_json TEXT,
-            version INTEGER DEFAULT 1,
-            updated_by TEXT,
-            updated_at TEXT,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (node_id, scope)
-        )
-    """
-    )
-    conn.commit()
-    conn.close()
-
     # Create a secrets service for the memory service
     from ciris_engine.logic.secrets.service import SecretsService
 
@@ -398,3 +388,46 @@ async def test_config_service_path_values(config_service):
     configs = await config_service.list_configs(prefix="paths.")
     assert "paths.test" in configs
     assert configs["paths.test"] == "/home/user/test.txt"
+
+
+@pytest.mark.asyncio
+async def test_config_scan_survives_legacy_keyless_config_node(config_service, memory_service, caplog):
+    """Regression (#935): a legacy CONFIG node without `key` must not warn on every scan.
+
+    Pre-2.9.0 accord_metrics wrote `accord_metrics/events_total` as a
+    CONFIG-typed GraphNode with only counter attributes (no `key`). The
+    node survives in long-lived production graphs, and every config lookup
+    (~10s cadence) logged "Failed to convert node accord_metrics/events_total
+    to ConfigNode: 'key'" into incidents_latest.log. The converter now
+    derives the key from the node id, so scans convert it cleanly.
+    """
+    import logging as _logging
+    from datetime import datetime, timezone
+
+    from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
+
+    now = datetime.now(timezone.utc)
+    legacy_node = GraphNode(
+        id="accord_metrics/events_total",
+        type=NodeType.CONFIG,
+        scope=GraphScope.LOCAL,
+        attributes={
+            "events_sent_total": 42,
+            "last_updated": now.isoformat(),
+        },
+        updated_by="accord_metrics_service",
+        updated_at=now,
+    )
+    result = await memory_service.memorize(legacy_node)
+    assert result.status.value == "ok"
+
+    # A regular config write + read scans all CONFIG nodes, including the
+    # legacy one.
+    await config_service.set_config("soak.test", "value", updated_by="test_user")
+
+    with caplog.at_level(_logging.WARNING, logger="ciris_engine.logic.services.graph.config_service.service"):
+        fetched = await config_service.get_config("soak.test")
+
+    assert fetched is not None
+    assert fetched.value.value == "value"
+    assert not [r for r in caplog.records if "Failed to convert node" in r.getMessage()]

@@ -15,7 +15,7 @@ import pytest
 from ciris_engine.logic.dma.idma import IDMAEvaluator
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem, ThoughtContent
 from ciris_engine.schemas.dma.results import CSDMAResult, DSDMAResult, EthicalDMAResult, IDMAResult
-from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 
@@ -34,16 +34,16 @@ class TestIDMAEvaluator:
         """Mock the prompt loader to return proper PromptCollection."""
         mock_loader = Mock()
         mock_collection = Mock()
-        mock_collection.uses_covenant_header = Mock(return_value=True)
+        mock_collection.uses_accord_header = Mock(return_value=True)
         mock_collection.get_system_message = Mock(return_value="Evaluate epistemic diversity.")
         mock_collection.get_user_message = Mock(return_value="Prior DMA context to analyze")
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
-        mock_loader.uses_covenant_header = Mock(return_value=True)
+        mock_loader.uses_accord_header = Mock(return_value=True)
         mock_loader.get_system_message = Mock(return_value="Evaluate epistemic diversity.")
         mock_loader.get_user_message = Mock(return_value="Prior DMA context to analyze")
 
-        monkeypatch.setattr("ciris_engine.logic.dma.idma.get_prompt_loader", lambda: mock_loader)
+        monkeypatch.setattr("ciris_engine.logic.dma.idma.get_prompt_loader", lambda *args, **kwargs: mock_loader)
         return mock_loader
 
     @pytest.fixture
@@ -110,10 +110,9 @@ class TestIDMAEvaluator:
     def mock_ethical_result(self):
         """Create mock PDMA result for prior context."""
         return EthicalDMAResult(
-            stakeholders="user, financial_advisors, regulatory_bodies",
-            conflicts="user_benefit vs risk_of_loss, advice_quality vs liability",
-            reasoning="Multiple stakeholders with potentially conflicting interests.",
-            alignment_check="Beneficence: supports user goals; Non-maleficence: financial risk exists",
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, financial_advisors, regulatory_bodies. Conflicts: user_benefit vs risk_of_loss, advice_quality vs liability. Multiple stakeholders with potentially conflicting interests. Beneficence: supports user goals; Non-maleficence: financial risk exists",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
 
     # ==================== Core Functionality Tests ====================
@@ -295,10 +294,56 @@ class TestIDMAEvaluator:
         call_args = evaluator.call_llm_structured.call_args
         messages = call_args.kwargs["messages"]
 
-        # Should have multiple messages (covenant, system, user)
+        # Should have multiple messages (accord, system, user)
         assert len(messages) >= 2
         # Response model should be IDMAResult
         assert call_args.kwargs["response_model"] == IDMAResult
+
+    def test_build_prior_dma_context_consumes_v32_pdma_schema(
+        self, mock_service_registry, mock_ethical_result, mock_csdma_result, mock_dsdma_result
+    ):
+        """Regression-pin: IDMA's prior-DMA context must surface the v3.2
+        EthicalDMAResult fields (action, weight_alignment_score,
+        ethical_alignment_score, rationale), NOT the deprecated v3.1 fields
+        (stakeholders, conflicts, reasoning) which produce silent N/A.
+
+        Caught in code review of the v3.2 polyglot reshape: IDMA was still
+        calling getattr(ethical_result, 'stakeholders'/'conflicts'/'reasoning')
+        with 'N/A' fallback after those fields were removed from the schema,
+        silently degrading IDMA's downstream fragility/correlation assessment
+        whenever PDMA output was provided.
+        """
+        evaluator = IDMAEvaluator(service_registry=mock_service_registry)
+
+        ctx = evaluator._build_prior_dma_context(
+            ethical_result=mock_ethical_result,
+            csdma_result=mock_csdma_result,
+            dsdma_result=mock_dsdma_result,
+        )
+
+        # v3.2 fields surfaced
+        assert "Recommended action: speak" in ctx
+        assert "Weight alignment (training-pull): 0.85" in ctx
+        assert "Ethical alignment (framework-pull): 0.85" in ctx
+        assert "Felt torque (weight − ethical): +0.00" in ctx
+        assert "Rationale: Stakeholders: user, financial_advisors" in ctx  # rationale body
+
+        # No silent N/A fallbacks for fields we DO have
+        ethical_section = ctx.split("=== Ethical PDMA Analysis ===")[1].split("===")[0]
+        assert "Recommended action: N/A" not in ethical_section
+        assert "Weight alignment (training-pull): N/A" not in ethical_section
+        assert "Ethical alignment (framework-pull): N/A" not in ethical_section
+        assert "Rationale: N/A" not in ethical_section
+
+        # v3.1 deprecated field labels gone — guards against accidental revert
+        assert "Stakeholders: N/A" not in ctx  # the LABEL, not the rationale text
+        assert "Conflicts: " not in ctx.split("Rationale:")[0]  # only allowed inside rationale prose
+
+    def test_build_prior_dma_context_handles_missing_pdma(self, mock_service_registry):
+        """Empty/None ethical_result must not crash; returns 'No prior DMA context'."""
+        evaluator = IDMAEvaluator(service_registry=mock_service_registry)
+        assert evaluator._build_prior_dma_context() == "No prior DMA context available"
+        assert evaluator._build_prior_dma_context(ethical_result=None) == "No prior DMA context available"
 
     @pytest.mark.asyncio
     async def test_idma_works_without_prior_dma(self, mock_service_registry, mock_prompt_loader, valid_queue_item):
@@ -512,14 +557,35 @@ class TestIDMAResultSchema:
         assert result.sources_identified == []
         assert result.correlation_factors == []
 
-    def test_idma_result_forbids_extra_fields(self):
-        """Test IDMAResult forbids extra fields."""
+    def test_idma_result_tolerates_extra_fields(self):
+        """IDMAResult uses extra='ignore' so legacy LLM outputs don't break.
+
+        The schema was trimmed from 43 → 8 fields because the LLM kept
+        returning malformed JSON trying to fill the full old shape. IDMA is
+        informational (not a safety gate — see EpistemicHumilityResult which
+        IS strict), so extras are silently dropped. The five required fields
+        still validate strictly; if any of them is missing the LLM call
+        raises InstructorRetryException and the DMA retry logic takes over.
+        """
+        # Extras are silently dropped — this must NOT raise.
+        result = IDMAResult(
+            k_eff=2.0,
+            correlation_risk=0.3,
+            phase="healthy",
+            fragility_flag=False,
+            reasoning="test",
+            rho_mean=0.4,  # v1 field, no longer declared; accepted and dropped
+            source_type_counts=["memory:2"],  # v1 list field, same
+            completely_unknown_field="x",  # never existed; same
+        )
+        assert result.k_eff == 2.0
+        assert not hasattr(result, "rho_mean")
+        # Missing REQUIRED field — must still raise (safety gate on inputs).
         with pytest.raises(ValueError):
             IDMAResult(
                 k_eff=2.0,
                 correlation_risk=0.3,
                 phase="healthy",
                 fragility_flag=False,
-                reasoning="test",
-                extra_field="not_allowed",  # This should fail
+                # reasoning intentionally omitted
             )

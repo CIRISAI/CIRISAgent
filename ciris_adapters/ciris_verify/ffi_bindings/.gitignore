@@ -1,0 +1,15 @@
+# Desktop FFI library is pip-resolved from the ciris-verify wheel
+# (site-packages/ciris_verify/libciris_verify_ffi.{so,dylib,dll}). Pin at
+# requirements.txt is the single source of truth for the desktop binary.
+# The on-disk artifact must NOT be committed here: it drifts silently
+# from the pin (saw v1.6.3 in-repo while pin said v1.11.1 — agent loaded
+# the in-repo stale version). See loader behavior in client.py.
+#
+# Mobile platform binaries (Android JNI under client/androidApp/src/main/
+# jniLibs/, iOS framework under client/iosApp/Resources) are tracked
+# separately — those need explicit on-disk artifacts because the mobile
+# build pipeline ships them into the APK/IPA. tools/update_ciris_verify.py
+# manages the mobile binaries.
+libciris_verify_ffi.so
+libciris_verify_ffi.dylib
+libciris_verify_ffi.dll

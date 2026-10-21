@@ -1,7 +1,7 @@
 """Runtime Control Service Protocol - Unified control plane for CIRIS runtime operations."""
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Dict, List, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
 from ciris_engine.schemas.services.core.runtime import (
     AdapterInfo,
@@ -85,8 +85,12 @@ class RuntimeControlServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def list_adapters(self) -> List[AdapterInfo]:
-        """List all loaded adapters."""
+    async def list_adapters(self) -> List[Any]:
+        """List all loaded adapters.
+
+        Returns a mix of AdapterInfo (bootstrap) and RuntimeAdapterStatus (managed).
+        RuntimeAdapterStatus preserves needs_reauth, has_auth_step, auth_step_id fields.
+        """
         ...
 
     @abstractmethod

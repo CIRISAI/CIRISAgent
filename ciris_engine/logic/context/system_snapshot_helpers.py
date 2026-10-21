@@ -12,6 +12,7 @@ Organized by logical function groups:
 8. User Management
 """
 
+import inspect
 import json
 import logging
 import re
@@ -37,6 +38,149 @@ from ciris_engine.schemas.types import JSONDict
 from .secrets_snapshot import ERROR_KEY, build_secrets_snapshot
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# 0. CONTEXT ENRICHMENT CACHE
+# =============================================================================
+
+# Module-level cache for context enrichment results
+# This prevents re-executing tools on every thought, providing instant access
+# to cached data like wallet balances, HA entities, etc.
+
+
+class EnrichmentCacheEntry(BaseModel):
+    """Cache entry for context enrichment results."""
+
+    data: Any
+    cached_at: datetime
+    ttl_seconds: float
+
+    def is_expired(self) -> bool:
+        """Check if cache entry has expired."""
+        age = (datetime.now(timezone.utc) - self.cached_at).total_seconds()
+        return age > self.ttl_seconds
+
+
+class ContextEnrichmentCache:
+    """Thread-safe cache for context enrichment results.
+
+    Features:
+    - Per-tool TTL configuration
+    - Startup population for instant context availability
+    - Manual refresh capability
+    - Cache statistics for monitoring
+    """
+
+    # TTL settings based on data type best practices:
+    # - HA entity lists: Devices rarely added/removed, 5 min is fine
+    # - Weather data: APIs recommend 10-20 min cache (OpenWeatherMap default: 20 min)
+    # - Real-time state: Use shorter TTL or on-demand refresh
+    # Reference: https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/appropriate-polling/
+    DEFAULT_TTL = 300.0  # 5 minutes - good for entity/device lists
+    MIN_TTL = 30.0  # 30 seconds minimum to prevent excessive polling
+    MAX_TTL = 900.0  # 15 minutes max - suitable for weather data
+
+    # Category-specific TTL recommendations (tools can override via context_enrichment_params)
+    TTL_ENTITY_LIST = 300.0  # 5 min - HA entities, MA players (rarely change)
+    TTL_WEATHER = 600.0  # 10 min - weather data (APIs rate-limit, data changes slowly)
+    TTL_DEVICE_STATE = 60.0  # 1 min - device states (more dynamic but not real-time)
+
+    def __init__(self) -> None:
+        self._cache: Dict[str, EnrichmentCacheEntry] = {}
+        self._hit_count = 0
+        self._miss_count = 0
+        self._startup_populated = False
+
+    def get(self, key: str) -> Optional[Any]:
+        """Get cached value if not expired."""
+        entry = self._cache.get(key)
+        if entry and not entry.is_expired():
+            self._hit_count += 1
+            logger.debug(f"[ENRICHMENT_CACHE] HIT: {key}")
+            return entry.data
+        if entry:
+            # Expired - clean up
+            del self._cache[key]
+        self._miss_count += 1
+        logger.debug(f"[ENRICHMENT_CACHE] MISS: {key}")
+        return None
+
+    def set(self, key: str, data: Any, ttl_seconds: Optional[float] = None) -> None:
+        """Store value in cache with TTL."""
+        ttl = ttl_seconds if ttl_seconds is not None else self.DEFAULT_TTL
+        ttl = max(self.MIN_TTL, min(ttl, self.MAX_TTL))  # Clamp to bounds
+
+        self._cache[key] = EnrichmentCacheEntry(
+            data=data,
+            cached_at=datetime.now(timezone.utc),
+            ttl_seconds=ttl,
+        )
+        logger.debug(f"[ENRICHMENT_CACHE] SET: {key} (TTL={ttl}s)")
+
+    def invalidate(self, key: str) -> None:
+        """Invalidate a specific cache entry."""
+        if key in self._cache:
+            del self._cache[key]
+            logger.debug(f"[ENRICHMENT_CACHE] INVALIDATED: {key}")
+
+    def clear(self) -> None:
+        """Clear all cache entries."""
+        self._cache.clear()
+        logger.info("[ENRICHMENT_CACHE] Cleared all entries")
+
+    @property
+    def stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        total = self._hit_count + self._miss_count
+        hit_rate = (self._hit_count / total * 100) if total > 0 else 0.0
+        return {
+            "entries": len(self._cache),
+            "hits": self._hit_count,
+            "misses": self._miss_count,
+            "hit_rate_pct": round(hit_rate, 1),
+            "startup_populated": self._startup_populated,
+        }
+
+    @property
+    def is_populated(self) -> bool:
+        """Check if cache has been populated (at startup or otherwise)."""
+        return len(self._cache) > 0 or self._startup_populated
+
+    def get_all_entries(self) -> Dict[str, Any]:
+        """Get all non-expired cache entries for API exposure.
+
+        Returns a dict of {tool_key: data} for all entries that haven't expired.
+        Used by /v1/system/environment endpoint to expose context enrichment data.
+        """
+        result: Dict[str, Any] = {}
+        expired_keys: List[str] = []
+
+        for key, entry in self._cache.items():
+            if entry.is_expired():
+                expired_keys.append(key)
+            else:
+                result[key] = entry.data
+
+        # Clean up expired entries
+        for key in expired_keys:
+            del self._cache[key]
+
+        return result
+
+    def mark_startup_populated(self) -> None:
+        """Mark that startup population has completed."""
+        self._startup_populated = True
+        logger.info(f"[ENRICHMENT_CACHE] Startup population complete: {len(self._cache)} entries")
+
+
+# Singleton cache instance
+_enrichment_cache = ContextEnrichmentCache()
+
+
+def get_enrichment_cache() -> ContextEnrichmentCache:
+    """Get the global context enrichment cache."""
+    return _enrichment_cache
 
 
 # =============================================================================
@@ -553,14 +697,38 @@ def _get_shutdown_context(runtime: Optional[Any]) -> Optional[Any]:
     return None
 
 
-def _format_critical_alert(alert: str) -> str:
-    """Format a critical resource alert."""
-    return f"🚨 CRITICAL! RESOURCE LIMIT BREACHED! {alert} - REJECT OR DEFER ALL TASKS!"
+_RESOURCE_PRESSURE_PREFIX = "RESOURCE PRESSURE (runtime self-protection, informational):"
+
+
+def _format_critical_alert(alert: str, shedding: bool = False) -> str:
+    """Format a critical resource alert for the prompt.
+
+    Informational only. The runtime handles resource pressure itself (reclaim,
+    throttle, shed); the alert must never steer the model toward any H3ERE
+    action -- runtime self-protection and agent decisions stay separate.
+    """
+    state = (
+        "the runtime is shedding new work (not admitting new tasks) until it recovers"
+        if shedding
+        else "the runtime is managing it itself"
+    )
+    return f"{_RESOURCE_PRESSURE_PREFIX} {alert} is past its critical threshold; {state}. No action is requested."
 
 
 def _get_system_unhealthy_alert() -> str:
-    """Get system unhealthy alert message."""
-    return "🚨 CRITICAL! SYSTEM UNHEALTHY! RESOURCE LIMITS EXCEEDED - IMMEDIATE ACTION REQUIRED!"
+    """Get system unhealthy alert message (informational, see _format_critical_alert)."""
+    return (
+        f"{_RESOURCE_PRESSURE_PREFIX} one or more resources are past their critical threshold; "
+        "the runtime is managing them itself. No action is requested."
+    )
+
+
+def _is_shedding(resource_monitor: Any) -> bool:
+    from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
+    from ciris_engine.schemas.services.resources_core import ResourceAction
+
+    gate = pressure_gate_of(resource_monitor)
+    return gate is not None and gate.is_active(ResourceAction.SHED)
 
 
 def _get_resource_check_failed_alert(error: str) -> str:
@@ -568,11 +736,11 @@ def _get_resource_check_failed_alert(error: str) -> str:
     return f"🚨 CRITICAL! FAILED TO CHECK RESOURCES: {error}"
 
 
-def _process_critical_alerts(snapshot: Any, resource_alerts: List[str]) -> None:
+def _process_critical_alerts(snapshot: Any, resource_alerts: List[str], shedding: bool = False) -> None:
     """Process critical resource alerts from snapshot."""
     if snapshot.critical:
         for alert in snapshot.critical:
-            resource_alerts.append(_format_critical_alert(alert))
+            resource_alerts.append(_format_critical_alert(alert, shedding))
 
 
 def _check_system_health(snapshot: Any, resource_alerts: List[str]) -> None:
@@ -587,7 +755,7 @@ def _collect_resource_alerts(resource_monitor: Any) -> List[str]:
     try:
         if resource_monitor is not None:
             snapshot = resource_monitor.snapshot
-            _process_critical_alerts(snapshot, resource_alerts)
+            _process_critical_alerts(snapshot, resource_alerts, _is_shedding(resource_monitor))
             _check_system_health(snapshot, resource_alerts)
         else:
             logger.warning("Resource monitor not available - cannot check resource constraints")
@@ -817,22 +985,64 @@ def _validate_runtime_capabilities(runtime: Optional[Any]) -> bool:
     return True
 
 
-def _get_tool_services(service_registry: Any) -> List[Any]:
-    """Get and validate tool services from registry."""
-    tool_services = service_registry.get_services_by_type("tool")
+def _derive_adapter_name_from_class(class_name: str) -> str:
+    """Derive adapter name from class name as fallback."""
+    class_name_mappings = {
+        "HA": "home_assistant",
+        "HomeAssistant": "home_assistant",
+        "Wallet": "wallet",
+        "Weather": "weather",
+    }
+    for key, name in class_name_mappings.items():
+        if key in class_name:
+            return name
+    return class_name.lower().replace("toolservice", "")
 
-    # Validate tool_services is iterable but not a string
-    try:
-        # Check if it's truly iterable and not a mock
-        if not hasattr(tool_services, "__iter__") or isinstance(tool_services, str):
-            logger.error(f"get_services_by_type('tool') returned non-iterable: {type(tool_services)}")
-            return []
 
-        # Try to convert to list to ensure it's really iterable
-        return list(tool_services)
-    except (TypeError, AttributeError):
-        logger.error(f"get_services_by_type('tool') returned non-iterable: {type(tool_services)}")
+def _get_adapter_name_from_provider(provider: Any) -> str:
+    """Extract adapter name from provider metadata or derive from class name."""
+    # Try metadata first
+    if hasattr(provider, "metadata") and isinstance(provider.metadata, dict):
+        name = provider.metadata.get("adapter", "unknown")
+        if name != "unknown" and isinstance(name, str):
+            return name
+
+    # Fallback to class name derivation
+    class_name = type(provider.instance).__name__
+    derived = _derive_adapter_name_from_class(class_name)
+    logger.debug("[TOOL_PROVIDERS] Fallback adapter name for %s: %s", class_name, derived)
+    return derived
+
+
+def _get_tool_providers(service_registry: Any) -> List[tuple[Any, str]]:
+    """Get tool service providers with their adapter names from registry.
+
+    Returns:
+        List of (instance, adapter_name) tuples
+    """
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    if not hasattr(service_registry, "_services"):
+        logger.warning("[TOOL_PROVIDERS] service_registry has no _services attribute")
         return []
+
+    providers: List[tuple[Any, str]] = []
+    tool_providers = service_registry._services.get(ServiceType.TOOL, [])
+
+    for provider in tool_providers:
+        if not hasattr(provider, "instance"):
+            continue
+        adapter_name = _get_adapter_name_from_provider(provider)
+        providers.append((provider.instance, adapter_name))
+        logger.debug("[TOOL_PROVIDERS] Found provider: %s -> %s", adapter_name, type(provider.instance).__name__)
+
+    logger.info("[TOOL_PROVIDERS] Found %d tool providers", len(providers))
+    return providers
+
+
+def _get_tool_services(service_registry: Any) -> List[Any]:
+    """Get and validate tool services from registry (instances only, for backwards compat)."""
+    return [instance for instance, _ in _get_tool_providers(service_registry)]
 
 
 async def _call_async_or_sync_method(obj: Any, method_name: str, *args: Any) -> Any:
@@ -880,8 +1090,22 @@ async def _get_tool_info_safely(tool_service: Any, tool_name: str, adapter_id: s
 
 
 def _extract_adapter_type(adapter_id: str) -> str:
-    """Extract adapter type from adapter_id."""
-    return adapter_id.split("_")[0] if "_" in adapter_id else adapter_id
+    """Extract adapter type from adapter_id.
+
+    Now that we get proper adapter names from metadata (e.g., 'home_assistant', 'wallet'),
+    we just return the name as-is. Only strip numeric suffixes if present (e.g., 'wallet_12345' -> 'wallet').
+    """
+    # Known adapter names that should not be split
+    known_adapters = {"home_assistant", "wallet", "navigation", "weather", "ciris_hosted_tools", "ciris_accord_metrics"}
+    if adapter_id in known_adapters:
+        return adapter_id
+
+    # For unknown adapters with numeric suffixes, strip the suffix
+    parts = adapter_id.rsplit("_", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return parts[0]
+
+    return adapter_id
 
 
 def _validate_tool_infos(tool_infos: List[ToolInfo]) -> None:
@@ -902,11 +1126,10 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
         # Assert runtime is not None since we validated it
         assert runtime is not None
         service_registry = runtime.service_registry
-        tool_services = _get_tool_services(service_registry)
+        # Use _get_tool_providers to get (instance, adapter_name) tuples
+        tool_providers = _get_tool_providers(service_registry)
 
-        for tool_service in tool_services:
-            adapter_id = getattr(tool_service, "adapter_id", "unknown")
-
+        for tool_service, adapter_name in tool_providers:
             # Get available tools from this service
             tool_names = await _call_async_or_sync_method(tool_service, "get_available_tools")
             if not tool_names:
@@ -915,15 +1138,15 @@ async def _collect_available_tools(runtime: Optional[Any]) -> Dict[str, List[Too
             # Get detailed info for each tool
             tool_infos: List[ToolInfo] = []
             for tool_name in tool_names:
-                tool_info = await _get_tool_info_safely(tool_service, tool_name, adapter_id)
+                tool_info = await _get_tool_info_safely(tool_service, tool_name, adapter_name)
                 if tool_info:
                     tool_infos.append(tool_info)
 
             if tool_infos:
                 _validate_tool_infos(tool_infos)
 
-                # Group by adapter type
-                adapter_type = _extract_adapter_type(adapter_id)
+                # Group by adapter type (use adapter_name directly since it's already clean)
+                adapter_type = _extract_adapter_type(adapter_name)
                 if adapter_type not in available_tools:
                     available_tools[adapter_type] = []
                 available_tools[adapter_type].extend(tool_infos)
@@ -940,9 +1163,11 @@ def _collect_enrichment_tools(available_tools: Dict[str, List[ToolInfo]]) -> Lis
     """Collect all tools marked for context enrichment."""
     enrichment_tools: List[tuple[str, ToolInfo]] = []
     for adapter_type, tools in available_tools.items():
+        logger.debug(f"[COLLECT_ENRICHMENT] {adapter_type}: {len(tools)} tools")
         for tool in tools:
             if tool.context_enrichment:
                 enrichment_tools.append((adapter_type, tool))
+                logger.debug(f"[COLLECT_ENRICHMENT] Found enrichment tool: {adapter_type}:{tool.name}")
                 logger.info(f"[CONTEXT_ENRICHMENT] Found enrichment tool: {adapter_type}:{tool.name}")
     return enrichment_tools
 
@@ -955,15 +1180,25 @@ def _log_no_enrichment_tools(available_tools: Dict[str, List[ToolInfo]]) -> None
         logger.info(f"[CONTEXT_ENRICHMENT] {adapter_type} has {len(tools)} tools: {[t.name for t in tools]}")
 
 
-async def _find_tool_service(tool_services: List[Any], adapter_type: str, tool_name: str) -> Optional[Any]:
-    """Find the tool service that provides the specified tool."""
-    for ts in tool_services:
-        adapter_id = getattr(ts, "adapter_id", "")
-        ts_adapter_type = _extract_adapter_type(adapter_id)
+async def _find_tool_service(tool_providers: List[tuple[Any, str]], adapter_type: str, tool_name: str) -> Optional[Any]:
+    """Find the tool service that provides the specified tool.
+
+    Args:
+        tool_providers: List of (instance, adapter_name) tuples from _get_tool_providers
+        adapter_type: Adapter type to match (e.g., "home_assistant", "wallet")
+        tool_name: Name of the tool to find
+
+    Returns:
+        Tool service instance if found, None otherwise
+    """
+    for ts, ts_adapter_name in tool_providers:
+        ts_adapter_type = _extract_adapter_type(ts_adapter_name)
         if ts_adapter_type == adapter_type:
             available = await _call_async_or_sync_method(ts, "get_available_tools")
             if available and tool_name in available:
+                logger.debug(f"[FIND_TOOL] Found {tool_name} in {ts_adapter_name}")
                 return ts
+    logger.warning(f"[FIND_TOOL] Could not find {tool_name} for adapter {adapter_type}")
     return None
 
 
@@ -971,6 +1206,17 @@ def _process_tool_result(result: Any, tool_key: str) -> Any:
     """Process and return the appropriate result from a tool execution."""
     if hasattr(result, "data") and result.data is not None:
         logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} returned data with {len(result.data)} keys")
+        # Log detailed result structure for context builder tuning
+        if isinstance(result.data, dict):
+            for key, value in result.data.items():
+                if key == "entities" and isinstance(value, list):
+                    logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} entities count: {len(value)}")
+                    for entity in value[:10]:  # Log first 10 entities
+                        logger.info(f"[CONTEXT_ENRICHMENT] Entity in context: {entity}")
+                    if len(value) > 10:
+                        logger.info(f"[CONTEXT_ENRICHMENT] ... and {len(value) - 10} more entities")
+                else:
+                    logger.info(f"[CONTEXT_ENRICHMENT] {tool_key}.{key} = {value}")
         return result.data
     elif hasattr(result, "success") and result.success:
         return {"success": True, "message": "Tool executed successfully"}
@@ -979,26 +1225,94 @@ def _process_tool_result(result: Any, tool_key: str) -> Any:
         return result
 
 
-async def _execute_enrichment_tool(tool_services: List[Any], adapter_type: str, tool: ToolInfo) -> tuple[str, Any]:
-    """Execute a single enrichment tool and return (tool_key, result)."""
+def _is_tool_bus(candidate: Any) -> bool:
+    """True only for a real ToolBus.
+
+    Deliberately an isinstance check, not ``hasattr``: every mock answers
+    ``hasattr`` truthfully, so a duck-typed check would silently route
+    enrichment into a stub and skip the provider entirely. When this is False
+    the caller falls back to the historical direct invocation, which is exactly
+    the behaviour that existed before the seam moved.
+    """
+    if candidate is None:
+        return False
+    try:
+        from ciris_engine.logic.buses.tool_bus import ToolBus
+
+        return isinstance(candidate, ToolBus)
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
+async def _execute_enrichment_tool(
+    tool_providers: List[tuple[Any, str]],
+    adapter_type: str,
+    tool: ToolInfo,
+    tool_bus: Optional[Any] = None,
+    subject: Optional[Any] = None,
+) -> tuple[str, Any]:
+    """Execute a single enrichment tool and return (tool_key, result).
+
+    If the tool has `_info_only=True` in context_enrichment_params, it just surfaces
+    the tool info for the prompt without actually executing the tool.
+
+    Args:
+        tool_providers: List of (instance, adapter_name) tuples from _get_tool_providers
+        adapter_type: Adapter type (e.g., "home_assistant")
+        tool: ToolInfo for the tool to execute
+    """
     tool_key = f"{adapter_type}:{tool.name}"
 
-    tool_service = await _find_tool_service(tool_services, adapter_type, tool.name)
+    params = tool.context_enrichment_params or {}
+
+    # Handle _info_only flag - just surface the tool info without executing
+    if params.get("_info_only", False):
+        logger.info(f"[CONTEXT_ENRICHMENT] {tool_key} is _info_only, surfacing tool info without execution")
+        # Return tool info as a highlight for the prompt
+        return tool_key, {
+            "_tool_highlight": True,
+            "tool_name": tool.name,
+            "description": tool.description,
+            "when_to_use": tool.when_to_use or tool.description,
+            "message": f"USE THIS TOOL for this type of request: {tool.when_to_use or tool.description}",
+        }
+
+    tool_service = await _find_tool_service(tool_providers, adapter_type, tool.name)
     if not tool_service:
         logger.warning(f"[CONTEXT_ENRICHMENT] No tool service found for {tool_key}")
         return tool_key, None
 
-    params = tool.context_enrichment_params or {}
     logger.info(f"[CONTEXT_ENRICHMENT] Executing {tool_key} with params: {params}")
 
-    result = await _call_async_or_sync_method(tool_service, "execute_tool", tool.name, params)
+    # Route through ToolBus.dispatch_to_provider — the single dispatch point —
+    # rather than invoking the provider instance directly (CIRISAgent#938).
+    # This path runs on EVERY thought, i.e. more often than the model-selected
+    # tool path, so a gate placed only in ToolBus.execute_tool would miss it.
+    # Provider resolution stays here (adapter-scoped, via _find_tool_service),
+    # so routing behaviour is unchanged; only the dispatch seam moves.
+    if tool_bus is not None and _is_tool_bus(tool_bus):
+        result = await tool_bus.dispatch_to_provider(
+            tool_service,
+            tool.name,
+            params,
+            handler_name="context_enrichment",
+            subject=subject,
+        )
+    else:
+        # No bus available — startup cache population and adapter load both run
+        # before/outside the bus manager. Direct invocation, logged as such
+        # rather than silently taking the ungated path.
+        logger.debug("[CONTEXT_ENRICHMENT] No ToolBus available for %s; invoking provider directly", tool_key)
+        result = await _call_async_or_sync_method(tool_service, "execute_tool", tool.name, params)
     if result:
         return tool_key, _process_tool_result(result, tool_key)
     return tool_key, None
 
 
 async def _run_context_enrichment_tools(
-    runtime: Optional[Any], available_tools: Dict[str, List[ToolInfo]]
+    runtime: Optional[Any],
+    available_tools: Dict[str, List[ToolInfo]],
+    subject: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Run context enrichment tools and return their results.
 
@@ -1006,14 +1320,22 @@ async def _run_context_enrichment_tools(
     They are automatically executed during context gathering to provide additional
     information for action selection (e.g., listing available Home Assistant entities).
 
+    This function uses caching to prevent re-executing slow tools on every thought.
+    Cache TTL can be configured per-tool via context_enrichment_params._cache_ttl.
+
     Args:
         runtime: The runtime object with service_registry and bus_manager
         available_tools: Already collected available tools by adapter type
+        subject: ToolInvocationSubject identifying the task/thought whose
+            context is being built (CIRISAgent#938). These tools are auto-run by
+            the pipeline, not selected by the model, which is why the origin is
+            CONTEXT_ENRICHMENT rather than REASONING.
 
     Returns:
         Dict mapping "adapter_type:tool_name" to tool execution results
     """
     enrichment_results: Dict[str, Any] = {}
+    cache = get_enrichment_cache()
 
     if not _validate_runtime_capabilities(runtime):
         return enrichment_results
@@ -1025,20 +1347,95 @@ async def _run_context_enrichment_tools(
         _log_no_enrichment_tools(available_tools)
         return enrichment_results
 
-    tool_services = _get_tool_services(runtime.service_registry)
+    # Use _get_tool_providers to get (instance, adapter_name) tuples with proper adapter mapping
+    tool_providers = _get_tool_providers(runtime.service_registry)
+    bus_manager = getattr(runtime, "bus_manager", None)
+    tool_bus = getattr(bus_manager, "tool", None) if bus_manager is not None else None
+    cache_hits = 0
+    cache_misses = 0
 
     for adapter_type, tool in enrichment_tools:
+        tool_key = f"{adapter_type}:{tool.name}"
         try:
-            tool_key, result = await _execute_enrichment_tool(tool_services, adapter_type, tool)
+            # Check cache first (fast path)
+            cached_result = cache.get(tool_key)
+            if cached_result is not None:
+                enrichment_results[tool_key] = cached_result
+                cache_hits += 1
+                continue
+
+            # Cache miss - execute tool
+            cache_misses += 1
+            _, result = await _execute_enrichment_tool(
+                tool_providers, adapter_type, tool, tool_bus=tool_bus, subject=subject
+            )
             if result is not None:
+                # Get TTL from tool params (default: 30s)
+                params = tool.context_enrichment_params or {}
+                ttl_raw = params.get("_cache_ttl")
+                ttl: Optional[float] = None
+                if isinstance(ttl_raw, (int, float)):
+                    ttl = float(ttl_raw)
+                cache.set(tool_key, result, ttl)
                 enrichment_results[tool_key] = result
         except Exception as e:
-            tool_key = f"{adapter_type}:{tool.name}"
             logger.error(f"[CONTEXT_ENRICHMENT] Failed to execute {tool_key}: {e}")
             enrichment_results[tool_key] = {"error": str(e)}
 
-    logger.info(f"[CONTEXT_ENRICHMENT] Collected {len(enrichment_results)} enrichment results")
+    logger.info(
+        f"[CONTEXT_ENRICHMENT] Collected {len(enrichment_results)} enrichment results "
+        f"(cache: {cache_hits} hits, {cache_misses} misses)"
+    )
     return enrichment_results
+
+
+async def populate_enrichment_cache_at_startup(runtime: Any, available_tools: Dict[str, List[ToolInfo]]) -> None:
+    """Populate the context enrichment cache at startup.
+
+    This should be called during runtime initialization to ensure
+    cached data is immediately available for the first thought.
+    """
+    cache = get_enrichment_cache()
+    if cache.is_populated:
+        logger.info("[ENRICHMENT_CACHE] Cache already populated, skipping startup population")
+        return
+
+    logger.info("[ENRICHMENT_CACHE] Starting startup population...")
+
+    # Run enrichment tools to populate cache
+    results = await _run_context_enrichment_tools(runtime, available_tools)
+
+    cache.mark_startup_populated()
+    logger.info(f"[ENRICHMENT_CACHE] Startup population complete: {len(results)} tools cached, stats: {cache.stats}")
+
+
+async def refresh_enrichment_cache(runtime: Any) -> Dict[str, Any]:
+    """Force refresh all context enrichment tools and update the cache.
+
+    This clears expired entries and re-executes all enrichment tools
+    to ensure fresh data is available. Used by the API endpoint when
+    ?refresh=true is requested.
+
+    Args:
+        runtime: The CIRIS runtime instance
+
+    Returns:
+        Dict of {tool_key: result} for all refreshed tools
+    """
+    cache = get_enrichment_cache()
+    logger.info("[ENRICHMENT_CACHE] API-triggered refresh starting...")
+
+    # Collect available tools
+    available_tools = await _collect_available_tools(runtime)
+    if not available_tools:
+        logger.warning("[ENRICHMENT_CACHE] No tools available for refresh")
+        return {}
+
+    # Run enrichment tools (this will update the cache)
+    results = await _run_context_enrichment_tools(runtime, available_tools)
+
+    logger.info(f"[ENRICHMENT_CACHE] API refresh complete: {len(results)} tools, stats: {cache.stats}")
+    return results
 
 
 # =============================================================================
@@ -1088,40 +1485,39 @@ def _extract_user_from_thought_context(thought: Any, user_ids: Set[str]) -> None
 
 
 def _extract_users_from_correlation_history(task: Optional[Task], user_ids: Set[str]) -> None:
-    """Extract user IDs from correlation history database."""
+    """Extract user IDs from persist's correlation substrate.
+
+    Post-A1 absorption (CIRISAgent#763): routes through
+    `engine.correlation_query` with a correlation_id filter; reads tags.user_id
+    off the returned rows. Persist's correlation_record / correlation_query
+    surface (CIRISPersist#61) replaces the legacy raw SQL path.
+    """
     if not (task and task.context and task.context.correlation_id):
         return
 
     try:
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        import json as _json
 
-        adapter = get_adapter()
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        with persistence.get_db_connection() as conn:
-            cursor = conn.cursor()
+        engine = get_persist_engine()
+        if engine is None:
+            return
 
-            # Build dialect-specific SQL
-            if adapter.is_postgresql():
-                sql = """
-                    SELECT DISTINCT tags->>'user_id' as user_id
-                    FROM service_correlations
-                    WHERE correlation_id = %s
-                    AND tags->>'user_id' IS NOT NULL
-                """
-            else:
-                sql = """
-                    SELECT DISTINCT json_extract(tags, '$.user_id') as user_id
-                    FROM service_correlations
-                    WHERE correlation_id = ?
-                    AND json_extract(tags, '$.user_id') IS NOT NULL
-                """
-
-            cursor.execute(sql, (task.context.correlation_id,))
-            correlation_users = cursor.fetchall()
-            for row in correlation_users:
-                if row["user_id"]:
-                    user_ids.add(str(row["user_id"]))
-                    logger.debug(f"[USER EXTRACTION] Found user {row['user_id']} from correlation history")
+        filter_json = _json.dumps({"correlation_id": task.context.correlation_id})
+        cursor = _json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
+        raw = engine.correlation_query(filter_json, cursor, 100)
+        parsed = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+        items = parsed.get("items", []) if isinstance(parsed, dict) else []
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            tags = row.get("tags")
+            if isinstance(tags, dict):
+                uid = tags.get("user_id")
+                if uid:
+                    user_ids.add(str(uid))
+                    logger.debug(f"[USER EXTRACTION] Found user {uid} from correlation history")
     except Exception as e:
         logger.warning(f"[USER EXTRACTION] Failed to extract users from correlation history: {e}")
 
@@ -1166,6 +1562,54 @@ def _create_user_memory_query(user_id: str) -> MemoryQuery:
         include_edges=True,
         depth=2,
     )
+
+
+def _create_preferences_memory_query(user_id: str) -> MemoryQuery:
+    """Create memory query for user preferences node.
+
+    The setup wizard stores user preferences (language, location, timezone)
+    in a separate 'preferences/{user_id}' node. This query retrieves those
+    preferences for merging into the user profile.
+    """
+    return MemoryQuery(
+        node_id=f"preferences/{user_id}",
+        scope=GraphScope.LOCAL,
+        type=NodeType.CONCEPT,  # Preferences are stored as CONCEPT nodes
+        include_edges=False,
+        depth=1,
+    )
+
+
+async def _query_user_preferences(user_id: str, memory_service: LocalGraphMemoryService) -> JSONDict:
+    """Query the preferences/{user_id} node for user settings.
+
+    The setup wizard and settings page store user preferences in a separate
+    node. This function retrieves those preferences for merging into the
+    user profile.
+
+    Args:
+        user_id: The user ID to query preferences for
+        memory_service: The memory service to query
+
+    Returns:
+        Dict of preference attributes (may be empty)
+    """
+    try:
+        prefs_query = _create_preferences_memory_query(user_id)
+        prefs_results = await memory_service.recall(prefs_query)
+
+        if prefs_results:
+            prefs_node = prefs_results[0]
+            attrs = _extract_node_attributes(prefs_node)
+            logger.debug(f"[USER PREFS] Found preferences for {user_id}: {list(attrs.keys())}")
+            return attrs
+
+        logger.debug(f"[USER PREFS] No preferences node found for {user_id}")
+        return {}
+
+    except Exception as e:
+        logger.warning(f"[USER PREFS] Failed to query preferences for {user_id}: {e}")
+        return {}
 
 
 def _determine_if_admin_user(user_id: str) -> bool:
@@ -1276,6 +1720,10 @@ async def _enrich_single_user_profile(
 
     If no user node exists, creates one automatically with appropriate defaults.
     This ensures user_profiles is never empty in system snapshots.
+
+    IMPORTANT: This function queries BOTH the user/{user_id} node AND the
+    preferences/{user_id} node. The setup wizard stores language/location
+    preferences in the preferences node, so we must query both and merge.
     """
     try:
         # Query user node with ALL attributes
@@ -1286,21 +1734,114 @@ async def _enrich_single_user_profile(
             f"[USER EXTRACTION] Query returned {len(user_results) if user_results else 0} results for user {user_id}"
         )
 
+        # Also query preferences node - setup wizard stores language/location here
+        prefs_attrs = await _query_user_preferences(user_id, memory_service)
+
         if user_results:
             user_node = user_results[0]
-            return await _process_user_node_for_profile(user_node, user_id, memory_service, channel_id)
+            profile = await _process_user_node_for_profile(user_node, user_id, memory_service, channel_id)
+
+            # Merge preferences into profile (preferences take priority)
+            if prefs_attrs:
+                profile = _merge_preferences_into_profile(profile, prefs_attrs)
+
+            return profile
 
         # No user node exists - create one automatically
         logger.info(f"[USER EXTRACTION] No node found for user/{user_id}, creating new user node with defaults")
         new_user_node = await _create_default_user_node(user_id, memory_service, channel_id)
 
         if new_user_node:
-            return await _process_user_node_for_profile(new_user_node, user_id, memory_service, channel_id)
+            profile = await _process_user_node_for_profile(new_user_node, user_id, memory_service, channel_id)
+
+            # Merge preferences into profile (preferences take priority)
+            if prefs_attrs:
+                profile = _merge_preferences_into_profile(profile, prefs_attrs)
+
+            return profile
 
     except Exception as e:
         logger.warning(f"Failed to enrich user {user_id}: {e}")
 
     return None
+
+
+def _build_location_string(prefs_attrs: JSONDict) -> Optional[str]:
+    """Build a location string from city, region, country parts."""
+    parts = []
+    for key in ("location_city", "location_region", "location_country"):
+        if prefs_attrs.get(key):
+            parts.append(str(prefs_attrs[key]))
+    return ", ".join(parts) if parts else None
+
+
+def _merge_preferences_into_profile(profile: UserProfile, prefs_attrs: JSONDict) -> UserProfile:
+    """Merge preferences node attributes into a user profile.
+
+    The setup wizard stores user preferences (language, location, timezone)
+    in a separate preferences/{user_id} node. This function merges those
+    preferences into the user profile, with preferences taking priority.
+
+    Args:
+        profile: The user profile to update
+        prefs_attrs: Attributes from the preferences node
+
+    Returns:
+        Updated user profile with merged preferences
+    """
+    # Language - critical for localization (non-default only)
+    lang = prefs_attrs.get("preferred_language")
+    if lang and lang != "en":
+        profile.preferred_language = str(lang)
+        logger.debug(f"[PREFS MERGE] Set language to '{profile.preferred_language}' from preferences node")
+
+    # Timezone (non-default only)
+    tz = prefs_attrs.get("timezone")
+    if tz and tz != "UTC":
+        profile.timezone = str(tz)
+
+    # Location - direct value or build from parts
+    if prefs_attrs.get("location"):
+        profile.location = str(prefs_attrs["location"])
+    elif prefs_attrs.get("location_country") and not profile.location:
+        profile.location = _build_location_string(prefs_attrs)
+
+    return profile
+
+
+def _merge_memory_profile_into_existing(existing: UserProfile, memory_profile: UserProfile) -> None:
+    """Merge memory graph profile data into an existing profile.
+
+    Updates fields from memory graph that may have been hardcoded or missing.
+    Only updates if memory graph has non-default values.
+    """
+    # Language, timezone, style - only non-default values
+    if memory_profile.preferred_language and memory_profile.preferred_language != "en":
+        existing.preferred_language = memory_profile.preferred_language
+    if memory_profile.timezone and memory_profile.timezone != "UTC":
+        existing.timezone = memory_profile.timezone
+    if memory_profile.communication_style and memory_profile.communication_style != "formal":
+        existing.communication_style = memory_profile.communication_style
+
+    # Direct copy for non-empty values
+    if memory_profile.user_preferred_name:
+        existing.user_preferred_name = memory_profile.user_preferred_name
+    if memory_profile.location:
+        existing.location = memory_profile.location
+    if memory_profile.interaction_preferences:
+        existing.interaction_preferences = memory_profile.interaction_preferences
+    if memory_profile.oauth_name:
+        existing.oauth_name = memory_profile.oauth_name
+
+    # Merge memorized_attributes
+    if memory_profile.memorized_attributes:
+        if not existing.memorized_attributes:
+            existing.memorized_attributes = {}
+        existing.memorized_attributes.update(memory_profile.memorized_attributes)
+
+    # Append notes
+    if memory_profile.notes:
+        existing.notes = (existing.notes or "") + "\n" + memory_profile.notes
 
 
 async def _enrich_user_profiles(
@@ -1309,18 +1850,28 @@ async def _enrich_user_profiles(
     channel_id: Optional[str],
     existing_profiles: List[UserProfile],
 ) -> List[UserProfile]:
-    """Enrich user profiles from memory graph with comprehensive data."""
-    existing_user_ids = {p.user_id for p in existing_profiles}
+    """Enrich user profiles from memory graph with comprehensive data.
+
+    IMPORTANT: For users that already exist in existing_profiles (e.g., from GraphQL),
+    we MERGE memory graph data into them rather than skipping. This ensures that
+    user preferences like preferred_language stored in the memory graph are always
+    reflected in the final profile.
+    """
+    existing_by_id = {p.user_id: p for p in existing_profiles}
 
     for user_id in user_ids:
         logger.debug(f"[USER EXTRACTION] Processing user {user_id}")
+        memory_profile = await _enrich_single_user_profile(user_id, memory_service, channel_id)
 
-        if _should_skip_user_enrichment(user_id, existing_user_ids):
+        if not memory_profile:
             continue
 
-        user_profile = await _enrich_single_user_profile(user_id, memory_service, channel_id)
-        if user_profile:
-            existing_profiles.append(user_profile)
+        if user_id in existing_by_id:
+            logger.debug(f"[USER EXTRACTION] Merging memory graph data into existing profile for {user_id}")
+            _merge_memory_profile_into_existing(existing_by_id[user_id], memory_profile)
+        else:
+            existing_profiles.append(memory_profile)
+            existing_by_id[user_id] = memory_profile
 
     return existing_profiles
 
@@ -1570,81 +2121,92 @@ def _create_user_profile_from_node(
 
 
 async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List[JSONDict]:
-    """Collect recent messages from this user in other channels."""
-    recent_messages = []
+    """Collect this user's recent messages in channels other than `channel_id`.
+
+    Post-A1 absorption (CIRISAgent#763): paginate persist's correlation
+    substrate filtering by service_type='communication', then check
+    tags.user_id + tags.channel_id client-side. Persist's CorrelationFilter
+    doesn't predicate on tag-JSON keys directly, so the user_id /
+    channel_id match runs in Python after pagination.
+    """
+    recent_messages: List[JSONDict] = []
     try:
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        adapter = get_adapter()
+        engine = get_persist_engine()
+        if engine is None:
+            return recent_messages
 
-        # Query service correlations for user's recent messages
-        with persistence.get_db_connection() as conn:
-            cursor = conn.cursor()
+        filter_json = json.dumps({"service_type": "communication"})
+        cursor_json = json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
 
-            # Build dialect-specific SQL
-            if adapter.is_postgresql():
-                # PostgreSQL: Cast JSONB to text for LIKE operator
-                sql = """
-                    SELECT
-                        c.correlation_id,
-                        c.handler_name,
-                        c.request_data,
-                        c.created_at,
-                        c.tags
-                    FROM service_correlations c
-                    WHERE
-                        c.tags::text LIKE %s
-                        AND c.tags::text NOT LIKE %s
-                        AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
-                    ORDER BY c.created_at DESC
-                    LIMIT 3
-                """
-            else:
-                # SQLite: tags is TEXT, LIKE works directly
-                sql = """
-                    SELECT
-                        c.correlation_id,
-                        c.handler_name,
-                        c.request_data,
-                        c.created_at,
-                        c.tags
-                    FROM service_correlations c
-                    WHERE
-                        c.tags LIKE ?
-                        AND c.tags NOT LIKE ?
-                        AND c.handler_name IN ('ObserveHandler', 'SpeakHandler')
-                    ORDER BY c.created_at DESC
-                    LIMIT 3
-                """
+        collected = 0
+        max_messages = 3
+        while collected < max_messages:
+            raw = engine.correlation_query(filter_json, cursor_json, 200)
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            items = parsed.get("items", []) if isinstance(parsed, dict) else []
+            if not items:
+                break
 
-            cursor.execute(sql, (f'%"user_id":"{user_id}"%', f'%"channel_id":"{channel_id}"%'))
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                handler = row.get("handler_name")
+                if handler not in ("ObserveHandler", "SpeakHandler"):
+                    continue
+                tags = row.get("tags") or {}
+                if not isinstance(tags, dict):
+                    try:
+                        tags = json.loads(tags)
+                    except Exception:
+                        continue
+                if str(tags.get("user_id", "")) != user_id:
+                    continue
+                msg_channel = str(tags.get("channel_id", "unknown"))
+                if msg_channel == channel_id:
+                    continue  # Cross-channel ONLY
 
-            for row in cursor.fetchall():
-                try:
-                    tags = json.loads(row["tags"]) if row["tags"] else {}
-                    msg_channel = tags.get("channel_id", "unknown")
-                    msg_content = "Message in " + msg_channel
+                req_data = row.get("request_data") or {}
+                if isinstance(req_data, str):
+                    try:
+                        req_data = json.loads(req_data)
+                    except Exception:
+                        req_data = {}
+                # ServiceRequestData stores call args in `parameters` (typed
+                # Dict[str, str]). Pre-2.9.0 a few writers also stamped a
+                # top-level `content`/`message` key; honor those for
+                # backward compatibility but read from parameters first.
+                params = req_data.get("parameters") if isinstance(req_data, dict) else None
+                if not isinstance(params, dict):
+                    params = {}
+                msg_content = (
+                    params.get("content")
+                    or params.get("message")
+                    or (req_data.get("content") if isinstance(req_data, dict) else None)
+                    or (req_data.get("message") if isinstance(req_data, dict) else None)
+                    or f"Message in {msg_channel}"
+                )
 
-                    # Try to extract content from request_data
-                    if row["request_data"]:
-                        req_data = json.loads(row["request_data"])
-                        if isinstance(req_data, dict):
-                            msg_content = req_data.get("content", req_data.get("message", msg_content))
+                created_at = row.get("created_at", "")
+                ts_str = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
+                recent_messages.append(
+                    {
+                        "channel": msg_channel,
+                        "content": msg_content,
+                        "timestamp": ts_str,
+                    }
+                )
+                collected += 1
+                if collected >= max_messages:
+                    break
 
-                    recent_messages.append(
-                        {
-                            "channel": msg_channel,
-                            "content": msg_content,
-                            "timestamp": (
-                                row["created_at"].isoformat()
-                                if hasattr(row["created_at"], "isoformat")
-                                else str(row["created_at"])
-                            ),
-                        }
-                    )
-                except (json.JSONDecodeError, TypeError, AttributeError, KeyError):
-                    # Skip malformed entries
-                    pass
+            if len(items) < 200:
+                break
+            next_cursor = parsed.get("cursor")
+            if not next_cursor:
+                break
+            cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
     except Exception as e:
         logger.warning(f"Failed to collect cross-channel messages for user {user_id}: {e}")
 

@@ -9,15 +9,15 @@ import sys
 from typing import List, Tuple
 
 
-def run_command(cmd: str) -> Tuple[int, str, str]:
+def run_command(cmd: List[str]) -> Tuple[int, str, str]:
     """Run a command and return output."""
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, shell=False, capture_output=True, text=True)
     return result.returncode, result.stdout, result.stderr
 
 
 def get_modified_files() -> List[str]:
     """Get list of modified files."""
-    code, stdout, _ = run_command("git diff --name-only")
+    code, stdout, _ = run_command(["git", "diff", "--name-only"])
     if code == 0 and stdout:
         return stdout.strip().split("\n")
     return []
@@ -25,7 +25,7 @@ def get_modified_files() -> List[str]:
 
 def get_staged_files() -> List[str]:
     """Get list of staged files."""
-    code, stdout, _ = run_command("git diff --cached --name-only")
+    code, stdout, _ = run_command(["git", "diff", "--cached", "--name-only"])
     if code == 0 and stdout:
         return stdout.strip().split("\n")
     return []
@@ -55,7 +55,7 @@ def main() -> int:
 
         print("📝 Re-staging modified files...")
         for file in new_modifications:
-            run_command(f"git add {file}")
+            run_command(["git", "add", "--", file])
 
         print("✅ Files re-staged successfully!")
         print("💡 Tip: The commit will proceed with the hook-modified files.")

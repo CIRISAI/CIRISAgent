@@ -6,6 +6,7 @@ Manages API keys, OAuth users, and authentication state.
 import base64
 import hashlib
 import logging
+import os
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,12 @@ import aiofiles
 import bcrypt
 
 logger = logging.getLogger(__name__)
+
+# When CIRIS_AUTH_DEBUG=1, the [AUTH SERVICE DEBUG] traces (which key_id is
+# being validated, how many keys _api_keys holds, which key_ids are present)
+# are emitted at INFO so they survive an INFO-level capture (QA / CI). They
+# stay at DEBUG in normal operation — auth validation is a hot path.
+_authlog = logger.info if os.environ.get("CIRIS_AUTH_DEBUG") == "1" else logger.debug
 
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.api.auth import UserRole
@@ -60,21 +67,6 @@ class StoredAPIKey:
 
 
 @dataclass
-class OAuthUser:
-    """OAuth user information."""
-
-    user_id: str  # Format: provider:external_id
-    provider: str
-    external_id: str
-    email: Optional[str]
-    name: Optional[str]
-    role: UserRole
-    created_at: datetime
-    last_login: datetime
-    marketing_opt_in: bool = False  # User consent for marketing communications
-
-
-@dataclass
 class User:
     """Unified user representation combining auth methods and WA status."""
 
@@ -117,7 +109,6 @@ class APIAuthService:
 
         # In-memory caches for performance
         self._api_keys: Dict[str, StoredAPIKey] = {}
-        self._oauth_users: Dict[str, OAuthUser] = {}
         self._users: Dict[str, User] = {}
 
         logger.debug(
@@ -130,30 +121,86 @@ class APIAuthService:
         # Flag to track if we've loaded users from DB
         self._users_loaded = False
 
+        # Revoked service tokens (in-memory set of token hashes)
+        # Backed by persist's service_token_revocation_* substrate
+        # (CIRISPersist#64, v1.5.23). Cached in memory for hot-path checks;
+        # source of truth is persist.
+        self._revoked_service_tokens: set[str] = set()
+        self._revoked_tokens_loaded: bool = False  # Track if async load completed
+
         # Don't load from DB in __init__ - this causes asyncio.run() errors
         # Instead, we'll load lazily on first access
+        # Users are created via setup wizard (or test fixtures for unit tests)
+
+    # ==========================================================================
+    # Service Token Revocation Persistence
+    # ==========================================================================
+
+    async def _load_revoked_tokens(self) -> None:
+        """Load revoked tokens from persist into the in-memory cache.
+
+        Routes through persist's `service_token_revocation_list` (CIRISPersist#64).
+        Runs once on first auth access; in-memory cache serves hot-path checks
+        afterwards. Persist owns the table — no per-process db file.
+        """
+        import json
+
+        try:
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                # Persist may genuinely not be wired yet — early-boot auth
+                # paths can race the engine bootstrap. Leave
+                # _revoked_tokens_loaded False so the NEXT auth call retries
+                # this load. Flipping it True here would permanently suppress
+                # the reload and accept revoked service tokens until process
+                # restart (codex P1).
+                logger.warning("[AUTH] persist engine not wired yet — revocation load will retry on next auth call")
+                self._revoked_service_tokens = set()
+                return
+
+            raw = engine.service_token_revocation_list()
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else (raw or [])
+            self._revoked_service_tokens = {
+                str(row.get("token_hash")) for row in parsed if isinstance(row, dict) and row.get("token_hash")
+            }
+            self._revoked_tokens_loaded = True
+            logger.info(f"[AUTH] Loaded {len(self._revoked_service_tokens)} revoked service tokens from persist")
+        except Exception as e:
+            logger.error(f"[AUTH] Failed to load revoked tokens: {type(e).__name__}: {e}")
+            # Initialize empty set on error to avoid blocking startup
+            self._revoked_service_tokens = set()
+            self._revoked_tokens_loaded = True  # Mark as loaded even on error to avoid repeated attempts
+
+    # ==========================================================================
+    # Attestation Methods (delegate to infrastructure AuthenticationService)
+    # ==========================================================================
+
+    def get_cached_attestation(self) -> Optional[Any]:
+        """Get cached CIRISVerify attestation from infrastructure service.
+
+        Returns:
+            AttestationResult if cached and not expired, None otherwise.
+        """
         if not self._auth_service:
-            # Fallback: Initialize with system admin user if no auth service
-            now = datetime.now(timezone.utc)
-            admin_user = User(
-                wa_id="wa-system-admin",
-                name="admin",
-                auth_type="password",
-                api_role=APIRole.SYSTEM_ADMIN,
-                wa_role=None,  # System admin is not a WA by default
-                created_at=now,
-                is_active=True,
-                password_hash=self._hash_password("ciris_admin_password"),
-            )
-            self._users[admin_user.wa_id] = admin_user
-            self._users_loaded = True
+            logger.debug("[APIAuthService] No auth_service - attestation not available")
+            return None
+
+        if not hasattr(self._auth_service, "get_cached_attestation"):
+            logger.debug("[APIAuthService] Auth service doesn't support get_cached_attestation")
+            return None
+
+        return self._auth_service.get_cached_attestation()
 
     async def _ensure_users_loaded(self) -> None:
         """Ensure users are loaded from database (lazy loading)."""
         if self._users_loaded:
             return
 
+        # Load users and revoked tokens in parallel
         await self._load_users_from_db()
+        await self._load_revoked_tokens()
         self._users_loaded = True
 
     async def reload_users_from_db(self) -> None:
@@ -240,10 +287,6 @@ class APIAuthService:
             primary_key = f"{wa.oauth_provider}:{wa.oauth_external_id}"
             self._users[primary_key] = user
             logger.debug(f"[AUTH DEBUG] Stored user under OAuth key: '{primary_key}'")
-            # Clear from _oauth_users cache - DB record is authoritative
-            if primary_key in self._oauth_users:
-                logger.debug(f"[AUTH DEBUG] Clearing stale _oauth_users entry: '{primary_key}'")
-                del self._oauth_users[primary_key]
 
         for link in wa.oauth_links:
             link_key = f"{link.provider}:{link.external_id}"
@@ -270,30 +313,15 @@ class APIAuthService:
                 )
                 await self._process_wa_record(wa)
 
-            # Clear the fallback admin FIRST if it wasn't loaded from the database
-            # The fallback admin is only meant for when there's no auth_service
-            # If wa-system-admin is in the DB, it's a real user and should be kept
-            # IMPORTANT: This must happen BEFORE checking for has_admin, otherwise
-            # the fallback admin tricks the code into thinking admin exists
-            loaded_wa_ids = {wa.wa_id for wa in was}
-            if "wa-system-admin" in self._users and "wa-system-admin" not in loaded_wa_ids:
-                logger.info("CIRIS_USER_CREATE: Removing fallback 'wa-system-admin' - not in DB, real users loaded")
-                del self._users["wa-system-admin"]
-
-            # Check if we need to create a default admin
-            # Skip if:
-            # 1. Any user named 'admin' exists, OR
-            # 2. Any ROOT user exists (setup wizard creates ROOT user with custom name)
+            # Log summary of users loaded
             has_admin_user = any(u.name == "admin" for u in self._users.values())
             has_root_user = any(u.wa_role == WARole.ROOT for u in self._users.values())
 
-            logger.info(f"CIRIS_USER_CREATE: Check default admin: has_admin={has_admin_user}, has_root={has_root_user}")
+            logger.info(f"CIRIS_USER_CREATE: has_admin={has_admin_user}, has_root={has_root_user}")
 
             if not has_admin_user and not has_root_user:
-                logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - will create default admin")
-                await self._create_default_admin()
-            else:
-                logger.info("CIRIS_USER_CREATE: Skipping default admin creation - admin or ROOT already exists")
+                # No admin/ROOT - setup wizard required (in test mode, QA runner handles this)
+                logger.info("CIRIS_USER_CREATE: No admin/ROOT user found - setup wizard required")
 
             logger.info(f"CIRIS_USER_CREATE: User loading complete. Total users in cache: {len(self._users)}")
             unique_users = {u.wa_id: u for u in self._users.values()}
@@ -306,70 +334,6 @@ class APIAuthService:
         except Exception as e:
             logger.error(f"CIRIS_USER_CREATE: Error loading users from database: {e}", exc_info=True)
             raise
-
-    async def _create_default_admin(self) -> None:
-        """Create the default admin user in the database.
-
-        NOTE: This is only called if no user named 'admin' exists in the database.
-        During first-run setup, the setup wizard creates the ROOT user, so this
-        should NOT be called in that flow.
-        """
-        if not self._auth_service:
-            logger.info("CIRIS_USER_CREATE: _create_default_admin skipped - no auth_service")
-            return
-
-        logger.info("=" * 70)
-        logger.info("CIRIS_USER_CREATE: _create_default_admin() called")
-        logger.info("=" * 70)
-
-        try:
-            # Check existing WAs before creating admin
-            existing_was = await self._auth_service.list_was(active_only=False)
-            logger.info(f"CIRIS_USER_CREATE: Existing WAs before default admin: {len(existing_was)}")
-            for wa in existing_was:
-                logger.info(f"CIRIS_USER_CREATE:   - {wa.wa_id}: name={wa.name}, role={wa.role}")
-
-            # Check if any ROOT user already exists - DON'T create another one
-            root_was = [wa for wa in existing_was if wa.role == WARole.ROOT]
-            if root_was:
-                logger.info(
-                    f"CIRIS_USER_CREATE: ROOT WA already exists ({root_was[0].wa_id}) - skipping default admin creation"
-                )
-                return
-
-            logger.info("CIRIS_USER_CREATE: No ROOT WA exists - creating default admin")
-
-            # Create admin WA certificate
-            wa_cert = await self._auth_service.create_wa(
-                name="admin",
-                email="admin@ciris.local",
-                scopes=["*"],  # All permissions
-                role=WARole.ROOT,  # System admin gets ROOT role
-            )
-            logger.info(f"CIRIS_USER_CREATE: ✅ Created default admin WA: {wa_cert.wa_id}")
-
-            # Update with password hash
-            await self._auth_service.update_wa(
-                wa_cert.wa_id, updates=None, password_hash=self._hash_password("ciris_admin_password")
-            )
-            logger.info(f"CIRIS_USER_CREATE: Password set for default admin: {wa_cert.wa_id}")
-
-            # Add to cache
-            admin_user = User(
-                wa_id=wa_cert.wa_id,
-                name="admin",
-                auth_type="password",
-                api_role=APIRole.SYSTEM_ADMIN,
-                wa_role=WARole.ROOT,
-                created_at=wa_cert.created_at,
-                is_active=True,
-                password_hash=self._hash_password("ciris_admin_password"),
-            )
-            self._users[admin_user.wa_id] = admin_user
-            logger.info(f"CIRIS_USER_CREATE: Added default admin to user cache")
-
-        except Exception as e:
-            logger.error(f"CIRIS_USER_CREATE: Error creating default admin: {e}", exc_info=True)
 
     def _wa_role_to_api_role(self, wa_role: Optional[WARole]) -> APIRole:
         """Convert WA role to API role."""
@@ -430,7 +394,7 @@ class APIAuthService:
         )
         # Store by key_id instead of hash (bcrypt hashes are unique per call)
         self._api_keys[key_id] = stored_key
-        logger.debug(
+        _authlog(
             f"[AUTH SERVICE DEBUG] store_api_key: Instance #{self._instance_id} - Stored key_id={key_id} for user={user_id}, role={role}. Total keys now: {len(self._api_keys)}, dict_id={id(self._api_keys)}"
         )
 
@@ -442,19 +406,17 @@ class APIAuthService:
 
         # DEBUG: Log validation attempt with minimal context (key_id only, no key content)
         all_key_ids = list(self._api_keys.keys())  # NOSONAR - key IDs are hashes, not secrets
-        logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - Validating key_id={key_id}"
-        )
-        logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - _api_keys has {len(self._api_keys)} keys, dict_id={id(self._api_keys)}"
-        )
-        logger.debug(
-            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - stored_key found: {stored_key is not None}"
+        _authlog(
+            f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - "
+            f"seeking key_id={key_id} (token …{(api_key or '')[-12:]}); "
+            f"_api_keys has {len(self._api_keys)} keys "
+            f"(dict_id={id(self._api_keys)}); present key_ids={all_key_ids}; "
+            f"stored_key found: {stored_key is not None}"
         )
 
         # Verify the key using bcrypt
         if not stored_key or not stored_key.is_active:
-            logger.debug(
+            _authlog(
                 f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - FAILED: key not found or inactive"
             )
             return None
@@ -473,21 +435,6 @@ class APIAuthService:
         # Update last used
         stored_key.last_used = datetime.now(timezone.utc)
 
-        # Ensure system admin user exists in _users
-        if stored_key.user_id == "wa-system-admin" and stored_key.user_id not in self._users:
-            # Re-create the system admin user
-            admin_user = User(
-                wa_id="wa-system-admin",
-                name="admin",
-                auth_type="password",
-                api_role=APIRole.SYSTEM_ADMIN,
-                wa_role=None,
-                created_at=datetime.now(timezone.utc),
-                is_active=True,
-                password_hash=self._hash_password("ciris_admin_password"),
-            )
-            self._users[admin_user.wa_id] = admin_user
-
         logger.debug(
             f"[AUTH SERVICE DEBUG] validate_api_key: Instance #{self._instance_id} - SUCCESS: key valid for user={stored_key.user_id}, role={stored_key.role}"
         )
@@ -499,46 +446,6 @@ class APIAuthService:
         stored_key = self._api_keys.get(key_id)
         if stored_key:
             stored_key.is_active = False
-
-    def create_oauth_user(
-        self,
-        provider: str,
-        external_id: str,
-        email: Optional[str],
-        name: Optional[str],
-        role: UserRole,
-        marketing_opt_in: bool = False,
-    ) -> OAuthUser:
-        """Create or update an OAuth user."""
-        user_id = f"{provider}:{external_id}"
-        now = datetime.now(timezone.utc)
-
-        if user_id in self._oauth_users:
-            # Update existing user
-            user = self._oauth_users[user_id]
-            user.last_login = now
-            if email:
-                user.email = email
-            if name:
-                user.name = name
-            # Update marketing opt-in (user can change their preference)
-            user.marketing_opt_in = marketing_opt_in
-        else:
-            # Create new user
-            user = OAuthUser(
-                user_id=user_id,
-                provider=provider,
-                external_id=external_id,
-                email=email,
-                name=name,
-                role=role,
-                created_at=now,
-                last_login=now,
-                marketing_opt_in=marketing_opt_in,
-            )
-            self._oauth_users[user_id] = user
-
-        return user
 
     # ========== User Management Methods ==========
 
@@ -760,44 +667,6 @@ class APIAuthService:
 
             users.append((user_id, user))  # Use the dict key as the canonical user_id
 
-        # Add OAuth users not in _users
-        for oauth_user in self._oauth_users.values():
-            oauth_user_id = oauth_user.user_id
-            # Check if already in users by matching oauth_external_id
-            # This handles cases where the DB WA has a different wa_id (e.g., wa-2025-12-03-xxx)
-            # but represents the same OAuth user (same oauth_external_id)
-            if any(uid == oauth_user_id or u.oauth_external_id == oauth_user.external_id for uid, u in users):
-                continue
-
-            # Convert OAuth user to User
-            user = User(
-                wa_id=oauth_user.user_id,
-                name=oauth_user.name or oauth_user.email or oauth_user.user_id,
-                auth_type="oauth",
-                api_role=self._user_role_to_api_role(oauth_user.role),
-                oauth_provider=oauth_user.provider,
-                oauth_email=oauth_user.email,
-                oauth_external_id=oauth_user.external_id,
-                oauth_name=oauth_user.name,  # Map OAuth name to oauth_name field
-                created_at=oauth_user.created_at,
-                last_login=oauth_user.last_login,
-                is_active=True,
-            )
-
-            # Apply filters
-            if search and search.lower() not in user.name.lower():
-                continue
-            if auth_type and user.auth_type != auth_type:
-                continue
-            if api_role and user.api_role != api_role:
-                continue
-            if wa_role is not None:
-                continue  # OAuth users without WA role
-            if is_active is not None and user.is_active != is_active:
-                continue
-
-            users.append((oauth_user_id, user))
-
         return sorted(users, key=lambda tu: tu[1].created_at or datetime.min, reverse=True)
 
     def _user_role_to_api_role(self, role: UserRole) -> APIRole:
@@ -809,93 +678,9 @@ class APIAuthService:
         }
         return mapping.get(role, APIRole.OBSERVER)
 
-    def _merge_oauth_with_stored_user(self, oauth_user: OAuthUser, stored_user: User) -> User:
-        """Merge OAuth session data with persistent database user data."""
-        return User(
-            wa_id=stored_user.wa_id,  # Use the actual WA ID from database!
-            name=stored_user.name or oauth_user.name or oauth_user.email or oauth_user.user_id,
-            auth_type="oauth",
-            api_role=stored_user.api_role,  # Preserve DB role
-            wa_role=stored_user.wa_role,  # Preserve WA role
-            oauth_provider=oauth_user.provider,
-            oauth_email=oauth_user.email,
-            oauth_external_id=oauth_user.external_id,
-            created_at=stored_user.created_at or oauth_user.created_at,
-            last_login=oauth_user.last_login,
-            is_active=stored_user.is_active,
-            wa_parent_id=stored_user.wa_parent_id,
-            wa_auto_minted=stored_user.wa_auto_minted,
-            oauth_name=stored_user.oauth_name or oauth_user.name,
-            oauth_picture=stored_user.oauth_picture,
-            permission_requested_at=stored_user.permission_requested_at,
-            custom_permissions=stored_user.custom_permissions,
-            oauth_links=stored_user.oauth_links,
-            marketing_opt_in=oauth_user.marketing_opt_in,
-        )
-
-    def _create_user_from_oauth(self, oauth_user: OAuthUser) -> User:
-        """Create a User object from an OAuth user (not yet minted as WA)."""
-        return User(
-            wa_id=oauth_user.user_id,  # OAuth user_id as placeholder
-            name=oauth_user.name or oauth_user.email or oauth_user.user_id,
-            auth_type="oauth",
-            api_role=self._user_role_to_api_role(oauth_user.role),
-            oauth_provider=oauth_user.provider,
-            oauth_email=oauth_user.email,
-            oauth_external_id=oauth_user.external_id,
-            created_at=oauth_user.created_at,
-            last_login=oauth_user.last_login,
-            is_active=True,
-            oauth_name=oauth_user.name,
-            marketing_opt_in=oauth_user.marketing_opt_in,
-        )
-
-    def _lookup_oauth_user(self, user_id: str) -> Optional[User]:
-        """Look up user in OAuth users dictionary."""
-        if user_id not in self._oauth_users:
-            return None
-
-        oauth_user = self._oauth_users[user_id]
-        stored_user = self._users.get(user_id)
-
-        # If stored_user exists, merge OAuth session data with persistent DB data
-        if stored_user:
-            return self._merge_oauth_with_stored_user(oauth_user, stored_user)
-
-        # No stored user - pure OAuth user not yet minted as WA
-        return self._create_user_from_oauth(oauth_user)
-
-    def _lookup_by_external_id(self, user_id: str) -> Optional[User]:
-        """Fallback lookup by OAuth external_id (without provider prefix)."""
-        # Try stored users first
-        for key, user in self._users.items():
-            if user.oauth_external_id == user_id:
-                return user
-
-        # Try OAuth users
-        for key, oauth_user in self._oauth_users.items():
-            if oauth_user.external_id == user_id:
-                stored_user = self._users.get(key)
-                if stored_user:
-                    return stored_user
-                return self._create_user_from_oauth(oauth_user)
-
-        return None
-
     def get_user(self, user_id: str) -> Optional[User]:
         """Get a specific user by ID."""
-        # Check stored users first (includes users loaded from DB with OAuth links)
-        if user_id in self._users:
-            return self._users[user_id]
-
-        # Check OAuth users (in-memory only, for users who haven't been minted as WA yet)
-        oauth_result = self._lookup_oauth_user(user_id)
-        if oauth_result:
-            return oauth_result
-
-        # Fallback: Try to find user by OAuth external_id (without provider prefix)
-        # This handles cases where frontend passes just "googleUserId" without "google:" prefix
-        return self._lookup_by_external_id(user_id)
+        return self._users.get(user_id)
 
     async def update_user(
         self, user_id: str, api_role: Optional[APIRole] = None, is_active: Optional[bool] = None
@@ -944,19 +729,6 @@ class APIAuthService:
                         await self._auth_service.revoke_wa(user_id, reason="User deactivated via API")
             except Exception as e:
                 logger.debug(f"[AUTH DEBUG] Error updating user in database: {e}")
-
-        # Also update OAuth user if applicable
-        if user_id in self._oauth_users:
-            oauth_user = self._oauth_users[user_id]
-            if api_role is not None:
-                # Convert APIRole back to UserRole
-                role_mapping = {
-                    APIRole.OBSERVER: UserRole.OBSERVER,
-                    APIRole.ADMIN: UserRole.ADMIN,
-                    APIRole.AUTHORITY: UserRole.ADMIN,  # No direct mapping
-                    APIRole.SYSTEM_ADMIN: UserRole.SYSTEM_ADMIN,
-                }
-                oauth_user.role = role_mapping.get(api_role, UserRole.OBSERVER)
 
         return user
 
@@ -1043,11 +815,6 @@ class APIAuthService:
                 await self._auth_service.revoke_wa(user_id, reason="User deactivated via API")
             except Exception as e:
                 logger.debug(f"[AUTH DEBUG] Error deactivating user in database: {e}")
-
-        # Also deactivate OAuth user if applicable
-        if user_id in self._oauth_users:
-            # Can't really deactivate OAuth users in this simple implementation
-            pass
 
         return True
 
@@ -1165,14 +932,127 @@ class APIAuthService:
 
         return user
 
+    def _hash_service_token(self, token: str) -> str:
+        """Hash a service token for revocation storage.
+
+        Uses SHA-256 for fast lookups. This is safe because:
+        1. Service tokens are high-entropy (generated by manager)
+        2. We use constant-time comparison for validation
+        3. Hash is only used for revocation checks, not authentication
+        """
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def is_service_token_revoked(self, token: str) -> bool:
+        """Check if a service token has been revoked.
+
+        Args:
+            token: The raw service token to check
+
+        Returns:
+            True if token is revoked, False otherwise
+        """
+        token_hash = self._hash_service_token(token)
+
+        # If async load has completed, use the in-memory cache
+        if self._revoked_tokens_loaded:
+            return token_hash in self._revoked_service_tokens
+
+        # Fallback: persist point-lookup if async load hasn't completed yet.
+        # Prevents revoked tokens from being accepted after restart before
+        # the async load has run. Persist's service_token_revocation_check
+        # is backed by the PRIMARY KEY index.
+        try:
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                return False
+            raw = engine.service_token_revocation_check(token_hash)
+            return raw is not None
+        except Exception as e:
+            logger.warning(f"[AUTH] Failed to check revocation synchronously: {e}")
+            # On error, also check in-memory set (may have partial data)
+            return token_hash in self._revoked_service_tokens
+
+    async def revoke_service_token(self, token: str, reason: str, revoked_by: str) -> bool:
+        """Revoke a service token.
+
+        Args:
+            token: The raw service token to revoke
+            reason: Reason for revocation (e.g., "security incident", "token rotation")
+            revoked_by: User ID or service that initiated revocation
+
+        Returns:
+            True if revocation succeeded, False if token was already revoked
+        """
+        token_hash = self._hash_service_token(token)
+
+        # Check if already revoked
+        if token_hash in self._revoked_service_tokens:
+            logger.info(f"[AUTH] Service token already revoked: {token_hash[:8]}...")
+            return False
+
+        # Add to revoked set
+        self._revoked_service_tokens.add(token_hash)
+
+        # Persist via service_token_revocation_record (CIRISPersist#64).
+        # Idempotent — duplicate token_hash inserts are no-ops on the
+        # PRIMARY KEY.
+        try:
+            import json
+
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            engine = get_persist_engine()
+            if engine is None:
+                logger.warning("[AUTH] persist engine not wired — revocation in-memory only")
+            else:
+                payload = json.dumps(
+                    {
+                        "token_hash": token_hash,
+                        "revoked_at": datetime.now(timezone.utc).isoformat(),
+                        "revoked_by": revoked_by,
+                        "reason": reason,
+                    }
+                )
+                engine.service_token_revocation_record(payload)
+        except Exception as e:
+            logger.error(f"[AUTH] Failed to persist revocation: {type(e).__name__}: {e}")
+
+        # Log audit event
+        logger.info(f"[AUTH] Service token revoked: hash={token_hash[:8]}..., reason={reason}, revoked_by={revoked_by}")
+
+        # Audit through infrastructure auth service if available
+        if self._auth_service and hasattr(self._auth_service, "audit"):
+            try:
+                await self._auth_service.audit(
+                    event_type="service_token_revoked",
+                    details={
+                        "token_hash": token_hash[:16] + "...",  # Partial hash for audit
+                        "reason": reason,
+                        "revoked_by": revoked_by,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"[AUTH] Failed to audit service token revocation: {e}")
+
+        return True
+
     def validate_service_token(self, token: str) -> Optional[User]:
         """Validate a service token and return a service account user.
 
         Service tokens are compared against CIRIS_SERVICE_TOKEN environment variable.
         Uses constant-time comparison to prevent timing attacks.
+        Now includes revocation check.
         """
         import hmac
         import os
+
+        # Check if token is revoked FIRST (before any comparison)
+        if self.is_service_token_revoked(token):
+            logger.warning("[AUTH] Service token validation failed: token is revoked")
+            return None
 
         # Get expected service token from environment
         expected_token = os.environ.get("CIRIS_SERVICE_TOKEN")
@@ -1182,6 +1062,10 @@ class APIAuthService:
         # Use constant-time comparison
         if not hmac.compare_digest(token, expected_token):
             return None
+
+        # Log successful validation (but not too frequently to avoid spam)
+        # Only log at debug level
+        logger.debug("[AUTH] Service token validated successfully")
 
         # Create and return service account user
         return User(
@@ -1220,7 +1104,7 @@ class APIAuthService:
         try:
             # Load ROOT public key from seed/
             root_pub_path = Path(__file__).parent.parent.parent.parent.parent.parent / "seed" / "root_pub.json"
-            async with aiofiles.open(root_pub_path, "r") as f:
+            async with aiofiles.open(root_pub_path, "r", encoding="utf-8") as f:
                 content = await f.read()
                 root_data = json.loads(content)
 
@@ -1300,11 +1184,38 @@ class APIAuthService:
             user.api_role = APIRole.OBSERVER
 
     async def _update_existing_wa(self, user_id: str, wa_role: WARole) -> None:
-        """Update existing WA certificate."""
+        """Update existing WA certificate.
+
+        A promotion has to carry jurisdiction with it. The new-certificate path
+        issues ``resolve_deferral:any`` alongside the AUTHORITY role; this path
+        used to change only the role, so an OBSERVER promoted to AUTHORITY was
+        refused every domain-tagged deferral by the F1 gate until the process
+        restarted and the bootstrap backfill ran. A role change that does not
+        take effect until a restart is not a role change.
+
+        Uses the SAME predicate as that backfill, so the two cannot disagree
+        about what counts as already holding jurisdiction — and so a
+        deliberately narrow grant (``resolve_deferral:medical_*``) is left
+        alone rather than widened to ``:any`` on the next promotion.
+        """
         if not self._auth_service:
             return
+
+        from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
+
+        permissions: Optional[List[str]] = None
+        if wa_role in (WARole.AUTHORITY, WARole.ROOT):
+            existing = await self._auth_service.get_wa(user_id)
+            held = list(getattr(existing, "scopes", None) or []) if existing else []
+            if not AuthenticationService._holds_deferral_jurisdiction(held):
+                permissions = held + ["resolve_deferral:any"]
+
         await self._auth_service.update_wa(
-            user_id, updates=WAUpdate(role=wa_role.value if hasattr(wa_role, "value") else str(wa_role))
+            user_id,
+            updates=WAUpdate(
+                role=wa_role.value if hasattr(wa_role, "value") else str(wa_role),
+                permissions=permissions,
+            ),
         )
         logger.debug(f"[AUTH DEBUG] Updated existing WA {user_id} to role {wa_role}")
 
@@ -1312,20 +1223,40 @@ class APIAuthService:
         """Create email for WA certificate."""
         return user_name + "@ciris.local" if "@" not in user_name else user_name
 
-    def _get_wa_permissions(self, user: User) -> List[str]:
-        """Get permissions for WA certificate."""
+    def _get_wa_permissions(self, user: User, wa_role: Optional[WARole] = None) -> List[str]:
+        """Get permissions for WA certificate.
+
+        Two grammars live in this list and both are load-bearing:
+
+        * ``wa.<thing>`` are API PERMISSIONS, checked by the route decorators.
+        * ``<action>:<resource-pattern>`` are certificate SCOPES, checked by
+          ``scope_grants`` when a resource is named.
+
+        ``wa.resolve_deferral`` is the first kind and grants no jurisdiction —
+        it has no colon, so ``scope_grants`` treats it as naming an action and
+        no domain, which is deliberate (a bare scope must not be read as "every
+        domain"). An authority holding only that was refused every
+        domain-tagged deferral by the F1 gate. AUTHORITY therefore also gets the
+        scope-grammar form.
+        """
         base_permissions = self.get_permissions_for_role(user.api_role)
-        return base_permissions + [
+        permissions = base_permissions + [
             "wa.resolve_deferral",  # Critical for deferral resolution
             "wa.mint",  # Allow WA to mint others
         ]
+        if wa_role in (WARole.AUTHORITY, WARole.ROOT):
+            # `:any` is the status quo ante — role-only breadth — made explicit
+            # so an operator can narrow it (resolve_deferral:medical_*) instead
+            # of it being inferred by the gate.
+            permissions.append("resolve_deferral:any")
+        return permissions
 
     async def _create_new_wa_for_oauth_user(self, user: User, user_id: str, wa_role: WARole) -> str:
         """Create new WA certificate for OAuth user and return the wa_id."""
         if not self._auth_service:
             raise ValueError("Authentication service not available")
 
-        wa_permissions = self._get_wa_permissions(user)
+        wa_permissions = self._get_wa_permissions(user, wa_role)
 
         # Create WA certificate with proper wa_id format, but link to OAuth user
         import json

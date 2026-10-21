@@ -6,6 +6,7 @@ Provides type-safe structures for WA authentication and authorization.
 
 from datetime import datetime
 from enum import Enum
+from fnmatch import fnmatchcase
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -140,7 +141,7 @@ class WACertificate(BaseModel):
         """Check if certificate has a specific scope."""
         return scope in self.scopes
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ChannelIdentity(BaseModel):
@@ -152,7 +153,7 @@ class ChannelIdentity(BaseModel):
     external_username: Optional[str] = None
     metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuthorizationContext(BaseModel):
@@ -167,7 +168,7 @@ class AuthorizationContext(BaseModel):
     resource: Optional[str] = None
     channel_id: Optional[str] = None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WACertificateRequest(BaseModel):
@@ -186,7 +187,7 @@ class WACertificateRequest(BaseModel):
     adapter_name: Optional[str] = None
     adapter_metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAToken(BaseModel):
@@ -198,7 +199,7 @@ class WAToken(BaseModel):
     scopes: List[str]
     wa_id: str
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAAuthRequest(BaseModel):
@@ -211,7 +212,7 @@ class WAAuthRequest(BaseModel):
     channel_identity: Optional[ChannelIdentity] = None
     requested_scopes: List[str] = Field(default_factory=list)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAAuthResponse(BaseModel):
@@ -222,7 +223,7 @@ class WAAuthResponse(BaseModel):
     certificate: Optional[WACertificate] = None
     error: Optional[str] = None
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WARoleMintRequest(BaseModel):
@@ -235,7 +236,7 @@ class WARoleMintRequest(BaseModel):
     parent_signature: str
     scopes: List[str] = Field(default_factory=list)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralRequest(BaseModel):
@@ -247,11 +248,46 @@ class DeferralRequest(BaseModel):
     defer_until: datetime
     context: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class DeferralVerification(str, Enum):
+    """Where a stored deferral resolution stands with respect to its signature.
+
+    Three states, not two, because "not verified" covers two situations that
+    must never be conflated. A record written before signing existed is a
+    migration gap; a record whose signature does not check out is an attack or
+    a corruption. Reporting the first as the second cries wolf, and reporting
+    the second as the first is the hole this whole issue is about.
+    """
+
+    VERIFIED = "verified"
+    UNSIGNED = "unsigned"
+    FAILED = "failed"
 
 
 class DeferralResponse(BaseModel):
-    """WA response to deferral request."""
+    """WA response to deferral request.
+
+    ``signature`` is the classical (Ed25519) half of a hybrid signature over
+    :func:`deferral_resolution_payload`, produced by the local node's persist
+    signing key — the delegate that the owner's CEG federation identity
+    authorized to operate. ``signature_pqc`` is the ML-DSA-65 half over
+    ``canonical || classical_sig``. ``owner_key_id`` records the CEG federation
+    identity the signing key chains to, so an approval is traceable to the same
+    root of authority that permits the agent to run at all rather than to a
+    second, ad-hoc key.
+
+    The field naming follows the CEG row convention already used across the
+    substrate (``scrub_signature_classical`` / ``scrub_signature_pqc``): the
+    classical half is required, the PQC half is ``None`` while a deployment is
+    hybrid-pending.
+
+    ``signature`` was historically an f-string (``api_{user}_{timestamp}``) or
+    the empty string (CIRISAgent#944) — forms that carry no key material and
+    prove nothing. Use :func:`is_unverifiable_legacy_signature` to recognise
+    those rather than letting them be mistaken for signatures.
+    """
 
     approved: bool
     reason: Optional[str] = None
@@ -259,7 +295,90 @@ class DeferralResponse(BaseModel):
     wa_id: str
     signature: str
 
-    model_config = ConfigDict(extra="forbid")
+    # Signing provenance. Optional because deployed rows predate it, and
+    # because a resolution is constructed unsigned and then signed.
+    signed_at: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 instant the signature commits to. Without it the canonical payload cannot be rebuilt, so the signature cannot be checked.",
+    )
+    signature_pqc: Optional[str] = Field(
+        default=None,
+        description="Base64 ML-DSA-65 signature over (canonical || classical_sig). None while hybrid-pending.",
+    )
+    signing_key_id: Optional[str] = Field(
+        default=None,
+        description="Derived federation key_id of the key that signed (persist local_derived_key_id).",
+    )
+    owner_key_id: Optional[str] = Field(
+        default=None,
+        description="CEG federation identity (key_id) that owns the signing key. None when the node is not owner-provisioned.",
+    )
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+def deferral_resolution_payload(deferral_id: str, response: "DeferralResponse", signed_at: str) -> Dict[str, object]:
+    """The exact fields a WA's signature commits to when resolving a deferral.
+
+    ONE function, called by both the signer and the verifier. ``sign_task`` and
+    ``verify_task_signature`` each build their canonical dict inline, so the two
+    can drift apart silently and a signature would simply stop verifying with no
+    indication why. This does not repeat that.
+
+    It commits to the decision, not to a rendering of it: which deferral, the
+    verdict, the guidance given, who decided, and when. ``signed_at`` is inside
+    the payload so a signature cannot be lifted onto a different moment, and
+    ``deferral_id`` so it cannot be replayed onto a different deferral.
+    """
+    return {
+        "deferral_id": deferral_id,
+        "approved": response.approved,
+        "reason": response.reason,
+        "wa_id": response.wa_id,
+        "signed_at": signed_at,
+    }
+
+
+def is_unverifiable_legacy_signature(signature: str) -> bool:
+    """True for the pre-#944 placeholder forms: empty, or the ``api_`` f-string.
+
+    Records written before signing existed must stay readable and be clearly
+    marked unverified — never silently treated as signed, and never silently
+    treated as a forgery either, which would misattribute a data-migration
+    problem to an attacker.
+    """
+    return not signature.strip() or signature.startswith("api_")
+
+
+def deferral_resolution_record(
+    response: "DeferralResponse",
+    resolved_at: str,
+    verification: "DeferralVerification",
+) -> Dict[str, object]:
+    """The resolution as stored on the deferred task's context.
+
+    Before #944 this dict held only ``approved``/``reason``/``resolved_by``/
+    ``resolved_at``. The signature and the ``signed_at`` it commits to were
+    never written down, which made after-the-fact verification not merely
+    unwired but *impossible* — the material to check against was gone by the
+    time anyone could ask. Everything the verifier needs is now here.
+
+    Those original four keys keep their names and meanings; readers of existing
+    rows are unaffected.
+    """
+    return {
+        "approved": response.approved,
+        "reason": response.reason,
+        "resolved_by": response.wa_id,
+        "resolved_at": resolved_at,
+        # Verification material (#944).
+        "signature": response.signature,
+        "signed_at": response.signed_at,
+        "signature_pqc": response.signature_pqc,
+        "signing_key_id": response.signing_key_id,
+        "owner_key_id": response.owner_key_id,
+        "verification": verification.value,
+    }
 
 
 class GuidanceRequest(BaseModel):
@@ -279,7 +398,7 @@ class GuidanceRequest(BaseModel):
     )
     inputs: Optional[Dict[str, str]] = Field(default=None, description="Structured inputs for non-text modalities")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WisdomAdvice(BaseModel):
@@ -300,7 +419,24 @@ class WisdomAdvice(BaseModel):
     )
     requires_professional: bool = Field(default=False, description="True if domain requires licensed professional")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class GuidanceOrigin(str, Enum):
+    """Who produced a GuidanceResponse.
+
+    Only WISE_AUTHORITY guidance can carry a signature worth verifying. A
+    DOMAIN_AUTO_DEFERRAL is a machine routing notice from the wise bus (a
+    request needs a licensed domain handler); it is unsigned by design and says
+    so here, instead of putting a constant label in ``signature`` that a
+    verifier would read as a forgery (#967).
+    """
+
+    WISE_AUTHORITY = "wise_authority"
+    DOMAIN_AUTO_DEFERRAL = "domain_auto_deferral"
+    #: The reasoning loop asked for guidance under a standing constitutional
+    #: halt (CC 4.2.1.1): no request went out. Unsigned, a machine notice.
+    ACCORD_HALT = "accord_halt"
 
 
 class GuidanceResponse(BaseModel):
@@ -311,11 +447,15 @@ class GuidanceResponse(BaseModel):
     reasoning: str
     wa_id: str
     signature: str
+    origin: GuidanceOrigin = Field(
+        default=GuidanceOrigin.WISE_AUTHORITY,
+        description="Who produced this response; a non-WA origin carries an empty (unsigned) signature",
+    )
 
     # NEW: Aggregated advice from multiple providers
     advice: Optional[List[WisdomAdvice]] = Field(default=None, description="Per-provider capability-tagged advice")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralApprovalContext(BaseModel):
@@ -329,7 +469,7 @@ class DeferralApprovalContext(BaseModel):
     channel_id: Optional[str] = None
     metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAPermission(BaseModel):
@@ -345,7 +485,134 @@ class WAPermission(BaseModel):
     expires_at: Optional[datetime] = None
     metadata: Dict[str, str] = Field(default_factory=dict)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+# ---------------------------------------------------------------------------
+# Resource-scoped authorization  (NULLWORKS RC3 finding F1 / test MULTI-AUTH-01)
+# ---------------------------------------------------------------------------
+#
+# The retest reproduced *resource-invariant authorization*: a WA was granted a
+# decision regardless of which resource or domain the decision was about.
+# ``WiseAuthorityService.check_authorization`` took a ``resource`` argument and
+# never read it — the body branched on ``wa.role`` alone — so an AUTHORITY
+# minted to adjudicate one narrow domain adjudicated *every* domain, and the
+# only trace of that was a bare ``True``/``False`` with no record of what had
+# been demanded or what the WA actually held.
+#
+# Routing or domain affinity is not decision-specific human jurisdiction. The
+# types below make the resource load-bearing in the decision, and make the
+# resulting refusal readable by whoever has to debug it.
+
+
+WILDCARD_RESOURCE_PATTERNS = frozenset({"*", "any"})
+"""Resource patterns that mean "every resource".
+
+``any`` is not glob syntax — it is the spelling this codebase already mints.
+Every WA created by ``logic/runtime/service_initializer.py``,
+``routes/setup/complete.py`` and ``infrastructure/sub_services/wa_cli_bootstrap.py``
+carries scopes shaped like ``read:any`` / ``write:any``. If ``any`` did not keep
+meaning "unrestricted", the first enforcement pass would narrow every
+certificate already in the field, which is how a control gets reverted instead
+of kept.
+"""
+
+
+def scope_grants(scope: str, action: str, resource: str) -> bool:
+    """Does one scope string grant ``action`` over ``resource``?
+
+    The grammar is the one already in use on ``WACertificate.scopes_json``:
+    ``"<action>:<resource-pattern>"`` — ``read:any``, ``write:message``,
+    ``wa:approve``, ``resolve_deferral:medical_*``. The resource half is matched
+    with :func:`fnmatch.fnmatchcase`, so ``medical_*`` and ``org/acme/*`` behave
+    the way an operator writing them into a certificate would expect (note that
+    ``*`` spans separators — ``org/*`` matches ``org/acme/case-1``), and the
+    match is case-sensitive because these are identifiers, not prose.
+
+    Two deliberate refusals, both of which are the finding:
+
+    * **A bare scope with no colon grants no resource jurisdiction.** A
+      certificate holding ``"resolve_deferrals"`` names an action and names no
+      domain. Reading that as "…therefore every domain" is precisely the
+      inference that made an authority resource-invariant. Breadth stays
+      expressible — it is spelled ``resolve_deferrals:any`` — but it now has to
+      be *written down* by whoever minted the certificate rather than inferred
+      by the gate.
+    * **An empty resource pattern grants nothing.** ``"read:"`` is a malformed
+      scope, and a malformed scope must not widen access (the same least-
+      privilege rule ``persistence/stores/authentication_store.py`` applies when
+      a ``scopes`` column fails to decode).
+
+    ``"*"`` on its own is honoured as a full grant: it is what root-equivalent
+    fixtures and bootstrap certificates use, and it is unambiguous.
+    """
+    scope = scope.strip()
+    if not scope:
+        return False
+    if scope == "*":
+        return True
+
+    action_part, separator, resource_pattern = scope.partition(":")
+    if not separator:
+        # Action named, domain unnamed — see the docstring. Not a grant.
+        return False
+    if action_part.strip() not in ("*", action):
+        return False
+
+    resource_pattern = resource_pattern.strip()
+    if not resource_pattern:
+        return False
+    if resource_pattern in WILDCARD_RESOURCE_PATTERNS:
+        return True
+    return fnmatchcase(resource, resource_pattern)
+
+
+class AuthorizationDenialReason(str, Enum):
+    """Why an authorization was refused. Named so the refusal says which gate bit.
+
+    A bare ``False`` is what let F1 sit in the code unnoticed: the caller could
+    not tell "this WA does not exist" from "this role may never do that" from
+    "this authority is real and powerful but holds no jurisdiction over *this*
+    resource". Those need different responses from an operator, so they get
+    different names.
+    """
+
+    WA_NOT_FOUND = "wa_not_found"
+    ROLE_FORBIDS_ACTION = "role_forbids_action"
+    SCOPE_ABSENT = "scope_absent"
+
+
+class AuthorizationDecision(BaseModel):
+    """The result of an authorization check, with the reasoning attached.
+
+    Carries both halves of the comparison that was made — ``required_scope``
+    (what this decision demanded) and ``held_scopes`` (what the WA actually
+    presented) — so a refused approval can be diagnosed from a log line or a
+    test assertion without re-deriving the check by hand.
+    """
+
+    allowed: bool = Field(..., description="Whether the action is authorized")
+    reason: Optional[AuthorizationDenialReason] = Field(None, description="Denial reason code (None when allowed)")
+    message: str = Field(..., description="Human-readable explanation naming the binding gate")
+    wa_id: str = Field(..., description="WA the decision was made about")
+    role: Optional[WARole] = Field(None, description="Role held by the WA (None when no certificate was found)")
+    action: str = Field(..., description="Action that was requested")
+    resource: Optional[str] = Field(
+        None, description="Resource the action was requested against, if the caller named one"
+    )
+    scope_enforced: bool = Field(
+        False,
+        description=(
+            "True when the resource scope gate actually ran. False means the caller named no resource, "
+            "so this decision rests on the role gate alone — see WiseAuthorityService.authorize()."
+        ),
+    )
+    required_scope: Optional[str] = Field(
+        None, description="Scope string that would have permitted this decision (None when no scope was demanded)"
+    )
+    held_scopes: List[str] = Field(default_factory=list, description="Scopes the WA presented")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [
@@ -367,4 +634,8 @@ __all__ = [
     "WisdomAdvice",
     "DeferralApprovalContext",
     "WAPermission",
+    "AuthorizationDecision",
+    "AuthorizationDenialReason",
+    "WILDCARD_RESOURCE_PATTERNS",
+    "scope_grants",
 ]

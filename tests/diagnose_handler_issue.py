@@ -14,7 +14,7 @@ def diagnose_handler_issue():
     # Login
     print("1. Authenticating...")
     login_resp = requests.post(
-        "http://localhost:8080/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"}
+        "http://localhost:8080/v1/auth/login", json={"username": "admin", "password": "qa_test_password_12345"}
     )
     if login_resp.status_code != 200:
         print(f"❌ Login failed: {login_resp.text}")

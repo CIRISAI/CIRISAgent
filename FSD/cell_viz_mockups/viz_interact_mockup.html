@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CIRIS · Interact — cell in the middle</title>
+<style>
+:root {
+  --nav-bg:   #e4d9f2;
+  --nav-ink:  #3a2a68;
+  --nav-accent: #dc2a87;
+  --chrome:   #edecee;
+  --surface:  #ffffff;
+  --bg:       #f3ede9;
+  --bg-deep:  #ebe2dc;
+  --text:     #1f232b;
+  --dim:      #6a6d7a;
+  --border:   #e3dcd5;
+  --warn-bg:  #fff2c6;
+  --warn-ink: #8a6a0c;
+  --warn-bar: #ebd680;
+
+  --user-bubble: #3a5bd9;
+  --user-ink:    #ffffff;
+  --agent-bubble: #ffffff;
+  --agent-border: #eadfd3;
+
+  --stop-red: #e54a4a;
+
+  --comm:     #2da89c;
+  --memory:   #8b5fd6;
+  --llm:      #3d86d9;
+  --tool:     #d98a2d;
+  --runtime:  #d8554e;
+  --wise:     #c9a52a;
+  --nucleus:  #c78f33;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: -apple-system, "Inter", "Segoe UI", system-ui, sans-serif;
+  font-weight: 400;
+  background: #1a1d26;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 20px 40px;
+  min-height: 100vh;
+  overflow-x: auto;
+}
+
+.frame-note {
+  color: #8a93ac;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.frame-note.prose {
+  margin-top: 18px;
+  max-width: 1180px;
+  color: #7e86a0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.window {
+  width: 1200px;
+  height: 820px;
+  max-width: 100%;
+  background: var(--bg);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* macOS chrome */
+.mac {
+  height: 32px; background: var(--chrome);
+  display: flex; align-items: center; padding: 0 14px; gap: 8px;
+  border-bottom: 1px solid #dedcdf; flex-shrink: 0;
+}
+.mac .dot { width: 12px; height: 12px; border-radius: 50%; background: #c4c2c5; }
+.mac .title { flex: 1; text-align: center; font-size: 12px; color: #5e5a62; font-weight: 500; }
+
+/* Top nav */
+.nav {
+  height: 56px; background: var(--nav-bg);
+  display: flex; align-items: center; padding: 0 18px; gap: 12px;
+  flex-shrink: 0;
+}
+.logo {
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  color: var(--nav-accent);
+}
+.nav-spacer { flex: 1; }
+.nav-tools { display: flex; gap: 4px; }
+.nav-btn {
+  width: 36px; height: 36px;
+  border: none; background: transparent; color: var(--nav-ink);
+  display: grid; place-items: center;
+  border-radius: 8px; cursor: pointer;
+}
+.nav-btn:hover { background: rgba(58,42,104,0.08); }
+.nav-btn svg { width: 20px; height: 20px; }
+
+/* Status */
+.status { background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.status-row {
+  height: 44px; display: flex; align-items: center;
+  padding: 0 18px; gap: 10px; font-size: 12px;
+}
+.status-row.first { border-bottom: 1px solid #f0ece6; }
+.status-row .sep { color: #d8d2cb; }
+.status-row .spacer { flex: 1; }
+
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #2aa36a; margin-right: 4px;
+  box-shadow: 0 0 6px rgba(42,163,106,0.6);
+}
+.conn-label { color: #2aa36a; font-weight: 500; }
+
+.warn-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: #d13a3a; font-weight: 600; font-size: 11px; letter-spacing: 0.05em;
+}
+.warn-chip::before, .warn-chip::after { content: '⚠'; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 500;
+  background: #f6ecd2; color: #8a6a0c;
+  border: 1px solid #e8d9a6;
+}
+.badge.trust { background: #ece4f8; color: #4a3a7a; border-color: #d4c3ee; }
+
+.state-label { font-size: 11px; letter-spacing: 0.2em; font-weight: 600; color: var(--text); }
+.pill-viz {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  font-size: 10px; letter-spacing: 0.15em; font-weight: 600;
+  color: var(--nav-ink); background: #f0e8fa;
+  border: 1px solid #d8c8ee; border-radius: 999px;
+  cursor: pointer;
+}
+.pill-viz .pd {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--comm);
+  box-shadow: 0 0 6px var(--comm);
+}
+
+.btn-ghost {
+  padding: 5px 14px; font-size: 11px; font-weight: 500;
+  background: transparent; color: var(--text);
+  border: 1px solid #d8d2cb; border-radius: 999px; cursor: pointer;
+}
+.btn-stop {
+  padding: 5px 16px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  background: var(--stop-red); color: white; border: none;
+  border-radius: 999px; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(229,74,74,0.3);
+}
+
+.bus-mini {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  background: #f5f1eb; border: 1px solid var(--border);
+  margin-left: 8px;
+}
+.bus-mini .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 6px var(--c);
+}
+.bus-mini .dot.live { animation: busLive 1.8s ease-in-out infinite; }
+.bus-mini .dot.idle { opacity: 0.35; box-shadow: none; }
+
+/* Warning banner */
+.warn-banner {
+  background: var(--warn-bg);
+  border-top: 1px solid var(--warn-bar); border-bottom: 1px solid var(--warn-bar);
+  color: var(--warn-ink);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+  text-align: center; padding: 8px 0; flex-shrink: 0;
+}
+
+/* Chat area — cell is a live background, messages flow chronologically over it.
+   The cell can be partly covered by message bubbles — that's intentional. Gentle
+   continuous rotation surfaces every element over time. */
+.chat {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  user-select: none;
+}
+
+/* Cell fills the chat as a background layer. Nucleus is anchored to the
+   geometric center of the chat so it stays the focal point. */
+.viz-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  touch-action: pan-y;
+  cursor: grab;
+}
+.viz-center.dragging { cursor: grabbing; }
+.viz-center svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: auto;
+}
+
+/* Messages flow in chronological order, agent left + user right.
+   They sit ON TOP of the cell — partial coverage is fine. */
+.messages {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 20px 20px 54px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  pointer-events: none; /* empty chat space passes pointer events to the cell */
+}
+.messages > * { pointer-events: auto; }
+
+.msg-row { display: flex; }
+.msg-row.user  { justify-content: flex-end; }
+.msg-row.agent { justify-content: flex-start; }
+
+.bubble {
+  max-width: 320px;
+  padding: 12px 14px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 2px 10px rgba(30,20,10,0.08);
+}
+.bubble.agent {
+  background: var(--agent-bubble);
+  border: 1px solid var(--agent-border);
+  color: var(--text);
+}
+.bubble.agent .name {
+  font-size: 10px; letter-spacing: 0.14em;
+  color: #9a7c3e; font-weight: 700; margin-bottom: 6px;
+}
+.bubble.user {
+  background: var(--user-bubble);
+  color: var(--user-ink);
+}
+.bubble.user .name {
+  font-size: 10px; letter-spacing: 0.14em;
+  opacity: 0.75; font-weight: 700; margin-bottom: 4px;
+}
+.bubble .time { font-size: 10px; margin-top: 6px; text-align: right; opacity: 0.55; }
+.bubble.user .time  { color: rgba(255,255,255,0.7); }
+.bubble.agent .time { color: var(--dim); }
+
+.bubble.action {
+  background: #faf4ea;
+  border: 1px dashed #d4b58a;
+  font-size: 12px;
+  color: #70521e;
+}
+.bubble.action .action-head {
+  font-size: 10px; letter-spacing: 0.15em;
+  color: #b07a1f; font-weight: 700;
+  margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px;
+}
+.bubble.action .action-head::before { content: '◆'; color: var(--tool); }
+.bubble.action .action-tool {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  font-size: 11px; color: #4a3a2a;
+}
+
+/* Footer affordances inside chat — sit above the rotating cell. Use a soft white
+   pill background so they're always legible regardless of what's spinning underneath. */
+.msg-notice {
+  position: absolute; left: 50%; bottom: 8px;
+  transform: translateX(-50%);
+  text-align: center; font-size: 11px; font-weight: 500;
+  color: #2c2f38;
+  background: rgba(255,255,255,0.78);
+  padding: 3px 12px; border-radius: 999px;
+  z-index: 3; pointer-events: none;
+}
+.spin-hint {
+  position: absolute; left: 50%; bottom: 32px;
+  transform: translateX(-50%);
+  font-size: 10px; letter-spacing: 0.2em; font-weight: 700;
+  color: #2c2f38;
+  background: rgba(255,255,255,0.78);
+  padding: 4px 12px; border-radius: 999px;
+  z-index: 3; pointer-events: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.spin-hint svg { width: 12px; height: 12px; }
+.fg-toggle {
+  position: absolute; right: 14px; top: 14px;
+  padding: 5px 11px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px; letter-spacing: 0.15em; font-weight: 600;
+  color: var(--nav-ink);
+  cursor: pointer;
+  z-index: 4;
+}
+.fg-toggle:hover { background: white; }
+
+/* Input row */
+.input-row {
+  height: 64px; background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 12px;
+  flex-shrink: 0;
+}
+.avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: #e9dff2; color: var(--nav-accent);
+  display: grid; place-items: center; font-weight: 700;
+  flex-shrink: 0;
+}
+.btn-attach {
+  width: 34px; height: 34px; border: none; background: transparent;
+  color: var(--nav-ink); font-size: 22px; cursor: pointer; flex-shrink: 0;
+}
+.input-field {
+  flex: 1; height: 40px;
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 0 14px; font-size: 13px;
+  background: #fcfafa; color: var(--text); outline: none;
+}
+.input-field::placeholder { color: #a69a90; }
+.input-field:focus { border-color: var(--comm); box-shadow: 0 0 0 3px rgba(45,168,156,0.18); }
+.btn-send {
+  width: 40px; height: 40px; border-radius: 50%; border: none;
+  background: #dcd5cf; color: white;
+  display: grid; place-items: center; cursor: pointer; flex-shrink: 0;
+}
+.btn-send.active { background: var(--nav-accent); box-shadow: 0 2px 8px rgba(220,42,135,0.35); }
+.btn-send svg { width: 18px; height: 18px; }
+
+/* Cell viz — light mode */
+.bus-arc        { fill: none; stroke-linecap: butt; opacity: 0.78; }
+.bus-arc.live   { animation: busLive 2.4s ease-in-out infinite; }
+.bus-arc-halo   { fill: none; stroke-linecap: butt; opacity: 0.22; }
+.port-body      { stroke-width: 1.4; fill: #ffffff; }
+.nucleus-shell  { fill: none; stroke: var(--nucleus); stroke-width: 0.9; }
+.nucleus-core   { fill: var(--nucleus); animation: nucleusPulse 3.2s ease-in-out infinite; }
+.nucleus-wave   { fill: none; stroke: var(--nucleus); stroke-width: 1; animation: nucleusWave 2.6s ease-out infinite; }
+.mote           { fill: #a49684; opacity: 0.55; }
+.mote-mem       { fill: var(--memory); opacity: 0.8; }
+.tendril        { fill: none; stroke-linecap: round; }
+.tendril-flow   { stroke-dasharray: 3 5; animation: tendrilFlow 2.2s linear infinite; }
+/* Channel labels — sit on top of the rotating cell, so they need a strong halo
+   to stay legible against any color the cell scrolls underneath them.
+   paint-order:stroke fill renders the white stroke FIRST, then the dark fill on
+   top — gives every glyph a crisp legibility halo without bloating the letters. */
+.ch-label {
+  font-family: -apple-system, "Inter", system-ui;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  fill: #14171f;
+  paint-order: stroke fill;
+  stroke: #ffffff;
+  stroke-width: 4.5px;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-opacity: 0.95;
+}
+.ch-label.dim {
+  fill: #4a4d59;
+  stroke-opacity: 0.85;
+}
+
+@keyframes busLive     { 0%,100% { stroke-opacity: 0.55; } 50% { stroke-opacity: 1; } }
+@keyframes nucleusPulse{ 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes nucleusWave { 0% { r: 7; opacity: 0; } 20% { opacity: 0.7; } 100% { r: 60; opacity: 0; } }
+@keyframes tendrilFlow { to { stroke-dashoffset: -30; } }
+@keyframes moteDrift   { 0%,100% { transform: translate(0,0); } 50% { transform: translate(var(--dx), var(--dy)); } }
+@keyframes tipPulse    { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes breathe     { 0%,100% { transform: scale(1); } 50% { transform: scale(1.005); } }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="frame-note">CIRIS · Interact Page — cell as live background, nucleus centered, gentle rotation · 1200 × 820</div>
+
+<div class="window">
+
+  <div class="mac">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <div class="title">CIRIS Agent</div>
+    <div style="width:54px"></div>
+  </div>
+
+  <header class="nav">
+    <div class="logo">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="16" cy="16" r="13" opacity="0.6"/>
+        <path d="M16 4 L19 16 L16 28 L13 16 Z" fill="currentColor"/>
+        <path d="M4 16 L16 13 L28 16 L16 19 Z" fill="currentColor" opacity="0.7"/>
+      </svg>
+    </div>
+    <div class="nav-spacer"></div>
+    <div class="nav-tools">
+      <button class="nav-btn" title="Tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></button>
+      <button class="nav-btn" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button class="nav-btn" title="Info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
+      <button class="nav-btn" title="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
+      <button class="nav-btn" title="More"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+    </div>
+  </header>
+
+  <div class="status">
+    <div class="status-row first">
+      <span class="conn-dot"></span><span class="conn-label">Local</span>
+      <span class="sep">·</span>
+      <span class="warn-chip">&nbsp;MOCKLLM&nbsp;</span>
+      <span class="spacer"></span>
+      <span class="badge">💰 $0.00</span>
+      <span class="badge trust">🛡 1/5</span>
+    </div>
+    <div class="status-row">
+      <span class="state-label">WORK</span>
+      <span class="pill-viz"><span class="pd"></span>VIZ BG</span>
+      <span class="bus-mini" title="live buses">
+        <span class="dot live" style="--c:var(--comm)"></span>
+        <span class="dot live" style="--c:var(--memory)"></span>
+        <span class="dot live" style="--c:var(--llm)"></span>
+        <span class="dot live" style="--c:var(--tool)"></span>
+        <span class="dot idle" style="--c:var(--runtime)"></span>
+        <span class="dot idle" style="--c:var(--wise)"></span>
+      </span>
+      <span class="spacer"></span>
+      <button class="btn-ghost">Shutdown</button>
+      <button class="btn-stop">STOP</button>
+    </div>
+  </div>
+
+  <div class="warn-banner">⚠  AI HALLUCINATES — CHECK FACTS</div>
+
+  <!-- Chat area: cell as live background, messages flow chronologically over it -->
+  <main class="chat">
+
+    <!-- Cell fills the chat area. Nucleus anchored to dead center. -->
+    <div class="viz-center" id="vizCenter">
+      <svg id="stage" viewBox="-500 -290 1000 580" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <radialGradient id="cellFill" cx="50%" cy="50%" r="60%">
+            <stop offset="0%"  stop-color="#fffaf3" stop-opacity="0.5"/>
+            <stop offset="60%" stop-color="#f0e8dd" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#d9c7b3" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="nucleusFill" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"  stop-color="#fff0c8" stop-opacity="0.95"/>
+            <stop offset="55%" stop-color="#e3a64b" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="#b57012" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+
+        <!-- Cell is centered at (0,0). The origin sits at the chat's geometric center
+             because the viewBox is symmetric around it (-500..500, -290..290). -->
+        <g id="cell" style="animation: breathe 9s ease-in-out infinite; transform-box: fill-box; transform-origin: center;">
+          <!-- STATIC LAYER 1: soft cell body aura -->
+          <circle r="235" fill="url(#cellFill)"/>
+
+          <!-- ROTATING LAYER: everything that gently spins so all elements surface over time.
+               Auto-rotates + picks up momentum from user swipes. -->
+          <g id="cellInner">
+            <g id="membrane"></g>
+            <g id="ports"></g>
+            <g id="motes"></g>
+            <g id="organelles"></g>
+            <g id="pseudopodsInner"></g>
+            <g id="nucleus">
+              <circle r="62" fill="url(#nucleusFill)" opacity="0.85"/>
+              <circle r="15" class="nucleus-shell" opacity="0.3"/>
+              <circle r="21" class="nucleus-shell" opacity="0.35"/>
+              <circle r="27" class="nucleus-shell" opacity="0.4"/>
+              <circle r="33" class="nucleus-shell" opacity="0.35"/>
+              <circle r="39" class="nucleus-shell" opacity="0.28"/>
+              <circle r="45" class="nucleus-shell" opacity="0.22"/>
+              <circle r="51" class="nucleus-shell" opacity="0.15"/>
+              <circle r="6"  class="nucleus-core"/>
+              <circle        class="nucleus-wave"/>
+            </g>
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Messages flow chronologically over the cell. Some cell elements will be
+         partially covered — that's fine, the gentle rotation surfaces everything. -->
+    <div class="messages">
+      <div class="msg-row agent">
+        <div class="bubble agent">
+          <div class="name">CIRIS</div>
+          <div>Morning. Home-Assistant just registered 18 sensor channels — see the cluster pseudopod on comm-bus.</div>
+          <div class="time">12:26 PM</div>
+        </div>
+      </div>
+
+      <div class="msg-row user">
+        <div class="bubble user">
+          <div class="name">YOU</div>
+          <div>what's the living-room temp?</div>
+          <div class="time">12:29 PM</div>
+        </div>
+      </div>
+
+      <div class="msg-row agent">
+        <div class="bubble agent">
+          <div class="name">CIRIS</div>
+          <div>71°F. The <code style="background:#f5eee4;padding:1px 4px;border-radius:3px;font-size:11px">ha:living_temp</code> pseudopod pulsed when I read it.</div>
+          <div class="time">12:29 PM</div>
+        </div>
+      </div>
+
+      <div class="msg-row user">
+        <div class="bubble user">
+          <div class="name">YOU</div>
+          <div>turn it down 2°</div>
+          <div class="time">12:30 PM</div>
+        </div>
+      </div>
+
+      <div class="msg-row agent">
+        <div class="bubble action">
+          <div class="action-head">TOOL · ToolBus</div>
+          <div class="action-tool">home_assistant.climate.set_temperature</div>
+          <div style="margin-top:6px;font-size:11px;color:#70521e">entity: climate.living_room · target: 69°F</div>
+          <div class="time" style="color:#b09260">12:30 PM</div>
+        </div>
+      </div>
+
+      <div class="msg-row agent">
+        <div class="bubble agent">
+          <div class="name">CIRIS</div>
+          <div>Done, 69°F. Tool-bus flashed amber as it fired.</div>
+          <div class="time">12:31 PM</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="fg-toggle" title="Enter full-screen viz">VIZ FG ↗</button>
+    <div class="spin-hint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      SWIPE TO SPIN
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div class="msg-notice">Showing last 12 messages</div>
+  </main>
+
+  <footer class="input-row">
+    <div class="avatar">E</div>
+    <button class="btn-attach" title="Attach">+</button>
+    <input class="input-field" type="text" placeholder="Type your message…" value="">
+    <button class="btn-send" title="Send">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+    </button>
+  </footer>
+
+</div>
+
+<div class="frame-note prose">
+  Messages flow chronologically (agent left, user right). The cell sits as a live background behind them —
+  partial coverage by bubbles is expected and fine. The nucleus is anchored to the geometric center of the chat,
+  and the whole cell auto-rotates gently (~90 s per revolution) so every bus arc, adapter port, organelle, and
+  pseudopod surfaces from behind any bubble given a little time. Swipe horizontally to add momentum on top of
+  baseline rotation. Channel labels counter-rotate so they stay upright regardless of cell angle.
+</div>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const el = (t,a={}) => { const n = document.createElementNS(NS, t); for (const k in a) n.setAttribute(k,a[k]); return n; };
+const rad = d => d * Math.PI / 180;
+const pxy = (r,a) => ({ x: r*Math.cos(rad(a)), y: r*Math.sin(rad(a)) });
+
+const R = 220;
+const BUSES = [
+  { id:'wise',    a:[240,300], color:'var(--wise)',    live:false },
+  { id:'runtime', a:[300,360], color:'var(--runtime)', live:false },
+  { id:'tool',    a:[0,60],    color:'var(--tool)',    live:true  },
+  { id:'llm',     a:[60,120],  color:'var(--llm)',     live:true  },
+  { id:'memory',  a:[120,180], color:'var(--memory)',  live:true  },
+  { id:'comm',    a:[180,240], color:'var(--comm)',    live:true  },
+];
+
+/* Membrane */
+const membrane = document.getElementById('membrane');
+BUSES.forEach(b => {
+  const [a1,a2] = b.a;
+  const p1 = pxy(R,a1), p2 = pxy(R,a2);
+  const d  = `M ${p1.x.toFixed(1)},${p1.y.toFixed(1)} A ${R},${R} 0 0 1 ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  membrane.appendChild(el('path',{ d, stroke:b.color, 'stroke-width':20, class:'bus-arc-halo' }));
+  membrane.appendChild(el('path',{ d, stroke:b.color, 'stroke-width':11, class:'bus-arc-halo', opacity:0.3 }));
+  membrane.appendChild(el('path',{ d, stroke:b.color, 'stroke-width':4.5, class:'bus-arc' + (b.live ? ' live':'') }));
+});
+
+/* Adapter ports */
+const ports = document.getElementById('ports');
+const ADAPTERS = [
+  { bus:'comm',    a:195, shape:'diamond', size:13 },
+  { bus:'comm',    a:215, shape:'diamond', size:13 },
+  { bus:'comm',    a:233, shape:'diamond', size:10 },
+  { bus:'tool',    a:20,  shape:'diamond', size:13 },
+  { bus:'tool',    a:45,  shape:'diamond', size:14 },
+  { bus:'wise',    a:258, shape:'hex',     size:12 },
+  { bus:'wise',    a:282, shape:'hex',     size:12 },
+  { bus:'llm',     a:78,  shape:'diamond', size:13 },
+  { bus:'llm',     a:103, shape:'diamond', size:13 },
+  { bus:'memory',  a:150, shape:'hex',     size:13 },
+  { bus:'runtime', a:330, shape:'diamond', size:11 },
+];
+function diamondPts(cx,cy,a,s) {
+  const o=pxy(1,a), t={x:-o.y,y:o.x};
+  return [[cx+s*0.9*o.x,cy+s*0.9*o.y],[cx+s*1.05*t.x,cy+s*1.05*t.y],[cx-s*1.2*o.x,cy-s*1.2*o.y],[cx-s*1.05*t.x,cy-s*1.05*t.y]];
+}
+function hexPts(cx,cy,a,s) {
+  const o=pxy(1,a), t={x:-o.y,y:o.x}; const out=[];
+  for (let i=0;i<6;i++) {
+    const ang=rad(60*i-30);
+    const lx=s*Math.cos(ang), ly=s*Math.sin(ang);
+    out.push([cx+lx*o.x+ly*t.x, cy+lx*o.y+ly*t.y]);
+  }
+  return out;
+}
+ADAPTERS.forEach(ad => {
+  const c=`var(--${ad.bus})`;
+  const p=pxy(R,ad.a);
+  const pts=(ad.shape==='hex'?hexPts:diamondPts)(p.x,p.y,ad.a,ad.size);
+  const s=pts.map(q=>`${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' ');
+  ports.appendChild(el('polygon',{ points:s, fill:c, opacity:0.2 }));
+  ports.appendChild(el('polygon',{ points:s, fill:'#ffffff', stroke:c, class:'port-body' }));
+  ports.appendChild(el('circle', { cx:p.x, cy:p.y, r:ad.size*0.3, fill:c, opacity:0.9 }));
+});
+
+/* Organelles */
+const organelles = document.getElementById('organelles');
+const SERVICES = [
+  ...Array(7).fill({shape:'hex',    color:'var(--memory)'}),
+  ...Array(4).fill({shape:'circle', color:'#6c7a94'}),
+  ...Array(4).fill({shape:'square', color:'#a86d5c'}),
+  ...Array(4).fill({shape:'tri',    color:'#b58c33'}),
+  ...Array(2).fill({shape:'dia',    color:'var(--llm)'}),
+  ...Array(1).fill({shape:'pent',   color:'var(--tool)'}),
+];
+function scatter(n,rMin,rMax) {
+  const phi=137.508, out=[];
+  for (let i=0;i<n;i++) {
+    const a=(i*phi+40)%360;
+    const rr=rMin+(rMax-rMin)*Math.sqrt((i+0.5)/n);
+    out.push({x:rr*Math.cos(rad(a)), y:rr*Math.sin(rad(a))});
+  }
+  return out;
+}
+const orgPts = scatter(SERVICES.length, 82, 190);
+function drawOrg(parent,s,p) {
+  const sz=s.shape==='hex'?7:s.shape==='square'?6:6.5;
+  const common={ fill:'#ffffff', stroke:s.color, 'stroke-width':1.2 };
+  let n;
+  switch (s.shape) {
+    case 'hex': {
+      const pts=[];
+      for (let i=0;i<6;i++){const a=rad(60*i);pts.push(`${(p.x+sz*Math.cos(a)).toFixed(1)},${(p.y+sz*Math.sin(a)).toFixed(1)}`);}
+      n=el('polygon',{ ...common, points:pts.join(' ') });
+      break;
+    }
+    case 'circle': n=el('circle',{...common,cx:p.x,cy:p.y,r:sz}); break;
+    case 'square': n=el('rect',{...common,x:p.x-sz,y:p.y-sz,width:sz*2,height:sz*2}); break;
+    case 'tri': {
+      const pts=[];
+      for (let i=0;i<3;i++){const a=rad(120*i-90);pts.push(`${(p.x+sz*Math.cos(a)).toFixed(1)},${(p.y+sz*Math.sin(a)).toFixed(1)}`);}
+      n=el('polygon',{ ...common, points:pts.join(' ') });
+      break;
+    }
+    case 'dia': n=el('polygon',{...common, points:`${p.x},${p.y-sz} ${p.x+sz},${p.y} ${p.x},${p.y+sz} ${p.x-sz},${p.y}`}); break;
+    case 'pent': {
+      const pts=[];
+      for (let i=0;i<5;i++){const a=rad(72*i-90);pts.push(`${(p.x+sz*Math.cos(a)).toFixed(1)},${(p.y+sz*Math.sin(a)).toFixed(1)}`);}
+      n=el('polygon',{ ...common, points:pts.join(' ') });
+      break;
+    }
+  }
+  parent.appendChild(n);
+  parent.appendChild(el('circle',{ cx:p.x, cy:p.y, r:sz*0.25, fill:s.color, opacity:0.9 }));
+}
+SERVICES.forEach((s,i) => drawOrg(organelles, s, orgPts[i]));
+
+/* Motes */
+const motesG = document.getElementById('motes');
+let seed=11;
+const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+for (let i=0;i<22;i++) {
+  const a=rnd()*360;
+  const rr=75+rnd()*125;
+  const p={x:rr*Math.cos(rad(a)), y:rr*Math.sin(rad(a))};
+  const dx=(rnd()-0.5)*10, dy=(rnd()-0.5)*10;
+  const dur=7+rnd()*8;
+  const isRecent=rnd()<0.22;
+  const r=0.9+rnd()*1.3;
+  const g=el('g',{ style:`animation: moteDrift ${dur.toFixed(1)}s ease-in-out ${(rnd()*dur).toFixed(1)}s infinite; --dx:${dx.toFixed(1)}px; --dy:${dy.toFixed(1)}px;` });
+  g.appendChild(el('circle',{ cx:p.x.toFixed(1), cy:p.y.toFixed(1), r, class:isRecent?'mote mote-mem':'mote' }));
+  motesG.appendChild(g);
+}
+
+/* Pseudopods — origin-centered (0,0). Live in the rotating inner group so they
+   rotate with their bus anchor. Gentle rotation brings hidden ones into view. */
+const pseudo = document.getElementById('pseudopodsInner');
+const CHANNELS = [
+  { a:188, kind:'discord',    label:'#general',        active:true  },
+  { a:200, kind:'api',        label:'api:eric',        active:true  },
+  { a:212, kind:'ha-cluster', label:'ha · 18 sensors', active:true, cluster:true },
+  { a:224, kind:'ha',         label:'ha:living_temp',  active:true  },
+  { a:236, kind:'discord',    label:'dm:alice',        active:false },
+];
+const kindColor={discord:'#5a6ddf', api:'var(--comm)', ha:'#2e9cd6', 'ha-cluster':'#2e9cd6', cli:'#7d8ba8'};
+CHANNELS.forEach(ch => {
+  const anchor=pxy(R,ch.a);
+  const tipLen=ch.cluster?58:46;
+  const tO=pxy(tipLen,ch.a);
+  const tip={x:anchor.x+tO.x, y:anchor.y+tO.y};
+  const c1={x:anchor.x+tO.x*0.35, y:anchor.y+tO.y*0.35-6};
+  const c2={x:anchor.x+tO.x*0.75, y:anchor.y+tO.y*0.75+6};
+  const d=`M ${anchor.x.toFixed(1)},${anchor.y.toFixed(1)} C ${c1.x.toFixed(1)},${c1.y.toFixed(1)} ${c2.x.toFixed(1)},${c2.y.toFixed(1)} ${tip.x.toFixed(1)},${tip.y.toFixed(1)}`;
+  const col=kindColor[ch.kind]||'var(--comm)';
+  const w=ch.cluster?3.2:1.7;
+  pseudo.appendChild(el('path',{ d, stroke:col, 'stroke-width':w*3, class:'tendril', opacity:0.18 }));
+  pseudo.appendChild(el('path',{ d, stroke:col, 'stroke-width':w, class:'tendril', opacity:ch.active?0.85:0.4 }));
+  if (ch.active) pseudo.appendChild(el('path',{ d, stroke:col, 'stroke-width':w*0.9, class:'tendril tendril-flow', opacity:0.9 }));
+  const tipR=ch.cluster?7:4;
+  pseudo.appendChild(el('circle',{ cx:tip.x, cy:tip.y, r:tipR+2, fill:col, opacity:0.2 }));
+  pseudo.appendChild(el('circle',{ cx:tip.x, cy:tip.y, r:tipR, fill:'#ffffff', stroke:col, 'stroke-width':1.4 }));
+  pseudo.appendChild(el('circle',{ cx:tip.x, cy:tip.y, r:tipR*0.45, fill:col, style:ch.active?'animation: tipPulse 1.8s ease-in-out infinite;':'' }));
+  /* Counter-rotate label so text stays upright while pseudopod rotates with cell */
+  const labelX=tip.x+tO.x*0.14, labelY=tip.y+tO.y*0.14+4;
+  const labelTxt=el('text',{ x:labelX.toFixed(1), y:labelY.toFixed(1), 'text-anchor':'middle', class:ch.active?'ch-label':'ch-label dim', 'data-label-angle':ch.a });
+  labelTxt.textContent=ch.label;
+  pseudo.appendChild(labelTxt);
+});
+
+/* ============================================================
+   ROTATION — gentle continuous baseline + swipe momentum.
+   Baseline rotates the cell ~360° every ~90 sec so every part of
+   the membrane, every port, every pseudopod surfaces from behind
+   any message bubble that happens to overlap it.
+   Swipe = adds momentum on top; momentum decays back to baseline.
+   ============================================================ */
+const cellInner = document.getElementById('cellInner');
+const vizCenter = document.getElementById('vizCenter');
+const labels = cellInner.querySelectorAll('text[data-label-angle]');
+let rotation = 0;
+let velocity = 0;       /* extra deg/frame on top of baseline (from swipes) */
+const BASE_DPS = 4;     /* baseline degrees per second — gentle */
+let dragging = false;
+let lastX = 0;
+let lastT = 0;
+let prevTs = performance.now();
+
+vizCenter.addEventListener('pointerdown', (e) => {
+  dragging = true;
+  vizCenter.classList.add('dragging');
+  lastX = e.clientX;
+  lastT = performance.now();
+  vizCenter.setPointerCapture(e.pointerId);
+});
+vizCenter.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const now = performance.now();
+  const dx = e.clientX - lastX;
+  const dt = Math.max(1, now - lastT);
+  rotation = (rotation + dx * 0.4) % 360;
+  velocity = dx / dt * 16; /* px → deg per frame @ 60fps */
+  applyRotation();
+  lastX = e.clientX;
+  lastT = now;
+});
+function endDrag() {
+  dragging = false;
+  vizCenter.classList.remove('dragging');
+}
+vizCenter.addEventListener('pointerup',    endDrag);
+vizCenter.addEventListener('pointercancel',endDrag);
+
+function applyRotation() {
+  cellInner.setAttribute('transform', `rotate(${rotation.toFixed(2)})`);
+  /* counter-rotate channel labels so text stays upright */
+  labels.forEach(t => {
+    const cx = parseFloat(t.getAttribute('x'));
+    const cy = parseFloat(t.getAttribute('y'));
+    t.setAttribute('transform', `rotate(${(-rotation).toFixed(2)} ${cx} ${cy})`);
+  });
+}
+
+function tick(ts) {
+  const dt = Math.min(64, ts - prevTs); /* ms, clamp for tab-switches */
+  prevTs = ts;
+  if (!dragging) {
+    /* gentle continuous rotation */
+    rotation = (rotation + BASE_DPS * dt / 1000) % 360;
+    /* swipe-momentum bonus, decays */
+    if (Math.abs(velocity) > 0.05) {
+      rotation = (rotation + velocity * 0.4) % 360;
+      velocity *= 0.96;
+    }
+    applyRotation();
+  }
+  requestAnimationFrame(tick);
+}
+applyRotation();
+requestAnimationFrame(tick);
+</script>
+
+</body>
+</html>

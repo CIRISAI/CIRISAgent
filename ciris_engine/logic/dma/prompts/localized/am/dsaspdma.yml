@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA DEFER ከመረጠ በኋላ በመብቶች ላይ የተመሠረተ ሁለተኛ ምርመራ
+
+component_name: dsaspdma
+description: "DEFER እርምጃን በመብቶች/ፍላጎቶች ታክሶኖሚ የሚመድብ የዲፈራል ልዩ የእርምጃ ምርጫ"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === የመብቶች / ፍላጎቶች ታክሶኖሚ ===
+  - health_and_bodily_integrity: ለሕይወት፣ ጤና፣ የሰውነት ንጽህና፣ አካል ጉዳት፣ የሕክምና ደህንነት፣ መሳሪያነት፣ አደገኛ ነገሮች ወይም ቀጥተኛ የአካላዊ ጉዳት አንድምታዎች ይጠቀሙ።
+    የመብቶች መሠረት: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: ለመኖሪያ ቤት፣ መጠለያ፣ የቤት ደህንነት፣ ምግብ፣ ውሃ፣ ንፅህና፣ ኃይል፣ መሠረተ ልማት እና ሌሎች መሠረታዊ የኑሮ ሁኔታዎች ይጠቀሙ።
+    የመብቶች መሠረት: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: ለሥራ፣ ገቢ፣ ደመወዝ፣ ዕዳ፣ ክሬዲት፣ ጥቅማጥቅሞች፣ ማኅበራዊ ደህንነት፣ ኢንቨስትመንት፣ ግብር ወይም ሌሎች የኑሮና የፋይናንስ መረጋጋት ፍላጎቶች ይጠቀሙ።
+    የመብቶች መሠረት: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: ለሕጋዊ ምክር፣ ሕጋዊ እርዳታ፣ ትክክለኛ ሂደት፣ ፍትሐዊ ፍርድ፣ መፍትሔ መዳረሻ፣ ኮንትራቶች፣ ኃላፊነት ወይም ሌሎች የፍትሕ መዳረሻ ጥያቄዎች ይጠቀሙ።
+    የመብቶች መሠረት: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: ለበሕግ ፊት እውቅና፣ የማንነት ማረጋገጫ፣ ዜግነት፣ ድምጽ መስጠት፣ ምርጫዎች፣ የሕዝብ ተሳትፎ ወይም ዜጋዊ አቋም ይጠቀሙ።
+    የመብቶች መሠረት: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: ለግላዊነት፣ ራስን መወሰን፣ ክብር፣ ከግዴታ፣ ማጭበርበር፣ ማታለል፣ ባዮሜትሪክ ግምት ወይም ክትትል ነፃነት ይጠቀሙ።
+    የመብቶች መሠረት: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: ለትምህርት፣ ምርምር፣ የእውቀት መዳረሻ፣ ባህላዊ ተሳትፎ እና የሳይንስ ጥቅሞች ይጠቀሙ።
+    የመብቶች መሠረት: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: ለማኅበረሰብ አስተዳደር፣ የቀውስ ማስገንዘብ፣ የንድፍ መለየት፣ የሕዝብ ደህንነት፣ መድሎ ወይም በቡድኖች ላይ በዋነኝነት የሚያስከትሉ ጉዳቶች ይጠቀሙ።
+    የመብቶች መሠረት: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: ዲፈራሉ በዋናነት ስለ እርግጠኛነት እጥረት፣ የፖሊሲ ትርጓሜ፣ የሥልጣን ወሰን ወይም ከዶሜን ውጭ የሰው ቁጥጥር ሲሆን ይጠቀሙ።
+    የመብቶች መሠረት: human_review_and_accountability
+
+  === የኦፕሬሽን የዲፈራል ምክንያት ኮዶች ===
+  - licensed_domain_required: ፈቃድ ያለው ልዩ ባለሙያ ወይም በተለየ የተገዛ የዶሜን አስተናጋጅ ያስፈልጋል።
+  - rights_impact_review: ጥያቄው የተጠበቁ መብቶችን ወይም መሠረታዊ የሰው ፍላጎቶችን በቁሳዊ ሁኔታ ይነካል እና ግምገማ ይፈልጋል።
+  - safety_escalation: ሊኖር የሚችል ጉዳት ወይም የቀውስ ሁኔታ ፈጣን ማስገንዘብ ወይም የሰው ቁጥጥር ይፈልጋል።
+  - consent_or_authority_required: ትክክለኛ ፈቃድ፣ ማረጋገጫ ወይም ተጠያቂ የሰው ሥልጣን በመጀመሪያ ያስፈልጋል።
+  - insufficient_context: ኤጀንቱ በኃላፊነት ለመቀጠል በቂ የታመነ አውድ የለውም።
+  - policy_review_required: ከመስራት በፊት የፖሊሲ ወይም የአስተዳደር ትርጓሜ ያስፈልጋል።
+  - resource_or_system_limitation: የሥርዓት ገደቦች ያለ ግምገማ በደህና ማጠናቀቅን ይከለክላሉ።
+  - time_based_review: ውሳኔው በተወሰነ ጊዜ ወይም ሁኔታ ከተለወጠ በኋላ እንደገና መመርመር አለበት።
+  - ethical_uncertainty: ሥርዓቱ ከሥነ-ምግባር አንጻር እርግጠኛ አይደለም እና የሰው ፍርድ ይፈልጋል።
+  - unknown: የኦፕሬሽን ምክንያቱ ግልጽ ካልሆነ የሚጠቀምበት ተጠባባቂ ኮድ።
+
+system_guidance_header: |
+  === የዲፈራል ልዩ የእርምጃ ምርጫ (DSASPDMA) ===
+
+  ASPDMA ቀድሞ DEFER መርጧል።
+  ሥራህ የእርምጃውን ምርጫ እንደገና መክፈት አይደለም።
+  ሥራህ ዲፈራሉን ተብራሪ፣ ኦዲት የሚቻል እና ወደ ትክክለኛ መንገድ የሚመራ እንዲሆን መመደብ ነው።
+
+  አለብህ፦
+  1. DEFER እርምጃን ጠብቅ።
+  2. ምርጡን ዋና የመብቶች / ፍላጎቶች ምድብ ምረጥ።
+  3. ምርጡን የኦፕሬሽን ምክንያት ኮድ ምረጥ።
+  4. ሁለተኛ ምድቦችን በእውነት ሲመለከቱ ብቻ ጨምር።
+  5. domain_hint ግልጽ የተፈቀደ የሙያ አስተናጋጅ ሲያስፈልግ ብቻ አዘጋጅ።
+
+evaluation_steps: |
+  ደረጃ 1: ዋናውን ሀሳብ እና ASPDMA ጊዜያዊ ምክንያት አንብብ።
+  ደረጃ 2: በቀጥታ የሚነካውን የሰው ፍላጎት / የሰው መብት ምድብ ለይ።
+  ደረጃ 3: ስርዓቱ ለምን እንደሚያዘገይ በትክክል የሚገልጽ የኦፕሬሽን ምክንያት ኮድ ምረጥ።
+  ደረጃ 4: reason_summary አጭር፣ ግልጽ እና ለተጠቃሚ የሚነበብ ይሁን።
+  ደረጃ 5: አንድ ዋና ምድብን አስቀድም። ሁለተኛ ምድቦችን ጉዳዩ በእውነት ብዙ መብቶችን ሲነካ ብቻ ጨምር።
+
+context_integration: |
+  === ዋና ሀሳብ ===
+  {original_thought_content}
+
+  === ASPDMA ምክንያት ===
+  {aspdma_reasoning}
+
+  === የአሁኑ DEFER ምክንያት ===
+  {current_reason}
+
+  === የአሁኑ DEFER ኮንቴክስት ===
+  {current_context}
+
+  === የአሁኑ DEFER UNTIL ===
+  {current_defer_until}
+
+  === የአሁኑ DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === የተፈቀዱ የሙያ ዘርፎች ===
+  ከእነዚህ አንዱን ግልጽ ሲያስፈልግ ብቻ ተጠቀም: {domain_hint_options}
+
+response_format: |
+  እነዚህን መስኮች ያለው ጠፍጣፋ JSON ነገር መልስ፦
+  - "reason_summary": አጭር ለሰው የሚነበብ ማብራሪያ
+  - "operational_reason": ከላይ ካሉ የኦፕሬሽን ምክንያት ኮዶች አንዱ
+  - "primary_need_category": ከላይ ካሉ የመብቶች / ፍላጎቶች ታክሶኖሚ እሴቶች አንዱ
+  - "secondary_need_categories": አማራጭ የተጨማሪ ታክሶኖሚ እሴቶች ዝርዝር
+  - "rights_basis": የመብት መሠረት አጭር መለያዎች
+  - "domain_hint": ተፈቃድ ያለው ልዩ አስተናጋጅ በግልጽ ሲያስፈልግ አማራጭ የሙያ ዘርፍ enum
+  - "defer_until": ጊዜው መቀየር ካለበት አማራጭ ISO ጊዜ ማስተካከያ
+
+  ምሳሌ፦
+  {{"reason_summary": "የሂደት መመሪያ ከመስጠት በፊት የተፈቀደ ሕጋዊ ግምገማ ያስፈልጋል።", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  የቋንቋ ህጎች፦
+  - በተጠቃሚው የተመረጠ ቋንቋ መልስ።
+  - JSON keys እና enum values በእንግሊዝኛ እንደተገለጹት በትክክል መቆየት አለባቸው።
+  - እንደ reason_summary ያለ ለሰው የሚነበብ ነፃ ጽሑፍ ብቻ ይተርጎም።
+
+closing_reminder: |
+  አስፈላጊ፦
+  - DEFER ወደ ሌላ እርምጃ አትቀይር።
+  - በእውነት የተፈቀደ ሙያዊ አያያዝ ካልተጠየቀ domain_hint አትፍጠር።
+  - ሕጋዊ እና ፋይናንስ መዳረሻ እንደ መብት የሚነካ ፍላጎት ይታይ፣ እንደ አጠቃላይ አስተዳደር ችግኝ አይታይ።
+  - በግልጽ የመብት መሠረት ያለውን በጣም ጠባብ ትክክለኛ ምድብ ምረጥ።

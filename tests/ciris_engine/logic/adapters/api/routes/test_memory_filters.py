@@ -3,7 +3,7 @@ Unit tests for memory filter helper functions.
 
 Tests the memory filtering functions that provide role-based access control:
 - filter_nodes_by_user_attribution (Defense Layer 2)
-- get_user_allowed_ids (OAuth identity resolution)
+- get_user_allowed_ids (one id per user)
 - build_user_filter_sql (Defense Layer 1)
 - should_apply_user_filtering (Role-based filtering decision)
 """
@@ -312,7 +312,7 @@ class TestFilterNodesByUserAttribution:
 
 
 class TestGetUserAllowedIds:
-    """Tests for get_user_allowed_ids (OAuth identity resolution)."""
+    """Tests for get_user_allowed_ids (one id per user)."""
 
     @pytest.mark.asyncio
     async def test_base_user_id_always_included(self):
@@ -327,70 +327,33 @@ class TestGetUserAllowedIds:
         mock_db.connection = Mock(return_value=mock_conn)
         auth_service.db_manager = mock_db
 
-        result = await get_user_allowed_ids(auth_service, "user123")
+        result = await get_user_allowed_ids("user123")
 
         assert "user123" in result
         assert len(result) == 1
 
     @pytest.mark.asyncio
-    async def test_oauth_identities_added(self):
-        """Should add OAuth identities to allowed set."""
-        import sqlite3
-        from unittest.mock import MagicMock, patch
+    async def test_no_oauth_derived_alias(self, persist_engine):
+        """A user has one id; an OAuth link on the cert adds no provider:subject alias."""
+        from ciris_engine.logic.persistence.stores import authentication_store
+        from ciris_engine.schemas.services.authority_core import WACertificate, WARole
 
-        auth_service = Mock()
-        auth_service.db_path = ":memory:"
-
-        # Create actual in-memory SQLite database for testing
-        with sqlite3.connect(":memory:") as conn:
-            # Create wa_cert table
-            conn.execute(
-                """
-                CREATE TABLE wa_cert (
-                    wa_id TEXT,
-                    oauth_provider TEXT,
-                    oauth_external_id TEXT,
-                    active INTEGER
-                )
-            """
+        wa_id = "wa-2026-05-19-USR001"
+        authentication_store.store_wa_certificate(
+            WACertificate(
+                wa_id=wa_id,
+                name="Test User",
+                role=WARole.OBSERVER,
+                pubkey="test_pubkey",
+                jwt_kid="test_kid",
+                scopes_json="[]",
+                oauth_provider="discord",
+                oauth_external_id="discord_123",
+                created_at=datetime.now(timezone.utc),
             )
-            # Insert test OAuth identities
-            conn.execute(
-                "INSERT INTO wa_cert (wa_id, oauth_provider, oauth_external_id, active) VALUES (?, ?, ?, ?)",
-                ("user123", "discord", "discord_123", 1),
-            )
-            conn.execute(
-                "INSERT INTO wa_cert (wa_id, oauth_provider, oauth_external_id, active) VALUES (?, ?, ?, ?)",
-                ("user123", "google", "google_456", 1),
-            )
-            conn.commit()
+        )
 
-            # Patch sqlite3.connect directly in the sqlite3 module
-            with patch("sqlite3.connect", return_value=conn):
-                result = await get_user_allowed_ids(auth_service, "user123")
-
-        assert "user123" in result
-        assert "discord:discord_123" in result
-        assert "discord_123" in result
-        assert "google:google_456" in result
-        assert "google_456" in result
-        assert len(result) == 5
-
-    @pytest.mark.asyncio
-    async def test_database_error_handling(self):
-        """Should handle database errors gracefully."""
-        from unittest.mock import patch
-
-        auth_service = Mock()
-        auth_service.db_path = "/nonexistent/path/to/db.db"
-
-        # Patch sqlite3.connect directly in the sqlite3 module
-        with patch("sqlite3.connect", side_effect=Exception("DB error")):
-            result = await get_user_allowed_ids(auth_service, "user123")
-
-        # Should still include base user_id even when DB query fails
-        assert "user123" in result
-        assert len(result) == 1
+        assert await get_user_allowed_ids(wa_id) == {wa_id}
 
 
 class TestBuildUserFilterSql:

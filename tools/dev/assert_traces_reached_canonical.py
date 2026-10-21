@@ -1,0 +1,572 @@
+#!/usr/bin/env python3
+"""Fail unless CEG traces actually reached canonical-server-1.
+
+WHY THIS IS A SEPARATE, FATAL SCRIPT.
+
+`QARunner._verify_federation_delivery()` already inspects the same signals, and
+says of itself:
+
+    Best-effort + non-fatal — reports, never crashes the run.
+
+That is the right call for a broad QA sweep, where a federation hiccup should not
+mask fifty unrelated results. It is the wrong call for a RELEASE GATE. A gate
+that reports and passes is indistinguishable from a gate that checked nothing,
+and this repository has now paid for that twice in one release: v2.9.42 published
+no Android APK, and CIRISClient 0.5.191 shipped with no XCFramework. Both were
+green.
+
+So the gate is its own script, in the idiom this repo already uses for exactly
+this purpose (`tools/dev/assert_oauth_redirect_uri.py`): one question, a nonzero
+exit, invoked from the workflow.
+
+WHAT "REACHED CANONICAL" ACTUALLY MEANS.
+
+Delivery is a ladder, and each rung has its own log line
+(`ciris_engine/logic/runtime/edge_runtime.py`). Checking only the top rung tells
+you nothing about why it failed, so this reports the highest rung reached:
+
+    1. ROOTED       transport found the peer     "canonical <k> ROOTED after ~Ns"
+    2. KEX PRESENT  key exchange resolved        "canonical <k> KEX PRESENT after ~Ns post-root"
+    3. REPLICATION  trace rows actually served   replication_envelopes_served_total=N
+
+Rungs 1 and 2 are preconditions, NOT delivery. A run can root and complete KEX
+and still move nothing.
+
+*** THE COUNTER THIS GATE MUST NOT USE: envelopes_sent_total. ***
+
+The first version of this file keyed rung 3 on `SHIP CONFIRMED —
+envelopes_sent_total=N`, and that INVERTS the gate: it fails runs where traces
+genuinely landed.
+
+`envelopes_sent_total` is incremented only from edge's application/durable send
+path (`inc_sent`/`inc_received`, `src/edge.rs`). The anti-entropy REPLICATION
+plane — which is what actually carries `trace:*` rows to a canonical — touches
+neither counter. So a run that lands trace_events on the canonical, summarised
+and scored, reports `envelopes_sent_total: 0`. Measured upstream: 15 trace_events
+delivered, counter zero.
+
+That is CIRISEdge#434, closed, whose guidance is explicit: *do not key
+trace-pipeline health on envelopes_sent_total; it measures the
+application/durable plane only.* The plane-correct counter is
+`replication_envelopes_served_total` (CIRISEdge#433, live since edge v15.x);
+`operator_surface.rs:1468` is the reference reader.
+
+So `SHIP CONFIRMED — envelopes_sent_total=0` is not the phrase lying. It is the
+phrase being right about a plane this gate does not care about, and the counter
+being blind to the one it does.
+
+This is not a hypothetical mistake to guard against: `harness/mesh-repro/
+scenarios/traceflow.sh` made exactly it, and its own comment records the
+outcome — a stage-5 ship rung that "could never pass — a check that could not
+fail, inside the instrument built to catch exactly that."
+
+WHY A MISSING SIGNAL FAILS RATHER THAN FALLING BACK. If no
+`replication_envelopes_served_total` appears anywhere in the logs, this gate
+fails and says so. It deliberately does NOT fall back to `envelopes_sent_total`:
+falling back to the wrong plane is how the gate became wrong in the first place,
+and "the signal is not being emitted yet" is a real, fixable condition that
+should be visible rather than silently satisfied by a counter that means
+something else.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import time
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+#: The ladder, highest rung last. Each entry: (rung name, compiled pattern).
+ROOTED = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+ROOTED after ~(\d+)s")
+KEX_PRESENT = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+KEX PRESENT after ~(\d+)s")
+#: THE PLANE-CORRECT COUNTER. Anti-entropy replication is what carries `trace:*`
+#: rows to a canonical, and it is served, not "sent". Matched loosely on purpose:
+#: it may arrive as a bare metrics line, inside a [TRACE-SHIP] probe, or embedded
+#: in a JSON blob, and a gate that only reads one spelling is a gate that reports
+#: "no evidence" while the evidence is right there in another shape.
+REPLICATION_SERVED = re.compile(r"replication_envelopes_served_total[\"'\s:=]+(\d+)")
+
+#: NOT delivery. Retained only so the report can say the application plane moved,
+#: which is a genuinely different fact — see the module docstring.
+SHIP_CONFIRMED = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+SHIP CONFIRMED\s+—\s+envelopes_sent_total=(\d+)")
+
+#: The agent's probe says this OUT LOUD when the substrate has no such counter,
+#: which is a different fact from "nothing was delivered" and must not be graded
+#: the same way (CIRISServer#518).
+COUNTER_ABSENT = re.compile(r"replication_envelopes_served_total ABSENT from delivery_status")
+
+#: Explicit failure lines, so the report can quote the node's own words rather
+#: than inferring failure from the absence of success.
+NO_ROOT = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+did not root within (\d+)s")
+KEX_NONE = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+)\s+KEX still None at (\d+)s")
+ZERO_ENVELOPES = re.compile(r"\[DELIVERY-PROBE\]\s+canonical\s+(\S+):.*ZERO", re.IGNORECASE)
+SHIP_UNCONFIRMED = re.compile(r"\[DELIVERY-PROBE\].*SHIP UNCONFIRMED")
+
+
+def _read(paths: List[Path]) -> Tuple[str, List[Path]]:
+    """Concatenate every log we were pointed at, remembering which existed.
+
+    Multiple paths because the probe line lands in whichever log the run
+    configured, and a gate that checks one file and silently finds nothing is the
+    failure mode this script exists to prevent.
+    """
+    chunks: List[str] = []
+    found: List[Path] = []
+    for p in paths:
+        try:
+            if p.is_dir():
+                for f in sorted(p.rglob("*.log")):
+                    chunks.append(f.read_text(errors="replace"))
+                    found.append(f)
+            elif p.exists():
+                chunks.append(p.read_text(errors="replace"))
+                found.append(p)
+        except OSError:
+            continue
+    return "\n".join(chunks), found
+
+
+def _probe_lines(text: str) -> List[str]:
+    return [ln for ln in text.splitlines() if "[DELIVERY-PROBE]" in ln]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument(
+        "logs",
+        nargs="+",
+        type=Path,
+        help="Log files or directories to scan (directories are searched for *.log).",
+    )
+    ap.add_argument(
+        "--require",
+        choices=["rooted", "kex", "replication"],
+        default="replication",
+        help=(
+            "Highest rung that must be reached. Default 'replication' — the only rung "
+            "that means trace rows were actually served to canonical. Lower values "
+            "diagnose a partially-working transport and MUST NOT be used to gate a "
+            "release. Note there is deliberately no 'ship' option: envelopes_sent_total "
+            "measures the application plane and is structurally blind to trace "
+            "replication (CIRISEdge#434)."
+        ),
+    )
+    ap.add_argument(
+        "--receipt-url",
+        default=None,
+        help=(
+            "Agent API base (e.g. http://localhost:8080). When given, the RECEIPT is asked "
+            "first and its answer is authoritative: it is the canonical's own signed "
+            "statement of what it holds, where every rung below is this node's account of "
+            "what it sent. Requires ciris-server >= 0.5.208; on an older wheel the endpoint "
+            "503s and this falls back to the ladder."
+        ),
+    )
+    ap.add_argument("--receipt-username", default=None, help="Admin user for --receipt-url")
+    ap.add_argument("--receipt-password", default=None, help="Password for --receipt-username")
+    ap.add_argument(
+        "--receipt-raw-out",
+        default=None,
+        help="Write the receipt's verbatim payload here (the projection is derived from it)",
+    )
+    ap.add_argument(
+        "--require-authored",
+        action="store_true",
+        help=(
+            "ENFORCED: fail with exit 5 unless this node's own receipt reports authored > 0. "
+            "This is the rung BELOW delivery — did the node seal any trace at all — and it "
+            "does not depend on the upstream KEX/replication work, so it can be enforced "
+            "while delivery is still only reported. Fail-closed: an unreadable count fails "
+            "too. Needs --receipt-url."
+        ),
+    )
+    ap.add_argument(
+        "--peer",
+        default=None,
+        help="Only consider probe lines for this canonical key (default: any).",
+    )
+    ap.add_argument(
+        "--wait-secs",
+        type=int,
+        default=0,
+        help=(
+            "Re-read the logs until the required rung appears, up to this many "
+            "seconds. Delivery is ASYNCHRONOUS — the probe can spend minutes rooting "
+            "and reports at a 60s cadence — so a one-shot scan straight after a fast "
+            "chat can fail a run that delivers moments later. 0 keeps the one-shot "
+            "behaviour for offline log analysis."
+        ),
+    )
+    args = ap.parse_args()
+
+    deadline = time.monotonic() + max(0, args.wait_secs)
+    last_receipt_print = ""
+    args.authored_seen = None
+    while True:
+        rc = None
+        if args.receipt_url:
+            # PRINT THE RECEIPT WHEN IT CHANGES, NOT EVERY TEN SECONDS. The first
+            # live negative reprinted an identical payload 24 times per platform
+            # while waiting out the deadline, and the one line that mattered — the
+            # authored count ticking 1 → 2 — was buried in the repetition.
+            rc, shown = _ask_receipt(args, quiet_if_same_as=last_receipt_print)
+            if shown:
+                last_receipt_print = shown
+            if rc is not None and rc not in (1, AUTHORED_NONE):
+                # 0 and RECEIPT_UNKNOWN are both settled: the first is the answer
+                # we wanted, the second cannot become knowable by re-reading a log.
+                # Only 1 (a canonical answered and does not hold it) and
+                # AUTHORED_NONE (nothing sealed YET) are worth waiting on,
+                # because sealing and delivery are both asynchronous.
+                return rc
+        if rc is None:
+            rc = _evaluate(args)
+            if getattr(args, "require_authored", False) and not args.authored_seen:
+                # FAIL-CLOSED. The ladder says nothing about whether this node
+                # sealed anything, so a fallback can never satisfy the authored
+                # rung on its own.
+                rc = AUTHORED_NONE
+        # 3 IS TERMINAL, LIKE 0. Waiting exists because delivery is
+        # ASYNCHRONOUS — a rung that has not appeared yet may appear. But 3 says
+        # the substrate exposes no replication counter AT ALL (CIRISServer#518),
+        # which is a property of the running wheel, not a race: it cannot become
+        # observable without replacing the process. Re-reading for the workflow's
+        # full 240s reprinted the identical verdict for four minutes per
+        # platform, eight per two-platform runner, to reach the conclusion the
+        # first read had already established.
+        #
+        # 1 and 2 keep retrying: those CAN change while we wait.
+        if rc in (0, 3) or time.monotonic() >= deadline:
+            if rc == AUTHORED_NONE and args.authored_seen is None:
+                print("FAIL (authored): the receipt never reported this node's authored count, so")
+                print("      authored > 0 is UNPROVEN — and an unproven enforced rung fails.")
+            if rc == 1 and args.receipt_url:
+                # THE RECEIPT IS THE VERDICT; THE LADDER IS THE DIAGNOSIS. A
+                # canonical saying "I hold nothing of yours" settles WHETHER
+                # traces landed and says nothing about WHY — that lives in this
+                # node's own probe: rooted? KEX resolved? Without this, the first
+                # real negative shipped a verdict and no cause, and the cause had
+                # to be dug out of the artifacts by hand.
+                print()
+                print("DIAGNOSIS — this node's own account of which gate stopped it:")
+                _evaluate(args)
+            return rc
+        time.sleep(10)
+
+
+#: Exit 4 — the receipt could not be established. NOT a delivery failure.
+#: `None` from the verdict means unreachable / unverified / partial / discovery
+#: incomplete, and upstream is explicit that it is "unknown, not zero". A gate
+#: that scored it as failure would red on someone else's outage; one that scored
+#: it as success would be the vacuous green this file exists to prevent. It gets
+#: its own code so the workflow can say "not established" and mean it.
+RECEIPT_UNKNOWN = 4
+
+#: Exit 5 — ENFORCED: this node authored no traces (or the count is unreadable).
+#: The rung below delivery. From 2026-10-09 to 10-14 every five-platform run
+#: sealed nothing — the mock-LLM latch (CIRISAgent#1244) had been set by adapter
+#: discovery in a LIVE run — and the job stayed green because delivery is
+#: reported, not enforced, and "authored: 0" made the receipt verdict None,
+#: which is exit 4, "unknown, not failure". A node that authored nothing has not
+#: delivered anything for an unknown reason; it has a local fault.
+AUTHORED_NONE = 5
+
+
+def _authored_count(data: dict) -> Optional[int]:
+    """This node's own authored-trace count from the receipt, or None if unreadable.
+
+    Read from the verbatim payload's top-level ``agents`` (this node's own
+    account, independent of any canonical answering), falling back to a
+    projected ``agents`` list. The largest per-agent count wins: one agent id
+    with traces is enough to prove sealing works.
+    """
+    import json as _json
+
+    agents = None
+    raw = data.get("raw_json")
+    if isinstance(raw, str) and raw:
+        try:
+            agents = (_json.loads(raw) or {}).get("agents")
+        except (ValueError, AttributeError):
+            agents = None
+    if agents is None:
+        agents = data.get("agents")
+    if not isinstance(agents, list) or not agents:
+        return None
+    counts = [a.get("authored") for a in agents if isinstance(a, dict)]
+    counts = [c for c in counts if isinstance(c, int) and not isinstance(c, bool)]
+    return max(counts) if counts else None
+
+
+def _ask_receipt(args, quiet_if_same_as: str = "") -> "tuple[Optional[int], Optional[str]]":
+    """The canonical's answer, or None to fall back to the ladder.
+
+    Returns (rc, printed) where rc is 0 (delivered), 1 (a canonical that
+    answered does not hold it — retryable, because delivery is asynchronous),
+    RECEIPT_UNKNOWN, or None (fall back). `printed` is the receipt text that was
+    shown, or None when it was suppressed for being identical to
+    `quiet_if_same_as` — the raw payload's read_at is stripped for that
+    comparison so a re-read of the same state is recognised as the same state.
+    """
+    import contextlib as _ctx
+    import io as _io
+
+    buf = _io.StringIO()
+    with _ctx.redirect_stdout(buf):
+        rc = _ask_receipt_impl(args)
+    text = buf.getvalue()
+    same = quiet_if_same_as and _strip_read_at(text) == _strip_read_at(quiet_if_same_as)
+    if same:
+        return rc, None
+    print(text, end="")
+    return rc, text
+
+
+def _strip_read_at(text: str) -> str:
+    import re as _re
+
+    return _re.sub(r'"read_at":"[^"]*"', '"read_at":"-"', text)
+
+
+def _ask_receipt_impl(args) -> Optional[int]:
+    """The body of _ask_receipt, printing to stdout as it goes."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    base = args.receipt_url.rstrip("/")
+    token = None
+    if args.receipt_username and args.receipt_password:
+        try:
+            body = _json.dumps({"username": args.receipt_username, "password": args.receipt_password}).encode()
+            req = urllib.request.Request(
+                f"{base}/v1/auth/login", data=body, headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                token = _json.loads(resp.read()).get("access_token")
+        except Exception as exc:  # noqa: BLE001
+            # Same phrase as every other fall-back below, on purpose: the
+            # operator is being told the same thing — the receipt could not be
+            # asked, so the ladder answers instead.
+            print(f"  receipt: could not authenticate against {base} ({exc}) — falling back to the ladder")
+            return None
+
+    req = urllib.request.Request(f"{base}/v1/system/runtime/delivery-receipt")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            payload = _json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        if exc.code == 503:
+            print("  receipt: unavailable on this wheel (ciris-server < 0.5.208) — falling back to the ladder")
+            return None
+        print(f"  receipt: HTTP {exc.code} from {base} — falling back to the ladder")
+        return None
+    except Exception as exc:  # noqa: BLE001
+        print(f"  receipt: {base} unreachable ({exc}) — falling back to the ladder")
+        return None
+
+    data = payload.get("data") or {}
+    verdict = data.get("held_by_every_answering_canonical")
+    print("RECEIPT (the canonical's own signed answer):")
+    print(f"  newest_authored_held_by_every_answering_canonical = {verdict!r}")
+
+    # THE RAW PAYLOAD, VERBATIM. Our projection of this receipt reads field names
+    # out of a Rust accessor whose schema we cannot import and could not confirm
+    # against a live canonical (the one we can reach is behind and 404s the
+    # route). If the projection above is reading the wrong key, every line of it
+    # says `None` and looks exactly like a canonical that answered "no" — so the
+    # payload it was derived FROM is printed beside it, and written next to the
+    # other artifacts. A projection you cannot check is not evidence.
+    raw = data.get("raw_json")
+    if isinstance(raw, str) and raw:
+        print("  raw receipt payload (authoritative; the projection above is derived from this):")
+        for line in raw.splitlines() or [raw]:
+            print(f"    {line}")
+        if args.receipt_raw_out:
+            try:
+                out = Path(args.receipt_raw_out)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(raw)
+                print(f"  raw receipt written to {out}")
+            except Exception as exc:  # noqa: BLE001 — never fail the gate on a dump
+                print(f"  (could not write raw receipt to {args.receipt_raw_out}: {exc})")
+    for c in data.get("canonicals") or []:
+        bits = [f"key={c.get('key_id')}", f"holds_newest={c.get('holds_newest')!r}"]
+        if c.get("shipped_any") is not None:
+            bits.append("shipped_any=%r (%s)" % (c["shipped_any"], "behind" if c["shipped_any"] else "never landed"))
+        if c.get("url"):
+            bits.append(f"url={c['url']} ({c.get('url_source')})")
+        if c.get("error"):
+            bits.append(f"error={c['error']}")
+        print("   - " + "  ".join(bits))
+
+    if getattr(args, "require_authored", False):
+        authored = _authored_count(data)
+        if authored is not None:
+            args.authored_seen = max(authored, getattr(args, "authored_seen", None) or 0)
+        print(f"  authored (this node's own count) = {authored!r}  [ENFORCED: must be > 0]")
+        if not authored:
+            if authored is None:
+                print("FAIL (authored): the receipt carries no readable authored count — unproven, so it fails.")
+            else:
+                print("FAIL (authored): this node has sealed NO traces. That is a local fault, not delivery:")
+                print("      check the [MOCK-GUARD] and [CONSENT] lines in the agent log first.")
+            return AUTHORED_NONE
+
+    if verdict is True:
+        print("PASS: every canonical that answered holds the newest trace this node authored.")
+        return 0
+    if verdict is False:
+        print("FAIL: a canonical that answered does NOT hold the newest trace this node authored.")
+        print("      shipped_any separates 'the plane works and is behind' from 'nothing ever landed'.")
+        return 1
+    for k in (
+        "canonicals_answered",
+        "canonicals_unreachable",
+        "canonicals_unverified",
+        "canonicals_partial",
+        "discovery_incomplete",
+        "identity_unavailable",
+    ):
+        if data.get(k):
+            print(f"  {k} = {data[k]!r}")
+    if data.get("error"):
+        print(f"  accessor error: {data['error']}")
+    print("UNKNOWN: the receipt could not be established. This is NOT a delivery failure —")
+    print("         upstream is explicit that None means unknown, not zero.")
+    return RECEIPT_UNKNOWN
+
+
+def _evaluate(args) -> int:
+    text, found = _read(args.logs)
+
+    if not found:
+        print("FAIL: none of the given log paths exist:", ", ".join(str(p) for p in args.logs))
+        print("      A gate that cannot find its evidence must fail, not pass quietly.")
+        return 2
+
+    probes = _probe_lines(text)
+    if not probes:
+        print(f"FAIL: no [DELIVERY-PROBE] lines in {len(found)} log file(s).")
+        print("      Either federation delivery was never enabled for this run")
+        print("      (the QA runner needs --federation-delivery), or the node never")
+        print("      reached the probe. Absence of evidence is not delivery.")
+        return 1
+
+    def _match(rx):
+        for ln in probes:
+            m = rx.search(ln)
+            if m and (args.peer is None or m.group(1) == args.peer):
+                return m
+        return None
+
+    rooted = _match(ROOTED)
+    kex = _match(KEX_PRESENT)
+    ship = _match(SHIP_CONFIRMED)  # application plane — reported, never gated on
+
+    # Replication is searched across the WHOLE text, not just [DELIVERY-PROBE]
+    # lines: the counter may arrive from a metrics dump or a node_state blob that
+    # carries no probe prefix.
+    # ANY POSITIVE SAMPLE COUNTS, NOT THE FIRST ONE.
+    #
+    # `_log_trace_ship()` emits this counter REPEATEDLY — at every status cadence
+    # while delivery is still in flight. A healthy run therefore logs
+    # `…served_total=0` early and a positive value later, and `search()` (first
+    # match) would read the zero and fail a run that delivered fine. Asynchronous
+    # delivery is the normal case, so the first sample is the least informative
+    # one available.
+    samples = [int(m) for m in REPLICATION_SERVED.findall(text)]
+    served = max(samples) if samples else None
+
+    print(f"Scanned {len(found)} log file(s), {len(probes)} [DELIVERY-PROBE] line(s).")
+    print(f"  1. ROOTED       {'yes — ' + rooted.group(1) if rooted else 'NO'}")
+    print(f"  2. KEX PRESENT  {'yes' if kex else 'NO'}")
+    print(
+        f"  3. REPLICATION  {'replication_envelopes_served_total=' + str(served) if served is not None else 'NO SIGNAL'}"
+    )
+    if ship:
+        # Printed for context only. A reader who sees this and assumes delivery is
+        # making precisely the CIRISEdge#434 mistake, so it is labelled inline.
+        print(
+            f"     (application plane: envelopes_sent_total={ship.group(2)} — "
+            f"NOT trace delivery, see CIRISEdge#434)"
+        )
+
+    replicated = served is not None and served > 0
+    reached: Optional[str] = "replication" if replicated else "kex" if kex else "rooted" if rooted else None
+    order = {"rooted": 1, "kex": 2, "replication": 3}
+
+    if reached is not None and order[reached] >= order[args.require]:
+        print(f"\nPASS: reached '{reached}' (required '{args.require}').")
+        return 0
+
+    print(f"\nFAIL: highest rung reached was '{reached or 'none'}', required '{args.require}'.")
+    # ROOT CAUSE FIRST. A run that never rooted has a transport problem, and
+    # saying "emit the counter" at it would send the reader to the wrong place.
+    # The missing-signal note is appended AFTER the ladder diagnosis rather than
+    # short-circuiting it — an earlier version returned immediately on a missing
+    # counter and swallowed "the peer never rooted", which is the more actionable
+    # of the two facts.
+    if served == 0:
+        print("      replication_envelopes_served_total=0 — the replication plane ran and served nothing")
+    for rx, why in (
+        (NO_ROOT, "the canonical peer never rooted — transport/bootstrap problem"),
+        (KEX_NONE, "rooted, but key exchange never resolved — traces cannot be sealed"),
+        (ZERO_ENVELOPES, "the probe saw zero envelopes on the application plane"),
+        (SHIP_UNCONFIRMED, "the application-plane delivery window closed unconfirmed"),
+    ):
+        m = rx.search(text)
+        if m:
+            print(f"      {why}")
+    if args.require == "replication" and served is None and COUNTER_ABSENT.search(text):
+        # THE INSTRUMENT IS MISSING, NOT THE DELIVERY.
+        #
+        # `replication_envelopes_served_total` is not in this wheel's
+        # delivery_status payload (CIRISServer#518), and the agent's own probe
+        # says so in as many words. Grading that as a delivery FAILURE would be
+        # reporting a fact we have no way to observe — the same error, inverted,
+        # as passing on `envelopes_sent_total` because it happened to be there.
+        #
+        # Exit 0, because this run did not demonstrate a failure. Say NOT COVERED
+        # loudly, because it did not demonstrate success either, and a gate that
+        # quietly returns 0 is indistinguishable from one that checked.
+        print("\nNOT COVERED: this substrate exposes no replication_envelopes_served_total.")
+        print("             The node's own probe reports it ABSENT from delivery_status,")
+        print("             so trace delivery cannot be observed from a log tail at all —")
+        print("             which is NOT evidence that delivery failed.")
+        print("             Tracked as CIRISServer#518. Until it lands, this rung is")
+        print("             unobservable rather than red; it does NOT fall back to")
+        print("             envelopes_sent_total, which measures a different plane.")
+        # EXIT 3, NOT 0 — UNKNOWN IS ITS OWN ANSWER.
+        #
+        # Returning 0 made the caller's success branch run, so the workflow set
+        # trace_rc=0 and chat-*.json recorded "traces": true. The gallery then
+        # rendered "traces reached canonical" for a run whose own output says
+        # NOT COVERED — this check asserting the opposite of what it printed,
+        # which is the precise failure it was written to prevent.
+        #
+        # Three states need three codes: 0 delivered, 1 did not, 3 could not be
+        # observed. Callers that only branch on zero/non-zero still treat 3 as
+        # "not proven", which is the safe reading.
+        return 3
+
+    if args.require == "replication" and served is None:
+        print("      no replication_envelopes_served_total appears anywhere in these logs.")
+        print("      This gate does NOT fall back to envelopes_sent_total: that counter")
+        print("      measures the application/durable plane and is structurally blind to")
+        print("      trace replication (CIRISEdge#434), so falling back would fail runs")
+        print("      that delivered fine and pass runs that delivered nothing.")
+        print("      If the transport rungs above are green, the likely fix is agent-side:")
+        print("      emit the plane-correct counter (CIRISEdge#433, operator_surface.rs:1468).")
+    print("\n      The node's own probe lines:")
+    for ln in probes[-8:]:
+        print(f"        {ln.strip()[:160]}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

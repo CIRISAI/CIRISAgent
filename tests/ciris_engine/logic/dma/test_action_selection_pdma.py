@@ -65,17 +65,14 @@ class TestActionSelectionPDMAEvaluator:
         """Create valid EnhancedDMAInputs with all faculty results."""
         # Create mock faculty results (properly typed!)
         pdma_result = EthicalDMAResult(
-            stakeholders="user, system",
-            conflicts="none",
-            reasoning="Action is ethically sound",
-            alignment_check="Ethical analysis: Beneficence - action promotes positive outcomes. Non-maleficence - no harm identified.",
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. Action is ethically sound Ethical analysis: Beneficence - action promotes positive outcomes. Non-maleficence - no harm identified.",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
 
         csdma_result = CSDMAResult(plausibility_score=0.9, flags=[], reasoning="Makes common sense")
 
         dsdma_result = DSDMAResult(domain="general", domain_alignment=0.8, flags=[], reasoning="Aligns with domain")
-
-        from ciris_engine.schemas.runtime.enums import HandlerActionType
 
         return EnhancedDMAInputs(
             original_thought=valid_thought,
@@ -100,7 +97,7 @@ class TestActionSelectionPDMAEvaluator:
         # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
         mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="User asked a question that needs a response",
+            reasoning="User asked a question that needs a response",
             speak_content="Here is my response to your question",
         )
 
@@ -134,7 +131,7 @@ class TestActionSelectionPDMAEvaluator:
         # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
         mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.OBSERVE,
-            rationale="Need more information",
+            reasoning="Need more information",
             observe_active=True,
         )
 
@@ -168,10 +165,9 @@ class TestActionSelectionPDMAEvaluator:
         )
 
         pdma_result = EthicalDMAResult(
-            stakeholders="user, system",
-            conflicts="none",
-            reasoning="OK",
-            alignment_check="Basic ethical approval without detailed analysis.",
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. OK Basic ethical approval without detailed analysis.",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
 
         # Need a valid CSDMA result even for this test
@@ -239,7 +235,7 @@ class TestActionSelectionPDMAEvaluator:
         # Mock the LLM call to return ASPDMALLMResult (flat schema, Gemini-compatible)
         mock_result = ASPDMALLMResult(
             selected_action=HandlerActionType.SPEAK,
-            rationale="All faculties approve",
+            reasoning="All faculties approve",
             speak_content="Response based on faculty evaluations",
         )
 

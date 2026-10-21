@@ -418,7 +418,7 @@ def main():
     print(f"{'='*80}")
 
     # PRODUCTION CODE SUMMARY (what actually matters)
-    print("\n🚨 PRODUCTION CODE VIOLATIONS:")
+    print("\n[ALERT] PRODUCTION CODE VIOLATIONS:")
     print(f"  Occurrences: {len(production_findings)}")
     print(f"  Files affected: {len(prod_findings_by_file)}")
 
@@ -429,11 +429,11 @@ def main():
             print(f"    {category:<20} {len(items):>3} ({percentage:.1f}%)")
 
     # Test/Tool summary (for reference only)
-    print("\n📊 NON-PRODUCTION CODE (Tests/Tools):")
+    print("\n NON-PRODUCTION CODE (Tests/Tools):")
     print(f"  Tests: {len(test_findings)} occurrences")
     print(f"  Tools: {len(tool_findings)} occurrences")
 
-    print("\n📈 TOTAL ACROSS ALL CODE:")
+    print("\n TOTAL ACROSS ALL CODE:")
     print(f"  Total occurrences: {len(all_findings)}")
     print(f"  Total files: {len(findings_by_file)}")
 
@@ -508,9 +508,9 @@ def main():
     # Final summary
     print(f"\n\n{'='*80}")
     if len(production_findings) == 0:
-        print("✅ CONGRATULATIONS! Zero Dict[str, Any] in production code!")
+        print("[OK] CONGRATULATIONS! Zero Dict[str, Any] in production code!")
     else:
-        print(f"⚠️  ACTION REQUIRED: {len(production_findings)} Dict[str, Any] violations in production code")
+        print(f"[WARN] ACTION REQUIRED: {len(production_findings)} Dict[str, Any] violations in production code")
         print("   These violate the 'No Dicts' principle and must be fixed.")
 
 

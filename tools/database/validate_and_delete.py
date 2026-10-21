@@ -105,7 +105,7 @@ def validate_and_delete_period(period_id, dry_run=False):
             print(f"  Actual count in database: {actual_count:,}")
 
             if claimed_count == actual_count and actual_count > 0:
-                print("  ✓ Counts match!")
+                print(" [OK] Counts match!")
                 if not dry_run:
                     print("  Deleting...")
                     cursor.execute(
@@ -124,7 +124,7 @@ def validate_and_delete_period(period_id, dry_run=False):
                 else:
                     print("  [DRY RUN] Would delete nodes")
             else:
-                print("  ✗ Count mismatch or no data! Not deleting.")
+                print(" [FAIL] Count mismatch or no data! Not deleting.")
 
         elif node_type == "audit_summary":
             claimed_count = attrs.get("source_node_count", 0)
@@ -143,7 +143,7 @@ def validate_and_delete_period(period_id, dry_run=False):
             print(f"  Actual count in database: {actual_count:,}")
 
             if claimed_count == actual_count and actual_count > 0:
-                print("  ✓ Counts match!")
+                print(" [OK] Counts match!")
                 if not dry_run:
                     print("  Deleting...")
                     cursor.execute(
@@ -179,7 +179,7 @@ def validate_and_delete_period(period_id, dry_run=False):
             print(f"  Actual count in database: {actual_count:,}")
 
             if claimed_count == actual_count and actual_count > 0:
-                print("  ✓ Counts match!")
+                print(" [OK] Counts match!")
                 if not dry_run:
                     print("  Deleting...")
                     cursor.execute(

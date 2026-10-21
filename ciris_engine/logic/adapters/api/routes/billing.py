@@ -8,17 +8,22 @@ Frontend should NEVER call the billing backend directly.
 import logging
 import re
 from typing import Any, Dict, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+import aiohttp
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.types import JSONDict
 
-from ..dependencies.auth import require_observer
+from ._common import (
+    RESPONSES_BILLING_503,
+    RESPONSES_BILLING_PURCHASE_INITIATE,
+    RESPONSES_BILLING_PURCHASE_STATUS,
+    AuthObserverDep,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,85 @@ ERROR_INVALID_PAYMENT_ID = "Invalid payment ID format"
 
 # Regex pattern for valid payment IDs (Stripe format: pi_xxx or similar alphanumeric with underscores)
 PAYMENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
+
+def _sanitize_for_log(value: str, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging.
+
+    Prevents log injection by:
+    1. Removing newlines and control characters
+    2. Truncating to max_length
+    3. Escaping special characters
+    """
+    if not value:
+        return "<empty>"
+    # Remove control characters (C0: 0x00-0x1f, DEL+C1: 0x7f-0x9f)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", str(value))
+    # Truncate to prevent log flooding
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
+# Trusted billing service hosts (prevents SSRF via env var manipulation)
+_TRUSTED_BILLING_HOSTS_EXACT = frozenset({"billing.ciris.ai", "localhost", "127.0.0.1"})
+
+# Pattern for CIRIS services hosts: billing*.ciris-services-N.ai where N is 1-99
+_CIRIS_SERVICES_PATTERN = re.compile(r"^billing\d*\.ciris-services-\d{1,2}\.ai$")
+
+
+def _is_trusted_billing_host(hostname: str | None) -> bool:
+    """Check if hostname is a trusted billing service host.
+
+    Trusted hosts:
+    - billing.ciris.ai
+    - localhost, 127.0.0.1
+    - billing*.ciris-services-N.ai (where N is 1-99)
+    """
+    if hostname is None:
+        return False
+    if hostname in _TRUSTED_BILLING_HOSTS_EXACT:
+        return True
+    if _CIRIS_SERVICES_PATTERN.match(hostname):
+        return True
+    return False
+
+
+def _validate_billing_url(url: str) -> str:
+    """Validate billing URL to prevent SSRF attacks.
+
+    Ensures the URL:
+    1. Is well-formed
+    2. Uses HTTPS (or HTTP for localhost only)
+    3. Points to a trusted billing host
+
+    Args:
+        url: The billing URL to validate
+
+    Returns:
+        The validated URL
+
+    Raises:
+        ValueError: If URL is invalid or points to untrusted host
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        raise ValueError(f"Invalid billing URL format: {e}") from e
+
+    # Require valid scheme
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Invalid billing URL scheme: {parsed.scheme}")
+
+    # Require HTTPS for non-localhost
+    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1"):
+        raise ValueError("Billing URL must use HTTPS for non-localhost hosts")
+
+    # Validate against trusted hosts
+    if not _is_trusted_billing_host(parsed.hostname):
+        raise ValueError(f"Untrusted billing host: {parsed.hostname}")
+
+    return url
 
 
 # Request/Response schemas
@@ -104,8 +188,8 @@ class TransactionListResponse(BaseModel):
 # Helper functions
 
 
-def _get_billing_client(request: Request, google_id_token: Optional[str] = None) -> httpx.AsyncClient:
-    """Get billing API client from app state.
+def _get_billing_config(request: Request, google_id_token: Optional[str] = None) -> tuple[str, Dict[str, str]]:
+    """Get billing API configuration (base URL and headers).
 
     Supports two authentication modes:
     1. Server mode: Uses CIRIS_BILLING_API_KEY env var (for agents.ciris.ai)
@@ -114,45 +198,123 @@ def _get_billing_client(request: Request, google_id_token: Optional[str] = None)
     Args:
         request: FastAPI request object
         google_id_token: Optional Google ID token for JWT pass-through mode
+
+    Returns:
+        Tuple of (base_url, headers)
     """
     import os
 
-    # Check if billing client already exists in app state (for testing or pre-configured)
-    if hasattr(request.app.state, "billing_client") and request.app.state.billing_client is not None:
-        existing_client: httpx.AsyncClient = request.app.state.billing_client
-        return existing_client
+    # Get and validate billing URL to prevent SSRF
+    billing_url_raw = get_billing_url()
+    try:
+        billing_url = _validate_billing_url(billing_url_raw)
+    except ValueError as e:
+        logger.error(f"[BILLING] Invalid billing URL configuration: {e}")
+        raise HTTPException(status_code=500, detail="Billing service misconfigured") from e
 
-    billing_url = get_billing_url()
     api_key = os.getenv("CIRIS_BILLING_API_KEY")
 
     # Determine authentication mode
     if api_key:
-        # Server mode: use API key (cached client)
-        if not hasattr(request.app.state, "billing_client"):
-            headers = {
-                "X-API-Key": api_key,
-                "User-Agent": "CIRIS-Agent-Frontend/1.0",
-            }
-            new_client = httpx.AsyncClient(base_url=billing_url, timeout=10.0, headers=headers)
-            request.app.state.billing_client = new_client
-        client: httpx.AsyncClient = request.app.state.billing_client
-        return client
+        # Server mode: use API key
+        headers = {
+            "X-API-Key": api_key,
+            "User-Agent": "CIRIS-Agent-Frontend/1.0",
+        }
+        return billing_url, headers
     elif google_id_token:
-        # JWT pass-through mode: create new client with Google ID token as Bearer
-        # Don't cache this client since token changes per request
+        # JWT pass-through mode: use Google ID token as Bearer
         headers = {
             "Authorization": f"Bearer {google_id_token}",
             "User-Agent": "CIRIS-Mobile/1.0",
         }
         logger.info(
-            f"[BILLING_JWT] Creating JWT pass-through client with Google ID token ({len(google_id_token)} chars)"
+            f"[BILLING_JWT] Creating JWT pass-through config with Google ID token ({len(google_id_token)} chars)"
         )
-        return httpx.AsyncClient(base_url=billing_url, timeout=10.0, headers=headers)
+        return billing_url, headers
     else:
         raise HTTPException(
             status_code=500,
             detail="Billing not configured: set CIRIS_BILLING_API_KEY or provide X-Google-ID-Token header",
         )
+
+
+async def _billing_post(base_url: str, path: str, headers: Dict[str, str], json_data: JSONDict) -> JSONDict:
+    """Make a POST request to the billing API.
+
+    Args:
+        base_url: Base URL for billing API
+        path: API path (e.g., "/v1/billing/credits/check")
+        headers: HTTP headers including auth
+        json_data: JSON payload
+
+    Returns:
+        JSON response as dict
+
+    Raises:
+        HTTPException: On HTTP errors or network failures
+    """
+    timeout = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        url = f"{base_url}{path}"
+        try:
+            async with session.post(url, json=json_data, headers=headers) as response:
+                if response.status >= 400:
+                    error_text = await response.text()
+                    if response.status == 400:
+                        raise HTTPException(status_code=400, detail="Invalid request")
+                    elif response.status == 401:
+                        logger.error("401 Unauthorized - API key may be invalid or missing")
+                        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+                    elif response.status == 404:
+                        raise HTTPException(status_code=404, detail="Not found")
+                    else:
+                        logger.error(f"Billing API error: {response.status} - {error_text}")
+                        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+                result: JSONDict = await response.json()
+                return result
+        except aiohttp.ClientError as e:
+            logger.error(f"Billing API request error: {e}")
+            raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+
+
+async def _billing_get(
+    base_url: str, path: str, headers: Dict[str, str], params: Optional[Dict[str, Any]] = None
+) -> JSONDict:
+    """Make a GET request to the billing API.
+
+    Args:
+        base_url: Base URL for billing API
+        path: API path (e.g., "/v1/billing/transactions")
+        headers: HTTP headers including auth
+        params: Optional query parameters
+
+    Returns:
+        JSON response as dict
+
+    Raises:
+        HTTPException: On HTTP errors or network failures
+    """
+    timeout = aiohttp.ClientTimeout(total=10.0)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        url = f"{base_url}{path}"
+        try:
+            async with session.get(url, params=params, headers=headers) as response:
+                if response.status >= 400:
+                    error_text = await response.text()
+                    if response.status == 401:
+                        logger.error("401 Unauthorized - API key may be invalid or missing")
+                    elif response.status == 404:
+                        # Return empty response for 404 (account/payment not found)
+                        return {"transactions": [], "total_count": 0, "has_more": False}
+                    else:
+                        logger.error(f"Billing API error: {response.status} - {error_text}")
+                    raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+                result: JSONDict = await response.json()
+                return result
+        except aiohttp.ClientError as e:
+            logger.error(f"Billing API request error: {e}")
+            raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
 
 
 def _extract_user_identity(auth: AuthContext, request: Request) -> JSONDict:
@@ -272,20 +434,9 @@ def _build_credit_check_payload(user_identity: JSONDict, context: Any) -> JSONDi
     return check_payload
 
 
-async def _query_billing_backend(billing_client: httpx.AsyncClient, check_payload: JSONDict) -> JSONDict:
+async def _query_billing_backend(base_url: str, headers: Dict[str, str], check_payload: JSONDict) -> JSONDict:
     """Query billing backend for credit status."""
-    try:
-        response = await billing_client.post(
-            "/v1/billing/credits/check",
-            json=check_payload,
-        )
-        response.raise_for_status()
-        result: JSONDict = response.json()
-        return result
-
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        logger.error(f"Billing API error: {e}", exc_info=True)
-        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+    return await _billing_post(base_url, "/v1/billing/credits/check", headers, check_payload)
 
 
 def _format_billing_response(credit_data: JSONDict) -> CreditStatusResponse:
@@ -365,16 +516,25 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
             load_dotenv(env_path, override=True)
             logger.debug("[BILLING_LAZY_INIT] Reloaded .env from %s", env_path)
 
-    # Check for Google ID token (written by Kotlin when user logs in)
-    google_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+    # Check for OAuth ID token (written by Kotlin when user logs in - Google on Android, Apple on iOS)
+    # The shared selector, because compatibility must not depend on a provider
+    # already existing. Reading only the Google/Apple names here meant that when
+    # Python started BEFORE an older desktop client signed in — and that client
+    # writes its own variable — this returned None, /credits answered with the
+    # unlimited-credit response, and the purchase routes reported no provider
+    # configured, all while a perfectly good token sat in the environment.
+    from ciris_engine.logic.utils.token_handshake import PROXY_TOKEN_VARS, read_proxy_token
+
+    google_token, token_var = read_proxy_token()
     if not google_token:
-        logger.debug("[BILLING_LAZY_INIT] No CIRIS_BILLING_GOOGLE_ID_TOKEN in environment")
+        logger.debug("[BILLING_LAZY_INIT] no proxy token in environment (looked at %s)", ", ".join(PROXY_TOKEN_VARS))
         return None
+    logger.debug("[BILLING_LAZY_INIT] using the token from %s", token_var)
 
     # Get billing URL from central config (checks env var first)
     billing_url = get_billing_url()
 
-    logger.info(
+    logger.debug(
         "[BILLING_LAZY_INIT] Token found (%d chars), creating CIRISBillingProvider...",
         len(google_token),
     )
@@ -390,16 +550,78 @@ def _try_lazy_init_billing_provider(request: Request, resource_monitor: Any) -> 
 
         # Attach to resource monitor
         resource_monitor.credit_provider = provider
-        logger.info(
-            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider: base_url=%s, token_length=%d",
-            billing_url,
-            len(google_token),
+        # Log only hostname to avoid logging full URL  # NOSONAR - sanitized
+        try:
+            host_only = urlparse(billing_url).hostname or "unknown"
+        except Exception:
+            host_only = "parse-error"
+        logger.debug(
+            "[BILLING_LAZY_INIT] Successfully created CIRISBillingProvider: host=%s",
+            host_only,
         )
         return provider
 
     except Exception as exc:
         logger.error("[BILLING_LAZY_INIT] Failed to create CIRISBillingProvider: %s", exc, exc_info=True)
         return None
+
+
+# A FAILED CHECK IS NOT A BALANCE.
+#
+# CIRISBillingProvider runs with fail_open=False, so every failure — an expired
+# token, a timeout, a 5xx from billing — comes back as the same shape a real
+# empty account does: has_credit=False, credits_remaining=None. The only thing
+# that tells them apart is `reason`, and this route used to drop it on the
+# floor and answer HTTP 200 with zeros and purchase_required=True.
+#
+# That is how an expired one-hour Google ID token rendered as "0 credits" on a
+# desktop whose balance was 398 the whole time. The client has an auth-error
+# branch (401/503 → token refresh → retry) and never reached it, because the
+# 401 had been laundered into a balance one layer down. Three layers each
+# "handled" the failure and none of them said what it was.
+#
+# The status now says what happened. Only a real answer from billing renders
+# as a balance; an auth failure is a 401 the client already knows how to
+# handle, and an outage is a 503 — not an empty wallet with a Buy button.
+_AUTH_FAILURE_CATEGORIES = ("AUTH_EXPIRED",)
+_UNAVAILABLE_CATEGORY_PREFIXES = ("TIMEOUT", "CONNECTION_ERROR", "NETWORK_ERROR", "HTTP_")
+
+
+def _refusal_for_non_answer(result: Any) -> Optional[HTTPException]:
+    """The HTTP refusal a failed CreditCheckResult deserves, or None if it is a real answer.
+
+    Classified on `provider_metadata["error_category"]`, which
+    CIRISBillingProvider._handle_failure sets beside its human-readable
+    `reason`. The prose is deliberately NOT parsed: it is written for people and
+    may be reworded, and a classifier that keyed on it would turn the next
+    wording improvement back into "0 credits". No category (NO_CREDITS, older
+    providers) is a genuine answer and returns None. A FAIL_OPEN result has
+    has_credit=True and is never refused.
+    """
+    if getattr(result, "has_credit", False):
+        return None
+    meta = getattr(result, "provider_metadata", None) or {}
+    category = str(meta.get("error_category") or "") if isinstance(meta, dict) else ""
+    reason = str(getattr(result, "reason", None) or "")
+    if category in _AUTH_FAILURE_CATEGORIES:
+        return HTTPException(
+            status_code=401,
+            detail={
+                "error": "billing_auth_expired",
+                "message": "The billing credential has expired — sign in again to refresh it.",
+                "reason": reason,
+            },
+        )
+    if category.startswith(_UNAVAILABLE_CATEGORY_PREFIXES):
+        return HTTPException(
+            status_code=503,
+            detail={
+                "error": "billing_unavailable",
+                "message": "The billing service could not be reached — your balance is unchanged.",
+                "reason": reason,
+            },
+        )
+    return None
 
 
 def _build_mobile_credit_response(result: Any) -> CreditStatusResponse:
@@ -418,10 +640,16 @@ def _build_mobile_credit_response(result: Any) -> CreditStatusResponse:
     )
 
 
-@router.get("/credits", response_model=CreditStatusResponse)
+@router.get(
+    "/credits",
+    responses={
+        **RESPONSES_BILLING_503,
+        401: {"description": "Billing credential expired — sign in again (reason: AUTH_EXPIRED)"},
+    },
+)
 async def get_credits(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> CreditStatusResponse:
     """
     Get user's credit balance and status.
@@ -434,13 +662,12 @@ async def get_credits(
     """
     import os
 
-    from ciris_engine.logic.adapters.api.routes.agent import _derive_credit_account
+    from ciris_engine.logic.adapters.api.routes._common import derive_credit_account
     from ciris_engine.schemas.services.credit_gate import CreditContext
 
-    logger.info("[BILLING_API] get_credits called for user_id=%s", auth.user_id)
+    logger.debug("[BILLING_API] get_credits called")
     user_identity = _extract_user_identity(auth, request)
     agent_id = _get_agent_id(request)
-    logger.info("[BILLING_API] agent_id=%s, user_identity=%s", agent_id, user_identity)
 
     # Check credit provider availability
     credit_provider = _get_credit_provider(request)
@@ -448,12 +675,12 @@ async def get_credits(
         if not hasattr(request.app.state, "resource_monitor"):
             logger.error("[BILLING_API] No resource_monitor on app.state")
             raise HTTPException(status_code=503, detail=ERROR_RESOURCE_MONITOR_UNAVAILABLE)
-        logger.info("[BILLING_API] No credit provider, returning unlimited response")
+        logger.debug("[BILLING_API] No credit provider, returning unlimited response")
         return _get_unlimited_credit_response()
 
     # Query credit provider
     resource_monitor = request.app.state.resource_monitor
-    account, _ = _derive_credit_account(auth, request)
+    account, _ = derive_credit_account(auth, request)
     context = CreditContext(agent_id=agent_id, channel_id="api:frontend", request_id=None)
 
     try:
@@ -468,8 +695,16 @@ async def get_credits(
 
     # CIRISBillingProvider: mobile mode (no API key) or server mode
     if not os.getenv("CIRIS_BILLING_API_KEY"):
+        refusal = _refusal_for_non_answer(result)
+        if refusal is not None:
+            logger.warning(
+                "[BILLING_CREDITS] refusing to render a failed check as a balance: HTTP %d (%s)",
+                refusal.status_code,
+                getattr(result, "reason", None),
+            )
+            raise refusal
         logger.info(
-            "[BILLING_CREDITS] Using CreditCheckResult (no API key): " "free=%s, paid=%s, has_credit=%s",
+            "[BILLING_CREDITS] Using CreditCheckResult (no API key): free=%s, paid=%s, has_credit=%s",
             result.free_uses_remaining,
             result.credits_remaining,
             result.has_credit,
@@ -477,8 +712,8 @@ async def get_credits(
         return _build_mobile_credit_response(result)
 
     # Server mode with API key - query billing backend
-    billing_client = _get_billing_client(request)
-    credit_data = await _query_billing_backend(billing_client, _build_credit_check_payload(user_identity, context))
+    base_url, headers = _get_billing_config(request)
+    credit_data = await _query_billing_backend(base_url, headers, _build_credit_check_payload(user_identity, context))
     response = _format_billing_response(credit_data)
     logger.info(
         "[BILLING_CREDITS] Credit check complete: free=%s, paid=%s, has_credit=%s",
@@ -489,11 +724,11 @@ async def get_credits(
     return response
 
 
-@router.post("/purchase/initiate", response_model=PurchaseInitiateResponse)
+@router.post("/purchase/initiate", responses=RESPONSES_BILLING_PURCHASE_INITIATE)
 async def initiate_purchase(
     request: Request,
     body: PurchaseInitiateRequest,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> PurchaseInitiateResponse:
     """
     Initiate credit purchase (creates Stripe payment intent).
@@ -520,7 +755,7 @@ async def initiate_purchase(
         )
 
     # Billing enabled - proceed with purchase
-    billing_client = _get_billing_client(request)
+    base_url, headers = _get_billing_config(request)
     user_identity = _extract_user_identity(auth, request)
     agent_id = (
         request.app.state.runtime.agent_identity.agent_id
@@ -537,27 +772,17 @@ async def initiate_purchase(
             detail="Email address required for purchase. Please authenticate with OAuth provider.",
         )
 
-    try:
-        # Create payment intent via billing backend
-        response = await billing_client.post(
-            "/v1/billing/purchases",
-            json={
-                **user_identity,
-                "customer_email": customer_email,
-                "return_url": body.return_url,
-            },
-        )
-        response.raise_for_status()
-        purchase_data = response.json()
-
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Billing API error: {e.response.status_code} - {e.response.text}")
-        if e.response.status_code == 400:
-            raise HTTPException(status_code=400, detail="Invalid purchase request")
-        raise HTTPException(status_code=503, detail="Billing service unavailable")
-    except httpx.RequestError as e:
-        logger.error(f"Billing API request error: {e}")
-        raise HTTPException(status_code=503, detail="Cannot reach billing service")
+    # Create payment intent via billing backend
+    purchase_data = await _billing_post(
+        base_url,
+        "/v1/billing/purchases",
+        headers,
+        {
+            **user_identity,
+            "customer_email": customer_email,
+            "return_url": body.return_url,
+        },
+    )
 
     # Get Stripe publishable key from billing backend response (single source of truth)
     publishable_key = purchase_data.get("publishable_key", "pk_test_not_configured")
@@ -572,11 +797,11 @@ async def initiate_purchase(
     )
 
 
-@router.get("/purchase/status/{payment_id}", response_model=PurchaseStatusResponse)
+@router.get("/purchase/status/{payment_id}", responses=RESPONSES_BILLING_PURCHASE_STATUS)
 async def get_purchase_status(
     payment_id: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> PurchaseStatusResponse:
     """
     Check payment status (optional - for polling after payment).
@@ -607,49 +832,37 @@ async def get_purchase_status(
         )
 
     # Billing enabled - check payment status
-    billing_client = _get_billing_client(request)
+    base_url, headers = _get_billing_config(request)
     user_identity = _extract_user_identity(auth, request)
 
-    payment_data = None
-    credit_data = None
+    # Query billing backend for specific payment status
+    # URL-encode payment_id to prevent path traversal (already validated by PAYMENT_ID_PATTERN)
+    safe_payment_id = quote(payment_id, safe="")
+    payment_data = await _billing_get(
+        base_url,
+        f"/v1/billing/purchases/{safe_payment_id}/status",
+        headers,
+        user_identity,
+    )
 
-    try:
-        from typing import Mapping, cast
-
-        # Query billing backend for specific payment status
-        # URL-encode payment_id to prevent path traversal (already validated by PAYMENT_ID_PATTERN)
-        safe_payment_id = quote(payment_id, safe="")
-        payment_response = await billing_client.get(
-            f"/v1/billing/purchases/{safe_payment_id}/status",
-            params=cast(Mapping[str, str | int | float | bool | None], user_identity),
+    # If payment not found (empty response from _billing_get), return pending
+    if not payment_data or payment_data.get("transactions") == []:
+        return PurchaseStatusResponse(
+            status="pending",
+            credits_added=0,
+            balance_after=None,
         )
-        payment_response.raise_for_status()
-        payment_data = payment_response.json()
 
-        # Get updated credit balance
-        credits_response = await billing_client.post(
-            "/v1/billing/credits/check",
-            json={
-                **user_identity,
-                "context": {"source": "purchase_status_check"},
-            },
-        )
-        credits_response.raise_for_status()
-        credit_data = credits_response.json()
-
-    except httpx.HTTPStatusError as e:
-        # If payment not found, return pending status
-        if e.response.status_code == 404:
-            return PurchaseStatusResponse(
-                status="pending",
-                credits_added=0,
-                balance_after=None,
-            )
-        logger.error(f"Billing API error: {e}")
-        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
-    except httpx.RequestError as e:
-        logger.error(f"Billing API request error: {e}")
-        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+    # Get updated credit balance
+    credit_data = await _billing_post(
+        base_url,
+        "/v1/billing/credits/check",
+        headers,
+        {
+            **user_identity,
+            "context": {"source": "purchase_status_check"},
+        },
+    )
 
     # Extract payment status and amount from billing backend response
     payment_status = payment_data.get("status", "unknown")
@@ -662,10 +875,10 @@ async def get_purchase_status(
     )
 
 
-@router.get("/transactions", response_model=TransactionListResponse)
+@router.get("/transactions", responses=RESPONSES_BILLING_503)
 async def get_transactions(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     limit: int = 50,
     offset: int = 0,
 ) -> TransactionListResponse:
@@ -694,88 +907,56 @@ async def get_transactions(
         return TransactionListResponse(transactions=[], total_count=0, has_more=False)
 
     # CIRISBillingProvider - query billing backend for transaction history
-    logger.info(f"[BILLING_TRANSACTIONS] Fetching transactions (limit={limit}, offset={offset})")
-    billing_client = _get_billing_client(request)
+    logger.debug("[BILLING_TRANSACTIONS] Fetching transactions (limit=%d, offset=%d)", limit, offset)
+    base_url, headers = _get_billing_config(request)
     user_identity = _extract_user_identity(auth, request)
 
-    try:
-        from typing import Mapping, cast
+    # Build query parameters for billing backend
+    oauth_provider = str(user_identity["oauth_provider"])
+    external_id = str(user_identity["external_id"])
 
-        # Build query parameters for billing backend - cast to expected types
-        oauth_provider = str(user_identity["oauth_provider"])
-        external_id = str(user_identity["external_id"])
+    params: dict[str, str | int] = {
+        "oauth_provider": oauth_provider,
+        "external_id": external_id,
+        "limit": limit,
+        "offset": offset,
+    }
 
-        params: dict[str, str | int] = {
-            "oauth_provider": oauth_provider,
-            "external_id": external_id,
-            "limit": limit,
-            "offset": offset,
-        }
+    # Add optional parameters if present
+    wa_id = user_identity.get("wa_id")
+    if wa_id:
+        params["wa_id"] = str(wa_id)
+    tenant_id = user_identity.get("tenant_id")
+    if tenant_id:
+        params["tenant_id"] = str(tenant_id)
 
-        # Add optional parameters if present
-        wa_id = user_identity.get("wa_id")
-        if wa_id:
-            params["wa_id"] = str(wa_id)
-        tenant_id = user_identity.get("tenant_id")
-        if tenant_id:
-            params["tenant_id"] = str(tenant_id)
+    # Log request details for debugging (without PII)
+    logger.debug(
+        f"[BILLING_TRANSACTIONS] Request to billing backend: "
+        f"oauth_provider={params.get('oauth_provider')}, "
+        f"external_id={params.get('external_id')}, "
+        f"wa_id={params.get('wa_id')}, "
+        f"has_email={user_identity.get('customer_email') is not None}"
+    )
 
-        # Log request details for debugging (without PII)
-        logger.debug(
-            f"[BILLING_TRANSACTIONS] Request to billing backend: "
-            f"oauth_provider={params.get('oauth_provider')}, "
-            f"external_id={params.get('external_id')}, "
-            f"wa_id={params.get('wa_id')}, "
-            f"has_email={user_identity.get('customer_email') is not None}"
-        )
+    # Query billing backend
+    transaction_data = await _billing_get(base_url, "/v1/billing/transactions", headers, params)
 
-        # Query billing backend
-        response = await billing_client.get(
-            "/v1/billing/transactions",
-            params=cast(Mapping[str, str | int | float | bool | None], params),
-        )
-        response.raise_for_status()
-        transaction_data: JSONDict = response.json()
+    # Map backend response to our schema - safely extract and validate transactions list
+    transactions_raw = transaction_data.get("transactions", [])
+    if not isinstance(transactions_raw, list):
+        transactions_raw = []
+    transactions = [TransactionItem(**txn) for txn in transactions_raw if isinstance(txn, dict)]
 
-        # Map backend response to our schema - safely extract and validate transactions list
-        transactions_raw = transaction_data.get("transactions", [])
-        if not isinstance(transactions_raw, list):
-            transactions_raw = []
-        transactions = [TransactionItem(**txn) for txn in transactions_raw if isinstance(txn, dict)]
-
-        logger.info(
-            f"[BILLING_TRANSACTIONS] Returning {len(transactions)} transactions "
-            f"(total={transaction_data.get('total_count', 0)}, has_more={transaction_data.get('has_more', False)})"
-        )
-        return TransactionListResponse(
-            transactions=transactions,
-            total_count=transaction_data.get("total_count", 0),
-            has_more=transaction_data.get("has_more", False),
-        )
-
-    except httpx.HTTPStatusError as e:
-        # Safely extract request details for logging
-        try:
-            headers_str = str(dict(e.request.headers))
-        except (TypeError, AttributeError):
-            headers_str = "<unavailable>"
-
-        logger.error(
-            f"Billing API error fetching transactions: {e.response.status_code} - {e.response.text}\n"
-            f"Request URL: {e.request.url}\n"
-            f"Request headers: {headers_str}"
-        )
-        if e.response.status_code == 404:
-            # Account not found - return empty list
-            return TransactionListResponse(transactions=[], total_count=0, has_more=False)
-        if e.response.status_code == 401:
-            # Authentication failed - log details and return empty
-            logger.error("401 Unauthorized - API key may be invalid or missing")
-            return TransactionListResponse(transactions=[], total_count=0, has_more=False)
-        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
-    except httpx.RequestError as e:
-        logger.error(f"Billing API request error: {e}")
-        raise HTTPException(status_code=503, detail=ERROR_BILLING_SERVICE_UNAVAILABLE)
+    logger.info(
+        f"[BILLING_TRANSACTIONS] Returning {len(transactions)} transactions "
+        f"(total={transaction_data.get('total_count', 0)}, has_more={transaction_data.get('has_more', False)})"
+    )
+    return TransactionListResponse(
+        transactions=transactions,
+        total_count=transaction_data.get("total_count", 0),
+        has_more=transaction_data.get("has_more", False),
+    )
 
 
 # Google Play verification models
@@ -799,11 +980,11 @@ class GooglePlayVerifyResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if verification failed")
 
 
-@router.post("/google-play/verify", response_model=GooglePlayVerifyResponse)
+@router.post("/google-play/verify")
 async def verify_google_play_purchase(
     request: Request,
     body: GooglePlayVerifyRequest,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> GooglePlayVerifyResponse:
     """
     Verify a Google Play purchase and add credits.
@@ -817,7 +998,12 @@ async def verify_google_play_purchase(
 
     Only works when CIRISBillingProvider is configured.
     """
-    logger.info(f"[GOOGLE_PLAY_VERIFY] Verifying purchase for user_id={auth.user_id}, product={body.product_id}")
+    # Sanitize user-controlled data before logging to prevent log injection
+    logger.info(
+        "[GOOGLE_PLAY_VERIFY] Verifying purchase for user_id=%s, product=%s",
+        _sanitize_for_log(auth.user_id),
+        _sanitize_for_log(body.product_id),
+    )
 
     # Check if billing is enabled
     if not hasattr(request.app.state, "resource_monitor"):
@@ -854,19 +1040,22 @@ async def verify_google_play_purchase(
     )  # NOSONAR - provider type not secret
 
     # Get Google ID token for JWT pass-through mode (Android/native)
-    # Android sends this in X-Google-ID-Token header for billing backend auth
+    # First check header, then fallback to environment (written by Kotlin EnvFileUpdater)
     google_id_token = request.headers.get("X-Google-ID-Token")
-    if google_id_token:
+    if not google_id_token:
+        import os
+
+        from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+        google_id_token, _tok_var = read_proxy_token()
+        if google_id_token:
+            logger.info(f"[GOOGLE_PLAY_VERIFY] Using OAuth ID token from environment ({len(google_id_token)} chars)")
+    else:
         logger.info(f"[GOOGLE_PLAY_VERIFY] Using JWT pass-through with Google ID token ({len(google_id_token)} chars)")
-    billing_client = _get_billing_client(request, google_id_token=google_id_token)
 
     try:
-        response = await billing_client.post(
-            "/v1/billing/google-play/verify",
-            json=verify_payload,
-        )
-        response.raise_for_status()
-        result = response.json()
+        base_url, headers = _get_billing_config(request, google_id_token=google_id_token)
+        result = await _billing_post(base_url, "/v1/billing/google-play/verify", headers, verify_payload)
 
         logger.info(
             f"[GOOGLE_PLAY_VERIFY] Success: credits_added={result.get('credits_added')}, "
@@ -880,9 +1069,9 @@ async def verify_google_play_purchase(
             already_processed=result.get("already_processed", False),
         )
 
-    except httpx.HTTPStatusError as e:
-        logger.error(f"[GOOGLE_PLAY_VERIFY] Billing API error: {e.response.status_code} - {e.response.text}")
-        return GooglePlayVerifyResponse(success=False, error=f"Verification failed: {e.response.status_code}")
-    except httpx.RequestError as e:
+    except HTTPException as e:
+        logger.error(f"[GOOGLE_PLAY_VERIFY] Billing API error: {e.status_code} - {e.detail}")
+        return GooglePlayVerifyResponse(success=False, error=f"Verification failed: {e.status_code}")
+    except aiohttp.ClientError as e:
         logger.error(f"[GOOGLE_PLAY_VERIFY] Request error: {e}")
         return GooglePlayVerifyResponse(success=False, error=f"Network error: {str(e)}")

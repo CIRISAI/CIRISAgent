@@ -52,6 +52,32 @@ from ciris_engine.schemas.telemetry.core import ServiceCorrelation
 
 # Import from modular components
 from .aggregator import ConsolidationCandidate, GracePolicy, MemoryType, TelemetryAggregator
+from .exceptions import (
+    MemoryBusUnavailableError,
+    MetricCollectionError,
+    NoThoughtDataError,
+    QueueStatusUnavailableError,
+    RuntimeControlBusUnavailableError,
+)
+from .helpers import (
+    METRIC_TYPES,
+    build_continuity_summary_from_memory,
+    build_telemetry_summary,
+    calculate_average_latencies,
+    calculate_error_rate,
+    calculate_query_time_window,
+    check_summary_cache,
+    collect_circuit_breaker_state,
+    collect_metric_aggregates,
+    convert_to_metric_record,
+    filter_by_metric_name,
+    filter_by_tags,
+    filter_by_time_range,
+    get_average_thought_depth,
+    get_queue_saturation,
+    get_service_uptime,
+    store_summary_cache,
+)
 from .storage import (
     store_behavioral_data,
     store_identity_context,
@@ -305,19 +331,6 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             MemoryBusUnavailableError: If memory bus not available
             MetricCollectionError: If query fails
         """
-        from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
-            MemoryBusUnavailableError,
-            MetricCollectionError,
-        )
-        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
-            calculate_query_time_window,
-            convert_to_metric_record,
-            filter_by_metric_name,
-            filter_by_tags,
-            filter_by_time_range,
-        )
-        from ciris_engine.schemas.services.graph.telemetry import MetricRecord
-
         if not self._memory_bus:
             raise MemoryBusUnavailableError("Memory bus not available for metric queries")
 
@@ -705,35 +718,25 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
         all telemetry data points.
         """
         try:
-            if not self._memory_bus:
-                logger.debug("Memory bus not available, returning 0 metric count")
+            # Post-A1 absorption (CIRISAgent#763): count tsdb_data nodes via
+            # persist's graph substrate. persist's `cirisgraph_count_nodes`
+            # (v1.5.25, CIRISPersist#65) is the count-only aggregate — no
+            # local pagination needed.
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            import json
+
+            engine = get_persist_engine()
+            if engine is None:
+                logger.debug("persist engine not wired, returning 0 metric count")
                 return 0
 
-            # Query the database directly to count TSDB_DATA nodes
-            from ciris_engine.logic.persistence import get_db_connection
+            # persist NodeFilter requires `scope` (AV-47); tsdb_data metric
+            # nodes are always written at GraphScope.LOCAL. Returns a raw int.
+            filter_json = json.dumps({"node_type": "tsdb_data", "scope": "LOCAL"})
+            count = int(engine.cirisgraph_count_nodes(filter_json))
 
-            # Get the memory service to access its db_path
-            memory_service = await self._memory_bus.get_service(handler_name="telemetry_service")
-            if not memory_service:
-                logger.debug("Memory service not available, returning 0 metric count")
-                return 0
-
-            db_path = getattr(memory_service, "db_path", None)
-            with get_db_connection(db_path=db_path) as conn:
-                cursor = conn.cursor()
-                # Count all TSDB_DATA nodes
-                cursor.execute("SELECT COUNT(*) as cnt FROM graph_nodes WHERE node_type = 'tsdb_data'")
-                result = cursor.fetchone()
-                # Handle both dict (PostgreSQL RealDictCursor) and tuple (SQLite Row) formats
-                if result is None:
-                    count = 0
-                elif isinstance(result, dict):
-                    count = result.get("cnt", 0)
-                else:
-                    count = result[0]
-
-                logger.debug(f"Total metric count from graph nodes: {count}")
-                return count
+            logger.debug(f"Total metric count from graph nodes: {count}")
+            return count
 
         except Exception as e:
             logger.error(f"Failed to get metric count: {type(e).__name__}: {e}", exc_info=True)
@@ -755,26 +758,6 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             RuntimeControlBusUnavailableError: If runtime control bus not available
             QueueStatusUnavailableError: If queue status cannot be retrieved
         """
-        from ciris_engine.logic.services.graph.telemetry_service.exceptions import (
-            MemoryBusUnavailableError,
-            NoThoughtDataError,
-            QueueStatusUnavailableError,
-            RuntimeControlBusUnavailableError,
-        )
-        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
-            METRIC_TYPES,
-            build_telemetry_summary,
-            calculate_average_latencies,
-            calculate_error_rate,
-            check_summary_cache,
-            collect_circuit_breaker_state,
-            collect_metric_aggregates,
-            get_average_thought_depth,
-            get_queue_saturation,
-            get_service_uptime,
-            store_summary_cache,
-        )
-
         now = self._now()
 
         # Always collect fresh circuit breaker state (not cacheable, changes rapidly)
@@ -855,12 +838,6 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
         Returns:
             ContinuitySummary with lifecycle metrics, or None if memory service unavailable
         """
-        from ciris_engine.logic.services.graph.telemetry_service.helpers import (
-            build_continuity_summary_from_memory,
-            check_summary_cache,
-            store_summary_cache,
-        )
-
         now = self._now()
 
         # Check cache

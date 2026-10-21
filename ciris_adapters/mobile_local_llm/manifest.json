@@ -1,0 +1,130 @@
+{
+  "module": {
+    "name": "mobile_local_llm",
+    "version": "1.0.0",
+    "description": "Local Gemma 4 inference on capable mobile devices via an on-device OpenAI-compatible server (Android today, iOS stub pending LiteRT-LM model)",
+    "author": "CIRIS Team"
+  },
+  "services": [{
+    "type": "LLM",
+    "priority": "HIGH",
+    "class": "mobile_local_llm.service.MobileLocalLLMService",
+    "capabilities": [
+      "call_llm_structured",
+      "provider:mobile_local"
+    ]
+  }],
+  "capabilities": [
+    "call_llm_structured",
+    "provider:mobile_local",
+    "on_device_inference"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.LLMService"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.runtime.resources",
+      "ciris_engine.schemas.services.core"
+    ]
+  },
+  "exports": {
+    "adapter_class": "mobile_local_llm.adapter.MobileLocalLLMAdapter",
+    "service_class": "mobile_local_llm.service.MobileLocalLLMService",
+    "config": "mobile_local_llm.config.MobileLocalLLMConfig"
+  },
+  "configuration": {
+    "enabled": {
+      "type": "boolean",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_ENABLED",
+      "default": true,
+      "description": "Master switch for the local inference adapter."
+    },
+    "model_variant": {
+      "type": "string",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_MODEL",
+      "default": "gemma-4-e2b",
+      "description": "Gemma 4 variant to run on-device (gemma-4-e2b or gemma-4-e4b)."
+    },
+    "model_path": {
+      "type": "string",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_MODEL_PATH",
+      "default": null,
+      "description": "Absolute path to the LiteRT-LM model bundle on disk."
+    },
+    "ios_model_path": {
+      "type": "string",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_IOS_MODEL_PATH",
+      "default": null,
+      "description": "Expected path to the iOS Gemma 4 model bundle. When missing the adapter reports IOS_STUB so the wizard can show 'coming soon'."
+    },
+    "server_binary": {
+      "type": "string",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_SERVER_BINARY",
+      "default": null,
+      "description": "Absolute path to the local inference server binary. If unset the adapter attaches to a pre-running server."
+    },
+    "host": {
+      "type": "string",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_HOST",
+      "default": "127.0.0.1",
+      "description": "Host the local inference server binds to (loopback by default)."
+    },
+    "port": {
+      "type": "integer",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_PORT",
+      "default": 8091,
+      "description": "Port the local inference server listens on."
+    },
+    "ready_timeout_seconds": {
+      "type": "float",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_READY_TIMEOUT",
+      "default": 30.0,
+      "description": "How long to wait for the server to become healthy after start()."
+    },
+    "request_timeout_seconds": {
+      "type": "float",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_REQUEST_TIMEOUT",
+      "default": 60.0,
+      "description": "Per-request inference timeout."
+    },
+    "health_interval_seconds": {
+      "type": "float",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_HEALTH_INTERVAL",
+      "default": 15.0,
+      "description": "Interval between background health probes."
+    },
+    "min_total_ram_gb_e2b": {
+      "type": "float",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_MIN_RAM_GB",
+      "default": 6.0,
+      "description": "Minimum total RAM (GB) required for the E2B tier."
+    },
+    "min_free_disk_gb": {
+      "type": "float",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_MIN_FREE_DISK_GB",
+      "default": 3.0,
+      "description": "Minimum free disk space (GB) required before local inference starts."
+    },
+    "force_capability": {
+      "type": "string",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_FORCE_CAPABILITY",
+      "default": null,
+      "description": "Override the capability probe with 'capable_e2b', 'capable_e4b', 'ios_stub', or 'incapable'. Testing only."
+    },
+    "allow_desktop": {
+      "type": "boolean",
+      "env": "CIRIS_MOBILE_LOCAL_LLM_ALLOW_DESKTOP",
+      "default": false,
+      "description": "Allow the adapter to run on desktop platforms for development."
+    }
+  },
+  "metadata": {
+    "provider": "mobile_local",
+    "platforms": ["android", "ios"],
+    "supported_architectures": ["arm64-v8a"],
+    "models": ["gemma-4-e2b", "gemma-4-e4b"],
+    "ios_status": "stub - adapter detects capable iOS hardware but stays unavailable until an adequate Gemma 4 LiteRT-LM model is shipped via the iOS bundle",
+    "notes": "Adapter owns the subprocess lifecycle of the inference server and reports unhealthy on weak devices so the LLM bus falls back to a hosted provider."
+  }
+}

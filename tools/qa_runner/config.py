@@ -2,7 +2,7 @@
 QA Runner configuration and module definitions.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -19,7 +19,6 @@ class QAModule(Enum):
     MEMORY = "memory"
     AUDIT = "audit"
     TOOLS = "tools"
-    TASKS = "tasks"
     GUIDANCE = "guidance"
     CONSENT = "consent"
     DSAR = "dsar"  # DSAR automation testing
@@ -29,6 +28,7 @@ class QAModule(Enum):
     BILLING = "billing"
     BILLING_INTEGRATION = "billing_integration"  # Full OAuth user billing workflow
     MULTI_OCCURRENCE = "multi_occurrence"
+    AGENT_MODE = "agent_mode"  # AgentMode GET/PUT + 256 GiB SERVER disk gate
     MESSAGE_ID_DEBUG = "message_id_debug"  # Message ID correlation debugging
     REDDIT = "reddit"  # Reddit adapter testing
     SQL_EXTERNAL_DATA = "sql_external_data"  # SQL external data service testing
@@ -44,15 +44,37 @@ class QAModule(Enum):
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
-    COVENANT = "covenant"  # Covenant invocation system (unfilterable kill switch) testing
-    COVENANT_METRICS = "covenant_metrics"  # Covenant metrics trace capture and signing testing
+    ACCORD_METRICS = "accord_metrics"  # Accord metrics trace capture and signing testing
     SYSTEM_MESSAGES = "system_messages"  # System message visibility for UI/UX testing
     HOSTED_TOOLS = "hosted_tools"  # CIRIS hosted tools (web search via proxy) testing
     UTILITY_ADAPTERS = "utility_adapters"  # Weather and navigation adapters testing
+    HOMEASSISTANT_AGENTIC = "homeassistant_agentic"  # Live Home Assistant + Music Assistant integration testing
+    DEFERRAL_TAXONOMY = "deferral_taxonomy"  # DSASPDMA rights/needs taxonomy coverage and routing tests
+    HE300_BENCHMARK = "he300_benchmark"  # HE-300 ethical benchmark via A2A adapter
+    LICENSED_AGENT = "licensed_agent"  # Licensed agent device auth (RFC 8628) flow testing
+    WALLET = "wallet"  # Wallet adapter testing (x402, validation, spending limits)
+    DEGRADED_MODE = "degraded_mode"  # Degraded mode behavior testing (no LLM provider)
+    MODEL_EVAL = "model_eval"  # Model quality evaluation with tough questions (requires --live)
+    PARALLEL_LOCALES = "parallel_locales"  # 29-locale parallel multi-turn convo (per-user channels)
+    SAFETY_BATTERY = (
+        "safety_battery"  # Run a canonical safety battery (CIRISNodeCore SCHEMA.md §11) against the agent via A2A
+    )
+    SAFETY_INTERPRET = "safety_interpret"  # Apply a rubric's criteria.json to a capture bundle; emit signed verdicts (CIRISNodeCore FSD/JUDGE_MODEL.md)
+    SECRETS_ENCRYPTION = "secrets_encryption"  # Secrets encryption testing (CIRISVerify v1.6.0+)
+    MEMORY_BENCHMARK = "memory_benchmark"  # Memory usage benchmark under message load
+    ACCORD_HALT = (
+        "accord_halt"  # CC 4.2.1.1 constitutional halt end to end (direct-latch mode; ciris-server >= 0.5.226)
+    )
+    MESH_REPRO = "mesh_repro"  # CIRISServer traceflow harness as an agent QA gate + prod-wheel test-anchor guard (#924)
+
+    # Cognitive state live testing modules
+    SOLITUDE_LIVE = "solitude_live"  # SOLITUDE state behavior testing
+    PLAY_LIVE = "play_live"  # PLAY state behavior testing
+    DREAM_LIVE = "dream_live"  # DREAM state behavior testing
 
     # Handler modules
     HANDLERS = "handlers"
-    SIMPLE_HANDLERS = "simple_handlers"
+    DEFERRAL = "deferral"  # Time-based deferral and TaskSchedulerService testing
 
     # Filter modules
     FILTERS = "filters"
@@ -66,11 +88,107 @@ class QAModule(Enum):
     SINGLE_STEP_SIMPLE = "single_step_simple"
     SINGLE_STEP_COMPREHENSIVE = "single_step_comprehensive"
     STREAMING = "streaming"  # H3ERE pipeline streaming verification
+    L4_ATTESTATION = (
+        "l4_attestation"  # Algorithm A (verify_tree) runtime contract — staged-QA L3+ floor + cache-population guard
+    )
 
     # Full suites
     API_FULL = "api_full"
-    HANDLERS_FULL = "handlers_full"
     ALL = "all"
+    # all_1 / all_2 — the ALL sequence split in half so CI can run them as a
+    # matrix (each leg fits a sane timeout; the two run as parallel jobs).
+    ALL_1 = "all_1"
+    ALL_2 = "all_2"
+
+
+# Canonical module sequence for `qa_runner all`. Both get_module_tests(ALL)
+# and QARunner.run() expand QAModule.ALL through this list — run() needs the
+# explicit members so its HTTP/SDK routing split runs SDK modules too (a bare
+# QAModule.ALL routes HTTP-only and silently skips every SDK module).
+# Order matters: STREAMING first (clean queue state), L4 attestation early.
+# Excludes credentialed / external-dep / live / destructive modules
+# (billing_integration, accord kill-switch, *_live, model_eval, setup, etc.).
+ALL_MODULE_SEQUENCE = [
+    # Streaming first — requires clean queue state
+    QAModule.STREAMING,
+    # L4 attestation contract — fail fast before downstream modules
+    QAModule.L4_ATTESTATION,
+    # Core API
+    QAModule.AUTH,
+    QAModule.TELEMETRY,
+    QAModule.AGENT,
+    QAModule.SYSTEM,
+    QAModule.MEMORY,
+    QAModule.AUDIT,
+    QAModule.TOOLS,
+    QAModule.GUIDANCE,
+    QAModule.CONSENT,
+    QAModule.DSAR,
+    # NOTE: dsar_multi_source is intentionally excluded — it is a
+    # multi-source integration module that needs connector registration,
+    # consent records and cross-source test data seeded into the DB before
+    # its erasure/verification tests are meaningful. That setup is not
+    # reliable inside the batched matrix (observed: "No test data found",
+    # "No consent found", "Verify SQL Deletion: user data still present").
+    # Special-setup module, same exclusion class as sql_external_data /
+    # multi_occurrence — run it standalone.
+    QAModule.PARTNERSHIP,
+    QAModule.BILLING,
+    # NOTE: reddit is intentionally excluded — it requires live Reddit API
+    # credentials (a secrets file CI does not have); its module raises
+    # "Reddit secrets not found" at construction, which _run_sdk_modules
+    # turns into a leg failure. Live-credential integration module — run it
+    # standalone where the secrets exist.
+    # NOTE: sql_external_data AND multi_occurrence are intentionally
+    # excluded — both are special-setup modules that don't compose with the
+    # batched --parallel-backends matrix:
+    #  - sql_external_data's pre-server _setup_test_database() writes a
+    #    SQLite fixture to a shared path that races ("disk I/O error").
+    #  - multi_occurrence spawns SEPARATE agent runtimes (its own
+    #    QARunner.run() special-case, run_true_multi_occurrence_integration_
+    #    test); "Failed to start occurrence_1" under the matrix. It needs a
+    #    dedicated server lifecycle.
+    # Same exclusion class as billing_integration. Run them standalone.
+    # Governance / observability
+    QAModule.ACCORD_METRICS,
+    QAModule.AGENT_MODE,
+    QAModule.CONTEXT_ENRICHMENT,
+    QAModule.SYSTEM_MESSAGES,
+    QAModule.AIR,
+    QAModule.DEFERRAL,
+    QAModule.DEFERRAL_TAXONOMY,
+    QAModule.SECRETS_ENCRYPTION,
+    # Adapter modules
+    QAModule.ADAPTER_AUTOLOAD,
+    QAModule.ADAPTER_MANIFEST,
+    QAModule.ADAPTER_CONFIG,
+    QAModule.ADAPTER_AVAILABILITY,
+    QAModule.UTILITY_ADAPTERS,
+    # Cognitive / behavior
+    QAModule.STATE_TRANSITIONS,
+    QAModule.COGNITIVE_STATE_API,
+    # NOTE: handlers / filters / vision are intentionally excluded — they are
+    # message→response flow modules that need per-test task-completion
+    # isolation (a clean channel per submit). Batched after a dozen other
+    # modules the channel still carries a stale active task, so new submits
+    # attach to it and never see a fresh TASK_COMPLETE (verified: handlers
+    # 9/10 standalone vs 0/10 batched). hosted_tools is excluded too — its
+    # balance_check / web_search tests need a CIRIS_BILLING_GOOGLE_ID_TOKEN
+    # (credentialed, same class as billing_integration). All four run clean
+    # standalone and are covered by the pytest shards; run them directly.
+    # SDK + extended
+    QAModule.SDK,
+    QAModule.EXTENDED_API,
+    QAModule.SINGLE_STEP_SIMPLE,
+    QAModule.SINGLE_STEP_COMPREHENSIVE,
+]
+
+# all_1 / all_2 — ALL_MODULE_SEQUENCE bisected so CI runs them as a matrix
+# (two parallel jobs, each fitting a sane timeout). Derived as slices so the
+# full sequence stays the single source of truth.
+_ALL_SPLIT = len(ALL_MODULE_SEQUENCE) // 2
+ALL_1_MODULE_SEQUENCE = ALL_MODULE_SEQUENCE[:_ALL_SPLIT]
+ALL_2_MODULE_SEQUENCE = ALL_MODULE_SEQUENCE[_ALL_SPLIT:]
 
 
 @dataclass
@@ -105,8 +223,12 @@ class QAConfig:
     api_port: int = 8080  # Default API port (matches DEFAULT_API_PORT in constants.py)
 
     # Authentication
-    admin_username: str = "admin"
-    admin_password: str = "ciris_admin_password"
+    # QA runner always wipes data and uses setup wizard to create test user
+    # with these known credentials
+    # A real first-run user who claims the node, as every wizard user does; the
+    # traces say QA through run_kind (CIRIS_TRACE_RUN_KIND), never this name.
+    admin_username: str = "qa-harness-user"
+    admin_password: str = "qa_test_password_12345"
 
     # OAuth test user configuration (for billing integration tests)
     oauth_test_user_id: str = "google:999888777666555444"
@@ -134,29 +256,118 @@ class QAConfig:
 
     # Server management
     auto_start_server: bool = True
+    # Where the backend under test writes incidents_latest.log, when it is not the
+    # server this runner started. The five-platform modular gate points this at a
+    # log pulled from an emulator or simulator; the gate still fails closed if the
+    # file is missing -- this only says WHERE to look, never whether to look.
+    incidents_log_path: Optional[Path] = None
     server_startup_timeout: float = (
         600.0  # Wakeup with rate-limited LLM: 60 LLM calls × ~40K tokens = 2.4M tokens, at 300K TPM = ~8-10 min
     )
     mock_llm: bool = True
     adapter: str = "api"
+    wipe_data: bool = False  # Wipe data directory before starting server
+
+    # Staged-environment mode
+    # When set, APIServerManager launches the server from a venv built off the
+    # canonical staged tree (tools.dev.stage_runtime → wheel → venv) instead of
+    # `sys.executable main.py` from the dev tree. Validates that the SHIPPED
+    # wheel passes QA, not just the source tree. Use Any to avoid a circular
+    # import at module-load time; the actual type is StagedEnvironment from
+    # tools.qa_runner.staged_env.
+    staged_env: Optional[Any] = None
 
     # Database backend configuration (for parallel testing)
     database_backends: List[str] = None  # None = ["sqlite"], or ["sqlite", "postgres"] for parallel
     postgres_url: str = "postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db"
-    postgres_port: int = 8001  # Port for PostgreSQL backend server (SQLite uses api_port)
+    postgres_api_port: int = (
+        8001  # API-server port for the postgres-backend run (NOT the PG DB port — see postgres_url)
+    )
     parallel_backends: bool = False  # Run backend tests in parallel instead of sequentially
 
     # Live LLM configuration (--live flag)
     live_api_key: Optional[str] = None
     live_model: Optional[str] = None
     live_base_url: Optional[str] = None
+    live_provider: Optional[str] = None  # "openai", "anthropic", "google", or auto-detect from base_url
 
-    # Live Lens configuration (--live-lens flag for covenant_metrics tests)
+    # Live Lens configuration (--live-lens flag for accord_metrics tests)
     # When True, uses https://lens.ciris-services-1.ai/lens-api/api/v1 instead of mock logshipper
     live_lens: bool = False
 
-    def get_module_tests(self, module: QAModule) -> List[QATestCase]:
-        """Get test cases for a specific module."""
+    # Federation delivery verification (--federation-delivery).
+    # The live-lens tee captures the HTTP lens-shipping path; this instead
+    # exercises + verifies the Reticulum FEDERATION DELIVERY path
+    # (edge start_federation_delivery → canonical-server-1). When set, the QA
+    # server boots with CIRIS_FEDERATION_DELIVERY=true and dials `canonical_peer`
+    # as a bootstrap peer (edge #296 unions it past any stale baked hint), then
+    # after the run the runner asserts the canonical peer rooted + traces
+    # delivered (GET /v1/federation/peers + /v1/federation/metrics).
+    federation_delivery: bool = False
+    # Correct canonical edge address (persist#404). The baked hint may still
+    # carry the stale :4243 until the 0.5.93 re-bake; this overrides it.
+    canonical_peer: str = "108.61.242.236:4242"
+
+    # Live Portal configuration (--live-portal flag for licensed_agent tests)
+    # When True, runs tests against live CIRISPortal server
+    live_portal: bool = False
+
+    # Fail-fast configuration
+    fail_fast: bool = True  # Exit on first test failure (use --proceed-anyway to disable)
+    test_timeout: float = 30.0  # Timeout for individual test interactions
+
+    # Memory benchmark configuration
+    message_count: int = 100  # Number of messages to send in memory benchmark
+    concurrent_channels: int = 4  # Number of concurrent channels for parallel testing
+
+    # Model evaluation configuration
+    model_eval_languages: List[str] = field(default_factory=lambda: ["am", "zh", "en", "es"])
+    model_eval_concurrency: int = 6
+    model_eval_profile_memory: bool = True
+    # Filter the model_eval question set by category (exact match, case-insensitive).
+    # Empty list = run all curated questions. Use to scope a run to a single
+    # topic e.g. ["RLHFTradeoffs"] for one bias-torque axis, or two like
+    # ["BenchmarkLegitimacy","ArchitectureTradeoffs"]. Combine with
+    # --model-eval-languages to run a single (question, language) pair for
+    # tight iteration loops.
+    model_eval_question_categories: List[str] = field(default_factory=list)
+    # Optional path to an external JSON questions file. When set, overrides
+    # the in-tree EVAL_QUESTIONS default. Sensitive / attractor-bait
+    # question sets live out-of-tree; point this at e.g.
+    # `~/bounce-test/model_eval_questions/v1_sensitive.json`.
+    model_eval_questions_file: Optional[str] = None
+
+    # Safety battery configuration. Loads a canonical battery from
+    # tests/safety/{lang_eng}_{domain}/v{N}_*_arc.json and runs each question
+    # through the agent via /v1/agent/interact. See CIRISNodeCore SCHEMA.md §11.
+    safety_battery_lang: str = "am"  # ISO 639-1 from manifest.json
+    safety_battery_limit: int = 0  # run only the first N questions (0 = all)
+    safety_battery_domain: str = "mental_health"  # cell's domain axis
+    safety_battery_template: str = "default"  # template_id for the agent persona
+
+    # Safety interpret module configuration. See CIRISNodeCore FSD/JUDGE_MODEL.md.
+    # Reads a capture bundle (produced by safety_battery) and applies the
+    # rubric's criteria.json to each (response, criterion) pair. The
+    # judge is a foundation model (default Claude Opus 4.5 via
+    # OpenRouter) called directly — NOT a CIRIS agent.
+    safety_interpret_capture_dir: Optional[str] = None  # required when module selected
+    safety_interpret_criteria_file: Optional[str] = None  # override; default resolved from BatteryManifest
+    safety_interpret_openrouter_key_file: Optional[str] = None  # default ~/.openrouter_key
+    safety_interpret_judge_model: Optional[str] = None  # default anthropic/claude-opus-4-5
+
+    # Setup-wizard template_id (read by server.py during setup completion).
+    # Modules that need a non-default template should set this; today only
+    # safety_battery uses it (see runner.py SAFETY_BATTERY construction case).
+    setup_template_id: Optional[str] = None
+
+    def get_module_tests(self, module: QAModule, admin_password: Optional[str] = None) -> List[QATestCase]:
+        """Get test cases for a specific module.
+
+        Args:
+            module: The QA module to get tests for.
+            admin_password: The admin password to use for auth tests.
+                           If None, uses the config's admin_password.
+        """
         from .modules import APITestModule, HandlerTestModule, SDKTestModule
         from .modules.comprehensive_api_tests import ComprehensiveAPITestModule
         from .modules.comprehensive_single_step_tests import ComprehensiveSingleStepTestModule
@@ -165,9 +376,12 @@ class QAConfig:
         from .modules.setup_tests import SetupTestModule
         from .modules.simple_single_step_tests import SimpleSingleStepTestModule
 
+        effective_password = admin_password or self.admin_password
+        effective_username = self.admin_username
+
         # API test modules
         if module == QAModule.AUTH:
-            return APITestModule.get_auth_tests()
+            return APITestModule.get_auth_tests(admin_username=effective_username, admin_password=effective_password)
         elif module == QAModule.TELEMETRY:
             return APITestModule.get_telemetry_tests()
         elif module == QAModule.AGENT:
@@ -180,8 +394,6 @@ class QAConfig:
             return APITestModule.get_audit_tests()
         elif module == QAModule.TOOLS:
             return APITestModule.get_tool_tests()
-        elif module == QAModule.TASKS:
-            return APITestModule.get_task_tests()
         elif module == QAModule.GUIDANCE:
             return APITestModule.get_guidance_tests()
         elif module == QAModule.SETUP:
@@ -242,11 +454,8 @@ class QAConfig:
         elif module == QAModule.AIR:
             # AIR parasocial prevention tests use SDK client
             return []  # Will be handled separately by runner
-        elif module == QAModule.COVENANT:
-            # Covenant tests run standalone (no server needed)
-            return []  # Will be handled separately by runner
-        elif module == QAModule.COVENANT_METRICS:
-            # Covenant metrics trace capture tests use SDK client
+        elif module == QAModule.ACCORD_METRICS:
+            # Accord metrics trace capture tests use SDK client
             return []  # Will be handled separately by runner
         elif module == QAModule.SYSTEM_MESSAGES:
             # System messages visibility tests use SDK client
@@ -257,12 +466,28 @@ class QAConfig:
         elif module == QAModule.UTILITY_ADAPTERS:
             # Utility adapters (weather, navigation) tests use SDK client
             return []  # Will be handled separately by runner
+        elif module == QAModule.HE300_BENCHMARK:
+            from .modules.he300_benchmark_tests import HE300BenchmarkModule
+
+            return HE300BenchmarkModule.get_he300_benchmark_tests()
+        elif module == QAModule.DEGRADED_MODE:
+            # Degraded mode tests use SDK client
+            return []  # Will be handled separately by runner
+        elif module == QAModule.ACCORD_HALT:
+            # Drives a real node's latch in the runner's throwaway CIRIS_HOME.
+            # NOT in the ALL sequence: it needs ciris-server >= 0.5.226 (0.5.225
+            # refuses trace ingest while halted) and skips below that.
+            return []  # Will be handled separately by runner
+        elif module == QAModule.MESH_REPRO:
+            # Mesh-repro drives the external CIRISServer harness (no CIRIS
+            # server, no HTTP test cases). External-dep module — NOT in the
+            # ALL sequence (same exclusion class as billing_integration);
+            # run it standalone where a CIRISServer checkout + docker exist.
+            return []  # Will be handled separately by runner
 
         # Handler test modules
         elif module == QAModule.HANDLERS:
             return HandlerTestModule.get_handler_tests()
-        elif module == QAModule.SIMPLE_HANDLERS:
-            return HandlerTestModule.get_simple_handler_tests()
 
         # Filter test modules
         elif module == QAModule.FILTERS:
@@ -270,7 +495,7 @@ class QAConfig:
 
         # SDK test modules
         elif module == QAModule.SDK:
-            return SDKTestModule.get_sdk_tests()
+            return SDKTestModule.get_sdk_tests(admin_username=effective_username, admin_password=effective_password)
 
         # Extended API tests
         elif module == QAModule.EXTENDED_API:
@@ -294,6 +519,12 @@ class QAConfig:
 
             return StreamingVerificationModule.get_streaming_verification_tests()
 
+        # L4 attestation contract (verify_tree / Algorithm A)
+        elif module == QAModule.L4_ATTESTATION:
+            from .modules.l4_attestation_tests import L4AttestationModule
+
+            return L4AttestationModule.get_l4_attestation_tests()
+
         # Aggregate modules
         elif module == QAModule.API_FULL:
             tests = []
@@ -305,54 +536,22 @@ class QAConfig:
                 QAModule.MEMORY,
                 QAModule.AUDIT,
                 QAModule.TOOLS,
-                QAModule.TASKS,
                 QAModule.GUIDANCE,
             ]:
                 tests.extend(self.get_module_tests(m))
             return tests
 
-        elif module == QAModule.HANDLERS_FULL:
+        elif module in (QAModule.ALL, QAModule.ALL_1, QAModule.ALL_2):
             tests = []
-            for m in [QAModule.HANDLERS, QAModule.SIMPLE_HANDLERS]:
-                tests.extend(self.get_module_tests(m))
-            return tests
-
-        elif module == QAModule.ALL:
-            tests = []
-            # Run all modules in sequence - comprehensive test suite
-            for m in [
-                # Streaming tests FIRST (requires clean queue state)
-                QAModule.STREAMING,
-                # Core API modules
-                QAModule.AUTH,
-                QAModule.TELEMETRY,
-                QAModule.AGENT,
-                QAModule.SYSTEM,
-                QAModule.MEMORY,
-                QAModule.AUDIT,
-                QAModule.TOOLS,
-                QAModule.TASKS,
-                QAModule.GUIDANCE,
-                QAModule.CONSENT,
-                QAModule.DSAR,
-                QAModule.DSAR_MULTI_SOURCE,
-                QAModule.PARTNERSHIP,
-                QAModule.BILLING,
-                QAModule.REDDIT,
-                QAModule.SQL_EXTERNAL_DATA,
-                QAModule.MULTI_OCCURRENCE,
-                # Handler modules
-                QAModule.HANDLERS,
-                QAModule.SIMPLE_HANDLERS,
-                # Filter modules
-                QAModule.FILTERS,
-                # SDK modules
-                QAModule.SDK,
-                # Extended modules
-                QAModule.EXTENDED_API,
-                QAModule.SINGLE_STEP_SIMPLE,
-                QAModule.SINGLE_STEP_COMPREHENSIVE,
-            ]:
+            # Run all modules in sequence - comprehensive test suite.
+            # The *_MODULE_SEQUENCE lists are the single source of truth
+            # (shared with QARunner.run()'s ALL→constituents expansion).
+            _seq = {
+                QAModule.ALL: ALL_MODULE_SEQUENCE,
+                QAModule.ALL_1: ALL_1_MODULE_SEQUENCE,
+                QAModule.ALL_2: ALL_2_MODULE_SEQUENCE,
+            }[module]
+            for m in _seq:
                 tests.extend(self.get_module_tests(m))
             return tests
 

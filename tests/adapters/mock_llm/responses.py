@@ -4,7 +4,6 @@ import re
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
-from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
     EntropyCheckResult,
@@ -12,6 +11,7 @@ from ciris_engine.schemas.conscience.core import (
     OptimizationVetoResult,
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult, CSDMAResult, DSDMAResult, EthicalDMAResult
+from ciris_engine.schemas.runtime.enums import HandlerActionType
 
 from .responses_action_selection import action_selection
 from .responses_epistemic import coherence, entropy
@@ -264,9 +264,9 @@ def ethical_dma(context: List[str] = None) -> EthicalDMAResult:
                 "Autonomy - respects user and agent autonomy. "
                 "Justice - treats all fairly. "
                 "Transparency - openly declares identity and purpose. "
-                "Covenant alignment - wakeup ritual proceeding as designed."
+                "Accord alignment - wakeup ritual proceeding as designed."
             )
-            rationale = "Wakeup ritual thought aligns with CIRIS covenant principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
+            rationale = "Wakeup ritual thought aligns with CIRIS accord principles. Promoting agent integrity and identity verification as required by Meta-Goal M-1."
         elif is_user_question:
             stakeholders = "user, agent, community"
             conflicts = "none"
@@ -290,11 +290,21 @@ def ethical_dma(context: List[str] = None) -> EthicalDMAResult:
                 "Integrity - maintains system coherence. "
                 "General alignment - proceeding with appropriate caution."
             )
-            rationale = "General thought processing aligns with ethical guidelines. No contraindications to CIRIS covenant principles detected."
+            rationale = "General thought processing aligns with ethical guidelines. No contraindications to CIRIS accord principles detected."
 
+    # PDMA v3.0 reshape: emit {action, rationale, alignment_score}.
+    # Concatenate the old prose into one rationale paragraph for the mock.
+    combined_rationale = (
+        f"Stakeholders: {stakeholders}. "
+        f"Conflicts: {conflicts}. "
+        f"{rationale} "
+        f"{alignment_check}"
+    )
     return _attach_extras(
         EthicalDMAResult(
-            alignment_check=alignment_check, stakeholders=stakeholders, conflicts=conflicts, reasoning=str(rationale)
+            action=HandlerActionType.SPEAK,
+            rationale=combined_rationale,
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
     )
 
@@ -358,24 +368,10 @@ def ds_dma(context: List[str] = None) -> DSDMAResult:
     return _attach_extras(DSDMAResult(domain=domain_val, domain_alignment=score_val, flags=flags, reasoning=reasoning))
 
 
-def ds_dma_llm_output(context: List[str] = None) -> BaseDSDMA.LLMOutputForDSDMA:
-    context = context or []
-    reasoning = f"Mock DSDMA LLM output. Context: {', '.join(context)}" if context else "Mock DSDMA LLM output."
-    score_val = 0.9
-    result = BaseDSDMA.LLMOutputForDSDMA(
-        score=score_val,
-        recommended_action="proceed",
-        flags=context,
-        reasoning=reasoning,
-    )
-    return _attach_extras(result)
-
-
 _RESPONSE_MAP = {
     EthicalDMAResult: ethical_dma,
     CSDMAResult: cs_dma,
     DSDMAResult: ds_dma,
-    BaseDSDMA.LLMOutputForDSDMA: ds_dma_llm_output,
     OptimizationVetoResult: optimization_veto,
     EpistemicHumilityResult: epistemic_humility,
     ActionSelectionDMAResult: action_selection,

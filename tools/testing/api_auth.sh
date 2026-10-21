@@ -38,7 +38,7 @@ check_api() {
 # Function to authenticate and get token
 authenticate() {
     local username="${1:-admin}"
-    local password="${2:-ciris_admin_password}"
+    local password="${2:-qa_test_password_12345}"
 
     print_status "Authenticating with CIRIS API at ${API_BASE_URL}..."
 

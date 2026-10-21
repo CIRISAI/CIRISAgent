@@ -6,7 +6,7 @@ Provides resource usage information and service status monitoring.
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict
+from typing import Annotated, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -19,12 +19,22 @@ from .schemas import ResourceUsageResponse, ServicesStatusResponse
 
 logger = logging.getLogger(__name__)
 
+# Type alias for authenticated observer dependency (S8410 compliance)
+AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
+
 router = APIRouter()
 
 
-@router.get("/resources", response_model=SuccessResponse[ResourceUsageResponse])
+@router.get(
+    "/resources",
+    responses={
+        500: {"description": "Error getting resource usage"},
+        503: {"description": "Resource monitor not available"},
+    },
+)
 async def get_resource_usage(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    auth: AuthObserverDep,
 ) -> SuccessResponse[ResourceUsageResponse]:
     """
     Resource usage and limits.
@@ -64,9 +74,10 @@ async def get_resource_usage(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/services", response_model=SuccessResponse[ServicesStatusResponse])
+@router.get("/services")
 async def get_services_status(
-    request: Request, auth: AuthContext = Depends(require_observer)
+    request: Request,
+    auth: AuthObserverDep,
 ) -> SuccessResponse[ServicesStatusResponse]:
     """
     Service status.

@@ -48,11 +48,13 @@ class ActionHandlerDependencies:
         time_service: TimeServiceProtocol,
         secrets_service: Optional[SecretsService] = None,
         shutdown_callback: Optional[Callable[[], None]] = None,
+        task_scheduler_service: Optional[Any] = None,
     ) -> None:
         self.bus_manager = bus_manager
         self.time_service = time_service
         self.secrets_service = secrets_service
         self.shutdown_callback = shutdown_callback
+        self.task_scheduler_service = task_scheduler_service
         self._shutdown_requested = False
         self._shutdown_task: Optional[asyncio.Task[Any]] = None
 
@@ -94,6 +96,38 @@ class BaseActionHandler(ABC):
         # Track current correlation for tracing
         self._current_correlation: Optional[ServiceCorrelation] = None
         self._trace_start_time: Optional[datetime] = None
+
+    def _localized_followup(self, _handler_key: str, default: Optional[str] = None, **params: Any) -> str:
+        """Build a localized agent-facing follow-up string.
+
+        Wraps `get_string()` with the agent's preferred language so handler
+        follow-up content is rendered in the user's language rather than
+        hard-coded English. Always prefixed with the `CIRIS_FOLLOW_UP_THOUGHT:`
+        marker that downstream processing depends on — that marker is a code
+        sentinel and must not be translated.
+
+        The first positional parameter is intentionally named with a leading
+        underscore to avoid collisions with substitution kwargs (e.g., handlers
+        passing `key=node.id` for FORGET payloads).
+
+        Args:
+            _handler_key: Sub-key under the `handlers.*` namespace (e.g., "speak_followup_success").
+            default: Fallback text if no localization entry exists.
+            **params: Substitution values (use `{name}` placeholders in the localized string).
+        """
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+        lang = get_preferred_language()
+        # Fetch the raw template (no interpolation here — get_string's own
+        # `key` parameter would collide with substitution kwargs that handlers
+        # pass through, e.g. FORGET passing `key=node.id`).
+        body = get_string(lang_code=lang, key=f"handlers.{_handler_key}", default=default)
+        # Apply substitutions ourselves so any kwarg name is safe.
+        for name, value in params.items():
+            body = body.replace("{" + name + "}", str(value))
+        if body.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
+            return body
+        return f"CIRIS_FOLLOW_UP_THOUGHT: {body}"
 
     def complete_thought_and_create_followup(
         self,

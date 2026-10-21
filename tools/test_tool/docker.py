@@ -19,7 +19,7 @@ class DockerManager:
         Returns:
             Tuple of (success, message)
         """
-        print("🔨 Rebuilding test container...")
+        print(" Rebuilding test container...")
         # Set environment variables for UID/GID
         env = os.environ.copy()
         env["USER_UID"] = str(os.getuid())

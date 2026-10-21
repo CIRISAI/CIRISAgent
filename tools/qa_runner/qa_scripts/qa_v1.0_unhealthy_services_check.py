@@ -16,7 +16,7 @@ async def check_unhealthy_services():
 
     async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as client:
         # Login
-        response = await client.post("/v1/auth/login", json={"username": "admin", "password": "ciris_admin_password"})
+        response = await client.post("/v1/auth/login", json={"username": "admin", "password": "qa_test_password_12345"})
         auth_data = response.json()
         token = auth_data["access_token"]
         client.headers["Authorization"] = f"Bearer {token}"
@@ -44,11 +44,11 @@ async def check_unhealthy_services():
             else:
                 unhealthy.append(service_name)
 
-        print(f"\n✅ HEALTHY SERVICES ({len(healthy)}):")
+        print(f"\n[OK] HEALTHY SERVICES ({len(healthy)}):")
         for svc in healthy:
             print(f"   - {svc}")
 
-        print(f"\n❌ UNHEALTHY SERVICES ({len(unhealthy)}):")
+        print(f"\n[FAIL] UNHEALTHY SERVICES ({len(unhealthy)}):")
         for svc in unhealthy:
             service_data = services[svc]
             print(f"   - {svc}")

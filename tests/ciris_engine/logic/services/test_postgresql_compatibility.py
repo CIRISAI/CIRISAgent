@@ -75,89 +75,24 @@ class TestWiseAuthorityPostgreSQLCompat:
 class TestTelemetryServicePostgreSQLCompat:
     """Test TelemetryService PostgreSQL compatibility."""
 
-    def _create_mock_service_with_memory_bus(self):
-        """Create a GraphTelemetryService with mocked memory bus."""
-        from unittest.mock import AsyncMock
-
-        service = GraphTelemetryService.__new__(GraphTelemetryService)
-        service.db_path = ":memory:"
-
-        # Mock memory service that provides db_path
-        mock_memory_service = MagicMock()
-        mock_memory_service.db_path = ":memory:"
-
-        # Mock memory bus that returns the memory service
-        mock_memory_bus = MagicMock()
-        mock_memory_bus.get_service = AsyncMock(return_value=mock_memory_service)
-
-        service._memory_bus = mock_memory_bus
-        return service
-
-    @pytest.mark.asyncio
-    async def test_get_metric_count_with_dict_result(self):
-        """Test get_metric_count handles dict result from PostgreSQL RealDictCursor."""
-        service = self._create_mock_service_with_memory_bus()
-
-        # Mock cursor that returns dict (like PostgreSQL RealDictCursor)
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = {"cnt": 42}
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-
-        with patch("ciris_engine.logic.persistence.get_db_connection", return_value=mock_conn):
-            count = await service.get_metric_count()
-
-        assert count == 42
-
-    @pytest.mark.asyncio
-    async def test_get_metric_count_with_tuple_result(self):
-        """Test get_metric_count handles tuple result from SQLite Row."""
-        service = self._create_mock_service_with_memory_bus()
-
-        # Mock cursor that returns tuple (like SQLite Row)
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (99,)
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-
-        with patch("ciris_engine.logic.persistence.get_db_connection", return_value=mock_conn):
-            count = await service.get_metric_count()
-
-        assert count == 99
-
-    @pytest.mark.asyncio
-    async def test_get_metric_count_with_none_result(self):
-        """Test get_metric_count handles None result."""
-        service = self._create_mock_service_with_memory_bus()
-
-        # Mock cursor that returns None
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = None
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=False)
-
-        with patch("ciris_engine.logic.persistence.get_db_connection", return_value=mock_conn):
-            count = await service.get_metric_count()
-
-        assert count == 0
+    # TODO(CIRISPersist): tests for get_metric_count via get_db_connection cursor
+    # shape (dict-vs-tuple) were removed in Phase 3a — get_metric_count now
+    # paginates persist's `cirisgraph_query_nodes` instead of executing raw SQL,
+    # so the PostgreSQL RealDictCursor vs SQLite Row code path no longer exists.
 
     @pytest.mark.asyncio
     async def test_get_metric_count_no_memory_bus(self):
-        """Test get_metric_count returns 0 when memory bus is not available."""
+        """Test get_metric_count returns 0 when persist engine is not wired."""
         service = GraphTelemetryService.__new__(GraphTelemetryService)
         service.db_path = ":memory:"
         service._memory_bus = None
 
-        count = await service.get_metric_count()
+        # When persist engine isn't wired, get_metric_count returns 0.
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=None,
+        ):
+            count = await service.get_metric_count()
 
         assert count == 0
 

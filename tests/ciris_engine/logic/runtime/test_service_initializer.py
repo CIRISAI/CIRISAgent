@@ -137,8 +137,17 @@ class TestServiceInitializer:
         assert service_initializer._db_path is not None
 
     @pytest.mark.asyncio
-    async def test_initialize_memory(self, service_initializer, mock_essential_config):
-        """Test memory services initialization."""
+    async def test_initialize_memory(self, service_initializer, mock_essential_config, persist_engine):
+        """Test memory services initialization.
+
+        Requests ``persist_engine`` so a real ciris-persist Engine is wired into
+        ``persistence.models.graph`` before ``initialize_memory_service`` starts
+        the SecretsService: post-#896 the SecretsService drives the persist
+        substrate, so ``SecretsService.start()`` → ``_check_dependencies()`` →
+        ``_get_engine()`` requires the wired engine (else "Required dependencies
+        not available"). The per-test engine reset in conftest nulls the global
+        before every test, so this fixture must supply it explicitly.
+        """
         # Initialize prerequisites
         await service_initializer.initialize_infrastructure_services()
 
@@ -154,8 +163,14 @@ class TestServiceInitializer:
         assert service_initializer.config_accessor is not None
 
     @pytest.mark.asyncio
-    async def test_initialize_identity(self, service_initializer, mock_essential_config):
-        """Test identity initialization."""
+    async def test_initialize_identity(self, service_initializer, mock_essential_config, persist_engine):
+        """Test identity initialization.
+
+        Requests ``persist_engine`` for the same reason as
+        ``test_initialize_memory``: it calls ``initialize_memory_service`` (which
+        starts the substrate-backed SecretsService) and so needs the persist
+        Engine wired into ``persistence.models.graph``.
+        """
         # Initialize prerequisites
         await service_initializer.initialize_infrastructure_services()
         await service_initializer.initialize_memory_service(mock_essential_config)
@@ -201,6 +216,45 @@ class TestServiceInitializer:
                 # Should create wise authority service
                 assert service_initializer.wa_auth_system is not None
                 mock_wa.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_security_init_recovers_stranded_wa_certificates(
+        self, service_initializer, mock_essential_config
+    ):
+        """The long-jump `wa_cert` recovery must run during security init.
+
+        A 2.7.x -> 2.9.x upgrade leaves the owner's certificate in the AUDIT
+        database while the store now reads persist. If this hook stops firing
+        the agent boots GREEN and the owner silently cannot log in
+        (see wa_cert_legacy_migration).
+        """
+        await service_initializer.initialize_infrastructure_services()
+
+        service_initializer.config_accessor = Mock()
+        service_initializer.config_accessor.get_path = AsyncMock(return_value=Path("test_auth.db"))
+
+        call_order = []
+
+        mock_auth_service = Mock()
+        mock_auth_service.start = AsyncMock(side_effect=lambda: call_order.append("auth_start"))
+
+        with patch(
+            "ciris_engine.logic.services.infrastructure.authentication.AuthenticationService",
+            return_value=mock_auth_service,
+        ), patch("ciris_engine.logic.runtime.service_initializer.WiseAuthorityService") as mock_wa_class, patch(
+            "ciris_engine.logic.persistence.stores.wa_cert_legacy_migration.migrate_legacy_wa_certificates"
+        ) as mock_migrate:
+            mock_migrate.side_effect = lambda cfg: call_order.append("migrate")
+            mock_wa = Mock()
+            mock_wa.start = AsyncMock()
+            mock_wa_class.return_value = mock_wa
+
+            await service_initializer.initialize_security_services(mock_essential_config, mock_essential_config)
+
+        mock_migrate.assert_called_once()
+        # Must run AFTER the auth service is up (persist engine wired, store
+        # usable) and before adapters start minting their own observers.
+        assert call_order == ["auth_start", "migrate"]
 
     @pytest.mark.asyncio
     async def test_initialize_services(self, service_initializer, mock_essential_config):
@@ -254,7 +308,7 @@ class TestServiceInitializer:
         service_initializer.service_registry.register_service.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_initialize_llm_service_real(self, service_initializer, mock_essential_config):
+    async def test_initialize_llm_service_real(self, service_initializer, mock_essential_config, monkeypatch):
         """Test LLM service initialization with real provider."""
         service_initializer._mock_llm = False
         service_initializer.service_registry = Mock()
@@ -265,9 +319,20 @@ class TestServiceInitializer:
         mock_essential_config.services.llm_model = "gpt-4"
         mock_essential_config.services.llm_timeout = 30
         mock_essential_config.services.llm_max_retries = 3
-        os.environ["OPENAI_API_KEY"] = "test-key"
+        # Use monkeypatch for thread-safe environment variable handling
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         # Clear secondary LLM keys to ensure only primary is initialized in this test
-        os.environ.pop("CIRIS_OPENAI_API_KEY_2", None)
+        monkeypatch.delenv("CIRIS_OPENAI_API_KEY_2", raising=False)
+        # Clear LLM replica env so this test always sees a single replica
+        # regardless of what other parallel tests are doing in os.environ.
+        monkeypatch.delenv("CIRIS_LLM_REPLICAS", raising=False)
+        # Clear billing ID tokens — when a non-CIRIS-proxy primary is configured
+        # AND an id_token is present, _initialize_llm_services auto-registers
+        # a CIRIS proxy fallback (a 2nd OpenAICompatibleClient). Other tests in
+        # the same xdist worker can leak these tokens into our env, breaking
+        # the call_count==1 assertion.
+        monkeypatch.delenv("CIRIS_BILLING_GOOGLE_ID_TOKEN", raising=False)
+        monkeypatch.delenv("CIRIS_BILLING_APPLE_ID_TOKEN", raising=False)
 
         with patch("ciris_engine.logic.runtime.service_initializer.OpenAICompatibleClient") as mock_llm_class:
             mock_llm = AsyncMock()
@@ -277,13 +342,8 @@ class TestServiceInitializer:
             await service_initializer._initialize_llm_services(mock_essential_config)
 
             assert service_initializer.llm_service is not None
-            # Check if secondary LLM is configured
-            if os.environ.get("CIRIS_OPENAI_API_KEY_2"):
-                # Both primary and secondary LLM services initialized
-                assert mock_llm_class.call_count == 2
-            else:
-                # Only primary LLM service initialized
-                assert mock_llm_class.call_count == 1
+            # Only primary LLM service should be initialized (secondary key cleared)
+            assert mock_llm_class.call_count == 1
 
     @pytest.mark.asyncio
     async def test_service_cleanup(self, service_initializer):
@@ -389,6 +449,82 @@ class TestServiceInitializer:
         assert service_initializer.tsdb_consolidation_service is not None
 
     @pytest.mark.asyncio
+    async def test_authentication_service_registered_under_wise_authority(
+        self, service_initializer, mock_essential_config
+    ):
+        """REGRESSION: AuthenticationService MUST be registered under
+        ServiceType.WISE_AUTHORITY alongside WiseAuthorityService.
+
+        Without this registration, batch_context.prefetch_for_batch's strict
+        attestation gate raises CRITICAL on every thought because no service
+        in the registry exposes `await_attestation_ready` (WiseAuthorityService
+        carries the deferral/guidance surface; AuthenticationService carries
+        the attestation surface). Both services legitimately serve the
+        WISE_AUTHORITY type — consumers disambiguate via attribute presence.
+
+        This test would have caught the production regression where
+        AuthenticationService was created and started but only assigned to
+        `service_initializer.auth_service` and never registered, leaving the
+        gate unable to find any await_attestation_ready provider.
+        """
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        # Mock the heavy bits so we can exercise the registration path.
+        # Note: initialize_all_services REPLACES self.service_registry with
+        # get_global_registry() at line ~530, so we patch get_global_registry
+        # itself to return our Mock, otherwise our injection is silently
+        # discarded.
+        captured_registry = Mock()
+        captured_registry.register_service = Mock()
+
+        service_initializer.bus_manager = Mock()
+        service_initializer.bus_manager.memory = Mock()
+        service_initializer.memory_service = Mock()
+        service_initializer.time_service = Mock()
+        service_initializer.telemetry_service = Mock()
+        service_initializer.config_service = Mock()
+        service_initializer.llm_service = Mock()
+
+        # Pre-set both services so the registration branch can register them.
+        # In production both come out of initialize_security_services; we
+        # bypass that here and inject directly because the assertion is
+        # specifically about the registration step.
+        service_initializer.auth_service = Mock(
+            spec=["await_attestation_ready", "get_cached_attestation", "run_attestation", "start"]
+        )
+        service_initializer.wa_auth_system = Mock(
+            spec=["send_deferral", "get_pending_deferrals", "resolve_deferral", "start"]
+        )
+
+        with patch(
+            "ciris_engine.logic.registries.base.get_global_registry",
+            return_value=captured_registry,
+        ):
+            with patch.object(service_initializer, "_initialize_llm_services"):
+                with patch.object(service_initializer, "_initialize_audit_services"):
+                    await service_initializer.initialize_all_services(
+                        mock_essential_config, mock_essential_config, "test_agent", None, []
+                    )
+
+        # Collect every register_service call's (service_type, provider) pair.
+        wa_registrations = []
+        for call in captured_registry.register_service.call_args_list:
+            kwargs = call.kwargs
+            if kwargs.get("service_type") == ServiceType.WISE_AUTHORITY:
+                wa_registrations.append(kwargs.get("provider"))
+
+        # Both services MUST appear under WISE_AUTHORITY.
+        assert service_initializer.wa_auth_system in wa_registrations, (
+            "WiseAuthorityService missing from WISE_AUTHORITY registrations — " "deferral/guidance path will be broken"
+        )
+        assert service_initializer.auth_service in wa_registrations, (
+            "AuthenticationService missing from WISE_AUTHORITY registrations — "
+            "the strict attestation gate in batch_context will raise CRITICAL "
+            "on every thought because no registered service exposes "
+            "await_attestation_ready"
+        )
+
+    @pytest.mark.asyncio
     async def test_initialization_order_dependencies(self, service_initializer, mock_essential_config):
         """Test that services are initialized in correct dependency order."""
         calls = []
@@ -444,6 +580,7 @@ class TestServiceInitializer:
         mock_services.llm_model = "test-model"
         mock_services.llm_max_retries = 3
         mock_services.llm_timeout = 30
+        mock_services.llm_timeout_local = 300
         mock_essential_config.services = mock_services
 
         # Mock OpenAI API key present
@@ -486,6 +623,7 @@ class TestServiceInitializer:
         mock_services.llm_model = "test-model"
         mock_services.llm_max_retries = 3
         mock_services.llm_timeout = 30
+        mock_services.llm_timeout_local = 300
         mock_essential_config.services = mock_services
 
         service_initializer._mock_llm = True
@@ -1002,6 +1140,429 @@ class TestAdapterLoading:
             assert call_kwargs["filter_service"] is None
             assert call_kwargs["secrets_service"] is None
             assert call_kwargs["time_service"] is None
+
+
+class TestAutoLoadAdaptersFlag:
+    """Test cases for auto_load_adapters template flag."""
+
+    @pytest.fixture
+    def temp_data_dir(self):
+        """Create temporary data directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield temp_dir
+
+    @pytest.fixture
+    def mock_essential_config(self, temp_data_dir):
+        """Create mock essential config."""
+        config = Mock(spec=EssentialConfig)
+        config.data_dir = temp_data_dir
+        config.db_path = os.path.join(temp_data_dir, "test.db")
+        config.log_level = "INFO"
+
+        # Add database attribute
+        mock_database = Mock()
+        mock_database.main_db = Path(temp_data_dir) / "test.db"
+        mock_database.secrets_db = Path(temp_data_dir) / "secrets.db"
+        mock_database.audit_db = Path(temp_data_dir) / "audit.db"
+        mock_database.database_url = None
+        config.database = mock_database
+
+        # Add security attribute
+        mock_security = Mock()
+        mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        config.security = mock_security
+
+        # Add graph attribute
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24
+        config.graph = mock_graph
+
+        # Add adapters attribute - enable auto_discovery by default for these tests
+        mock_adapters = Mock()
+        mock_adapters.auto_discovery = True
+        mock_adapters.disabled_adapters = []
+        config.adapters = mock_adapters
+
+        # Add agent_occurrence_id for adapter injection
+        config.agent_occurrence_id = "default"
+
+        return config
+
+    @pytest.fixture
+    def service_initializer(self, mock_essential_config):
+        """Create ServiceInitializer instance."""
+        initializer = ServiceInitializer(essential_config=mock_essential_config)
+        initializer._db_path = mock_essential_config.db_path
+        initializer._mock_llm = True
+        initializer.bus_manager = Mock()
+        initializer.config_service = Mock()
+        return initializer
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_disabled_when_template_flag_false(self, service_initializer):
+        """Test that skill adapters don't auto-load when auto_load_adapters is False."""
+        # Create mock identity with auto_load_adapters = False
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                # Mock AdapterDiscoveryService to track if it's called
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # AdapterDiscoveryService should NOT be instantiated
+                    mock_discovery.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_disabled_when_no_identity(self, service_initializer):
+        """Test that skill adapters don't auto-load when no identity exists."""
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=None,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # AdapterDiscoveryService should NOT be instantiated
+                    mock_discovery.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_disabled_when_config_auto_discovery_false(
+        self, service_initializer, mock_essential_config
+    ):
+        """Test that skill adapters don't auto-load when config.adapters.auto_discovery is False."""
+        # Enable template flag but disable config flag
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+
+        # Disable in config
+        mock_essential_config.adapters.auto_discovery = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # AdapterDiscoveryService should NOT be instantiated
+                    mock_discovery.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_enabled_when_both_flags_true(self, service_initializer, mock_essential_config):
+        """Test that skill adapters auto-load when both template and config flags are True."""
+        # Enable both flags
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+        mock_essential_config.adapters.auto_discovery = True
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                # Mock the discovery service with AsyncMock for async methods
+                mock_discovery_instance = Mock()
+                mock_discovery_instance.discover_adapters.return_value = []
+                mock_discovery_instance.load_eligible_adapters = AsyncMock(return_value=[])
+
+                with patch(
+                    "ciris_engine.logic.services.tool.AdapterDiscoveryService",
+                    return_value=mock_discovery_instance,
+                ) as mock_discovery_class:
+                    with patch("ciris_engine.logic.services.tool.eligibility_checker.ToolEligibilityChecker"):
+                        with patch(
+                            "ciris_engine.logic.config.env_utils.get_env_var",
+                            return_value=None,
+                        ):
+                            await service_initializer._initialize_skill_adapters()
+
+                            # AdapterDiscoveryService SHOULD be instantiated
+                            mock_discovery_class.assert_called_once()
+                            # load_eligible_adapters should be called (the async method)
+                            mock_discovery_instance.load_eligible_adapters.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skill_adapters_checks_core_profile_attribute(self, service_initializer):
+        """Test that we properly check core_profile.auto_load_adapters attribute."""
+        # Create identity without auto_load_adapters attribute on core_profile
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock(spec=[])  # No auto_load_adapters attr
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                with patch("ciris_engine.logic.services.tool.AdapterDiscoveryService") as mock_discovery:
+                    await service_initializer._initialize_skill_adapters()
+
+                    # Should not proceed since hasattr returns False
+                    mock_discovery.assert_not_called()
+
+
+class TestIsAutoDiscoveryEnabled:
+    """Tests for _is_auto_discovery_enabled helper method."""
+
+    @pytest.fixture
+    def temp_data_dir(self):
+        """Create temporary data directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield temp_dir
+
+    @pytest.fixture
+    def mock_essential_config(self, temp_data_dir):
+        """Create mock essential config."""
+        config = Mock(spec=EssentialConfig)
+        config.data_dir = temp_data_dir
+
+        mock_database = Mock()
+        mock_database.main_db = Path(temp_data_dir) / "test.db"
+        mock_database.secrets_db = Path(temp_data_dir) / "secrets.db"
+        mock_database.audit_db = Path(temp_data_dir) / "audit.db"
+        mock_database.database_url = None
+        config.database = mock_database
+
+        mock_security = Mock()
+        mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        config.security = mock_security
+
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24
+        config.graph = mock_graph
+
+        mock_adapters = Mock()
+        mock_adapters.auto_discovery = True
+        mock_adapters.disabled_adapters = []
+        config.adapters = mock_adapters
+
+        return config
+
+    @pytest.fixture
+    def service_initializer(self, mock_essential_config):
+        """Create ServiceInitializer instance."""
+        initializer = ServiceInitializer(essential_config=mock_essential_config)
+        return initializer
+
+    def test_returns_false_when_no_identity(self, service_initializer):
+        """Returns False when no identity exists."""
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=None,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_false_when_no_auto_load_attr(self, service_initializer):
+        """Returns False when identity.core_profile lacks auto_load_adapters."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock(spec=[])
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_false_when_template_disabled(self, service_initializer):
+        """Returns False when template disables auto_load_adapters."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_false_when_config_disabled(self, service_initializer, mock_essential_config):
+        """Returns False when config.adapters.auto_discovery is False."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+        mock_essential_config.adapters.auto_discovery = False
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is False
+
+    def test_returns_true_when_both_enabled(self, service_initializer, mock_essential_config):
+        """Returns True when both template and config enable auto-discovery."""
+        mock_identity = Mock()
+        mock_identity.core_profile = Mock()
+        mock_identity.core_profile.auto_load_adapters = True
+        mock_essential_config.adapters.auto_discovery = True
+
+        with patch(
+            "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity",
+            return_value=mock_identity,
+        ):
+            with patch(
+                "ciris_engine.logic.config.db_paths.get_sqlite_db_full_path",
+                return_value="/tmp/test.db",
+            ):
+                assert service_initializer._is_auto_discovery_enabled() is True
+
+
+class TestStartAndRegisterAdapter:
+    """Tests for _start_and_register_adapter helper method."""
+
+    @pytest.fixture
+    def temp_data_dir(self):
+        """Create temporary data directory."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yield temp_dir
+
+    @pytest.fixture
+    def mock_essential_config(self, temp_data_dir):
+        """Create mock essential config."""
+        config = Mock(spec=EssentialConfig)
+        config.data_dir = temp_data_dir
+
+        mock_database = Mock()
+        mock_database.main_db = Path(temp_data_dir) / "test.db"
+        config.database = mock_database
+
+        mock_security = Mock()
+        mock_security.secrets_key_path = Path(temp_data_dir) / ".ciris_keys"
+        config.security = mock_security
+
+        mock_graph = Mock()
+        mock_graph.tsdb_raw_retention_hours = 24
+        config.graph = mock_graph
+
+        return config
+
+    @pytest.fixture
+    def service_initializer(self, mock_essential_config):
+        """Create ServiceInitializer instance."""
+        initializer = ServiceInitializer(essential_config=mock_essential_config)
+        initializer.service_registry = Mock()
+        return initializer
+
+    @pytest.mark.asyncio
+    async def test_starts_service_with_start_method(self, service_initializer):
+        """Calls service.start() if available."""
+        mock_service = Mock()
+        mock_service.start = Mock(return_value=None)
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
+
+        await service_initializer._start_and_register_adapter("test", mock_service)
+
+        mock_service.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_awaits_async_start(self, service_initializer):
+        """Awaits start() if it returns awaitable."""
+        mock_service = Mock()
+        mock_service.start = AsyncMock()
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
+
+        await service_initializer._start_and_register_adapter("test", mock_service)
+
+        mock_service.start.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_registers_tool_service(self, service_initializer):
+        """Registers service with TOOL type if has get_all_tool_info."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_service = Mock()
+        mock_service.get_all_tool_info = Mock()
+        del mock_service.start
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
+
+        await service_initializer._start_and_register_adapter("tool_adapter", mock_service)
+
+        service_initializer.service_registry.register_service.assert_called_once()
+        call_kwargs = service_initializer.service_registry.register_service.call_args.kwargs
+        assert call_kwargs["service_type"] == ServiceType.TOOL
+        assert "execute_tool" in call_kwargs["capabilities"]
+        assert call_kwargs["metadata"]["adapter"] == "tool_adapter"
+
+    @pytest.mark.asyncio
+    async def test_registers_wise_authority_service(self, service_initializer):
+        """Registers service with WISE_AUTHORITY type if has send_deferral."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        mock_service = Mock()
+        mock_service.send_deferral = Mock()
+        del mock_service.start
+        del mock_service.get_all_tool_info
+        # Remove get_services_to_register so fallback logic is used
+        del mock_service.get_services_to_register
+
+        await service_initializer._start_and_register_adapter("wa_adapter", mock_service)
+
+        service_initializer.service_registry.register_service.assert_called_once()
+        call_kwargs = service_initializer.service_registry.register_service.call_args.kwargs
+        assert call_kwargs["service_type"] == ServiceType.WISE_AUTHORITY
+        assert "send_deferral" in call_kwargs["capabilities"]
+
+    @pytest.mark.asyncio
+    async def test_skips_registration_when_no_registry(self, service_initializer):
+        """Skips registration when service_registry is None."""
+        service_initializer.service_registry = None
+        mock_service = Mock()
+        mock_service.get_all_tool_info = Mock()
+        del mock_service.start
+
+        # Should not raise
+        await service_initializer._start_and_register_adapter("test", mock_service)
+
+    @pytest.mark.asyncio
+    async def test_no_registration_for_unknown_type(self, service_initializer):
+        """Does not register service without recognized attributes."""
+        mock_service = Mock(spec=[])  # No get_all_tool_info or send_deferral
+
+        await service_initializer._start_and_register_adapter("unknown", mock_service)
+
+        service_initializer.service_registry.register_service.assert_not_called()
 
 
 class TestGetLLMServiceConfigValue:

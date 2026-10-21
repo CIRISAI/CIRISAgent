@@ -30,19 +30,50 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-# Optional mDNS discovery support
-try:
-    from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
-
-    ZEROCONF_AVAILABLE = True
-except ImportError:
-    ZEROCONF_AVAILABLE = False
-    ServiceListener = object  # type: ignore[misc,assignment]
-    logger.info("Zeroconf not available - mDNS discovery disabled")
+# Zeroconf is lazy-loaded to avoid blocking startup (can take 60s+ to import)
+# See _get_zeroconf_classes() for lazy loading
+ZEROCONF_AVAILABLE: Optional[bool] = None  # None = not checked yet
+_zeroconf_classes: Optional[Tuple[Any, Any, Any]] = None
 
 
-class HADiscoveryListener(ServiceListener):
-    """Zeroconf listener for Home Assistant instances."""
+def _get_zeroconf_classes() -> Optional[Tuple[Any, Any, Any]]:
+    """Lazy-load zeroconf classes to avoid blocking module import.
+
+    Returns (ServiceBrowser, ServiceListener, Zeroconf) tuple if available, else None.
+    """
+    global ZEROCONF_AVAILABLE, _zeroconf_classes
+
+    if ZEROCONF_AVAILABLE is not None:
+        return _zeroconf_classes
+
+    try:
+        from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+
+        ZEROCONF_AVAILABLE = True
+        _zeroconf_classes = (ServiceBrowser, ServiceListener, Zeroconf)
+        logger.info("Zeroconf loaded successfully for mDNS discovery")
+        return _zeroconf_classes
+    except ImportError:
+        ZEROCONF_AVAILABLE = False
+        _zeroconf_classes = None
+        logger.info("Zeroconf not available - mDNS discovery disabled")
+        return None
+
+
+# For type hints, we need a base class for HADiscoveryListener
+class _ServiceListenerBase:
+    """Base class for ServiceListener when zeroconf not available."""
+
+    pass
+
+
+class HADiscoveryListener:
+    """Zeroconf listener for Home Assistant instances.
+
+    Note: Does not inherit from ServiceListener at class definition time
+    to avoid requiring zeroconf import. Zeroconf is lazy-loaded when
+    mDNS discovery is actually used.
+    """
 
     def __init__(self) -> None:
         self.services: List[Dict[str, Any]] = []
@@ -56,27 +87,25 @@ class HADiscoveryListener(ServiceListener):
             if addresses:
                 ip_address = addresses[0]
 
-                # Prefer homeassistant.local if server name indicates it's available
-                # The server field contains the hostname (e.g., "homeassistant.local.")
+                # Get hostname for display purposes only
+                # We ALWAYS use IP for the URL because mDNS hostname resolution
+                # is unreliable on Android (especially Samsung browser)
                 server = getattr(info, "server", None)
-                if server and "homeassistant" in server.lower():
-                    # Strip trailing dot from mDNS name
-                    hostname = server.rstrip(".")
-                    host = hostname
-                    logger.info(f"[mDNS DISCOVERY] Using hostname: {hostname}")
-                else:
-                    host = ip_address
+                hostname = server.rstrip(".") if server else ip_address
+                display_name = hostname if "homeassistant" in hostname.lower() else ip_address
 
-                url = f"http://{host}:{port}"
+                # Always use IP address for the actual URL (reliable across all platforms)
+                url = f"http://{ip_address}:{port}"
                 logger.info(f"[mDNS DISCOVERY] Found Home Assistant at {url}")
-                logger.info(f"[mDNS DISCOVERY]   IP: {ip_address}, Host: {host}, Port: {port}, Name: {name}")
+                logger.info(f"[mDNS DISCOVERY]   IP: {ip_address}, Hostname: {hostname}, Port: {port}")
                 self.services.append(
                     {
                         "id": f"ha_{ip_address}_{port}",
-                        "label": f"Home Assistant ({host}:{port})",
+                        "label": f"Home Assistant ({display_name}:{port})",
                         "description": name.replace("._home-assistant._tcp.local.", ""),
                         "metadata": {
-                            "host": host,
+                            "host": ip_address,  # Use IP for actual connections
+                            "hostname": hostname,  # Keep hostname for reference
                             "ip": ip_address,
                             "port": port,
                             "name": name,
@@ -189,6 +218,7 @@ class HAConfigurableAdapter:
         """Discover Home Assistant instances.
 
         Supports:
+        - "supervisor": Detect HA addon mode (SUPERVISOR_TOKEN present)
         - "mdns" / "zeroconf": Use mDNS/Zeroconf discovery
         - "manual": Return empty list (user enters URL manually)
         - "env": Check environment variables
@@ -201,24 +231,63 @@ class HAConfigurableAdapter:
         """
         logger.info(f"Running HA discovery: {discovery_type}")
 
-        if discovery_type in ("mdns", "zeroconf"):
-            return await self._discover_mdns()
+        if discovery_type == "manual":
+            return []
         elif discovery_type == "env":
             return self._discover_from_env()
-        elif discovery_type == "manual":
-            return []
+        elif discovery_type == "supervisor":
+            return self._discover_supervisor()
 
-        # Default: try mDNS first, then env
+        # Check supervisor mode FIRST (highest priority when running as HA addon)
+        supervisor_instance = self._discover_supervisor()
+        if supervisor_instance:
+            return supervisor_instance
+
+        # All discovery paths (explicit "mdns"/"zeroconf" or default) try the
+        # full chain: mDNS → hostname probe → env.  This ensures that when
+        # zeroconf is unavailable (e.g. iOS sandbox) we still find HA via
+        # direct hostname resolution of homeassistant.local.
         instances = await self._discover_mdns()
+        if not instances:
+            instances = await self._discover_via_hostname_probe()
         if not instances:
             instances = self._discover_from_env()
         return instances
 
+    def _discover_supervisor(self) -> List[Dict[str, Any]]:
+        """Check if running as HA addon with SUPERVISOR_TOKEN.
+
+        When running inside Home Assistant as an addon, the Supervisor
+        automatically injects SUPERVISOR_TOKEN for API access.
+        No OAuth flow is needed - we can use this token directly.
+        """
+        supervisor_token = os.getenv("SUPERVISOR_TOKEN")
+        if supervisor_token:
+            logger.info("[HA SUPERVISOR] Detected SUPERVISOR_TOKEN - running as HA addon")
+            return [
+                {
+                    "id": "ha_supervisor",
+                    "label": "Home Assistant (Local Addon)",
+                    "description": "Running as Home Assistant addon - authentication automatic",
+                    "metadata": {
+                        "url": "http://supervisor/core/api",
+                        "source": "supervisor",
+                        "supervisor_mode": True,
+                        "oauth_required": False,  # No OAuth needed
+                    },
+                }
+            ]
+        return []
+
     async def _discover_mdns(self) -> List[Dict[str, Any]]:
         """Discover HA instances via mDNS/Zeroconf."""
-        if not ZEROCONF_AVAILABLE:
+        # Lazy-load zeroconf to avoid blocking startup
+        zc_classes = _get_zeroconf_classes()
+        if zc_classes is None:
             logger.warning("Zeroconf not available for mDNS discovery")
             return []
+
+        ServiceBrowser, _, Zeroconf = zc_classes
 
         try:
             listener = HADiscoveryListener()
@@ -242,6 +311,71 @@ class HAConfigurableAdapter:
         except Exception as e:
             logger.error(f"mDNS discovery error: {e}")
             return []
+
+    async def _discover_via_hostname_probe(self) -> List[Dict[str, Any]]:
+        """Probe common Home Assistant hostnames directly.
+
+        This is a fallback when mDNS service discovery fails but the hostname
+        might still resolve (e.g., when HA isn't advertising _home-assistant._tcp).
+
+        Uses zeroconf-based mDNS resolution for reliable .local hostname
+        resolution on all platforms including Android.
+        """
+        from ciris_engine.logic.utils.mdns_resolver import resolve_local_hostname
+
+        common_hosts = [
+            ("homeassistant.local", 8123),
+            ("homeassistant", 8123),
+            ("hass.local", 8123),
+            ("hass", 8123),
+        ]
+
+        discovered = []
+        for host, port in common_hosts:
+            # Resolve hostname to IP via mDNS first
+            ip_address = await resolve_local_hostname(host, timeout=2.0)
+            url = f"http://{ip_address}:{port}"
+
+            try:
+                logger.info(f"[HOSTNAME PROBE] Trying {url} (resolved from {host})...")
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{url}/api/",
+                        timeout=aiohttp.ClientTimeout(total=2),
+                        allow_redirects=False,
+                    ) as response:
+                        # HA API returns 401 without auth, which confirms it's HA
+                        if response.status in (200, 401):
+                            logger.info(f"[HOSTNAME PROBE] Found Home Assistant: {host} -> {ip_address}")
+
+                            discovered.append(
+                                {
+                                    "id": f"ha_{ip_address}_{port}",
+                                    "label": f"Home Assistant ({host}:{port})",
+                                    "description": f"Discovered via hostname probe",
+                                    "metadata": {
+                                        "host": ip_address,  # Use IP for connections
+                                        "hostname": host,  # Keep hostname for reference
+                                        "ip": ip_address,
+                                        "port": port,
+                                        "url": url,  # Use IP-based URL
+                                        "source": "hostname_probe",
+                                    },
+                                }
+                            )
+                            # Found one, return immediately (usually only one HA instance)
+                            return discovered
+                        else:
+                            logger.info(f"[HOSTNAME PROBE] {url} returned status {response.status}")
+            except Exception as e:
+                # Host doesn't resolve or isn't reachable - try next
+                logger.info(f"[HOSTNAME PROBE] {url} failed: {type(e).__name__}: {e}")
+
+        if discovered:
+            logger.info(f"[HOSTNAME PROBE] Found {len(discovered)} HA instances")
+        else:
+            logger.info("[HOSTNAME PROBE] No HA instances found via hostname probe")
+        return discovered
 
     def _discover_from_env(self) -> List[Dict[str, Any]]:
         """Check environment variables for HA configuration."""
@@ -456,6 +590,8 @@ class HAConfigurableAdapter:
                             "expires_in": token_data.get("expires_in", 1800),
                             "ha_auth_provider_type": token_data.get("ha_auth_provider_type"),
                             "ha_auth_provider_id": token_data.get("ha_auth_provider_id"),
+                            # Store client_id for token refresh - MUST match OAuth authorization
+                            "client_id": client_id,
                         }
                     else:
                         error_text = await response.text()
@@ -644,18 +780,25 @@ class HAConfigurableAdapter:
         oauth_tokens = config.get("oauth_tokens", {})
         access_token = config.get("access_token") or oauth_tokens.get("access_token")
         refresh_token = config.get("refresh_token") or oauth_tokens.get("refresh_token")
+        client_id = config.get("client_id") or oauth_tokens.get("client_id")
 
-        # Set environment variables for the HA service
+        # Set environment variables for the HA service AND persist to .env
         if config.get("base_url"):
             os.environ["HOME_ASSISTANT_URL"] = config["base_url"]
+            self._persist_to_env("HOME_ASSISTANT_URL", config["base_url"])
         if access_token:
             os.environ["HOME_ASSISTANT_TOKEN"] = access_token
+            self._persist_to_env("HOME_ASSISTANT_TOKEN", access_token)
         if refresh_token:
             os.environ["HOME_ASSISTANT_REFRESH_TOKEN"] = refresh_token
+            self._persist_to_env("HOME_ASSISTANT_REFRESH_TOKEN", refresh_token)
+        if client_id:
+            os.environ["HOME_ASSISTANT_CLIENT_ID"] = client_id
+            self._persist_to_env("HOME_ASSISTANT_CLIENT_ID", client_id)
 
         # Log sanitized config
         safe_config = {k: ("***" if "token" in k.lower() else v) for k, v in config.items()}
-        logger.info(f"HA configuration applied: {safe_config}")
+        logger.info(f"HA configuration applied and persisted: {safe_config}")
 
         return True
 
@@ -666,3 +809,32 @@ class HAConfigurableAdapter:
             Applied configuration or None if not configured
         """
         return self._applied_config
+
+    def _persist_to_env(self, key: str, value: str) -> None:
+        """Persist a key-value pair to the .env file for next restart.
+
+        This ensures HA tokens survive app restarts on mobile.
+        """
+        try:
+            from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+            env_path = get_env_file_path()
+            if env_path and env_path.exists():
+                content = env_path.read_text()
+                lines = content.split("\n")
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.startswith(f"{key}="):
+                        # Preserve quoted format for tokens
+                        lines[i] = f'{key}="{value}"'
+                        updated = True
+                        break
+                if not updated:
+                    # Add new key before the last empty lines
+                    lines.append(f'{key}="{value}"')
+                env_path.write_text("\n".join(lines))
+                logger.info(f"[HA CONFIG] Persisted {key} to .env file")
+            else:
+                logger.warning(f"[HA CONFIG] .env file not found, cannot persist {key}")
+        except Exception as e:
+            logger.error(f"[HA CONFIG] Failed to persist {key} to .env: {e}")

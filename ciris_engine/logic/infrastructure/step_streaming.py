@@ -64,12 +64,17 @@ def _sanitize_for_sse(data: Any) -> Any:
 class ReasoningEventStream:
     """Global broadcaster for H3ERE reasoning events (5 simplified events only)."""
 
+    # Max events to keep in buffer for telemetry export
+    MAX_BUFFER_SIZE = 200
+
     def __init__(self) -> None:
         # Use a regular set instead of WeakSet to prevent garbage collection
         # of subscriber queues before events can be delivered
         self._subscribers: set[asyncio.Queue[Any]] = set()
         self._sequence_number = 0
         self._is_enabled = True
+        # Buffer for telemetry export (circular buffer of recent events)
+        self._recent_events: list[Dict[str, Any]] = []
 
     def subscribe(self, queue: asyncio.Queue[Any]) -> None:
         """Subscribe a queue to receive reasoning events."""
@@ -111,6 +116,11 @@ class ReasoningEventStream:
         # Images remain in OpenTelemetry traces for debugging
         update_dict = _sanitize_for_sse(update_dict)
 
+        # Add to recent events buffer for telemetry export
+        self._recent_events.append(update_dict)
+        if len(self._recent_events) > self.MAX_BUFFER_SIZE:
+            self._recent_events = self._recent_events[-self.MAX_BUFFER_SIZE :]
+
         # Broadcast to all subscribers
         dead_queues = []
         for queue in self._subscribers:
@@ -137,6 +147,44 @@ class ReasoningEventStream:
             "subscriber_count": len(self._subscribers),
             "events_broadcast": self._sequence_number,
         }
+
+    def get_recent_events(self, limit: int = 100) -> list[Dict[str, Any]]:
+        """
+        Get recent reasoning events for telemetry export.
+
+        Args:
+            limit: Maximum number of events to return
+
+        Returns:
+            List of recent reasoning events (most recent last)
+        """
+        return self._recent_events[-limit:]
+
+    def get_oldest_events(self, limit: int = 100) -> list[Dict[str, Any]]:
+        """
+        Get oldest reasoning events for telemetry export (FIFO order).
+
+        This should be used with clear_exported_events() which removes from
+        the front of the buffer. Using get_recent_events() with clear_exported_events()
+        would clear the wrong events when buffer size > limit.
+
+        Args:
+            limit: Maximum number of events to return
+
+        Returns:
+            List of oldest reasoning events (oldest first)
+        """
+        return self._recent_events[:limit]
+
+    def clear_exported_events(self, count: int) -> None:
+        """
+        Remove events that have been exported.
+
+        Args:
+            count: Number of events to remove from the front of the buffer
+        """
+        if count > 0 and count <= len(self._recent_events):
+            self._recent_events = self._recent_events[count:]
 
     def enable(self) -> None:
         """Enable reasoning event streaming."""

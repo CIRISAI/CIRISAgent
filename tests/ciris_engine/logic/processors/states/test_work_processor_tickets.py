@@ -11,7 +11,6 @@ Tests cover:
 """
 
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,10 +19,26 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 import pytest_asyncio
 
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.tasks import add_task, get_all_tasks
 from ciris_engine.logic.persistence.models.tickets import create_ticket, get_ticket, update_ticket_status
 from ciris_engine.logic.processors.states.work_processor import WorkProcessor
 from ciris_engine.schemas.runtime.enums import TaskStatus
+
+
+def _init_temp_db() -> str:
+    """Create a temp SQLite DB initialized via the standard bootstrap.
+
+    `initialize_database` runs all migrations, constructs the persist
+    Engine, and wires it into `persistence.models.graph` — the same
+    side effects production gets. Tests that previously cherry-picked
+    SQL migration files must use this so the migrated tasks/thoughts
+    code can find the engine via `get_persist_engine()`.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    initialize_database(db_path)
+    return db_path
 
 
 class TestWorkProcessorPhase1Claiming:
@@ -31,35 +46,9 @@ class TestWorkProcessorPhase1Claiming:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        migrations_dir = (
-            Path(__file__).parent.parent.parent.parent.parent.parent
-            / "ciris_engine"
-            / "logic"
-            / "persistence"
-            / "migrations"
-            / "sqlite"
-        )
-
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 11):  # Include migration 010 for images_json column
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
-
+        """Create temporary database with migrations + persist engine wired."""
+        db_path = _init_temp_db()
         yield db_path
-
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -110,8 +99,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="pending",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Execute discovery
@@ -121,12 +109,12 @@ class TestWorkProcessorPhase1Claiming:
         assert tasks_created == 1, "Should create one task"
 
         # Verify ticket claimed
-        ticket = get_ticket(ticket_id, db_path=temp_db_path)
+        ticket = get_ticket(ticket_id)
         assert ticket["status"] == "assigned"
         assert ticket["agent_occurrence_id"] == "occurrence-1"
 
         # Verify task created
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         assert len(tasks) == 1
         assert tasks[0].task_id.startswith(f"TICKET-{ticket_id}-")
         assert tasks[0].agent_occurrence_id == "occurrence-1"
@@ -143,8 +131,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="pending",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Create two processors
@@ -180,8 +167,8 @@ class TestWorkProcessorPhase1Claiming:
         assert (tasks1 + tasks2) == 1, "Only one occurrence should create task"
 
         # Verify only one task exists (check both occurrences)
-        tasks1_final = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
-        tasks2_final = get_all_tasks(occurrence_id="occurrence-2", db_path=temp_db_path)
+        tasks1_final = get_all_tasks(occurrence_id="occurrence-1")
+        tasks2_final = get_all_tasks(occurrence_id="occurrence-2")
         assert len(tasks1_final) + len(tasks2_final) == 1
 
     @pytest.mark.asyncio
@@ -196,11 +183,10 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="pending",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
         # Assign to different occurrence
-        update_ticket_status(ticket_id, "pending", agent_occurrence_id="occurrence-2", db_path=temp_db_path)
+        update_ticket_status(ticket_id, "pending", agent_occurrence_id="occurrence-2")
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -217,8 +203,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="blocked",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -236,8 +221,7 @@ class TestWorkProcessorPhase1Claiming:
             ticket_type="dsar",
             status="deferred",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -250,35 +234,9 @@ class TestWorkProcessorPhase2Continuation:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        migrations_dir = (
-            Path(__file__).parent.parent.parent.parent.parent.parent
-            / "ciris_engine"
-            / "logic"
-            / "persistence"
-            / "migrations"
-            / "sqlite"
-        )
-
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 11):  # Include migration 010 for images_json column
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
-
+        """Create temporary database with migrations + persist engine wired."""
+        db_path = _init_temp_db()
         yield db_path
-
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -322,14 +280,13 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
         assert tasks_created == 1
 
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         assert len(tasks) == 1
         assert tasks[0].task_id.startswith(f"TICKET-{ticket_id}-")
         assert tasks[0].agent_occurrence_id == "occurrence-1"
@@ -347,8 +304,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -367,10 +323,9 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-2",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
         # Assign to different occurrence
-        update_ticket_status(ticket_id, "assigned", agent_occurrence_id="occurrence-2", db_path=temp_db_path)
+        update_ticket_status(ticket_id, "assigned", agent_occurrence_id="occurrence-2")
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -387,8 +342,7 @@ class TestWorkProcessorPhase2Continuation:
             ticket_type="dsar",
             status="blocked",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -406,8 +360,7 @@ class TestWorkProcessorPhase2Continuation:
             ticket_type="dsar",
             status="deferred",
             email="test@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -427,8 +380,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
+            )
 
         # Create existing ACTIVE task for ticket
         from ciris_engine.schemas.runtime.models import Task
@@ -444,7 +396,7 @@ class TestWorkProcessorPhase2Continuation:
             created_at=now,
             updated_at=now,
         )
-        add_task(existing_task, db_path=temp_db_path)
+        add_task(existing_task)
 
         tasks_created = await work_processor._discover_incomplete_tickets()
 
@@ -465,8 +417,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"deferred_until": future_time},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -488,8 +439,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"deferred_until": past_time},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -509,8 +459,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"awaiting_human_response": True},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         tasks_created = await work_processor._discover_incomplete_tickets()
@@ -530,8 +479,7 @@ class TestWorkProcessorPhase2Continuation:
             email="test@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             metadata={"deferred_until": "invalid-date-format"},
-            agent_occurrence_id="occurrence-1",
-            db_path=temp_db_path,
+            agent_occurrence_id="occurrence-1"
         )
 
         # Should not crash, should continue and create task
@@ -545,30 +493,9 @@ class TestWorkProcessorTwoPhaseIntegration:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
-
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 11):  # Include migration 010 for images_json column
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
-
+        """Create temporary database with migrations + persist engine wired."""
+        db_path = _init_temp_db()
         yield db_path
-
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -609,8 +536,7 @@ class TestWorkProcessorTwoPhaseIntegration:
             ticket_type="dsar",
             status="pending",
             email="a@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Ticket B: ASSIGNED to occurrence-1 (should get continuation)
@@ -623,9 +549,8 @@ class TestWorkProcessorTwoPhaseIntegration:
             email="b@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
-        update_ticket_status(ticket_b, "assigned", agent_occurrence_id="occurrence-1", db_path=temp_db_path)
+            )
+        update_ticket_status(ticket_b, "assigned", agent_occurrence_id="occurrence-1")
 
         # Ticket C: IN_PROGRESS for occurrence-1 (should get continuation)
         ticket_c = "TICKET-C"
@@ -637,9 +562,8 @@ class TestWorkProcessorTwoPhaseIntegration:
             email="c@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
             agent_occurrence_id="occurrence-1",  # Already assigned to this occurrence
-            db_path=temp_db_path,
-        )
-        update_ticket_status(ticket_c, "in_progress", agent_occurrence_id="occurrence-1", db_path=temp_db_path)
+            )
+        update_ticket_status(ticket_c, "in_progress", agent_occurrence_id="occurrence-1")
 
         # Ticket D: BLOCKED (should be skipped)
         ticket_d = create_ticket(
@@ -648,8 +572,7 @@ class TestWorkProcessorTwoPhaseIntegration:
             ticket_type="dsar",
             status="blocked",
             email="d@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=temp_db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Execute
@@ -659,12 +582,12 @@ class TestWorkProcessorTwoPhaseIntegration:
         assert tasks_created == 3, "Should create 3 tasks (A claimed, B+C continued)"
 
         # Verify Ticket A was claimed
-        ticket_a_updated = get_ticket("TICKET-A", db_path=temp_db_path)
+        ticket_a_updated = get_ticket("TICKET-A")
         assert ticket_a_updated["status"] == "assigned"
         assert ticket_a_updated["agent_occurrence_id"] == "occurrence-1"
 
         # Verify tasks
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         # We should have 3 tasks total (1 from TICKET-A claim, 2 from TICKET-B/C continuation)
         assert len(tasks) == 3
 
@@ -714,14 +637,13 @@ class TestWorkProcessorTwoPhaseIntegration:
             user_identifier="user123",
             priority=8,
             submitted_at=datetime.now(timezone.utc).isoformat(),
-            metadata={"test_meta": "value"},
-            db_path=temp_db_path,
+            metadata={"test_meta": "value"}
         )
 
         await processor._discover_incomplete_tickets()
 
         # Verify task created
-        tasks = get_all_tasks(occurrence_id="occurrence-1", db_path=temp_db_path)
+        tasks = get_all_tasks(occurrence_id="occurrence-1")
         assert len(tasks) == 1
 
         task = tasks[0]

@@ -1,0 +1,103 @@
+"""Shared persist-engine wiring fixture for Lane T* absorption tests.
+
+Tests that exercise persistence/models/* functions need a real
+ciris-persist Engine wired into the module-global at
+`ciris_engine.logic.persistence.models.graph._engine`.
+
+This fixture:
+  1. Creates a temp SQLite-backed persist Engine.
+  2. Captures and replaces the module-global, restoring on teardown.
+  3. Tears down by clearing the engine + unlinking the temp file.
+
+Use with::
+
+    @pytest.fixture
+    def persist_db(persist_engine):
+        return persist_engine.db_path
+
+The previous tests used `get_db_connection` against the same temp DB; now
+that the absorption-routed functions go through persist, they need the
+engine wired instead. This shared fixture is the migration's "wire once,
+reuse everywhere" pattern.
+"""
+
+from __future__ import annotations
+
+import os
+import tempfile
+from typing import Iterator
+
+import pytest
+
+from ciris_engine.logic.persistence._substrate import Engine  # type: ignore[import-untyped]
+
+
+@pytest.fixture
+def persist_engine() -> Iterator[Engine]:
+    """Wire a fresh persist Engine into persistence.models.graph for the test.
+
+    Yields the Engine instance for direct use; restores the prior
+    module-global on teardown so tests can run in any order.
+    """
+    # Lazy import to avoid pulling persistence.models.graph during conftest
+    # collection (some tests check module-level side effects).
+    from ciris_engine.logic.persistence.models.graph import set_persist_engine
+
+    from tests.fixtures.database import _release_persist_engine
+
+    # v1.8.x persist Engine is a process-singleton — close any engine a
+    # prior test pinned before constructing this one, or Engine() raises
+    # EngineConfigMismatch.
+    _release_persist_engine()
+
+    with tempfile.NamedTemporaryFile(suffix="-persist.db", delete=False) as pf:
+        db_path = pf.name
+
+    # Production parity (db/core.py _construct_engine): the Engine carries a
+    # LocalSigner (32-byte Ed25519 seed) so seal/sign paths work — lens-core's
+    # LensClient signs via engine.local_key_id()/local_sign(), which raises
+    # "no local signing key configured" on a bare Engine. The federation key
+    # is registered the way edge-init does in production so attestation
+    # writes (consent CEG artifacts) and the lens consent gate's directory
+    # read both function in tests.
+    seed_path = db_path + ".seed"
+    with open(seed_path, "wb") as sf:
+        sf.write(os.urandom(32))
+    # Hybrid (Ed25519 + ML-DSA-65) signer. persist 10.1.1 (CIRISPersist#275)
+    # verifies federation emits Ed25519 + ML-DSA-65 Strict: an Ed25519-only
+    # engine leaves register_self's ML-DSA pubkey absent and downstream verify
+    # fails. A real federation node carries both keys — production
+    # (db/core.py) does, and the conformance suite does; mirror it here.
+    pqc_seed_path = db_path + ".pqc"
+    with open(pqc_seed_path, "wb") as pf:
+        pf.write(os.urandom(32))
+
+    engine = Engine(
+        f"sqlite:///{db_path}",
+        "test-key",
+        local_key_id="test-key",
+        local_key_path=seed_path,
+        local_pqc_key_id="test-key-pqc",
+        local_pqc_key_path=pqc_seed_path,
+    )
+    # Register the engine's OWN signing key as a self federation key. v10's
+    # receive_and_persist verifies the trace signature against registered keys
+    # and rejects an unregistered signer with `verify_unknown_key`. Use the
+    # self-registration path (5-arg register_self_federation_key, per
+    # CIRISConformance conftest) — not the old 2-arg register_federation_key
+    # (v10 takes a SignedKeyRecord JSON).
+    try:
+        engine.register_self_federation_key("agent", "test-key", None, None, None)
+    except Exception:  # noqa: BLE001 - federation_conflict = already registered
+        pass
+    set_persist_engine(engine, dsn=f"sqlite:///{db_path}")
+
+    try:
+        yield engine
+    finally:
+        _release_persist_engine()
+        for path in (db_path, seed_path, pqc_seed_path):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass

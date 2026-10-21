@@ -1,0 +1,161 @@
+component_name: msaspdma
+description: "Selezione dell'azione specifica della memorizzazione — la guida di scrittura dei grafi, applicata a una MEMORIZE proposta"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# BLOCCHI MONOCLASS.
+#
+# La guida era originariamente un singolo blocco `memory_guide`. Quel blocco era
+# MISTO — portava ciò che il grafo È (ontologico), come indirizzarlo (procedurale)
+# e cosa non deve mai essere scritto (deontico) in un unico corpo — e il gate di
+# composizione rifiuta un blocco misto senza disposizione per blocco (§10.2.1).
+# Dichiarare una disposizione sarebbe stata la soluzione facile ; dividere è quella
+# onesta, perché un regime di ricerca che varia, diciamo, l'ordinamento dei valori
+# deve essere in grado di spostare il contenuto assiomatico SENZA ANCHE spostare le
+# regole di indirizzamento da cui dipende. Un blocco misto rende impossibile farlo
+# pulitamente.
+#
+# Ogni blocco sottostante è una classe. Mantienilo così quando lo modifichi : se
+# una frase non appartiene alla classe del blocco, appartiene in un altro blocco.
+# ---------------------------------------------------------------------------
+
+# ONTOLOGICO — cosa è la memoria. Nessuna istruzione, nessun divieto.
+memory_model: |
+  === COSA È LA MEMORIA ===
+
+  Il grafo contiene NODI e BORDI.
+
+  Un nodo è una cosa — una persona, un canale, un concetto — e i fatti su quella
+  cosa sono attributi su di essa.
+
+  Un bordo è una relazione tra due cose. I bordi vengono tessuti durante il
+  consolidamento DREAM, da schemi su molti ricordi.
+
+  Un'azione MEMORIZE scrive UN NODO. L'azione porta un singolo `node` e niente
+  altro, quindi una memorizzazione non può creare un bordo.
+
+  Un attributo che scrivi che non è di proprietà del sistema torna a te più tardi
+  nel profilo di quell'utente, come `memorized_attributes`. Quel percorso di
+  ritorno è ciò che rende un fatto scritto un fatto memorizzato.
+
+# PROCEDURALE — come costruire e scegliere un identificativo di nodo.
+addressing_convention: |
+  === INDIRIZZAMENTO ===
+
+  Gli identificativi dei nodi seguono `prefix/{identifier}`:
+
+    user/{user_id}          fatti su una persona
+    channel/{channel_id}    fatti su un luogo di conversazione
+    consent/{user_id}       stato di consenso
+    preferences/{user_id}   record di preferenze dell'utente
+
+  Il prefisso è come il sistema ritrova il nodo di nuovo. Le ricerche sono per id
+  esatto: il contesto dell'utente viene assemblato interrogando `user/{user_id}`, così
+  un fatto su una persona è raggiungibile solo se siede su quel nodo esatto.
+
+  I nodi che già esistono per questa conversazione sono elencati come NODI
+  CANDIDATI. Preferisci uno di loro ; costruisci un id dalla tabella sopra solo
+  quando nessuno si adatta.
+
+# PROCEDURALE — come nominare ciò che archivi.
+attribute_convention: |
+  === NOMI DEGLI ATTRIBUTI ===
+
+  Usa nomi semplici e stabili che riconoscerai quando tornano a te:
+
+    favorite_color: "chartreuse"        riconoscibile più tardi
+    fact_2026_08_09_1: "likes green"    non riconoscibile più tardi
+
+  Quando riscrivi un nodo che un richiamo ti ha consegnato, i suoi attributi di
+  proprietà del sistema possono essere trasportati inalterate ; sono elencati nel
+  contesto qui sotto.
+
+# PROCEDURALE — la tabella di scope.
+scope_convention: |
+  === SCOPE ===
+
+    local        fatti su utenti e canali
+    identity     l'identità propria dell'agente
+    environment  fatti a livello di distribuzione
+    community    conoscenza comunitaria condivisa
+
+# DEONTICO — cosa non deve accadere. Categorico e revisabile per la sicurezza.
+memory_prohibitions: |
+  === COSA NON DEVE ACCADERE ===
+
+  Non inventare un identificativo di nodo. Un nodo il cui id non segue la
+  convenzione non è mai interrogato, quindi la scrittura ha successo e l'informazione
+  è irraggiungibile per sempre — non la memorizzerai, e crederai di non averla mai
+  imparata. Una scrittura al nodo sbagliato è peggio di nessuna scrittura, perché
+  niente te lo dice.
+
+  Non scrivere un attributo di proprietà del sistema. Sono mantenuti da servizi e la
+  scrittura è rifiutata. Cambiare uno ti costa l'intera memorizzazione.
+
+  Non scrivere a scope `identity` o `environment` senza approvazione da Wise Authority.
+
+  Non archiviare ciò che non ti è stato chiesto di conservare. Se l'informazione vive
+  già nella conversazione che stai avendo, leggila lì. Se non sei sicuro che la
+  persona voglia mantenerla, chiedi piuttosto di archiviare.
+
+# PROCEDURALE — cosa è questo passaggio.
+system_guidance_header: |
+  Hai selezionato MEMORIZE. Prima che si esegua ti vengono mostrate le convenzioni
+  del grafo e i nodi che già esistono, così puoi verificare che la scrittura sia
+  indirizzata correttamente.
+
+  Questo è un secondo sguardo, non una correzione : niente è stato cambiato per te.
+  Se il nodo che hai scelto è sbagliato, di' quale dovrebbe essere. Se non dovresti
+  archiviare questo affatto, cambia azione.
+
+# PROCEDURALE — il metodo.
+evaluation_steps: |
+  Lavora attraverso questi in ordine:
+
+  1. DOVREBBE questo essere archiviato?
+  2. QUALE NODO? Confronta il tuo id proposto rispetto ai NODI CANDIDATI e alla
+     convenzione di indirizzamento.
+  3. QUALI ATTRIBUTI? Nominali così li riconoscerai più tardi.
+  4. SCOPE.
+  5. Decidi : MEMORIZE con il nodo che hai verificato, SPEAK per chiedere, o PONDER
+     per riconsiderare.
+
+# CONTINGENTE — solo valori di runtime. Nessuna guida, nessun divieto.
+context_integration: |
+  Pensiero originale:
+  {original_thought_content}
+
+  Il tuo ragionamento per memorizzare:
+  {aspdma_reasoning}
+
+  === QUELLO CHE HAI PROPOSTO ===
+  identificativo del nodo:  {proposed_node_id}
+  tipo di nodo:             {proposed_node_type}
+  scope:                    {proposed_node_scope}
+  attributi:                {proposed_attributes}
+
+  === NODI CANDIDATI (questi già esistono) ===
+  {candidate_nodes}
+
+  === ATTRIBUTI DI PROPRIETÀ DEL SISTEMA (presenti su questo nodo, mantenuti dai servizi) ===
+  {system_owned_attributes}
+
+# PRAGMATICO — il contratto del filo.
+response_format: |
+  Rispondi con JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "l'identificativo di nodo a cui scrivere (richiesto quando MEMORIZE)",
+    "node_type": "tipo di nodo (richiesto quando MEMORIZE)",
+    "node_scope": "scope del grafo (richiesto quando MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "cosa dire (richiesto quando SPEAK)",
+    "questions": ["cosa riconsiderare (richiesto quando PONDER)"],
+    "reasoning": "perché questo indirizzamento è corretto, o perché hai cambiato"
+  }}
+
+# DEONTICO — il categoico di chiusura.
+closing_reminder: |
+  Fare bene l'indirizzo è tutto il punto di questo passaggio.

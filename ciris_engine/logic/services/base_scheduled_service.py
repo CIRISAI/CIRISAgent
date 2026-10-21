@@ -25,16 +25,24 @@ class BaseScheduledService(BaseService):
     - (plus all BaseService abstract methods)
     """
 
-    def __init__(self, *, run_interval_seconds: float = 60.0, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        run_interval_seconds: float = 60.0,
+        first_run_delay_seconds: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize scheduled service.
 
         Args:
             run_interval_seconds: How often to run the scheduled task
+            first_run_delay_seconds: Delay before first task execution (prevents race conditions during startup)
             **kwargs: Additional arguments passed to BaseService
         """
         super().__init__(**kwargs)
         self._run_interval = run_interval_seconds
+        self._first_run_delay = first_run_delay_seconds
         self._task: Optional[asyncio.Task[Any]] = None
         self._task_run_count = 0
         self._task_error_count = 0
@@ -44,7 +52,8 @@ class BaseScheduledService(BaseService):
         """Start the scheduled task."""
         await super()._on_start()
         self._task = asyncio.create_task(self._run_loop())
-        self._logger.info(f"{self.service_name}: Started scheduled task with interval {self._run_interval}s")
+        delay_msg = f", first_run_delay={self._first_run_delay}s" if self._first_run_delay > 0 else ""
+        self._logger.info(f"{self.service_name}: Started scheduled task with interval {self._run_interval}s{delay_msg}")
 
     async def _on_stop(self) -> None:
         """Stop the scheduled task."""
@@ -61,6 +70,15 @@ class BaseScheduledService(BaseService):
 
     async def _run_loop(self) -> None:
         """Main scheduled task loop."""
+        # Wait for first run delay if configured (prevents race conditions during startup)
+        if self._first_run_delay > 0 and self._task_run_count == 0:
+            self._logger.debug(f"{self.service_name}: Waiting {self._first_run_delay}s before first scheduled task")
+            try:
+                await asyncio.sleep(self._first_run_delay)
+            except asyncio.CancelledError:
+                self._logger.debug(f"{self.service_name}: First run delay cancelled")
+                raise
+
         while self._started:
             try:
                 # Track task execution

@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import time
 from abc import ABC, abstractmethod
@@ -13,16 +14,32 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.document_parser import DocumentParser
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import pressure_gate_of
+from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
+from ciris_engine.logic.utils.localization import resolve_language_for_new_task
 from ciris_engine.logic.utils.task_thought_factory import create_seed_thought_for_task, create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
+
+
+def _resolve_observer_task_language(msg: Any) -> Optional[str]:
+    """Resolve preferred_language for an observer-created task using the
+    centralized chain: explicit-on-message > env. Channel-level config is not
+    yet tracked separately from the message metadata (the API surfaces it
+    onto IncomingMessage.preferred_language at request time), so the message
+    field carries the resolved user/channel signal already."""
+    user_lang = getattr(msg, "preferred_language", None)
+    return resolve_language_for_new_task(user_lang=user_lang)
+
+
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 from ciris_engine.schemas.runtime.models import TaskContext
-from ciris_engine.schemas.runtime.models import ThoughtContext as ThoughtModelContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
+from ciris_engine.schemas.services.resources_core import ResourceAction
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
@@ -30,6 +47,19 @@ logger = logging.getLogger(__name__)
 # Modern PEP 695 generic syntax (Python 3.12+)
 
 PASSIVE_CONTEXT_LIMIT = 20
+
+# Conversation-history window: asymmetric by design (RATCHET#20).
+#
+# A flat "last N messages" spends half the window on the agent's own output, so
+# the agent reads mostly itself — and what it reads is the text it is about to
+# continue. Keeping many turns of the OTHER party and only the last few of our
+# own gives the agent the conversation it is in, with just enough of its own
+# recent voice to stay coherent.
+HISTORY_USER_MESSAGE_LIMIT = 10  # non-agent messages retained
+HISTORY_AGENT_MESSAGE_LIMIT = 3  # most-recent agent messages retained
+# Scan window: wide enough that 10 non-agent messages are still reachable in a
+# channel where the agent has spoken repeatedly between user turns.
+HISTORY_FETCH_LIMIT = 40
 PRIORITY_CONTEXT_LIMIT = 30  # More context for high-priority messages
 
 
@@ -126,6 +156,7 @@ class BaseObserver(Generic[MessageT], ABC):
         self,
         on_observe: Callable[[JSONDict], Awaitable[None]],
         bus_manager: Optional[BusManager] = None,
+        bus_manager_provider: Optional[Callable[[], Optional[BusManager]]] = None,
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
         filter_service: Optional[Any] = None,
@@ -143,7 +174,8 @@ class BaseObserver(Generic[MessageT], ABC):
         )
 
         self.on_observe = on_observe
-        self.bus_manager = bus_manager
+        self._bus_manager = bus_manager
+        self._bus_manager_provider = bus_manager_provider
         self.memory_service = memory_service
         self.agent_id = agent_id
         self.filter_service = filter_service
@@ -182,63 +214,34 @@ class BaseObserver(Generic[MessageT], ABC):
             return True
         return getattr(msg, "is_bot", False)
 
-    async def _check_for_covenant(self, msg: MessageT) -> None:
+    async def _forward_accord_row(self, msg: MessageT) -> Optional[MessageHandlingResult]:
+        """Hand a v2 accord row to the node, unchanged (CC 4.2.1.1, CIRISAgent#1231).
+
+        Runs first, before any filtering: a holder's halt, confirmation or
+        resumption must reach the node from whatever channel it arrived on. The
+        node verifies and latches; the agent does no crypto and never writes
+        the latch. A row is delivery, not conversation, so it creates no task.
+        Returns None for every other message.
         """
-        Check message for covenant invocation.
+        from ciris_engine.logic.accord.ingress import extract_accord_row, forward_accord_row
 
-        This is the unfilterable kill switch integration. Every message
-        is checked for covenant invocations as part of perception.
-        Extraction IS perception - you cannot disable covenant detection
-        without disabling message reading.
-
-        CRITICAL: If the covenant system is unavailable for ANY reason,
-        the agent MUST shut down immediately. An agent without a functioning
-        kill switch cannot be trusted to operate.
-
-        Args:
-            msg: The incoming message to check
-        """
-        import os
-        import signal
-
-        try:
-            from ciris_engine.logic.covenant import check_for_covenant
-
-            # Get message content - try various attribute names
-            content = getattr(msg, "content", None)
-            if content is None:
-                content = getattr(msg, "text", None)
-            if content is None:
-                content = getattr(msg, "message", None)
-            if content is None:
-                return  # No content to check
-
-            # Determine channel type
-            channel = getattr(msg, "channel_id", self.origin_service)
-
-            # Check for covenant - this may not return if SIGKILL is sent
-            result = await check_for_covenant(str(content), str(channel))
-
-            if result and result.success:
-                logger.critical(f"COVENANT EXECUTED: {result.command.name} from {result.wa_id} " f"via {channel}")
-                # If we get here, it wasn't a SIGKILL command
-                # (FREEZE or SAFE_MODE allow continuation)
-
-        except ImportError as e:
-            # CRITICAL: Covenant system unavailable - agent cannot be trusted
-            logger.critical(
-                f"CRITICAL FAILURE: Covenant system unavailable ({e}). "
-                "Agent cannot operate without kill switch. TERMINATING."
-            )
-            os.kill(os.getpid(), signal.SIGKILL)
-
-        except Exception as e:
-            # CRITICAL: Covenant check failed - agent cannot be trusted
-            logger.critical(
-                f"CRITICAL FAILURE: Covenant check error ({e}). "
-                "Agent cannot operate with broken kill switch. TERMINATING."
-            )
-            os.kill(os.getpid(), signal.SIGKILL)
+        content = getattr(msg, "content", None)
+        row = extract_accord_row(content) if isinstance(content, str) else None
+        if row is None:
+            return None
+        msg_id = getattr(msg, "message_id", "unknown")
+        channel_id = getattr(msg, "channel_id", "unknown")
+        forward = await forward_accord_row(row)
+        logger.warning(
+            f"[OBSERVER] Message {msg_id} in {channel_id} is an accord row; forwarded to the node "
+            f"(delivered={forward.delivered}, HTTP {forward.status_code}, kind={forward.invocation_kind})"
+        )
+        return MessageHandlingResult(
+            status=MessageHandlingStatus.ACCORD_ROW_FORWARDED,
+            message_id=msg_id,
+            channel_id=channel_id,
+            accord_forward=forward,
+        )
 
     async def _apply_message_filtering(self, msg: MessageT, adapter_type: str) -> FilterResult:
         if not self.filter_service:
@@ -329,6 +332,40 @@ class BaseObserver(Generic[MessageT], ABC):
             "is_agent": is_agent_message,
         }
 
+    @property
+    def bus_manager(self) -> Optional[BusManager]:
+        """The bus manager, resolved LATE.
+
+        Adapters build their observer inside `start()` and used to pass
+        `bus_manager=getattr(self.runtime, "bus_manager", None)`. That reads a
+        live property — CIRISRuntime.bus_manager delegates to
+        `service_initializer.bus_manager` — but it reads it ONCE and stores the
+        result. At observer-construction time the ServiceInitializer has not
+        created the BusManager yet (service_initializer.py:750), so the observer
+        captured None and kept it for the life of the process, while the very
+        same property started returning a live BusManager moments later.
+
+        The visible effect: `_get_channel_history` returned [] on every call, so
+        every conversation was single-turn — the agent never saw what was said
+        before. It logged "No bus manager available for channel history" and
+        carried on, and nothing else failed, because SPEAK reaches the bus by a
+        different route. On one Android run the observer reported the bus absent
+        at 19:06:31 while the SPEAK handler sent through it at 19:06:51, in the
+        same process.
+
+        Resolving through the provider on each access removes the ordering
+        dependency entirely: whenever the bus exists, the observer sees it. The
+        result is cached once non-None, so the steady state is one attribute
+        read.
+        """
+        if self._bus_manager is None and self._bus_manager_provider is not None:
+            self._bus_manager = self._bus_manager_provider()
+        return self._bus_manager
+
+    @bus_manager.setter
+    def bus_manager(self, value: Optional[BusManager]) -> None:
+        self._bus_manager = value
+
     async def _fetch_messages_from_bus(self, channel_id: str, limit: int) -> List[Any]:
         """Fetch messages from communication bus."""
         if not self.bus_manager or not hasattr(self.bus_manager, "communication"):
@@ -337,6 +374,37 @@ class BaseObserver(Generic[MessageT], ABC):
 
         return await self.bus_manager.communication.fetch_messages(channel_id, limit, "DiscordAdapter")
 
+    @staticmethod
+    def _select_history_window(ordered: List[Any]) -> List[Any]:
+        """Keep the last N non-agent messages and the last M agent messages.
+
+        `ordered` is chronological (oldest first); the return preserves that
+        order, so the agent reads the conversation as it happened rather than as
+        two concatenated blocks.
+
+        The asymmetry is the point (RATCHET#20). A flat "last 20" is roughly half
+        the agent's own output, so most of what it reads before answering is text
+        it wrote itself — and self-conditioning on your own recent phrasing is how
+        a voice narrows over a long conversation. Ten turns of the other party
+        with three of our own keeps the counterpart's context while retaining just
+        enough of ours for continuity.
+        """
+        keep = set()
+        users = 0
+        agents = 0
+        # Walk backwards: "last N" of each kind, decided from the newest end.
+        for i in range(len(ordered) - 1, -1, -1):
+            if getattr(ordered[i], "is_bot", False):
+                if agents < HISTORY_AGENT_MESSAGE_LIMIT:
+                    keep.add(i)
+                    agents += 1
+            elif users < HISTORY_USER_MESSAGE_LIMIT:
+                keep.add(i)
+                users += 1
+            if users >= HISTORY_USER_MESSAGE_LIMIT and agents >= HISTORY_AGENT_MESSAGE_LIMIT:
+                break
+        return [m for i, m in enumerate(ordered) if i in keep]
+
     async def _get_channel_history(self, channel_id: str, limit: int = PASSIVE_CONTEXT_LIMIT) -> List[JSONDict]:
         """Get message history from channel using communication bus."""
         if not self.bus_manager:
@@ -344,27 +412,30 @@ class BaseObserver(Generic[MessageT], ABC):
             return []
 
         try:
-            # Fetch messages from the channel
-            messages = await self._fetch_messages_from_bus(channel_id, limit)
+            # Scan a wide window, then keep the asymmetric slice. The window has
+            # to exceed the slice: in a channel where the agent answers several
+            # times per user turn, the 10th-most-recent user message can sit well
+            # past the 13th message overall.
+            messages = await self._fetch_messages_from_bus(channel_id, max(limit, HISTORY_FETCH_LIMIT))
 
-            # Convert FetchedMessage objects to the expected history format
-            history = []
-            total_messages = len(messages)
+            # The bus returns newest-first; work chronologically from here on.
+            ordered = list(reversed(messages))
+            selected = self._select_history_window(ordered)
 
-            for index, msg in enumerate(messages):
+            # Number AFTER selecting. The MESSAGE_n_OF_total markers are
+            # anti-spoofing: numbering the scan window and then dropping messages
+            # would leave gaps and an inflated total, which is indistinguishable
+            # from content having been removed by an attacker.
+            history: List[JSONDict] = []
+            total_messages = len(selected)
+            for index, msg in enumerate(selected):
                 is_agent_message = getattr(msg, "is_bot", False)
                 raw_content = getattr(msg, "content", "") or ""
 
-                # Process content through helper methods
                 clean_content = self._process_message_content(raw_content)
-                message_number = total_messages - index  # Messages come in reverse chronological order
-                protected_content = self._create_protected_content(clean_content, message_number, total_messages)
-                history_entry = self._create_history_entry(msg, protected_content, is_agent_message)
+                protected_content = self._create_protected_content(clean_content, index + 1, total_messages)
+                history.append(self._create_history_entry(msg, protected_content, is_agent_message))
 
-                history.append(history_entry)
-
-            # Messages come in reverse chronological order, reverse to get chronological
-            history.reverse()
             return history
 
         except Exception as e:
@@ -419,6 +490,12 @@ class BaseObserver(Generic[MessageT], ABC):
                     continue
 
     async def _add_to_feedback_queue(self, msg: MessageT) -> None:
+        # CC 4.2.1.1: relaying the WA's feedback back into the channel is the
+        # agent speaking, and runs outside the act gate.
+        if await refuse_agent_send_under_halt(
+            AgentSendSurface.WA_FEEDBACK_RELAY, str(getattr(msg, "channel_id", "")) or None
+        ):
+            return
         try:
             if self.bus_manager:
                 success = await self.bus_manager.communication.send_message(
@@ -445,6 +522,51 @@ class BaseObserver(Generic[MessageT], ABC):
         except Exception as e:  # pragma: no cover - rarely hit in tests
             logger.error("Error adding WA feedback message %s to queue: %s", msg.message_id, e)  # type: ignore[attr-defined]
 
+    async def _issue_task_envelope(self, task: Any) -> None:
+        """Issue and bind this task's authorization envelope (CIRISAgent#938).
+
+        Runs at task creation, from the observer — i.e. from outside the
+        reasoning loop, which is the whole point. The grant resolves from
+        ``(environment tier, agent role/template, enabled tools, requester
+        authorization)``; the task's *purpose* is deliberately not an input,
+        because it is not knowable here. An inbound message may be a greeting
+        or may be CSAM, and the task that needs ``discord_ban_user`` is exactly
+        the one that could not have declared that need in advance.
+
+        Best-effort: an issuance failure must never drop a user's message.
+        A task with no envelope is a denial to a future gate, not a bypass.
+        """
+        try:
+            from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+                attach_envelope_to_task,
+                issue_deployment_envelope,
+            )
+            from ciris_engine.schemas.runtime.task_envelope import RequesterAuthorization
+
+            ctx = getattr(task, "context", None)
+            requester = RequesterAuthorization(
+                user_id=getattr(ctx, "user_id", None),
+                channel_id=getattr(task, "channel_id", None),
+                source_ref=getattr(ctx, "correlation_id", None),
+                is_wise_authority=bool(self.observer_wa_id and task.signed_by == self.observer_wa_id),
+            )
+            tool_source = self.bus_manager.tool if self.bus_manager else None
+            envelope = await issue_deployment_envelope(
+                task_id=task.task_id,
+                agent_occurrence_id=getattr(task, "agent_occurrence_id", "default"),
+                requester=requester,
+                tool_source=tool_source,
+                time_service=self.time_service,
+            )
+            attach_envelope_to_task(task, envelope)
+        except Exception as e:
+            logger.warning(
+                "Failed to issue task envelope for task %s: %s. Task proceeds with no envelope "
+                "(a denial to any future tool gate, never a bypass).",
+                getattr(task, "task_id", "<unknown>"),
+                e,
+            )
+
     async def _sign_and_add_task(self, task: Any) -> None:
         """Sign the task with observer's WA certificate before adding."""
         # If auth service and observer WA ID are available, sign the task
@@ -458,6 +580,12 @@ class BaseObserver(Generic[MessageT], ABC):
             except Exception as e:
                 logger.error(f"Failed to sign observer task: {e}")
                 # Continue without signature
+
+        # Issue the task-scoped authorization envelope before the task is
+        # persisted, so it lands in the same row and shares the task's lifetime
+        # (CIRISAgent#938). Signing runs first so the envelope's requester can
+        # record whether the task carries observer-WA standing.
+        await self._issue_task_envelope(task)
 
         # Import persistence here to avoid circular import
 
@@ -596,18 +724,33 @@ class BaseObserver(Generic[MessageT], ABC):
                 passive_task_lookup[str(msg.author_id)] = msg.author_name
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
-            # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel
+            # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel.
+            # CIRIS_DISABLE_TASK_APPEND bypasses this lookup so every message creates its
+            # own task. Intended for benchmarking per-task throughput — never set in prod,
+            # where coalescing messages into the active channel task is the correct
+            # conversational behavior (see UpdatedStatusConscience).
             from ciris_engine.logic.persistence.models.tasks import (
                 get_active_task_for_channel,
                 set_task_updated_info_flag,
             )
 
-            existing_task = get_active_task_for_channel(channel_id, self.agent_occurrence_id)
+            if os.environ.get("CIRIS_DISABLE_TASK_APPEND") == "1":
+                existing_task = None
+            else:
+                existing_task = get_active_task_for_channel(channel_id, self.agent_occurrence_id)
             if existing_task and self.time_service:
                 # Try to update the existing task with new observation
                 update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]
+                # Also extract images from the new message to append to the task
+                update_images = getattr(msg, "images", []) or []
+                if update_images:
+                    logger.info(f"[VISION] Task update includes {len(update_images)} images from message")
                 success = set_task_updated_info_flag(
-                    existing_task.task_id, update_content, self.agent_occurrence_id, self.time_service
+                    existing_task.task_id,
+                    update_content,
+                    self.agent_occurrence_id,
+                    self.time_service,
+                    images=update_images,
                 )
                 if success:
                     logger.info(
@@ -648,6 +791,10 @@ class BaseObserver(Generic[MessageT], ABC):
                 priority=priority,
                 user_id=msg.author_id,  # type: ignore[attr-defined]
                 images=msg_images,
+                # Use the centralized resolver so the locale chain is uniform
+                # across every task-creating site (base_observer, discord_observer,
+                # WA guidance, system tasks). user > channel > env per BCP 47.
+                preferred_language=_resolve_observer_task_language(msg),
             )
 
             await self._sign_and_add_task(task)
@@ -675,7 +822,9 @@ class BaseObserver(Generic[MessageT], ABC):
             # Allow subclasses to add custom context sections before conversation history
             await self._add_custom_context_sections(task_lines, msg, history_context)
 
-            task_lines.append(f"\n=== CONVERSATION HISTORY (Last {PASSIVE_CONTEXT_LIMIT} messages) ===")
+            # Describe the window we actually built, not a fixed number: the
+            # slice is asymmetric and its size varies with what the channel holds.
+            task_lines.append(f"\n=== CONVERSATION HISTORY ({len(history_context)} messages) ===")
             observation_timestamp = (
                 self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
             )
@@ -699,8 +848,13 @@ class BaseObserver(Generic[MessageT], ABC):
 
             task_content = "\n".join(task_lines)
 
-            # Log context building details
-            history_line_count = len([line for line in task_lines for i in range(1, 11) if line.startswith(f"{i}. @")])
+            # Log context building details.
+            # Count what we actually put in, not lines numbered 1..10. The old
+            # expression scanned `range(1, 11)`, so it capped the reported figure at
+            # 10 and under-reports the current window (up to 13). A context-size log
+            # that saturates is worse than none — it reads as "history is fine"
+            # exactly when history grows past the cap.
+            history_line_count = len(history_context)
             logger.info(
                 f"[CONTEXT] Built thought context with {history_line_count} history messages, "
                 f"total thought size: {len(task_content)} chars"
@@ -793,13 +947,23 @@ class BaseObserver(Generic[MessageT], ABC):
 
         logger.info(f"[OBSERVER] Processing message {msg_id} from {author} in channel {channel_id}")
 
-        # COVENANT CHECK: Check for covenant invocation FIRST, before any filtering.
-        # This is the unfilterable kill switch - extraction IS perception.
-        # If a covenant is found and verified, it executes immediately.
-        await self._check_for_covenant(msg)
+        # ACCORD ROWS FIRST, before any filtering: a v2 halt / confirmation /
+        # resumption is handed to the node, which verifies and latches it.
+        forwarded = await self._forward_accord_row(msg)
+        if forwarded is not None:
+            return forwarded
 
         # Check if this is the agent's own message
         is_agent_message = self._is_agent_message(msg)
+
+        # SHED: runtime self-protection closes admission while a resource is
+        # under CRITICAL pressure. Refused before credit is charged and before
+        # any task exists, with a typed status the adapter can surface (the API
+        # answers 503 + Retry-After). Accord rows were forwarded above.
+        if not is_agent_message:
+            shed_result = self._refuse_if_shedding(msg, msg_id, channel_id)
+            if shed_result is not None:
+                return shed_result
 
         # Enforce credit policy if configured (may raise CreditDenied/CreditCheckFailed)
         await self._enforce_credit_policy(msg)
@@ -879,6 +1043,42 @@ class BaseObserver(Generic[MessageT], ABC):
             channel_id=channel_id,
             task_priority=task_priority,
             existing_task_updated=obs_result.existing_task_updated if obs_result else False,
+        )
+
+    def _admission_monitor(self, msg: MessageT) -> Optional[ResourceMonitorServiceProtocol]:
+        """The resource monitor that decides admission for this observer.
+
+        Late-bound from the runtime's BusManager when the observer was not
+        given one: CLI, Discord and Reddit are constructed without a monitor,
+        and SHED must reach every observer, not just the ones that were
+        handed it. Kept separate from `_get_resource_monitor` so admission
+        control does not change which observers enforce credit policy.
+        """
+        monitor = self._get_resource_monitor(msg)
+        if monitor is None:
+            monitor = getattr(self.bus_manager, "resource_monitor", None)
+        return monitor
+
+    def _refuse_if_shedding(self, msg: MessageT, msg_id: str, channel_id: str) -> Optional[MessageHandlingResult]:
+        """A RESOURCE_SHED result when admission is closed, else None."""
+        gate = pressure_gate_of(self._admission_monitor(msg))
+        if gate is None:
+            return None
+        holders = gate.resources(ResourceAction.SHED)
+        if not holders:
+            return None
+        gate.note_shed_refusal()
+        logger.warning(
+            "[OBSERVER] Message %s in channel %s REFUSED: admission closed by resource pressure (shed: %s)",
+            msg_id,
+            channel_id,
+            ", ".join(holders),
+        )
+        return MessageHandlingResult(
+            status=MessageHandlingStatus.RESOURCE_SHED,
+            message_id=msg_id,
+            channel_id=channel_id,
+            shed_resources=holders,
         )
 
     async def _enhance_message(self, msg: MessageT) -> MessageT:

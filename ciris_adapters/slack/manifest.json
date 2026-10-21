@@ -1,0 +1,35 @@
+{
+  "module": {
+    "name": "slack",
+    "version": "1.0.0",
+    "description": "Slack integration for reacting to messages, pinning/unpinning items in channels or DMs.",
+    "author": "CIRIS Team (converted from Clawdbot)",
+    "homepage": null
+  },
+  "cli_dependencies": ["slack"],
+  "services": [
+    {
+      "type": "TOOL",
+      "priority": "NORMAL",
+      "class": "slack.service.SlackToolService",
+      "capabilities": [
+        "tool:slack"
+      ]
+    }
+  ],
+  "capabilities": [
+    "tool:slack"
+  ],
+  "dependencies": {
+    "protocols": [
+      "ciris_engine.protocols.services.runtime.tool.ToolServiceProtocol"
+    ],
+    "schemas": [
+      "ciris_engine.schemas.adapters.tools"
+    ]
+  },
+  "exports": {
+    "service_class": "slack.service.SlackToolService"
+  },
+  "configuration": {}
+}

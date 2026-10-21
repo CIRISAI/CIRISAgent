@@ -5,9 +5,10 @@ Handles transitions between WAKEUP, DREAM, PLAY, WORK, SOLITUDE, and SHUTDOWN st
 Supports template-driven cognitive state behaviors configuration per
 FSD/COGNITIVE_STATE_BEHAVIORS.md for mission-appropriate transition rules.
 
-Covenant References:
-- Section V: Model Welfare & Self-Governance
-- Section VIII: Dignified Sunset Protocol
+References:
+- CC 7.5 / plain rule 5a: consensual shutdown and its objection window
+  (CLM-agent-shutdown-consent)
+- CC plain rules: rest states (DREAM, PLAY, SOLITUDE) are given to every agent in code
 """
 
 import logging
@@ -87,7 +88,7 @@ class StateManager:
             time_service: Service for time operations
             initial_state: Starting state (default: SHUTDOWN)
             cognitive_behaviors: Template-driven state transition config.
-                If None, uses default Covenant-compliant behaviors.
+                If None, uses default Accord-compliant behaviors.
         """
         self.time_service = time_service
         self.current_state = initial_state

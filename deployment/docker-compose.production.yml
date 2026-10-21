@@ -2,11 +2,19 @@ version: '3.8'
 
 # Production deployment with separate .env files per agent
 # Usage: docker-compose -f docker-compose.production.yml up -d
+#
+# IMAGE PINNING (CIRISAgent#850):
+# Images below use ghcr.io/cirisai/...:${CIRIS_VERSION:-latest}. This defaults to
+# `latest` (non-breaking) but lets operators pin a known-good build. To pin,
+# set CIRIS_VERSION to a published release tag, e.g.:
+#   export CIRIS_VERSION=2.9.5
+# For supply-chain integrity, ideally pin to an immutable digest by appending an
+# @sha256:... to the image reference once you have the digest for that tag.
 
 services:
   # Agent Datum (Primary decision-making)
   agent-datum:
-    image: ghcr.io/cirisai/ciris-agent:latest
+    image: ghcr.io/cirisai/ciris-agent:${CIRIS_VERSION:-latest}
     container_name: ciris-agent-datum
     expose:
       - "8080"
@@ -32,7 +40,7 @@ services:
 
   # Agent Sage (Wisdom and deep analysis)
   agent-sage:
-    image: ghcr.io/cirisai/ciris-agent:latest
+    image: ghcr.io/cirisai/ciris-agent:${CIRIS_VERSION:-latest}
     container_name: ciris-agent-sage
     expose:
       - "8081"
@@ -58,7 +66,7 @@ services:
 
   # Agent Scout (Information gathering and reconnaissance)
   agent-scout:
-    image: ghcr.io/cirisai/ciris-agent:latest
+    image: ghcr.io/cirisai/ciris-agent:${CIRIS_VERSION:-latest}
     container_name: ciris-agent-scout
     expose:
       - "8082"
@@ -84,7 +92,7 @@ services:
 
   # Agent Echo-Core (Core reasoning and consistency)
   agent-echo-core:
-    image: ghcr.io/cirisai/ciris-agent:latest
+    image: ghcr.io/cirisai/ciris-agent:${CIRIS_VERSION:-latest}
     container_name: ciris-agent-echo-core
     expose:
       - "8083"
@@ -110,7 +118,7 @@ services:
 
   # Agent Echo-Speculative (Speculative reasoning and possibilities)
   agent-echo-speculative:
-    image: ghcr.io/cirisai/ciris-agent:latest
+    image: ghcr.io/cirisai/ciris-agent:${CIRIS_VERSION:-latest}
     container_name: ciris-agent-echo-speculative
     expose:
       - "8084"
@@ -136,7 +144,7 @@ services:
 
   # GUI Application
   ciris-gui:
-    image: ghcr.io/cirisai/ciris-gui:latest
+    image: ghcr.io/cirisai/ciris-gui:${CIRIS_VERSION:-latest}
     container_name: ciris-gui
     expose:
       - "3000"

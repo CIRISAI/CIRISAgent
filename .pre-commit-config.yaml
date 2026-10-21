@@ -16,6 +16,15 @@ repos:
         verbose: true
         stages: [pre-commit]
 
+      # Node key material, by PATH. detect-private-key below cannot see it: it
+      # matches PEM armor, and a CIRIS master.key is 32 raw bytes with no
+      # header. 124 such files were tracked before this hook existed.
+      - id: no-key-material
+        name: Block node key material (identity/, keys/, *.master.key)
+        entry: python tools/dev/check_no_key_material.py
+        language: python
+        stages: [pre-commit]
+
   # Formatters - Always run, auto-fix
   - repo: https://github.com/psf/black
     rev: 24.4.2
@@ -26,6 +35,9 @@ repos:
         # Never fail, just fix
         always_run: true
         fail_fast: false
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
@@ -35,21 +47,80 @@ repos:
         # Never fail, just fix
         always_run: true
         fail_fast: false
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
 
   # Basic hygiene - Always fix
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       - id: end-of-file-fixer
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       - id: mixed-line-ending
         args: ['--fix=lf']
+        # Vendored byte-identical from CIRISClient (localization/upstream/vendored.json):
+        # reformatting them is a silent fork the vendoring check then rejects.
+        exclude: '^localization/((localize|glossary|review_only)\.py|drive\.sh|TRANSLATION_GUIDE\.md|glossaries/.*|upstream/.*)$'
       # Critical checks that should block
       - id: check-merge-conflict
       - id: detect-private-key
+      # Block files >250 KB. Build artifacts and pre-built binaries do NOT
+      # belong in git; distribute them via GitHub Releases or fetch on
+      # install (see tools/update_ciris_verify.py for the canonical pattern).
+      # Intentionally tracked larger files (allowlisted because there is no
+      # better distribution channel today):
+      #   - ciris_engine/data/geo/cities.db (~6 MB) — geo typeahead, shipped in pip wheel
+      #   - apps/android/wheels/*.whl (~2 MB each) — Android-specific pydantic_core
+      #     builds, not available from PyPI
+      # If you genuinely need to commit a file larger than 250 KB, justify it
+      # in the PR description first; do NOT bypass this hook with --no-verify.
       - id: check-added-large-files
-        args: ['--maxkb=500']
+        args: ['--maxkb=250']
+        # Honor the allowlist documented in the comment above. Without this
+        # exclude, the wheel-version-bump path (e.g.,
+        # pydantic_core-2.23.4-...whl → 2.24.0-...whl) is a "new file" to
+        # the hook and gets rejected — forcing developers to bypass with
+        # --no-verify, which directly contradicts the policy stated above.
+        # Adding new entries to this list requires the same justification
+        # standard as bypassing the hook would: name the specific file,
+        # explain why there is no better distribution channel today, and
+        # link to the discussion in the PR description.
+        exclude: |
+          (?x)^(
+              ciris_engine/data/geo/cities\.db
+            | apps/android/wheels/.*\.whl
+          )$
 
+  # UNDEFINED NAMES - BLOCKING. Narrow on purpose.
+  #
+  # The general ruff hook below is `stages: [manual]`, so it never runs in the
+  # normal flow — which is how `_gate_verdict()` reached main as a CALL WITH NO
+  # DEFINITION and sat there five releases. It lived on an error path, so it only
+  # fired when something else broke, and then the diagnostic meant to explain that
+  # failure raised NameError instead. Nine more of the same class were found
+  # alongside it — including a bare `os` in grace.py (the pre-commit gatekeeper
+  # itself) and `max_attempts`/`retry_delay` in qa_runner's retry path.
+  #
+  # F821 ONLY, and NO --fix: an undefined name is not a style opinion, it is code
+  # that cannot run, so it blocks. Keeping the rule narrow stops this becoming a
+  # lint-churn gate people learn to skip. `tests/` is excluded for now — it still
+  # carries 14 of these; add it once cleared, since a linter that skips tests is
+  # blind exactly where fixtures hide.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.8
+    hooks:
+      - id: ruff
+        alias: ruff-undefined-names
+        name: ruff (F821 undefined names — blocking)
+        args: ['--select', 'F821', '--no-fix']
+        files: '^(ciris_engine|ciris_adapters|tools)/.*\.py$'
   # Quality checks - Run but don't block (Grace will report)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.8
@@ -60,20 +131,20 @@ repos:
         always_run: false
         stages: [manual]
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+  # Mypy - Type checking (BLOCKING - catches errors before CI)
+  - repo: local
     hooks:
-      - id: mypy
-        args: ['--config-file=mypy.ini', '--ignore-missing-imports']
-        additional_dependencies: [
-          'pydantic>=2.0',
-          'types-PyYAML',
-          'types-requests',
-        ]
+      - id: mypy-check
+        name: mypy (type checking)
+        entry: python tools/dev/mypy_precommit.py
+        language: python
+        types: [python]
+        files: '^(ciris_engine|ciris_adapters)/.*\.py$'
         exclude: '^(tests|tools|scripts|docs|main\.py|grace\.py)'
-        # Don't block commits
-        always_run: false
-        stages: [manual]
+        pass_filenames: true
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
 
   # Custom CIRIS checks - Informational only
   - repo: local
@@ -88,14 +159,57 @@ repos:
         stages: [manual]
         verbose: true
 
-      # Version reminder - Gentle nudge
-      - id: version-check
-        name: Version Reminder
-        entry: tools/dev/check_version_reminder.sh
-        language: system
+      # Version alignment - Blocks if constants are out of sync
+      - id: version-alignment
+        name: Version Alignment Check
+        entry: python tools/dev/check_version_alignment.py
+        language: python
         pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
+
+      # Localization guard - Blocks on undefined referenced keys (raw-key UI bug)
+      # and en.json mirror drift. Fires when any bundle JSON or commonMain Kotlin
+      # (the localizedString/getString call sites) changes.
+      - id: localization-sync
+        name: Localization Guard (mirror parity + locale lag)
+        entry: python tools/dev/check_localization_sync.py
+        language: python
+        pass_filenames: false
+        # The Kotlin half moved upstream with the shared client. What remains
+        # here is the engine's own localized data and the UI strings the Android
+        # shell ships as assets; `client/shared/**/*.kt` no longer exists, and a
+        # pattern that can never match reads as coverage it does not provide.
+        files: '^(ciris_engine/data/localized/.*\.json|apps/android/src/main/assets/localization/.*\.json)$'
         always_run: false
-        stages: [manual]
+        stages: [pre-commit]
+        verbose: true
+
+      # Vendored CIRISClient localization pipeline - BLOCKING. A vendored file
+      # that differs from the digest localization/upstream/vendored.json records is a
+      # fork nobody declared; re-vendor it or record the edit as a patch.
+      - id: localize-vendoring
+        name: Vendored localize pipeline matches its record
+        entry: python tools/dev/check_localize_vendoring.py
+        language: python
+        pass_filenames: false
+        files: '^(localization/.*|tools/dev/check_localize_vendoring\.py)$'
+        always_run: false
+        stages: [pre-commit]
+        verbose: true
+
+      # D27: runtime code must not depend on its own .md (outside L4 attestation
+      # tree). Fires on any ciris_engine python change. CIRISAgent#807.
+      - id: no-runtime-md-reference
+        name: D27 runtime .md-reference gate
+        entry: python tools/dev/check_no_runtime_md_reference.py
+        language: python
+        pass_filenames: false
+        files: '^ciris_engine/.*\.py$'
+        always_run: false
+        stages: [pre-commit]
+        verbose: true
 
 # Configuration
 default_language_version:

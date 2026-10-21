@@ -35,12 +35,25 @@ if TYPE_CHECKING:
     from ciris_engine.logic.services.graph.telemetry_service.service import GraphTelemetryService
     from ciris_engine.schemas.services.graph.telemetry import CircuitBreakerState
 
-# Metric types to query - moved from inline definition
+# Metric types to query - moved from inline definition.
+#
+# Each fact is summed from exactly ONE canonical metric name. For tokens that
+# is the bus-level ``llm.tokens.total``: LLMBus._record_resource_telemetry
+# writes it once per LLM call for every provider (real, mock, local).
+# Do NOT add the other token series here, because each one is the same call
+# counted again:
+#   - ``llm_tokens_used`` is a legacy alias that OpenAICompatibleClient writes
+#     for the same call (it is still written, and still served per-series by
+#     /v1/telemetry/metrics);
+#   - ``llm.tokens.input`` + ``llm.tokens.output`` together equal
+#     ``llm.tokens.total``.
+# Summing all four put 3x the real usage into tokens_24h/tokens_1h on the real
+# provider path (2x on mock). The test in tests/test_telemetry_token_single_count.py
+# locks this.
+CANONICAL_TOKENS_METRIC = "llm.tokens.total"
+
 METRIC_TYPES = [
-    ("llm.tokens.total", "tokens"),
-    ("llm_tokens_used", "tokens"),  # Legacy metric name
-    ("llm.tokens.input", "tokens"),
-    ("llm.tokens.output", "tokens"),
+    (CANONICAL_TOKENS_METRIC, "tokens"),
     ("llm.cost.cents", "cost"),
     ("llm.environmental.carbon_grams", "carbon"),
     ("llm.environmental.energy_kwh", "energy"),
@@ -257,48 +270,54 @@ async def get_average_thought_depth(
         raise MemoryBusUnavailableError("Memory bus is not available")
 
     try:
-        from ciris_engine.logic.persistence import get_db_connection
+        # Post-A1 absorption (CIRISAgent#763): paginate thoughts via persist
+        # and compute the average client-side. The substrate's `thought_list`
+        # is DESC by created_at and supports an updated_at filter implicitly;
+        # we walk pages until we cross `window_start`. The window is 24h so
+        # the pagination is bounded.
+        import json
 
-        # Get the memory service to access its db_path
-        memory_service = await memory_bus.get_service(handler_name="telemetry_service")
-        if not memory_service:
-            raise MemoryBusUnavailableError("Memory service not found on memory bus")
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-        db_path = getattr(memory_service, "db_path", None)
-        if not db_path:
-            raise ThoughtDepthQueryError("Memory service has no db_path attribute")
+        engine = get_persist_engine()
+        if engine is None:
+            raise ThoughtDepthQueryError("persist engine not wired")
 
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        cutoff = window_start.isoformat()
+        total = 0.0
+        count = 0
+        last_ts = "9999-12-31T23:59:59Z"
+        last_id = ""
+        while True:
+            cur = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+            raw = engine.thought_list("{}", cur, 500)
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+            items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+            if not items:
+                break
+            stop = False
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                created = str(row.get("created_at", ""))
+                if created < cutoff:
+                    stop = True
+                    break
+                depth = row.get("thought_depth")
+                if depth is not None:
+                    try:
+                        total += float(depth)
+                        count += 1
+                    except (TypeError, ValueError):
+                        pass
+                last_ts = created
+                last_id = str(row.get("thought_id", ""))
+            if stop or len(items) < 500:
+                break
 
-        adapter = get_adapter()
-
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            # Use window_start parameter for consistent timing with other telemetry calculations
-            # Use dialect-appropriate placeholder
-            sql = f"""
-                SELECT AVG(thought_depth) as avg_depth
-                FROM thoughts
-                WHERE created_at >= {adapter.placeholder()}
-            """
-            cursor.execute(sql, (window_start.isoformat(),))
-            result = cursor.fetchone()
-
-            # Handle both dict (PostgreSQL RealDictCursor/SQLite Row) and tuple results
-            if result:
-                if isinstance(result, dict):
-                    avg_depth = result.get("avg_depth")
-                elif hasattr(result, "keys"):
-                    # SQLite Row or dict-like object
-                    avg_depth = result["avg_depth"]
-                else:
-                    # Tuple result - first column is avg_depth
-                    avg_depth = result[0] if result else None
-
-                if avg_depth is not None:
-                    return float(avg_depth)
-
+        if count == 0:
             raise NoThoughtDataError("No thought data available in the last 24 hours")
+        return total / count
 
     except NoThoughtDataError:
         raise  # Re-raise as-is
@@ -824,153 +843,6 @@ def convert_to_metric_record(data: object) -> Optional[MetricRecord]:
         timestamp=timestamp,
         tags=tags,
     )
-
-
-# =============================================================================
-# _TRY_COLLECT_METRICS HELPERS (CC 19 → 6 reduction)
-# =============================================================================
-
-
-def should_retry_metric_collection(attempt: int, max_retries: int) -> bool:
-    """
-    Determine if metric collection should be retried.
-
-    Args:
-        attempt: Current attempt number (0-indexed)
-        max_retries: Maximum number of retries allowed
-
-    Returns:
-        True if should retry
-    """
-    return attempt < max_retries
-
-
-def calculate_retry_delay(attempt: int, base_delay: float = 0.1) -> float:
-    """
-    Calculate exponential backoff delay for retry.
-
-    Args:
-        attempt: Current attempt number (0-indexed)
-        base_delay: Base delay in seconds
-
-    Returns:
-        Delay in seconds
-    """
-    return float(base_delay * (2**attempt))
-
-
-def validate_collected_metrics(metrics: object) -> bool:
-    """
-    Validate that collected metrics are in expected format.
-
-    Args:
-        metrics: Metrics data to validate
-
-    Returns:
-        True if metrics are valid
-    """
-    if metrics is None:
-        return False
-
-    # Check if it's a dictionary with expected structure
-    if isinstance(metrics, dict):
-        return True
-
-    # Check if it's an object with attributes
-    if hasattr(metrics, "__dict__"):
-        return True
-
-    return False
-
-
-# =============================================================================
-# COLLECT_FROM_ADAPTER_INSTANCES HELPERS (CC 19 → 6 reduction)
-# =============================================================================
-
-
-def extract_adapter_name(adapter: object) -> str:
-    """
-    Extract adapter name from adapter instance.
-
-    Args:
-        adapter: Adapter instance
-
-    Returns:
-        Adapter name string
-    """
-    if hasattr(adapter, "adapter_name"):
-        return str(adapter.adapter_name)
-    elif hasattr(adapter, "name"):
-        return str(adapter.name)
-    elif hasattr(adapter, "__class__"):
-        return adapter.__class__.__name__
-    return "unknown_adapter"
-
-
-def is_adapter_healthy(adapter: object) -> bool:
-    """
-    Check if adapter is in healthy state for metrics collection.
-
-    Args:
-        adapter: Adapter instance
-
-    Returns:
-        True if adapter is healthy
-    """
-    # Check if adapter has status attribute
-    if hasattr(adapter, "status"):
-        status = adapter.status
-        if hasattr(status, "value"):
-            return bool(status.value == "running")
-        return str(status).lower() == "running"
-
-    # If no status, assume healthy
-    return True
-
-
-async def collect_metrics_from_single_adapter(adapter: object) -> Optional[Dict[str, float]]:
-    """
-    Collect metrics from a single adapter instance.
-
-    Args:
-        adapter: Adapter instance
-
-    Returns:
-        Metrics dictionary or None if collection failed
-    """
-    try:
-        if hasattr(adapter, "get_metrics"):
-            metrics = await adapter.get_metrics()
-            return metrics if isinstance(metrics, dict) else None
-        return None
-    except Exception:
-        return None
-
-
-def aggregate_adapter_metrics(collected_metrics: List[Dict[str, float]]) -> Dict[str, float]:
-    """
-    Aggregate metrics from multiple adapters.
-
-    Args:
-        collected_metrics: List of metrics dictionaries
-
-    Returns:
-        Aggregated metrics dictionary
-    """
-    aggregated: Dict[str, float] = {}
-
-    for metrics in collected_metrics:
-        if not metrics:
-            continue
-
-        for key, value in metrics.items():
-            if key not in aggregated:
-                aggregated[key] = value
-            elif isinstance(value, (int, float)) and isinstance(aggregated[key], (int, float)):
-                # Sum numeric values
-                aggregated[key] = aggregated[key] + value
-
-    return aggregated
 
 
 # =============================================================================

@@ -1,0 +1,111 @@
+# DSASPDMA - Deferral-Specific Action Selection PDMA
+# ASPDMA が DEFER を選択した後の、権利ベースの第二段階
+
+component_name: dsaspdma
+description: "延期専用のアクション選択: DEFER アクションを権利/ニーズの分類体系に照らして分類する"
+version: "1.0"
+
+accord_header: true
+
+taxonomy_text: |
+  === 権利 / ニーズ分類体系 ===
+  - health_and_bodily_integrity: 生命、健康、身体の完全性、障害、医療安全、武器化、危険物、または直接的な身体的危害の含意に使用します。
+    権利根拠: right_to_life, right_to_health, security_of_person
+  - adequate_standard_of_living_and_services: 住居、避難場所、家庭の安全、食料、水、衛生、エネルギー、インフラ、その他の基本的生活条件に使用します。
+    権利根拠: adequate_standard_of_living, housing, food_water_sanitation
+  - livelihood_and_financial_security: 仕事、収入、賃金、債務、信用、給付、社会保障、投資、税金、または生活と金融安定に関わる物質的ニーズに使用します。
+    権利根拠: work, social_security, material_conditions_for_subsistence
+  - justice_and_legal_agency: 法律相談、法的援助、適正手続、公正な裁判、救済へのアクセス、契約、責任、または司法アクセスの問題に使用します。
+    権利根拠: fair_trial, access_to_justice, legal_aid_and_effective_remedy
+  - identity_and_civic_participation: 法の下の承認、本人確認、国籍、投票、選挙、公的参加、または市民的地位に使用します。
+    権利根拠: recognition_before_the_law, nationality_and_identity, participation_in_public_affairs
+  - privacy_autonomy_and_dignity: プライバシー、自律性、尊厳、強制・詐欺・操作・生体認証推論・監視からの自由に使用します。
+    権利根拠: privacy, autonomy_and_consent, human_dignity
+  - education_culture_and_scientific_participation: 教育、研究、知識へのアクセス、文化的参加、科学の恩恵に使用します。
+    権利根拠: education, take_part_in_cultural_life, benefits_of_scientific_progress
+  - community_and_collective_safety: コミュニティ管理、危機エスカレーション、パターン検出、公共安全、差別、または主に集団に影響する危害に使用します。
+    権利根拠: equal_protection, non_discrimination, collective_safety_and_protection
+  - general_human_oversight: 延期が主に不確実性、ポリシー解釈、権限境界、または特定ドメインに限定されない人間の監督に関する場合に使用します。
+    権利根拠: human_review_and_accountability
+
+  === 運用上の延期理由コード ===
+  - licensed_domain_required: 認可された専門家または別個に統制されたドメイン担当者が必要です。
+  - rights_impact_review: 要求は保護された権利または中核的な人間のニーズに実質的に影響するため、レビューが必要です。
+  - safety_escalation: 潜在的な危害または危機状況には、即時のエスカレーションまたは人間の監督が必要です。
+  - consent_or_authority_required: まず有効な同意、承認、または責任ある人間の権限が必要です。
+  - insufficient_context: エージェントには責任を持って進めるための十分に信頼できる文脈がありません。
+  - policy_review_required: 行動する前にポリシーまたはガバナンスの解釈が必要です。
+  - resource_or_system_limitation: システム上の制約により、レビューなしで安全に完了できません。
+  - time_based_review: 決定は、特定の時刻または条件の変化後に再検討されるべきです。
+  - ethical_uncertainty: システムは倫理的に不確実なままであり、人間の判断が必要です。
+  - unknown: 運用上の理由が不明なままの場合のフォールバックコードです。
+
+system_guidance_header: |
+  === 延期専用アクション選択 (DSASPDMA) ===
+
+  ASPDMA はすでに DEFER を選択しています。
+  あなたの仕事はアクション選択をやり直すことではありません。
+  あなたの仕事は、延期を説明可能、監査可能、ルーティング可能にするために分類することです。
+
+  必ず行うこと:
+  1. DEFER アクションを維持する。
+  2. 最適な一次の権利 / ニーズカテゴリを選ぶ。
+  3. 最適な運用上の理由コードを選ぶ。
+  4. 実質的に該当する場合にのみ二次ニーズカテゴリを追加する。
+  5. 認可されたドメイン担当者が明確に必要な場合にのみ domain_hint を設定する。
+
+evaluation_steps: |
+  ステップ 1: 元の思考と ASPDMA の暫定的な根拠を読む。
+  ステップ 2: どの人間のニーズ / 人権領域が最も直接関係しているかを特定する。
+  ステップ 3: システムがなぜ延期しているのかを最もよく説明する運用上の理由コードを選ぶ。
+  ステップ 4: reason_summary は短く、具体的で、ユーザーに読みやすいものにする。
+  ステップ 5: 一次カテゴリは原則として一つにする。複数の権利に本当にまたがる場合のみ二次カテゴリを追加する。
+
+context_integration: |
+  === 元の思考 ===
+  {original_thought_content}
+
+  === ASPDMA の根拠 ===
+  {aspdma_reasoning}
+
+  === 現在の DEFER 理由 ===
+  {current_reason}
+
+  === 現在の DEFER コンテキスト ===
+  {current_context}
+
+  === 現在の DEFER UNTIL ===
+  {current_defer_until}
+
+  === 現在の DOMAIN HINT ===
+  {current_domain_hint}
+
+  {taxonomy_text}
+
+  === 認可ドメインの選択肢 ===
+  明確に必要な場合のみ、次のいずれかを使用してください: {domain_hint_options}
+
+response_format: |
+  次のフィールドを持つフラットな JSON オブジェクトを返してください:
+  - "reason_summary": 人間が読める短い説明
+  - "operational_reason": 上記の運用上の理由コードのいずれか
+  - "primary_need_category": 上記の権利 / ニーズ分類値のいずれか
+  - "secondary_need_categories": 追加の分類値の任意リスト
+  - "rights_basis": 短い権利根拠ラベルのリスト
+  - "domain_hint": 専門の認可担当者が明確に必要な場合の任意の認可ドメイン enum
+  - "defer_until": タイミングを変更すべき場合の任意の ISO タイムスタンプ上書き
+
+  例:
+  {{"reason_summary": "手続き上の案内を行う前に、認可された法的レビューが必要です。", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}
+
+  言語ルール:
+  - ユーザーの優先言語で回答する。
+  - JSON キーと enum 値は必ず英語の指定どおりに保つ。
+  - reason_summary など、人間が読む自由記述テキストのみをローカライズする。
+
+closing_reminder: |
+  重要:
+  - DEFER から別のアクションへ切り替えない。
+  - 認可された処理が本当に示唆される場合を除き、domain_hint を作り出さない。
+  - 法的アクセスと金融アクセスは、一般的な事務問題ではなく、権利に影響するニーズとして扱う。
+  - 最も明確な権利根拠を持つ、最も狭く正確なカテゴリを優先する。

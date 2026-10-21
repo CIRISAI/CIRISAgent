@@ -1,0 +1,83 @@
+name: Results page
+
+# Publishes docs/results/ to GitHub Pages: every safety battery this agent has
+# run, per language and per criterion, with the question, the answer, the
+# judgement and the rubric behind each verdict.
+#
+# The page is static and reads only committed evidence — no API calls, no token,
+# nothing that expires. That is the point: Actions artifacts are retained 90
+# days, and a results page built on them would go blank on a rolling basis while
+# still looking healthy.
+#
+# The data under docs/results/data/ is GENERATED from qa_reports/ by
+# tools/build_results_index.py and regenerated here on every deploy, so a stale
+# commit of the generated files cannot silently outlive the evidence it claims
+# to summarise.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'qa_reports/safety_battery/**'
+      - 'qa_reports/safety_interpret/**'
+      - 'qa_reports/safety_sweeps.json'
+      - 'qa_reports/qa_status.json'
+      - 'tests/safety/**/*canonical_universal_criteria.json'
+      - 'docs/results/**'
+      - 'tools/build_results_index.py'
+      - '.github/workflows/results-page.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Regenerate the page data from committed evidence
+        run: python3 -u tools/build_results_index.py | tee build.log
+
+      - name: Refuse to publish an empty page
+        run: |
+          # A results page that renders zero runs looks like "nothing has failed"
+          # and is indistinguishable from "the generator broke". State the
+          # denominator and fail on zero rather than publishing a confident void.
+          RUNS=$(python3 -c "import json;print(len(json.load(open('docs/results/data/index.json'))['runs']))")
+          echo "runs in index: $RUNS"
+          if [ "$RUNS" -eq 0 ]; then
+            echo "::error::index.json holds zero runs — publishing this would show an empty page that reads as 'all clear'."
+            exit 1
+          fi
+          {
+            echo "### Results page"
+            echo ""
+            echo "- runs published: **$RUNS**"
+            grep -E '^  (index|runs missing)' build.log || true
+          } >> $GITHUB_STEP_SUMMARY
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/results
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

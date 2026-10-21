@@ -7,7 +7,7 @@ Handles loading, creating, and persisting agent identity.
 import hashlib
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ciris_engine.constants import CIRIS_VERSION
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -89,12 +89,9 @@ class IdentityManager:
     ) -> Optional[JSONDict]:  # NOSONAR: Maintains async consistency in identity chain
         """Retrieve agent identity from the persistence tier."""
         try:
-            from ciris_engine.logic.config import get_sqlite_db_full_path
             from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
 
-            # Get the correct db path from our config
-            db_path = get_sqlite_db_full_path(self.config)
-            identity = retrieve_agent_identity(db_path=db_path)
+            identity = retrieve_agent_identity()
             if identity:
                 return identity.model_dump()
 
@@ -106,12 +103,9 @@ class IdentityManager:
     async def _save_identity_to_graph(self, identity: AgentIdentityRoot) -> None:
         """Save agent identity to the persistence tier."""
         try:
-            from ciris_engine.logic.config import get_sqlite_db_full_path
             from ciris_engine.logic.persistence.models.identity import store_agent_identity
 
-            # Get the correct db path from our config
-            db_path = get_sqlite_db_full_path(self.config)
-            success = store_agent_identity(identity, self.time_service, db_path=db_path)
+            success = store_agent_identity(identity, self.time_service)
             if success:
                 logger.info("Agent identity saved to persistence tier")
             else:
@@ -121,33 +115,76 @@ class IdentityManager:
             logger.error(f"Failed to save identity to persistence: {e}")
             raise
 
+    def _extract_domain_knowledge(self, template: AgentTemplate) -> Dict[str, str]:
+        """Extract and normalize domain knowledge from template."""
+        import json
+
+        if not template.dsdma_kwargs or not template.dsdma_kwargs.domain_specific_knowledge:
+            return {}
+
+        domain_knowledge: Dict[str, str] = {}
+        for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
+            domain_knowledge[key] = json.dumps(value) if isinstance(value, dict) else str(value)
+        return domain_knowledge
+
+    def _extract_overrides(self, overrides_obj: Any) -> Dict[str, Any]:
+        """Extract non-None values from an overrides object.
+
+        #995 P0-2 — `__dict__` is not the whole model under Pydantic v2. It
+        holds DECLARED fields only; with `extra="allow"` (which
+        `ActionSelectionOverrides` sets) undeclared keys land in
+        `__pydantic_extra__` and never appear in `__dict__`. Since prompt
+        overrides in agent templates are written as free-form YAML keys, that
+        meant every template's `system_header` and bespoke guidance override
+        was silently discarded — and for `echo`, `sage`, `scout`, `echo-core`
+        and `echo-speculative` the extraction returned `{}`, dropping their
+        overrides entirely. A template that configures the agent's prompts and
+        has no effect is worse than one that cannot: the operator reads the
+        YAML and believes it applied.
+
+        `model_extra` is the supported accessor for the extra bucket; falling
+        back to `{}` keeps this working for plain objects and for models that
+        forbid extras.
+        """
+        if not overrides_obj:
+            return {}
+        declared = getattr(overrides_obj, "__dict__", {}) or {}
+        extra = getattr(overrides_obj, "model_extra", None) or {}
+        return {k: v for k, v in {**declared, **extra}.items() if v is not None}
+
+    def _resolve_permitted_actions(self, template: AgentTemplate) -> List[HandlerActionType]:
+        """Resolve permitted actions from template or defaults."""
+        if template.permitted_actions is not None:
+            actions = [
+                HandlerActionType(action) if isinstance(action, str) else action
+                for action in template.permitted_actions
+            ]
+            logger.info(
+                f"IdentityManager: Using template-defined permitted_actions for {template.name}: "
+                f"{[a.value for a in actions]}"
+            )
+            return actions
+
+        actions = self._get_default_permitted_actions()
+        logger.warning(
+            f"IdentityManager: Template {template.name} has no permitted_actions, using defaults: "
+            f"{[a.value for a in actions]}"
+        )
+        return actions
+
     def _create_identity_from_template(self, template: AgentTemplate) -> AgentIdentityRoot:
         """Create initial identity from template (first run only)."""
-        # Generate deterministic identity hash
         identity_string = f"{template.name}:{template.description}:{template.role_description}"
         identity_hash = hashlib.sha256(identity_string.encode()).hexdigest()
 
-        # Extract DSDMA configuration from template
-        domain_knowledge = {}
+        # Extract DSDMA configuration
+        domain_knowledge = self._extract_domain_knowledge(template)
         dsdma_prompt_template = None
+        if template.dsdma_kwargs and template.dsdma_kwargs.prompt_template:
+            dsdma_prompt_template = template.dsdma_kwargs.prompt_template
 
-        if template.dsdma_kwargs:
-            # Extract domain knowledge from typed model
-            if template.dsdma_kwargs.domain_specific_knowledge:
-                for key, value in template.dsdma_kwargs.domain_specific_knowledge.items():
-                    if isinstance(value, dict):
-                        # Convert nested dicts to JSON strings
-                        import json
+        permitted_actions = self._resolve_permitted_actions(template)
 
-                        domain_knowledge[key] = json.dumps(value)
-                    else:
-                        domain_knowledge[key] = str(value)
-
-            # Extract prompt template
-            if template.dsdma_kwargs.prompt_template:
-                dsdma_prompt_template = template.dsdma_kwargs.prompt_template
-
-        # Create identity root from template
         return AgentIdentityRoot(
             agent_id=template.name,
             identity_hash=identity_hash,
@@ -155,21 +192,11 @@ class IdentityManager:
                 description=template.description,
                 role_description=template.role_description,
                 domain_specific_knowledge=domain_knowledge,
+                auto_load_adapters=template.auto_load_adapters,
                 dsdma_prompt_template=dsdma_prompt_template,
-                csdma_overrides={
-                    k: v
-                    for k, v in (template.csdma_overrides.__dict__ if template.csdma_overrides else {}).items()
-                    if v is not None
-                },
-                action_selection_pdma_overrides={
-                    k: v
-                    for k, v in (
-                        template.action_selection_pdma_overrides.__dict__
-                        if template.action_selection_pdma_overrides
-                        else {}
-                    ).items()
-                    if v is not None
-                },
+                csdma_overrides=self._extract_overrides(template.csdma_overrides),
+                pdma_overrides=self._extract_overrides(template.pdma_overrides),
+                action_selection_pdma_overrides=self._extract_overrides(template.action_selection_pdma_overrides),
                 last_shutdown_memory=None,
             ),
             identity_metadata=IdentityMetadata(
@@ -183,18 +210,7 @@ class IdentityManager:
                 approval_timestamp=None,
                 version=CIRIS_VERSION,  # Use actual CIRIS version
             ),
-            permitted_actions=[
-                HandlerActionType.OBSERVE,
-                HandlerActionType.SPEAK,
-                HandlerActionType.TOOL,
-                HandlerActionType.MEMORIZE,
-                HandlerActionType.RECALL,
-                HandlerActionType.FORGET,
-                HandlerActionType.DEFER,
-                HandlerActionType.REJECT,
-                HandlerActionType.PONDER,
-                HandlerActionType.TASK_COMPLETE,
-            ],
+            permitted_actions=permitted_actions,
             restricted_capabilities=[
                 "identity_change_without_approval",
                 "profile_switching",
@@ -220,7 +236,6 @@ class IdentityManager:
         Returns:
             True if update successful, False otherwise
         """
-        from ciris_engine.logic.config import get_sqlite_db_full_path
         from ciris_engine.logic.persistence.models.identity import update_agent_identity
         from ciris_engine.logic.utils.path_resolution import find_template_file
 
@@ -254,12 +269,10 @@ class IdentityManager:
         updated_identity = self._create_updated_identity_from_template(template, current_identity)
 
         # 4. Call update_agent_identity for proper tracking
-        db_path = get_sqlite_db_full_path(self.config)
         success = update_agent_identity(
             updated_identity,
             updated_by=updated_by,
             time_service=self.time_service,
-            db_path=db_path,
         )
 
         if success:
@@ -333,13 +346,26 @@ class IdentityManager:
 
         # Build overrides using helper
         csdma_overrides = self._build_overrides_dict(template.csdma_overrides)
+        pdma_overrides = self._build_overrides_dict(template.pdma_overrides)
         action_pdma_overrides = self._build_overrides_dict(template.action_selection_pdma_overrides)
 
-        # Build permitted actions list
-        actions_source = template.permitted_actions or self._get_default_permitted_actions()
-        permitted_actions = [
-            HandlerActionType(action) if isinstance(action, str) else action for action in actions_source
-        ]
+        # Build permitted actions list - CRITICAL: use 'is not None' check!
+        # An empty list means NO actions permitted (valid), None means use defaults
+        if template.permitted_actions is not None:
+            permitted_actions = [
+                HandlerActionType(action) if isinstance(action, str) else action
+                for action in template.permitted_actions
+            ]
+            logger.info(
+                f"IdentityManager: Refresh using template-defined permitted_actions for {template.name}: "
+                f"{[a.value for a in permitted_actions]}"
+            )
+        else:
+            permitted_actions = self._get_default_permitted_actions()
+            logger.warning(
+                f"IdentityManager: Template {template.name} has no permitted_actions, using defaults: "
+                f"{[a.value for a in permitted_actions]}"
+            )
 
         # Create updated identity
         return AgentIdentityRoot(
@@ -349,8 +375,10 @@ class IdentityManager:
                 description=template.description,
                 role_description=template.role_description,
                 domain_specific_knowledge=domain_knowledge,
+                auto_load_adapters=template.auto_load_adapters,
                 dsdma_prompt_template=dsdma_prompt_template,
                 csdma_overrides=csdma_overrides,
+                pdma_overrides=pdma_overrides,
                 action_selection_pdma_overrides=action_pdma_overrides,
                 last_shutdown_memory=current_identity.core_profile.last_shutdown_memory,
             ),
@@ -386,5 +414,5 @@ class IdentityManager:
                 logger.error(f"Identity missing required field: {field}")
                 return False
 
-        logger.info("✓ Agent identity verified")
+        logger.info("[OK] Agent identity verified")
         return True

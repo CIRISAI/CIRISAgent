@@ -28,7 +28,7 @@ class AuditEventData(BaseModel):
         default_factory=dict, description="Additional event metadata"
     )
 
-    model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
+    model_config = ConfigDict(extra="allow", defer_build=True)  # Allow additional fields for flexibility
 
 
 class VerificationReport(BaseModel):

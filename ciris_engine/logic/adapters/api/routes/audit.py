@@ -7,19 +7,18 @@ Simplified to 3 core endpoints: query, get specific entry, and export.
 
 import asyncio
 import json
-import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi import Path as FastAPIPath
 from fastapi import Query, Request
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
-from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_str, get_str_optional
+from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
@@ -27,9 +26,14 @@ from ciris_engine.schemas.services.graph.audit import AuditQuery, VerificationRe
 from ciris_engine.schemas.services.nodes import AuditEntry
 
 from ..constants import DESC_END_TIME, DESC_RESULTS_OFFSET, DESC_START_TIME, ERROR_AUDIT_SERVICE_NOT_AVAILABLE
-from ..dependencies.auth import AuthContext, require_admin, require_observer
+from ._common import RESPONSES_404_500_503, RESPONSES_500_503, AuthAdminDep, AuthObserverDep
 
 router = APIRouter(prefix="/audit", tags=["audit"])
+
+# Logger for chain integrity warnings
+import logging
+
+_audit_logger = logging.getLogger(__name__)
 
 
 # Internal dataclass for audit entry merging
@@ -58,6 +62,8 @@ class AuditEntryResponse(BaseModel):
     signature: Optional[str] = Field(None, description="Cryptographic signature")
     hash_chain: Optional[str] = Field(None, description="Previous hash for chain")
     storage_sources: List[str] = Field(default_factory=list, description="Storage locations: graph, jsonl, sqlite")
+    integrity_valid: bool = Field(True, description="Chain integrity verified during read")
+    integrity_warnings: List[str] = Field(default_factory=list, description="Integrity issues detected")
 
     @field_serializer("timestamp")
     def serialize_timestamp(self, timestamp: datetime, _info: Any) -> Optional[str]:
@@ -97,10 +103,6 @@ class AuditExportResponse(BaseModel):
 
 def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
     """Convert AuditEntry to API response format."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     # Convert context to AuditContext
     ctx = entry.context
     if hasattr(ctx, "model_dump"):
@@ -108,13 +110,14 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
         ctx_dict = ctx.model_dump()
         additional_data = ctx_dict.get("additional_data", {})
 
-        # Debug logging to trace metadata propagation
-        if additional_data:
-            logger.debug(f"_convert_audit_entry - additional_data keys: {additional_data.keys()}")
-            if "tool_name" in additional_data:
-                logger.debug(f"_convert_audit_entry - Found tool_name={additional_data['tool_name']}")
-        else:
-            logger.debug("_convert_audit_entry - No additional_data in ctx_dict")
+        # Extract outcome from additional_data (stored by audit service)
+        outcome = additional_data.get("outcome") if additional_data else None
+        # Also check for error field to determine outcome
+        error = ctx_dict.get("error")
+        if not outcome and error:
+            outcome = "failure"
+        elif not outcome:
+            outcome = "success"
 
         context = AuditContext(
             entity_id=ctx_dict.get("entity_id"),
@@ -127,12 +130,12 @@ def _convert_audit_entry(entry: AuditEntry) -> AuditEntryResponse:
             ip_address=ctx_dict.get("ip_address"),
             user_agent=ctx_dict.get("user_agent"),
             result=ctx_dict.get("result"),
-            error=ctx_dict.get("error"),
+            error=error,
+            outcome=outcome,
             metadata=additional_data,
         )
     else:
         # If it's not an AuditEntryContext, create a minimal AuditContext
-        logger.debug("_convert_audit_entry - ctx doesn't have model_dump, using str(ctx)")
         context = AuditContext(description=str(ctx) if ctx else None)
 
     return AuditEntryResponse(
@@ -155,40 +158,103 @@ def _get_audit_service(request: Request) -> AuditServiceProtocol:
     return audit_service  # type: ignore[no-any-return]
 
 
+def _persist_audit_row_to_legacy(row: dict[str, Any]) -> dict[str, object]:
+    """Map a persist `cirislens_audit_log` row to the legacy `audit_log` row shape.
+
+    Callers in this route assume the legacy column names. Persist uses
+    slightly different field names + adds tenant_id / actor_id / etc.
+    We project the persist row onto the legacy shape; integrity flag rides
+    on the new key `_signature_verified` so the chain-integrity warning UI
+    keeps working without recomputing hashes client-side.
+    """
+    payload_str = row.get("payload", "")
+    return {
+        "event_id": row.get("entry_id", ""),
+        "event_timestamp": row.get("recorded_at", ""),
+        "event_type": row.get("action_type", "audit_event"),
+        "originator_id": row.get("actor_id", ""),
+        "event_payload": payload_str,
+        "sequence_number": row.get("sequence_number", 0),
+        "previous_hash": row.get("prev_hash", ""),
+        "entry_hash": row.get("entry_hash", ""),
+        "signature": row.get("signature", ""),
+        "signing_key_id": row.get("signing_key_id", ""),
+        "_signature_verified": bool(row.get("signature_verified", 0)),
+    }
+
+
 def _sync_query_sqlite_audit(
     db_path: str,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-) -> list[dict[str, object]]:  # SERIALIZATION BOUNDARY - SQLite row_factory returns dicts
-    """Query SQLite audit database directly (synchronous version)."""
-    if not Path(db_path).exists():
-        return []
+) -> list[dict[str, object]]:
+    """Query the audit chain via persist's `audit_list_entries` substrate.
 
+    Post-A3 cutover (CIRISAgent#763 / 2.9.0 Phase 3a): the legacy
+    `audit_log` table is empty on every 2.9.0 deployment because the
+    write path routes through `cirislens_audit_log`. We read from
+    persist's substrate so the API exposes the actual current chain.
+
+    `db_path` is preserved in the signature for backward compatibility;
+    persist owns the underlying file.
+    """
     try:
-        with sqlite3.connect(db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            # Build query with time filters
-            query = "SELECT * FROM audit_log WHERE 1=1"
-            params = []
+        engine = get_persist_engine()
+        if engine is None:
+            return []
 
-            if start_time:
-                query += " AND event_timestamp >= ?"
-                params.append(start_time.isoformat())
+        # Build the persist AuditFilter. Tenant scoping is required by
+        # AV-51; resolve the tenant via the SAME source as the audit WRITE
+        # path (logic.audit.resolve_tenant_id, which prefers
+        # CIRIS_AGENT_ID). Reading CIRIS_AGENT_TENANT here diverged from the
+        # writer: with only CIRIS_AGENT_ID set (the common config) the reader
+        # queried "agent-default" while entries were tagged with the
+        # CIRIS_AGENT_ID tenant — so /v1/audit/entries returned an empty
+        # trail even though entries existed.
+        from ciris_engine.logic.audit import resolve_tenant_id
 
-            if end_time:
-                query += " AND event_timestamp <= ?"
-                params.append(end_time.isoformat())
+        tenant_id = resolve_tenant_id()
+        filter_payload: dict[str, Any] = {"tenant_id": tenant_id}
+        if start_time:
+            filter_payload["recorded_after"] = start_time.isoformat()
+        if end_time:
+            filter_payload["recorded_before"] = end_time.isoformat()
 
-            query += " ORDER BY event_timestamp DESC LIMIT ? OFFSET ?"
-            params.extend([str(limit), str(offset)])
-
-            cursor.execute(query, params)
-            return [dict(row) for row in cursor.fetchall()]
-    except Exception:
+        # Paginate forward; persist returns newest-first.
+        legacy_rows: list[dict[str, object]] = []
+        cursor_json: Optional[str] = None
+        skipped = 0
+        while len(legacy_rows) < limit:
+            page_size = min(500, limit + offset)
+            raw = engine.audit_list_entries(
+                json.dumps(filter_payload), cursor_json, page_size
+            )
+            parsed = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
+            items = parsed.get("items", []) if isinstance(parsed, dict) else []
+            if not items:
+                break
+            for row in items:
+                if not isinstance(row, dict):
+                    continue
+                if skipped < offset:
+                    skipped += 1
+                    continue
+                legacy_rows.append(_persist_audit_row_to_legacy(row))
+                if len(legacy_rows) >= limit:
+                    break
+            next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+            if not next_cursor or len(items) < page_size:
+                break
+            cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
+        return legacy_rows
+    except Exception as e:
+        _audit_logger.warning(
+            "Failed to query persist audit chain via audit_list_entries: %s", e
+        )
         return []
 
 
@@ -204,6 +270,167 @@ async def _query_sqlite_audit(
     return await loop.run_in_executor(None, _sync_query_sqlite_audit, db_path, start_time, end_time, limit, offset)
 
 
+def _normalize_timestamp_str(ts_str: str) -> str:
+    """Normalize timestamp string to ISO format for consistent deduplication.
+
+    SQLite uses: 2026-03-25T01:25:49.386438+00:00 (with T)
+    JSONL uses:  2026-03-25 01:21:00.503015+00:00 (with space)
+
+    Normalizes to ISO format with 'T' separator.
+    """
+    # Replace space with T for ISO format consistency
+    return ts_str.replace(" ", "T")
+
+
+# =============================================================================
+# Helper functions for reducing cognitive complexity
+# =============================================================================
+
+
+def _entry_has_additional_metadata(entry: AuditEntry) -> bool:
+    """Check if a graph entry has additional metadata worth merging.
+
+    Graph entries may contain rich metadata from handlers (ponder_questions,
+    tool_parameters, etc.) that SQLite entries don't have.
+    """
+    if not hasattr(entry, "context"):
+        return False
+    if not hasattr(entry.context, "additional_data"):
+        return False
+    return bool(entry.context.additional_data)
+
+
+def _merge_graph_metadata_into_entry(merged_entry: _MergedAuditEntry, graph_ctx: Any) -> None:
+    """Merge metadata from a graph entry into an existing merged entry.
+
+    Copies keys from graph's additional_data that don't already exist
+    in the merged entry's metadata.
+    """
+    if merged_entry.entry.context.metadata is None:
+        merged_entry.entry.context.metadata = {}
+
+    if hasattr(graph_ctx, "additional_data") and graph_ctx.additional_data:
+        for key, value in graph_ctx.additional_data.items():
+            if key not in merged_entry.entry.context.metadata:
+                merged_entry.entry.context.metadata[key] = value
+
+
+def _find_sqlite_entry_for_dedup_key(
+    merged: Dict[str, _MergedAuditEntry], dedup_key: str
+) -> Optional[_MergedAuditEntry]:
+    """Find a SQLite entry in merged results that matches the given dedup key.
+
+    Used to merge graph metadata into existing SQLite entries.
+    """
+    for merged_entry in merged.values():
+        sqlite_dedup = (
+            f"{_normalize_timestamp_str(merged_entry.entry.timestamp.isoformat())}_{merged_entry.entry.action}"
+        )
+        if sqlite_dedup == dedup_key:
+            return merged_entry
+    return None
+
+
+def _infer_outcome_from_event(outcome: Optional[str], event_type: str) -> str:
+    """Infer outcome from event type if not explicitly provided.
+
+    Returns 'failure' if event_type contains 'fail' or 'error', otherwise 'success'.
+    """
+    if outcome:
+        return outcome
+    event_lower = event_type.lower()
+    if "fail" in event_lower or "error" in event_lower:
+        return "failure"
+    return "success"
+
+
+def _extract_handler_metadata(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract handler-specific metadata fields from parameters.
+
+    Handles DEFER, TOOL, PONDER, SPEAK, TASK_COMPLETE, and REJECT parameters.
+    Returns a flat dict of extracted metadata.
+    """
+    metadata: Dict[str, Any] = {}
+
+    # DEFER params
+    if "defer_reason" in params:
+        metadata["defer_reason"] = params["defer_reason"]
+    if "defer_until" in params:
+        metadata["defer_until"] = params["defer_until"]
+
+    # TOOL params
+    if "tool_name" in params:
+        metadata["tool_name"] = params["tool_name"]
+    elif "name" in params:
+        metadata["tool_name"] = params["name"]
+
+    if "parameters" in params:
+        tool_params = params["parameters"]
+        metadata["tool_parameters"] = json.dumps(tool_params) if isinstance(tool_params, dict) else str(tool_params)
+
+    # PONDER params
+    if "ponder_questions" in params:
+        metadata["ponder_questions"] = params["ponder_questions"]
+    elif "questions" in params:
+        metadata["ponder_questions"] = params["questions"]
+
+    # SPEAK params
+    if "content" in params:
+        metadata["content"] = params["content"]
+
+    # TASK_COMPLETE params
+    if "completion_reason" in params:
+        metadata["completion_reason"] = params["completion_reason"]
+
+    # REJECT params
+    if "reason" in params:
+        metadata["reject_reason"] = params["reason"]
+
+    return metadata
+
+
+def _parse_event_payload_metadata(
+    event_payload_str: Optional[str],
+) -> Tuple[Dict[str, Any], Optional[str]]:
+    """Parse event payload JSON and extract metadata and description.
+
+    Returns (metadata dict, description string).
+    If parsing fails, returns empty metadata and the original string as description.
+    """
+    if not event_payload_str:
+        return {}, None
+
+    try:
+        payload = json.loads(event_payload_str)
+    except json.JSONDecodeError:
+        return {}, event_payload_str
+
+    if not isinstance(payload, dict):
+        return {}, event_payload_str
+
+    metadata: Dict[str, Any] = {}
+
+    # Extract nested parameters
+    params_str = payload.get("parameters", "{}")
+    if isinstance(params_str, str):
+        try:
+            params = json.loads(params_str)
+            if isinstance(params, dict):
+                metadata.update(_extract_handler_metadata(params))
+        except json.JSONDecodeError:
+            pass
+
+    # Extract direct payload fields
+    for key in ["thought_id", "task_id", "handler_name", "action_type"]:
+        if key in payload:
+            metadata[key] = payload[key]
+
+    # Build description from payload
+    description = payload.get("action_type") or payload.get("handler_name") or event_payload_str
+
+    return metadata, description
+
+
 def _parse_jsonl_entry_timestamp(
     entry: dict[str, object],
 ) -> Optional[datetime]:  # SERIALIZATION BOUNDARY - JSONL raw entries
@@ -211,7 +438,7 @@ def _parse_jsonl_entry_timestamp(
     entry_time_str = get_str_optional(entry, "timestamp") or get_str_optional(entry, "event_timestamp")
     if entry_time_str:
         try:
-            return datetime.fromisoformat(entry_time_str.replace("Z", UTC_TIMEZONE_SUFFIX))
+            return datetime.fromisoformat(entry_time_str.replace("Z", UTC_TIMEZONE_SUFFIX).replace(" ", "T"))
         except ValueError:
             return None
     return None
@@ -280,58 +507,198 @@ async def _query_jsonl_audit(
     return await loop.run_in_executor(None, _sync_query_jsonl_audit, jsonl_path, start_time, end_time, limit, offset)
 
 
-def _process_graph_entries(merged: Dict[str, _MergedAuditEntry], graph_entries: List[AuditEntry]) -> None:
-    """Process graph entries and add them to merged results."""
+def _process_graph_entries(
+    merged: Dict[str, _MergedAuditEntry], graph_entries: List[AuditEntry], seen_timestamps: set[str]
+) -> None:
+    """Process graph entries and add them to merged results.
+
+    Graph entries contain the full handler action metadata (ponder_questions, tool_parameters, etc.)
+    while SQLite entries may only have partial data. We merge graph data INTO existing SQLite
+    entries rather than skipping graph entries entirely.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     for entry in graph_entries:
+        normalized_ts = _normalize_timestamp_str(entry.timestamp.isoformat())
+        dedup_key = f"{normalized_ts}_{entry.action}"
         entry_id = getattr(entry, "id", f"audit_{entry.timestamp.isoformat()}_{entry.actor}")
-        if entry_id not in merged:
-            merged[entry_id] = _MergedAuditEntry(entry=_convert_audit_entry(entry), sources=["graph"])
-        else:
-            merged[entry_id].sources.append("graph")
+        has_metadata = _entry_has_additional_metadata(entry)
+
+        if dedup_key in seen_timestamps:
+            _handle_duplicate_graph_entry(merged, entry, dedup_key, has_metadata, logger)
+            continue
+
+        _add_new_graph_entry(merged, entry, entry_id, dedup_key, seen_timestamps, logger)
+
+
+def _handle_duplicate_graph_entry(
+    merged: Dict[str, _MergedAuditEntry],
+    entry: AuditEntry,
+    dedup_key: str,
+    has_metadata: bool,
+    logger: Any,
+) -> None:
+    """Handle a graph entry that duplicates an existing SQLite entry.
+
+    If the graph entry has metadata, merge it into the existing SQLite entry.
+    """
+    if not has_metadata:
+        return
+
+    matched_entry = _find_sqlite_entry_for_dedup_key(merged, dedup_key)
+    if matched_entry:
+        _merge_graph_metadata_into_entry(matched_entry, entry.context)
+        matched_entry.sources.append("graph")
+    else:
+        logger.warning(f"[AUDIT API] No matching SQLite entry found for dedup_key={dedup_key}")
+
+
+def _add_new_graph_entry(
+    merged: Dict[str, _MergedAuditEntry],
+    entry: AuditEntry,
+    entry_id: str,
+    dedup_key: str,
+    seen_timestamps: set[str],
+    logger: Any,
+) -> None:
+    """Add a new graph entry to merged results."""
+    logger.debug(f"[AUDIT API]   Adding new entry with id={entry_id}")
+    if entry_id not in merged:
+        merged[entry_id] = _MergedAuditEntry(entry=_convert_audit_entry(entry), sources=["graph"])
+        seen_timestamps.add(dedup_key)
+    else:
+        merged[entry_id].sources.append("graph")
 
 
 def _process_sqlite_entries(
-    merged: Dict[str, _MergedAuditEntry], sqlite_entries: list[dict[str, object]]
+    merged: Dict[str, _MergedAuditEntry],
+    sqlite_entries: list[dict[str, object]],
+    seen_timestamps: set[str],
+    dedup_to_entry: Dict[str, str],
 ) -> None:  # SERIALIZATION BOUNDARY - SQLite query results
-    """Process SQLite entries and add them to merged results."""
+    """Process SQLite entries and add them to merged results.
+
+    SQLite entries are the authoritative source with the hash chain.
+    Track timestamps for deduplication with graph entries.
+    """
     for sqlite_entry in sqlite_entries:
-        event_timestamp = get_str(sqlite_entry, "event_timestamp", "")
-        originator_id = get_str(sqlite_entry, "originator_id", "unknown")
-        entry_id = get_str_optional(sqlite_entry, "event_id") or f"audit_{event_timestamp}_{originator_id}"
+        entry_info = _extract_sqlite_entry_info(sqlite_entry)
+        _track_sqlite_dedup_key(entry_info, seen_timestamps, dedup_to_entry)
 
-        if entry_id not in merged:
-            # Convert SQLite entry to AuditEntryResponse format
-            timestamp = datetime.fromisoformat(event_timestamp.replace("Z", UTC_TIMEZONE_SUFFIX))
-            context = AuditContext(
-                description=get_str_optional(sqlite_entry, "event_payload"),
-                entity_id=get_str_optional(sqlite_entry, "originator_id"),
-            )
-
-            merged[entry_id] = _MergedAuditEntry(
-                entry=AuditEntryResponse(
-                    id=entry_id,
-                    action=get_str(sqlite_entry, "event_type", "unknown"),
-                    actor=originator_id,
-                    timestamp=timestamp,
-                    context=context,
-                    signature=get_str_optional(sqlite_entry, "signature"),
-                    hash_chain=get_str_optional(sqlite_entry, "previous_hash"),
-                    storage_sources=["sqlite"],
-                ),
-                sources=["sqlite"],
-            )
+        if entry_info["entry_id"] in merged:
+            merged[entry_info["entry_id"]].sources.append("sqlite")
         else:
-            merged[entry_id].sources.append("sqlite")
+            _add_new_sqlite_entry(merged, sqlite_entry, entry_info)
+
+
+def _extract_sqlite_entry_info(sqlite_entry: dict[str, object]) -> Dict[str, str]:
+    """Extract basic info from a SQLite audit entry."""
+    event_timestamp = get_str(sqlite_entry, "event_timestamp", "")
+    originator_id = get_str(sqlite_entry, "originator_id", "unknown")
+    event_type = get_str(sqlite_entry, "event_type", "unknown")
+    entry_id = get_str_optional(sqlite_entry, "event_id") or f"audit_{event_timestamp}_{originator_id}"
+    normalized_ts = _normalize_timestamp_str(event_timestamp)
+    dedup_key = f"{normalized_ts}_{event_type}"
+
+    return {
+        "event_timestamp": event_timestamp,
+        "originator_id": originator_id,
+        "event_type": event_type,
+        "entry_id": entry_id,
+        "dedup_key": dedup_key,
+    }
+
+
+def _track_sqlite_dedup_key(
+    entry_info: Dict[str, str], seen_timestamps: set[str], dedup_to_entry: Dict[str, str]
+) -> None:
+    """Track dedup key for later source merging with graph/jsonl entries."""
+    seen_timestamps.add(entry_info["dedup_key"])
+    dedup_to_entry[entry_info["dedup_key"]] = entry_info["entry_id"]
+
+
+def _add_new_sqlite_entry(
+    merged: Dict[str, _MergedAuditEntry], sqlite_entry: dict[str, object], entry_info: Dict[str, str]
+) -> None:
+    """Add a new SQLite entry to merged results."""
+    timestamp = datetime.fromisoformat(entry_info["event_timestamp"].replace("Z", UTC_TIMEZONE_SUFFIX))
+    outcome = _infer_outcome_from_event(get_str_optional(sqlite_entry, "outcome"), entry_info["event_type"])
+
+    event_payload_str = get_str_optional(sqlite_entry, "event_payload")
+    metadata, description = _parse_event_payload_metadata(event_payload_str)
+    if description is None:
+        description = event_payload_str
+
+    context = AuditContext(
+        description=description,
+        entity_id=get_str_optional(sqlite_entry, "originator_id"),
+        outcome=outcome,
+        metadata=metadata if metadata else None,
+    )
+
+    # Extract integrity warnings if present (added during routine read verification)
+    integrity_warnings_raw = sqlite_entry.get("_integrity_warnings")
+    integrity_warnings: List[str] = []
+    if isinstance(integrity_warnings_raw, list):
+        integrity_warnings = [str(w) for w in integrity_warnings_raw]
+    integrity_valid = len(integrity_warnings) == 0
+
+    merged[entry_info["entry_id"]] = _MergedAuditEntry(
+        entry=AuditEntryResponse(
+            id=entry_info["entry_id"],
+            action=get_str(sqlite_entry, "event_type", "unknown"),
+            actor=entry_info["originator_id"],
+            timestamp=timestamp,
+            context=context,
+            signature=get_str_optional(sqlite_entry, "signature"),
+            hash_chain=get_str_optional(sqlite_entry, "previous_hash"),
+            storage_sources=["sqlite"],
+            integrity_valid=integrity_valid,
+            integrity_warnings=integrity_warnings,
+        ),
+        sources=["sqlite"],
+    )
 
 
 def _process_jsonl_entries(
-    merged: Dict[str, _MergedAuditEntry], jsonl_entries: list[dict[str, object]]
+    merged: Dict[str, _MergedAuditEntry],
+    jsonl_entries: list[dict[str, object]],
+    seen_timestamps: set[str],
+    dedup_to_entry: Dict[str, str],
 ) -> None:  # SERIALIZATION BOUNDARY - JSONL raw entries
-    """Process JSONL entries and add them to merged results."""
+    """Process JSONL entries and add them to merged results.
+
+    If entry already exists from SQLite/graph (by timestamp+action), just add 'jsonl' to sources.
+    """
     for jsonl_entry in jsonl_entries:
-        timestamp_str = get_str(jsonl_entry, "timestamp", "")
+        timestamp_str = get_str(jsonl_entry, "timestamp", "") or get_str(jsonl_entry, "event_timestamp", "")
         actor_str = get_str(jsonl_entry, "actor", "")
+        action = get_str_optional(jsonl_entry, "action") or get_str(jsonl_entry, "event_type", "unknown")
         entry_id = get_str_optional(jsonl_entry, "id") or f"audit_{timestamp_str}_{actor_str}"
+
+        # Check timestamp-based deduplication - add source to existing entry
+        # Normalize timestamp format for consistent matching with SQLite
+        normalized_ts = _normalize_timestamp_str(timestamp_str)
+        dedup_key = f"{normalized_ts}_{action}"
+        if dedup_key in seen_timestamps:
+            # Find the existing entry and add jsonl to its sources
+            # First check dedup_to_entry (populated by SQLite entries)
+            existing_entry_id = dedup_to_entry.get(dedup_key)
+            if existing_entry_id and existing_entry_id in merged:
+                if "jsonl" not in merged[existing_entry_id].sources:
+                    merged[existing_entry_id].sources.append("jsonl")
+            else:
+                # dedup_to_entry may not have this key if entry came from graph
+                # Search merged entries by matching dedup_key
+                for merged_id, merged_entry in merged.items():
+                    entry_dedup = f"{_normalize_timestamp_str(merged_entry.entry.timestamp.isoformat())}_{merged_entry.entry.action}"
+                    if entry_dedup == dedup_key:
+                        if "jsonl" not in merged_entry.sources:
+                            merged_entry.sources.append("jsonl")
+                        break
+            continue
 
         if entry_id not in merged:
             # Convert JSONL entry to AuditEntryResponse format
@@ -343,7 +710,16 @@ def _process_jsonl_entries(
             )
 
             description = get_str_optional(jsonl_entry, "description") or get_str_optional(jsonl_entry, "event_payload")
-            context = AuditContext(description=description)
+            # Extract outcome from JSONL entry
+            outcome = get_str_optional(jsonl_entry, "outcome")
+            if not outcome:
+                # Try to infer from action or event_type
+                action = get_str_optional(jsonl_entry, "action") or get_str(jsonl_entry, "event_type", "")
+                if "fail" in action.lower() or "error" in action.lower():
+                    outcome = "failure"
+                else:
+                    outcome = "success"
+            context = AuditContext(description=description, outcome=outcome)
 
             merged[entry_id] = _MergedAuditEntry(
                 entry=AuditEntryResponse(
@@ -368,13 +744,25 @@ async def _merge_audit_sources(
     sqlite_entries: list[dict[str, object]],
     jsonl_entries: list[dict[str, object]],
 ) -> List[AuditEntryResponse]:  # SERIALIZATION BOUNDARY - Raw database results
-    """Merge audit entries from all sources and track storage locations."""
-    merged: Dict[str, _MergedAuditEntry] = {}  # Track entries by ID with their sources
+    """Merge audit entries from all sources and track storage locations.
 
-    # Process entries from all sources
-    _process_graph_entries(merged, graph_entries)
-    _process_sqlite_entries(merged, sqlite_entries)
-    _process_jsonl_entries(merged, jsonl_entries)
+    Each event should appear ONCE with storage_sources showing which backends have it.
+    SQLite entries are the authoritative source with the hash chain.
+    Graph entries provide rich metadata (ponder_questions, tool_result, etc.).
+    JSONL provides backup logging.
+    """
+    merged: Dict[str, _MergedAuditEntry] = {}  # Track entries by ID with their sources
+    seen_timestamps: set[str] = set()  # Track timestamp+action for deduplication
+    dedup_to_entry: Dict[str, str] = {}  # Map dedup_key -> entry_id for source tracking
+
+    # Process SQLite entries FIRST (authoritative source with hash chain)
+    _process_sqlite_entries(merged, sqlite_entries, seen_timestamps, dedup_to_entry)
+
+    # Process graph entries - merge metadata into SQLite entries, add 'graph' source
+    _process_graph_entries(merged, graph_entries, seen_timestamps)
+
+    # Process JSONL - just add 'jsonl' source to existing entries
+    _process_jsonl_entries(merged, jsonl_entries, seen_timestamps, dedup_to_entry)
 
     # Update storage_sources for all merged entries and build result
     result = []
@@ -390,10 +778,10 @@ async def _merge_audit_sources(
 # Endpoints
 
 
-@router.get("/entries", response_model=SuccessResponse[AuditEntriesResponse])
+@router.get("/entries", responses=RESPONSES_500_503)
 async def query_audit_entries(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     # Time range filters
     start_time: Optional[datetime] = Query(None, description=DESC_START_TIME),
     end_time: Optional[datetime] = Query(None, description=DESC_END_TIME),
@@ -441,9 +829,16 @@ async def query_audit_entries(
         # Query graph memory (existing functionality)
         graph_entries = await audit_service.query_audit_trail(query)
 
-        # Query SQLite database directly (hardcoded paths for now - should be configurable)
+        # Get the proper data directory for SQLite path
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        data_dir = get_data_dir()
+        sqlite_path = str(data_dir / "ciris_audit.db")
+        jsonl_path = str(data_dir / "audit_logs.jsonl")
+
+        # Query SQLite database directly
         sqlite_task = _query_sqlite_audit(
-            "data/ciris_audit.db",  # Default SQLite path
+            sqlite_path,
             start_time=start_time,
             end_time=end_time,
             limit=limit * 3,  # Get more to account for merging
@@ -452,7 +847,7 @@ async def query_audit_entries(
 
         # Query JSONL file directly
         jsonl_task = _query_jsonl_audit(
-            "audit_logs.jsonl",  # Default JSONL path
+            jsonl_path,
             start_time=start_time,
             end_time=end_time,
             limit=limit * 3,  # Get more to account for merging
@@ -521,11 +916,11 @@ def _add_chain_navigation(response: AuditEntryDetailResponse, entries: List[Any]
         )
 
 
-@router.get("/entries/{entry_id}", response_model=SuccessResponse[AuditEntryDetailResponse])
+@router.get("/entries/{entry_id}", responses=RESPONSES_404_500_503)
 async def get_audit_entry(
     request: Request,
+    auth: AuthObserverDep,
     entry_id: str = FastAPIPath(..., description="Audit entry ID"),
-    auth: AuthContext = Depends(require_observer),
     verify: bool = Query(False, description="Include verification information"),
 ) -> SuccessResponse[AuditEntryDetailResponse]:
     """
@@ -572,10 +967,10 @@ async def get_audit_entry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/search", response_model=SuccessResponse[AuditEntriesResponse])
+@router.post("/search", responses=RESPONSES_500_503)
 async def search_audit_trails(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
     search_text: Optional[str] = Query(None, description="Text to search for"),
     entity_id: Optional[str] = Query(None, description="Filter by entity ID"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
@@ -608,11 +1003,11 @@ async def search_audit_trails(
     )
 
 
-@router.post("/verify/{entry_id}", response_model=SuccessResponse[VerificationReport])
+@router.post("/verify/{entry_id}", responses=RESPONSES_500_503)
 async def verify_audit_entry(
     request: Request,
+    auth: AuthAdminDep,
     entry_id: str = FastAPIPath(..., description="Audit entry ID to verify"),
-    auth: AuthContext = Depends(require_admin),
 ) -> SuccessResponse[VerificationReport]:
     """
     Verify the integrity of a specific audit entry.
@@ -632,10 +1027,10 @@ async def verify_audit_entry(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/export", response_model=SuccessResponse[AuditExportResponse])
+@router.post("/export", responses=RESPONSES_500_503)
 async def export_audit_data(
     request: Request,
-    auth: AuthContext = Depends(require_admin),
+    auth: AuthAdminDep,
     start_date: Optional[datetime] = Query(None, description="Export start date"),
     end_date: Optional[datetime] = Query(None, description="Export end date"),
     format: str = Query("jsonl", pattern="^(json|jsonl|csv)$", description="Export format"),

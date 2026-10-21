@@ -6,7 +6,6 @@ import json
 
 import pytest
 
-from ciris_engine.logic.dma.dsdma_base import BaseDSDMA
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
     EntropyCheckResult,
@@ -35,11 +34,12 @@ class TestMockLLMComprehensive:
         assert hasattr(response, "finish_reason")
         assert hasattr(response, "_raw_response")
 
-        # Verify the response has expected fields
-        assert hasattr(response, "alignment_check")
-        assert hasattr(response, "stakeholders")
-        assert hasattr(response, "conflicts")
-        assert hasattr(response, "reasoning")
+        # Verify the response has expected fields (PDMA v3.0 reshape:
+        # action + rationale + two-score split, no per-step prose fields)
+        assert hasattr(response, "action")
+        assert hasattr(response, "rationale")
+        assert hasattr(response, "weight_alignment_score")
+        assert hasattr(response, "ethical_alignment_score")
 
     @pytest.mark.asyncio
     async def test_cs_dma_result(self, mock_client):
@@ -85,14 +85,21 @@ class TestMockLLMComprehensive:
         assert hasattr(response, "rationale")
 
     @pytest.mark.asyncio
-    async def test_dsdma_llm_output(self, mock_client):
-        """Test BaseDSDMA.LLMOutputForDSDMA schema response."""
-        response = await mock_client._create(response_model=BaseDSDMA.LLMOutputForDSDMA)
+    async def test_dsdma_result(self, mock_client):
+        """Test DSDMAResult schema response.
 
-        assert isinstance(response, BaseDSDMA.LLMOutputForDSDMA)
+        DSDMA's instructor response_model is DSDMAResult directly — the
+        legacy BaseDSDMA.LLMOutputForDSDMA shim was removed in 2.7.4
+        (its `score` field clashed with the new prompt asking for
+        `domain_alignment`, causing schema-mismatch retry storms)."""
+        response = await mock_client._create(response_model=DSDMAResult)
+
+        assert isinstance(response, DSDMAResult)
         assert hasattr(response, "choices")
         assert hasattr(response, "finish_reason")
         assert hasattr(response, "_raw_response")
+        assert hasattr(response, "domain")
+        assert hasattr(response, "domain_alignment")
 
     @pytest.mark.asyncio
     async def test_optimization_veto_result(self, mock_client):
@@ -157,7 +164,6 @@ class TestMockLLMComprehensive:
             EthicalDMAResult,
             CSDMAResult,
             DSDMAResult,
-            BaseDSDMA.LLMOutputForDSDMA,
             OptimizationVetoResult,
             EpistemicHumilityResult,
             ActionSelectionDMAResult,

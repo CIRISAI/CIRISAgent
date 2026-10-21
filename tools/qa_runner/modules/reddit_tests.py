@@ -73,7 +73,7 @@ class RedditTests:
 
     async def run(self) -> List[Dict]:
         """Run all Reddit tests."""
-        self.console.print("\n[cyan]🗣️  Testing Reddit Adapter[/cyan]")
+        self.console.print("\n[cyan] Testing Reddit Adapter[/cyan]")
 
         tests = [
             ("Verify System Health", self.test_system_health),
@@ -90,10 +90,10 @@ class RedditTests:
             try:
                 await test_func()
                 self.results.append({"test": name, "status": "✅ PASS", "error": None})
-                self.console.print(f"  ✅ {name}")
+                self.console.print(f" [OK] {name}")
             except Exception as e:
                 self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
-                self.console.print(f"  ❌ {name}: {str(e)[:100]}")
+                self.console.print(f" [FAIL] {name}: {str(e)[:100]}")
                 if self.console.is_terminal:
                     self.console.print(f"     [dim]{traceback.format_exc()}[/dim]")
 
@@ -369,6 +369,6 @@ class RedditTests:
         total = len(self.results)
 
         if failed == 0:
-            self.console.print(f"\n[bold green]✅ All {total} Reddit tests passed![/bold green]")
+            self.console.print(f"\n[bold green][OK] All {total} Reddit tests passed![/bold green]")
         else:
-            self.console.print(f"\n[bold yellow]⚠️  {passed}/{total} tests passed, {failed} failed[/bold yellow]")
+            self.console.print(f"\n[bold yellow][WARN] {passed}/{total} tests passed, {failed} failed[/bold yellow]")

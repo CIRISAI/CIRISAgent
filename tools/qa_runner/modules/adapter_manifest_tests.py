@@ -37,9 +37,14 @@ class AdapterManifestTests:
         self.results: List[Dict[str, Any]] = []
 
         # Base URL for direct API calls
-        self._base_url = getattr(client, "_base_url", "http://localhost:8080")
-        if hasattr(client, "_transport") and hasattr(client._transport, "_base_url"):
-            self._base_url = client._transport._base_url
+        # CIRISClient exposes the base URL as `base_url` (and Transport.base_url)
+        # — NOT `_base_url`. getattr(client, "_base_url", …) always missed and
+        # fell back to a hardcoded :8080, so under --parallel-backends the
+        # postgres leg's raw adapter requests hit the sqlite server → 401.
+        self._base_url = getattr(client, "base_url", None) or "http://localhost:8080"
+        _tr = getattr(client, "_transport", None)
+        if _tr is not None and getattr(_tr, "base_url", None):
+            self._base_url = _tr.base_url
 
         # Adapters directory
         self.adapters_dir = Path(__file__).parent.parent.parent.parent / "ciris_adapters"
@@ -184,6 +189,24 @@ class AdapterManifestTests:
             self.results.append({"test": test_name, "status": "PASS", "error": None})
             self.console.print(f"    [green]PASS[/green] Service imports ({len(services)} services)")
 
+    # Mapping of pip package names to their actual import names
+    PACKAGE_IMPORT_MAP = {
+        "opencv-python": "cv2",
+        "pyyaml": "yaml",
+        "pillow": "PIL",
+        "scikit-learn": "sklearn",
+        "beautifulsoup4": "bs4",
+        "python-dateutil": "dateutil",
+    }
+
+    # Packages that require system libraries and should be soft-checked
+    # Packages that are optional in a minimal QA env: declaring them in an
+    # adapter manifest is correct, but the QA / staged-wheel env does not
+    # install every optional adapter's heavy dep tree. Missing → WARN, not
+    # FAIL (the manifest is still valid). pyodbc/ciris-verify: system-level;
+    # opencv-python/numpy: home_assistant vision; mcp: the MCP adapters.
+    SYSTEM_DEP_PACKAGES = {"pyodbc", "ciris-verify", "opencv-python", "numpy", "mcp"}
+
     async def _test_dependencies(self, adapter_name: str, manifest: Dict) -> None:
         """Test that declared dependencies are available."""
         test_name = f"{adapter_name}::dependencies"
@@ -195,18 +218,28 @@ class AdapterManifestTests:
             return
 
         errors = []
+        warnings = []
 
         # Check external dependencies (pip packages)
         external = deps.get("external", {})
         for package, version in external.items():
+            # Get the correct import name for this package
+            import_name = self.PACKAGE_IMPORT_MAP.get(package, package.replace("-", "_"))
+
             try:
-                importlib.import_module(package.replace("-", "_"))
+                importlib.import_module(import_name)
             except ImportError:
-                errors.append(f"Missing package: {package}")
+                if package in self.SYSTEM_DEP_PACKAGES:
+                    warnings.append(f"Optional system dep: {package}")
+                else:
+                    errors.append(f"Missing package: {package}")
 
         if errors:
             self.results.append({"test": test_name, "status": "FAIL", "error": "; ".join(errors)})
-            self.console.print(f"    [yellow]WARN[/yellow] Dependencies: {'; '.join(errors)}")
+            self.console.print(f"    [red]FAIL[/red] Dependencies: {'; '.join(errors)}")
+        elif warnings:
+            self.results.append({"test": test_name, "status": "PASS", "error": None})
+            self.console.print(f"    [yellow]WARN[/yellow] Dependencies: {'; '.join(warnings)}")
         else:
             self.results.append({"test": test_name, "status": "PASS", "error": None})
             self.console.print(f"    [green]PASS[/green] Dependencies")
@@ -259,6 +292,9 @@ class AdapterManifestTests:
         except Exception as e:
             self.results.append({"test": test_name, "status": "FAIL", "error": str(e)})
             self.console.print(f"    [red]FAIL[/red] API load: {str(e)[:50]}")
+
+        # Small delay to avoid rate limiting (60 req/min limit)
+        await asyncio.sleep(1.1)
 
     async def _cleanup_loaded_adapters(self) -> None:
         """Clean up any adapters we loaded during testing."""

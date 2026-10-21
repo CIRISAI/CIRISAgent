@@ -253,7 +253,7 @@ class TestTaskCompleteHandler:
 
             # Verify task status was updated
             mock_persistence.update_task_status.assert_called_once_with(
-                "task_123", TaskStatus.COMPLETED, "default", task_complete_handler.time_service
+                "task_123", TaskStatus.COMPLETED, "default"
             )
 
             # Handler does not send notifications currently
@@ -360,7 +360,7 @@ class TestTaskCompleteHandler:
 
             # Parent task should still be marked as completed
             mock_persistence.update_task_status.assert_called_with(
-                "task_123", TaskStatus.COMPLETED, "default", task_complete_handler.time_service
+                "task_123", TaskStatus.COMPLETED, "default"
             )
 
     @pytest.mark.asyncio
@@ -459,7 +459,7 @@ class TestTaskCompleteHandler:
             # Handler currently only updates status, not signing fields
             # Task signing functionality needs to be implemented
             mock_persistence.update_task_status.assert_called_with(
-                "task_123", TaskStatus.COMPLETED, "default", task_complete_handler.time_service
+                "task_123", TaskStatus.COMPLETED, "default"
             )
 
     @pytest.mark.asyncio
@@ -537,7 +537,7 @@ class TestTaskCompleteHandler:
 
             # Task should still be marked as completed even if notification fails
             mock_persistence.update_task_status.assert_called_with(
-                "task_123", TaskStatus.COMPLETED, "default", task_complete_handler.time_service
+                "task_123", TaskStatus.COMPLETED, "default"
             )
 
     @pytest.mark.asyncio

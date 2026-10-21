@@ -154,9 +154,9 @@ limits:
   max_active_thoughts: 50
   round_delay_seconds: 5.0
   mock_llm_round_delay: 0.1
-  dma_retry_limit: 3
-  dma_timeout_seconds: 30.0
-  conscience_retry_limit: 2
+  dma_retry_limit: 3          # deprecated, not read -- see LLM time budgets (llm_budget.py, #1186)
+  dma_timeout_seconds: 30.0   # deprecated, not read
+  conscience_retry_limit: 2   # deprecated, not read
 
 telemetry:
   enabled: false

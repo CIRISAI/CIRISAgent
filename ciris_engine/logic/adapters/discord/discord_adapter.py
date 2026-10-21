@@ -9,10 +9,12 @@ from discord.errors import ConnectionClosed, HTTPException
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.adapters.base import Service
+from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
 from ciris_engine.protocols.services import CommunicationService, WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.discord import DiscordApprovalData, DiscordChannelInfo, DiscordGuidanceData
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage, IncomingMessage
 from ciris_engine.schemas.runtime.system_context import ChannelContext
@@ -270,7 +272,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     updated_at=end_time,
                     timestamp=start_time,
                 ),
-                time_service,
             )
 
             # Increment message processed counter for sent messages too
@@ -447,7 +448,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     updated_at=end_time,
                     timestamp=start_time,
                 ),
-                time_service,
             )
             # Note: Guidance requests are already audited via defer handler action
 
@@ -694,6 +694,11 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         """Resolve a deferred decision."""
         deferral_channel_id = self.discord_config.deferral_channel_id
         if not deferral_channel_id:
+            return False
+
+        # CC 4.2.1.1: the WA service has already recorded the decision; this is
+        # only the agent announcing it, which is held under a halt.
+        if await refuse_agent_send_under_halt(AgentSendSurface.DEFERRAL_RESOLUTION_NOTICE, deferral_channel_id):
             return False
 
         try:
@@ -1067,7 +1072,6 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
                     updated_at=end_time,
                     timestamp=start_time,
                 ),
-                time_service,
             )
 
             # Increment commands handled counter for deferral requests

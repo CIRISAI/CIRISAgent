@@ -75,9 +75,8 @@ class TestSetupApplicationDirectories:
                 "data": 0o755,
                 "data_archive": 0o755,
                 "logs": 0o755,
-                "audit_keys": 0o700,
                 "config": 0o755,
-                ".secrets": 0o700,
+                "secrets": 0o700,
             }
 
             for dir_name, expected_mode in expected_dirs.items():
@@ -124,7 +123,7 @@ class TestSetupApplicationDirectories:
                 # Test with fail_fast=False (should raise)
                 with pytest.raises(DiskSpaceError) as exc_info:
                     setup_application_directories(base_dir=base_dir, fail_fast=False)
-                assert "MINIMUM 100MB REQUIRED" in str(exc_info.value)
+                assert "MINIMUM 50MB REQUIRED" in str(exc_info.value)
 
     def test_cannot_create_directory_fails_fast(self, mock_db_path):
         """Test that directory creation failure causes immediate failure."""
@@ -186,7 +185,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all required directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             # Should validate successfully
@@ -201,7 +200,7 @@ class TestValidateDirectories:
             # Create some but not all directories
             (base_dir / "data").mkdir()
             (base_dir / "logs").mkdir()
-            # Missing: data_archive, audit_keys, config
+            # Missing: data_archive, config
 
             with pytest.raises(DirectoryCreationError) as exc_info:
                 validate_directories(base_dir=base_dir)
@@ -213,7 +212,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all directories except one
-            for dir_name in ["data", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             # Create a file instead of directory
@@ -229,7 +228,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 dir_path = base_dir / dir_name
                 dir_path.mkdir()
 
@@ -250,7 +249,7 @@ class TestValidateDirectories:
             base_dir = Path(tmpdir)
 
             # Create all directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             with patch("ciris_engine.logic.utils.directory_setup.check_disk_space") as mock_check:
@@ -279,7 +278,7 @@ class TestErrorMessages:
                 error_msg = str(exc_info.value)
                 assert "INSUFFICIENT DISK SPACE" in error_msg
                 assert "42.5MB available" in error_msg
-                assert "MINIMUM 100MB REQUIRED" in error_msg
+                assert "MINIMUM 50MB REQUIRED" in error_msg
                 assert "EXITING" in error_msg
 
     def test_permission_error_message(self, mock_db_path):
@@ -360,16 +359,31 @@ class TestErrorMessages:
 class TestDatabaseExclusiveAccess:
     """Test database exclusive access functionality."""
 
+    # 2.9.4: `ensure_database_exclusive_access` no longer pre-constructs a
+    # `ciris_persist.Engine(...)` probe — the probe was incompatible with
+    # persist 3.6.3's process-singleton Engine guardrail (the probe pinned
+    # a bootstrap-keyed Engine in-process, then the real initialize_database
+    # call hit EngineConfigMismatch). Lock detection still happens
+    # end-to-end inside persist's own `Engine()` constructor at
+    # `_bootstrap_persist_engine` — see `ciris_engine.logic.persistence.db.core`.
+    # The contract this function holds is now narrower: ensure the parent
+    # dir exists and is writable. The mapping of lock errors → CRITICAL
+    # ERROR / sys.exit(1) still applies, but it fires against permission
+    # errors at this layer rather than a synthetic Engine probe.
+
     def test_database_exclusive_access_success(self):
-        """Test successful database access check."""
+        """Test successful parent-dir validation."""
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = str(Path(tmpdir) / "test.db")
 
-            # Should succeed on first access
+            # Should succeed when parent dir is writable. NOTE: post-2.9.4 the
+            # function no longer constructs an Engine, so the .db file is NOT
+            # created here — that's persist's job during initialize_database.
             ensure_database_exclusive_access(db_path, fail_fast=False)
 
-            # Verify database file was created
-            assert Path(db_path).exists()
+            # Parent dir is the contract this function guarantees.
+            assert Path(db_path).parent.exists()
+            assert os.access(Path(db_path).parent, os.W_OK)
 
     def test_database_exclusive_access_creates_parent_directory(self):
         """Test that parent directories are created if needed."""
@@ -379,71 +393,63 @@ class TestDatabaseExclusiveAccess:
             # Should succeed and create parent directories
             ensure_database_exclusive_access(db_path, fail_fast=False)
 
-            # Verify database and parent directories were created
-            assert Path(db_path).exists()
+            # Verify parent directories were created (the .db itself is
+            # created later by persist's Engine constructor — not this
+            # function's responsibility post-2.9.4).
             assert Path(db_path).parent.exists()
+            assert os.access(Path(db_path).parent, os.W_OK)
 
     def test_database_exclusive_access_locked_database(self):
-        """Test detection of locked database (another agent running)."""
-        import sqlite3
+        """Lock detection moved to persist.initialize_database (2.9.4).
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "test.db")
+        The prior implementation pre-constructed `ciris_persist.Engine(...)`
+        as a probe and mapped the resulting "database is locked" error
+        into `DatabaseAccessError`. Persist 3.6.3's process-singleton
+        Engine guardrail made that probe incompatible with the real
+        bootstrap (the probe pinned a bootstrap-keyed Engine; the real
+        init then hit EngineConfigMismatch).
 
-            # Create and hold a lock on the database
-            conn = sqlite3.connect(db_path)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("BEGIN IMMEDIATE")  # Hold exclusive lock
-
-            try:
-                # Should detect the lock and fail
-                with pytest.raises(DatabaseAccessError) as exc_info:
-                    ensure_database_exclusive_access(db_path, fail_fast=False)
-
-                error_msg = str(exc_info.value)
-                assert "CANNOT ACCESS DATABASE" in error_msg
-                assert "ANOTHER AGENT MAY BE RUNNING" in error_msg
-            finally:
-                # Clean up the lock
-                conn.rollback()
-                conn.close()
+        Lock detection still works end-to-end — persist's `Engine()`
+        constructor in `_bootstrap_persist_engine` raises "database is
+        locked" naturally when another process holds the file. The
+        lock-error mapping in `ensure_database_exclusive_access` is now
+        a no-op pass-through because this function no longer constructs
+        Engine, and we trust persist to surface the lock instead.
+        """
+        # Test is now an executable comment — there is no Engine-probe
+        # path to exercise here. Lock-detection coverage moved to
+        # persistence/db/core's tests.
+        pytest.skip(
+            "Lock detection moved to persist.initialize_database post-2.9.4 "
+            "(CIRIS_HOME end-to-end fix; see commit 4af552836)."
+        )
 
     def test_database_exclusive_access_fail_fast_exits(self):
-        """Test that fail_fast=True causes system exit."""
-        import sqlite3
+        """fail_fast=True path is preserved but no longer fires on Engine probe.
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "test.db")
+        See `test_database_exclusive_access_locked_database` — the function
+        no longer constructs an Engine, so the test's `patch ciris_persist.Engine`
+        has no observable effect. The fail_fast → sys.exit(1) wiring is still
+        there for parent-dir permission errors; covered by Test*Permission
+        elsewhere in this file.
+        """
+        pytest.skip(
+            "Engine-probe path removed post-2.9.4; fail_fast wiring covered by "
+            "TestSetupApplicationDirectories permission tests."
+        )
 
-            # Create and hold a lock
-            conn = sqlite3.connect(db_path)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("BEGIN IMMEDIATE")
+    def test_database_exclusive_access_unexpected_error(self):
+        """Unexpected-error wrapping moved to persist (2.9.4).
 
-            try:
-                with patch("sys.exit") as mock_exit:
-                    with pytest.raises(DatabaseAccessError):
-                        ensure_database_exclusive_access(db_path, fail_fast=True)
-                    mock_exit.assert_called_once_with(1)
-            finally:
-                conn.rollback()
-                conn.close()
-
-    @patch("sqlite3.connect")
-    def test_database_exclusive_access_unexpected_error(self, mock_connect):
-        """Test handling of unexpected database errors."""
-        mock_connect.side_effect = Exception("Unexpected database error")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "test.db")
-
-            # Should catch and wrap unexpected errors
-            with pytest.raises(DatabaseAccessError) as exc_info:
-                ensure_database_exclusive_access(db_path, fail_fast=False)
-
-            error_msg = str(exc_info.value)
-            assert "UNEXPECTED DATABASE ERROR" in error_msg
-            assert "Unexpected database error" in error_msg
+        See `test_database_exclusive_access_locked_database` — `ciris_persist.Engine`
+        is no longer called by `ensure_database_exclusive_access`. Any unexpected
+        errors from persist now surface where they originate (db/core) rather than
+        being wrapped here.
+        """
+        pytest.skip(
+            "Engine-probe path removed post-2.9.4; unexpected-error coverage moved "
+            "to persistence/db/core tests."
+        )
 
     def test_setup_with_database_access_check_enabled(self):
         """Test that setup_application_directories includes database check by default."""
@@ -487,28 +493,19 @@ class TestDatabaseExclusiveAccess:
                 mock_db_check.assert_called_once_with(config_db_path, False)
 
     def test_database_exclusive_access_error_messages(self):
-        """Test that database access errors have helpful messages."""
-        import sqlite3
+        """Error-message wrapping moved to persist (2.9.4).
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = str(Path(tmpdir) / "locked.db")
-
-            # Create and lock the database
-            conn = sqlite3.connect(db_path)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("BEGIN IMMEDIATE")
-
-            try:
-                with pytest.raises(DatabaseAccessError) as exc_info:
-                    ensure_database_exclusive_access(db_path, fail_fast=False)
-
-                error_msg = str(exc_info.value)
-                assert "CANNOT ACCESS DATABASE" in error_msg
-                assert db_path in error_msg
-                assert "ANOTHER AGENT MAY BE RUNNING" in error_msg
-            finally:
-                conn.rollback()
-                conn.close()
+        See `test_database_exclusive_access_locked_database` for the full
+        context — `ciris_persist.Engine` is no longer constructed here, so
+        the "CANNOT ACCESS DATABASE" / "ANOTHER AGENT MAY BE RUNNING"
+        message strings are now produced by persist's own bootstrap
+        error path rather than this function. Lock-error wording lives at
+        the persistence layer where lock detection actually happens.
+        """
+        pytest.skip(
+            "Engine-probe error-message wrapping removed post-2.9.4; "
+            "lock-error wording moved to persistence/db/core."
+        )
 
 
 class TestWindowsCompatibility:
@@ -534,7 +531,7 @@ class TestWindowsCompatibility:
                 setup_application_directories(base_dir=base_dir, fail_fast=False)
 
                 # Check all directories were created
-                expected_dirs = ["data", "data_archive", "logs", "audit_keys", "config", ".secrets"]
+                expected_dirs = ["data", "data_archive", "logs", "config", "secrets"]
                 for dir_name in expected_dirs:
                     assert (base_dir / dir_name).exists(), f"Directory {dir_name} should exist"
             finally:
@@ -550,7 +547,7 @@ class TestWindowsCompatibility:
             base_dir = Path(tmpdir)
 
             # Create all required directories
-            for dir_name in ["data", "data_archive", "logs", "audit_keys", "config"]:
+            for dir_name in ["data", "data_archive", "logs", "config"]:
                 (base_dir / dir_name).mkdir()
 
             # Save original functions if they exist

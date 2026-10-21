@@ -442,20 +442,20 @@ class TestRuntimeControlServiceCoverage:
         )
         # Use a real dict for loaded_adapters so 'in' operator works
         mock_adapter_manager.loaded_adapters = {"test_id": mock_instance}
-        # Control service expects adapter_manager.get_adapter_info to return AdapterInfo from adapter_management
-        from ciris_engine.schemas.runtime.adapter_management import AdapterInfo as AMAdapterInfo
+        # Control service expects adapter_manager.get_adapter_info to return full AdapterInfo (now async)
+        from unittest.mock import AsyncMock
 
-        mock_info = AMAdapterInfo(
+        from ciris_engine.schemas.services.core.runtime import AdapterInfo as FullAdapterInfo
+
+        mock_info = FullAdapterInfo(
             adapter_id="test_id",
             adapter_type="cli",
-            is_running=True,
-            load_time=datetime.now(timezone.utc).isoformat(),
-            config=AdapterConfig(adapter_type="cli", settings={}),
+            status=AdapterStatus.RUNNING,
+            started_at=datetime.now(timezone.utc),
+            config_params=AdapterConfig(adapter_type="cli", settings={}),
             services_registered=[],
-            lifecycle_tasks=[],
-            metrics={},
         )
-        mock_adapter_manager.get_adapter_info = Mock(return_value=mock_info)
+        mock_adapter_manager.get_adapter_info = AsyncMock(return_value=mock_info)
 
         info = await control_service.get_adapter_info("test_id")
 
@@ -467,9 +467,11 @@ class TestRuntimeControlServiceCoverage:
     @pytest.mark.asyncio
     async def test_get_adapter_info_not_found(self, control_service, mock_adapter_manager):
         """Test get_adapter_info when adapter not found."""
+        from unittest.mock import AsyncMock
+
         # Use a real dict for loaded_adapters so 'in' operator works
         mock_adapter_manager.loaded_adapters = {}
-        mock_adapter_manager.get_adapter_info = Mock(return_value=None)
+        mock_adapter_manager.get_adapter_info = AsyncMock(return_value=None)
 
         info = await control_service.get_adapter_info("nonexistent")
 

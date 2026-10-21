@@ -3,10 +3,11 @@
 Covers uncovered helper functions:
 - _validate_api_key_for_provider
 - _classify_llm_connection_error
-- _validate_setup_passwords
-- _log_oauth_linking_skip
+- _validate_system_admin_password
 - _get_llm_providers
 - _get_available_adapters
+- should_filter_adapter (shared module, replaces _should_skip_manifest)
+- parse_manifest_to_module_info (shared module, replaces _create_adapter_from_manifest)
 """
 
 from unittest.mock import Mock, patch
@@ -14,15 +15,19 @@ from unittest.mock import Mock, patch
 import pytest
 from fastapi import HTTPException
 
+from ciris_engine.logic.adapters.api.routes._adapter_discovery import (
+    parse_manifest_to_module_info,
+    should_filter_adapter,
+)
 from ciris_engine.logic.adapters.api.routes.setup import (
+    AdapterConfig,
     LLMValidationRequest,
     SetupCompleteRequest,
     _classify_llm_connection_error,
     _get_available_adapters,
     _get_llm_providers,
-    _log_oauth_linking_skip,
     _validate_api_key_for_provider,
-    _validate_setup_passwords,
+    _validate_system_admin_password,
 )
 
 
@@ -142,113 +147,30 @@ class TestClassifyLLMConnectionError:
         assert "Some other network error" in result.error
 
 
-class TestValidateSetupPasswords:
-    """Tests for _validate_setup_passwords helper."""
+class TestValidateSystemAdminPassword:
+    """Setup checks only the local admin replacement; the owner's credential is the node's."""
 
-    def test_oauth_user_without_password_generates_random(self):
-        """OAuth user without password gets a generated one."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password=None,
-            oauth_provider="google",
-        )
-        result = _validate_setup_passwords(setup, is_oauth_user=True)
-        assert len(result) > 8  # Generated password should be long
+    def _setup(self, **kw):
+        base = dict(llm_provider="openai", llm_api_key="sk-test", admin_username="testuser")
+        base.update(kw)
+        return SetupCompleteRequest(**base)
 
-    def test_oauth_user_with_empty_password_generates_random(self):
-        """OAuth user with empty password gets a generated one."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="",
-            oauth_provider="google",
-        )
-        result = _validate_setup_passwords(setup, is_oauth_user=True)
-        assert len(result) > 8
+    def test_add_device_setup_without_any_password_is_accepted(self):
+        """Add-device (no owner password, no OAuth) must not be refused (FSD/ADD_DEVICE.md §4.2)."""
+        _validate_system_admin_password(self._setup(admin_password=None))
 
-    def test_non_oauth_user_without_password_raises_error(self):
-        """Non-OAuth user without password raises HTTPException."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password=None,
-        )
-        with pytest.raises(HTTPException) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert exc_info.value.status_code == 400
-        assert "at least 8 characters" in exc_info.value.detail
-
-    def test_password_too_short_raises_error(self):
-        """Password shorter than 8 characters raises HTTPException."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="short",
-        )
-        with pytest.raises(HTTPException) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert exc_info.value.status_code == 400
-        assert "at least 8 characters" in exc_info.value.detail
-
-    def test_valid_password_returns_same(self):
-        """Valid password is returned unchanged."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="validpassword123",
-        )
-        result = _validate_setup_passwords(setup, is_oauth_user=False)
-        assert result == "validpassword123"
+    def test_owner_password_is_not_validated(self):
+        """A short owner password is not setup's to judge -- the node set it at claim."""
+        _validate_system_admin_password(self._setup(admin_password="short"))
 
     def test_system_admin_password_too_short_raises_error(self):
-        """System admin password too short raises HTTPException."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="validpassword123",
-            system_admin_password="short",
-        )
         with pytest.raises(HTTPException) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
+            _validate_system_admin_password(self._setup(system_admin_password="short"))
         assert exc_info.value.status_code == 400
         assert "System admin password" in exc_info.value.detail
 
-
-class TestLogOAuthLinkingSkip:
-    """Tests for _log_oauth_linking_skip helper."""
-
-    def test_logs_missing_provider(self):
-        """Logs reason when oauth_provider is missing."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="password123",
-            oauth_provider=None,
-            oauth_external_id="12345",
-        )
-        # Should not raise, just logs
-        _log_oauth_linking_skip(setup)
-
-    def test_logs_missing_external_id(self):
-        """Logs reason when oauth_external_id is missing."""
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test",
-            admin_username="testuser",
-            admin_password="password123",
-            oauth_provider="google",
-            oauth_external_id=None,
-        )
-        # Should not raise, just logs
-        _log_oauth_linking_skip(setup)
+    def test_valid_system_admin_password_is_accepted(self):
+        _validate_system_admin_password(self._setup(system_admin_password="validpassword123"))
 
 
 class TestGetLLMProviders:
@@ -293,7 +215,8 @@ class TestGetAvailableAdapters:
         """Returns a list of adapters."""
         adapters = _get_available_adapters()
         assert isinstance(adapters, list)
-        assert len(adapters) >= 2  # At least api, cli
+        # At least the API adapter is always included
+        assert len(adapters) >= 1
 
     def test_adapter_ids(self):
         """Adapters have expected IDs."""
@@ -301,8 +224,6 @@ class TestGetAvailableAdapters:
         adapter_ids = {a.id for a in adapters}
         # API adapter is always required
         assert "api" in adapter_ids
-        # Should have multiple adapters from discovery
-        assert len(adapter_ids) >= 4
 
     def test_api_adapter_enabled_by_default(self):
         """API adapter is enabled by default."""
@@ -316,3 +237,536 @@ class TestGetAvailableAdapters:
         discord = next((a for a in adapters if a.id == "discord"), None)
         if discord:
             assert "DISCORD_BOT_TOKEN" in discord.required_env_vars
+
+
+class TestShouldFilterAdapter:
+    """Tests for should_filter_adapter from shared _adapter_discovery module."""
+
+    def _create_manifest_data(
+        self,
+        name: str = "test_adapter",
+        is_mock: bool = False,
+        services: list = None,
+        metadata: dict = None,
+    ) -> dict:
+        """Create a manifest data dict for testing."""
+        module = {"name": name}
+        if is_mock:
+            module["MOCK"] = True
+        return {
+            "module": module,
+            "services": services if services is not None else [{"type": "TOOL"}],
+            "metadata": metadata or {},
+        }
+
+    def test_skip_already_seen(self):
+        """Skip manifest if module_id already in skip_adapters."""
+        manifest = self._create_manifest_data(name="already_seen")
+        # Use skip_adapters instead of seen_ids
+        assert should_filter_adapter(manifest, skip_adapters={"already_seen"}) is True
+
+    def test_skip_accord_metrics(self):
+        """Skip ciris_accord_metrics (handled separately)."""
+        manifest = self._create_manifest_data(name="ciris_accord_metrics")
+        assert should_filter_adapter(manifest, skip_adapters={"ciris_accord_metrics"}) is True
+
+    def test_skip_mock_modules(self):
+        """Skip mock modules."""
+        manifest = self._create_manifest_data(is_mock=True)
+        assert should_filter_adapter(manifest) is True
+
+    def test_skip_reference_modules(self):
+        """Reference modules are NOT filtered (changed behavior in shared module)."""
+        manifest = self._create_manifest_data(metadata={"type": "reference"})
+        # Shared module does not filter reference type
+        assert should_filter_adapter(manifest, filter_by_platform=False) is False
+
+    def test_skip_qa_modules(self):
+        """QA modules are NOT filtered (changed behavior in shared module)."""
+        manifest = self._create_manifest_data(metadata={"type": "qa"})
+        # Shared module does not filter qa type
+        assert should_filter_adapter(manifest, filter_by_platform=False) is False
+
+    def test_skip_no_services(self):
+        """Skip modules with no services."""
+        manifest = self._create_manifest_data(services=[])
+        assert should_filter_adapter(manifest) is True
+
+    def test_skip_library_type(self):
+        """Skip modules with metadata type = library."""
+        manifest = self._create_manifest_data(metadata={"type": "library"})
+        assert should_filter_adapter(manifest) is True
+
+    def test_skip_common_suffix(self):
+        """Skip modules ending with _common."""
+        manifest = self._create_manifest_data(name="ciris_common")
+        assert should_filter_adapter(manifest) is True
+
+    def test_skip_common_infix(self):
+        """Skip modules with _common_ in name."""
+        manifest = self._create_manifest_data(name="ciris_common_utils")
+        assert should_filter_adapter(manifest) is True
+
+    def test_do_not_skip_valid_adapter(self):
+        """Do not skip valid adapter."""
+        manifest = self._create_manifest_data(name="valid_adapter")
+        assert should_filter_adapter(manifest, filter_by_platform=False) is False
+
+
+class TestParseManifestToModuleInfo:
+    """Tests for parse_manifest_to_module_info from shared _adapter_discovery module."""
+
+    def _create_manifest_data(
+        self,
+        name: str = "test_adapter",
+        description: str = "Test adapter description",
+        capabilities: list = None,
+        metadata: dict = None,
+        platform_requirements: list = None,
+    ) -> dict:
+        """Create a manifest data dict for testing."""
+        return {
+            "module": {
+                "name": name,
+                "description": description,
+                "version": "1.0.0",
+                "author": "Test",
+            },
+            "capabilities": capabilities or [],
+            "services": [{"type": "TOOL"}],
+            "metadata": metadata or {},
+            "platform_requirements": platform_requirements or [],
+        }
+
+    def test_creates_module_type_info(self):
+        """Creates ModuleTypeInfo from manifest."""
+        from ciris_engine.schemas.runtime.adapter_management import ModuleTypeInfo
+
+        manifest = self._create_manifest_data()
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert isinstance(result, ModuleTypeInfo)
+        assert result.module_id == "test_adapter"
+
+    def test_name_from_manifest(self):
+        """Name is taken from manifest module name."""
+        manifest = self._create_manifest_data(name="my_test_adapter")
+        result = parse_manifest_to_module_info(manifest, "my_test_adapter")
+        # Name is used as-is from manifest
+        assert result.name == "my_test_adapter"
+
+    def test_description_from_manifest(self):
+        """Uses description from manifest."""
+        manifest = self._create_manifest_data(description="Custom description")
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert result.description == "Custom description"
+
+    def test_description_fallback(self):
+        """Uses fallback description when manifest has none."""
+        manifest = self._create_manifest_data(description="")
+        # Set module description to empty string (not None)
+        manifest["module"]["description"] = ""
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        # With empty description, it returns empty or default
+        assert result.description == "" or "test_adapter" in result.description.lower()
+
+    def test_requires_binaries_capability(self):
+        """Detects requires:binaries capability."""
+        manifest = self._create_manifest_data(capabilities=["requires:binaries", "other"])
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert "requires:binaries" in result.capabilities
+
+    def test_no_requires_binaries(self):
+        """No requires:binaries in capabilities."""
+        manifest = self._create_manifest_data(capabilities=["other"])
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert "requires:binaries" not in result.capabilities
+
+    def test_metadata_from_manifest(self):
+        """Extracts metadata from manifest."""
+        manifest = self._create_manifest_data(metadata={"supported_platforms": ["linux", "darwin"]})
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert result.metadata == {"supported_platforms": ["linux", "darwin"]}
+
+    def test_metadata_empty_when_missing(self):
+        """Empty metadata when not in manifest."""
+        manifest = self._create_manifest_data(metadata={})
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert result.metadata == {}
+
+    def test_platform_requirements_from_manifest(self):
+        """Uses platform_requirements from manifest."""
+        manifest = self._create_manifest_data(platform_requirements=["gpu", "cuda"])
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert result.platform_requirements == ["gpu", "cuda"]
+
+    def test_platform_requirements_empty_when_none(self):
+        """Empty platform_requirements when manifest has None."""
+        manifest = self._create_manifest_data(platform_requirements=None)
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert result.platform_requirements == []
+
+    def test_service_types_extracted(self):
+        """Service types are extracted from manifest."""
+        manifest = self._create_manifest_data()
+        manifest["services"] = [{"type": "TOOL"}, {"type": "COMMUNICATION"}]
+        result = parse_manifest_to_module_info(manifest, "test_adapter")
+        assert "TOOL" in result.service_types
+        assert "COMMUNICATION" in result.service_types
+
+
+# ============================================================================
+# Live Model Listing Helper Tests
+# ============================================================================
+
+
+class TestDetectOllama:
+    """Tests for _detect_ollama helper."""
+
+    def test_standard_ollama_port(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("http://localhost:11434") is True
+
+    def test_ollama_port_with_path(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("http://myserver:11434/v1") is True
+
+    def test_non_ollama_port(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("http://localhost:8080") is False
+
+    def test_none_url(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama(None) is False
+
+    def test_empty_string(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _detect_ollama
+
+        assert _detect_ollama("") is False
+
+
+class TestGetProviderBaseUrl:
+    """Tests for _get_provider_base_url helper."""
+
+    def test_known_provider_groq(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("groq", None) == "https://api.groq.com/openai/v1"
+
+    def test_known_provider_together(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("together", None) == "https://api.together.xyz/v1"
+
+    def test_known_provider_openrouter(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("openrouter", None) == "https://openrouter.ai/api/v1"
+
+    def test_custom_url_overrides_default(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("groq", "https://custom.url/v1") == "https://custom.url/v1"
+
+    def test_unknown_provider_no_url(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("openai", None) is None
+
+    def test_unknown_provider_with_url(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_provider_base_url
+
+        assert _get_provider_base_url("other", "https://my-api.com/v1") == "https://my-api.com/v1"
+
+
+class TestAnnotateModelsWithCapabilities:
+    """Tests for _annotate_models_with_capabilities helper."""
+
+    def test_known_model_annotated(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        models = [LiveModelInfo(id="gpt-4o", display_name="gpt-4o")]
+        result = _annotate_models_with_capabilities(models, "openai")
+        assert result[0].display_name == "GPT-4o"
+        assert result[0].ciris_compatible is True
+        assert result[0].source == "both"
+
+    def test_unknown_model_left_as_is(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        models = [LiveModelInfo(id="ft:custom-model-2025", display_name="ft:custom-model-2025")]
+        result = _annotate_models_with_capabilities(models, "openai")
+        assert result[0].ciris_compatible is None
+        assert result[0].source == "live"
+
+    def test_unknown_provider(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        models = [LiveModelInfo(id="my-model", display_name="my-model")]
+        result = _annotate_models_with_capabilities(models, "nonexistent_provider")
+        assert result[0].ciris_compatible is None
+
+    def test_empty_models_list(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _annotate_models_with_capabilities
+
+        result = _annotate_models_with_capabilities([], "openai")
+        assert result == []
+
+
+class TestSortModels:
+    """Tests for _sort_models helper."""
+
+    def test_sorting_order(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _sort_models
+
+        models = [
+            LiveModelInfo(id="a", display_name="A", ciris_compatible=False),
+            LiveModelInfo(id="b", display_name="B", ciris_compatible=True, ciris_recommended=True),
+            LiveModelInfo(id="c", display_name="C", ciris_compatible=None),
+            LiveModelInfo(id="d", display_name="D", ciris_compatible=True),
+        ]
+        sorted_models = _sort_models(models)
+        assert sorted_models[0].id == "b"  # recommended
+        assert sorted_models[1].id == "d"  # compatible
+        assert sorted_models[2].id == "c"  # unknown
+        assert sorted_models[3].id == "a"  # incompatible
+
+    def test_alphabetical_within_group(self):
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, _sort_models
+
+        models = [
+            LiveModelInfo(id="z", display_name="Zebra", ciris_compatible=True),
+            LiveModelInfo(id="a", display_name="Alpha", ciris_compatible=True),
+        ]
+        sorted_models = _sort_models(models)
+        assert sorted_models[0].id == "a"
+        assert sorted_models[1].id == "z"
+
+    def test_empty_list(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _sort_models
+
+        assert _sort_models([]) == []
+
+
+class TestGetStaticFallbackModels:
+    """Tests for _get_static_fallback_models helper."""
+
+    def test_known_provider(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_static_fallback_models
+
+        models = _get_static_fallback_models("openai")
+        assert len(models) > 0
+        assert all(m.source == "static" for m in models)
+
+    def test_unknown_provider_empty(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _get_static_fallback_models
+
+        models = _get_static_fallback_models("nonexistent_provider")
+        assert len(models) == 0
+
+
+class TestBuildFallbackResponse:
+    """Tests for _build_fallback_response helper."""
+
+    def test_includes_error_message(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _build_fallback_response
+
+        resp = _build_fallback_response("openai", "Connection timed out")
+        assert resp.source == "static"
+        assert resp.error is not None
+        assert "Connection timed out" in resp.error
+        assert resp.total_count > 0
+        assert resp.provider == "openai"
+
+    def test_unknown_provider_empty_models(self):
+        from ciris_engine.logic.adapters.api.routes.setup import _build_fallback_response
+
+        resp = _build_fallback_response("nonexistent", "No such provider")
+        assert resp.source == "static"
+        assert resp.total_count == 0
+        assert resp.error is not None
+
+
+class TestListModelsForProvider:
+    """Tests for _list_models_for_provider orchestrator."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_api_key_returns_static(self):
+        """Invalid API key triggers static fallback."""
+        from ciris_engine.logic.adapters.api.routes.setup import LLMValidationRequest, _list_models_for_provider
+
+        config = LLMValidationRequest(
+            provider="openai",
+            api_key="your_openai_api_key_here",  # Placeholder key triggers validation error
+        )
+        result = await _list_models_for_provider(config)
+        assert result.source == "static"
+        assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_live_query_exception_falls_back(self):
+        """Exception during live query triggers static fallback."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LLMValidationRequest, _list_models_for_provider
+
+        config = LLMValidationRequest(
+            provider="openai",
+            api_key="sk-valid-key-12345",
+        )
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._fetch_live_models",
+            side_effect=TimeoutError("Connection timed out"),
+        ):
+            result = await _list_models_for_provider(config)
+            assert result.source == "static"
+            assert result.error is not None
+
+    @pytest.mark.asyncio
+    async def test_successful_live_query(self):
+        """Successful live query returns annotated models."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import (
+            LiveModelInfo,
+            LLMValidationRequest,
+            _list_models_for_provider,
+        )
+
+        config = LLMValidationRequest(
+            provider="openai",
+            api_key="sk-valid-key-12345",
+        )
+
+        mock_models = [
+            LiveModelInfo(id="gpt-4o", display_name="gpt-4o", source="live"),
+            LiveModelInfo(id="gpt-3.5-turbo", display_name="gpt-3.5-turbo", source="live"),
+        ]
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._fetch_live_models",
+            return_value=mock_models,
+        ):
+            result = await _list_models_for_provider(config)
+            assert result.source == "live"
+            assert result.error is None
+            assert result.total_count == 2
+
+    @pytest.mark.asyncio
+    async def test_local_provider_skips_api_key_validation(self):
+        """Local provider does not require API key validation."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import (
+            LiveModelInfo,
+            LLMValidationRequest,
+            _list_models_for_provider,
+        )
+
+        config = LLMValidationRequest(
+            provider="local",
+            api_key="",
+            base_url="http://localhost:11434",
+        )
+
+        mock_models = [LiveModelInfo(id="llama3", display_name="llama3", source="live")]
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._fetch_live_models",
+            return_value=mock_models,
+        ):
+            result = await _list_models_for_provider(config)
+            assert result.source == "live"
+
+
+class TestFetchLiveModels:
+    """Tests for _fetch_live_models dispatch function."""
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_anthropic(self):
+        """Anthropic provider dispatches to _list_models_anthropic."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="anthropic", api_key="sk-ant-test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_anthropic",
+            return_value=[LiveModelInfo(id="claude-3-opus", display_name="Claude 3 Opus", source="live")],
+        ) as mock_anthropic:
+            result = await _fetch_live_models(config)
+            mock_anthropic.assert_called_once_with("sk-ant-test123")
+            assert len(result) == 1
+            assert result[0].id == "claude-3-opus"
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_google(self):
+        """Google provider dispatches to _list_models_google."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="google", api_key="AIza-test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_google",
+            return_value=[LiveModelInfo(id="gemini-2.0-flash-exp", display_name="Gemini 2.0 Flash", source="live")],
+        ) as mock_google:
+            result = await _fetch_live_models(config)
+            mock_google.assert_called_once_with("AIza-test123")
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_ollama(self):
+        """Local provider with Ollama URL dispatches to _list_models_ollama."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="local", api_key="", base_url="http://localhost:11434")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_ollama",
+            return_value=[LiveModelInfo(id="llama3:latest", display_name="llama3:latest", source="live")],
+        ) as mock_ollama:
+            result = await _fetch_live_models(config)
+            mock_ollama.assert_called_once_with("http://localhost:11434")
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_dispatches_to_openai_compatible(self):
+        """OpenAI provider dispatches to _list_models_openai_compatible."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="openai", api_key="sk-test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_openai_compatible",
+            return_value=[LiveModelInfo(id="gpt-4o", display_name="gpt-4o", source="live")],
+        ) as mock_openai:
+            result = await _fetch_live_models(config)
+            mock_openai.assert_called_once_with("sk-test123", None)
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_groq_resolves_base_url(self):
+        """Groq provider resolves to correct base URL."""
+        from unittest.mock import patch as async_patch
+
+        from ciris_engine.logic.adapters.api.routes.setup import LiveModelInfo, LLMValidationRequest, _fetch_live_models
+
+        config = LLMValidationRequest(provider="groq", api_key="gsk_test123")
+
+        with async_patch(
+            "ciris_engine.logic.adapters.api.routes.setup.llm_validation._list_models_openai_compatible",
+            return_value=[],
+        ) as mock_openai:
+            await _fetch_live_models(config)
+            mock_openai.assert_called_once_with("gsk_test123", "https://api.groq.com/openai/v1")

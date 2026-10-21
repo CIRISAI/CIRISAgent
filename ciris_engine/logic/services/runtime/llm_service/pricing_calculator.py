@@ -30,6 +30,10 @@ class LLMPricingCalculator:
             pricing_config: Optional pricing configuration. If None, loads from file.
         """
         self.pricing_config = pricing_config or get_pricing_config()
+        # (provider, model) pairs already reported as unpriced. Whether a model has an
+        # entry is static for the life of the process, so a repeat says nothing new
+        # while this runs on every cost calculation (#935).
+        self._reported_unpriced: set[tuple[str, str]] = set()
         logger.debug(f"Initialized pricing calculator with config version {self.pricing_config.version}")
 
     def calculate_cost_and_impact(
@@ -119,9 +123,41 @@ class LLMPricingCalculator:
         if pattern_config:
             return pattern_config
 
-        # Fall back to unknown model pricing
-        logger.warning(f"No pricing found for model {model_name}, using fallback pricing")
-        return self.pricing_config.get_fallback_pricing()
+        # Fall back to provider-scoped pricing, then the global default.
+        #
+        # ONCE PER (provider, model), not once per call (#935). Whether a model has a
+        # pricing entry is STATIC for the life of the process, but this runs on every
+        # cost calculation — 64 identical lines in a 31-minute window on datum. The
+        # repeat carries nothing the first did not.
+        fallback = self.pricing_config.get_fallback_pricing(provider_name)
+        seen_key = (provider_name or "<unknown>", model_name)
+        if seen_key not in self._reported_unpriced:
+            self._reported_unpriced.add(seen_key)
+            scope = f"the {provider_name} default" if provider_name else "the global default"
+            logger.warning(
+                "MODEL HAS NO PRICING ENTRY — costs for %r are ESTIMATED, not actual, and every "
+                "figure derived from them (billing, budget envelopes, usage reports) is an "
+                "estimate too.\n"
+                "  model     : %s\n"
+                "  provider  : %s\n"
+                "  using     : %s (input=%s output=%s cents/million tokens)\n"
+                "  WHY: the model is absent from ciris_engine/config/PRICING_DATA.json. This is a "
+                "data gap, not a runtime fault — it will not resolve on its own.\n"
+                "  FIX: add the model under providers.%s.models in PRICING_DATA.json with its "
+                "list price in CENTS per million tokens (the file's values are 100x the USD "
+                "figure), then restart or call reload_pricing_config().\n"
+                "  (Reported once per model: the answer is static. Repeats: debug.)",
+                model_name,
+                model_name,
+                provider_name or "<unknown>",
+                scope,
+                fallback.input_cost,
+                fallback.output_cost,
+                provider_name or "<provider>",
+            )
+        else:
+            logger.debug("No pricing entry for %s/%s; using fallback", provider_name, model_name)
+        return fallback
 
     def _try_pattern_matching(self, model_name: str) -> Optional[ModelConfig]:
         """

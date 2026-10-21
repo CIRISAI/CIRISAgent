@@ -42,7 +42,7 @@ class ToolParameter(BaseModel):
     required: bool = Field(True, description="Whether parameter is required")
     default: Optional[ConfigValue] = Field(None, description="Default value if not provided")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class Tool(BaseModel):
@@ -54,7 +54,7 @@ class Tool(BaseModel):
     category: str = Field("general", description="Tool category")
     parameters: List[ToolParameter] = Field(default_factory=list, description="Tool parameters")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ToolResult(BaseModel):
@@ -66,7 +66,7 @@ class ToolResult(BaseModel):
     execution_time: Optional[float] = Field(None, description="Execution time in seconds")
     timestamp: Optional[datetime] = Field(None, description="When the tool was executed")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["ParameterType", "ToolStatus", "ToolParameter", "Tool", "ToolResult"]

@@ -76,9 +76,20 @@ class EnvironmentalFactors(BaseModel):
 
 
 class FallbackPricing(BaseModel):
-    """Fallback pricing for unknown models."""
+    """Fallback pricing for unknown models.
+
+    A single global fallback is wrong in both directions: it understates a premium
+    model (claude-3-opus is 75x the old flat default on output) and overstates a
+    budget one. `provider_defaults` keeps an unseen model in the right order of
+    magnitude for the provider it actually ran on, which is the one thing we always
+    know even when the model name is new.
+    """
 
     unknown_model: ModelConfig = Field(..., description="Default pricing for unknown models")
+    provider_defaults: Dict[str, ModelConfig] = Field(
+        default_factory=dict,
+        description="Per-provider default pricing, used before the global unknown_model fallback",
+    )
 
 
 class PricingMetadata(BaseModel):
@@ -217,8 +228,17 @@ class PricingConfig(BaseModel):
             return self.environmental_factors.carbon_intensity.regions[region]
         return self.environmental_factors.carbon_intensity.global_average_g_co2_per_kwh
 
-    def get_fallback_pricing(self) -> ModelConfig:
-        """Get fallback pricing for unknown models."""
+    def get_fallback_pricing(self, provider_name: Optional[str] = None) -> ModelConfig:
+        """Get fallback pricing for an unknown model.
+
+        Prefers the provider's own default when the provider is known: the model name
+        may be new, but the provider tells us the price tier. Only falls back to the
+        global `unknown_model` when the provider is unknown too.
+        """
+        if provider_name:
+            provider_default = self.fallback_pricing.provider_defaults.get(provider_name)
+            if provider_default:
+                return provider_default
         return self.fallback_pricing.unknown_model
 
     def list_active_models(self, provider_name: Optional[str] = None) -> List[tuple[str, str, ModelConfig]]:

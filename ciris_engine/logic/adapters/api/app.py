@@ -5,7 +5,7 @@ This module creates and configures the FastAPI application with all routes.
 """
 
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +17,7 @@ from .middleware.rate_limiter import RateLimitMiddleware
 from .routes import (
     agent,
     audit,
-    auth,
+    auth_proxy,
     billing,
     config,
     connectors,
@@ -26,17 +26,23 @@ from .routes import (
     dsar_multi_source,
     emergency,
     memory,
+    my_data,
+    node_identity,
+    node_proxy,
     partnership,
+    scheduler,
     setup,
     system,
     system_extensions,
     telemetry,
+    telemetry_export,
     tickets,
     tools,
     transparency,
     users,
     verification,
     wa,
+    wallet,
 )
 
 # Import auth service
@@ -48,9 +54,215 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application lifecycle."""
     # Startup
     print("Starting CIRIS API...")
+    # Note: Founding partnership reconciliation is handled by config_migration.py
+    # during runtime initialization (PARTNERSHIP_MIGRATION step).
     yield
     # Shutdown
     print("Shutting down CIRIS API...")
+
+
+# ============================================================================
+# Helper functions to reduce cognitive complexity (SonarCloud S3776)
+# ============================================================================
+
+
+def _configure_cors(app: FastAPI, adapter_config: Any) -> None:
+    """Configure CORS middleware based on adapter config."""
+    cors_enabled = True
+    cors_origins: list[str] = ["*"]
+    cors_allow_credentials = False
+
+    if adapter_config:
+        cors_enabled = bool(getattr(adapter_config, "cors_enabled", True))
+        configured_origins = getattr(adapter_config, "cors_origins", ["*"])
+        if isinstance(configured_origins, list) and configured_origins:
+            cors_origins = configured_origins
+        cors_allow_credentials = bool(getattr(adapter_config, "cors_allow_credentials", False))
+
+    if not cors_enabled:
+        return
+
+    # Browsers reject wildcard origins with credentials; fail safe by disabling credentials
+    if "*" in cors_origins and cors_allow_credentials:
+        print("CORS warning: wildcard origins cannot use credentials. Disabling credentials.")
+        cors_allow_credentials = False
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=cors_allow_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+def _configure_rate_limiting(app: FastAPI, adapter_config: Any) -> None:
+    """Configure rate limiting middleware if enabled."""
+    if not adapter_config or not getattr(adapter_config, "rate_limit_enabled", False):
+        return
+
+    rate_limit = getattr(adapter_config, "rate_limit_per_minute", 60)
+    rate_limit_middleware = RateLimitMiddleware(requests_per_minute=rate_limit)
+
+    @app.middleware("http")
+    async def rate_limit_wrapper(request: Request, call_next: Callable[..., Any]) -> Response:
+        return await rate_limit_middleware(request, call_next)
+
+    print(f"Rate limiting enabled: {rate_limit} requests per minute")
+
+
+def _initialize_app_state(app: FastAPI, runtime: Any) -> None:
+    """Initialize app.state with runtime and service placeholders."""
+    app.state.runtime = runtime
+    app.state.auth_service = APIAuthService()
+
+    # Graph Services (7)
+    app.state.memory_service = None
+    app.state.consent_manager = None
+    app.state.config_service = None
+    app.state.telemetry_service = None
+    app.state.audit_service = None
+    app.state.incident_management_service = None
+    app.state.tsdb_consolidation_service = None
+
+    # Infrastructure Services (7)
+    app.state.time_service = None
+    app.state.shutdown_service = None
+    app.state.initialization_service = None
+    app.state.authentication_service = None
+    app.state.resource_monitor = None
+    app.state.database_maintenance_service = None
+    app.state.secrets_service = None
+
+    # Governance Services (4)
+    app.state.wise_authority_service = None
+    app.state.wa_service = None
+    app.state.adaptive_filter_service = None
+    app.state.visibility_service = None
+    app.state.self_observation_service = None
+
+    # Runtime Services (3)
+    app.state.llm_service = None
+    app.state.runtime_control_service = None
+    app.state.task_scheduler = None
+
+    # Tool Services (1)
+    app.state.secrets_tool_service = None
+
+    # Infrastructure components
+    app.state.service_registry = None
+    app.state.agent_processor = None
+    app.state.message_handler = None
+    app.state.communication_service = None
+    app.state.tool_service = None
+    app.state.adapter_configuration_service = None
+    app.state.tool_bus = None
+    app.state.memory_bus = None
+
+
+def _mount_gui_assets(app: FastAPI) -> None:
+    """Mount GUI static assets or configure API-only mode.
+
+    Priority order:
+    1. WASM app (wasm_static/) - for HA addon and web deployments
+    2. Android GUI (android_gui_static/) - for Android app
+    3. Next.js dashboard (gui_static/) - for standalone deployments
+    4. API-only mode - no GUI served
+    """
+    from pathlib import Path
+
+    from fastapi.staticfiles import StaticFiles
+
+    from ciris_engine.logic.utils.path_resolution import is_android, is_managed
+
+    package_root = Path(__file__).resolve().parent.parent.parent.parent
+    android_gui_dir = package_root.parent / "android_gui_static"
+    gui_static_dir = package_root / "gui_static"
+    wasm_static_dir = package_root / "wasm_static"
+
+    # Also check common Docker/HA addon locations
+    alt_wasm_dirs = [
+        Path("/app/wasm_static"),
+        Path("/app/ciris_engine/wasm_static"),
+        package_root.parent / "wasm_static",
+    ]
+
+    # Find WASM directory (priority for web/HA deployments)
+    wasm_dir = None
+    if wasm_static_dir.exists() and any(wasm_static_dir.iterdir()):
+        wasm_dir = wasm_static_dir
+    else:
+        for alt_dir in alt_wasm_dirs:
+            if alt_dir.exists() and any(alt_dir.iterdir()):
+                wasm_dir = alt_dir
+                break
+
+    # Choose appropriate GUI directory
+    if is_android() and android_gui_dir.exists() and any(android_gui_dir.iterdir()):
+        gui_static_dir = android_gui_dir
+        print(f" Using Android GUI static assets: {gui_static_dir}")
+
+    # Skip GUI in managed/Docker mode (unless WASM is available)
+    if is_managed() and not wasm_dir:
+        print("[INFO] GUI disabled in managed mode (manager provides frontend)")
+        _add_api_root_endpoint(app, "managed_mode", "Running in managed mode - GUI provided by CIRIS Manager")
+    elif wasm_dir:
+        # WASM app takes priority - mount at root for HA addon
+        app.mount("/", StaticFiles(directory=str(wasm_dir), html=True), name="wasm_gui")
+        print(f"[OK] WASM GUI enabled at / (static assets: {wasm_dir})")
+    elif gui_static_dir.exists() and any(gui_static_dir.iterdir()):
+        app.mount("/", StaticFiles(directory=str(gui_static_dir), html=True), name="gui")
+        print(f"[OK] GUI enabled at / (static assets: {gui_static_dir})")
+    else:
+        _add_api_root_endpoint(app, "desktop_app", "Use CIRIS Desktop app to connect to this API server")
+        print("[INFO] API-only mode - use CIRIS Desktop app to connect")
+
+
+def _add_api_root_endpoint(app: FastAPI, gui_status: str, message: str) -> None:
+    """Add a root endpoint for API-only mode."""
+    from ciris_engine import __version__
+
+    @app.get("/")
+    def root() -> dict[str, str]:
+        return {
+            "name": "CIRIS API",
+            "version": __version__,
+            "docs": "/docs",
+            "redoc": "/redoc",
+            "openapi": "/openapi.json",
+            "health": "/health",
+            "gui": gui_status,
+            "message": message,
+        }
+
+    @app.get("/health")
+    def health() -> dict[str, Any]:
+        """Root-level health check (no /v1 prefix needed).
+
+        Surfaces the CIRISVerify storage descriptor when available
+        (ciris-verify >= 1.8.0) so operators can confirm the identity-seed
+        keyring is on a persistent volume rather than container ephemeral
+        storage. See issue #708. Field is omitted (not null) when the
+        loaded ciris-verify is older or the descriptor isn't yet exposed —
+        keeps the health-check payload small for callers that don't care.
+        """
+        payload: dict[str, Any] = {
+            "status": "ok",
+            "version": __version__,
+            "api": "running",
+        }
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_storage_descriptor,
+            )
+
+            descriptor = get_storage_descriptor()
+            if descriptor is not None:
+                payload["storage_descriptor"] = descriptor
+        except Exception:
+            # /health MUST NOT 500 because of an optional surfacing helper.
+            pass
+        return payload
 
 
 def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
@@ -64,6 +276,11 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     Returns:
         Configured FastAPI application
     """
+    from ciris_engine.logic.runtime.startup_logging import set_api_status
+
+    print("[STARTUP] Creating API application...")
+    set_api_status("creating_api")
+
     # Determine root_path for reverse proxy support
     root_path = ""
     if adapter_config and hasattr(adapter_config, "proxy_path") and adapter_config.proxy_path:
@@ -75,187 +292,116 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
         description="Autonomous AI Agent Interaction and Observability API (Pre-Beta)",
         version="1.0.0",
         lifespan=lifespan,
-        root_path=root_path or "",  # This tells FastAPI it's behind a proxy at this path
+        root_path=root_path or "",
+        redirect_slashes=False,  # We strip trailing slashes in middleware
     )
 
-    # Add CORS middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Configure based on deployment
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Strip trailing slashes in-place so clients that append "/" don't get 404s.
+    # FastAPI's redirect_slashes sends a 307 redirect, but some HTTP clients
+    # (e.g. Ktor/Darwin on iOS) drop the Authorization header on redirect.
+    @app.middleware("http")
+    async def _strip_trailing_slash(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        if request.url.path != "/" and request.url.path.endswith("/"):
+            request.scope["path"] = request.url.path.rstrip("/")
+        response = await call_next(request)
+        if response.status_code == 404:
+            import logging
 
-    # Add rate limiting middleware if enabled in config
-    if adapter_config and getattr(adapter_config, "rate_limit_enabled", False):
-        rate_limit = getattr(adapter_config, "rate_limit_per_minute", 60)
+            logging.getLogger("ciris.api").warning(
+                "[404_DEBUG] path=%s method=%s auth=%s",
+                request.url.path,
+                request.method,
+                "present" if request.headers.get("authorization") else "missing",
+            )
+        return response
 
-        # Create middleware instance
-        rate_limit_middleware = RateLimitMiddleware(requests_per_minute=rate_limit)
+    # Add cache-control headers for static files to prevent stale WASM cache
+    # This fixes the "hard reload required" issue in Home Assistant ingress
+    @app.middleware("http")
+    async def _add_cache_control(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        response = await call_next(request)
+        path = request.url.path
 
-        # Add middleware using a wrapper function
-        @app.middleware("http")
-        async def rate_limit_wrapper(request: Request, call_next: Callable[..., Any]) -> Response:
-            return await rate_limit_middleware(request, call_next)
+        # For index.html and root path, always revalidate (no caching)
+        if path == "/" or path.endswith("/index.html") or path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        # For JS and WASM files, use short cache with revalidation
+        elif path.endswith(".js") or path.endswith(".wasm"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        # For other static assets (CSS, images), allow short caching
+        elif any(path.endswith(ext) for ext in [".css", ".png", ".jpg", ".svg", ".ico", ".woff", ".woff2"]):
+            response.headers["Cache-Control"] = "public, max-age=3600, must-revalidate"
 
-        print(f"Rate limiting enabled: {rate_limit} requests per minute")
+        return response
 
-    # Store runtime in app state for access in routes
+    # Configure middleware
+    print("[STARTUP] Configuring middleware...")
+    set_api_status("configuring_middleware")
+    _configure_cors(app, adapter_config)
+    _configure_rate_limiting(app, adapter_config)
+
+    # Initialize app state with runtime and service placeholders
     if runtime:
-        app.state.runtime = runtime
+        print("[STARTUP] Initializing runtime state...")
+        set_api_status("initializing_runtime")
+        _initialize_app_state(app, runtime)
 
-        # Initialize auth service - will be properly initialized later with authentication service
-        app.state.auth_service = APIAuthService()
-
-        # Services will be injected later in ApiPlatform.start() after they're initialized
-        # For now, just set placeholders to None
-
-        # === THE 21 CORE CIRIS SERVICES ===
-        # Graph Services (6)
-        app.state.memory_service = None
-        app.state.consent_manager = None  # Consent manager for Consensual Evolution Protocol (includes DSAR automation)
-        app.state.config_service = None
-        app.state.telemetry_service = None
-        app.state.audit_service = None
-        app.state.incident_management_service = None
-        app.state.tsdb_consolidation_service = None
-
-        # Infrastructure Services (7)
-        app.state.time_service = None
-        app.state.shutdown_service = None
-        app.state.initialization_service = None
-        app.state.authentication_service = None
-        app.state.resource_monitor = None
-        app.state.database_maintenance_service = None
-        app.state.secrets_service = None
-
-        # Governance Services (4)
-        app.state.wise_authority_service = None
-        app.state.wa_service = None  # Alias for wise_authority_service
-        app.state.adaptive_filter_service = None
-        app.state.visibility_service = None
-        app.state.self_observation_service = None
-
-        # Runtime Services (3)
-        app.state.llm_service = None
-        app.state.runtime_control_service = None
-        app.state.task_scheduler = None
-
-        # Tool Services (1)
-        app.state.secrets_tool_service = None
-
-        # === INFRASTRUCTURE COMPONENTS (not part of the 22 services) ===
-        app.state.service_registry = None
-        app.state.agent_processor = None
-        app.state.message_handler = None
-        # Adapter-created services
-        app.state.communication_service = None
-        app.state.tool_service = None
-        # Adapter configuration service (for interactive adapter setup)
-        app.state.adapter_configuration_service = None
-        # Message buses (injected from bus_manager)
-        app.state.tool_bus = None
-        app.state.memory_bus = None
-
-    # Mount v1 API routes (all routes except emergency under /v1)
+    # Mount v1 API routes
+    print("[STARTUP] Registering API routes...")
+    set_api_status("registering_routes")
     v1_routers = [
-        setup.router,  # Setup wizard (first-run + reconfiguration) - MUST be first for first-run detection
-        agent.router,  # Agent interaction
-        billing.router,  # Billing & credits (frontend proxy) - LLM credits
-        tools.router,  # Tool balance & credits (web_search, etc.) - separate from LLM credits
-        memory.router,  # Memory operations
-        system_extensions.router,  # Extended system operations (queue, services, processors) - MUST be before system.router
-        system.router,  # System operations (includes health, time, resources, runtime)
-        config.router,  # Configuration management
-        telemetry.router,  # Telemetry & observability
-        audit.router,  # Audit trail
-        wa.router,  # Wise Authority
-        auth.router,  # Authentication
-        users.router,  # User management
-        consent.router,  # Consent management (Consensual Evolution Protocol)
-        dsar.router,  # Data Subject Access Requests (GDPR compliance - single source)
-        dsar_multi_source.router,  # Multi-source DSAR (CIRIS + external databases)
-        connectors.router,  # External data connector management (SQL, REST, HL7)
-        tickets.router,  # Universal Ticket System (DSAR + custom workflows)
-        verification.router,  # Deletion proof verification (public, no auth)
-        partnership.router,  # Partnership management dashboard (admin only)
-        transparency.router,  # Public transparency feed (no auth)
+        setup.router,
+        agent.router,
+        billing.router,
+        tools.router,
+        memory.router,
+        system_extensions.router,
+        system.router,
+        config.router,
+        telemetry.router,
+        telemetry_export.router,
+        audit.router,
+        wa.router,
+        auth_proxy.router,
+        users.router,
+        consent.router,
+        dsar.router,
+        dsar_multi_source.router,
+        my_data.router,
+        node_identity.router,
+        connectors.router,
+        tickets.router,
+        scheduler.router,
+        verification.router,
+        partnership.router,
+        transparency.router,
+        wallet.router,
     ]
 
-    # Include all v1 routes with /v1 prefix
     for router in v1_routers:
         app.include_router(router, prefix="/v1")
 
+    # LAST, deliberately. FastAPI matches in registration order, so every brain
+    # route above still wins; this only catches /v1 paths the brain does not
+    # serve and forwards them to the folded node. It makes the agent ONE surface:
+    # /v1/setup is split across brain and node (list-models here, claim-remote
+    # there) and no single address answered both, which is what broke desktop
+    # BYOK. See routes/node_proxy.py.
+    app.include_router(node_proxy.router, prefix="/v1")
+
     # Mount emergency routes at root level (no /v1 prefix)
-    # This is special - requires signed commands, no auth
     app.include_router(emergency.router)
 
-    # Mount GUI static assets (if available) - MUST be LAST for proper route priority
-    # This enables serving the CIRISGUI frontend when bundled in the wheel
-    # ONLY in installed/standalone mode - NOT in managed/Docker mode
-    from pathlib import Path
+    print("[STARTUP] Routes registered successfully")
+    set_api_status("routes_registered")
 
-    from ciris_engine.logic.utils.path_resolution import is_android, is_managed
+    # Mount GUI static assets (MUST be LAST for proper route priority)
+    _mount_gui_assets(app)
 
-    # Path resolution for GUI static assets
-    # Need 4 parent levels: api -> adapters -> logic -> ciris_engine
-    package_root = Path(__file__).resolve().parent.parent.parent.parent
-
-    # On Android, prefer android_gui_static (built from CIRISGUI-Android)
-    # Otherwise fall back to gui_static (bundled in wheel for desktop/server)
-    android_gui_dir = package_root.parent / "android_gui_static"
-    gui_static_dir = package_root / "gui_static"
-
-    # Choose the appropriate GUI directory
-    if is_android() and android_gui_dir.exists() and any(android_gui_dir.iterdir()):
-        gui_static_dir = android_gui_dir
-        print(f"📱 Using Android GUI static assets: {gui_static_dir}")
-
-    # Skip GUI in managed/Docker mode - manager provides its own frontend
-    if is_managed():
-        print("ℹ️  GUI disabled in managed mode (manager provides frontend)")
-
-        # API-only mode for managed deployments
-        @app.get("/")
-        def root() -> dict[str, str]:
-            return {
-                "name": "CIRIS API",
-                "version": "1.0.0",
-                "docs": "/docs",
-                "redoc": "/redoc",
-                "openapi": "/openapi.json",
-                "gui": "managed_mode",
-                "message": "Running in managed mode - GUI provided by CIRIS Manager",
-            }
-
-    elif gui_static_dir.exists() and any(gui_static_dir.iterdir()):
-        from fastapi.staticfiles import StaticFiles
-
-        # Serve GUI at root (/) - catch-all, lowest priority
-        # This works because FastAPI matches routes in order:
-        # 1. /v1/* routes (highest priority)
-        # 2. /emergency/* routes
-        # 3. /docs, /redoc, /openapi.json (FastAPI built-ins)
-        # 4. /* GUI static files (lowest priority, catch-all)
-        app.mount("/", StaticFiles(directory=str(gui_static_dir), html=True), name="gui")
-        print(f"✅ GUI enabled at / (static assets: {gui_static_dir})")
-    else:
-        # No GUI - API-only mode
-        @app.get("/")
-        def root() -> dict[str, str]:
-            return {
-                "name": "CIRIS API",
-                "version": "1.0.0",
-                "docs": "/docs",
-                "redoc": "/redoc",
-                "openapi": "/openapi.json",
-                "gui": "not_available",
-                "message": "Install from PyPI for the full package with GUI: pip install ciris-agent",
-            }
-
-        print("ℹ️  API-only mode (no GUI assets found)")
-
+    print("[STARTUP] API application ready")
+    set_api_status("api_ready")
     return app
 
 

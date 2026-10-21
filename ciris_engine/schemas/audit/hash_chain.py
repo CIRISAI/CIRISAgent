@@ -6,11 +6,13 @@ These replace all Dict[str, Any] usage in logic/audit/hash_chain.py.
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HashChainAuditEntry(BaseModel):
     """An entry in the audit log with hash chain fields."""
+
+    model_config = ConfigDict(defer_build=True)
 
     event_id: str = Field(..., description="Unique event ID")
     event_timestamp: str = Field(..., description="Event timestamp")
@@ -25,6 +27,8 @@ class HashChainAuditEntry(BaseModel):
 class HashChainVerificationResult(BaseModel):
     """Result from verifying hash chain integrity."""
 
+    model_config = ConfigDict(defer_build=True)
+
     valid: bool = Field(..., description="Whether chain is valid")
     entries_checked: int = Field(..., description="Number of entries verified")
     errors: List[str] = Field(default_factory=list, description="List of validation errors")
@@ -34,6 +38,8 @@ class HashChainVerificationResult(BaseModel):
 
 class ChainSummary(BaseModel):
     """Summary of the hash chain state."""
+
+    model_config = ConfigDict(defer_build=True)
 
     total_entries: int = Field(0, description="Total number of entries")
     sequence_range: List[int] = Field(default_factory=list, description="Min and max sequence")
@@ -46,6 +52,8 @@ class ChainSummary(BaseModel):
 
 class AuditEntryResult(BaseModel):
     """Result from creating an audit entry with hash chain data (ALWAYS enabled in production)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     entry_id: str = Field(..., description="Unique ID of the audit entry (REQUIRED)")
     sequence_number: int = Field(..., description="Sequence number in hash chain (REQUIRED)")

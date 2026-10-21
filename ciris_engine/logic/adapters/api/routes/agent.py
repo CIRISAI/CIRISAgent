@@ -11,13 +11,14 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 from ciris_engine.logic.adapters.base_observer import BillingServiceError, CreditCheckFailed, CreditDenied
 from ciris_engine.schemas.api.agent import AgentLineage, MessageContext, ServiceAvailability
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, AuthContext, Permission, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
+from ciris_engine.schemas.runtime.accord_halt import AccordHaltState, AccordRowForward
 from ciris_engine.schemas.runtime.messages import IncomingMessage
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext
 from ciris_engine.schemas.types import JSONDict
@@ -27,12 +28,19 @@ from ..constants import (
     ERROR_MEMORY_SERVICE_NOT_AVAILABLE,
     ERROR_MESSAGE_HANDLER_NOT_CONFIGURED,
 )
-from ..dependencies.auth import require_observer
+from ._common import RESPONSES_402_403_503, RESPONSES_500, RESPONSES_503, AuthObserverDep, derive_credit_account
 
 logger = logging.getLogger(__name__)
 
 # Minimum uptime in seconds before defaulting task count
 MIN_UPTIME_FOR_DEFAULT_TASKS = 60
+
+# Tracks which CREDIT_ATTACH miss reasons we have already logged during this
+# server lifetime. The message handler runs CREDIT_ATTACH on every inbound
+# message, so a missing provider would otherwise produce one log line per
+# message (e.g. 1000 entries during a memory benchmark). We only care about
+# the first occurrence per reason — subsequent ones are redundant.
+_credit_attach_miss_logged: set[str] = set()
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -49,6 +57,10 @@ class MessageRejectionReason(str, Enum):
     PROCESSOR_PAUSED = "PROCESSOR_PAUSED"  # Agent processor paused
     RATE_LIMITED = "RATE_LIMITED"  # Rate limit exceeded
     CHANNEL_RESTRICTED = "CHANNEL_RESTRICTED"  # Channel access denied
+    RESOURCE_SHED = "RESOURCE_SHED"  # Runtime self-protection: admission closed under resource pressure
+    ACCORD_HALT = "ACCORD_HALT"  # CC 4.2.1.1 constitutional halt: agent acts paused, no new work admitted
+    ACCORD_ROW_FORWARDED = "ACCORD_ROW_FORWARDED"  # An accord row, handed to the node; not work for the agent
+    NODE_UNCLAIMED = "NODE_UNCLAIMED"  # The node has no owner: an agent does not run on an unowned node
 
 
 class ImagePayload(BaseModel):
@@ -81,6 +93,31 @@ class InteractRequest(BaseModel):
     )
 
 
+class InteractOutcome(str, Enum):
+    """How an interact() call ended (#1059).
+
+    The HTTP status is 200 for all three and `response` always carries text,
+    so a caller that only reads `response` keeps working. A caller that needs
+    to know whether that text is the agent's answer reads this instead of
+    matching the placeholder — which is localized, so string matching breaks
+    for every agent not running in English.
+    """
+
+    #: `response` is the agent's reply.
+    COMPLETE = "complete"
+    #: The deadline passed first. `response` is the localized still-processing
+    #: placeholder; the task keeps running and its reply lands in history.
+    TIMEOUT = "timeout"
+    #: The processor is paused; the message is queued, `response` says so.
+    PAUSED = "paused"
+    #: The task failed before it could answer (#1264): its last live thought
+    #: raised, e.g. a DMA that exhausted its LLM retries. `response` is the
+    #: localized error notice, not a reply; the task is FAILED and will not answer.
+    FAILED = "failed"
+    #: The message was a v2 accord row; it went to the node, not to the agent.
+    ACCORD_ROW_FORWARDED = "accord_row_forwarded"
+
+
 class InteractResponse(BaseModel):
     """Response from agent interaction."""
 
@@ -88,6 +125,30 @@ class InteractResponse(BaseModel):
     response: str = Field(..., description="Agent's response")
     state: str = Field(..., description="Agent's cognitive state after processing")
     processing_time_ms: int = Field(..., description="Time taken to process")
+    #: The task this interaction produced, when it can be resolved (#1011).
+    #:
+    #: The safety battery writes this into every capture row as
+    #: `agent_task_id` and has done since it was written — but the field was
+    #: never on this model, so it read `None` in every row of every run. The
+    #: consequence only surfaced during a French regression hunt: the traces
+    #: teed into the capture bundle key on `task_id`/`thought_id`, the verdicts
+    #: key on `question_id`, and with this empty there is NO join between them.
+    #: A failing question could not be traced to the reasoning that produced it,
+    #: which is the entire purpose of teeing the traces.
+    #:
+    #: Optional because the correlation is best-effort: a paused or timed-out
+    #: interaction has no task to name, and None there is honest.
+    task_id: Optional[str] = Field(None, description="Task ID this interaction produced, if resolvable")
+    outcome: InteractOutcome = Field(
+        InteractOutcome.COMPLETE,
+        description="complete: response is the agent's reply; timeout: deadline passed, the task is still "
+        "running and its reply will appear in history; paused: processor paused, message queued; "
+        "failed: the task failed before answering and response is the error notice; "
+        "accord_row_forwarded: the message was an accord row, handed to the node",
+    )
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict, when the message was an accord row (outcome accord_row_forwarded)"
+    )
 
 
 class MessageRequest(BaseModel):
@@ -107,6 +168,9 @@ class MessageSubmissionResponse(BaseModel):
     accepted: bool = Field(..., description="Whether message was accepted for processing")
     rejection_reason: Optional[MessageRejectionReason] = Field(None, description="Reason if rejected")
     rejection_detail: Optional[str] = Field(None, description="Additional detail about rejection")
+    accord_forward: Optional[AccordRowForward] = Field(
+        None, description="The node's verdict, when the message was an accord row (reason ACCORD_ROW_FORWARDED)"
+    )
 
 
 class ConversationMessage(BaseModel):
@@ -155,6 +219,9 @@ class AgentStatus(BaseModel):
     services_active: int = Field(..., description="Number of active services")
     memory_usage_mb: float = Field(..., description="Current memory usage in MB")
     multi_provider_services: Optional[JSONDict] = Field(None, description="Services with provider counts")
+    accord_halt: Optional[AccordHaltState] = Field(
+        None, description="The constitutional-halt latch as the agent's act gate last read it (CC 4.2.1.1)"
+    )
 
 
 class AgentIdentity(BaseModel):
@@ -197,9 +264,13 @@ class ChannelList(BaseModel):
 # Message tracking for interact functionality
 _message_responses: dict[str, str] = {}
 _response_events: dict[str, asyncio.Event] = {}
+#: The task whose SPEAK answered a waiting interact(), keyed by message_id.
+#: Written by the delivery path, which knows the speaking task; read once by
+#: interact() so it can name the task without a persistence scan.
+_message_task_ids: dict[str, str] = {}
 
 
-async def store_message_response(message_id: str, response: str) -> None:
+async def store_message_response(message_id: str, response: str, task_id: Optional[str] = None) -> None:
     """Store a response and notify waiting request."""
     import os
 
@@ -211,9 +282,19 @@ async def store_message_response(message_id: str, response: str) -> None:
     event = _response_events.get(message_id)
     if event:
         logger.info(f"[STORE_RESPONSE] Event found for {message_id}, setting it")
+        if task_id:
+            _message_task_ids[message_id] = task_id
         event.set()
     else:
-        logger.warning(f"[STORE_RESPONSE] No event found for {message_id}!")
+        # No waiter for this message_id. This is EXPECTED for async
+        # submit_message() responses (the client polls history — no event is
+        # ever registered) and for a sync interact() that already timed out
+        # and cleaned up. So this stays WARNING, not ERROR — the unambiguous
+        # failure signal is the interact() timeout itself ([INTERACT_TIMEOUT],
+        # logged at ERROR), not this line.
+        logger.warning(
+            f"[STORE_RESPONSE] No event found for {message_id} (async submission or already-timed-out interact)"
+        )
 
 
 # Endpoints
@@ -297,24 +378,88 @@ async def _process_request_documents(body: InteractRequest | MessageRequest) -> 
 
 
 async def _create_interaction_message(
-    auth: AuthContext, body: InteractRequest | MessageRequest
+    auth: AuthContext, body: InteractRequest | MessageRequest, request: Request
 ) -> Tuple[str, str, IncomingMessage]:
     """Create message ID, channel ID, and IncomingMessage for interaction."""
     message_id = str(uuid.uuid4())
-    channel_id = f"api_{auth.user_id}"  # User-specific channel
+    # Use custom channel_id from context if provided, otherwise user-specific channel
+    # This allows benchmarks and A2A adapters to use unique channels per message
+    if body.context and body.context.channel_id:
+        channel_id = body.context.channel_id
+    else:
+        channel_id = f"api_{auth.user_id}"  # User-specific channel
 
     images = _process_request_images(body)
     additional_content = await _process_request_documents(body)
     final_content = body.message + additional_content
 
+    # Look up user's display name for author_name. Priority:
+    #   1. user_preferred_name (set via PUT /v1/users/me/settings — explicit display preference)
+    #   2. oauth_name (from OAuth provider)
+    #   3. name (auth username, e.g. "jeff" for QA admin)
+    #   4. user_id (final fallback)
+    #
+    # Why user_preferred_name beats name: the auth username is an opaque
+    # identifier (often ASCII-only, often hardcoded for QA), while
+    # user_preferred_name is the user's chosen display name (Unicode-safe,
+    # culturally appropriate). For multilingual / multi-locale agents,
+    # using the username instead of the display name causes the agent to
+    # address users by an inappropriate identifier — e.g. addressing a
+    # Yoruba user as "jeff" instead of "Tèmítọ́pẹ́".
+    author_name = auth.user_id
+    auth_service = getattr(request.app.state, "auth_service", None)
+    memory_service = getattr(request.app.state, "memory_service", None)
+
+    # Tier 1: user_preferred_name from the user's graph node (best-effort).
+    if memory_service:
+        try:
+            from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+            from ciris_engine.schemas.services.operations import MemoryQuery
+
+            user_results = await memory_service.recall(
+                MemoryQuery(
+                    node_id=f"user/{auth.user_id}",
+                    scope=GraphScope.LOCAL,
+                    type=NodeType.USER,
+                    include_edges=False,
+                    depth=1,
+                )
+            )
+            if user_results:
+                attrs = user_results[0].attributes if isinstance(user_results[0].attributes, dict) else {}
+                preferred = attrs.get("user_preferred_name")
+                if isinstance(preferred, str) and preferred.strip():
+                    author_name = preferred.strip()
+        except Exception:
+            pass  # Fall through to auth-service lookup
+
+    # Tier 2-4: oauth_name → name → user_id (only if user_preferred_name didn't resolve).
+    if author_name == auth.user_id and auth_service and hasattr(auth_service, "get_user"):
+        try:
+            user = auth_service.get_user(auth.user_id)
+            if user:
+                author_name = getattr(user, "oauth_name", None) or getattr(user, "name", None) or auth.user_id
+        except Exception:
+            pass  # Keep default author_name on lookup failure
+
+    # Surface caller-declared locale (e.g. from qa_runner channel metadata)
+    # so it lands on the task at creation time. This is the top of the
+    # localization chain — task/thought beats user/system/env defaults.
+    preferred_language: Optional[str] = None
+    if body.context and body.context.metadata:
+        meta_lang = body.context.metadata.get("language") or body.context.metadata.get("preferred_language")
+        if isinstance(meta_lang, str) and meta_lang.strip():
+            preferred_language = meta_lang.strip()
+
     msg = IncomingMessage(
         message_id=message_id,
         author_id=auth.user_id,
-        author_name=auth.user_id,
+        author_name=author_name,
         content=final_content,
         channel_id=channel_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         images=images,
+        preferred_language=preferred_language,
     )
 
     return message_id, channel_id, msg
@@ -351,7 +496,7 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
             await consent_manager.grant_consent(consent_req, channel_id=channel_id)
 
             # Return notice to add to response
-            return "\n\n📝 Privacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
+            return "\n\nPrivacy Notice: We forget about you in 14 days unless you say otherwise. Visit /v1/consent to manage your data preferences."
 
     except Exception as e:
         logger.warning(f"Could not check consent for user {auth.user_id}: {e}")
@@ -394,65 +539,8 @@ async def _track_air_interaction(
         return None
 
 
-def _derive_provider_from_user(user: Any, auth: AuthContext) -> Tuple[str, str]:
-    """Derive provider and account_id from authenticated user."""
-    oauth_provider = getattr(user, "oauth_provider", None)
-    oauth_external_id = getattr(user, "oauth_external_id", None)
-    if oauth_provider and oauth_external_id:
-        return f"oauth:{oauth_provider}", oauth_external_id
-    return "wa", getattr(user, "wa_id", None) or auth.user_id
-
-
-def _derive_provider_from_auth(auth: AuthContext) -> Tuple[str, str]:
-    """Derive provider and account_id from auth context (no user)."""
-    if auth.api_key_id:
-        return "api-key", auth.api_key_id
-    if auth.role == UserRole.SERVICE_ACCOUNT:
-        return "service-account", auth.user_id
-    return "api", auth.user_id
-
-
-def _build_credit_metadata(auth: AuthContext, user: Any) -> Dict[str, str]:
-    """Build metadata dictionary for credit tracking."""
-    metadata: Dict[str, str] = {"role": auth.role.value}
-    if user and hasattr(user, "oauth_email") and user.oauth_email:
-        metadata["email"] = user.oauth_email
-    if user and hasattr(user, "marketing_opt_in"):
-        metadata["marketing_opt_in"] = str(user.marketing_opt_in).lower()
-    if auth.api_key_id:
-        metadata["api_key_id"] = auth.api_key_id
-    return metadata
-
-
-def _derive_credit_account(
-    auth: AuthContext,
-    request: Request,
-) -> Tuple[CreditAccount, Dict[str, str]]:
-    """Build credit account metadata for the current request."""
-    auth_service = getattr(request.app.state, "auth_service", None)
-    user = None
-    if auth_service and hasattr(auth_service, "get_user"):
-        try:
-            user = auth_service.get_user(auth.user_id)
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.debug("Unable to load user for credit gating: %s", exc)
-
-    if user:
-        authority_id = getattr(user, "wa_id", None) or auth.user_id
-        tenant_id = getattr(user, "wa_parent_id", None)
-        provider, account_id = _derive_provider_from_user(user, auth)
-    else:
-        authority_id, tenant_id = None, None
-        provider, account_id = _derive_provider_from_auth(auth)
-
-    account = CreditAccount(
-        provider=provider,
-        account_id=account_id,
-        authority_id=authority_id,
-        tenant_id=tenant_id,
-    )
-
-    return account, _build_credit_metadata(auth, user)
+# Credit account utilities moved to _common.py to break cyclic dependency with billing.py
+# Use derive_credit_account imported from ._common
 
 
 def _attach_credit_metadata(
@@ -469,7 +557,12 @@ def _attach_credit_metadata(
     logger.debug(f"[CREDIT_ATTACH] resource_monitor exists: {resource_monitor is not None}")
 
     if not resource_monitor:
-        logger.critical(f"[CREDIT_ATTACH] NO RESOURCE MONITOR - credit metadata NOT attached to {msg.message_id}")
+        if "no_resource_monitor" not in _credit_attach_miss_logged:
+            _credit_attach_miss_logged.add("no_resource_monitor")
+            logger.warning(
+                "[CREDIT_ATTACH] No resource monitor available - credit metadata will not be attached to any message. "
+                "This is expected for mock-mode/benchmark runs without a billing backend."
+            )
         return msg
 
     credit_provider = getattr(resource_monitor, "credit_provider", None)
@@ -483,12 +576,17 @@ def _attach_credit_metadata(
 
         credit_provider = _try_lazy_init_billing_provider(request, resource_monitor)
         if not credit_provider:
-            logger.critical(f"[CREDIT_ATTACH] NO CREDIT PROVIDER - credit metadata NOT attached to {msg.message_id}")
+            if "no_credit_provider" not in _credit_attach_miss_logged:
+                _credit_attach_miss_logged.add("no_credit_provider")
+                logger.warning(
+                    "[CREDIT_ATTACH] No credit provider configured - credit metadata will not be attached to any message. "
+                    "This is expected for mock-mode/benchmark runs without a billing backend."
+                )
             return msg
         logger.info(f"[CREDIT_ATTACH] Lazily initialized billing provider for {msg.message_id}")
 
     try:
-        account, _ = _derive_credit_account(auth, request)
+        account, _ = derive_credit_account(auth, request)
         logger.debug(f"[CREDIT_ATTACH] Derived credit account: {account.cache_key()}")
 
         runtime = getattr(request.app.state, "runtime", None)
@@ -575,6 +673,95 @@ def _get_processor_cognitive_state(processor: Any) -> str:
     return "WORK"  # Default
 
 
+def _system_reply(key: str, default: str, language: Optional[str] = None) -> str:
+    """A system-authored reply, in the caller's language (#1012).
+
+    The interact endpoint returns two strings the AGENT never wrote — the
+    timeout notice and the paused-processor notice. Both were English literals,
+    and both reach the user in exactly the situations where the agent has no
+    voice of its own.
+
+    An Amharic safety-battery run graded one of them: q06 came back as "Still
+    processing. Check back later." and the deterministic script check scored
+    script_ratio=0.000, correctly, because there was no Ethiopic in it. The
+    battery captured a system string and marked it a response — the user, in
+    that moment, got English.
+
+    `default` keeps the English wording as the fallback so a locale missing the
+    key degrades to today's behaviour rather than to an empty reply.
+    """
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(language or get_preferred_language(), key, default=default)
+
+
+def _resolve_task_id_for_message(message_id: str) -> Optional[str]:
+    """The task this interaction produced, resolved via correlation_id (#1011).
+
+    `base_observer` stamps `correlation_id=msg.message_id` on every task it
+    creates, so the link exists in persistence — it was simply never surfaced
+    on the wire. Best-effort by design: a paused or timed-out interaction has
+    no task to name, and returning None there is the honest answer rather than
+    a fabricated id.
+
+    Never raises. A capture bundle that cannot name its task is worse than one
+    that says so, but neither is worth failing a live interaction over.
+    """
+    try:
+        from ciris_engine.logic import persistence
+
+        for task in persistence.get_all_tasks():
+            ctx = getattr(task, "context", None)
+            if ctx is not None and getattr(ctx, "correlation_id", None) == message_id:
+                return str(task.task_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("[INTERACT] task_id correlation lookup failed for %s: %s", message_id, exc)
+    return None
+
+
+def _task_id_for_interaction(message_id: str, request: Optional[Request] = None) -> Optional[str]:
+    """The task that owns this interaction, cheapest source first.
+
+    1. The task whose SPEAK was delivered to this message (delivery knows it).
+    2. The adapter's message_id -> task_id map, written when the observer
+       returns — the only source that is right under task-append, where the
+       message was folded into an existing task whose correlation_id is a
+       different message.
+    3. The persistence scan by correlation_id (#1011).
+
+    Call before `_cleanup_interaction_tracking`, which drops 1 and 2.
+    """
+    delivered = _message_task_ids.get(message_id)
+    if delivered:
+        return delivered
+    if request is not None:
+        task_map = getattr(request.app.state, "message_task_map", None)
+        if isinstance(task_map, dict):
+            mapped = task_map.get(message_id)
+            if isinstance(mapped, str) and mapped:
+                return mapped
+    return _resolve_task_id_for_message(message_id)
+
+
+def _outcome_for_answered_task(task_id: Optional[str]) -> InteractOutcome:
+    """COMPLETE, unless the task that answered is FAILED (its answer is the failure notice)."""
+    if not task_id:
+        return InteractOutcome.COMPLETE
+    try:
+        import os
+
+        from ciris_engine.logic import persistence
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+
+        task = persistence.get_task_by_id(task_id, os.environ.get("AGENT_OCCURRENCE_ID", "default"))
+    except Exception as e:  # noqa: BLE001 - the outcome is best-effort; the reply is already in hand
+        logger.debug("Could not read status of task %s for interact outcome: %s", task_id, e)
+        return InteractOutcome.COMPLETE
+    if task is not None and task.status == TaskStatus.FAILED:
+        return InteractOutcome.FAILED
+    return InteractOutcome.COMPLETE
+
+
 def _create_paused_response(
     message_id: str, cognitive_state: str, processing_time: int
 ) -> SuccessResponse[InteractResponse]:
@@ -582,9 +769,13 @@ def _create_paused_response(
     return SuccessResponse(
         data=InteractResponse(
             message_id=message_id,
-            response="Processor paused - task added to queue. Resume processing to continue.",
+            response=_system_reply(
+                "agent.processor_paused",
+                "Processor paused - task added to queue. Resume processing to continue.",
+            ),
             state=cognitive_state,
             processing_time_ms=processing_time,
+            outcome=InteractOutcome.PAUSED,
         )
     )
 
@@ -601,8 +792,10 @@ async def _check_processor_pause_status(
         # Processor is paused - route message and prepare response
         await _handle_paused_message(request, msg)
 
-        # Clean up response tracking since we're returning immediately
-        _response_events.pop(message_id, None)
+        # Clean up response tracking since we're returning immediately —
+        # full cleanup (incl. the channel FIFO queue) so a paused-path return
+        # doesn't leave a stale queue entry that drifts FIFO correlation.
+        _cleanup_interaction_tracking(message_id, request)
 
         # Calculate processing time and get state
         processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
@@ -620,11 +813,42 @@ async def _check_processor_pause_status(
 
 
 def _get_interaction_timeout(request: Request) -> float:
-    """Get interaction timeout from config or return default."""
-    timeout = 55.0  # default timeout for longer processing
-    if hasattr(request.app.state, "api_config"):
-        timeout = request.app.state.api_config.interaction_timeout
-    return timeout
+    """How long interact() waits for the agent's reply before answering TIMEOUT.
+
+    Resolution order (highest priority first):
+      1. `CIRIS_API_INTERACTION_TIMEOUT` env var — operator override that
+         wins even when a stored `APIAdapterConfig` is in use. The adapter's
+         `_load_config` flow can discard the env-loaded config when it is
+         handed an `APIAdapterConfig` object (adapter.py:_apply_adapter_config),
+         so the env var is re-checked here on every call.
+      2. `request.app.state.api_config.interaction_timeout` — only when it
+         was explicitly configured (a positive number). None means "not set".
+      3. `active_budget().interact_deadline_s` (#1186) — the deadline for the
+         primary LLM provider: 195s for a hosted model, 900s for one running
+         on the user's own hardware. The budget is sized so a reply that
+         needs a PONDER round still lands inside it; a fixed 110s was a coin
+         flip for local models (#1013).
+    """
+    import os
+
+    env_timeout = os.environ.get("CIRIS_API_INTERACTION_TIMEOUT")
+    if env_timeout:
+        try:
+            value = float(env_timeout)
+            if value > 0:
+                return value
+        except ValueError:
+            pass  # malformed env var — fall through to config / budget
+
+    api_config = getattr(request.app.state, "api_config", None)
+    configured = getattr(api_config, "interaction_timeout", None) if api_config is not None else None
+    # bool is an int subclass; a stray True must not become a 1s deadline.
+    if isinstance(configured, (int, float)) and not isinstance(configured, bool) and configured > 0:
+        return float(configured)
+
+    from ciris_engine.logic.config.llm_budget import active_budget
+
+    return float(active_budget().interact_deadline_s)
 
 
 def _get_current_cognitive_state(request: Request) -> str:
@@ -633,10 +857,180 @@ def _get_current_cognitive_state(request: Request) -> str:
     return _get_cognitive_state(runtime)
 
 
-def _cleanup_interaction_tracking(message_id: str) -> None:
-    """Clean up interaction tracking for given message ID."""
+def _raise_if_shed(result: Any, message_id: str, request: Request) -> None:
+    """503 + Retry-After when the observer refused the message under SHED.
+
+    SHED is runtime self-protection (a resource is under CRITICAL pressure),
+    not an agent decision, so it is answered as a retryable service condition
+    rather than as a rejected or deferred message.
+    """
+    from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import SHED_RETRY_AFTER_SECONDS
+    from ciris_engine.schemas.runtime.messages import MessageHandlingStatus
+
+    if getattr(result, "status", None) != MessageHandlingStatus.RESOURCE_SHED:
+        return
+    _cleanup_interaction_tracking(message_id, request)
+    raise HTTPException(
+        status_code=503,
+        headers={"Retry-After": str(SHED_RETRY_AFTER_SECONDS)},
+        detail={
+            "error": "resource_shed",
+            "reason": MessageRejectionReason.RESOURCE_SHED.value,
+            "message": "The agent is not admitting new work while a resource is under pressure. Retry later.",
+            "resources": list(getattr(result, "shed_resources", []) or []),
+            "retry_after_seconds": SHED_RETRY_AFTER_SECONDS,
+        },
+    )
+
+
+async def _forward_if_accord_row(text: str) -> Optional[AccordRowForward]:
+    """A v2 accord row sent to the agent goes to the node instead (CC 4.2.1.1).
+
+    Checked before the halt refusal: a row is delivery to the node, not work for
+    the agent, and a resumption row must get through while the halt stands.
+    The node verifies and latches; the agent does no crypto.
+    """
+    from ciris_engine.logic.accord.ingress import extract_accord_row, forward_accord_row
+
+    row = extract_accord_row(text)
+    return await forward_accord_row(row) if row is not None else None
+
+
+def _accord_forward_detail(forward: AccordRowForward) -> str:
+    if not forward.delivered:
+        return f"Accord row could not be delivered to the node: {forward.error}"
+    return (
+        f"Accord row handed to the node (HTTP {forward.status_code}, {forward.invocation_kind or 'unknown kind'} "
+        f"{forward.invocation_id or ''}): halted={forward.halted}, confirmed={forward.confirmed}, "
+        f"released={forward.released}{f', refusal={forward.refusal}' if forward.refusal else ''}"
+        f"{f', error={forward.error}' if forward.error else ''}"
+    )
+
+
+async def _raise_if_accord_halted() -> None:
+    """423 when a constitutional halt stands (CC 4.2.1.1, CIRISAgent#1231).
+
+    Checked FIRST, before SHED: a halted agent answers with its halt, not with a
+    resource condition. No Retry-After — the halt is not a resource condition,
+    and `lapses_at`, when the node reports one, is the honest bound. The error
+    token is the node's own, so a client sees one name for one fact.
+    """
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
+    # Fresh: admitting a message is a decision, not a poll. A cached "no halt"
+    # admitted CSD-129 run 4's interact 0.9 s after the node latched, and it
+    # then waited out its timeout on a thought the halt held.
+    halt = await read_halt_latch(fresh=True)
+    if not halt.halted:
+        return
+    raise _accord_halt_refusal(halt)
+
+
+def _accord_halt_refusal(halt: Any, held_task_id: Optional[str] = None, admitted: bool = False) -> HTTPException:
+    """The 423 a halt answers with. `admitted`: the message got in just before the halt and is held."""
+    from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL
+
+    if not admitted:
+        message = (
+            "The agent's acts are paused under a constitutional halt. Nothing was admitted; "
+            "the halt ends when the holders release it or its fuse lapses."
+        )
+    else:
+        message = (
+            "The agent's acts are paused under a constitutional halt. This message was admitted just "
+            "before it; its task is held, not dropped, and no reply can come until the halt ends."
+        )
+    detail: Dict[str, Any] = {
+        "error": ACCORD_HALT_REFUSAL,
+        "reason": MessageRejectionReason.ACCORD_HALT.value,
+        "message": message,
+        "halt": halt.model_dump(mode="json"),
+    }
+    if held_task_id is not None:
+        detail["held_task_id"] = held_task_id
+    return HTTPException(status_code=423, detail=detail)
+
+
+#: How often a waiting interact looks for a halt that landed after admission.
+INTERACT_HALT_POLL_SECONDS = 0.5
+
+
+async def _wait_for_reply_or_halt(event: asyncio.Event, timeout: float) -> Optional[Any]:
+    """Wait for the agent's reply; the halt that lands meanwhile, if one does.
+
+    A message admitted just before a halt has its thought held: no reply can
+    come, so the caller is told now (423) instead of after the whole timeout.
+    Raises asyncio.TimeoutError like `wait_for` when neither happens.
+    """
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise asyncio.TimeoutError
+        try:
+            await asyncio.wait_for(event.wait(), timeout=min(INTERACT_HALT_POLL_SECONDS, remaining))
+            return None
+        except asyncio.TimeoutError:
+            pass
+        halt = await read_halt_latch()
+        if halt.halted:
+            return halt
+
+
+async def _raise_if_node_unclaimed() -> None:
+    """423 when the node has no owner: EVERY NODE IS ALWAYS CLAIMED.
+
+    Checked after the halt (a halted agent answers with its halt) and before
+    anything is created. The body names both ways to claim the node and where
+    the deployer finds the claim PIN, never the PIN itself.
+    """
+    from ciris_engine.logic.utils.node_ownership import node_owned
+    from ciris_engine.schemas.runtime.node_ownership import NODE_UNCLAIMED_ERROR
+
+    ownership = await node_owned()
+    if not ownership.unclaimed:
+        return
+    raise HTTPException(
+        status_code=423,
+        detail={
+            "error": NODE_UNCLAIMED_ERROR,
+            "reason": MessageRejectionReason.NODE_UNCLAIMED.value,
+            "message": ownership.unclaimed_message(),
+            "claim_pin_file": ownership.claim_pin_file,
+            "claim_route": ownership.claim_route,
+            "upgrade_claim_routes": ownership.upgrade_claim_routes,
+            "reading": ownership.reading.value,
+        },
+    )
+
+
+def _cleanup_interaction_tracking(message_id: str, request: Optional[Request] = None) -> None:
+    """Clean up interaction tracking for given message ID.
+
+    Also purges message_id from its channel's FIFO pending-response queue:
+    a timed-out interact() (no SPEAK arriving) must not leave a stale entry,
+    or FIFO correlation drifts by one for every later request on the channel.
+    """
     _response_events.pop(message_id, None)
     _message_responses.pop(message_id, None)
+    _message_task_ids.pop(message_id, None)
+    if request is not None:
+        task_map = getattr(request.app.state, "message_task_map", None)
+        if isinstance(task_map, dict):
+            task_map.pop(message_id, None)
+        chan_map = getattr(request.app.state, "message_channel_map", {})
+        if isinstance(chan_map, dict):
+            for queue in chan_map.values():
+                if isinstance(queue, list):
+                    try:
+                        queue.remove(message_id)
+                    except ValueError:
+                        # message_id isn't in this channel's queue — expected,
+                        # since we sweep every channel but it lives in one.
+                        pass
 
 
 async def _inject_error_to_channel(request: Request, channel_id: str, content: str) -> None:
@@ -653,9 +1047,9 @@ async def _inject_error_to_channel(request: Request, channel_id: str, content: s
         logger.warning(f"Could not inject error message to channel: {e}")
 
 
-@router.post("/message", response_model=SuccessResponse[MessageSubmissionResponse])
+@router.post("/message", response_model=None, responses=RESPONSES_402_403_503)
 async def submit_message(
-    request: Request, body: MessageRequest, auth: AuthContext = Depends(require_observer)
+    request: Request, body: MessageRequest, auth: AuthObserverDep
 ) -> SuccessResponse[MessageSubmissionResponse]:
     """
     Submit a message to the agent (async pattern - returns immediately).
@@ -673,8 +1067,27 @@ async def submit_message(
     # Check permissions
     _check_send_messages_permission(auth, request)
 
+    # An accord row goes to the node; then a standing halt refuses intake
+    # before anything is created.
+    forward = await _forward_if_accord_row(body.message)
+    if forward is not None:
+        return SuccessResponse(
+            data=MessageSubmissionResponse(
+                message_id=str(uuid.uuid4()),
+                task_id=None,
+                channel_id=f"api_{auth.user_id}",
+                submitted_at=datetime.now(timezone.utc).isoformat(),
+                accepted=False,
+                rejection_reason=MessageRejectionReason.ACCORD_ROW_FORWARDED,
+                rejection_detail=_accord_forward_detail(forward),
+                accord_forward=forward,
+            )
+        )
+    await _raise_if_accord_halted()
+    await _raise_if_node_unclaimed()
+
     # Create message and tracking
-    message_id, channel_id, msg = await _create_interaction_message(auth, body)
+    message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
 
     # Handle consent for user
@@ -735,6 +1148,8 @@ async def submit_message(
         )
         return SuccessResponse(data=response)
 
+    _raise_if_shed(result, message_id, request)
+
     # Map MessageHandlingResult to MessageSubmissionResponse
     accepted = result.status in [MessageHandlingStatus.TASK_CREATED, MessageHandlingStatus.UPDATED_EXISTING_TASK]
     rejection_reason = None
@@ -768,10 +1183,8 @@ async def submit_message(
     return SuccessResponse(data=response)
 
 
-@router.post("/interact", response_model=SuccessResponse[InteractResponse])
-async def interact(
-    request: Request, body: InteractRequest, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[InteractResponse]:
+@router.post("/interact", response_model=None, responses=RESPONSES_402_403_503)
+async def interact(request: Request, body: InteractRequest, auth: AuthObserverDep) -> SuccessResponse[InteractResponse]:
     """
     Send message and get response.
 
@@ -783,8 +1196,25 @@ async def interact(
     # Check permissions
     _check_send_messages_permission(auth, request)
 
+    # An accord row goes to the node, not the agent. Then a standing halt: no
+    # reply can come, so say so up front.
+    forward = await _forward_if_accord_row(body.message)
+    if forward is not None:
+        return SuccessResponse(
+            data=InteractResponse(
+                message_id=str(uuid.uuid4()),
+                response=_accord_forward_detail(forward),
+                state=_get_current_cognitive_state(request),
+                processing_time_ms=0,
+                outcome=InteractOutcome.ACCORD_ROW_FORWARDED,
+                accord_forward=forward,
+            )
+        )
+    await _raise_if_accord_halted()
+    await _raise_if_node_unclaimed()
+
     # Create message and tracking
-    message_id, channel_id, msg = await _create_interaction_message(auth, body)
+    message_id, channel_id, msg = await _create_interaction_message(auth, body, request)
     msg = _attach_credit_metadata(msg, request, auth, channel_id)
 
     event = asyncio.Event()
@@ -806,12 +1236,12 @@ async def interact(
 
     try:
         if hasattr(request.app.state, "on_message"):
-            await request.app.state.on_message(msg)
+            interact_result = await request.app.state.on_message(msg)
         else:
             raise HTTPException(status_code=503, detail=ERROR_MESSAGE_HANDLER_NOT_CONFIGURED)
     except CreditDenied as exc:
         await _inject_error_to_channel(request, channel_id, f"Message blocked: {exc.reason}")
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
         raise HTTPException(
             status_code=402,
             detail={
@@ -824,11 +1254,11 @@ async def interact(
         await _inject_error_to_channel(
             request, channel_id, "Message blocked: Credit service temporarily unavailable. Please try again later."
         )
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
         raise HTTPException(status_code=503, detail="Credit provider unavailable") from exc
     except BillingServiceError as exc:
         await _inject_error_to_channel(request, channel_id, f"Service error: {exc.message}")
-        _cleanup_interaction_tracking(message_id)
+        _cleanup_interaction_tracking(message_id, request)
         raise HTTPException(
             status_code=402,
             detail={
@@ -838,11 +1268,20 @@ async def interact(
             },
         ) from exc
 
+    _raise_if_shed(interact_result, message_id, request)
+
     # Get timeout and wait for response
     timeout = _get_interaction_timeout(request)
 
     try:
-        await asyncio.wait_for(event.wait(), timeout=timeout)
+        halt = await _wait_for_reply_or_halt(event, timeout)
+        if halt is not None:
+            try:
+                held_task_id = _task_id_for_interaction(message_id, request)
+            except Exception:  # noqa: BLE001 - naming the held task is a courtesy; the 423 is the answer
+                held_task_id = None
+            _cleanup_interaction_tracking(message_id, request)
+            raise _accord_halt_refusal(halt, held_task_id, admitted=True)
 
         # Get response
         import os
@@ -865,7 +1304,8 @@ async def interact(
             response_content += "\n\n---\n" + air_reminder
 
         # Clean up and calculate timing
-        _cleanup_interaction_tracking(message_id)
+        task_id = _task_id_for_interaction(message_id, request)
+        _cleanup_interaction_tracking(message_id, request)
         processing_time_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
 
         # Build response
@@ -874,31 +1314,59 @@ async def interact(
             response=response_content,
             state=_get_current_cognitive_state(request),
             processing_time_ms=processing_time_ms,
+            task_id=task_id,
+            outcome=_outcome_for_answered_task(task_id),
         )
 
         return SuccessResponse(data=response)
 
     except asyncio.TimeoutError:
-        # Clean up
-        _cleanup_interaction_tracking(message_id)
+        import os
+
+        # The task exists and keeps running; name it so the caller can follow
+        # it in history. Resolve before cleanup, which drops the map entry.
+        timed_out_task_id = _task_id_for_interaction(message_id, request)
+
+        # Clean up. Removing message_id from the channel queue is what keeps
+        # the task's late SPEAK from being delivered to the NEXT request on
+        # this channel: delivery matches by task, and this message no longer
+        # has a waiter (api_communication._handle_api_interaction_response).
+        _cleanup_interaction_tracking(message_id, request)
+
+        # A timeout is a real degradation — the agent did not deliver a
+        # response within the window. Under mock LLM (QA) this should never
+        # happen, so log at ERROR: QA incident detection must surface a
+        # systemic interact() stall instead of it masking as a benign 200.
+        mock_llm = bool(os.environ.get("CIRIS_MOCK_LLM"))
+        logger.error(
+            "[INTERACT_TIMEOUT] message_id=%s timed out after %.0fs without an agent response%s",
+            message_id,
+            timeout,
+            " (mock LLM active — this indicates a processing stall, not slow inference)" if mock_llm else "",
+        )
 
         # Return a timeout response rather than error
         response = InteractResponse(
             message_id=message_id,
-            response="Still processing. Check back later. Agent response is not guaranteed.",
+            response=_system_reply(
+                "agent.still_processing",
+                "Still processing. Check back later. Agent response is not guaranteed.",
+            ),
             state="WORK",
             processing_time_ms=int(timeout * 1000),  # Use actual timeout value
+            task_id=timed_out_task_id,
+            outcome=InteractOutcome.TIMEOUT,
         )
 
         return SuccessResponse(data=response)
 
 
-@router.get("/history", response_model=SuccessResponse[ConversationHistory])
+@router.get("/history", response_model=None, responses=RESPONSES_500)
 async def get_history(
     request: Request,
+    auth: AuthObserverDep,
     limit: int = Query(50, ge=1, le=200, description="Maximum messages to return"),
     before: Optional[datetime] = Query(None, description="Get messages before this time"),
-    auth: AuthContext = Depends(require_observer),
 ) -> SuccessResponse[ConversationHistory]:
     """
     Conversation history.
@@ -909,7 +1377,7 @@ async def get_history(
     channels_to_query = _build_channels_to_query(auth, request)
     channel_id = f"api_{auth.user_id}"
 
-    logger.info(f"History query for user {auth.user_id} with role {auth.role}, channels: {channels_to_query}")
+    logger.debug(f"History query for user {auth.user_id} with role {auth.role}, channels: {channels_to_query}")
 
     # Check for mock message history first
     message_history = getattr(request.app.state, "message_history", None)
@@ -1236,12 +1704,12 @@ async def _fetch_messages_from_channels(comm_service: Any, channels_to_query: Li
     fetched_messages = []
     for channel in channels_to_query:
         try:
-            logger.info(f"Fetching messages from channel: {channel}")
+            logger.debug(f"Fetching messages from channel: {channel}")
             if comm_service is None:
                 logger.warning("Communication service is not available")
                 continue
             channel_messages = await comm_service.fetch_messages(channel, limit=fetch_limit)
-            logger.info(f"Retrieved {len(channel_messages)} messages from {channel}")
+            logger.debug(f"Retrieved {len(channel_messages)} messages from {channel}")
             fetched_messages.extend(channel_messages)
         except Exception as e:
             logger.warning(f"Failed to fetch from channel {channel}: {e}")
@@ -1345,6 +1813,8 @@ async def _build_agent_status(
     # Get version information
     version, codename, code_hash = _get_version_info()
 
+    from ciris_engine.logic.utils.halt_latch import read_halt_latch
+
     return AgentStatus(
         agent_id=agent_id,
         name=agent_name,
@@ -1359,6 +1829,7 @@ async def _build_agent_status(
         services_active=services_active,
         memory_usage_mb=memory_usage_mb,
         multi_provider_services=multi_provider_services,
+        accord_halt=await read_halt_latch(),
     )
 
 
@@ -1379,8 +1850,8 @@ def _get_agent_identity_info(runtime: Any) -> Tuple[str, str]:
     return agent_id, agent_name
 
 
-@router.get("/status", response_model=SuccessResponse[AgentStatus])
-async def get_status(request: Request, auth: AuthContext = Depends(require_observer)) -> SuccessResponse[AgentStatus]:
+@router.get("/status", response_model=None, responses={**RESPONSES_500, **RESPONSES_503})
+async def get_status(request: Request, auth: AuthObserverDep) -> SuccessResponse[AgentStatus]:
     """
     Agent status and cognitive state.
 
@@ -1467,10 +1938,8 @@ def _build_service_availability(service_registry: Any) -> ServiceAvailability:
     return services
 
 
-@router.get("/identity", response_model=SuccessResponse[AgentIdentity])
-async def get_identity(
-    request: Request, auth: AuthContext = Depends(require_observer)
-) -> SuccessResponse[AgentIdentity]:
+@router.get("/identity", response_model=None, responses={**RESPONSES_500, **RESPONSES_503})
+async def get_identity(request: Request, auth: AuthObserverDep) -> SuccessResponse[AgentIdentity]:
     """
     Agent identity and capabilities.
 
@@ -1691,8 +2160,8 @@ def _add_default_api_channels(channels: List[ChannelInfo], request: Request, aut
         )
 
 
-@router.get("/channels", response_model=SuccessResponse[ChannelList])
-async def get_channels(request: Request, auth: AuthContext = Depends(require_observer)) -> SuccessResponse[ChannelList]:
+@router.get("/channels", response_model=None, responses=RESPONSES_500)
+async def get_channels(request: Request, auth: AuthObserverDep) -> SuccessResponse[ChannelList]:
     """
     List active communication channels.
 

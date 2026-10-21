@@ -339,7 +339,7 @@ class StorageAnalyzer(BaseDBTool):
         print(f"Overall Edge Coverage: {edge_stats['edge_coverage']:.1f}%")
 
         if edge_stats["periods_with_no_edges"]:
-            print(f"\n⚠️  WARNING: {len(edge_stats['periods_with_no_edges'])} periods have NO edges!")
+            print(f"\n[WARN] WARNING: {len(edge_stats['periods_with_no_edges'])} periods have NO edges!")
             for period in edge_stats["periods_with_no_edges"][:3]:
                 print(f"  - {period}")
             if len(edge_stats["periods_with_no_edges"]) > 3:

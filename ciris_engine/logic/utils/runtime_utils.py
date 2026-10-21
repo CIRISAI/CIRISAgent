@@ -7,13 +7,13 @@ from pathlib import Path
 from typing import Optional
 
 from ciris_engine.schemas.config.essential import EssentialConfig
-from ciris_engine.schemas.types import ConfigDict
+from ciris_engine.schemas.types import ConfigMapping
 
 from ..config.bootstrap import ConfigBootstrap
 from ..runtime.ciris_runtime import CIRISRuntime
 
 
-async def load_config(config_path: Optional[str], cli_overrides: Optional[ConfigDict] = None) -> EssentialConfig:
+async def load_config(config_path: Optional[str], cli_overrides: Optional[ConfigMapping] = None) -> EssentialConfig:
     """Load essential configuration using the new bootstrap system.
 
     Args:

@@ -39,7 +39,7 @@ class FeedbackDirective(BaseModel):
     data: Union[Dict[str, str], str, List[str]] = Field(..., description="Directive data")
     reasoning: Optional[str] = Field(None, description="Reasoning for directive")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WiseAuthorityFeedback(BaseModel):
@@ -75,7 +75,7 @@ class WiseAuthorityFeedback(BaseModel):
     processed_at: Optional[datetime] = Field(None, description="Processing time")
     processing_result: Dict[str, str] = Field(default_factory=dict, description="Processing results")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FeedbackMapping(BaseModel):
@@ -95,7 +95,7 @@ class FeedbackMapping(BaseModel):
 
     created_at: datetime = Field(..., description="Creation time")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FeedbackProcessingRequest(BaseModel):
@@ -105,7 +105,7 @@ class FeedbackProcessingRequest(BaseModel):
     force: bool = Field(False, description="Force reprocessing")
     dry_run: bool = Field(False, description="Validate without applying")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class FeedbackProcessingResult(BaseModel):
@@ -117,7 +117,7 @@ class FeedbackProcessingResult(BaseModel):
     errors: List[str] = Field(default_factory=list, description="Errors encountered")
     warnings: List[str] = Field(default_factory=list, description="Warnings")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

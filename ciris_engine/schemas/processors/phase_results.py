@@ -1,6 +1,6 @@
 """Typed result models for H3ERE pipeline phases."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.processors.core import ConscienceApplicationResult
@@ -17,5 +17,4 @@ class ActionSelectionPhaseResult(BaseModel):
         ..., description="Result of conscience checks on the selected action"
     )
 
-    class Config:
-        frozen = True  # Immutable result object
+    model_config = ConfigDict(frozen=True, defer_build=True)  # Immutable result object

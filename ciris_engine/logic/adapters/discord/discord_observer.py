@@ -1,12 +1,14 @@
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.adapters.discord.discord_vision_helper import DiscordVisionHelper
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
+from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
 from ciris_engine.logic.utils.task_thought_factory import create_task, create_thought
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 from ciris_engine.schemas.runtime.models import TaskContext
@@ -32,6 +34,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         memory_service: Optional[Any] = None,
         agent_id: Optional[str] = None,
         bus_manager: Optional[BusManager] = None,
+        bus_manager_provider: Optional[Callable[[], Optional[BusManager]]] = None,
         filter_service: Optional[Any] = None,
         secrets_service: Optional[SecretsService] = None,
         communication_service: Optional[Any] = None,
@@ -40,6 +43,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         super().__init__(
             on_observe=lambda _: asyncio.sleep(0),
             bus_manager=bus_manager,
+            bus_manager_provider=bus_manager_provider,
             memory_service=memory_service,
             agent_id=agent_id,
             filter_service=filter_service,
@@ -72,6 +76,11 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
 
         if not self.deferral_channel_id:
             logger.warning("No deferral channel configured")
+            return
+
+        # CC 4.2.1.1: replying in the deferral channel is the agent speaking. The
+        # WA's decision itself is recorded before this; only the reply is held.
+        if await refuse_agent_send_under_halt(AgentSendSurface.DISCORD_DEFERRAL_CHANNEL, self.deferral_channel_id):
             return
 
         try:
@@ -508,9 +517,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                     # Reactivate the original task
                     original_task = persistence.get_task_by_id(original_thought.source_task_id)
                     if original_task and self.time_service and self.agent_id:
-                        persistence.update_task_status(
-                            original_task.task_id, TaskStatus.ACTIVE, self.agent_id, self.time_service
-                        )
+                        persistence.update_task_status(original_task.task_id, TaskStatus.ACTIVE, self.agent_id)
                         logger.info(f"Reactivated task {original_task.task_id} due to guidance")
 
                         # Extract deferral reason from the original thought's final_action
@@ -608,6 +615,9 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 priority=8,  # High priority for guidance
                 user_id=msg.author_id,
             )
+            # Task-scoped authorization envelope, issued outside the reasoning
+            # loop at task creation (CIRISAgent#938).
+            await self._issue_task_envelope(task)
             persistence.add_task(task)
             logger.info(
                 f"Created unsolicited guidance task {task.task_id} - seed thought will be generated automatically"

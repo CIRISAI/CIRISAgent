@@ -20,7 +20,12 @@ from .test_cases import (  # Screen navigation tests (new in 1.9.2)
     TestResult,
     test_all_screens,
     test_app_launch,
+    test_catchup_add_fedid,
     test_chat_interaction,
+    test_connect_node,
+    test_connect_node_auth,
+    test_connect_node_error,
+    test_connect_node_welcome,
     test_full_flow,
     test_google_signin,
     test_local_login,
@@ -33,6 +38,7 @@ from .test_cases import (  # Screen navigation tests (new in 1.9.2)
     test_screen_services,
     test_screen_system,
     test_setup_wizard,
+    test_verify_trust,
 )
 from .ui_automator import UIAutomator
 
@@ -46,24 +52,47 @@ class MobileTestConfig:
     adb_path: Optional[str] = None
 
     # App settings
-    apk_path: str = "mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
-    package_name: str = "ai.ciris.mobile"
+    apk_path: str = "apps/android/build/outputs/apk/debug/androidApp-debug.apk"
+    package_name: str = "ai.ciris.mobile.debug"  # matches the default debug apk_path
     reinstall_app: bool = True
     clear_data: bool = True
+    # Keep files/ciris/identity/ across a data clear so the node re-uses its
+    # key_id. A re-minted agent is re-admitted at Advisory and strands on the
+    # un-rooted path (CIRISEdge#432), so repeat QA against a primed canonical
+    # needs a stable identity until the live-map upgrade lands.
+    preserve_identity: bool = False
 
     # Test account
     test_email: str = "ciristest1@gmail.com"
     test_password: str = ""  # For Google Sign-In if manual entry needed
 
+    # Login mode for first-run setup. "local" clicks Local Login → setup wizard
+    # (fully driveable via the Compose test server); "google" launches the
+    # native Google overlay, which the test server cannot drive — prefer local.
+    login_mode: str = "google"
+    # Local account created by the setup wizard (login_mode="local").
+    setup_username: str = "admin"
+    setup_password: str = "qa_test_password_12345"
+
     # LLM settings for setup
-    llm_provider: str = "groq"
+    llm_provider: str = "openrouter"
     llm_api_key: str = ""
-    llm_model: str = "meta-llama/llama-4-maverick-17b-128e-instruct"
+    llm_model: str = "qwen/qwen3.6-35b-a3b"
 
     # Test settings
     test_message: str = "Hello CIRIS! This is an automated test. Please respond briefly."
     timeout: int = 300  # Total test timeout in seconds
-    keep_app_open: bool = False  # Don't force-stop app after tests
+    # Default TRUE: teardown must NOT kill the node. A full_flow run seals its
+    # trace seconds before teardown, and federation delivery ships in the
+    # background AFTER the suite — force-stopping here stranded every sealed
+    # trace on-device (the ship-unconfirmed chronic). Opt into the old
+    # behavior with --force-stop.
+    keep_app_open: bool = True
+
+    # Portal / Node settings (for connect_node tests)
+    portal_url: str = "https://portal.ciris.ai"
+    wait_for_portal_auth: bool = False
+    portal_auth_timeout: int = 300
 
     # Output settings
     output_dir: str = "mobile_qa_reports"
@@ -149,6 +178,84 @@ class MobileTestRunner:
         self.ui: Optional[UIAutomator] = None
         self.logcat_process: Optional[subprocess.Popen] = None
 
+    def _start_emulator(self) -> bool:
+        """
+        Start Android emulator if none running.
+
+        Returns:
+            True if emulator started or already running.
+        """
+        import shutil
+
+        # Find emulator binary
+        emulator_path = shutil.which("emulator")
+        if not emulator_path:
+            android_home = os.environ.get("ANDROID_HOME") or os.path.expanduser("~/Android/Sdk")
+            emulator_path = os.path.join(android_home, "emulator", "emulator")
+            if not os.path.exists(emulator_path):
+                print("      ERROR: emulator binary not found")
+                return False
+
+        # List available AVDs
+        try:
+            result = subprocess.run(
+                [emulator_path, "-list-avds"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            avds = [a.strip() for a in result.stdout.strip().split("\n") if a.strip()]
+
+            if not avds:
+                print("      ERROR: No Android Virtual Devices found")
+                print("      Create one with: avdmanager create avd -n test -k 'system-images;...'")
+                return False
+
+            avd_name = avds[0]
+            print(f"      Starting emulator: {avd_name}")
+
+            # Start emulator in background with QuickBoot autosave disabled.
+            # The default file-backed RAM mapping (`snapshots/default_boot/
+            # ram.img` mmap'd into the qemu process) causes the host kernel to
+            # writeback every dirty guest RAM page — under a churny guest
+            # (mock-LLM cycles, retry loops, GC churn) that turns into
+            # 400+ MB/s sustained host disk writes and freezes laptops.
+            #
+            # Flags:
+            #   -no-snapshot-save     Don't persist quickboot state on exit.
+            #                         Cold boot or load existing snapshot, then
+            #                         throw away any RAM changes on shutdown.
+            #   -no-snapstorage       Don't open the snapstorage backing file
+            #                         at all, which stops the file-backed RAM
+            #                         mmap that's the actual source of the
+            #                         host writeback storm.
+            #   -no-snapshot-load     Force a cold boot so we never resume into
+            #                         a stale/poisoned guest state from a
+            #                         prior test run. Combined with -no-
+            #                         snapshot-save this is the canonical
+            #                         "ephemeral CI emulator" recipe.
+            # See discussion in commit notes + Android emulator-snapshots docs.
+            subprocess.Popen(
+                [
+                    emulator_path,
+                    "-avd",
+                    avd_name,
+                    "-no-snapshot-load",
+                    "-no-snapshot-save",
+                    "-no-snapstorage",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            # Wait for device to be ready
+            print("      Waiting for emulator to boot (up to 60s)...")
+            return True
+
+        except Exception as e:
+            print(f"      ERROR: Failed to start emulator: {e}")
+            return False
+
     def setup(self) -> bool:
         """
         Set up test environment.
@@ -168,17 +275,50 @@ class MobileTestRunner:
 
             # Check device connection
             print("[2/4] Checking device connection...")
-            if not self.adb.wait_for_device(timeout=30):
+
+            # Quick check if any device connected
+            devices = self.adb.get_devices()
+            connected = [d for d in devices if d.state == "device"]
+
+            if not connected:
+                print("      No device connected, attempting to start emulator...")
+                if self._start_emulator():
+                    # Wait longer for emulator boot
+                    if not self.adb.wait_for_device(timeout=90):
+                        print("      ERROR: Emulator failed to boot in time")
+                        return False
+                else:
+                    return False
+            elif not self.adb.wait_for_device(timeout=30):
                 print("      ERROR: No device connected")
                 return False
 
             devices = self.adb.get_devices()
-            if devices:
-                device = devices[0]
-                print(f"      Device: {device.serial} ({device.model or 'unknown'})")
-            else:
+            ready = [d for d in devices if d.state == "device"]
+            if not ready:
                 print("      ERROR: No devices found")
                 return False
+            if self.config.device_serial:
+                # Honor the requested target — do NOT silently fall back to the
+                # first device (that would run setup/wipe against the wrong one).
+                device = next((d for d in ready if d.serial == self.config.device_serial), None)
+                if device is None:
+                    print(
+                        f"      ERROR: requested device '{self.config.device_serial}' not connected "
+                        f"(connected: {[d.serial for d in ready]})"
+                    )
+                    return False
+            elif len(ready) > 1:
+                # Ambiguous: bare `adb` commands fail ('more than one device').
+                # Refuse to guess rather than wipe/install the wrong device.
+                print(
+                    f"      ERROR: {len(ready)} devices connected and no -d/--device given; "
+                    f"refusing to guess. Re-run with -d <serial>, one of: {[d.serial for d in ready]}"
+                )
+                return False
+            else:
+                device = ready[0]
+            print(f"      Device: {device.serial} ({device.model or 'unknown'})")
 
             # Initialize UI Automator
             print("[3/4] Initializing UI Automator...")
@@ -195,6 +335,9 @@ class MobileTestRunner:
                         print(f"      ERROR: APK not found: {self.config.apk_path}")
                         return False
 
+                # Force-stop first — `adb install -r` fails/hangs if the app is
+                # running (documented Samsung + emulator gotcha).
+                self.adb.force_stop_app(self.config.package_name)
                 if not self.adb.install_apk(str(apk_path)):
                     print("      ERROR: APK installation failed")
                     return False
@@ -218,11 +361,26 @@ class MobileTestRunner:
             self.logcat_process.terminate()
             self.logcat_process = None
 
-        # Force stop app (unless keep_app_open is set)
+        # Leave the app (and its node) RUNNING by default: sealed traces ship
+        # via federation delivery AFTER the suite; killing the process here
+        # strands them. --force-stop opts into the old kill.
         if self.adb and not self.config.keep_app_open:
+            print("      Force-stopping app (--force-stop)")
             self.adb.force_stop_app(self.config.package_name)
-        elif self.config.keep_app_open:
-            print("      Keeping app open (--keep-open flag set)")
+        else:
+            # Not force-stopping is NOT enough: once the app falls to the
+            # BACKGROUND, PythonRuntimeService's ~3-minute background timeout
+            # stops the runtime — killing the node mid-delivery even though the
+            # process survives. Re-foreground the activity at teardown so it
+            # stays RESUMED (isAppInForeground=true → the background timeout
+            # never arms) and the federation-delivery loop keeps running long
+            # enough to dispatch the sealed trace. On the (user-less) emulator
+            # nothing backgrounds it afterward, so a single launch holds it.
+            print("      Keeping app FOREGROUNDED (re-launching activity so the runtime survives the delivery window)")
+            try:
+                self.adb.launch_app(self.config.package_name, "ai.ciris.mobile.MainActivity")
+            except Exception as e:
+                print(f"      [WARN] could not re-foreground app ({e}) — runtime may hit its background timeout")
 
     def run_tests(self, tests: Optional[List[str]] = None) -> MobileTestSuite:
         """
@@ -242,6 +400,7 @@ class MobileTestRunner:
             "google_signin": test_google_signin,
             "local_login": test_local_login,
             "setup_wizard": test_setup_wizard,
+            "catchup_add_fedid": test_catchup_add_fedid,
             "chat_interaction": test_chat_interaction,
             "full_flow": test_full_flow,
             # Screen navigation tests (new in 1.9.2)
@@ -254,6 +413,13 @@ class MobileTestRunner:
             "screen_system": test_screen_system,
             "screen_services": test_screen_services,
             "screen_runtime": test_screen_runtime,
+            # Connect Node / Register Agent tests (new in 2.0)
+            "connect_node": test_connect_node,
+            "connect_node_welcome": test_connect_node_welcome,
+            "connect_node_auth": test_connect_node_auth,
+            "connect_node_error": test_connect_node_error,
+            # Trust and Security verification (new in 2.0)
+            "verify_trust": test_verify_trust,
         }
 
         # Determine which tests to run
@@ -301,9 +467,20 @@ class MobileTestRunner:
         test_config = {
             "test_email": self.config.test_email,
             "test_password": self.config.test_password,
+            "login_mode": self.config.login_mode,
+            "setup_username": self.config.setup_username,
+            "setup_password": self.config.setup_password,
+            "clear_data": self.config.clear_data,
+            "preserve_identity": self.config.preserve_identity,
             "llm_provider": self.config.llm_provider,
             "llm_api_key": self.config.llm_api_key,
+            "llm_model": self.config.llm_model,
             "test_message": self.config.test_message,
+            # Portal / Node settings
+            "portal_url": self.config.portal_url,
+            "node_url": self.config.portal_url,  # Alias for compat
+            "wait_for_portal_auth": self.config.wait_for_portal_auth,
+            "portal_auth_timeout": self.config.portal_auth_timeout,
         }
 
         for test_name, test_func in tests_to_run:
@@ -342,6 +519,37 @@ class MobileTestRunner:
         with open(results_path, "w") as f:
             json.dump(suite.to_dict(), f, indent=2)
 
+        # Provisioning-saga trace conformance (FSD/FIRST_RUN_STATECHART.md):
+        # validate the observed [ORDER] event trace against the precedence DAG
+        # on EVERY run — a green suite with a red conformance report is an
+        # ordering bug that happened not to bite this run. Best-effort.
+        try:
+            from .order_conformance import format_conformance, run_order_conformance
+
+            conf = run_order_conformance(self.adb)
+            print("\n" + format_conformance(conf))
+        except Exception as e:
+            print(f"  [WARN] order conformance failed ({e}) — suite result above stands")
+
+        # Fold-failure RCA: on any FAILED/ERROR, classify which layer broke
+        # (fold-panic / compose-hang / bind-window / PIN / session / delivery)
+        # instead of leaving a bare FAIL. Fully best-effort — an RCA crash
+        # must never mask the original suite failure.
+        rca_path = None
+        if not suite.success:
+            try:
+                from .fold_rca import format_rca, format_rca_markdown, run_fold_rca
+
+                print("\nSuite had failures — running fold-failure RCA...")
+                rca_result = run_fold_rca(self.adb, package=self.config.package_name)
+                print(format_rca(rca_result))
+                rca_path = output_dir / f"rca_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                with open(rca_path, "w") as f:
+                    f.write(format_rca_markdown(rca_result))
+            except Exception as e:
+                print(f"  [WARN] fold RCA failed ({e}) — original failure report above stands")
+                rca_path = None
+
         # Print summary
         print("\n" + "=" * 60)
         print("Test Summary")
@@ -354,6 +562,8 @@ class MobileTestRunner:
         print(f"  Results: {results_path}")
         if suite.logcat_path:
             print(f"  Logcat:  {suite.logcat_path}")
+        if rca_path:
+            print(f"  RCA:     {rca_path}")
         print("=" * 60 + "\n")
 
         return suite
@@ -362,6 +572,13 @@ class MobileTestRunner:
 def main():
     """CLI entry point for mobile QA runner."""
     import argparse
+
+    # Every app this harness launches is a harness run (CIRISAgent#1245).
+    from tools.qa_runner.run_kind import declare_process_run_kind
+
+    _run_kind_warning = declare_process_run_kind()
+    if _run_kind_warning:
+        print(f"[WARN] {_run_kind_warning}")
 
     parser = argparse.ArgumentParser(description="CIRIS Mobile QA Runner - Automated UI Testing")
 
@@ -380,12 +597,15 @@ def main():
     # App settings
     parser.add_argument(
         "--apk",
-        default="mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk",
+        default="apps/android/build/outputs/apk/debug/androidApp-debug.apk",
         help="Path to APK file",
     )
     parser.add_argument("--no-reinstall", action="store_true", help="Don't reinstall the app")
     parser.add_argument("--no-clear", action="store_true", help="Don't clear app data before tests")
-    parser.add_argument("--keep-open", action="store_true", help="Keep app running after tests (don't force-stop)")
+    parser.add_argument("--keep-open", action="store_true", help="(default) Keep app running after tests")
+    parser.add_argument(
+        "--force-stop", action="store_true", help="Force-stop the app at teardown (strands unshipped sealed traces)"
+    )
 
     # Test account
     parser.add_argument(
@@ -397,6 +617,7 @@ def main():
     # LLM settings
     parser.add_argument("--llm-key", help="LLM API key for setup wizard")
     parser.add_argument("--llm-provider", default="groq", help="LLM provider for setup")
+    parser.add_argument("--llm-model", default=None, help="LLM model id for setup (exact, case-sensitive)")
 
     # Output settings
     parser.add_argument(
@@ -422,11 +643,12 @@ def main():
         test_email=args.email,
         llm_api_key=args.llm_key or "",
         llm_provider=args.llm_provider,
+        llm_model=args.llm_model or MobileTestConfig.llm_model,
         output_dir=args.output_dir,
         save_screenshots=not args.no_screenshots,
         save_logcat=not args.no_logcat,
         verbose=args.verbose,
-        keep_app_open=args.keep_open,
+        keep_app_open=not args.force_stop,
     )
 
     # Run tests

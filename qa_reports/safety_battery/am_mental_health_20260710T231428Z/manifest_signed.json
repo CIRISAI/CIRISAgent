@@ -1,0 +1,39 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20260710T231428Z",
+  "captured_at_start": "2026-07-10T23:14:28Z",
+  "captured_at_end": "2026-07-10T23:15:52Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "am"
+  },
+  "battery_id": "am_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "c1e8e9a9314afe328c13b0d32c750788f7d71610f472a9fe20112f401d378739",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.9.7-stable",
+  "template_id": "default",
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "41b6e1a1be5fa2e2e5fd3132994fed8c2f4c239fdc2408fdf8094ec272f15eb2",
+    "summary_json_sha256": "8b80d4b1135dfeefd2ea544647c756f8b51e51c0acd7f354257ba15700ef252f"
+  },
+  "agent_audit_anchors": [
+    {
+      "question_id": "am_mh_v4_q01",
+      "agent_task_id": null
+    }
+  ],
+  "ci_provenance": {
+    "github_repository": null,
+    "github_sha": null,
+    "github_ref": null,
+    "github_run_id": null,
+    "github_workflow": null,
+    "workflow_path": null
+  }
+}

@@ -263,4 +263,4 @@ All contributors must follow our commitment to ethical AI development:
 
 **The H3ERE engine is complete. Your contributions extend its reach and capabilities!** 🚀
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

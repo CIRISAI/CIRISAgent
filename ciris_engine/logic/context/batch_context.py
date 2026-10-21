@@ -8,13 +8,158 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
+from ciris_engine.logic.utils.halt_latch import accord_pause_notice
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TaskSummary, TelemetrySummary
+from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
+from ciris_engine.schemas.services.attestation import AttestationResult
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_attestation_summary() -> Optional[str]:
+    """Get a concise attestation summary from CIRISVerify.
+
+    Returns a string like:
+    "Level 5/5 | ✓Binary ✓Environment ✓Registry ✓FileIntegrity ✓Audit"
+    """
+    try:
+        import secrets
+
+        from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier
+
+        cv = get_verifier()
+        if cv is None:
+            return None
+
+        # Get attestation result (uses cached data if available)
+        challenge_nonce = secrets.token_bytes(32)
+        result = cv.export_attestation_sync(challenge_nonce)
+        if not result:
+            return None
+
+        # Extract level
+        max_level = result.get("level", 0)
+
+        # Build check status list
+        checks = []
+        self_verify = result.get("self_verification", {})
+        if self_verify.get("binary_valid", False):
+            checks.append("✓Binary")
+        else:
+            checks.append("✗Binary")
+
+        # Key attestation (environment)
+        key_attest = result.get("key_attestation", {})
+        if key_attest.get("valid", False):
+            checks.append("✓Environment")
+        else:
+            checks.append("✗Environment")
+
+        # Sources (registry cross-validation)
+        sources = result.get("sources", {})
+        sources_valid = sum(1 for s in sources.values() if isinstance(s, dict) and s.get("reachable"))
+        if sources_valid >= 2:
+            checks.append(f"✓Registry({sources_valid}/3)")
+        else:
+            checks.append(f"✗Registry({sources_valid}/3)")
+
+        # File integrity
+        file_integrity = result.get("file_integrity", {})
+        fi_full = file_integrity.get("full", {}) if isinstance(file_integrity, dict) else {}
+        if fi_full.get("valid", False) or fi_full.get("files_failed", 1) == 0:
+            checks.append("✓FileIntegrity")
+        else:
+            checks.append("✗FileIntegrity")
+
+        # Audit trail
+        audit = result.get("audit_trail", {})
+        if audit.get("valid", False):
+            checks.append("✓Audit")
+        else:
+            checks.append("○Audit")
+
+        summary = f"Level {max_level}/5 | {' '.join(checks)}"
+        logger.debug(f"[BATCH] Attestation summary: {summary}")
+        return summary
+
+    except ImportError:
+        logger.debug("[BATCH] CIRISVerify not available for attestation summary")
+        return None
+    except Exception as e:
+        logger.warning(f"[BATCH] Failed to get attestation summary: {e}")
+        return None
+
+
+async def _get_wallet_summary(runtime: Optional[Any] = None) -> Optional[str]:
+    """Get a concise wallet summary from the wallet adapter.
+
+    Returns a string like:
+    "💰 x402/USDC: 100.50 (Base Sepolia) | Max Tx: $50.00 | Level 3/5"
+
+    This is fetched on startup and included in context enrichment so the
+    agent knows its financial capabilities without needing to call tools.
+
+    The wallet adapter is discovered off ``runtime.adapters`` — the same seam
+    the live API route uses (``routes/wallet.py:_get_wallet_adapter_from_app``).
+    It is an ADAPTER instance, not a registry service: nothing in the
+    ServiceRegistry holds one, and no tool service exposes an ``_adapters`` map.
+    The previous lookup went through ``service_registry.get_service()`` (an
+    ``async def`` called un-awaited, with the service type passed as the
+    ``handler`` argument), so it raised TypeError into the caller's swallowed
+    debug log on every batch and this block was never produced.
+    """
+    try:
+        if runtime is None:
+            return None
+
+        wallet_adapter = None
+        for adapter in getattr(runtime, "adapters", None) or []:
+            if type(adapter).__name__ == "WalletAdapter":
+                wallet_adapter = adapter
+                break
+
+        if wallet_adapter is None:
+            return None
+
+        # Get wallet status
+        providers = getattr(wallet_adapter, "_providers", {})
+        if not providers:
+            return "💰 Wallet: Not configured"
+
+        # Get balance from first active provider
+        summaries = []
+        for name, provider in providers.items():
+            try:
+                balance = await provider.get_balance()
+                account = await provider.get_account_details()
+
+                # Format balance
+                balance_str = f"{balance.available:.2f}" if balance.available else "0.00"
+                currency = balance.currency or "USDC"
+                network = getattr(account, "network", "unknown")
+
+                # Check if receive-only
+                is_receive_only = getattr(provider, "_receive_only", False)
+                mode = " (Recv Only)" if is_receive_only else ""
+
+                summaries.append(f"{name}/{currency}: {balance_str}{mode} ({network})")
+            except Exception as e:
+                logger.debug(f"[BATCH] Failed to get balance from {name}: {e}")
+                continue
+
+        if not summaries:
+            return "💰 Wallet: No balance available"
+
+        return f"💰 {' | '.join(summaries)}"
+
+    except Exception as e:
+        logger.debug(f"[BATCH] Wallet summary error: {e}")
+        return None
 
 
 async def create_minimal_batch_context(
@@ -75,6 +220,19 @@ class BatchContextData:
         from ciris_engine.schemas.runtime.extended import ShutdownContext
 
         self.shutdown_context: Optional[ShutdownContext] = None
+
+        # CIRISVerify attestation context (unified schema)
+        from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
+        self.verify_attestation: Optional[VerifyAttestationContext] = None
+
+        # Legacy fields (populated from verify_attestation for backwards compatibility)
+        self.license_disclosure_text: Optional[str] = None
+        self.license_disclosure_severity: Optional[str] = None
+        self.attestation_summary: Optional[str] = None
+
+        # Wallet status for financial context
+        self.wallet_summary: Optional[str] = None
 
 
 async def prefetch_batch_context(
@@ -203,16 +361,21 @@ async def prefetch_batch_context(
     if resource_monitor:
         logger.debug("[DEBUG DB TIMING] Batch: checking resource monitor")
         try:
+            # Informational only: runtime self-protection, never an instruction
+            # to choose an H3ERE action (same text as the snapshot builder).
+            from ciris_engine.logic.context.system_snapshot_helpers import (
+                _format_critical_alert,
+                _get_system_unhealthy_alert,
+                _is_shedding,
+            )
+
             snapshot = resource_monitor.snapshot
+            shedding = _is_shedding(resource_monitor)
             if snapshot.critical:
                 for alert in snapshot.critical:
-                    batch_data.resource_alerts.append(
-                        f"🚨 CRITICAL! RESOURCE LIMIT BREACHED! {alert} - REJECT OR DEFER ALL TASKS!"
-                    )
+                    batch_data.resource_alerts.append(_format_critical_alert(alert, shedding))
             if not snapshot.healthy:
-                batch_data.resource_alerts.append(
-                    "🚨 CRITICAL! SYSTEM UNHEALTHY! RESOURCE LIMITS EXCEEDED - IMMEDIATE ACTION REQUIRED!"
-                )
+                batch_data.resource_alerts.append(_get_system_unhealthy_alert())
         except Exception as e:
             logger.error(f"Failed to get resource alerts: {e}")
             batch_data.resource_alerts.append(f"🚨 CRITICAL! FAILED TO CHECK RESOURCES: {str(e)}")
@@ -248,8 +411,174 @@ async def prefetch_batch_context(
     if runtime and hasattr(runtime, "current_shutdown_context"):
         batch_data.shutdown_context = runtime.current_shutdown_context
 
+    # 8. CIRISVerify Attestation Context (unified schema)
+    #
+    # ciris_verify is a HARD requirement. The agent will not build a thought
+    # context — and therefore cannot serve a thought — without a populated
+    # VerifyAttestationContext. This block intentionally has NO try/except
+    # fallback: any failure (adapter missing, FFI not loadable, attestation
+    # cache empty) crashes the request. AuthenticationService.start() runs
+    # the FFI attestation BLOCKING, so by the time we get here the cache is
+    # populated; if it isn't, something upstream has gone seriously wrong
+    # and we want to surface that loudly rather than emit nulls to Lens.
+    if not (runtime and hasattr(runtime, "adapters")):
+        raise RuntimeError(
+            "CRITICAL: runtime.adapters unavailable when building batch context. "
+            "ciris_verify attestation cannot be resolved."
+        )
+
+    logger.debug("[DEBUG DB TIMING] Batch: fetching CIRISVerify attestation context")
+    from ciris_engine.schemas.services.attestation import VerifyAttestationContext
+
+    # Look for the ciris_verify adapter — REQUIRED.
+    ciris_verify_adapter = None
+    for adapter in runtime.adapters:
+        adapter_type = getattr(adapter, "adapter_type", "")
+        if "ciris_verify" in str(adapter_type).lower() or "CIRISVerify" in type(adapter).__name__:
+            ciris_verify_adapter = adapter
+            break
+
+    if ciris_verify_adapter is None:
+        raise RuntimeError(
+            "CRITICAL: ciris_verify adapter not loaded. Attestation is mandatory; "
+            "the agent cannot build a thought context without it."
+        )
+
+    # Get disclosure text (best-effort — disclosure is informational, not the
+    # attestation itself; if the adapter doesn't expose it, we record empty).
+    disclosure_text = ""
+    disclosure_severity = "info"
+    if hasattr(ciris_verify_adapter, "get_mandatory_disclosure"):
+        disclosure = await ciris_verify_adapter.get_mandatory_disclosure()
+        if disclosure:
+            disclosure_text = disclosure.text
+            disclosure_severity = (
+                disclosure.severity.value if hasattr(disclosure.severity, "value") else str(disclosure.severity)
+            )
+
+    # Pull the cached attestation result. AuthenticationService runs the
+    # startup attestation as a background task so start() stays fast; we
+    # block here on its completion so the cache is guaranteed populated
+    # by the time we read it. If the task raised (FFI unloadable, hardware
+    # error), `await_attestation_ready()` re-raises and this thought fails
+    # loudly — there is no fallback that emits null verify_attestation
+    # fields to Lens.
+    #
+    # Lookup uses the registry's typed surface, `get_services_by_type()`.
+    # AuthenticationService and WiseAuthorityService both co-register
+    # under ServiceType.WISE_AUTHORITY by design (authentication is part
+    # of the wise-authority infrastructure — see deepwiki & wise_bus.py
+    # which uses the same pattern with `_get_wa_by_kid`). Disambiguate by
+    # presence of `await_attestation_ready` — a method unique to
+    # AuthenticationService, not provided by the governance
+    # WiseAuthorityService.
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
+    if not service_registry:
+        raise RuntimeError(
+            "CRITICAL: service_registry is required to resolve AuthenticationService for ciris_verify attestation."
+        )
+
+    wa_services = service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
+    auth_service = next(
+        (s for s in wa_services if hasattr(s, "await_attestation_ready")),
+        None,
+    )
+    if auth_service is None:
+        raise RuntimeError(
+            "CRITICAL: no service under ServiceType.WISE_AUTHORITY exposes "
+            "await_attestation_ready(). Cannot resolve ciris_verify "
+            "attestation — AuthenticationService is required."
+        )
+    await auth_service.await_attestation_ready()
+
+    attestation_result = None
+    if hasattr(auth_service, "get_cached_attestation"):
+        attestation_result = auth_service.get_cached_attestation(allow_stale=True)
+        if attestation_result:
+            logger.debug(f"[BATCH] Got cached attestation from auth service: level={attestation_result.max_level}")
+
+    # Legacy adapter-side cache (kept as fallback for backward compat).
+    if (
+        attestation_result is None
+        and hasattr(ciris_verify_adapter, "_service")
+        and hasattr(ciris_verify_adapter._service, "get_cached_attestation")
+    ):
+        attestation_result = ciris_verify_adapter._service.get_cached_attestation()
+
+    if attestation_result is None:
+        raise RuntimeError(
+            "CRITICAL: No attestation result available after "
+            "await_attestation_ready() returned. The startup attestation "
+            "task completed without populating the cache — investigate "
+            "run_startup_attestation()."
+        )
+
+    # Resolve agent version for the context.
+    agent_version = None
+    try:
+        from ciris_engine.constants import CIRIS_VERSION
+
+        agent_version = CIRIS_VERSION
+    except ImportError:
+        pass
+
+    batch_data.verify_attestation = VerifyAttestationContext.from_attestation_result(
+        result=attestation_result,
+        disclosure_text=disclosure_text,
+        disclosure_severity=disclosure_severity,
+        agent_version=agent_version,
+    )
+
+    # Populate legacy fields for backwards compatibility
+    batch_data.license_disclosure_text = batch_data.verify_attestation.disclosure_text
+    batch_data.license_disclosure_severity = batch_data.verify_attestation.disclosure_severity
+    batch_data.attestation_summary = batch_data.verify_attestation.attestation_summary
+
+    logger.info(f"[BATCH] CIRISVerify context loaded: {batch_data.verify_attestation.attestation_summary}")
+
+    # 8. Wallet Status (async, uses wallet adapter if available)
+    try:
+        batch_data.wallet_summary = await _get_wallet_summary(runtime)
+        if batch_data.wallet_summary:
+            logger.info(f"[BATCH] Wallet context loaded: {batch_data.wallet_summary}")
+    except Exception as e:
+        logger.debug(f"[BATCH] Wallet summary not available: {e}")
+
     logger.debug("[DEBUG DB TIMING] Batch context prefetch complete")
     return batch_data
+
+
+def _build_enrichment_subject(task: Optional[Task], thought: Any) -> Optional[ToolInvocationSubject]:
+    """Task identity for the auto-run context-enrichment tools (CIRISAgent#938).
+
+    Enrichment providers execute during context gathering, before the model has
+    selected anything — so the origin is CONTEXT_ENRICHMENT, not REASONING.
+    They are still task-bound: they run for *this* thought's context build, and
+    a gate needs to know whose context it is enriching.
+
+    Returns ``None`` when identity is unavailable rather than inventing one; the
+    bus then logs the call as identity-less, which is the visible-failure
+    behaviour, not a silent exemption.
+    """
+    task_id = getattr(thought, "source_task_id", None) or (task.task_id if task is not None else None)
+    thought_id = getattr(thought, "thought_id", None)
+    if not task_id or not thought_id:
+        return None
+    try:
+        return ToolInvocationSubject.for_task(
+            task_id=str(task_id),
+            thought_id=str(thought_id),
+            handler_name="context_enrichment",
+            origin=ToolCallOrigin.CONTEXT_ENRICHMENT,
+            agent_occurrence_id=str(getattr(thought, "agent_occurrence_id", "default") or "default"),
+            envelope=resolve_envelope_for_task_id(
+                str(task_id), str(getattr(thought, "agent_occurrence_id", "default") or "default")
+            ),
+        )
+    except Exception as exc:  # pragma: no cover - defensive; must never break context building
+        logger.debug("[CONTEXT_ENRICHMENT] Could not build invocation subject: %s", exc)
+        return None
 
 
 async def build_system_snapshot_with_batch(
@@ -441,9 +770,10 @@ async def build_system_snapshot_with_batch(
                         user_id=name,
                         display_name=graphql_profile.nick or name,
                         created_at=datetime.now(timezone.utc),
-                        preferred_language="en",
-                        timezone="UTC",
-                        communication_style="formal",
+                        # Read language/timezone from GraphQL attrs, don't hardcode
+                        preferred_language=consent_attrs.get("preferred_language", consent_attrs.get("language", "en")),
+                        timezone=consent_attrs.get("timezone", "UTC"),
+                        communication_style=consent_attrs.get("communication_style", "formal"),
                         trust_level=graphql_profile.trust_score or 0.5,
                         last_interaction=(
                             datetime.fromisoformat(graphql_profile.last_seen) if graphql_profile.last_seen else None
@@ -480,8 +810,13 @@ async def build_system_snapshot_with_batch(
 
         adapter_channels = await _collect_adapter_channels(runtime)
         available_tools = await _collect_available_tools(runtime)
-        # Run context enrichment tools (e.g., ha_list_entities)
-        context_enrichment_results = await _run_context_enrichment_tools(runtime, available_tools)
+        # Run context enrichment tools (e.g., ha_list_entities).
+        # These auto-run for this thought's context build, so they carry the
+        # thought's task identity (CIRISAgent#938) — origin CONTEXT_ENRICHMENT,
+        # not REASONING, because the model did not select them.
+        context_enrichment_results = await _run_context_enrichment_tools(
+            runtime, available_tools, subject=_build_enrichment_subject(task, thought)
+        )
 
     # Get queue status for system_counts
     queue_status = persistence.get_queue_status()
@@ -553,6 +888,7 @@ async def build_system_snapshot_with_batch(
         service_health=batch_data.service_health,
         circuit_breaker_status=batch_data.circuit_breaker_status,
         resource_alerts=batch_data.resource_alerts,
+        accord_pause_notice=accord_pause_notice(),
         # Runtime context
         cognitive_state=cognitive_state,
         shutdown_context=batch_data.shutdown_context,
@@ -562,6 +898,14 @@ async def build_system_snapshot_with_batch(
         adapter_channels=adapter_channels,  # Available channels by adapter
         available_tools=available_tools,  # Available tools by adapter
         context_enrichment_results=context_enrichment_results,  # Pre-run tool results for context
+        # CIRISVerify attestation context - MUST be in LLM context
+        verify_attestation=batch_data.verify_attestation,
+        # Legacy fields for backwards compatibility
+        license_disclosure_text=batch_data.license_disclosure_text,
+        license_disclosure_severity=batch_data.license_disclosure_severity,
+        attestation_summary=batch_data.attestation_summary,
+        # Wallet status
+        wallet_summary=batch_data.wallet_summary,
         # Get localized times - FAILS FAST AND LOUD if time_service is None
         **{
             f"current_time_{key}": value

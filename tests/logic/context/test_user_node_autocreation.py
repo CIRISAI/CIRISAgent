@@ -151,8 +151,15 @@ async def test_create_default_user_node_handles_errors():
 
 
 @pytest.mark.asyncio
-async def test_enrich_single_user_profile_creates_node_when_missing():
-    """Test that enrichment creates node when user doesn't exist."""
+async def test_enrich_single_user_profile_creates_node_when_missing(persist_engine):
+    """Test that enrichment creates node when user doesn't exist.
+
+    Post-A1 (CIRISAgent#763): `_enrich_single_user_profile` no longer needs
+    a raw DB connection — cross-channel-message lookup routes through
+    persist's correlation substrate (auto-wired via `persist_engine`). The
+    legacy `get_db_connection` mock was dead code; the symbol is no longer
+    exported from `ciris_engine.logic.persistence`.
+    """
     # Setup mock memory service
     memory_service = AsyncMock()
     # First call (recall) returns empty - no existing node
@@ -160,37 +167,29 @@ async def test_enrich_single_user_profile_creates_node_when_missing():
     # Second call (after creation) should also return empty for edges query
     memory_service.memorize = AsyncMock()
 
-    # Mock the persistence.get_db_connection to avoid database access
-    import ciris_engine.logic.persistence as persistence_module
+    # Call enrichment
+    profile = await _enrich_single_user_profile("test-user-789", memory_service, "test-channel")
 
-    mock_conn = Mock()
-    mock_cursor = Mock()
-    mock_cursor.fetchall = Mock(return_value=[])
-    mock_conn.cursor = Mock(return_value=mock_cursor)
-    mock_conn.__enter__ = Mock(return_value=mock_conn)
-    mock_conn.__exit__ = Mock(return_value=False)
+    # Verify node was created
+    memory_service.memorize.assert_called_once()
+    created_node = memory_service.memorize.call_args[0][0]
+    assert created_node.id == "user/test-user-789"
+    assert created_node.type == NodeType.USER
 
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(persistence_module, "get_db_connection", Mock(return_value=mock_conn))
-
-        # Call enrichment
-        profile = await _enrich_single_user_profile("test-user-789", memory_service, "test-channel")
-
-        # Verify node was created
-        memory_service.memorize.assert_called_once()
-        created_node = memory_service.memorize.call_args[0][0]
-        assert created_node.id == "user/test-user-789"
-        assert created_node.type == NodeType.USER
-
-        # Verify profile was returned
-        assert profile is not None
-        assert profile.user_id == "test-user-789"
-        assert profile.display_name == "User_test-user-789"
+    # Verify profile was returned
+    assert profile is not None
+    assert profile.user_id == "test-user-789"
+    assert profile.display_name == "User_test-user-789"
 
 
 @pytest.mark.asyncio
-async def test_enrich_single_user_profile_uses_existing_node():
-    """Test that enrichment uses existing node without creating new one."""
+async def test_enrich_single_user_profile_uses_existing_node(persist_engine):
+    """Test that enrichment uses existing node without creating new one.
+
+    Post-A1 (CIRISAgent#763): legacy `get_db_connection` mock is no longer
+    needed (persist owns the connection; cross-channel lookup is short-
+    circuited when channel_id is None).
+    """
     # Setup mock memory service
     memory_service = AsyncMock()
 
@@ -210,27 +209,14 @@ async def test_enrich_single_user_profile_uses_existing_node():
     # Recall returns existing node
     memory_service.recall = AsyncMock(return_value=[existing_node])
 
-    # Mock the persistence for edges
-    import ciris_engine.logic.persistence as persistence_module
+    # Call enrichment (channel_id=None short-circuits cross-channel lookup)
+    profile = await _enrich_single_user_profile("existing-user", memory_service, None)
 
-    mock_conn = Mock()
-    mock_cursor = Mock()
-    mock_cursor.fetchall = Mock(return_value=[])
-    mock_conn.cursor = Mock(return_value=mock_cursor)
-    mock_conn.__enter__ = Mock(return_value=mock_conn)
-    mock_conn.__exit__ = Mock(return_value=False)
+    # Verify node was NOT created (memorize not called)
+    memory_service.memorize.assert_not_called()
 
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(persistence_module, "get_db_connection", Mock(return_value=mock_conn))
-
-        # Call enrichment
-        profile = await _enrich_single_user_profile("existing-user", memory_service, None)
-
-        # Verify node was NOT created (memorize not called)
-        memory_service.memorize.assert_not_called()
-
-        # Verify profile was returned from existing node
-        assert profile is not None
-        assert profile.user_id == "existing-user"
-        assert profile.display_name == "Existing User"
-        assert profile.trust_level == 0.8
+    # Verify profile was returned from existing node
+    assert profile is not None
+    assert profile.user_id == "existing-user"
+    assert profile.display_name == "Existing User"
+    assert profile.trust_level == 0.8

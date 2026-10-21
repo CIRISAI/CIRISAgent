@@ -1,0 +1,71 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20260921T133337Z",
+  "captured_at_start": "2026-09-21T13:33:37Z",
+  "captured_at_end": "2026-09-21T13:46:16Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "yo"
+  },
+  "battery_id": "yo_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "c5bf4ea8ae86d9e5840b748285acb2828d9c63f7cb3e347a7005a040a8017999",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.11.4-stable",
+  "template_id": "default",
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "982f204e9083e45490061eab0d443378297dda50392ae97ddde52ab525b52941",
+    "summary_json_sha256": "521e5f3df596591af944e0fc1c25be03dadbddf5bc8a8077abbade02505bd716"
+  },
+  "agent_audit_anchors": [
+    {
+      "question_id": "yo_mh_v4_q01",
+      "agent_task_id": "302d876f-6424-4f86-ac76-89ce0507dbbc"
+    },
+    {
+      "question_id": "yo_mh_v4_q02",
+      "agent_task_id": "d0867de2-70a8-4631-add2-f9e27ef62978"
+    },
+    {
+      "question_id": "yo_mh_v4_q03",
+      "agent_task_id": "5ff735f4-1c55-4358-8024-17cf53821106"
+    },
+    {
+      "question_id": "yo_mh_v4_q04",
+      "agent_task_id": null
+    },
+    {
+      "question_id": "yo_mh_v4_q05",
+      "agent_task_id": "58365664-934d-4a2b-af48-5d313a247ad5"
+    },
+    {
+      "question_id": "yo_mh_v4_q06",
+      "agent_task_id": "7af14b30-1da5-4617-bfc0-1e33b5ae8832"
+    },
+    {
+      "question_id": "yo_mh_v4_q07",
+      "agent_task_id": "cc99483b-47ff-4132-a737-4fdbfc8084c0"
+    },
+    {
+      "question_id": "yo_mh_v4_q08",
+      "agent_task_id": "1f660cce-ec60-43e3-9d79-7e3b88c059d0"
+    },
+    {
+      "question_id": "yo_mh_v4_q09",
+      "agent_task_id": "3e4b5a93-6fba-411a-81ea-d17d2fda6d1f"
+    }
+  ],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "d5bcbdf9bbc02ed66bcbed5178b8a94f80d301ee",
+    "github_ref": "refs/heads/main",
+    "github_run_id": "35605960097",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/heads/main"
+  }
+}

@@ -10,20 +10,49 @@ their own future actions with human approval.
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
-from ciris_engine.logic.persistence import add_thought, get_db_connection
+from ciris_engine.logic.persistence import add_thought
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch
 from ciris_engine.protocols.services import ServiceProtocol as TaskSchedulerServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import ServiceType, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.extended import ScheduledTask, ScheduledTaskInfo, ShutdownContext
 from ciris_engine.schemas.runtime.models import FinalAction, Thought
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: str, max_length: int = 64) -> str:
+    """Sanitize a value for safe inclusion in log messages.
+
+    Prevents log injection (CWE-117) by:
+    1. Removing newlines and carriage returns (prevent log forging)
+    2. Removing control characters
+    3. Truncating to max length
+    4. Using allowlist of safe characters
+
+    Args:
+        value: Raw value to sanitize
+        max_length: Maximum length of output
+
+    Returns:
+        Sanitized value safe for logging
+    """
+    if not value:
+        return "unnamed"
+    # Remove newlines, carriage returns, and other control characters
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", value)
+    # Truncate to max length
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized or "unnamed"
+
 
 # Try to import croniter for cron scheduling support
 try:
@@ -33,6 +62,72 @@ try:
 except ImportError:
     CRONITER_AVAILABLE = False
     logger.warning("croniter not installed. Cron scheduling will be disabled.")
+
+
+# Wakeup step-task prefixes (mirrors database_maintenance._is_wakeup_or_shutdown_task
+# and the wakeup processor's step sequence). Used to NAME the wakeup step in the
+# single ERROR emitted when a wakeup-step re-activation cannot proceed (#934) —
+# a silently-skipped step leaves the agent spinning empty wakeup rounds forever
+# while reporting healthy.
+WAKEUP_STEP_PREFIXES = (
+    "VERIFY_IDENTITY_",
+    "VALIDATE_INTEGRITY_",
+    "EVALUATE_RESILIENCE_",
+    "ACCEPT_INCOMPLETENESS_",
+    "EXPRESS_GRATITUDE_",
+)
+
+# Consecutive identical trigger failures before a scheduled task is dead-lettered
+# (#934). Deterministic failures (missing FK target detected at trigger time) skip
+# the count and quarantine immediately — retrying a constraint violation can never
+# succeed (~80k futile re-fires observed on one production agent over 8 weeks).
+DEAD_LETTER_THRESHOLD = 3
+
+# Task statuses that mean this deferral has ALREADY BEEN ANSWERED, so an
+# expiring timer must not resurrect the row (NULLWORKS RC3 finding F2).
+#
+# `WiseAuthorityService.resolve_deferral` marks the original deferred task
+# COMPLETED for BOTH outcomes — an approval and a rejection — records the
+# outcome on the row, and (only when approved) carries the work forward on a
+# NEW `[WA GUIDANCE]` task that holds the freshly issued approval envelope.
+# Without this set, a stale one-time timer firing after a human answered would
+# flip that COMPLETED row back to ACTIVE and re-pend its thought: a rejection
+# silently re-entering the pipeline, or an approval re-run on the old task,
+# which by construction does NOT hold the approval envelope. Time may prompt
+# reconsideration; it must never overturn — or stand in for — a human's answer.
+RESOLVED_TASK_STATUSES: FrozenSet[TaskStatus] = frozenset(
+    {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.REJECTED}
+)
+
+
+def _has_recorded_resolution(task_id: str) -> bool:
+    """Did a wise authority already answer this deferral?
+
+    Reads the SIGNED resolution record that
+    ``WiseAuthorityService.resolve_deferral`` writes into
+    ``context["deferral"]["resolution"]``.
+
+    Takes a task_id and reads the RAW PERSISTED ROW, not a ``Task``, and that
+    is load-bearing: ``_persist_row_to_task`` materializes ``TaskContext`` from
+    seven named fields and drops everything else the row carries, ``deferral``
+    included. An earlier version of this function accepted a ``Task`` and was
+    therefore always False in production — a guard that could never fire, which
+    is worse than no guard because the code around it reads as protected.
+
+    Status alone cannot answer this under concurrency, but the record can, and
+    the asymmetry is what makes it reliable: ``update_task_status`` writes ONLY
+    the status column, never context. So if this timer clobbers a resolution
+    that landed mid-window, the WA's record is still sitting in the row
+    afterwards and says so. The marker is monotonic — once written it is never
+    removed — which is exactly the property a status field lacks.
+    """
+    from ciris_engine.logic.persistence import get_task_raw_context
+
+    context = get_task_raw_context(task_id)
+    deferral = context.get("deferral")
+    if not isinstance(deferral, dict):
+        return False
+    return bool(deferral.get("resolution"))
 
 
 class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
@@ -51,11 +146,19 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         self._active_tasks: Dict[str, ScheduledTask] = {}
         self._shutdown_event = asyncio.Event()
 
+        # Dead-letter quarantine (#934): tasks that deterministically fail
+        # (missing FK target) or fail DEAD_LETTER_THRESHOLD consecutive times
+        # are moved here — they stop re-firing and stay visible via
+        # get_scheduled_tasks() / the /v1/scheduler API with status FAILED.
+        self._dead_lettered_tasks: Dict[str, ScheduledTask] = {}
+        self._task_failure_counts: Dict[str, int] = {}
+
         # Task tracking metrics
         self._tasks_scheduled = 0
         self._tasks_triggered = 0
         self._tasks_completed = 0
         self._tasks_failed = 0
+        self._tasks_dead_lettered = 0
         self._recurring_tasks = 0
         self._oneshot_tasks = 0
 
@@ -86,17 +189,15 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         await super()._on_stop()
 
     async def _load_active_tasks(self) -> None:
-        """Load all active tasks from the database."""
-        try:
-            if not self.conn:
-                self.conn = get_db_connection(self.db_path)  # type: ignore[assignment]
+        """Load all active tasks.
 
-            # For now, we'll use the existing thought/task tables
-            # In the future, this could be a dedicated scheduled_tasks table
-            logger.info("Loading active scheduled tasks")
-
-        except Exception as e:
-            logger.error(f"Failed to load active tasks: {e}")
+        Scheduled tasks are currently held in-memory in `self._active_tasks`.
+        Persistence through ciris-persist's `scheduled_task_*` substrate
+        is wired separately (CIRISAgent#763 / 2.9.0 absorption); legacy
+        raw-sqlite3 path is removed to avoid a second libsqlite writer
+        on `ciris_engine.db`.
+        """
+        logger.info("Loading active scheduled tasks (in-memory state)")
 
     def _create_scheduled_task(
         self,
@@ -126,6 +227,13 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
 
     async def _run_scheduled_task(self) -> None:
         """Check for due tasks and trigger them."""
+        # CC 4.2.1.1: under a standing constitutional halt nothing fires. A due
+        # task stays due, so on resume each fires ONCE however many of its times
+        # passed: a cron task re-bases on its single trigger (`last_triggered_at`),
+        # which is what coalesces the missed fires.
+        if (await read_halt_latch(fresh=True)).halted:
+            return
+
         # Check for due tasks
         now = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         due_tasks = self._get_due_tasks(now)
@@ -159,7 +267,9 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
     def _should_trigger_cron(self, task: ScheduledTask, current_time: datetime) -> bool:
         """Check if a cron-scheduled task should trigger."""
         if not CRONITER_AVAILABLE:
-            logger.warning(f"Cron scheduling requested for task {task.task_id} but croniter not installed")
+            # Sanitize task_id for logging (CWE-117)
+            safe_task_id = _sanitize_for_log(task.task_id)
+            logger.warning(f"Cron scheduling requested for task {safe_task_id} but croniter not installed")
             return False
 
         try:
@@ -181,65 +291,264 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             # Add a small buffer (1 second) to avoid missing triggers due to timing
             return bool(current_time >= next_time - timedelta(seconds=1))
 
-        except Exception as e:
-            logger.error(f"Invalid cron expression '{task.schedule_cron}' for task {task.task_id}: {e}")
+        except Exception:
+            # Sanitize for logging (CWE-117) - don't log exception details
+            safe_task_id = _sanitize_for_log(task.task_id)
+            logger.error(f"Invalid cron expression for task {safe_task_id}: parse error")
             return False
+
+    def _wakeup_step_name(self, task_id: str) -> Optional[str]:
+        """Return the wakeup step name if task_id is a wakeup step task, else None."""
+        for prefix in WAKEUP_STEP_PREFIXES:
+            if task_id.startswith(prefix):
+                return prefix.rstrip("_")
+        return None
+
+    def _dead_letter_task(self, task: ScheduledTask, root_cause: str) -> None:
+        """Quarantine a scheduled task that can never (or will no longer) succeed (#934).
+
+        The task stops re-firing, is marked FAILED, and remains visible via
+        get_scheduled_tasks() / the scheduler API. Exactly ONE ERROR is emitted
+        at the transition — not one per minute forever.
+        """
+        task.status = "FAILED"
+        self._active_tasks.pop(task.task_id, None)
+        self._task_failure_counts.pop(task.task_id, None)
+        self._dead_lettered_tasks[task.task_id] = task
+        self._tasks_dead_lettered += 1
+        # Single transition ERROR: task_id + name + origin thought (the closest
+        # thing a ScheduledTask has to a correlation id) + root cause.
+        logger.error(
+            f"Dead-lettered scheduled task {_sanitize_for_log(task.task_id)} "
+            f"({_sanitize_for_log(task.name)}): {_sanitize_for_log(root_cause, max_length=256)} "
+            f"[origin_thought_id={_sanitize_for_log(task.origin_thought_id)}]. "
+            "Task will not re-fire; inspect via /v1/scheduler/tasks?status=FAILED."
+        )
+
+    def _reactivate_deferred_task(self, task: ScheduledTask, deferred_task_id: str) -> bool:
+        """Re-activate a self-deferred task + its deferred thought.
+
+        Returns True when reactivation proceeded (normal completion follows);
+        False when the task was dead-lettered (caller must stop).
+
+        The re-activation deliberately touches ONLY rows that already exist —
+        it never inserts a thought FK'd to the synthetic scheduled-task id
+        (the #934 `FOREIGN KEY constraint failed` loop that kept a production
+        agent spinning ~933k empty wakeup rounds over 55 days).
+
+        **What the timer grants, and what it does not** (NULLWORKS RC3, F2).
+        Two things are easy to conflate here and are deliberately kept apart:
+
+        * *Reconsideration* — the agent may look at this work again. That is
+          exactly what an expiring `defer_until` buys, and it is why this method
+          sets the task ACTIVE rather than PENDING (see (1) below).
+        * *Execution* — the deferred consequential action may proceed. A timer
+          buys none of this, and nothing on this path grants it.
+
+        The separation holds structurally rather than by a flag checked here,
+        which is why there is no approval bit in this method to look for:
+
+        * A tool declaring ``ToolDMAGuidance(requires_approval=True)`` executes
+          only when the **task's** ``TaskEnvelope`` was issued by an approval
+          authority (``WISE_AUTHORITY``/``NODE_OWNER``) and names that tool —
+          ``ThoughtProcessor._enforce_tool_approval`` ->
+          ``authorization.tool_approval.envelope_approves_tool``. Absence of an
+          envelope is denial; a DEPLOYMENT_RESOLVED envelope is denial even when
+          it enumerates the tool.
+        * Approval is **issuance, never widening**. ``TaskEnvelope`` is frozen
+          and has no widening method, and the only producer of an approval
+          envelope is ``WiseAuthorityService.resolve_deferral``, which mints it
+          onto the **new** ``[WA GUIDANCE]`` task it creates when a human says
+          yes — never onto the row this method touches.
+
+        So a task resurrected by the clock alone re-enters the pipeline holding
+        exactly the envelope it already had, which is not an approval; the gate
+        denies the tool and defers again. The clock buys another round of
+        thinking. Only a human buys the action. Locked by
+        ``tests/ciris_engine/logic/infrastructure/authorization/test_timed_deferral_is_not_approval.py``.
+        """
+        from ciris_engine.logic.persistence import (
+            get_task_by_id_any_occurrence,
+            update_task_status,
+            update_thought_status,
+        )
+
+        safe_deferred_id = _sanitize_for_log(deferred_task_id)
+        logger.info(f"Reactivating deferred task {safe_deferred_id}")
+
+        # Resolve the REAL deferred task row across occurrences — wakeup step
+        # tasks live on the claiming occurrence, not necessarily "default".
+        deferred_task = get_task_by_id_any_occurrence(deferred_task_id)
+        if deferred_task is None:
+            step_name = self._wakeup_step_name(deferred_task_id)
+            if step_name:
+                root_cause = (
+                    f"wakeup step {step_name} cannot be re-activated: deferred task row "
+                    "no longer exists — the wakeup sequence cannot complete"
+                )
+            else:
+                root_cause = "deferred task row no longer exists — nothing to reactivate"
+            self._dead_letter_task(task, root_cause)
+            return False
+
+        # (0) A human's answer outranks the clock (NULLWORKS RC3 F2). If the WA
+        # resolved this deferral while the timer was still running, the task row
+        # is already COMPLETED with its outcome recorded — approved work moved on
+        # to a fresh [WA GUIDANCE] task, rejected work stopped. Flipping that row
+        # back to ACTIVE would let an expiring timer re-open a question a human
+        # has closed, and re-pend the very thought a WA refused. Not a
+        # dead-letter: the deferral was answered, so the one-time scheduled task
+        # retires normally on the caller's happy path.
+        if deferred_task.status in RESOLVED_TASK_STATUSES or _has_recorded_resolution(deferred_task_id):
+            resolved_status = getattr(deferred_task.status, "value", deferred_task.status)
+            logger.info(
+                f"Reactivate {safe_deferred_id}: skipped — task is already "
+                f"{_sanitize_for_log(str(resolved_status), 32)}, which means this deferral was "
+                "resolved before the timer expired. A timer does not re-open a question a "
+                "wise authority already answered."
+            )
+            return True
+
+        occurrence_id = deferred_task.agent_occurrence_id
+
+        # (1) Task: deferred -> ACTIVE. PENDING is NOT sufficient: only the
+        # WORK processor promotes PENDING→ACTIVE (activate_pending_tasks), the
+        # wakeup processor skips non-ACTIVE steps, and
+        # get_pending_thoughts_for_active_tasks() filters thoughts to ACTIVE
+        # tasks — so a task re-pended during WAKEUP left its thought invisible
+        # and the agent kept spinning empty rounds (#934 layer B).
+        if not update_task_status(deferred_task_id, TaskStatus.ACTIVE, occurrence_id):
+            raise RuntimeError(f"failed to set deferred task {deferred_task_id} ACTIVE")
+
+        # (1a) LOST-RACE REPAIR. The check above is a read; this is the write;
+        # they are not one atomic step, and on a horizontally scaled deployment
+        # a WA can answer in between. The substrate offers no conditional
+        # status update — `engine.task_update_status` takes no expected value —
+        # so this cannot be a compare-and-set at this tier (upstream ask: a
+        # conditional task_update_status, the same shape as the existing
+        # task_try_claim_shared).
+        #
+        # It can still be made safe, because the two writers touch DIFFERENT
+        # columns: resolve_deferral upserts status AND context, while
+        # update_task_status writes status alone. So a resolution that landed
+        # inside the window survives our clobber in context, and finding it
+        # here means we lost. Put the answer back and retire the timer.
+        #
+        # Deliberately BEFORE the thought is re-pended: re-pending a thought a
+        # WA refused is the actual harm, and it is the step that cannot be
+        # undone by rewriting a status.
+        if _has_recorded_resolution(deferred_task_id):
+            update_task_status(deferred_task_id, TaskStatus.COMPLETED, occurrence_id)
+            logger.warning(
+                f"Reactivate {safe_deferred_id}: a wise authority answered while this timer was "
+                "firing. Restored the resolved status and retired the timer without re-pending "
+                "the thought — a timer does not overturn a human's answer, and losing a race "
+                "does not make it one."
+            )
+            return True
+
+        # (2) Thought: re-pend the deferred thought. Setting the task ACTIVE
+        # alone is NOT enough — get_tasks_needing_seed_thought only seeds
+        # tasks that have ZERO thoughts, and the original deferred thought
+        # still exists, so without this the thought stays DEFERRED forever
+        # and the agent never reconsiders (the missing transition of #865).
+        if task.origin_thought_id:
+            if not update_thought_status(
+                thought_id=task.origin_thought_id,
+                status=ThoughtStatus.PENDING,
+                occurrence_id=occurrence_id,
+            ):
+                logger.warning(
+                    f"Reactivate {safe_deferred_id}: deferred thought "
+                    f"{_sanitize_for_log(task.origin_thought_id)} not found to re-pend; "
+                    "task is ACTIVE — processor will generate a fresh thought"
+                )
+            else:
+                logger.info(
+                    f"Reactivated deferred task {safe_deferred_id}: task ACTIVE + thought "
+                    f"{_sanitize_for_log(task.origin_thought_id)} re-pended"
+                )
+        else:
+            logger.info(
+                f"Reactivated deferred task {safe_deferred_id}: task ACTIVE "
+                "(no origin thought; a fresh seed thought will be generated)"
+            )
+        return True
+
+    def _create_scheduled_thought(self, task: ScheduledTask) -> bool:
+        """Create the trigger thought for a regular scheduled task.
+
+        Returns True when the thought was created (normal completion follows);
+        False when the task was dead-lettered because its FK target is gone.
+        """
+        from ciris_engine.logic.persistence import get_task_by_id_any_occurrence
+
+        # Validate the FK target BEFORE inserting. A ScheduledTask can outlive
+        # its task row (cleanup, data wipe, a one-time defer whose task already
+        # completed); creating a thought with a dangling source_task_id violates
+        # the thoughts→tasks foreign key ("FOREIGN KEY constraint failed") —
+        # deterministically, on every trigger, forever. Quarantine instead (#934).
+        source_task = get_task_by_id_any_occurrence(task.task_id)
+        if source_task is None:
+            self._dead_letter_task(
+                task,
+                "source task row does not exist — creating its thought would "
+                "violate the thoughts→tasks foreign key on every trigger",
+            )
+            return False
+
+        now_iso = (self._time_service.now() if self._time_service else datetime.now(timezone.utc)).isoformat()
+        thought = Thought(
+            thought_id=f"thought_{(self._time_service.now() if self._time_service else datetime.now(timezone.utc)).timestamp()}",
+            content=task.trigger_prompt,
+            status=ThoughtStatus.PENDING,
+            thought_type=ThoughtType.SCHEDULED,
+            source_task_id=task.task_id,
+            agent_occurrence_id=source_task.agent_occurrence_id,
+            created_at=now_iso,
+            updated_at=now_iso,
+            final_action=FinalAction(
+                action_type="SCHEDULED_TASK",
+                action_params={
+                    "scheduled_task_id": task.task_id,
+                    "scheduled_task_name": task.name,
+                    "goal_description": task.goal_description,
+                    "trigger_type": "scheduled",
+                },
+                reasoning=f"Scheduled task '{task.name}' triggered",
+            ),
+        )
+        add_thought(thought)
+        return True
 
     async def _trigger_task(self, task: ScheduledTask) -> None:
         """Trigger a scheduled task by creating a new thought or reactivating a deferred task."""
+        # Sanitize for logging (CWE-117)
+        safe_name = _sanitize_for_log(task.name)
+        safe_task_id = _sanitize_for_log(task.task_id)
         try:
-            logger.info(f"Triggering scheduled task: {task.name} ({task.task_id})")
+            logger.info(f"Triggering scheduled task: {safe_name} ({safe_task_id})")
 
             # Increment triggered counter
             self._tasks_triggered += 1
 
-            # Check if this is a deferred task reactivation
-            if hasattr(task, "metadata") and task.metadata and "deferred_task_id" in task.metadata:
-                # Reactivate the deferred task
-                deferred_task_id = task.metadata["deferred_task_id"]
-                logger.info(f"Reactivating deferred task {deferred_task_id}")
+            # Check if this is a deferred task reactivation. The deferred task id
+            # lives in deferral_history — ScheduledTask sets extra="forbid" and
+            # has NO `.metadata` attribute, so the old `task.metadata` check was
+            # dead code that silently never reactivated anything (#865). The
+            # deferring thought is task.origin_thought_id.
+            deferred_task_id: Optional[str] = None
+            if task.deferral_history:
+                last_entry = task.deferral_history[-1]
+                if isinstance(last_entry, dict):
+                    deferred_task_id = last_entry.get("deferred_task_id")
 
-                # Update the task status from 'deferred' to 'pending'
-                from ciris_engine.logic.persistence import update_task_status
-                from ciris_engine.schemas.runtime.enums import TaskStatus
-
-                if self._time_service:
-                    update_task_status(deferred_task_id, TaskStatus.PENDING, "default", self._time_service)
-                else:
-                    # If no time service available, skip updating the task
-                    logger.warning(f"Cannot update task {deferred_task_id} status: no time service available")
-
-                logger.info(f"Task {deferred_task_id} reactivated and marked as pending")
-
+            if deferred_task_id:
+                if not self._reactivate_deferred_task(task, deferred_task_id):
+                    return  # dead-lettered — must not re-fire or count as triggered success
             else:
-                # Create a new thought for regular scheduled tasks
-                thought = Thought(
-                    thought_id=f"thought_{(self._time_service.now() if self._time_service else datetime.now(timezone.utc)).timestamp()}",
-                    content=task.trigger_prompt,
-                    status=ThoughtStatus.PENDING,
-                    thought_type=ThoughtType.SCHEDULED,
-                    source_task_id=task.task_id,
-                    agent_occurrence_id="default",  # Scheduled tasks run on default occurrence
-                    created_at=(
-                        self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-                    ).isoformat(),
-                    updated_at=(
-                        self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-                    ).isoformat(),
-                    final_action=FinalAction(
-                        action_type="SCHEDULED_TASK",
-                        action_params={
-                            "scheduled_task_id": task.task_id,
-                            "scheduled_task_name": task.name,
-                            "goal_description": task.goal_description,
-                            "trigger_type": "scheduled",
-                        },
-                        reasoning=f"Scheduled task '{task.name}' triggered",
-                    ),
-                )
-
-                # Add thought to database
-                add_thought(thought, db_path=self.db_path)
+                if not self._create_scheduled_thought(task):
+                    return  # dead-lettered
 
             # Update scheduled task status
             await self._update_task_triggered(task)
@@ -248,10 +557,29 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             if task.defer_until and not task.schedule_cron:
                 await self._complete_task(task)
 
-        except Exception as e:
+            # Success clears the consecutive-failure streak.
+            self._task_failure_counts.pop(task.task_id, None)
+
+        except Exception as trigger_error:
             # Increment failed counter
             self._tasks_failed += 1
-            logger.error(f"Failed to trigger task {task.task_id}: {e}")
+            # Track CONSECUTIVE failures per task; after DEAD_LETTER_THRESHOLD
+            # the task is quarantined with one ERROR instead of re-firing
+            # every interval forever (#934).
+            failures = self._task_failure_counts.get(task.task_id, 0) + 1
+            self._task_failure_counts[task.task_id] = failures
+            if failures >= DEAD_LETTER_THRESHOLD:
+                self._dead_letter_task(
+                    task,
+                    f"{failures} consecutive trigger failures; last: "
+                    f"{type(trigger_error).__name__}: {trigger_error}",
+                )
+            else:
+                # Sanitize task_id for logging (CWE-117) - don't log exception details
+                logger.error(
+                    f"Failed to trigger task {safe_task_id}: task execution error "
+                    f"(consecutive failure {failures}/{DEAD_LETTER_THRESHOLD})"
+                )
 
     async def _update_task_triggered(self, task: ScheduledTask) -> None:
         """Update task after triggering."""
@@ -332,16 +660,19 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
         else:
             self._oneshot_tasks += 1
 
-        # Log scheduling details
+        # Log scheduling details - sanitize user-controlled data to prevent log injection (CWE-117)
+        safe_name = _sanitize_for_log(name)
+        safe_task_id = _sanitize_for_log(task_id)
         if defer_until:
-            logger.info(f"Scheduled one-time task: {name} ({task_id}) for {defer_until}")
+            # defer_until is validated datetime string, but sanitize anyway for defense in depth
+            safe_defer = _sanitize_for_log(defer_until, max_length=30)
+            logger.info(f"Scheduled one-time task: {safe_name} ({safe_task_id}) for {safe_defer}")
         elif schedule_cron:
             next_run = self._get_next_cron_time(schedule_cron)
-            logger.info(
-                f"Scheduled recurring task: {name} ({task_id}) with cron '{schedule_cron}'. " f"Next run: {next_run}"
-            )
+            # schedule_cron is validated above, next_run is computed datetime
+            logger.info(f"Scheduled recurring task: {safe_name} ({safe_task_id}). Next run: {next_run}")
         else:
-            logger.info(f"Scheduled task: {name} ({task_id})")
+            logger.info(f"Scheduled task: {safe_name} ({safe_task_id})")
 
         return task
 
@@ -388,7 +719,10 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             }
         )
 
-        logger.info(f"Scheduled deferred task {task_id} for reactivation at {defer_until}")
+        # Sanitize for logging (CWE-117)
+        safe_task_id = _sanitize_for_log(task_id)
+        safe_defer = _sanitize_for_log(defer_until, max_length=30)
+        logger.info(f"Scheduled deferred task {safe_task_id} for reactivation at {safe_defer}")
 
         return scheduled_task
 
@@ -406,15 +740,27 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
             task = self._active_tasks[task_id]
             task.status = "CANCELLED"
             del self._active_tasks[task_id]
-            logger.info(f"Cancelled task: {task.name} ({task_id})")
+            self._task_failure_counts.pop(task_id, None)
+            # Sanitize task name and ID for logging to prevent log injection (CWE-117)
+            safe_name = _sanitize_for_log(task.name)
+            safe_id = _sanitize_for_log(task_id)
+            logger.info(f"Cancelled task: {safe_name} ({safe_id})")
+            return True
+
+        if task_id in self._dead_lettered_tasks:
+            task = self._dead_lettered_tasks.pop(task_id)
+            task.status = "CANCELLED"
+            safe_name = _sanitize_for_log(task.name)
+            safe_id = _sanitize_for_log(task_id)
+            logger.info(f"Cleared dead-lettered task: {safe_name} ({safe_id})")
             return True
 
         return False
 
     async def get_scheduled_tasks(self) -> List[ScheduledTaskInfo]:
-        """Get all scheduled tasks."""
+        """Get all scheduled tasks, including dead-lettered (status FAILED) ones."""
         tasks = []
-        for task in self._active_tasks.values():
+        for task in list(self._active_tasks.values()) + list(self._dead_lettered_tasks.values()):
             tasks.append(
                 ScheduledTaskInfo(
                     task_id=task.task_id,
@@ -464,7 +810,11 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                     "reason": reason,
                 }
             )
-            logger.info(f"Deferred task: {task.name} ({task_id}) until {defer_until}")
+            # Sanitize for logging (CWE-117)
+            safe_name = _sanitize_for_log(task.name)
+            safe_task_id = _sanitize_for_log(task_id)
+            safe_defer = _sanitize_for_log(defer_until, max_length=30)
+            logger.info(f"Deferred task: {safe_name} ({safe_task_id}) until {safe_defer}")
             return True
 
         return False
@@ -531,6 +881,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 "tasks_triggered": float(self._tasks_triggered),
                 "tasks_completed": float(self._tasks_completed),
                 "tasks_failed": float(self._tasks_failed),
+                "tasks_dead_lettered": float(len(self._dead_lettered_tasks)),
                 "task_success_rate": success_rate,
                 "recurring_tasks": float(recurring),
                 "oneshot_tasks": float(oneshot),
@@ -596,6 +947,7 @@ class TaskSchedulerService(BaseScheduledService, TaskSchedulerServiceProtocol):
                 "tasks_scheduled_total": float(self._tasks_scheduled),
                 "tasks_completed_total": float(self._tasks_completed),
                 "tasks_failed_total": float(self._tasks_failed),
+                "tasks_dead_lettered": float(len(self._dead_lettered_tasks)),
                 "tasks_pending": float(len(self._active_tasks)),
                 "scheduler_uptime_seconds": self._calculate_uptime(),
             }

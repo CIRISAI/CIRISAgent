@@ -17,6 +17,7 @@ from ciris_engine.protocols.pipeline_control import PipelineController
 from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.states import AgentState
+from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Task, TaskStatus, Thought, ThoughtStatus
 from ciris_engine.schemas.services.core.runtime import ProcessorControlResponse, ProcessorStatus
 from ciris_engine.schemas.services.runtime_control import (
@@ -489,10 +490,9 @@ class TestStepResultSchemas:
 
         # Create proper DMA result objects
         ethical_result = EthicalDMAResult(
-            stakeholders="user, system",
-            conflicts="none",
-            reasoning="Action aligns with ethical principles",
-            alignment_check="Benevolence and integrity principles satisfied. Action aligns with ethical guidelines.",
+            action=HandlerActionType.SPEAK,
+            rationale="Stakeholders: user, system. Action aligns with ethical principles Benevolence and integrity principles satisfied. Action aligns with ethical guidelines.",
+            weight_alignment_score=0.85, ethical_alignment_score=0.85,
         )
 
         csdma_result = CSDMAResult(

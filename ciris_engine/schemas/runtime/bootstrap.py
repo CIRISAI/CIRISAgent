@@ -38,4 +38,6 @@ class RuntimeBootstrapConfig(BaseModel):
         description="Template name for identity operations. Used with identity_update flag.",
     )
 
-    model_config = ConfigDict(extra="forbid")  # No additional parameters allowed - all must be declared explicitly
+    model_config = ConfigDict(
+        extra="forbid", defer_build=True
+    )  # No additional parameters allowed - all must be declared explicitly

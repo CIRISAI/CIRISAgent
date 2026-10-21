@@ -10,6 +10,9 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.services.agent_credits import DomainCategory
+from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
 
 class DeferralReason(str, Enum):
     """Standard deferral reason codes."""
@@ -33,7 +36,7 @@ class EthicalAssessment(BaseModel):
     principles_upheld: List[str] = Field(default_factory=list)
     principles_violated: List[str] = Field(default_factory=list)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CSDMAAssessment(BaseModel):
@@ -44,7 +47,7 @@ class CSDMAAssessment(BaseModel):
     flags: List[str] = Field(default_factory=list, description="Common sense flags")
     reasoning: str = Field(..., description="Explanation")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DSDMAAssessment(BaseModel):
@@ -55,7 +58,7 @@ class DSDMAAssessment(BaseModel):
     recommendations: List[str] = Field(default_factory=list)
     reasoning: str = Field(..., description="Explanation")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ActionHistoryItem(BaseModel):
@@ -66,7 +69,7 @@ class ActionHistoryItem(BaseModel):
     parameters: Dict[str, str] = Field(default_factory=dict, description="Action parameters")
     result: Optional[str] = Field(None, description="Action result")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralPackage(BaseModel):
@@ -76,6 +79,26 @@ class DeferralPackage(BaseModel):
     task_id: str = Field(..., description="ID of associated task")
     deferral_reason: DeferralReason = Field(..., description="Reason code")
     reason_description: str = Field(..., description="Human-readable reason")
+    reason_code: Optional[DeferralOperationalReason] = Field(
+        None,
+        description="Structured operational explanation for the deferral",
+    )
+    needs_category: Optional[DeferralNeedCategory] = Field(
+        None,
+        description="Primary rights/needs category implicated by the deferral",
+    )
+    secondary_needs_categories: List[DeferralNeedCategory] = Field(
+        default_factory=list,
+        description="Additional rights/needs categories implicated by the deferral",
+    )
+    rights_basis: List[str] = Field(
+        default_factory=list,
+        description="Human-rights basis labels supporting the deferral classification",
+    )
+    domain_hint: Optional[DomainCategory] = Field(
+        None,
+        description="Licensed domain hint for routing, if applicable",
+    )
 
     # Core content
     thought_content: str = Field(..., description="The thought being deferred")
@@ -99,7 +122,7 @@ class DeferralPackage(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc), description="When package was created"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class TransportData(BaseModel):
@@ -111,7 +134,7 @@ class TransportData(BaseModel):
     message_id: Optional[str] = Field(None, description="Message identifier")
     additional_context: Dict[str, str] = Field(default_factory=dict, description="Additional transport context")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralReport(BaseModel):
@@ -132,7 +155,7 @@ class DeferralReport(BaseModel):
     response_received: bool = Field(default=False, description="Whether response received")
     response_at: Optional[datetime] = Field(None, description="Response timestamp")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralResolution(BaseModel):
@@ -151,7 +174,7 @@ class DeferralResolution(BaseModel):
     resolved_at: datetime = Field(..., description="When resolved")
     signature: str = Field(..., description="Digital signature")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = [

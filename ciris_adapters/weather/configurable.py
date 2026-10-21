@@ -209,25 +209,30 @@ class WeatherConfigurableAdapter:
 
         self._applied_config = config.copy()
 
-        # Set environment variables for the Weather service
+        # Set environment variables for the Weather service AND persist to .env
         if config.get("user_agent"):
             os.environ["CIRIS_NOAA_USER_AGENT"] = config["user_agent"]
+            self._persist_to_env("CIRIS_NOAA_USER_AGENT", config["user_agent"])
 
         if config.get("owm_api_key"):
             os.environ["CIRIS_OPENWEATHERMAP_API_KEY"] = config["owm_api_key"]
+            self._persist_to_env("CIRIS_OPENWEATHERMAP_API_KEY", config["owm_api_key"])
 
         if config.get("units"):
             os.environ["CIRIS_WEATHER_UNITS"] = config["units"]
+            self._persist_to_env("CIRIS_WEATHER_UNITS", config["units"])
 
         if config.get("default_location"):
             os.environ["CIRIS_WEATHER_DEFAULT_LOCATION"] = config["default_location"]
+            self._persist_to_env("CIRIS_WEATHER_DEFAULT_LOCATION", config["default_location"])
 
         if config.get("update_interval"):
             os.environ["CIRIS_WEATHER_UPDATE_INTERVAL"] = str(config["update_interval"])
+            self._persist_to_env("CIRIS_WEATHER_UPDATE_INTERVAL", str(config["update_interval"]))
 
         # Log sanitized config
         safe_config = {k: ("***" if "api_key" in k.lower() or "token" in k.lower() else v) for k, v in config.items()}
-        logger.info(f"Weather configuration applied: {safe_config}")
+        logger.info(f"Weather configuration applied and persisted: {safe_config}")
 
         return True
 
@@ -238,3 +243,31 @@ class WeatherConfigurableAdapter:
             Applied configuration or None if not configured
         """
         return self._applied_config
+
+    def _persist_to_env(self, key: str, value: str) -> None:
+        """Persist a key-value pair to the .env file for next restart.
+
+        This ensures weather location settings survive app restarts on mobile.
+        """
+        try:
+            from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+            env_path = get_env_file_path()
+            if env_path and env_path.exists():
+                content = env_path.read_text()
+                lines = content.split("\n")
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.startswith(f"{key}="):
+                        # Preserve quoted format
+                        lines[i] = f'{key}="{value}"'
+                        updated = True
+                        break
+                if not updated:
+                    lines.append(f'{key}="{value}"')
+                env_path.write_text("\n".join(lines))
+                logger.info(f"[WEATHER CONFIG] Persisted {key} to .env file")
+            else:
+                logger.warning(f"[WEATHER CONFIG] .env file not found, cannot persist {key}")
+        except Exception as e:
+            logger.error(f"[WEATHER CONFIG] Failed to persist {key} to .env: {e}")

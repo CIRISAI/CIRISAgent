@@ -7,7 +7,7 @@ Provides typed contexts for all handler operations.
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -17,6 +17,8 @@ class HandlerData(BaseModel):
 
     handler_name: str = Field(..., description="Name of the handler")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class SpeakHandlerData(HandlerData):
     """Data specific to SPEAK handler."""
@@ -24,6 +26,8 @@ class SpeakHandlerData(HandlerData):
     message_type: str = Field("response", description="Type of message")
     reply_to_message_id: Optional[str] = Field(None, description="Message being replied to")
     formatting_hints: Optional[Dict[str, str]] = Field(None, description="Formatting hints")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ToolHandlerData(HandlerData):
@@ -33,6 +37,8 @@ class ToolHandlerData(HandlerData):
     requires_confirmation: bool = Field(False, description="Whether user confirmation needed")
     sandbox_mode: bool = Field(True, description="Whether to run in sandbox")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class MemoryHandlerData(HandlerData):
     """Data specific to memory handlers (MEMORIZE, RECALL, FORGET)."""
@@ -40,6 +46,8 @@ class MemoryHandlerData(HandlerData):
     operation_type: str = Field(..., description="memorize, recall, or forget")
     allow_duplicates: bool = Field(False, description="Whether to allow duplicate memories")
     cascade_delete: bool = Field(False, description="Whether to cascade delete related memories")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class HandlerRequest(BaseModel):
@@ -57,11 +65,15 @@ class HandlerRequest(BaseModel):
         None, description="Handler-specific typed data"
     )
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ActionContextParams(BaseModel):
     """Base class for action parameters in audit context."""
 
     action_type: str = Field(..., description="Type of action")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class SpeakActionParams(ActionContextParams):
@@ -71,12 +83,16 @@ class SpeakActionParams(ActionContextParams):
     channel_id: str = Field(..., description="Target channel")
     message_type: str = Field("response", description="Type of message")
 
+    model_config = ConfigDict(defer_build=True)
+
 
 class ToolActionParams(ActionContextParams):
     """Parameters for TOOL action."""
 
     tool_name: str = Field(..., description="Tool to execute")
     tool_args: JSONDict = Field(..., description="Tool arguments")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class MemoryActionParams(ActionContextParams):
@@ -86,6 +102,8 @@ class MemoryActionParams(ActionContextParams):
     node_id: Optional[str] = Field(None, description="Node ID for recall/forget")
     query: Optional[str] = Field(None, description="Query for recall")
     content: Optional[JSONDict] = Field(None, description="Content for memorize")
+
+    model_config = ConfigDict(defer_build=True)
 
 
 class ActionContext(BaseModel):
@@ -103,6 +121,8 @@ class ActionContext(BaseModel):
     thought_id: str = Field(..., description="Associated thought ID")
     correlation_id: str = Field(..., description="Correlation ID")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(defer_build=True)
 
 
 __all__ = [

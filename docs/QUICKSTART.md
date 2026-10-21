@@ -36,7 +36,7 @@ npm run dev
 
 # 3. Access the web interface
 # Visit http://localhost:3000
-# Default credentials: admin/ciris_admin_password
+# Complete setup wizard on first run to create admin credentials
 ```
 
 ## What's Running?

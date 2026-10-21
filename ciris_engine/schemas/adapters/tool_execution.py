@@ -26,7 +26,7 @@ class ToolExecutionArgs(BaseModel):
         default_factory=dict, description="Tool-specific parameters that vary by tool type"
     )
 
-    model_config = ConfigDict(extra="allow")  # Allow extra fields for tool-specific params
+    model_config = ConfigDict(defer_build=True, extra="allow")  # Allow extra fields for tool-specific params
 
     def get_all_params(self) -> JSONDict:
         """Get all parameters including tool-specific ones."""
@@ -42,4 +42,4 @@ class ToolHandlerContext(BaseModel):
     handler_name: str = Field(..., description="Name of the handler executing the tool")
     bot_instance: Optional[Any] = Field(None, description="Bot/client instance for tool execution")
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    model_config = ConfigDict(defer_build=True, extra="forbid", arbitrary_types_allowed=True)

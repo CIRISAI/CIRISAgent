@@ -145,10 +145,10 @@ def complete_telemetry_data():
         "overall_uptime_seconds": 7200,
         "total_errors": 5,
         "total_requests": 250,
-        "covenant_metrics": {
+        "accord_metrics": {
             "wise_authority_deferrals": 3,
             "ethical_decisions": 45,
-            "covenant_compliance_rate": 0.96,
+            "accord_compliance_rate": 0.96,
             "transparency_score": 0.89,
         },
     }
@@ -176,10 +176,10 @@ def degraded_telemetry_data():
         "overall_uptime_seconds": 3600,
         "total_errors": 30,
         "total_requests": 200,
-        "covenant_metrics": {
+        "accord_metrics": {
             "wise_authority_deferrals": 8,
             "ethical_decisions": 25,
-            "covenant_compliance_rate": 0.85,
+            "accord_compliance_rate": 0.85,
             "transparency_score": 0.72,
         },
     }
@@ -219,13 +219,13 @@ def telemetry_with_services(complete_telemetry_data, mixed_services_data):
 
 
 # =============================================================================
-# COVENANT DATA FIXTURES
+# ACCORD DATA FIXTURES
 # =============================================================================
 
 
 @pytest.fixture
-def complete_covenant_data():
-    """Create complete covenant metrics data matching actual service implementation."""
+def complete_accord_data():
+    """Create complete accord metrics data matching actual service implementation."""
     return {
         "wise_authority_deferrals": 5,
         "filter_matches": 2,
@@ -235,8 +235,8 @@ def complete_covenant_data():
 
 
 @pytest.fixture
-def partial_covenant_data():
-    """Create partial covenant metrics for testing optional fields."""
+def partial_accord_data():
+    """Create partial accord metrics for testing optional fields."""
     return {
         "wise_authority_deferrals": 3,
         "thoughts_processed": 25,
@@ -244,8 +244,8 @@ def partial_covenant_data():
 
 
 @pytest.fixture
-def empty_covenant_data():
-    """Create empty covenant data for testing edge cases."""
+def empty_accord_data():
+    """Create empty accord data for testing edge cases."""
     return {}
 
 
@@ -419,13 +419,13 @@ def expected_system_metric_names():
 
 
 @pytest.fixture
-def expected_covenant_metric_names():
-    """Provide expected covenant metric names for validation (matching actual implementation)."""
+def expected_accord_metric_names():
+    """Provide expected accord metric names for validation (matching actual implementation)."""
     return {
-        "covenant.wise_authority.deferrals",
-        "covenant.filter.matches",
-        "covenant.thoughts.processed",
-        "covenant.insights.generated",
+        "accord.wise_authority.deferrals",
+        "accord.filter.matches",
+        "accord.thoughts.processed",
+        "accord.insights.generated",
     }
 
 

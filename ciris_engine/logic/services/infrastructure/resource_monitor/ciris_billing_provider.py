@@ -23,6 +23,14 @@ from ciris_engine.schemas.services.credit_gate import (
 logger = logging.getLogger(__name__)
 
 
+def _read_proxy_token(current: str = "", callback_token: str = "") -> str:
+    """The freshest proxy token, chosen exactly as the LLM side chooses it."""
+    from ciris_engine.logic.utils.token_handshake import read_proxy_token
+
+    token, _var = read_proxy_token(current=current, callback_token=callback_token)
+    return token
+
+
 class CIRISBillingProvider(CreditGateProtocol):
     """Async credit provider that gates interactions via self-hosted CIRIS Billing API.
 
@@ -61,7 +69,15 @@ class CIRISBillingProvider(CreditGateProtocol):
         """
         # Read from env as fallback if not passed directly
         self._api_key = api_key or os.environ.get("CIRIS_BILLING_API_KEY", "")
-        self._google_id_token = google_id_token or os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "")
+        self._google_id_token = (
+            google_id_token
+            # Same selector the LLM side uses: billing that keeps reading only
+            # the Google/Apple names goes on sending the stale setup-time token
+            # after a legacy-desktop client refreshed under its own name, so
+            # AUTH_EXPIRED keeps gating every interaction even once the LLM key
+            # has recovered.
+            or _read_proxy_token()
+        )
         self._token_refresh_callback = token_refresh_callback
         # Use provided URL or get from central config
         self._base_url = (base_url or get_billing_url()).rstrip("/")
@@ -96,21 +112,50 @@ class CIRISBillingProvider(CreditGateProtocol):
         5. ResourceMonitor reloads .env (via load_dotenv override=True)
         6. This method reads the updated GOOGLE_ID_TOKEN from environment
         """
-        # First, try the callback if available
+        # THE SHARED SELECTOR DECIDES, AND IT GOES FIRST.
+        #
+        # This used to consult the injected callback first and return the
+        # moment that callback produced anything different. The callback is a
+        # first-non-empty read of the Google/Apple names, so when a legacy
+        # desktop client had refreshed under its own name — leaving a stale
+        # Google value beside a fresh one — the callback handed back the STALE
+        # token, installed it over the fresh one the refresh handler had just
+        # set, and returned before this method ever reached the selector. The
+        # fix upstream was undone on the very next billing request, and billing
+        # kept answering AUTH_EXPIRED while the LLM key looked healthy.
+        #
+        # The selector also needs to know what we are holding: with opaque
+        # tokens it cannot rank by expiry, and "the copy that is not the one
+        # currently being rejected" is the only signal left.
+        # ASK THE CALLBACK, THEN RANK IT WITH EVERYTHING ELSE.
+        #
+        # This has now been wrong in both directions. Consulting the callback
+        # FIRST and returning on any difference let a stale value overwrite a
+        # fresh one — the refresh was undone on the next billing request.
+        # Skipping the callback whenever the environment held anything fixed
+        # that but silently disabled callers who fetch credentials from secure
+        # storage or some other external source, which is exactly what the
+        # parameter is documented for. So the callback is neither first nor
+        # last: it is a candidate, and the selector ranks it.
+        callback_token = ""
         if self._token_refresh_callback:
             try:
-                new_token = self._token_refresh_callback()
-                if new_token and new_token != self._google_id_token:
-                    old_len = len(self._google_id_token) if self._google_id_token else 0
-                    new_len = len(new_token)
-                    logger.info("[BILLING_TOKEN] Token refreshed via callback: %d chars -> %d chars", old_len, new_len)
-                    self._google_id_token = new_token
-                    return self._google_id_token
+                callback_token = self._token_refresh_callback() or ""
             except Exception as exc:
-                logger.warning("[BILLING_TOKEN] Token refresh callback failed: %s", exc)
+                logger.warning("[TOKEN_HANDSHAKE] billing token refresh callback failed: %s", exc)
 
-        # Check environment for updated token (set by auth route or ResourceMonitor after .env reload)
-        env_token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN", "") or os.environ.get("GOOGLE_ID_TOKEN", "")
+        selected = _read_proxy_token(current=self._google_id_token, callback_token=callback_token)
+        if selected:
+            if selected != self._google_id_token:
+                logger.info(
+                    "[TOKEN_HANDSHAKE] billing token updated: %d chars -> %d chars",
+                    len(self._google_id_token) if self._google_id_token else 0,
+                    len(selected),
+                )
+                self._google_id_token = selected
+            return self._google_id_token
+
+        env_token = os.environ.get("GOOGLE_ID_TOKEN", "")
         if env_token and env_token != self._google_id_token:
             old_len = len(self._google_id_token) if self._google_id_token else 0
             new_len = len(env_token)
@@ -146,6 +191,13 @@ class CIRISBillingProvider(CreditGateProtocol):
         logger.info("Updated Google ID token for billing auth")
 
     async def start(self) -> None:
+        # Skip network client in test mode UNLESS a mock transport was explicitly provided
+        if self._transport is None and (
+            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+        ):
+            logger.info("[BILLING_PROVIDER] Skipped in test mode (no mock transport)")
+            return
+
         async with self._client_lock:
             if self._client is not None:
                 return
@@ -249,29 +301,56 @@ class CIRISBillingProvider(CreditGateProtocol):
             self._update_fallback_state(region)
             return response, "SUCCESS", "", ""
 
-        except (httpx.ConnectTimeout, asyncio.TimeoutError):
-            logger.warning("[BILLING] ✗ %s TIMEOUT: %s timed out after %.1fs", region, base_url, self._timeout_seconds)
+        # EVERY TIMEOUT IS A REASON TO TRY THE OTHER REGION (CIRISAgent#1079).
+        #
+        # This caught httpx.ConnectTimeout only. httpx.ReadTimeout is NOT a
+        # subclass of it — they are siblings under httpx.TimeoutException — so a
+        # read timeout fell past this branch into the RequestError branch below,
+        # which returned "FATAL", and FATAL returns from the region loop WITHOUT
+        # trying EU-fallback. Scout timed out against US-primary and the EU
+        # region it exists for was never contacted.
+        #
+        # A timeout says the region did not answer in time. That is the precise
+        # condition a second region exists to survive, and it says nothing at all
+        # about whether the other one would answer.
+        except (httpx.TimeoutException, asyncio.TimeoutError):
+            logger.warning("[BILLING] [FAIL] %s TIMEOUT: %s timed out after %.1fs", region, base_url, self._timeout_seconds)
             return None, "RETRY", "TIMEOUT", f"Timed out after {self._timeout_seconds}s"
 
         except httpx.ConnectError as exc:
-            logger.warning("[BILLING] ✗ %s CONNECTION_ERROR: Cannot reach %s - %s", region, base_url, exc)
+            logger.warning("[BILLING] [FAIL] %s CONNECTION_ERROR: Cannot reach %s - %s", region, base_url, exc)
             return None, "RETRY", "CONNECTION_ERROR", str(exc)
 
         except httpx.RequestError as exc:
-            error_detail = f"NETWORK_ERROR:{type(exc).__name__}: {exc}"
-            logger.error("[BILLING] ✗ %s NETWORK_ERROR: %s - %s", region, base_url, error_detail)
-            return None, "FATAL", error_detail, ""
+            # RETURN A BARE CATEGORY, like the TIMEOUT and CONNECTION_ERROR
+            # branches above. This one used to pack the category, the exception
+            # class AND the exception text into the error_type slot, and every
+            # layer downstream then prefixed it again — which is how a user was
+            # shown "NETWORK_ERROR:NETWORK_ERROR:ReadTimeout:".
+            #
+            # str(httpx.ReadTimeout()) is EMPTY, so the detail also has to
+            # tolerate an exception that says nothing about itself; the class
+            # name is the only fact available and is worth more than a bare colon.
+            detail = f"{type(exc).__name__}: {exc}".strip() if str(exc) else type(exc).__name__
+            logger.warning("[BILLING] [FAIL] %s NETWORK_ERROR: %s - %s", region, base_url, detail)
+            # RETRY, not FATAL. FATAL means "this will fail identically against
+            # every region", and almost no transport error qualifies: the regions
+            # are different hosts on different networks. Marking these fatal made
+            # one unreachable region look like a total outage, which is the exact
+            # failure the fallback was built to prevent. If EU fails too, the loop
+            # ends and _summarize_errors reports both — nothing is swallowed.
+            return None, "RETRY", "NETWORK_ERROR", detail
 
     def _update_fallback_state(self, region: str) -> None:
         """Update fallback state based on which region succeeded."""
         if "fallback" in region and not self._using_fallback:
-            logger.info("[BILLING] ✓ Switched to %s: %s", region, self._fallback_url)
+            logger.info("[BILLING] [OK] Switched to %s: %s", region, self._fallback_url)
             self._using_fallback = True
         elif "primary" in region and self._using_fallback:
-            logger.info("[BILLING] ✓ Recovered to %s: %s", region, self._base_url)
+            logger.info("[BILLING] [OK] Recovered to %s: %s", region, self._base_url)
             self._using_fallback = False
         else:
-            logger.info("[BILLING] ✓ Request succeeded via %s", region)
+            logger.info("[BILLING] [OK] Request succeeded via %s", region)
 
     def _summarize_errors(self, errors: list[tuple[str, str, str]], cache_key: str) -> tuple[None, str]:
         """Summarize errors from all failed attempts."""
@@ -302,6 +381,12 @@ class CIRISBillingProvider(CreditGateProtocol):
     ) -> CreditCheckResult:
         if not account.provider or not account.account_id:
             raise ValueError("Credit account must include provider and account_id")
+
+        # Return mock result in test mode (no network calls)
+        if self._transport is None and (
+            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+        ):
+            return CreditCheckResult(has_credit=True, credits_remaining=1000, free_uses_remaining=100)
 
         await self._ensure_started()
 
@@ -343,7 +428,7 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_network_error(self, error_type: str, cache_key: str) -> CreditCheckResult:
         """Handle network errors from check_credit."""
         error_category = error_type.split(":")[0] if ":" in error_type else error_type
-        logger.error("[CREDIT_CHECK] ✗ %s for %s - %s", error_category, cache_key, error_type)
+        logger.error("[CREDIT_CHECK] [FAIL] %s for %s - %s", error_category, cache_key, error_type)
         return self._handle_failure(error_category, error_type)
 
     def _handle_check_response(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
@@ -362,19 +447,29 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_success(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle successful credit check response."""
         response_data = response.json()
-        has_credit = response_data.get("has_credit", False)
-        free_remaining = response_data.get("free_uses_remaining", 0)
-        credits_remaining = response_data.get("credits_remaining", 0)
+        free_remaining = response_data.get("free_uses_remaining", 0) or 0
+        credits_remaining = response_data.get("credits_remaining", 0) or 0
+        daily_free_remaining = response_data.get("daily_free_uses_remaining", 0) or 0
+
+        # Compute has_credit locally: user has credit if they have paid credits OR any free uses
+        # The billing API's has_credit field may not account for free uses correctly
+        has_credit = credits_remaining > 0 or free_remaining > 0 or daily_free_remaining > 0
+        response_data["has_credit"] = has_credit
 
         if has_credit:
             logger.info(
-                "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, paid=%s", cache_key, free_remaining, credits_remaining
+                "[CREDIT_CHECK] ✓ HAS_CREDIT for %s: free=%s, daily_free=%s, paid=%s",
+                cache_key,
+                free_remaining,
+                daily_free_remaining,
+                credits_remaining,
             )
         else:
             logger.warning(
-                "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, paid=%s (exhausted)",
+                "[CREDIT_CHECK] ✗ NO_CREDITS for %s: free=%s, daily_free=%s, paid=%s (exhausted)",
                 cache_key,
                 free_remaining,
+                daily_free_remaining,
                 credits_remaining,
             )
 
@@ -385,7 +480,7 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_no_credits(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle payment required or forbidden response."""
         reason = self._extract_reason(response)
-        logger.warning("[CREDIT_CHECK] ✗ NO_CREDITS for %s (HTTP %d): %s", cache_key, response.status_code, reason)
+        logger.warning("[CREDIT_CHECK] [FAIL] NO_CREDITS for %s (HTTP %d): %s", cache_key, response.status_code, reason)
         result = CreditCheckResult(has_credit=False, reason=f"NO_CREDITS:{reason}")
         self._store_cache(cache_key, result)
         return result
@@ -410,7 +505,7 @@ class CIRISBillingProvider(CreditGateProtocol):
     def _handle_check_unexpected(self, response: httpx.Response, cache_key: str) -> CreditCheckResult:
         """Handle unexpected HTTP status codes."""
         reason = self._extract_reason(response)
-        logger.error("[CREDIT_CHECK] ✗ UNEXPECTED_ERROR for %s: HTTP %d - %s", cache_key, response.status_code, reason)
+        logger.error("[CREDIT_CHECK] [FAIL] UNEXPECTED_ERROR for %s: HTTP %d - %s", cache_key, response.status_code, reason)
         return self._handle_failure(f"HTTP_{response.status_code}", reason)
 
     async def spend_credit(
@@ -421,6 +516,12 @@ class CIRISBillingProvider(CreditGateProtocol):
     ) -> CreditSpendResult:
         if request.amount_minor <= 0:
             raise ValueError("Spend amount must be positive")
+
+        # Return mock result in test mode (no network calls)
+        if self._transport is None and (
+            os.environ.get("CIRIS_IMPORT_MODE") == "true" or os.environ.get("CIRIS_MOCK_LLM") == "true"
+        ):
+            return CreditSpendResult(succeeded=True, balance_remaining=999)
 
         await self._ensure_started()
 
@@ -437,20 +538,20 @@ class CIRISBillingProvider(CreditGateProtocol):
                     "[CREDIT_SPEND] ✗ TIMEOUT for %s - billing service unreachable",
                     cache_key,
                 )
-                return CreditSpendResult(succeeded=False, reason=f"TIMEOUT:{error_type}")
+                return CreditSpendResult(succeeded=False, reason=self._failure_reason("TIMEOUT", error_type))
             elif error_type.startswith("CONNECTION_ERROR"):
                 logger.error(
                     "[CREDIT_SPEND] ✗ CONNECTION_ERROR for %s - cannot connect to billing",
                     cache_key,
                 )
-                return CreditSpendResult(succeeded=False, reason=f"CONNECTION_ERROR:{error_type}")
+                return CreditSpendResult(succeeded=False, reason=self._failure_reason("CONNECTION_ERROR", error_type))
             else:
                 logger.error(
                     "[CREDIT_SPEND] ✗ NETWORK_ERROR for %s - %s",
                     cache_key,
                     error_type,
                 )
-                return CreditSpendResult(succeeded=False, reason=f"NETWORK_ERROR:{error_type}")
+                return CreditSpendResult(succeeded=False, reason=self._failure_reason("NETWORK_ERROR", error_type))
 
         assert response is not None
 
@@ -539,34 +640,15 @@ class CIRISBillingProvider(CreditGateProtocol):
             self._client.headers["Authorization"] = f"Bearer {token}"
 
     def _signal_token_refresh_needed(self) -> None:
-        """Write a signal file to indicate token refresh is needed.
+        """Ask the client for a fresh token (billing's 401 path).
 
-        This is picked up by Android's TokenRefreshManager which will:
-        1. Call Google silentSignIn() to get a fresh ID token
-        2. Update .env with the new token
-        3. Write .config_reload signal
-        4. Python ResourceMonitor detects .config_reload and emits token_refreshed
+        Byte-for-byte the same conversation the LLM service has, so it is the
+        same code now — `utils.token_handshake` owns the directory, the
+        filename and the wording.
         """
-        import time
-        from pathlib import Path
+        from ciris_engine.logic.utils.token_handshake import request_token_refresh
 
-        # Get CIRIS_HOME
-        ciris_home = os.environ.get("CIRIS_HOME")
-        if not ciris_home:
-            try:
-                from ciris_engine.logic.utils.path_resolution import get_ciris_home
-
-                ciris_home = str(get_ciris_home())
-            except Exception:
-                logger.warning("[BILLING_TOKEN] Cannot write refresh signal - CIRIS_HOME not found")
-                return
-
-        try:
-            signal_file = Path(ciris_home) / ".token_refresh_needed"
-            signal_file.write_text(str(time.time()))
-            logger.info("[BILLING_TOKEN] Token refresh signal written to: %s", signal_file)
-        except Exception as exc:
-            logger.warning("[BILLING_TOKEN] Failed to write token refresh signal: %s", exc)
+        request_token_refresh(reason="billing 401")
 
     def _store_cache(self, cache_key: str, result: CreditCheckResult) -> None:
         if self._cache_ttl <= 0:
@@ -738,6 +820,19 @@ class CIRISBillingProvider(CreditGateProtocol):
         except ValueError:
             return response.text
 
+    @staticmethod
+    def _failure_reason(error_category: str, detail: str) -> str:
+        """One legible sentence, with the category kept for operators.
+
+        All three spend branches used to build `f"{CATEGORY}:{error_type}"`, and
+        error_type was already the category — so even the TIMEOUT path emitted
+        "TIMEOUT:TIMEOUT". Nothing parses this string; it is read by humans.
+        """
+        _d = (detail or "").strip().strip(":").strip()
+        if _d.startswith(error_category):
+            _d = _d[len(error_category) :].strip().strip(":").strip()
+        return f"{error_category}{': ' + _d if _d else ''}"
+
     def _handle_failure(self, error_category: str, detail: str) -> CreditCheckResult:
         """Handle a billing failure and return appropriate CreditCheckResult.
 
@@ -749,14 +844,37 @@ class CIRISBillingProvider(CreditGateProtocol):
         - NO_CREDITS: User has no credits available
         - HTTP_xxx: Unexpected HTTP status code
         """
-        reason = f"{error_category}:{detail}"
+        # NEVER PREFIX A DETAIL THAT ALREADY CARRIES THE CATEGORY. `detail` is
+        # sometimes the raw error_type, which for the network branch WAS the
+        # category — so this line produced "NETWORK_ERROR:NETWORK_ERROR:...".
+        # Callers put `reason` straight in front of a user (agent.py renders
+        # "Message blocked: {reason}"), so it has to read as a sentence, not as
+        # a colon-separated audit of which layer touched it last.
+        _HUMAN = {
+            "TIMEOUT": "the billing service did not respond in time",
+            "CONNECTION_ERROR": "could not connect to the billing service",
+            "NETWORK_ERROR": "network error while contacting the billing service",
+            "AUTH_EXPIRED": "the billing session expired",
+            "NO_CREDITS": "no credits available",
+        }
+        _detail = (detail or "").strip().strip(":").strip()
+        if _detail.startswith(error_category):
+            _detail = _detail[len(error_category) :].strip().strip(":").strip()
+        _human = _HUMAN.get(error_category, error_category)
+        reason = f"{_human} ({error_category}{': ' + _detail if _detail else ''})"
+        # THE CATEGORY TRAVELS AS DATA, NOT INSIDE THE SENTENCE. `reason` is for
+        # people and may be reworded freely; anything that needs to know WHICH
+        # failure this was — the credits route deciding between 401, 503 and a
+        # genuine zero — reads `provider_metadata["error_category"]` and never
+        # the prose. Parsing the sentence would make the wording load-bearing.
+        metadata = {"error_category": error_category}
         if self._fail_open:
             logger.warning(
                 "[BILLING] FAIL_OPEN engaged - allowing request despite error: %s",
                 reason,
             )
-            return CreditCheckResult(has_credit=True, reason=f"FAIL_OPEN:{reason}")
-        return CreditCheckResult(has_credit=False, reason=reason)
+            return CreditCheckResult(has_credit=True, reason=f"FAIL_OPEN:{reason}", provider_metadata=metadata)
+        return CreditCheckResult(has_credit=False, reason=reason, provider_metadata=metadata)
 
 
 __all__ = ["CIRISBillingProvider"]

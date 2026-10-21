@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+# Mark all tests in this module with a timeout to prevent worker crashes
+pytestmark = pytest.mark.timeout(30)
+
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
@@ -162,21 +165,31 @@ class TestThoughtProcessor:
         mock_context_builder = Mock()
         mock_context_builder.build_thought_context = AsyncMock(return_value=Mock())
 
-        # Mock runtime with proper adapter manager structure
-        mock_runtime = Mock()
-        mock_adapter_manager = Mock()
-        mock_adapter_manager._adapters = {}  # Empty dict for iteration
-        mock_runtime.adapter_manager = mock_adapter_manager
+        # Mock runtime — use the centralized MockRuntime which carries the
+        # ciris_verify adapter required by the strict attestation gate added
+        # in 2.7.1. Override `current_shutdown_context` to None so Pydantic
+        # validation downstream sees None (not the default Mock-shaped
+        # ShutdownContext built into MockRuntime).
+        from tests.fixtures.mocks import MockRuntime
+
+        mock_runtime = MockRuntime(include_logging_mocks=False, include_time_service=False)
+        mock_runtime.current_shutdown_context = None
         mock_runtime.bus_manager = Mock()
         mock_runtime.service_registry = Mock()
-        mock_runtime.current_shutdown_context = None  # None, not Mock, for Pydantic validation
+        mock_runtime.service_registry._services = {}
         mock_context_builder.runtime = mock_runtime
 
         # Mock other services needed by batch context
         mock_context_builder.memory_service = AsyncMock()
         mock_context_builder.memory_service.recall = AsyncMock(return_value=[])
         mock_context_builder.secrets_service = None
-        mock_context_builder.service_registry = Mock()
+        # Centralized MockServiceRegistry — carries get_authentication() that
+        # returns an attestation-aware auth service satisfying the post-2.7.1
+        # strict gate. `get_provider_info` etc. are surfaced as Mocks for the
+        # system-snapshot helpers that consume them.
+        from tests.fixtures.mocks import MockServiceRegistry
+
+        mock_context_builder.service_registry = MockServiceRegistry()
         mock_context_builder.service_registry.get_provider_info = Mock(
             return_value={"handlers": {}, "global_services": {}}
         )
@@ -222,6 +235,12 @@ class TestThoughtProcessor:
         mock_conscience_check_result.thought_depth_current = None
         mock_conscience_check_result.thought_depth_max = None
         mock_conscience_check_result.CIRIS_OBSERVATION_UPDATED_STATUS = None  # Used by conscience_execution.py
+        # Conscience prompt fields - must be None or strings, not Mock objects
+        mock_conscience_check_result.entropy_prompt = None
+        mock_conscience_check_result.coherence_prompt = None
+        mock_conscience_check_result.optimization_veto_prompt = None
+        mock_conscience_check_result.epistemic_humility_prompt = None
+        mock_conscience_check_result.replacement_action = None  # Prevents mock from being truthy
         mock_conscience.check = AsyncMock(return_value=mock_conscience_check_result)
 
         # Mock conscience registry entry
@@ -253,7 +272,12 @@ class TestThoughtProcessor:
     @pytest.mark.asyncio
     @pytest.mark.flaky(reruns=2, reruns_delay=1)
     async def test_process_thought(self, thought_processor: ThoughtProcessor, mock_persistence: Mock) -> None:
-        """Test processing a thought."""
+        """Test processing a thought.
+
+        Note: Uses asyncio.wait_for for graceful timeout handling to prevent
+        pytest-xdist worker crashes.
+        """
+        import asyncio
         import logging
 
         logger = logging.getLogger(__name__)
@@ -286,9 +310,14 @@ class TestThoughtProcessor:
         mock_persistence.async_get_thought_by_id.return_value = thought
         logger.info(f"TEST: Set mock_persistence.async_get_thought_by_id.return_value to {thought.thought_id}")
 
-        # Process - the mocks are already set up in the fixture
+        # Process - use asyncio.wait_for for graceful async timeout
         logger.info("TEST: About to call thought_processor.process_thought")
-        result = await thought_processor.process_thought(item)
+        try:
+            result = await asyncio.wait_for(
+                thought_processor.process_thought(item), timeout=10.0  # 10 second timeout for async operation
+            )
+        except asyncio.TimeoutError:
+            pytest.fail("process_thought timed out after 10 seconds - possible async hang")
         logger.info(f"TEST: thought_processor.process_thought completed, result={'present' if result else 'None'}")
 
         assert result is not None
@@ -388,14 +417,32 @@ class TestThoughtProcessor:
         result = await thought_processor.process_thought(item)
 
         assert result is not None
-        # Result is ConscienceApplicationResult, so access final_action.selected_action
-        assert result.final_action.selected_action == HandlerActionType.DEFER
+        # Result is ConscienceApplicationResult.
+        # DMA output side: ASPDMA selected DEFER for this thought.
+        assert result.original_action.selected_action == HandlerActionType.DEFER
+        # Note: as of 2.7.9, DEFER is no longer outer-exempt from consciences —
+        # Coherence/EOV/EpistemicHumility evaluate the defer `reason` for
+        # defensive-mimicry refusal framing. The mocked DEFER reason in this
+        # test ("Waiting for user input") is short and may trigger a conscience
+        # PONDER override, so result.final_action is allowed to differ from
+        # the original DMA selection. This test verifies the DMA-DEFER-routing
+        # path, not conscience pass-through.
+        assert result.final_action.selected_action in (
+            HandlerActionType.DEFER,
+            HandlerActionType.PONDER,
+        )
 
     @pytest.mark.asyncio
     async def test_process_thought_with_error(
         self, thought_processor: ThoughtProcessor, mock_persistence: Mock
     ) -> None:
-        """Test processing a thought that encounters an error."""
+        """Test processing a thought that encounters an error.
+
+        Note: This test has crashed pytest-xdist workers in CI. We use asyncio.wait_for
+        instead of pytest-timeout to ensure graceful async cancellation.
+        """
+        import asyncio
+
         # Create a queue item
         thought = Thought(
             thought_id="test_thought_error",
@@ -420,18 +467,34 @@ class TestThoughtProcessor:
         mock_persistence.async_get_thought_by_id.return_value = thought
         mock_persistence.get_thought_by_id.return_value = thought
 
-        # Mock DMA to raise error
-        thought_processor.dma_orchestrator.run_initial_dmas = AsyncMock(side_effect=DMAFailure("Test error"))
+        # Mock DMA to raise error - use a fresh AsyncMock to avoid state issues
+        error_mock = AsyncMock(side_effect=DMAFailure("Test error"))
+        thought_processor.dma_orchestrator.run_initial_dmas = error_mock
 
         # Process should handle error gracefully
-        result = await thought_processor.process_thought(item)
+        # Use asyncio.wait_for for graceful async timeout (not thread-based pytest-timeout)
+        try:
+            result = await asyncio.wait_for(
+                thought_processor.process_thought(item), timeout=10.0  # 10 second timeout for async operation
+            )
+        except asyncio.TimeoutError:
+            pytest.fail("process_thought timed out after 10 seconds - possible async hang")
+        except Exception as e:
+            # If process_thought doesn't catch the error, fail cleanly
+            pytest.fail(f"process_thought should handle DMAFailure gracefully, but raised: {type(e).__name__}: {e}")
 
         # Should return DEFER result on DMA error (wrapped in ConscienceApplicationResult)
-        assert result is not None
-        assert result.final_action.selected_action == HandlerActionType.DEFER
+        assert result is not None, "process_thought returned None instead of DEFER result"
+        assert (
+            result.final_action.selected_action == HandlerActionType.DEFER
+        ), f"Expected DEFER action on DMA error, got {result.final_action.selected_action}"
         # Check that it's a DeferParams with the expected reason
-        assert isinstance(result.final_action.action_parameters, DeferParams)
-        assert "DMA timeout" in result.final_action.action_parameters.reason
+        assert isinstance(
+            result.final_action.action_parameters, DeferParams
+        ), f"Expected DeferParams, got {type(result.final_action.action_parameters)}"
+        assert (
+            "DMA timeout" in result.final_action.action_parameters.reason
+        ), f"Expected 'DMA timeout' in reason, got: {result.final_action.action_parameters.reason}"
 
     @pytest.mark.asyncio
     async def test_process_thought_with_circuit_breaker(
@@ -839,8 +902,9 @@ class TestTSASPDMAIntegration:
         from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
         from ciris_engine.schemas.actions.parameters import ToolParams
 
-        # Mock tool bus to return None (tool not found)
+        # Mock tool bus to return None (tool not found) and empty tools list
         thought_processor_with_tsaspdma.dependencies.bus_manager.tool.get_tool_info = AsyncMock(return_value=None)
+        thought_processor_with_tsaspdma.dependencies.bus_manager.tool.get_all_tool_info = AsyncMock(return_value=[])
 
         thought_item = ProcessingQueueItem(
             thought_id="test_thought",
@@ -862,7 +926,12 @@ class TestTSASPDMAIntegration:
 
         # Should return PONDER when tool not found
         assert result.selected_action == HandlerActionType.PONDER
-        assert "not available" in result.rationale or "not found" in result.rationale
+        rationale_lower = result.rationale.lower()
+        assert (
+            "not available" in rationale_lower
+            or "not found" in rationale_lower
+            or "no tools available" in rationale_lower
+        )
 
     @pytest.mark.asyncio
     async def test_maybe_run_tsaspdma_handles_evaluator_error(
@@ -928,7 +997,7 @@ class TestTSASPDMAIntegration:
                 thought_item=thought_item,
                 tool_name="test_tool",
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
             )
 
     @pytest.mark.asyncio
@@ -970,7 +1039,7 @@ class TestTSASPDMAIntegration:
                 thought_item=thought_item,
                 tool_name="test_tool",
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
             )
 
             # Should have broadcast the event
@@ -1015,7 +1084,7 @@ class TestTSASPDMAIntegration:
                 thought_item=thought_item,
                 tool_name="test_tool",
                 tsaspdma_result=tsaspdma_result,
-                aspdma_rationale="Test rationale",
+                aspdma_reasoning="Test rationale",
             )
 
             # Verify event was created with correct parameters
@@ -1024,3 +1093,126 @@ class TestTSASPDMAIntegration:
             # Action value comes from enum.value which is lowercase
             assert call_kwargs["final_action"] == "speak"
             assert call_kwargs["final_tool_name"] is None  # Not a TOOL action
+
+
+class TestDSASPDMAIntegration:
+    """Test cases for DSASPDMA integration in ThoughtProcessor."""
+
+    @pytest.fixture
+    def mock_time_service_dsaspdma(self) -> Mock:
+        """Create mock time service."""
+        import itertools
+
+        counter = itertools.count()
+
+        def get_time() -> datetime:
+            base_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+            return base_time.replace(microsecond=next(counter) * 1000)
+
+        mock_service = Mock()
+        mock_service.now = Mock(side_effect=get_time)
+        mock_service.now_iso = Mock(side_effect=lambda: mock_service.now().isoformat())
+        return mock_service
+
+    @pytest.fixture
+    def mock_dependencies_dsaspdma(self) -> Mock:
+        """Create mock handler dependencies."""
+
+        deps = Mock(spec=ActionHandlerDependencies)
+        deps.bus_manager = Mock()
+        return deps
+
+    @pytest.fixture
+    def thought_processor_with_dsaspdma(
+        self,
+        mock_time_service_dsaspdma: Mock,
+        mock_dependencies_dsaspdma: Mock,
+    ) -> ThoughtProcessor:
+        """Create ThoughtProcessor with DSASPDMA evaluator configured."""
+
+        mock_dma_orchestrator = Mock()
+        mock_dma_orchestrator.dsaspdma_evaluator = Mock()
+
+        mock_context_builder = Mock()
+        mock_conscience_registry = Mock()
+        mock_conscience_registry.get_consciences = Mock(return_value=[])
+        mock_conscience_registry.get_bypass_consciences = Mock(return_value=[])
+        mock_conscience_registry.get_normal_consciences = Mock(return_value=[])
+        mock_config = Mock(spec=ConfigAccessor)
+
+        return ThoughtProcessor(
+            dma_orchestrator=mock_dma_orchestrator,
+            context_builder=mock_context_builder,
+            conscience_registry=mock_conscience_registry,
+            app_config=mock_config,
+            dependencies=mock_dependencies_dsaspdma,
+            time_service=mock_time_service_dsaspdma,
+            telemetry_service=None,
+            auth_service=None,
+        )
+
+    @pytest.fixture
+    def dsaspdma_thought_item(self) -> ProcessingQueueItem:
+        """Create a thought item for deferral tests."""
+
+        from ciris_engine.logic.processors.support.processing_queue import ThoughtContent
+
+        return ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=ThoughtContent(text="Please help with a legal contract dispute."),
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_dsaspdma_skips_non_defer_action(
+        self,
+        thought_processor_with_dsaspdma: ThoughtProcessor,
+        dsaspdma_thought_item: ProcessingQueueItem,
+    ) -> None:
+        """Non-DEFER actions should bypass DSASPDMA."""
+
+        speak_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.SPEAK,
+            action_parameters=SpeakParams(content="Hello"),
+            rationale="Test speak",
+        )
+
+        result = await thought_processor_with_dsaspdma._maybe_run_dsaspdma(dsaspdma_thought_item, speak_result)
+        assert result == speak_result
+
+    @pytest.mark.asyncio
+    async def test_maybe_run_dsaspdma_processes_defer_action(
+        self,
+        thought_processor_with_dsaspdma: ThoughtProcessor,
+        dsaspdma_thought_item: ProcessingQueueItem,
+    ) -> None:
+        """DEFER actions should run through DSASPDMA."""
+
+        defer_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.DEFER,
+            action_parameters=DeferParams(reason="Human review is required."),
+            rationale="Initial deferral",
+        )
+
+        with patch("ciris_engine.logic.dma.dma_executor.run_dsaspdma") as mock_run_dsaspdma:
+            enriched_result = ActionSelectionDMAResult(
+                selected_action=HandlerActionType.DEFER,
+                action_parameters=DeferParams(
+                    reason="Licensed legal review is required.",
+                    domain_hint="LEGAL",
+                ),
+                rationale="DSASPDMA: Licensed legal review is required.",
+            )
+            mock_run_dsaspdma.return_value = enriched_result
+
+            result = await thought_processor_with_dsaspdma._maybe_run_dsaspdma(
+                dsaspdma_thought_item,
+                defer_result,
+            )
+
+            assert result == enriched_result
+            mock_run_dsaspdma.assert_awaited_once()

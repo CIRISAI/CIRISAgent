@@ -19,7 +19,7 @@ class AuditActionContext(BaseModel):
     parameters: Dict[str, str] = Field(default_factory=dict, description="Action parameters")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditConscienceResult(BaseModel):
@@ -30,7 +30,7 @@ class AuditConscienceResult(BaseModel):
     modifications: Dict[str, str] = Field(default_factory=dict, description="Suggested modifications")
     risk_level: Optional[str] = Field(None, description="Assessed risk level")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class AuditRequest(BaseModel):
@@ -44,7 +44,7 @@ class AuditRequest(BaseModel):
     details: Dict[str, str] = Field(..., description="Event details")
     outcome: Optional[str] = Field(None, description="Event outcome")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["AuditActionContext", "AuditConscienceResult", "AuditRequest"]

@@ -1,0 +1,506 @@
+"""Structural guards for the five-platform live gate.
+
+This workflow's whole purpose is to be the one job that cannot pass vacuously, so
+the properties that make it non-vacuous deserve guarding at PR time — the job
+itself is nightly and runs on hardware a PR check does not have.
+
+Each assertion below corresponds to a way this gate has already been defeated, in
+this repo, inside a green build:
+
+  * artifacts uploaded unconditionally — a failure you cannot diagnose from the
+    artifact costs a re-run to learn what the first run already knew
+  * fail-fast disabled — killing the matrix on first red destroys the five-way
+    comparison the gallery exists to show
+  * the gallery job runs on failure — the red run is the one worth looking at
+  * a platform that cannot run FAILS rather than being quietly absent — v2.9.42
+    published no APK exactly that way
+"""
+
+from __future__ import annotations
+
+import pathlib
+from typing import Any, Dict, List
+
+import pytest
+
+yaml = pytest.importorskip("yaml")
+
+WORKFLOW = pathlib.Path(__file__).resolve().parents[2] / ".github" / "workflows" / "five-platform-live-qa.yml"
+
+
+@pytest.fixture(scope="module")
+def spec() -> Dict[str, Any]:
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def raw() -> str:
+    return WORKFLOW.read_text(encoding="utf-8")
+
+
+def _steps(job: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return job.get("steps") or []
+
+
+def test_three_runner_images_cover_five_platforms(spec: Dict[str, Any]) -> None:
+    """macOS pairs with iOS, Linux with Android, Windows alone."""
+    include = spec["jobs"]["live-qa"]["strategy"]["matrix"]["include"]
+    # macos-15 carries Xcode 16, which the pbxproj format Homebrew's xcodegen
+    # emits requires; macos-14 (Xcode 15.4) could not open the generated project.
+    assert {e["os"] for e in include} == {"ubuntu-latest", "macos-15", "windows-latest"}
+    covered = " ".join(e["platforms"] for e in include).split()
+    assert sorted(covered) == ["android", "ios", "linux", "macos", "windows"]
+
+
+def test_fail_fast_is_disabled(spec: Dict[str, Any]) -> None:
+    """One red platform must not cancel the other four."""
+    assert spec["jobs"]["live-qa"]["strategy"]["fail-fast"] is False
+
+
+def test_artifacts_upload_even_on_failure(spec: Dict[str, Any]) -> None:
+    """The failing run is the one whose logs matter."""
+    uploads = [s for s in _steps(spec["jobs"]["live-qa"]) if "upload-artifact" in str(s.get("uses", ""))]
+    assert uploads, "the job uploads nothing — a CI failure would be undiagnosable"
+    for step in uploads:
+        assert step.get("if") == "always()", f"{step.get('name', step['uses'])} does not upload on failure"
+
+
+def test_log_collection_runs_on_failure(spec: Dict[str, Any]) -> None:
+    collect = [s for s in _steps(spec["jobs"]["live-qa"]) if "Collect artifacts" in str(s.get("name", ""))]
+    assert collect and collect[0].get("if") == "always()"
+
+
+def test_command_output_is_captured_to_an_uploaded_path(spec: Dict[str, Any], raw: str) -> None:
+    """CIRIS_QA_LOG_DIR must point INSIDE the uploaded artifacts directory.
+
+    Setting it somewhere else would faithfully record everything and then throw
+    it away when the runner is destroyed.
+    """
+    env = spec["jobs"]["live-qa"]["env"]
+    assert "CIRIS_QA_LOG_DIR" in env, "bring-up command output is not being captured"
+    assert "artifacts" in env["CIRIS_QA_LOG_DIR"], "command logs land outside the uploaded path"
+
+
+def test_the_gallery_renders_even_when_platforms_fail(spec: Dict[str, Any]) -> None:
+    gallery = spec["jobs"]["gallery"]
+    assert gallery.get("if") == "always()", "a gallery that only renders on success is useless when it matters"
+    assert gallery.get("needs") == "live-qa"
+
+
+def test_a_platform_that_cannot_run_fails_rather_than_vanishing(raw: str) -> None:
+    """THE VACUOUS-PASS GUARD.
+
+    If the iOS app does not build, the run must go red — not skip silently and
+    leave four tiles that read as five. This is the exact shape of v2.9.42
+    shipping with no APK: not a red tick, an absent artifact.
+    """
+    assert "no simulator .app was built" in raw
+    # `overall=1` on that branch is what makes the job red.
+    ios_skip = raw.split("no simulator .app was built")[1][:200]
+    assert "overall=1" in ios_skip, "iOS skips without failing the job"
+
+
+def test_the_trace_gate_still_runs_and_still_asks_for_replication(raw: str) -> None:
+    """Reaching Interact is half the gate; traces leaving is the other half.
+
+    Enforcement is currently OFF: the `replication` rung sits on the
+    KEX/replication path upstream is rebuilding, so it cannot pass for reasons
+    no change here can fix, and holding five platforms red on someone else's
+    in-flight work trains everyone to ignore the colour.
+
+    What must NOT drift while it is off:
+      * it still runs (a check nobody executes rots silently)
+      * it still asks for `replication`, never `ship` — 'ship' keys on
+        envelopes_sent_total, which is blind to the replication plane
+        (CIRISEdge#434); softening the RUNG rather than the ENFORCEMENT would
+        quietly redefine what "delivered" means
+      * the run still SAYS so — an unenforced check that is also invisible is a
+        vacuous pass with extra steps
+    """
+    assert "assert_traces_reached_canonical.py" in raw
+    assert "--require replication" in raw
+    assert "--require ship" not in raw, (
+        "'ship' keys on envelopes_sent_total, which is blind to the replication "
+        "plane (CIRISEdge#434) — the gate must require 'replication'"
+    )
+    # THE WINDOW IS THE CASE STATEMENT, NOT A CHARACTER COUNT. This used to
+    # slice 600 chars after the invocation, which held until the receipt rung
+    # added its arguments and its own `4)` outcome with a comment explaining
+    # why unknown is not failure — and the `*)` warning fell off the end. A
+    # test that fails because a comment got longer is measuring the wrong
+    # thing: what must not drift is that the branch which CONSUMES the result
+    # says enforcement is off, wherever it sits.
+    after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
+    assert 'case "$trace_status" in' in after, "the result is not dispatched on at all"
+    case_block = after.split('case "$trace_status" in')[1].split("esac")[0]
+    assert "::warning::" in case_block, "the non-enforced result is not surfaced at all"
+    assert "NOT enforced" in case_block, "the log does not say enforcement is off"
+
+
+def test_the_interact_gate_is_still_fatal(raw: str) -> None:
+    """Whatever happens to the trace rung, silence on screen must stay fatal.
+
+    This is the half of the gate that is entirely ours, so it has no excuse to
+    be downgraded alongside the half that is not.
+    """
+    chat = raw.split("web_ui desktop-chat")[1][:700]
+    assert "overall=1" in chat and "interact failed" in chat
+
+
+def test_chat_authenticates_for_the_history_assertion(raw: str) -> None:
+    """desktop-chat reads /v1/agent/history, so it needs credentials.
+
+    Without them the command defaults to `admin`, which this workflow never
+    creates, and every platform fails with 401 raised by the GATE rather than by
+    the product — a red run that says nothing about the app.
+    """
+    chat = raw.split("web_ui desktop-chat")[1][:700]
+    assert "--username" in chat and "--password" in chat
+
+
+def test_headless_is_not_passed_to_mobile_targets(raw: str) -> None:
+    """--headless controls a desktop window; an emulator has its own display."""
+    assert '[ "$target" = "desktop" ] && extra="--headless"' in raw
+
+
+def test_log_collection_cannot_outlive_the_job(raw: str) -> None:
+    """A collect step must never hang.
+
+    `command -v adb` succeeds on GitHub's macOS runners — they ship the Android
+    SDK — and with no device attached adb blocks starting its server. That hung
+    the macos-ios collect step for over an hour, burned the job timeout, and
+    blocked upload-artifact behind it, so the failure it was collecting for could
+    not be diagnosed at all.
+
+    Two independent guards, because either alone is thin: only run it on the
+    runner that actually owns Android, and cap it regardless.
+    """
+    assert "MATRIX_PLATFORMS" in raw, "logcat is not gated on the runner owning android"
+    # Any invocation of logcat: adb resolved by name OR through "$ADB". The
+    # collect step stopped relying on `command -v adb` -- it is not on PATH on
+    # the ubuntu runner, so the guard was false on the one host with a device
+    # and the device log was never collected (run 33704781359).
+    logcat = [ln for ln in raw.splitlines() if "logcat -d" in ln and not ln.strip().startswith("#")]
+    assert logcat, "no logcat collection at all"
+    for line in logcat:
+        assert "timeout " in line, f"adb logcat is not time-capped: {line.strip()}"
+
+
+def test_each_platform_starts_from_a_clean_host(raw: str) -> None:
+    """One runner walks two platforms; the second must not inherit the first.
+
+    macos-ios runs macOS then iOS on one host. With macOS's backend still on
+    :8080 and its test server on :9091, the iOS app cannot bind and every probe
+    lands on the still-running macOS stack — scoring a second desktop
+    interaction as the iOS result. A false green on the platform least likely to
+    be checked by eye.
+    """
+    # Bounded by the step's next structural line, not by a character count: the
+    # rationale comment above the invocation is long and grew when the mechanism
+    # changed, and a fixed window that once held the whole loop now holds only
+    # the comment -- the assertion then failed on a teardown that was present.
+    after = raw.split("TEAR DOWN THE PREVIOUS PLATFORM FIRST")[1]
+    teardown = after[: after.find("export CIRIS_HOME")] if "export CIRIS_HOME" in after else after[:2000]
+    # The teardown must PROVE the ports free, not merely try to kill something.
+    # The lsof loop this replaced checked nothing on Windows (no lsof in Git
+    # Bash, every probe fell into `|| true`) and printed "free" regardless —
+    # run #34147279506 booted the next backend into EADDRINUSE behind that line.
+    # free_ports.py finds holders per platform and then binds the port, which no
+    # missing tool can answer wrongly. Asserting the tool by name is asserting
+    # that property; asserting lsof is absent is asserting the regression stays
+    # out.
+    assert "free_ports.py" in teardown, "no per-platform teardown (free_ports.py not invoked)"
+    assert "lsof -ti" not in teardown, "teardown regressed to lsof, which is absent on Windows"
+    for port in ("8080", "9091"):
+        assert port in teardown, f"teardown does not clear :{port}"
+
+
+def test_the_trace_rung_has_three_outcomes(raw: str) -> None:
+    """Unknown must not be recorded as delivered.
+
+    Exit 3 (CIRISServer#518: no replication counter on this substrate) once ran
+    the success branch, so chat-*.json said "traces": true and the gallery
+    claimed delivery for a run whose own output said NOT COVERED.
+    """
+    assert "trace_status" in raw
+    assert "traces_json=null" in raw, "the unobservable case is not recorded distinctly"
+    assert "traces_json=true" in raw and "traces_json=false" in raw
+
+
+def test_android_provisioning_asserts_the_avd_exists(raw: str) -> None:
+    """Installing the emulator is not the same as having an AVD.
+
+    The first version checked `test -x emulator`, then ran `-list-avds` without
+    reading the result — so an empty list passed as success and reappeared two
+    steps later as "no AVDs configured", a message about bring-up for a fault in
+    provisioning. A check whose output nobody reads is not a check.
+    """
+    step = raw.split("Install the Android emulator")[1]
+    step = step[: step.find("- name:")] if "- name:" in step else step
+    assert 'grep -qx "ciris_qa"' in step, "the AVD list is not actually asserted"
+    assert "ANDROID_AVD_HOME" in step, "the AVD home is left to inference"
+
+
+def test_both_steps_agree_on_the_avd_home(raw: str) -> None:
+    """avdmanager and the emulator resolve the AVD list independently.
+
+    They agreed only by luck before, and stopped agreeing on the runner: the AVD
+    was created somewhere the emulator did not look.
+    """
+    assert raw.count('export ANDROID_AVD_HOME="$HOME/.android/avd"') == 2
+
+
+def test_android_gets_its_client_aar(raw: str) -> None:
+    """The APK links against the published client, same as iOS links the xcframework.
+
+    apps/settings.gradle.kts resolves it from a flatDir at android/libs, and only
+    fetch_client_artifacts puts it there. Only the iOS half was fetched, so the
+    android build had nothing to link against.
+    """
+    assert "fetch_client_artifacts.py --platform android" in raw
+
+
+def test_the_holder_assertion_queries_where_each_platform_writes(raw: str) -> None:
+    """$CIRIS_HOME/data is the DESKTOP store only.
+
+    Android and iOS embed their own backend and write inside the device or
+    simulator sandbox. Pointing this at the host path for every target made the
+    assertion return 2 (no database) on every mobile run and set overall=1 — so
+    android and iOS could not pass no matter how well the interaction went. A
+    check that cannot succeed is not a gate, it is a permanent red light.
+    """
+    block = raw.split("assert_one_holder_per_identity.py")[0]
+    # The per-platform store resolution now sits behind the on-device LOG pulls
+    # (files/ciris/logs for Android via the same run-as; the app container for
+    # iOS), which are longer than the DB pulls they follow. The window is sized
+    # to hold both; the invariant is unchanged.
+    tail = block[-6000:]
+    assert "simctl get_app_container" in tail, "iOS store is not resolved from the simulator sandbox"
+    assert "run-as" in tail, "android store is not pulled from the device"
+    assert (
+        "NOT COVERED" in raw.split("assert_one_holder_per_identity.py")[1][:600]
+    ), "an unreachable store must report NOT COVERED, not a failure"
+
+
+def test_chaquopy_gets_its_python_without_hijacking_the_runner(raw: str) -> None:
+    """The APK build needs 3.10; the QA runner needs 3.12.
+
+    apps/android/build.gradle pins buildPython to /usr/bin/python3.10, which the
+    runner does not have — the APK build failed there after the emulator had
+    booted. build.yml's android-release job already provisions it this way.
+
+    `update-environment: false` is load-bearing: letting setup-python prepend
+    3.10 to PATH would swap the interpreter the wheel was installed for, fixing
+    the APK build by breaking everything after it.
+    """
+    assert "/usr/bin/python3.10" in raw
+    step = raw.split("Set up Python 3.10 for Chaquopy")[1][:600]
+    assert "update-environment: false" in step, "3.10 would replace the runner's 3.12"
+
+
+def test_every_stage_asks_for_a_screenshot(raw: str) -> None:
+    """The capture wrapper runs whatever the exit code, but only when asked.
+
+    Only desktop-chat asked, so a platform that died in setup produced no
+    screenshot at all -- Android, every run -- and the failing screen had to
+    be reconstructed from a testTag dump. Each stage names its own file so a
+    setup failure is visible as a picture, not inferred.
+    """
+    lines = raw.splitlines()
+    blocks: dict[str, str] = {}
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        if "python -m tools.qa_runner.modules.web_ui desktop-" in ln:
+            cmd = ln.split("web_ui ", 1)[1].split()[0]
+            block = [ln]
+            while block[-1].rstrip().endswith("\\") and i + 1 < len(lines):
+                i += 1
+                block.append(lines[i])
+            blocks[cmd] = "\n".join(block)
+        i += 1
+    assert set(blocks) >= {"desktop-setup", "desktop-login", "desktop-chat"}, sorted(blocks)
+    for cmd, block in blocks.items():
+        assert "--screenshot-on-success" in block, f"{cmd} runs without a screenshot"
+
+
+# --- the run-without-AI pass (CIRISAgent#1149) --------------------------------
+
+
+def _shared_flow_block() -> str:
+    """The run: block that drives every platform through the shared flow."""
+    import yaml
+
+    doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    for job in doc["jobs"].values():
+        for step in _steps(job):
+            run = step.get("run", "")
+            if "desktop-reset" in run:
+                return str(run)
+    raise AssertionError("no step drives desktop-reset — the run-without-AI pass is missing")
+
+
+def test_the_gate_drives_both_answers_to_the_ai_question() -> None:
+    """CI drove only the with-AI shape; the product has two."""
+    block = _shared_flow_block()
+    assert "--run-without-ai" in block, "the without-AI answer is never exercised"
+    assert block.count("desktop-setup") >= 2, "both passes must run the wizard"
+
+
+def test_the_no_ai_pass_comes_first_and_is_reset_before_the_with_ai_pass() -> None:
+    """Order is the whole point: no-AI, prove Interact, reset, then the normal flow."""
+    lines = _shared_flow_block().splitlines()
+
+    def line_of(needle: str) -> int:
+        return next(i for i, l in enumerate(lines) if needle in l)
+
+    # `$llm_args` is the with-AI pass: it is the only place a provider and key
+    # are handed to the wizard.
+    noai = line_of("--run-without-ai")
+    reset = line_of("web_ui desktop-reset")
+    with_ai = line_of("$llm_args")
+    assert (
+        noai < reset < with_ai
+    ), f"the reset must separate the two passes (no-AI at {noai}, reset at {reset}, with-AI at {with_ai})"
+
+
+def test_the_reset_goes_through_the_client_not_the_filesystem() -> None:
+    """factoryReset() is what deletes the .env, and the .env holds CIRIS_RUN_WITHOUT_AI."""
+    block = _shared_flow_block()
+    reset_line = next(l for l in block.splitlines() if "desktop-reset" in l)
+    assert "rm " not in reset_line and "del " not in reset_line
+    assert "web_ui desktop-reset" in reset_line
+
+
+def test_the_node_ports_are_reaped_between_passes() -> None:
+    """A node-only backend holds 4242/4243; the agent's fold binds 4243 next (#1101/#1102)."""
+    block = _shared_flow_block()
+    assert "4242 4243" in block, "the node's ports are never freed, so the with-AI pass hits EADDRINUSE"
+
+
+def test_every_no_ai_phase_names_itself_to_the_diagnoser() -> None:
+    """A red must say which pass it came from, not just 'setup failed'."""
+    block = _shared_flow_block()
+    for phase in ("setup-noai", "login-noai", "reset"):
+        assert f"--phase {phase}" in block, f"phase {phase} is not distinguishable in the diagnosis"
+
+
+def test_the_gate_waits_for_the_node_ports_rather_than_sleeping() -> None:
+    """A `sleep 3` let macOS boot into EADDRINUSE — the port being free is observable (#1102)."""
+    block = _shared_flow_block()
+    assert "ports still held after" in block, "nothing reports ports that never free"
+    reset_at = next(i for i, l in enumerate(block.splitlines()) if "web_ui desktop-reset" in l)
+    tail = "\n".join(block.splitlines()[reset_at:])
+    assert "sleep 3\n" not in tail, "the post-reset wait is time-based again"
+    # OBSERVE, DO NOT GUESS -- and observe by the one method no missing tool can
+    # fake. The lsof loop this once asserted printed "free after 2s" on Windows
+    # having probed nothing (no lsof in Git Bash; run #34147279506 then booted
+    # into os error 10048). free_ports.py proves a port free by BINDING it and
+    # bounds the wait with --timeout, so the property is asserted by naming the
+    # tool and its bound, and the regression is kept out by name.
+    assert "free_ports.py" in tail and "--timeout" in tail, "the wait must observe the ports (bind test), not guess"
+    assert "lsof -ti" not in tail, "the wait regressed to lsof, which is absent on Windows"
+
+
+# ---- CIRISAgent#1158 review (Codex) --------------------------------------------
+
+
+def test_a_listener_that_survives_teardown_fails_the_leg(raw: str) -> None:
+    """free_ports.py is the proof the platform starts clean; `|| true` after it
+    would let the next app boot into EADDRINUSE or probe a stale backend green."""
+    i = raw.find("--label teardown")
+    assert i > 0
+    line = raw[raw.rfind("\n", 0, i) : raw.find("\n", i)]
+    assert "|| true" not in line, "the teardown's verdict is discarded"
+    assert "if ! python3 tools/dev/free_ports.py" in line
+    after = raw[i : i + 600]
+    assert "overall=1" in after and "continue" in after, "a survived listener must fail and skip the platform"
+
+
+def test_the_csd_flows_run_on_the_logged_in_client(raw: str) -> None:
+    """check_csd.py proves documents and flows agree; the gate must RUN them
+    (FSD/CSD_STANDARD.md) and fail the leg when a flow does not hold."""
+    i = raw.find("modules.web_ui flow")
+    assert i > 0, "the CSD flow runner is not invoked by the gate"
+    block = raw[i : i + 900]
+    assert "--spec tools/qa_runner/flows" in block and "--artifacts artifacts" in block
+    assert '[ "$flow_rc" = 1 ]' in block and "overall=1" in block, "a flow that ran and failed must fail the leg"
+    assert "::warning::" in block, "a flow that cannot start on this client is reported, not silently green"
+
+
+def test_a_preview_reinstall_is_skipped_where_nothing_was_vendored(raw: str) -> None:
+    """A subset dispatch boots every runner; the one with no requested platform
+    vendors nothing and must not fail expanding an empty clientwheel/ glob."""
+    i = raw.find("--force-reinstall --no-deps")
+    assert i > 0
+    around = raw[i - 600 : i + 200]
+    assert 'if [ -n "$preview_wheel" ]' in around, "the reinstall must be guarded on a vendored wheel"
+
+
+def test_ios_reset_cleanup_frees_the_automation_port(raw: str) -> None:
+    """The reset relaunches the simulator app, whose :9091 test server binds
+    first; the next --launch refuses while :9091 has an owner (Codex P2)."""
+    i = raw.find("--label post-reset")
+    assert i > 0
+    before = raw[i - 700 : i]
+    assert 'reset_ports="4242 4243 8080"' in before
+    assert '[ "$target" = "ios" ] && reset_ports="$reset_ports 9091"' in before
+
+
+def test_the_per_platform_script_is_plain_text(spec: Dict[str, Any]) -> None:
+    """A `run:` body containing `${{ }}` is one expression, capped at 21000
+    characters by GitHub; crossing it invalidates the whole file and the only
+    symptom is a push-event run with no jobs (9293c53a9). Keep the big script
+    expression-free: matrix/inputs reach it through `env:`."""
+    for job in spec["jobs"].values():
+        for step in _steps(job):
+            if step.get("id") == "qa":
+                assert "${{" not in step["run"], "the per-platform script must not contain expressions"
+                assert "MATRIX_PLATFORMS" in (step.get("env") or {})
+                return
+    raise AssertionError("the qa step is missing")
+
+
+def test_simulator_crash_reports_are_collected(raw: str) -> None:
+    """An iOS SIGABRT is one launchd line in oslog; the reason lives in the .ips
+    report under DiagnosticReports (CIRISClient#50 was filed without it)."""
+    i = raw.find("mkdir -p artifacts/cmdlogs/ios-crashes")
+    assert i > 0, "the collect step does not gather simulator crash reports"
+    around = raw[i : i + 1800]
+    assert "Library/Logs/DiagnosticReports" in around
+    assert "ios-crashes" in around and "*.ips" in around
+    # The APP's report is inside the simulator container; the host directory alone
+    # collected only xcodebuild's own abort (run 34283596992).
+    assert "CoreSimulator/Devices" in around, "the simulator device containers are not searched"
+    assert "naming the app" in around, "the count must distinguish the app's crash from a host crash"
+    assert "if: always()" in raw[raw.rfind("- name: Collect artifacts", 0, i) : i], "collection must run on failure too"
+
+
+def test_the_no_ai_login_leg_declares_the_install_it_drives(raw: str) -> None:
+    """`homeScreen(hasAgent)` lands a run-without-AI install on the NODE surface
+    (Contacts), not Interact — the client's deliberate design. The login leg must
+    say which install it is driving so it asserts the right home; asserting the
+    agent home on a node cost run 34296932220 (CIRISClient#48)."""
+    i = raw.find("$plat-login-noai.png")
+    assert i > 0
+    block = raw[i - 500 : i]
+    assert "desktop-login" in block and "--run-without-ai" in block
+    # ...and the with-AI leg must NOT claim it, or it would accept the node home.
+    j = raw.find("$plat-login.png")
+    assert j > 0
+    assert "--run-without-ai" not in raw[j - 500 : j]
+
+
+def test_authored_traces_are_enforced(raw: str) -> None:
+    """authored > 0 is FATAL (exit 5 sets overall=1); delivery itself stays reported-only.
+
+    2026-10-09..14 every platform authored 0 traces and the job stayed green.
+    """
+    after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
+    invocation = after.split("trace_status=$?")[0]
+    assert "--require-authored" in invocation, "the authored rung is not requested"
+    case_block = after.split('case "$trace_status" in')[1].split("esac")[0]
+    five = case_block.split("5)")[1].split(";;")[0]
+    assert "overall=1" in five, "authored=0 does not fail the job"
+    star = case_block.split("*)")[1].split(";;")[0]
+    assert "overall=1" not in star, "delivery must stay reported-only while upstream KEX is in flight"

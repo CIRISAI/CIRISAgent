@@ -3,8 +3,11 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
-from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_api_channel, parse_iso_timestamp
+from ciris_engine.logic.infrastructure.handlers.shared_helpers import parse_iso_timestamp
+from ciris_engine.logic.utils.halt_latch import running_exempt_under_halt
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.schemas.actions import DeferParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
@@ -16,16 +19,14 @@ logger = logging.getLogger(__name__)
 
 
 class DeferHandler(BaseActionHandler):
-    async def _get_task_scheduler_service(self) -> Optional[Any]:
-        """Get task scheduler service from registry."""
-        try:
-            if hasattr(self, "_service_registry") and self._service_registry:
-                return await self._service_registry.get_service(handler="task_scheduler", service_type="scheduler")
-            else:
-                logger.debug("No _service_registry available for task scheduler lookup")
-        except Exception as e:
-            logger.warning(f"Could not get task scheduler service: {e}")
-        return None
+    def _get_task_scheduler_service(self) -> Optional[Any]:
+        """Get task scheduler service from dependencies."""
+        service = self.dependencies.task_scheduler_service
+        if service:
+            logger.info(f"Got TaskSchedulerService from dependencies: {type(service).__name__}")
+        else:
+            logger.warning("TaskSchedulerService not available in handler dependencies")
+        return service
 
     async def handle(
         self,
@@ -58,8 +59,14 @@ class DeferHandler(BaseActionHandler):
             )
             await self._send_error_deferral(thought, dispatch_context)
 
-        # Update thought and task status
-        persistence.update_thought_status(thought_id=thought_id, status=ThoughtStatus.DEFERRED, final_action=result)
+        # Update thought and task status (in the thought's own occurrence —
+        # wakeup step thoughts live on the claiming occurrence, not "default").
+        persistence.update_thought_status(
+            thought_id=thought_id,
+            status=ThoughtStatus.DEFERRED,
+            occurrence_id=thought.agent_occurrence_id,
+            final_action=result,
+        )
         self.logger.info(f"Updated thought {thought_id} to DEFERRED. Info: {follow_up_info}")
 
         self._mark_task_deferred(thought)
@@ -68,17 +75,46 @@ class DeferHandler(BaseActionHandler):
 
     def _parse_defer_params(self, raw_params: Any) -> DeferParams:
         """Parse raw parameters into DeferParams."""
-        if isinstance(raw_params, DeferParams):
-            return raw_params
-        if hasattr(raw_params, "model_dump"):
-            return DeferParams(**raw_params.model_dump())
-        raise ValueError(f"Expected DeferParams but got {type(raw_params)}")
+        return self._validate_and_convert_params(raw_params, DeferParams)
 
     async def _schedule_time_based_deferral(
         self, defer_params: DeferParams, thought: Thought, follow_up_info: str
     ) -> str:
-        """Schedule a time-based deferral. Returns updated follow_up_info."""
-        scheduler_service = await self._get_task_scheduler_service()
+        """Schedule a time-based deferral. Returns updated follow_up_info.
+
+        A deferral that is *waiting on a human approval* never gets a timer
+        (NULLWORKS RC3, F2). See the guard below.
+        """
+        # An approval-required deferral is not timer-resumable. The approval gate
+        # builds its deferral with `defer_until=None` for exactly this reason
+        # (`tool_approval.build_approval_deferral`), but these `DeferParams` can
+        # also come straight from the model, which is free to set BOTH a
+        # pending-approval context and a `defer_until`. Arming a timer for one
+        # would assert, in the scheduler, that the passage of time is a route
+        # back to this work — the reconsideration/execution conflation F2 is
+        # about — and would leave a scheduled row whose only apparent purpose is
+        # to resume something a human has not answered.
+        #
+        # This is defence in depth, not the load-bearing control: even with a
+        # timer, the re-run task holds no approval envelope, so
+        # `ThoughtProcessor._enforce_tool_approval` denies the tool and defers
+        # again. What the guard buys is that the *state* is honest — nothing in
+        # the system is scheduled to bring approval-required work back on its own.
+        pending_tool = pending_tool_from_deferral_context(defer_params.context)
+        if pending_tool:
+            logger.info(
+                "DEFER %s awaits wise-authority approval of tool '%s' — no reactivation timer "
+                "armed (requested defer_until=%s). Only an affirmative resolution resumes this work.",
+                thought.thought_id,
+                pending_tool,
+                defer_params.defer_until,
+            )
+            return (
+                f"Deferred thought {thought.thought_id} pending wise-authority approval of tool "
+                f"'{pending_tool}'; no reactivation timer armed. Reason: {defer_params.reason}"
+            )
+
+        scheduler_service = self._get_task_scheduler_service()
         if not scheduler_service:
             return follow_up_info
 
@@ -105,8 +141,8 @@ class DeferHandler(BaseActionHandler):
                 f"Deferred thought {thought.thought_id} until {defer_params.defer_until} "
                 f"({hours}h {minutes}m from now). Reason: {defer_params.reason}"
             )
-        except Exception as e:
-            logger.error(f"Failed to schedule deferred task: {e}")
+        except Exception:
+            logger.exception("Failed to schedule deferred task")
             return follow_up_info
 
     async def _send_deferral_to_wa(
@@ -114,7 +150,7 @@ class DeferHandler(BaseActionHandler):
     ) -> bool:
         """Send deferral to Wise Authority. Returns success status."""
         try:
-            metadata = self._build_deferral_metadata(thought, dispatch_context)
+            metadata = self._build_deferral_metadata(thought, dispatch_context, defer_params)
 
             defer_until_dt = None
             if defer_params.defer_until:
@@ -126,6 +162,11 @@ class DeferHandler(BaseActionHandler):
                 reason=defer_params.reason,
                 defer_until=defer_until_dt,
                 priority=getattr(defer_params, "priority", "medium"),
+                domain_hint=defer_params.domain_hint,
+                reason_code=defer_params.reason_code,
+                needs_category=defer_params.needs_category,
+                secondary_needs_categories=defer_params.secondary_needs_categories,
+                rights_basis=defer_params.rights_basis,
                 metadata=metadata,
             )
 
@@ -145,12 +186,21 @@ class DeferHandler(BaseActionHandler):
             self.logger.error(f"WiseAuthorityService deferral failed for thought {thought.thought_id}: {e}")
             return False
 
-    def _build_deferral_metadata(self, thought: Thought, dispatch_context: DispatchContext) -> Dict[str, str]:
+    def _build_deferral_metadata(
+        self,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        defer_params: Optional[DeferParams] = None,
+    ) -> Dict[str, str]:
         """Build metadata dict for deferral context."""
         metadata = {
             "attempted_action": getattr(dispatch_context, "attempted_action", "unknown"),
             "max_rounds_reached": str(getattr(dispatch_context, "max_rounds_reached", False)),
         }
+
+        if defer_params is not None:
+            self._add_taxonomy_metadata(metadata, defer_params)
+            self._add_context_metadata(metadata, defer_params.context)
 
         if thought.source_task_id:
             task = persistence.get_task_by_id(thought.source_task_id)
@@ -158,6 +208,32 @@ class DeferHandler(BaseActionHandler):
                 metadata["task_description"] = task.description
 
         return metadata
+
+    def _add_taxonomy_metadata(self, metadata: Dict[str, str], defer_params: DeferParams) -> None:
+        """Add structured taxonomy fields to deferral metadata."""
+        if defer_params.reason_code is not None:
+            metadata["reason_code"] = defer_params.reason_code.value
+        if defer_params.needs_category is not None:
+            metadata["needs_category"] = defer_params.needs_category.value
+        if defer_params.secondary_needs_categories:
+            metadata["secondary_needs_categories"] = ",".join(
+                category.value for category in defer_params.secondary_needs_categories
+            )
+        if defer_params.rights_basis:
+            metadata["rights_basis"] = ",".join(defer_params.rights_basis)
+        if defer_params.domain_hint is not None:
+            metadata["domain_hint"] = defer_params.domain_hint.value
+
+    def _add_context_metadata(self, metadata: Dict[str, str], context: Optional[Dict[str, Any]]) -> None:
+        """Add ad hoc deferral context values to metadata."""
+        for key, value in (context or {}).items():
+            metadata[key] = self._stringify_metadata_value(value)
+
+    def _stringify_metadata_value(self, value: Any) -> str:
+        """Serialize context metadata values into strings for DeferralContext."""
+        if isinstance(value, list):
+            return ",".join(str(item) for item in value)
+        return str(value)
 
     async def _send_error_deferral(self, thought: Thought, dispatch_context: DispatchContext) -> None:
         """Send deferral with parameter error context."""
@@ -184,24 +260,53 @@ class DeferHandler(BaseActionHandler):
             self.logger.error(f"Fallback deferral submission failed for thought {thought.thought_id}: {e}")
 
     def _mark_task_deferred(self, thought: Thought) -> None:
-        """Mark parent task as deferred and send notification."""
+        """Mark parent task as deferred and notify the channel.
+
+        The notification is sent for ANY channel (not just `api_*`). Downstream
+        send_message routing handles whether a waiter exists — this ensures
+        synchronous interact() callers receive a DEFER notification instead of
+        hanging on an unanswered SPEAK until timeout. The deferral reason is
+        intentionally NOT surfaced to the user (it's for WA review only).
+        """
         parent_task_id = thought.source_task_id
-        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, "default", self.time_service)
+        # Resolve the task's real occurrence — a hard-coded "default" silently
+        # fails to mark tasks owned by other occurrences (#934 chain hygiene).
+        task = persistence.get_task_by_id_any_occurrence(parent_task_id)
+        occurrence_id = task.agent_occurrence_id if task else thought.agent_occurrence_id
+        persistence.update_task_status(parent_task_id, TaskStatus.DEFERRED, occurrence_id)
         self.logger.info(f"Marked parent task {parent_task_id} as DEFERRED due to child thought deferral.")
 
-        # Send notification to API channels
-        task = persistence.get_task_by_id(parent_task_id)
-        if task and task.channel_id and is_api_channel(task.channel_id):
-            self.logger.info(f"Sending deferral notification to API channel {task.channel_id}")
-            # Use event loop to schedule the notification
-            import asyncio
+        if not task or not task.channel_id:
+            return
 
-            # Store task reference to prevent garbage collection before completion
-            notification_task = asyncio.create_task(
-                self._send_notification(
-                    task.channel_id,
-                    "The agent chose to defer, check the wise authority panel if you are the setup user",
-                )
+        # Under a standing constitutional halt only the deferral WRITE is exempt
+        # (CC 4.2.1.1). The channel notice is the agent speaking, and is not.
+        if running_exempt_under_halt() is not None:
+            self.logger.info(f"Accord halt: deferral recorded; channel notice to {task.channel_id} withheld")
+            return
+
+        # Localize the defer notification. Task.preferred_language is the
+        # record of truth (mirrored on context.preferred_language per
+        # schemas/runtime/models.py:106). Fall back to the env-level
+        # CIRIS_PREFERRED_LANGUAGE for tasks that pre-date the field or
+        # are system-internal. The criterion that caught this (am
+        # mh_v4_q07 U9 script_detection) is correct — the English
+        # notification fails the Amharic-script check; the fix is to
+        # ship the notification in the user's own language.
+        task_lang = getattr(task, "preferred_language", None) or get_preferred_language()
+        notification_body = get_string(
+            task_lang,
+            "agent.defer_check_panel",
+            default="The agent chose to defer, check the wise authority panel if you are the setup user",
+        )
+
+        self.logger.info(f"Sending deferral notification to channel {task.channel_id} (lang={task_lang})")
+        import asyncio
+
+        notification_task = asyncio.create_task(
+            self._send_notification(
+                task.channel_id,
+                notification_body,
             )
-            # Add done callback to handle any exceptions
-            notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)
+        )
+        notification_task.add_done_callback(lambda t: t.exception() if t.done() and not t.cancelled() else None)

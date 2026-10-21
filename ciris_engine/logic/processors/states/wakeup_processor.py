@@ -11,7 +11,7 @@ from ciris_engine.logic import persistence
 from ciris_engine.logic.persistence.models import get_identity_for_context
 from ciris_engine.logic.processors.core.base_processor import BaseProcessor
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
-from ciris_engine.logic.utils.jsondict_helpers import get_list, get_str
+from ciris_engine.logic.utils.jsondict_helpers import get_int, get_list, get_str
 from ciris_engine.logic.utils.task_thought_factory import create_task
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -222,16 +222,85 @@ class WakeupProcessor(BaseProcessor):
         if result.get("status") == "failed":
             errors = 1  # At least one error if status is failed
             if "steps_status" in result:
-                # Count actual number of failed tasks - use get_list to type narrow
+                # Count actual number of failed tasks - use get_list to type narrow.
+                # "missing" (row vanished) is a failure too (#934); floor at 1 so a
+                # failed sequence never reports zero errors.
                 steps_status = get_list(result, "steps_status", [])
-                errors = sum(1 for s in steps_status if isinstance(s, dict) and get_str(s, "status", "") == "failed")
+                errors = max(
+                    1,
+                    sum(
+                        1
+                        for s in steps_status
+                        if isinstance(s, dict) and get_str(s, "status", "") in ("failed", "missing")
+                    ),
+                )
+
+        processed = result.get("processed_thoughts", 0)
+        # `result` is a JSONDict, so `processed` is a union; get_int narrows it
+        # the way the rest of this module already does.
+        self._note_wakeup_progress(round_number, get_int(result, "processed_thoughts", 0))
 
         return WakeupResult(
-            thoughts_processed=result.get("processed_thoughts", 0),
+            thoughts_processed=processed,
             wakeup_complete=result.get("wakeup_complete", False),
             errors=errors,
             duration_seconds=duration,
         )
+
+    #: Rounds of zero progress before the stall is called out. At ~5s a round
+    #: this is a couple of minutes — long enough not to trip on a slow first
+    #: LLM call, short enough that nobody waits 22 hours to learn something is
+    #: wrong.
+    _STALL_ROUNDS = 30
+
+    def _note_wakeup_progress(self, round_number: int, processed_thoughts: int) -> None:
+        """Say something when WAKEUP stops getting anywhere (CIRISAgent#1069).
+
+        Observed in production: an agent at round 15,938 — one round every ~5s
+        for its entire 22-hour uptime — each round finding 0 PENDING thoughts
+        and processing none of them, never reaching WORK. Nothing in the log
+        said anything was wrong, because nothing was ERRORing: the loop was
+        working exactly as written, on a sequence that could never finish.
+
+        `_check_all_steps_complete` requires every step task to be COMPLETED. A
+        step left in any other status with no thoughts to drive it can never get
+        there, so the processor repeats forever. One way in is a stale ACTIVE
+        wakeup task that could not be deleted at boot (#1070).
+
+        This does not change the outcome — it makes the deadlock legible, naming
+        the steps that are blocking and what state they are actually in. Whether
+        a stalled wakeup should be force-failed rather than spun on is a
+        behavioural decision, deliberately not taken here.
+        """
+        if processed_thoughts > 0:
+            self._stall_rounds = 0
+            self._stall_reported = False
+            return
+
+        self._stall_rounds = getattr(self, "_stall_rounds", 0) + 1
+        if self._stall_rounds < self._STALL_ROUNDS or getattr(self, "_stall_reported", False):
+            return
+
+        blocking = []
+        for step_task in (self.wakeup_tasks or [])[1:]:
+            try:
+                cur = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
+            except Exception:  # pragma: no cover - diagnostics must not raise
+                cur = None
+            status = cur.status.value if cur and hasattr(cur.status, "value") else ("missing" if not cur else str(cur.status))
+            if not cur or cur.status != TaskStatus.COMPLETED:
+                blocking.append(f"{step_task.task_id}={status}")
+
+        logger.error(
+            "WAKEUP IS NOT PROGRESSING: %d consecutive rounds processed 0 thoughts (round %d). "
+            "The sequence completes only when EVERY step task reaches COMPLETED, and these have not: %s. "
+            "The agent will keep repeating this round and will not reach WORK. "
+            "A stale ACTIVE wakeup task that failed to delete at boot (#1070) is one known cause.",
+            self._stall_rounds,
+            round_number,
+            ", ".join(blocking) or "<no step tasks recorded — the sequence was never created>",
+        )
+        self._stall_reported = True
 
     async def _process_wakeup(self, round_number: int, non_blocking: bool = False) -> JSONDict:
         """
@@ -304,7 +373,7 @@ class WakeupProcessor(BaseProcessor):
                     current_root = persistence.get_task_by_id(root_task.task_id, root_task.agent_occurrence_id)
                     if current_root and current_root.status == TaskStatus.COMPLETED:
                         self.wakeup_complete = True
-                        logger.info("✓ Shared wakeup task completed by claiming occurrence")
+                        logger.info("[OK] Shared wakeup task completed by claiming occurrence")
                         return {
                             "status": "completed",
                             "wakeup_complete": True,
@@ -315,7 +384,7 @@ class WakeupProcessor(BaseProcessor):
                         }
                     elif current_root and current_root.status == TaskStatus.FAILED:
                         self.wakeup_complete = False
-                        logger.error("✗ Shared wakeup task failed")
+                        logger.error("[FAIL] Shared wakeup task failed")
                         return {
                             "status": "failed",
                             "wakeup_complete": False,
@@ -337,15 +406,25 @@ class WakeupProcessor(BaseProcessor):
                             "processed_thoughts": False,
                         }
 
-                # We have step tasks, so we're the claiming occurrence
+                # We have step tasks, so we're the claiming occurrence.
+                # A step whose DB row has VANISHED ("missing") can never
+                # complete — treating it as in-progress left the processor
+                # spinning empty rounds forever while reporting healthy
+                # (#934: ~933k rounds over 55 days). Fail the sequence
+                # loudly instead, naming the broken step(s).
                 all_complete = all(s["status"] == "completed" for s in steps_status)
-                any_failed = any(s["status"] == "failed" for s in steps_status)
+                any_failed = any(s["status"] in ("failed", "missing") for s in steps_status)
 
                 if any_failed:
-                    # If any task failed, mark wakeup as failed
+                    # If any task failed or vanished, mark wakeup as failed
                     self.wakeup_complete = False
                     self._mark_root_task_failed()
-                    logger.error("✗ Wakeup sequence failed - one or more tasks failed!")
+                    broken_steps = ", ".join(
+                        f"{s['type']} ({s['task_id']}: {s['status']})"
+                        for s in steps_status
+                        if s["status"] in ("failed", "missing")
+                    )
+                    logger.error(f"[FAIL] Wakeup sequence failed - steps failed or missing: {broken_steps}")
                     return {
                         "status": "failed",
                         "wakeup_complete": False,
@@ -358,7 +437,7 @@ class WakeupProcessor(BaseProcessor):
                 elif all_complete:
                     self.wakeup_complete = True
                     self._mark_root_task_complete()
-                    logger.info("✓ Wakeup sequence completed successfully!")
+                    logger.info("[OK] Wakeup sequence completed successfully!")
 
                 return {
                     "status": "completed" if all_complete else "in_progress",
@@ -420,12 +499,37 @@ class WakeupProcessor(BaseProcessor):
                     logger.debug(f"Found existing thought {thought.thought_id} for processing")
 
     def _check_all_steps_complete(self) -> bool:
-        """Check if all wakeup steps are complete without blocking."""
+        """Check if all wakeup steps are complete without blocking.
+
+        A REJECTED step keeps the agent in WAKEUP — deliberately, and loudly
+        (#1069 / #1077). It already did so before this change, but only as a
+        side effect of not being COMPLETED, which is the same branch a step that
+        has not run yet takes. Those two are not the same thing: one resolves by
+        waiting and one never will, and the log said `debug` for both.
+
+        Rejection is an ANSWER. An agent that declined to affirm its own identity
+        has not failed to finish waking up; it finished, and the answer was no.
+        Entering WORK anyway would mean acting on an authorisation it explicitly
+        withheld, so the refusal is the correct behaviour — it just has to be a
+        decision the code makes on purpose rather than one it falls into.
+        """
         if not self.wakeup_tasks or len(self.wakeup_tasks) < 2:
             return False
 
         for step_task in self.wakeup_tasks[1:]:
             current_task = persistence.get_task_by_id(step_task.task_id, step_task.agent_occurrence_id)
+            if current_task and current_task.status == TaskStatus.REJECTED:
+                if not getattr(self, "_rejection_reported", False):
+                    self._rejection_reported = True
+                    logger.error(
+                        "WAKEUP STEP REJECTED: %s. The agent will NOT enter WORK — a rejected step is "
+                        "terminal, not pending, and does not resolve by waiting. /v1/system/health "
+                        "reports cognitive_state=WAKEUP_ERROR with a wakeup_step_rejected warning. "
+                        "If the step was rejected because persist refused to record the status, see "
+                        "CIRISAgent#1077.",
+                        step_task.task_id,
+                    )
+                return False
             if not current_task or current_task.status != TaskStatus.COMPLETED:
                 logger.debug(
                     f"Step {step_task.task_id} not yet complete (status: {current_task.status if current_task else 'missing'})"
@@ -540,7 +644,7 @@ class WakeupProcessor(BaseProcessor):
 
         # CRITICAL: Keep shared wakeup task in "__shared__" namespace for multi-occurrence coordination
         # All occurrences need to be able to query this task to monitor completion
-        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__", self.time_service)
+        persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, "__shared__")
         self.wakeup_tasks = [root_task]
 
         # Create step tasks as child tasks of the shared root
@@ -563,6 +667,15 @@ class WakeupProcessor(BaseProcessor):
             else:
                 enhanced_sequence.append((step_type, content))
 
+        # Wakeup tasks are system-internal — no user, no real channel locale —
+        # so the resolver falls through to the deployment env default. Use the
+        # centralized helper instead of letting create_task default to None,
+        # so all locale-coherent downstream paths (DMA prompts, conscience
+        # justifications) read the same value.
+        from ciris_engine.logic.utils.localization import resolve_language_for_new_task
+
+        wakeup_lang = resolve_language_for_new_task()
+
         for step_type, content in enhanced_sequence:
             # Create task with proper context using the default channel
             step_task = create_task(
@@ -576,6 +689,7 @@ class WakeupProcessor(BaseProcessor):
                 task_id=f"{step_type}_{uuid.uuid4()}",
                 user_id="system",
                 parent_task_id=root_task.task_id,
+                preferred_language=wakeup_lang,
             )
             await add_system_task(step_task, auth_service=self.auth_service)
             self.wakeup_tasks.append(step_task)
@@ -745,7 +859,7 @@ class WakeupProcessor(BaseProcessor):
 
     def _mark_task_failed(self, task_id: str, reason: str, occurrence_id: str = "default") -> None:
         """Mark a task as failed."""
-        persistence.update_task_status(task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
+        persistence.update_task_status(task_id, TaskStatus.FAILED, occurrence_id)
         logger.error(f"Task {task_id} marked as FAILED: {reason}")
 
     def _mark_root_task_complete(self) -> None:
@@ -753,7 +867,7 @@ class WakeupProcessor(BaseProcessor):
         if self.wakeup_tasks:
             root_task = self.wakeup_tasks[0]
             occurrence_id = root_task.agent_occurrence_id
-            persistence.update_task_status(root_task.task_id, TaskStatus.COMPLETED, occurrence_id, self.time_service)
+            persistence.update_task_status(root_task.task_id, TaskStatus.COMPLETED, occurrence_id)
             logger.info(f"Marked shared wakeup task {root_task.task_id} as COMPLETED")
 
     def _mark_root_task_failed(self) -> None:
@@ -761,7 +875,7 @@ class WakeupProcessor(BaseProcessor):
         if self.wakeup_tasks:
             root_task = self.wakeup_tasks[0]
             occurrence_id = root_task.agent_occurrence_id
-            persistence.update_task_status(root_task.task_id, TaskStatus.FAILED, occurrence_id, self.time_service)
+            persistence.update_task_status(root_task.task_id, TaskStatus.FAILED, occurrence_id)
             logger.error(f"Marked shared wakeup task {root_task.task_id} as FAILED")
 
     def is_wakeup_complete(self) -> bool:

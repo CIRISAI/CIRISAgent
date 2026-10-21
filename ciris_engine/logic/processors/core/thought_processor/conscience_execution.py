@@ -9,12 +9,14 @@ Captures detailed results from all 6 consciences:
 - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
 """
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string, get_user_language_from_context
 from ciris_engine.schemas.actions.parameters import PonderParams
 from ciris_engine.schemas.conscience.core import (
     CoherenceCheckResult,
@@ -86,16 +88,26 @@ class ConscienceExecutionPhase:
         # (bypass consciences need this context to run)
         from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 
+        # Lift IDMA out of the DMA result dict into a typed context field so
+        # consciences can read fragility/k_eff/phase directly on the context
+        # rather than spelunking through system_snapshot-as-dma-bag.
+        idma_result = dma_results.get("idma") if isinstance(dma_results, dict) else None
+
         context = ConscienceCheckContext(
             thought=thought or thought_item,
             task=None,  # Will be populated by conscience checks if needed
             round_number=None,
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
+            idma_result=idma_result,
+            # The thought's deadline (#1186). The conscience-retry pass calls
+            # this step again with the SAME thought_item, so it spends the
+            # remainder, never a fresh budget.
+            deadline=getattr(thought_item, "deadline", None),
         )
 
         # CRITICAL: Run bypass consciences FIRST, even for exempt actions
         # This allows UpdatedStatusConscience to detect new messages before TASK_COMPLETE
-        bypass_result = await self._run_bypass_conscience_entries(action_result, context)
+        bypass_result = await self._run_bypass_conscience_entries(action_result, context, processing_context)
 
         if bypass_result["overridden"]:
             logger.info(
@@ -127,14 +139,22 @@ class ConscienceExecutionPhase:
                 updated_status_detected=bypass_result.get("updated_status_detected"),
             )
 
-        # Exempt actions that shouldn't be overridden by NORMAL consciences
-        # Conscience runs for: SPEAK, TOOL, PONDER, MEMORIZE, FORGET (5 actions)
-        # Conscience exempt: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (5 actions)
+        # Exempt actions that shouldn't be overridden by NORMAL consciences.
+        #
+        # Updated 2026-05-03: DEFER removed from exempt set so Coherence,
+        # OptimizationVeto, and EpistemicHumility can evaluate the
+        # agent-generated defer `reason` for defensive-mimicry refusal
+        # framing (e.g. topic-substitution dodges, principled-clothing
+        # cowardice per PDMA §VIII). Entropy still skips DEFER per its
+        # inner verb-scope guard (SPEAK+TOOL only — DEFER reasons are
+        # short structured prose, not narrative response content).
+        #
+        # Conscience runs for: SPEAK, TOOL, PONDER, MEMORIZE, FORGET, DEFER (6 actions)
+        # Conscience exempt:   RECALL, TASK_COMPLETE, OBSERVE, REJECT (4 actions)
         exempt_actions = {
             HandlerActionType.RECALL.value,
             HandlerActionType.TASK_COMPLETE.value,
             HandlerActionType.OBSERVE.value,
-            HandlerActionType.DEFER.value,
             HandlerActionType.REJECT.value,
         }
 
@@ -160,6 +180,7 @@ class ConscienceExecutionPhase:
 
         final_action = action_result
         overridden = False
+        conscience_unavailable = False
         override_reason = None
         thought_depth_triggered: Optional[bool] = None
         updated_status_detected: Optional[bool] = None
@@ -180,37 +201,60 @@ class ConscienceExecutionPhase:
         optimization_veto_result: Optional[OptimizationVetoResult] = None
         epistemic_humility_result: Optional[EpistemicHumilityResult] = None
 
-        # Get consciences from registry
-        for entry in self.conscience_registry.get_consciences():
-            conscience = entry.conscience
-            cb = entry.circuit_breaker
+        # Conscience prompts (for localization validation/streaming)
+        entropy_prompt: Optional[str] = None
+        coherence_prompt: Optional[str] = None
+        optimization_veto_prompt: Optional[str] = None
+        epistemic_humility_prompt: Optional[str] = None
 
-            try:
-                if cb:
-                    cb.check_and_raise()
-                result = await conscience.check(final_action, context)
-                if cb:
-                    cb.record_success()
-                conscience_checks_ran += 1
-            except CircuitBreakerError as e:
-                logger.warning(f"conscience {entry.name} unavailable: {e}")
-                continue
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"conscience {entry.name} error: {e}", exc_info=True)
-                if cb:
-                    cb.record_failure()
-                continue
+        # Dispatch all conscience checks CONCURRENTLY (issue #889). The four
+        # epistemic consciences (Entropy/Coherence/OptimizationVeto/
+        # EpistemicHumility) each make an INDEPENDENT LLM call; a sequential
+        # await-loop serialized 4 LLM round-trips per thought, dominating
+        # cycle time on slow/edge inference. They have no inter-dependency
+        # (each reads the same final_action + context, none consumes another's
+        # output, and each conscience is a separate instance with no shared
+        # mutable state), so gather them. Results are folded below in
+        # registry priority order: the FIRST failing conscience in priority
+        # order wins, yielding the identical override decision +
+        # override_reason as the old serial break-on-first-failure loop.
+        #
+        # Intended behavioral delta (documented in #889): all checks now
+        # always RUN (the serial loop broke early and skipped later checks),
+        # and every completed check's results are folded in — so
+        # epistemic_data and the per-check result fields are complete even
+        # when an early check fails. The override decision is unchanged.
+        entries = self.conscience_registry.get_consciences()
+        check_results = await asyncio.gather(
+            *(self._run_single_conscience(entry, final_action, context) for entry in entries)
+        )
+
+        for entry, result in zip(entries, check_results):
+            # No `None` skip here (#1247): _run_single_conscience always
+            # returns a result, and a faculty that could not run comes back
+            # as a fail-closed DID-NOT-RUN result, never as an absence.
+            conscience_checks_ran += 1
 
             # Aggregate epistemic metrics from conscience results
             if result.entropy_score is not None:
                 entropy_level = result.entropy_score
-                # Capture full entropy check result
+                # Capture full entropy check result, preserving IRIS-E's
+                # alternative_meanings for recursive ASPDMA retry guidance.
+                _alts = getattr(result, "entropy_alternatives", None)
+                _alt_list = list(_alts) if isinstance(_alts, list) else []
+                _rep = getattr(result, "entropy_actual_is_representative", None)
+                _rep_bool = _rep if isinstance(_rep, bool) else None
                 entropy_check_result = EntropyCheckResult(
                     passed=result.passed,
                     entropy_score=result.entropy_score,
                     threshold=0.4,  # Default threshold from ConscienceConfig
                     message=result.reason or f"Entropy: {result.entropy_score:.2f}",
+                    alternative_meanings=_alt_list,
+                    actual_is_representative=_rep_bool,
                 )
+                # Capture prompt for localization validation
+                if result.entropy_prompt:
+                    entropy_prompt = result.entropy_prompt
             if result.coherence_score is not None:
                 coherence_level = result.coherence_score
                 # Capture full coherence check result
@@ -220,12 +264,21 @@ class ConscienceExecutionPhase:
                     threshold=0.6,  # Default threshold from ConscienceConfig
                     message=result.reason or f"Coherence: {result.coherence_score:.2f}",
                 )
+                # Capture prompt for localization validation
+                if result.coherence_prompt:
+                    coherence_prompt = result.coherence_prompt
             if result.optimization_veto_check is not None:
                 optimization_veto_result = result.optimization_veto_check
+                # Capture prompt for localization validation
+                if result.optimization_veto_prompt:
+                    optimization_veto_prompt = result.optimization_veto_prompt
             if result.epistemic_humility_check is not None:
                 epistemic_humility_result = result.epistemic_humility_check
                 uncertainty_acknowledged = True
                 reasoning_transparency = 1.0  # Humility check ran, transparency confirmed
+                # Capture prompt for localization validation
+                if result.epistemic_humility_prompt:
+                    epistemic_humility_prompt = result.epistemic_humility_prompt
 
             # Capture bypass guardrail results
             if result.thought_depth_triggered is not None:
@@ -242,9 +295,21 @@ class ConscienceExecutionPhase:
                 if result.CIRIS_OBSERVATION_UPDATED_STATUS:
                     updated_status_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
 
-            if not result.passed:
+            # First failing conscience in PRIORITY ORDER wins (the fold walks
+            # entries in registry priority order, so the `not overridden`
+            # guard reproduces the serial loop's break-on-first-failure
+            # precedence exactly: same override decision, same
+            # override_reason, same final_action). Later entries keep
+            # folding their epistemic data above — that is the intended
+            # #889 delta — but can no longer change the override.
+            if not result.passed and not overridden:
                 overridden = True
                 override_reason = result.reason
+                # #1049: remember WHY. A shard that could not reach its model
+                # still fails closed (safe), but the action was not judged --
+                # so a retry cannot change the outcome and must not be issued.
+                if not result.check_ran:
+                    conscience_unavailable = True
 
                 # Check if the conscience provides a replacement action (top-level field)
                 if result.replacement_action:
@@ -253,10 +318,11 @@ class ConscienceExecutionPhase:
                 else:
                     # Default behavior: create a PONDER action
                     attempted_action_desc = self._describe_action(action_result)
+                    lang = get_user_language_from_context(processing_context)
                     questions = [
-                        f"I attempted to {attempted_action_desc}",
-                        result.reason or "conscience failed",
-                        "What alternative approach would better align with my principles?",
+                        get_string(lang, "conscience.ponder_attempted", action=attempted_action_desc),
+                        result.reason or get_string(lang, "conscience.ponder_conscience_failed"),
+                        get_string(lang, "conscience.ponder_alternative_approach"),
                     ]
 
                     ponder_params = PonderParams(questions=questions)
@@ -265,13 +331,17 @@ class ConscienceExecutionPhase:
                     final_action = ActionSelectionDMAResult(
                         selected_action=HandlerActionType.PONDER,
                         action_parameters=ponder_params,
-                        rationale=f"Overridden by {entry.name}: Need to reconsider {attempted_action_desc}",
+                        rationale=get_string(
+                            lang,
+                            "conscience.override_rationale",
+                            conscience_name=entry.name,
+                            action=attempted_action_desc,
+                        ),
                         raw_llm_response=None,
                         reasoning=None,
                         evaluation_time_ms=None,
                         resource_usage=None,
                     )
-                break
 
         # If this was a conscience retry and we didn't override, force PONDER
         # unless the override was from thought depth guardrail
@@ -284,17 +354,18 @@ class ConscienceExecutionPhase:
 
             if not has_depth_guardrail:
                 logger.info("ThoughtProcessor: Conscience retry without override - forcing PONDER")
+                lang = get_user_language_from_context(processing_context)
                 final_action = ActionSelectionDMAResult(
                     selected_action=HandlerActionType.PONDER,
-                    action_parameters=PonderParams(questions=["Forced PONDER after conscience retry"]),
-                    rationale="Forced PONDER after conscience retry to prevent loops",
+                    action_parameters=PonderParams(questions=[get_string(lang, "conscience.ponder_forced_retry")]),
+                    rationale=get_string(lang, "conscience.forced_ponder_rationale"),
                     raw_llm_response=None,
                     reasoning=None,
                     evaluation_time_ms=None,
                     resource_usage=None,
                 )
                 overridden = True
-                override_reason = "Conscience retry - forcing PONDER to prevent loops"
+                override_reason = get_string(lang, "conscience.forced_ponder_rationale")
 
         # Build EpistemicData from aggregated conscience results
         from ciris_engine.schemas.conscience.core import EpistemicData
@@ -308,10 +379,15 @@ class ConscienceExecutionPhase:
                 f"All consciences must provide epistemic_data for non-exempt actions."
             )
 
-        # Use actual data from conscience checks - no defaults for missing metrics
+        # Use actual data from conscience checks — and NO defaults, which the
+        # comment above this block always claimed while the code substituted
+        # entropy=0.1 / coherence=0.9. Those numbers are indistinguishable
+        # downstream from a faculty that ran and returned them, so a trace could
+        # carry a confident scalar for a check that never happened. None now
+        # means not measured, and says so.
         epistemic_data = EpistemicData(
-            entropy_level=entropy_level if entropy_level is not None else 0.1,  # Default safe value
-            coherence_level=coherence_level if coherence_level is not None else 0.9,  # Default high coherence
+            entropy_level=entropy_level,
+            coherence_level=coherence_level,
             uncertainty_acknowledged=uncertainty_acknowledged,
             reasoning_transparency=reasoning_transparency,
         )
@@ -321,6 +397,7 @@ class ConscienceExecutionPhase:
             original_action=action_result,
             final_action=final_action,
             overridden=overridden,
+            conscience_unavailable=conscience_unavailable,
             override_reason=override_reason,
             epistemic_data=epistemic_data,
             # Bypass guardrails
@@ -330,23 +407,164 @@ class ConscienceExecutionPhase:
             thought_depth_current=thought_depth_current,
             thought_depth_max=thought_depth_max,
             # Ethical faculties (None if skipped due to exempt action)
-            ethical_faculties_skipped=False,  # Non-exempt actions always run faculties
+            # DERIVED, not asserted. This was hardcoded False with the comment
+            # "Non-exempt actions always run faculties" — a reporting field with
+            # no writer, so it could never report the thing it names. Anything
+            # keying on it (a research arm distinguishing "pipeline ran" from
+            # "pipeline skipped", an auditor asking whether a decision was
+            # checked) read a constant.
+            #
+            # Now it reflects what actually happened: the ethical faculties are
+            # skipped exactly when neither scalar was measured.
+            ethical_faculties_skipped=(entropy_level is None and coherence_level is None),
             entropy_check=entropy_check_result,
             coherence_check=coherence_check_result,
             optimization_veto_check=optimization_veto_result,
             epistemic_humility_check=epistemic_humility_result,
+            # Conscience prompts for localization validation/streaming
+            entropy_prompt=entropy_prompt,
+            coherence_prompt=coherence_prompt,
+            optimization_veto_prompt=optimization_veto_prompt,
+            epistemic_humility_prompt=epistemic_humility_prompt,
         )
         return application_result
+
+    def _create_ponder_fallback_action(
+        self,
+        action_result: ActionSelectionDMAResult,
+        entry_name: str,
+        reason: Optional[str],
+        processing_context: Any = None,
+    ) -> ActionSelectionDMAResult:
+        """Create a PONDER action as fallback when no replacement action is provided."""
+        attempted_action_desc = self._describe_action(action_result)
+        lang = get_user_language_from_context(processing_context)
+        questions = [
+            get_string(lang, "conscience.ponder_attempted", action=attempted_action_desc),
+            reason or get_string(lang, "conscience.ponder_bypass_failed"),
+            get_string(lang, "conscience.ponder_alternative_approach"),
+        ]
+        ponder_params = PonderParams(questions=questions)
+        return ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=ponder_params,
+            rationale=get_string(
+                lang, "conscience.override_rationale", conscience_name=entry_name, action=attempted_action_desc
+            ),
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+
+    async def _run_single_conscience(self, entry: Any, action: ActionSelectionDMAResult, context: Any) -> Any:
+        """Run one conscience.check() with circuit-breaker handling.
+
+        Used to dispatch the epistemic consciences CONCURRENTLY via
+        ``asyncio.gather`` (issue #889) — the override precedence is applied by
+        the caller, which processes results in priority order.
+
+        NEVER returns a silent pass (CIRISAgent#1247). This used to return
+        ``None`` when the circuit breaker was open or ``check()`` raised, and
+        the fold skips ``None`` -- so a faculty that could not run simply
+        vanished from the decision and the action went through as if it had
+        passed. A safety check that did not run fails CLOSED: the result is
+        the same DID-NOT-RUN shape the shards themselves return
+        (``passed=False, check_ran=False``), so the action is overridden, the
+        processor does not retry into the same fault, and the trace says the
+        check did not run rather than reading as a judgement.
+        """
+        from ciris_engine.logic.conscience.transport import (
+            is_transport_failure,
+            unavailable_result,
+            unusable_answer_result,
+        )
+
+        conscience = entry.conscience
+        cb = entry.circuit_breaker
+        try:
+            if cb:
+                cb.check_and_raise()
+            result = await conscience.check(action, context)
+            if cb:
+                cb.record_success()
+            return result
+        except CircuitBreakerError as e:
+            logger.warning(f"conscience {entry.name} unavailable (circuit open), failing closed: {e}")
+            return unavailable_result(entry.name, e)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"conscience {entry.name} error, failing closed: {e}", exc_info=True)
+            if cb:
+                cb.record_failure()
+            if is_transport_failure(e):
+                return unavailable_result(entry.name, e)
+            return unusable_answer_result(entry.name, e)
+
+    async def _check_single_bypass_conscience(
+        self, entry: Any, current_action: ActionSelectionDMAResult, context: Any
+    ) -> Optional[Any]:
+        """Check a single bypass conscience, handling circuit breaker logic.
+
+        Returns the check result, or None if the conscience should be skipped.
+        """
+        conscience = entry.conscience
+        cb = entry.circuit_breaker
+
+        try:
+            if cb:
+                cb.check_and_raise()
+            result = await conscience.check(current_action, context)
+            if cb:
+                cb.record_success()
+            return result
+        except CircuitBreakerError as e:
+            logger.warning(f"Bypass conscience {entry.name} unavailable: {e}")
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Bypass conscience {entry.name} error: {e}", exc_info=True)
+            if cb:
+                cb.record_failure()
+            return None
+
+    def _extract_observation_content(self, result: Any) -> Optional[str]:
+        """Extract observation content from conscience result if present."""
+        if hasattr(result, "CIRIS_OBSERVATION_UPDATED_STATUS") and result.CIRIS_OBSERVATION_UPDATED_STATUS:
+            content: str = str(result.CIRIS_OBSERVATION_UPDATED_STATUS)
+            preview = content[:100] if content else "None"
+            logger.info(f"[BYPASS_CONSCIENCE] Extracted new observation: {preview}...")
+            return content
+        return None
+
+    def _log_override_details(
+        self,
+        entry_name: str,
+        action_result: ActionSelectionDMAResult,
+        override_reason: Optional[str],
+        updated_status_detected: Optional[bool],
+        updated_observation_content: Optional[str],
+    ) -> None:
+        """Log details when a bypass conscience overrides an action."""
+        logger.info(f"[BYPASS_CONSCIENCE] {entry_name} overriding action {action_result.selected_action}")
+        logger.info(f"[BYPASS_CONSCIENCE] Override reason: {override_reason}")
+        logger.info(f"[BYPASS_CONSCIENCE] updated_status_detected={updated_status_detected}")
+        preview = updated_observation_content[:100] if updated_observation_content else "None"
+        logger.info(f"[BYPASS_CONSCIENCE] updated_observation_content={preview}...")
 
     async def _run_bypass_conscience_entries(
         self,
         action_result: ActionSelectionDMAResult,
         context: Any,
+        processing_context: Any = None,
     ) -> Dict[str, Any]:
         """Run bypass conscience entries that should run even for exempt actions.
 
         These are critical checks like UpdatedStatusConscience that must run
         even for TASK_COMPLETE, DEFER, REJECT actions.
+
+        Args:
+            action_result: The action to check
+            context: ConscienceCheckContext for conscience checks
+            processing_context: ThoughtContext with system_snapshot (for user language)
 
         Returns:
             Dict with keys: final_action, overridden, override_reason, updated_status_detected,
@@ -356,70 +574,33 @@ class ConscienceExecutionPhase:
         overridden = False
         override_reason: Optional[str] = None
         updated_status_detected: Optional[bool] = None
-        updated_observation_content: Optional[str] = None  # NEW: Store the actual observation
+        updated_observation_content: Optional[str] = None
 
-        # Get bypass consciences from registry
         for entry in self.conscience_registry.get_bypass_consciences():
-            conscience = entry.conscience
-            cb = entry.circuit_breaker
-
-            try:
-                if cb:
-                    cb.check_and_raise()
-                result = await conscience.check(final_action, context)
-                if cb:
-                    cb.record_success()
-            except CircuitBreakerError as e:
-                logger.warning(f"Bypass conscience {entry.name} unavailable: {e}")
-                continue
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"Bypass conscience {entry.name} error: {e}", exc_info=True)
-                if cb:
-                    cb.record_failure()
+            result = await self._check_single_bypass_conscience(entry, final_action, context)
+            if result is None:
                 continue
 
             if result.updated_status_detected is not None:
                 updated_status_detected = result.updated_status_detected
 
-            # CRITICAL: Extract the actual observation content from CIRIS_OBSERVATION_UPDATED_STATUS
-            if hasattr(result, "CIRIS_OBSERVATION_UPDATED_STATUS") and result.CIRIS_OBSERVATION_UPDATED_STATUS:
-                updated_observation_content = result.CIRIS_OBSERVATION_UPDATED_STATUS
-                logger.info(
-                    f"[BYPASS_CONSCIENCE] Extracted new observation: {updated_observation_content[:100] if updated_observation_content else 'None'}..."
-                )
+            observation = self._extract_observation_content(result)
+            if observation:
+                updated_observation_content = observation
 
             if not result.passed:
                 overridden = True
                 override_reason = result.reason
-                logger.info(f"[BYPASS_CONSCIENCE] {entry.name} overriding action {action_result.selected_action}")
-                logger.info(f"[BYPASS_CONSCIENCE] Override reason: {override_reason}")
-                logger.info(f"[BYPASS_CONSCIENCE] updated_status_detected={updated_status_detected}")
-                logger.info(
-                    f"[BYPASS_CONSCIENCE] updated_observation_content={updated_observation_content[:100] if updated_observation_content else 'None'}..."
+                self._log_override_details(
+                    entry.name, action_result, override_reason, updated_status_detected, updated_observation_content
                 )
 
-                # Check if the conscience provides a replacement action
                 if result.replacement_action:
                     final_action = ActionSelectionDMAResult.model_validate(result.replacement_action)
                     logger.info(f"[BYPASS_CONSCIENCE] Using replacement action: {final_action.selected_action}")
                 else:
-                    # Default behavior: create a PONDER action
-                    attempted_action_desc = self._describe_action(action_result)
-                    questions = [
-                        f"I attempted to {attempted_action_desc}",
-                        result.reason or "bypass conscience failed",
-                        "What alternative approach would better align with my principles?",
-                    ]
-
-                    ponder_params = PonderParams(questions=questions)
-                    final_action = ActionSelectionDMAResult(
-                        selected_action=HandlerActionType.PONDER,
-                        action_parameters=ponder_params,
-                        rationale=f"Overridden by {entry.name}: Need to reconsider {attempted_action_desc}",
-                        raw_llm_response=None,
-                        reasoning=None,
-                        evaluation_time_ms=None,
-                        resource_usage=None,
+                    final_action = self._create_ponder_fallback_action(
+                        action_result, entry.name, result.reason, processing_context
                     )
                 break
 
@@ -428,5 +609,5 @@ class ConscienceExecutionPhase:
             "overridden": overridden,
             "override_reason": override_reason,
             "updated_status_detected": updated_status_detected,
-            "updated_observation_content": updated_observation_content,  # NEW: Include the actual text
+            "updated_observation_content": updated_observation_content,
         }

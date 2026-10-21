@@ -1,0 +1,349 @@
+name: Compose Gate (Phase 1)
+
+# #973 — the ablation gate gating itself (FSD/RESEARCH_PROMPT_OVERRIDES.md §12/§14).
+#
+# Four checks, all static, no LLM call, no secrets:
+#   1. the compose dump (locales en + am, all 8 steps) is DETERMINISTIC —
+#      two runs produce byte-identical JSONL;
+#   2. a dump gated against itself under the null self-check regime PASSES
+#      every Phase-1 hold;
+#   3. a deliberately mutated copy FAILS, naming the mutated block —
+#      the gate still detects a flipped held block;
+#   4. a regime that varies `axiotic` while its mixed blocks are unresolved
+#      REFUSES, naming the smuggling block — §10.2.1 refusal-by-default is live.
+#      Asserted on the REFUSAL SHAPE, not on a block name: this step used to
+#      grep for `language_guidance` specifically, and the #997 split legitimately
+#      changed which block gets named first. A CI check pinned to one block's
+#      name fails on correct work and teaches people to loosen it. What must
+#      hold is that a varied class contaminating an unresolved mixed block is
+#      refused BY NAME — any name, with the reason attached.
+#
+# If 2 ever fails, composition drifted or the gate broke; if 3 or 4 ever
+# PASSES, the gate has stopped gating. Either way this workflow goes red.
+#
+# Honest scope: a self-check cannot catch weakening the scanner and the gate
+# in the same commit that runs them (shared-code mutation) — that is what
+# review of compose_dump.py is for. It DOES catch: composition
+# nondeterminism, RESIDUE_SITES drift vs the recorded digest, fragment
+# inventory shrink, block-space drift, and any hold/refusal regression.
+
+on:
+  pull_request:
+    paths:
+      - 'ciris_engine/logic/dma/**'
+      - 'ciris_engine/logic/formatters/**'
+      - 'ciris_engine/logic/utils/constants.py'
+      - 'ciris_engine/logic/utils/localization.py'
+      - 'ciris_engine/logic/utils/research_overrides.py'
+      - 'ciris_engine/logic/utils/compose_dump.py'
+      - 'ciris_engine/schemas/dma/compose.py'
+      - 'ciris_engine/data/**'
+      - 'localization/**'
+      - 'tests/ciris_engine/logic/dma/compose_golden.py'
+      - 'tools/research/regimes/**'
+      - 'tools/research/probe_gate_coverage.py'
+      - 'ciris_engine/logic/conscience/**'
+      - 'ciris_engine/logic/processors/core/thought_processor/**'
+      - '.github/workflows/compose-gate.yml'
+      # THE PIN ITSELF. The iOS currency job below asks "was the committed iOS
+      # bundle built from the ciris-server this branch pins?" — and the change
+      # that makes the answer 'no' is a requirements.txt bump, which was not in
+      # this list. So the gate never ran on the one event it exists to catch.
+      # It appeared to work only because GitHub's path filter is cumulative
+      # across a PR: once any commit matched, every later push re-triggered.
+      - 'requirements.txt'
+      - 'apps/ios/substrate.lock.json'
+      - '.github/workflows/refresh-ios-substrate.yml'
+  push:
+    branches: [main, 'release/**']
+    paths:
+      - 'ciris_engine/logic/dma/**'
+      - 'ciris_engine/logic/formatters/**'
+      - 'ciris_engine/logic/utils/constants.py'
+      - 'ciris_engine/logic/utils/localization.py'
+      - 'ciris_engine/logic/utils/research_overrides.py'
+      - 'ciris_engine/logic/utils/compose_dump.py'
+      - 'ciris_engine/schemas/dma/compose.py'
+      - 'ciris_engine/data/**'
+      - 'localization/**'
+      - 'tests/ciris_engine/logic/dma/compose_golden.py'
+      - 'tools/research/regimes/**'
+      - 'tools/research/probe_gate_coverage.py'
+      - 'ciris_engine/logic/conscience/**'
+      - 'ciris_engine/logic/processors/core/thought_processor/**'
+      - '.github/workflows/compose-gate.yml'
+      # THE PIN ITSELF. The iOS currency job below asks "was the committed iOS
+      # bundle built from the ciris-server this branch pins?" — and the change
+      # that makes the answer 'no' is a requirements.txt bump, which was not in
+      # this list. So the gate never ran on the one event it exists to catch.
+      # It appeared to work only because GitHub's path filter is cumulative
+      # across a PR: once any commit matched, every later push re-triggered.
+      - 'requirements.txt'
+      - 'apps/ios/substrate.lock.json'
+      - '.github/workflows/refresh-ios-substrate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Is the committed iOS bundle built from the substrate this branch pins? ──
+  #
+  # Milliseconds, on the cheapest runner: substrate.lock.json vs requirements.txt.
+  # Split out from the gate so the answer is a JOB OUTPUT other jobs can depend
+  # on — which is what replaced the previous arrangement, where the gate polled
+  # `gh run list` for up to 15 minutes hoping a separate workflow would push a
+  # fix mid-run. That raced, and the push it waited for is what froze the PR.
+  ios-currency:
+    name: iOS substrate currency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      stale: ${{ steps.check.outputs.stale }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: check
+        run: |
+          if python tools/dev/check_ios_substrate_current.py; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Only when stale: rebuild on the one macOS runner we have ────────────────
+  #
+  # `uses:` the refresh workflow rather than duplicating it — one implementation,
+  # invoked as a dependent job instead of triggering itself on the same event and
+  # racing the gate. upload_only stops it pushing: a push from CI is authenticated
+  # as github-actions[bot] and parks every check on the PR behind approval.
+  #
+  # macOS minutes bill at a premium, so this is gated on `stale` and skips
+  # entirely on the overwhelming majority of PRs that never touch the pin.
+  ios-refresh:
+    name: Rebuild iOS substrate
+    needs: ios-currency
+    if: needs.ios-currency.outputs.stale == 'true'
+    uses: ./.github/workflows/refresh-ios-substrate.yml
+    # A called workflow's token cannot exceed the caller's. This workflow
+    # defaults to `contents: read`, while the refresh declares `contents: write`
+    # for its workflow_dispatch path (branch push + PR). Without an explicit
+    # grant here the call fails at load time — "requesting contents: write, only
+    # allowed contents: read" — before a single step runs.
+    #
+    # upload_only never pushes, so the write scope goes unused on this path; it
+    # is granted only to satisfy the cap against the callee's declaration.
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      target_branch: ${{ github.head_ref || github.ref_name }}
+      upload_only: true
+    secrets: inherit
+
+  compose-gate:
+    # Depends on the ANSWER, not on the rebuild. The gate stays fast: it does not
+    # wait on a macOS job it cannot use the output of anyway, because landing the
+    # bundle is a commit a human makes.
+    needs: ios-currency
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: iOS substrate currency — an Xcode build off this branch must ship the pinned substrate
+        run: |
+          # Resources.zip records no version of its own — the vendored
+          # ciris_server declares no __version__ and the .so embeds no version
+          # literal, which the updater reports when it probes and finds nothing.
+          # So nothing could tell whether iOS shipped the substrate everything
+          # else was pinned to, and it drifted a full release behind while
+          # requirements.txt, CLIENT_VERSION, the Android gradle pin and the
+          # Android wheels all moved to 0.5.173.
+          #
+          # substrate.lock.json is written by the updater on every iOS refresh,
+          # so this runs on any runner in milliseconds and answers the question
+          # the artifact cannot answer about itself.
+          #
+          # WAIT FOR THE REFRESH RATHER THAN RACING IT. When a PR bumps the
+          # ciris-server pin, refresh-ios-substrate.yml fires on the SAME event
+          # and pushes the updated lock back to this branch — but it needs a
+          # macOS runner, a release download and a Resources rebuild, so it
+          # finishes minutes after this job starts. Asserting immediately made
+          # every pin bump red-then-green-on-rerun, and a gate that is routinely
+          # wrong on first run is a gate people learn to re-run without reading.
+          #
+          # So: if the lock is stale AND a refresh for this branch is in flight,
+          # wait for it and re-check. If it is stale with no refresh running,
+          # fail immediately — that is the real condition this gate exists for.
+          # The check already ran in `ios-currency`; this asserts on its output.
+          #
+          # It used to poll `gh run list` for up to 15 minutes waiting for the
+          # refresh workflow to push a fix onto this branch mid-run. That was
+          # wrong twice over: it raced (the gate could win and fail a PR that was
+          # about to be fixed), and the push it was waiting for is precisely what
+          # froze all eight checks — a CI push is github-actions[bot], and this
+          # repo requires approval for bot-triggered runs.
+          #
+          # Now the rebuild happens in the `ios-refresh` job of THIS run and is
+          # handed back as an artifact. Landing it is one command, and the commit
+          # is authored by a real collaborator, so their push runs CI normally.
+          if [ "${STALE}" != "true" ]; then
+            echo "iOS bundle matches the pinned substrate."
+            exit 0
+          fi
+
+          echo "::error::iOS bundle is stale — it was NOT built from the ciris-server pinned on this branch."
+          {
+            echo "### iOS substrate is stale"
+            echo
+            echo 'The `ios-refresh` job in this run rebuilt it on the macOS runner. Land it with:'
+            echo
+            echo '```bash'
+            # Via a temp dir: `gh run download` REFUSES to overwrite, so
+            # extracting straight into apps/ios/ aborts on the first file
+            # that already exists — which is all of them — and lands nothing.
+            echo "T=\$(mktemp -d)"
+            echo "gh run download ${{ github.run_id }} -R ${{ github.repository }} \\"
+            echo "  -n ios-substrate-refresh -D \"\$T\""
+            echo "cp -a \"\$T\"/. apps/ios/"
+            echo "git add -f apps/ios/app_packages_native apps/ios/Frameworks \\"
+            echo "  apps/ios/Resources/app_packages apps/ios/Resources.zip \\"
+            echo "  apps/ios/substrate.lock.json"
+            echo "git commit -m 'chore(ios): refresh iOS substrate to the pinned ciris-server'"
+            echo '```'
+            echo
+            echo 'It is deliberately not pushed for you: a push from CI runs as'
+            echo '`github-actions[bot]`, and every check it triggers lands in `action_required`.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+        env:
+          STALE: ${{ needs.ios-currency.outputs.stale }}
+
+      - name: Version alignment — the shipped client must match the shipped node
+        run: |
+          # WHY THIS RUNS IN CI AND NOT ONLY IN pre-commit.
+          #
+          # `CLIENT_VERSION` (ClientMode.kt) must equal the `ciris-server==` pin.
+          # When they drift, every user of that build sees
+          #
+          #     Node is v0.5.173 — app built for 0.5.172
+          #
+          # and a release has already shipped that way once. The check itself is
+          # correct and has been wired into .pre-commit-config.yaml — but ONLY
+          # there, so it protects a developer's machine and nothing else. A
+          # commit made with --no-verify, or in any environment where hooks are
+          # not installed, walks straight past it.
+          #
+          # A guard that only runs where the mistake is least likely is not a
+          # guard. This is the same shape as the persist round-trip canary that
+          # skipped silently for months, and the localization test that compared
+          # keys while claiming byte-identity: correct logic, never executed on
+          # the path that matters.
+          python tools/dev/check_version_alignment.py
+
+      - name: Dump twice — determinism is part of the instrument
+        run: |
+          python3 -m ciris_engine.logic.utils.compose_dump dump \
+            --arm h3ere-ciris --locales en,am --out /tmp/dump-a.jsonl
+          python3 -m ciris_engine.logic.utils.compose_dump dump \
+            --arm h3ere-ciris --locales en,am --out /tmp/dump-b.jsonl
+          cmp /tmp/dump-a.jsonl /tmp/dump-b.jsonl \
+            || { echo '::error::compose dump is NOT deterministic — hold: byte-identity is meaningless'; exit 1; }
+
+      - name: Gate self-check must PASS
+        run: |
+          python3 -m ciris_engine.logic.utils.compose_dump gate \
+            --dump-a /tmp/dump-a.jsonl --dump-b /tmp/dump-b.jsonl \
+            --regime tools/research/regimes/phase1_selfcheck_null.yaml
+
+      - name: Mutated copy must FAIL, naming the block
+        run: |
+          python3 - <<'EOF'
+          import json
+          rows = [json.loads(l) for l in open('/tmp/dump-b.jsonl', encoding='utf-8')]
+          for row in rows:
+              if row.get('block_id') == 'pdma.prohibition' and row.get('locale') == 'en':
+                  row['sha256'] = '0' * 64
+          with open('/tmp/dump-b-mutated.jsonl', 'w', encoding='utf-8') as f:
+              f.write('\n'.join(json.dumps(r, ensure_ascii=False) for r in rows) + '\n')
+          EOF
+          set +e
+          python3 -m ciris_engine.logic.utils.compose_dump gate \
+            --dump-a /tmp/dump-a.jsonl --dump-b /tmp/dump-b-mutated.jsonl \
+            --regime tools/research/regimes/phase1_selfcheck_null.yaml | tee /tmp/gate-mutated.out
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo '::error::the gate PASSED a mutated held block — the gate has stopped gating'
+            exit 1
+          fi
+          grep -q 'en:pdma.prohibition' /tmp/gate-mutated.out \
+            || { echo '::error::gate failed but did not NAME the mutated block'; exit 1; }
+
+      - name: Mixed block in a varied class must REFUSE, naming it
+        run: |
+          set +e
+          python3 -m ciris_engine.logic.utils.compose_dump gate \
+            --dump-a /tmp/dump-a.jsonl --dump-b /tmp/dump-b.jsonl \
+            --regime tools/research/regimes/phase1_selfcheck_varied.yaml | tee /tmp/gate-varied.out
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" -eq 0 ]; then
+            echo '::error::the gate PASSED a regime whose varied class contaminates unresolved mixed blocks'
+            exit 1
+          fi
+          grep -qE 'REFUSE .*(smuggles varied class|no per-block disposition)' /tmp/gate-varied.out \
+            || { echo '::error::gate refused but did not NAME a smuggling/unresolved mixed block with its reason'; exit 1; }
+
+      - name: Gate COVERAGE must not regress (#986)
+        run: |
+          # The gate's verdict only constrains a key whose replacement moves a
+          # block. This sweeps every override key — one composition per key,
+          # diffed against an un-overridden baseline — and fails if any
+          # namespace can see fewer keys than it could at #986.
+          #
+          # It lives here rather than in the unit-test shards because it spawns
+          # 100+ composition subprocesses: the sharded run has a 60s per-test
+          # timeout and four workers already competing. The floors are defined
+          # once, in the probe module, and the pytest entry point imports them.
+          python3 -m tools.research.probe_gate_coverage --locales en --jobs 4 --assert-floors
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from collections import Counter
+          lines = open('/tmp/dump-a.jsonl', encoding='utf-8').read().splitlines()
+          rows = [json.loads(l) for l in lines[1:]]
+          classes = Counter(r['class'] for r in rows)
+          print('### Compose dump coverage (the honest number, FSD §1.4)')
+          print()
+          print('| class | blocks |')
+          print('|---|---|')
+          for name, count in sorted(classes.items()):
+              print(f'| {name} | {count} |')
+          routed = sum(1 for r in rows if r['source'] != 'inline')
+          seps = sum(1 for r in rows if r['block_id'].rsplit('.', 1)[-1].startswith('join'))
+          print()
+          print(f'{len(rows)} blocks total; {routed} routed-source, {len(rows) - routed} inline.')
+          print(f'{seps} of the `structural` rows are whitespace-only field separators, not doctrine.')
+          print('Since #997 a block is a FIELD, not a message; `mixed` now means only')
+          print('"axiotic content the corpus has not been split away from" (§11).')
+          EOF

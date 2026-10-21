@@ -1,16 +1,83 @@
-"""CIRISVerify adapter for hardware-rooted license verification.
+"""CIRISVerify adapter package.
 
-This adapter integrates CIRISVerify with the CIRIS agent to provide:
-- License status verification
-- Capability enforcement based on license tier
-- Mandatory disclosure management
-- Hardware attestation for professional licenses
+This adapter integrates CIRISVerify license verification into the CIRIS agent.
+The FFI bindings are bundled in the ffi_bindings subpackage.
 
-The adapter hooks into WiseBus to enforce license-based capability restrictions,
-ensuring community agents cannot access professional capabilities (medical,
-legal, financial) without proper licensing.
+Usage:
+    from ciris_adapters.ciris_verify import CIRISVerifyAdapter
+
+    adapter = CIRISVerifyAdapter(runtime, context)
+    await adapter.start()
 """
 
-from .adapter import CIRISVerifyAdapter
+# Export adapter-specific classes
+from .adapter import CIRISVerifyAdapter  # noqa: F401
 
-__all__ = ["CIRISVerifyAdapter"]
+# Import from bundled FFI bindings
+from .ffi_bindings import (  # noqa: F401
+    AttestationInProgressError,
+    BinaryIntegrityStatus,
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    CapabilityCheckResult,
+    CIRISVerify,
+    CIRISVerifyError,
+    CommunicationError,
+    DisclosureSeverity,
+    FileCheckStatus,
+    FileIntegrityResult,
+    HardwareType,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    PythonIntegrityResult,
+    PythonModuleHashes,
+    TimeoutError,
+    ValidationStatus,
+    VerificationFailedError,
+    get_library_version,
+    jcs_canonicalize,
+    setup_logging,
+)
+from .service import CIRISVerifyService, VerificationConfig  # noqa: F401
+
+# Alias for adapter loading code (looks for 'Adapter' class)
+Adapter = CIRISVerifyAdapter
+
+# Version from FFI bindings
+from .ffi_bindings import __version__
+
+__all__ = [
+    # Adapter exports
+    "Adapter",
+    "CIRISVerifyAdapter",
+    "CIRISVerifyService",
+    "VerificationConfig",
+    # Re-exports from FFI bindings
+    "CIRISVerify",
+    "get_library_version",
+    "setup_logging",
+    "LicenseStatus",
+    "LicenseTier",
+    "LicenseDetails",
+    "MandatoryDisclosure",
+    "DisclosureSeverity",
+    "LicenseStatusResponse",
+    "CapabilityCheckResult",
+    "FileIntegrityResult",
+    "FileCheckStatus",
+    "BinaryIntegrityStatus",
+    "HardwareType",
+    "ValidationStatus",
+    "PythonModuleHashes",
+    "PythonIntegrityResult",
+    "CIRISVerifyError",
+    "BinaryNotFoundError",
+    "BinaryTamperedError",
+    "VerificationFailedError",
+    "TimeoutError",
+    "CommunicationError",
+    "AttestationInProgressError",
+]

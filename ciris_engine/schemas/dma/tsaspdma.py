@@ -17,7 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
-    from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+    # Note: ProcessingQueueItem is from logic/processors/support/processing_queue.py
+    # We use Any to avoid layer violation (schemas should not import from logic)
     from ciris_engine.schemas.adapters.tools import ToolInfo
 
 
@@ -30,8 +31,8 @@ class TSASPDMAInputs(BaseModel):
 
     # Tool information from ASPDMA selection
     tool_name: str = Field(..., description="Name of the tool selected by ASPDMA")
-    tool_parameters: JSONDict = Field(..., description="Parameters ASPDMA selected for the tool")
-    aspdma_rationale: str = Field(..., description="ASPDMA's rationale for selecting this tool")
+    # NOTE: ASPDMA only provides tool_name. TSASPDMA extracts parameters from original_thought.
+    aspdma_reasoning: str = Field(..., description="ASPDMA's rationale for selecting this tool")
 
     # Full tool metadata with documentation
     tool_info: Any = Field(..., description="Full ToolInfo with documentation, gotchas, examples")
@@ -42,7 +43,7 @@ class TSASPDMAInputs(BaseModel):
     # Optional additional context
     context: Optional[Any] = Field(None, description="Additional processing context if available")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # NOTE: TSASPDMA OUTPUT is ActionSelectionDMAResult (same as ASPDMA!)

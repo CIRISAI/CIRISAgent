@@ -406,4 +406,4 @@ This isn't just a database - it's the agent's mind, memories, and identity in on
 
 ---
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

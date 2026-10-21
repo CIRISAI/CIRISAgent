@@ -19,7 +19,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -42,6 +42,7 @@ from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig
 from ciris_engine.schemas.runtime.core import AgentIdentityRoot
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.attestation import AttestationGateOutcome
 
 from .billing_helpers import (
     CIRIS_PROXY_DOMAINS,
@@ -61,19 +62,11 @@ from .bootstrap_helpers import (
     parse_bootstrap_config,
 )
 from .component_builder import ComponentBuilder
-from .config_migration import (
-    check_existing_cognitive_config,
-    create_legacy_cognitive_behaviors,
-    get_cognitive_behaviors_from_template,
-    migrate_adapter_configs_to_graph,
-    migrate_cognitive_state_behaviors_to_graph,
-    migrate_tickets_config_to_graph,
-    save_cognitive_behaviors_to_graph,
-    should_skip_cognitive_migration,
-)
+from .config_migration import migrate_adapter_configs_to_graph, migrate_tickets_config_to_graph
 from .identity_manager import IdentityManager
 from .resume_helpers import (
     auto_enable_android_adapters_for_resume,
+    auto_enable_environment_adapters_for_resume,
     initialize_core_services_for_resume,
     initialize_identity_for_resume,
     initialize_llm_for_resume,
@@ -174,6 +167,9 @@ class CIRISRuntime(ServicePropertyMixin):
         self._agent_task: Optional[asyncio.Task[Any]] = None
         self._shutdown_complete = False
         self._shutdown_in_progress = False
+        self._safe_mode = False
+        self._safe_mode_reason: Optional[str] = None
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         # Resume protection
         self._resume_in_progress = False
@@ -253,6 +249,106 @@ class CIRISRuntime(ServicePropertyMixin):
         """Wrapper used during initialization failures."""
         self.request_shutdown(reason)
 
+    def enter_safe_mode(self, reason: str) -> bool:
+        """
+        Enter safe mode - reduces agent to minimal functionality.
+
+        In safe mode, the agent:
+        - Can still respond to messages
+        - Cannot execute autonomous tool actions
+        - Cannot make memory modifications
+        - Logs all attempted actions for review
+
+        Args:
+            reason: Human-readable reason for entering safe mode
+
+        Returns:
+            True if safe mode was activated successfully, False if already in safe mode
+        """
+        if self._safe_mode:
+            logger.warning(f"Already in safe mode (reason: {self._safe_mode_reason})")
+            return False  # Already in safe mode - no state change
+
+        logger.critical(f"ENTERING SAFE MODE: {reason}")
+        self._safe_mode = True
+        self._safe_mode_reason = reason
+
+        # Log to audit if available
+        if hasattr(self, "service_initializer") and self.service_initializer:
+            audit_service = getattr(self.service_initializer, "audit_service", None)
+            if audit_service:
+                try:
+                    # Fire and forget - save task to prevent GC
+                    import asyncio
+
+                    task = asyncio.create_task(
+                        audit_service.log_event(
+                            event_type="accord_safe_mode",
+                            event_data={"reason": reason, "activated": True},
+                        )
+                    )
+                    # Store task reference to prevent premature garbage collection
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
+                except Exception as e:
+                    logger.error(f"Failed to log safe mode to audit: {e}")
+
+        return True
+
+    def exit_safe_mode(self, authorized_by: str) -> bool:
+        """
+        Exit safe mode - requires explicit authorization.
+
+        Args:
+            authorized_by: Identifier of who authorized exit from safe mode
+
+        Returns:
+            True if safe mode was exited successfully, False if not in safe mode
+        """
+        if not self._safe_mode:
+            logger.warning("Not in safe mode, nothing to exit")
+            return False  # Not in safe mode - no state change
+
+        logger.critical(f"EXITING SAFE MODE: Authorized by {authorized_by}")
+        self._safe_mode = False
+        previous_reason = self._safe_mode_reason
+        self._safe_mode_reason = None
+
+        # Log to audit if available
+        if hasattr(self, "service_initializer") and self.service_initializer:
+            audit_service = getattr(self.service_initializer, "audit_service", None)
+            if audit_service:
+                try:
+                    import asyncio
+
+                    task = asyncio.create_task(
+                        audit_service.log_event(
+                            event_type="accord_safe_mode",
+                            event_data={
+                                "reason": previous_reason,
+                                "activated": False,
+                                "authorized_by": authorized_by,
+                            },
+                        )
+                    )
+                    # Store task reference to prevent premature garbage collection
+                    self._background_tasks.add(task)
+                    task.add_done_callback(self._background_tasks.discard)
+                except Exception as e:
+                    logger.error(f"Failed to log safe mode exit to audit: {e}")
+
+        return True
+
+    @property
+    def is_safe_mode(self) -> bool:
+        """Check if runtime is in safe mode."""
+        return self._safe_mode
+
+    @property
+    def safe_mode_reason(self) -> Optional[str]:
+        """Get the reason for safe mode, if active."""
+        return self._safe_mode_reason if self._safe_mode else None
+
     def set_preload_tasks(self, tasks: List[str]) -> None:
         """Set tasks to be loaded after successful WORK state transition."""
         self._preload_tasks = tasks.copy()
@@ -287,6 +383,12 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def initialize(self) -> None:
         """Initialize all components and services."""
+        # An in-process RESTART (mobile resume) reuses the module-level shutdown
+        # service from the run that just ended; shed it if it belongs to a dead
+        # loop, or the new runtime exits at birth / wedges on its Event (#1122).
+        from ciris_engine.logic.utils.shutdown_manager import reset_global_shutdown_service_if_stale
+
+        reset_global_shutdown_service_if_stale()
         if self._initialized:
             return
 
@@ -418,6 +520,24 @@ class CIRISRuntime(ServicePropertyMixin):
             critical=True,
         )
 
+        # Phase 1 (post-database): CIRISEdge federation runtime.
+        # Consumes the persist Engine from the previous step (CIRISEdge#16
+        # cohabitation). A failure here is a boot failure: session auth cannot
+        # run without it (#1101). When Edge is DISABLED by env the step is a no-op;
+        # `GET /v1/system/federation` then returns `{available: false}`.
+        init_manager.register_step(
+            phase=InitializationPhase.DATABASE,
+            name="Initialize Edge Runtime",
+            handler=self._init_edge_runtime,
+            verifier=self._verify_edge_runtime,
+            # CRITICAL (CIRISAgent#1101): every `sess:` bearer is judged by the
+            # in-process substrate. With Edge down the API answered 503 to every
+            # session while health stayed green. The step is skipped cleanly when
+            # Edge is disabled by env (pytest / CIRIS_EDGE_DISABLED), and the
+            # PyO3-cohabitation branch still degrades rather than raising.
+            critical=True,
+        )
+
         # Phase 2: MEMORY
         init_manager.register_step(
             phase=InitializationPhase.MEMORY,
@@ -446,19 +566,28 @@ class CIRISRuntime(ServicePropertyMixin):
         )
 
         # Phase 5: SERVICES
+        # Use longer timeout on mobile platforms (90s) as they can be slower
+        from ciris_engine.logic.utils.path_resolution import is_android, is_ios
+
+        core_services_timeout = 90.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Core Services",
             handler=self._initialize_services,
             verifier=self._verify_core_services,
             critical=True,
+            timeout=core_services_timeout,
         )
 
+        # Adapter start includes the node fold (compose + bind 4243), which
+        # takes 15-40s on-device under emulator arm64 translation.
+        adapter_start_timeout = 120.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Start Adapters",
             handler=self._start_adapters,
             critical=True,
+            timeout=adapter_start_timeout,
         )
 
         init_manager.register_step(
@@ -468,11 +597,30 @@ class CIRISRuntime(ServicePropertyMixin):
             critical=True,
         )
 
+        # Adapter loading can be slow on mobile due to graph DB queries
+        adapter_load_timeout = 60.0 if (is_android() or is_ios()) else 30.0
+        # Enrichment tools are network/IO bound (200-400ms each) and slower on mobile
+        enrichment_cache_timeout = 60.0 if (is_android() or is_ios()) else 30.0
         init_manager.register_step(
             phase=InitializationPhase.SERVICES,
             name="Load Saved Adapters",
             handler=self._load_saved_adapters,
             critical=False,  # Non-critical - system can run without saved adapters
+            timeout=adapter_load_timeout,
+        )
+
+        # Warm the context-enrichment cache before the first thought needs it.
+        # Shipped in 2.4.2 (#669) but only ever registered by the dead duplicate
+        # registrar in initialization_steps.py, so it never ran at boot: every
+        # first thought paid the full 200-400ms per enrichment tool.
+        # Non-critical by construction — the handler is first-run aware and
+        # swallows its own failures; enrichment then runs lazily as before.
+        init_manager.register_step(
+            phase=InitializationPhase.SERVICES,
+            name="Populate Context Enrichment Cache",
+            handler=self._populate_context_enrichment_cache,
+            critical=False,  # Non-critical - context enrichment can run on-demand
+            timeout=enrichment_cache_timeout,
         )
 
         init_manager.register_step(
@@ -545,18 +693,22 @@ class CIRISRuntime(ServicePropertyMixin):
     async def _init_database(self) -> None:
         """Initialize database and run migrations."""
         from ciris_engine.logic import persistence
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+        from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 
-        adapter = get_adapter()
-        if adapter.is_postgresql():
-            db_path = None
-            logger.info("Using PostgreSQL database from environment (CIRIS_DB_URL)")
+        # One canonical DB-path resolver — honors config.database.database_url
+        # (Postgres, including the CIRIS_DB_URL env var) and otherwise returns
+        # the SQLite main_db path. Every consumer (memory service, auth, etc.)
+        # resolves the same way; diverging here would construct the process
+        # persist Engine with a different DSN and trip EngineConfigMismatch.
+        db_path = get_sqlite_db_full_path(self.essential_config)
+        if db_path.startswith(("postgresql://", "postgres://")):
+            logger.info("Using PostgreSQL database")
         else:
-            db_path = str(self.essential_config.database.main_db)
             logger.info(f"Using SQLite database: {db_path}")
 
+        # initialize_database bootstraps persist's Engine end-to-end (schema
+        # via persist's own sqlx migrations + A0a legacy graph migration).
         persistence.initialize_database(db_path)
-        persistence.run_migrations(db_path)
 
         if not self.essential_config:
             self.essential_config = EssentialConfig()
@@ -564,36 +716,79 @@ class CIRISRuntime(ServicePropertyMixin):
             logger.warning("No config provided, using defaults")
 
     async def _verify_database_integrity(self) -> bool:
-        """Verify database integrity before proceeding."""
+        """Verify database integrity before proceeding.
+
+        Post-A1 absorption (CIRISAgent#763): persist owns the schema. If the
+        Engine is wired and a cheap probe succeeds, the schema is intact.
+        """
         try:
-            from ciris_engine.logic import persistence
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
+            import json
 
-            adapter = get_adapter()
-            db_path = None if adapter.is_postgresql() else str(self.essential_config.database.main_db)
-            conn = persistence.get_db_connection(db_path)
-            cursor = conn.cursor()
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-            required_tables = ["tasks", "thoughts", "graph_nodes", "graph_edges"]
+            engine = get_persist_engine()
+            if engine is None:
+                raise RuntimeError("persist engine not wired — initialize_database must run first")
 
-            for table in required_tables:
-                if adapter.is_postgresql():
-                    cursor.execute(
-                        "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name=%s",
-                        (table,),
-                    )
-                else:
-                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+            # Cheap sanity probe.
+            engine.task_list("{}", json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}), 1)
 
-                if not cursor.fetchone():
-                    raise RuntimeError(f"Required table '{table}' missing from database")
-
-            conn.close()
-            logger.info("Database integrity verified")
+            logger.info("Database integrity verified (persist engine healthy)")
             return True
         except Exception as e:
             logger.error(f"Database integrity check failed: {e}")
             return False
+
+    async def _init_edge_runtime(self) -> None:
+        """Initialize CIRISEdge federation runtime (foundation dep, post-database).
+
+        Currently best-effort due to Edge v0.9.1's PyO3 cross-crate PyClass
+        identity bug — the cohabitation handoff of persist's Engine fails
+        with `TypeError: argument 'engine': 'Engine' object is not an
+        instance of 'Engine'`. The edge_runtime module catches this
+        specific failure and logs a warning, leaving the Edge singleton
+        unset. When the Edge team ships v0.9.2+ with the fix (tracked at
+        CIRISEdge#22 issuecomment-4560383149), flip the register_step
+        above to critical=True.
+
+        Before invoking ``initialize_edge_runtime``, seed the
+        ``AgentModeBroker`` from ``EssentialConfig.agent_mode``. The broker
+        defaults to ``AgentMode.PROXY`` at module import; without this seed
+        the ``AGENT_MODE`` env var (parsed into EssentialConfig.agent_mode
+        by ``load_env_vars``) would be ignored by Edge, which reads the
+        mode through ``get_agent_mode_broker().current_mode()``. Use the
+        sync setter because ConfigService is not yet wired at this phase.
+        """
+        from ciris_engine.logic.runtime import edge_runtime
+        from ciris_engine.logic.utils.agent_mode_broker import get_agent_mode_broker
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        config = self._ensure_config()
+        get_agent_mode_broker().set_mode_sync(config.agent_mode)
+
+        # CIRISAgent#1244: a mock LLM named only in the module list must be
+        # known before any federation path starts (modules may be mutated
+        # after construction, so re-check immediately before edge init).
+        from ciris_engine.logic.utils.mock_llm_guard import latch_if_mock_llm_module
+
+        latch_if_mock_llm_module(getattr(self, "modules_to_load", None) or [], "pre-edge")
+        identity_dir = get_data_dir() / "edge"
+        edge_runtime.initialize_edge_runtime(identity_dir)
+
+    async def _verify_edge_runtime(self) -> bool:
+        """Verify Edge runtime status — passes regardless of degraded state."""
+        from ciris_engine.logic.runtime import edge_runtime
+
+        if edge_runtime.is_available():
+            addr = edge_runtime.get_federation_address()
+            logger.info("Edge runtime verified: federation_address=%s", addr)
+        elif edge_runtime._edge_disabled():
+            logger.info("Edge runtime disabled via env — skipping verification")
+        else:
+            logger.warning(
+                "Edge runtime not available (degraded). GET /v1/system/federation will report available=false."
+            )
+        return True  # Non-critical: always pass.
 
     async def _initialize_memory_service(self) -> None:
         """Initialize memory service early for identity storage."""
@@ -679,9 +874,79 @@ class CIRISRuntime(ServicePropertyMixin):
 
         await self._perform_startup_maintenance()
 
+    async def _start_single_adapter(self, adapter: Any) -> None:
+        """Start one adapter with timing + explicit failure logging."""
+        adapter_name = adapter.__class__.__name__
+        start_time = time.perf_counter()
+        logger.info("[_start_adapters] Starting %s", adapter_name)
+        try:
+            await adapter.start()
+            elapsed = time.perf_counter() - start_time
+            logger.info("[_start_adapters] %s started in %.2fs", adapter_name, elapsed)
+        except Exception:
+            elapsed = time.perf_counter() - start_time
+            logger.exception("[_start_adapters] %s failed after %.2fs", adapter_name, elapsed)
+            raise
+
+    def _log_background_adapter_start_failure(self, t: "asyncio.Task[Any]") -> None:
+        """Surface background-start failures explicitly.
+
+        Without this the re-raise in _start_single_adapter becomes an
+        unretrieved task exception and a REQUIRED adapter (e.g.
+        accord_metrics) can silently not run during the first-run wizard
+        session.
+        """
+        self._background_tasks.discard(t)
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.error(
+                "[_start_adapters] BACKGROUND adapter start FAILED (%s): %s — "
+                "the adapter is NOT running for this first-run session and "
+                "will block boot on the next (non-first-run) start",
+                t.get_name(),
+                exc,
+            )
+
+    async def _start_adapters_first_run(self) -> None:
+        """First-run start order: wizard-critical adapters block, the rest
+        start in the background so the setup wizard is reachable fast."""
+        blocking_adapter_names = {"CIRISVerifyAdapter", "ApiPlatform"}
+        blocking_adapters = [a for a in self.adapters if a.__class__.__name__ in blocking_adapter_names]
+        background_adapters = [a for a in self.adapters if a.__class__.__name__ not in blocking_adapter_names]
+
+        logger.info(
+            "[_start_adapters] First-run mode: blocking adapters=%s background adapters=%s",
+            [adapter.__class__.__name__ for adapter in blocking_adapters],
+            [adapter.__class__.__name__ for adapter in background_adapters],
+        )
+
+        if blocking_adapters:
+            await asyncio.gather(*(self._start_single_adapter(adapter) for adapter in blocking_adapters))
+
+        for adapter in background_adapters:
+            task = asyncio.create_task(
+                self._start_single_adapter(adapter),
+                name=f"AdapterStart::{adapter.__class__.__name__}",
+            )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._log_background_adapter_start_failure)
+
+        logger.info(
+            "[_start_adapters] First-run blocking adapters started; %d background adapter starts scheduled",
+            len(background_adapters),
+        )
+
     async def _start_adapters(self) -> None:
         """Start all adapters."""
-        await asyncio.gather(*(adapter.start() for adapter in self.adapters))
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        if is_first_run():
+            await self._start_adapters_first_run()
+        else:
+            await asyncio.gather(*(self._start_single_adapter(adapter) for adapter in self.adapters))
+
         logger.info(f"All {len(self.adapters)} adapters started")
         await self._migrate_adapter_configs_to_graph()
 
@@ -751,30 +1016,6 @@ class CIRISRuntime(ServicePropertyMixin):
     async def _migrate_tickets_config_to_graph(self) -> None:
         """Migrate tickets config to graph."""
         await migrate_tickets_config_to_graph(self)
-
-    def _should_skip_cognitive_migration(self, force_from_template: bool) -> bool:
-        """Check if cognitive migration should be skipped."""
-        return should_skip_cognitive_migration(force_from_template)
-
-    async def _check_existing_cognitive_config(self, config_service: Any) -> bool:
-        """Check if cognitive config already exists in graph."""
-        return await check_existing_cognitive_config(config_service)
-
-    def _get_cognitive_behaviors_from_template(self) -> Optional[Any]:
-        """Get cognitive behaviors from the agent template if available."""
-        return get_cognitive_behaviors_from_template(self)
-
-    def _create_legacy_cognitive_behaviors(self) -> Any:
-        """Create pre-1.7 compatible cognitive behaviors config."""
-        return create_legacy_cognitive_behaviors()
-
-    async def _save_cognitive_behaviors_to_graph(self, config_service: Any, cognitive_behaviors: Any) -> None:
-        """Save cognitive behaviors to the graph with IDENTITY scope."""
-        await save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)
-
-    async def _migrate_cognitive_state_behaviors_to_graph(self, force_from_template: bool = False) -> None:
-        """Migrate cognitive state behaviors to graph."""
-        await migrate_cognitive_state_behaviors_to_graph(self, force_from_template)
 
     async def _final_verification(self) -> None:
         """Perform final system verification."""
@@ -911,7 +1152,10 @@ class CIRISRuntime(ServicePropertyMixin):
         if not auth_service:
             return None
 
-        auth_token = await auth_service._create_channel_token_for_adapter(adapter_type, adapter_info)
+        # auth_service is `Any` (see service_initializer.py), so the call
+        # returns Any — annotate locally so the function honours its
+        # declared `Optional[str]` return type.
+        auth_token: Optional[str] = await auth_service._create_channel_token_for_adapter(adapter_type, adapter_info)
 
         if hasattr(adapter, "set_auth_token") and auth_token:
             adapter.set_auth_token(auth_token)
@@ -968,8 +1212,39 @@ class CIRISRuntime(ServicePropertyMixin):
 
         await load_saved_adapters_from_graph(self)
 
+    async def _populate_context_enrichment_cache(self) -> None:
+        """Pre-run context-enrichment tools so the first thought does not pay for them.
+
+        Delegates to the step handler in initialization_steps, which is
+        first-run aware and swallows its own failures (enrichment falls back to
+        running lazily on the first thought).
+        """
+        from ciris_engine.logic.runtime.initialization_steps import populate_context_enrichment_cache
+
+        await populate_context_enrichment_cache(self)
+
     async def _build_components(self) -> None:
-        """Build all processing components."""
+        """Build all processing components.
+
+        Idempotent: if `self.agent_processor` is already built, this is a
+        no-op. The init manager registers a "Build Components" step at
+        Phase 6 (`ciris_runtime.py:601`) AND the post-setup RESUME flow
+        calls `_build_components` directly (`ciris_runtime.py:1387`).
+        Without idempotency the second call replaces `self.agent_processor`
+        with a fresh AgentProcessor whose state_manager never transitions
+        to WORK — the first agent_processor's task is still running but
+        `self.agent_processor` no longer points to it, so /v1/agent/status
+        reads SHUTDOWN from the orphaned reference and the qa_runner
+        timeout fires (observed: accord_metrics qa module hung 600s
+        despite the agent actually being in WORK).
+        """
+        if self.agent_processor is not None:
+            logger.debug(
+                "[_build_components] agent_processor already built; skipping duplicate "
+                "build (idempotent guard against double-registration on Phase 6)."
+            )
+            return
+
         logger.info("[_build_components] Starting component building...")
         logger.info(f"[_build_components] llm_service: {self.llm_service}")
         logger.info(f"[_build_components] service_registry: {self.service_registry}")
@@ -1127,9 +1402,27 @@ class CIRISRuntime(ServicePropertyMixin):
         """Re-inject services into running adapters during resume."""
         reinject_adapters_for_resume(self, log_step, total_steps)
 
-    async def _resume_auto_enable_android_adapters(self) -> None:
-        """Auto-enable Android-specific adapters after resume."""
-        await auto_enable_android_adapters_for_resume(self)
+    async def _resume_load_post_setup_adapters(self, log_step: Any, total_steps: int) -> None:
+        """Load adapters configured during setup wizard (explicit loading only).
+
+        This replaces auto-enable - all adapter loading must be explicit via
+        CIRIS_ADAPTER env var set during setup.
+        """
+        from ciris_engine.logic.runtime.resume_helpers import load_post_setup_adapters_for_resume
+
+        await load_post_setup_adapters_for_resume(self, log_step, total_steps)
+
+    async def _resume_auto_enable_environment_adapters(self) -> None:
+        """Auto-enable adapters based on detected runtime environment.
+
+        This enables adapters that can be automatically configured based on
+        the environment, such as:
+        - home_assistant: When SUPERVISOR_TOKEN present (HA addon mode)
+        - ciris_hosted_tools: When on Android with Google auth
+
+        Called after post-setup adapters are loaded.
+        """
+        await auto_enable_environment_adapters_for_resume(self)
 
     async def resume_from_first_run(self) -> None:
         """Resume initialization after setup wizard completes."""
@@ -1189,10 +1482,14 @@ class CIRISRuntime(ServicePropertyMixin):
         # Step 11: Re-inject services into adapters
         self._resume_reinject_adapters(log_step, total_steps)
 
-        # Step 12: Auto-enable Android-specific adapters
-        log_step(12, total_steps, "Auto-enabling Android adapters...")
-        await self._resume_auto_enable_android_adapters()
-        log_step(12, total_steps, "Android adapters auto-enabled")
+        # Step 12: Load post-setup adapters and auto-enable environment adapters
+        # This loads adapters configured during setup (e.g., cirisnode after Portal registration)
+        # Then auto-enables environment-specific adapters (e.g., home_assistant when running as HA addon)
+        log_step(12, total_steps, "Loading post-setup adapters...")
+        await self._resume_load_post_setup_adapters(log_step, total_steps)
+        log_step(12, total_steps, "Auto-enabling environment adapters...")
+        await self._resume_auto_enable_environment_adapters()
+        log_step(12, total_steps, "Post-setup adapters loaded")
 
         # Step 13: Build cognitive components
         log_step(13, total_steps, "Building cognitive components...")
@@ -1215,6 +1512,58 @@ class CIRISRuntime(ServicePropertyMixin):
         self._resume_started_at = None
         logger.info(f"[RESUME] Completed in {elapsed:.2f}s, _resume_in_progress=False")
 
+        # Log "agent_configured" audit event - this is the definitive first-run completion record
+        # It captures whether portal key was provisioned, identity template used, etc.
+        await self._log_agent_configured_event()
+
+    async def _log_agent_configured_event(self) -> None:
+        """Log audit event for first-run configuration completion.
+
+        This creates a tamper-evident record of the agent's initial configuration.
+        This event is logged AFTER resume_from_first_run completes, when the audit service
+        is fully initialized. Attestation may still be pending at this point.
+        """
+        if not self.audit_service:
+            logger.warning("[AUDIT] Cannot log agent_configured - audit_service not available")
+            return
+
+        try:
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.schemas.audit import EventPayload
+
+            # Get signing key info — the engine's local signer (2.9.7: the
+            # ONE signer identity). Be defensive: engine may not be wired yet.
+            key_id = "unknown"
+            try:
+                engine = get_persist_engine()
+                key_id = str(engine.local_derived_key_id()) if engine is not None else "pending"
+            except Exception:
+                pass  # Key not available yet, that's fine
+
+            # Get identity info if available
+            identity_template = None
+            agent_id = None
+            if self.identity_manager:
+                if self.identity_manager.agent_template:
+                    identity_template = getattr(self.identity_manager.agent_template, "name", None)
+                if self.identity_manager.agent_identity:
+                    agent_id = getattr(self.identity_manager.agent_identity, "agent_id", None)
+
+            # Use EventPayload as expected by AuditServiceProtocol.log_event
+            # result should be normalized outcome, config details go in action
+            config_details = (
+                f"key_id={key_id}, template={identity_template or 'unknown'}, agent={agent_id or 'unknown'}"
+            )
+            audit_event = EventPayload(
+                action=f"agent_configured: {config_details}",
+                result="success",
+                service_name="resume_from_first_run",
+            )
+            await self.audit_service.log_event("agent_configured", audit_event)
+            logger.info(f"[AUDIT] agent_configured event logged (key_id={key_id})")
+        except Exception as e:
+            logger.warning(f"[AUDIT] Failed to log agent_configured event: {e}")
+
     async def _create_agent_processor_when_ready(self) -> None:
         """Create and start agent processor once all services are ready."""
         logger.info("Waiting for services to be ready before starting agent processor...")
@@ -1235,12 +1584,146 @@ class CIRISRuntime(ServicePropertyMixin):
             _sink_task = asyncio.create_task(self.bus_manager.start())
             logger.info("Started multi-service sink as background task")
 
+        # Hard gate: nothing — not WAKEUP, not WORK, not a single thought —
+        # runs until startup attestation has finished. ciris_verify is a
+        # mandatory runtime dependency, and per-thought batch_context already
+        # blocks on await_attestation_ready(). Without this gate the *first*
+        # thought after startup absorbs the full attestation latency and
+        # downstream timing assertions (SSE snapshot waits, /v1/agent/interact
+        # response window) blow their budgets. Gating here ensures the
+        # processor only starts once the attestation cache is populated and
+        # every subsequent thought sees a no-op await.
+        #
+        # Auth service enforces an end-to-end latency budget. If blown, the
+        # gate dumps verifier-debugging receipts and starts the processor
+        # DEGRADED rather than aborting — see _await_attestation_ready. The
+        # breach is never silent (that would mask a verifier regression), but
+        # it is also never fatal: a slow disk must not brick the install.
+        await self._await_attestation_ready()
+
         effective_num_rounds = DEFAULT_NUM_ROUNDS
         logger.info(
             f"Starting agent processor (num_rounds={effective_num_rounds if effective_num_rounds != -1 else 'infinite'})..."
         )
 
         await self.agent_processor.start_processing(effective_num_rounds)
+
+    async def _await_attestation_ready(self) -> None:
+        """Block on the AuthenticationService's attestation budget.
+
+        Non-fatal by design: a budget breach is a latency regression, not a
+        correctness failure, so it degrades to a warning and lets the
+        processor start. Enforcement lives in batch_context, which refuses
+        to build a thought without an attestation result.
+
+        Looks up the service by capability (await_attestation_ready) rather
+        than registry type, mirroring batch_context's lookup so the two gate
+        sites stay aligned. The budget is enforced by the auth service
+        itself; a breach is reported here and startup continues degraded.
+
+        On budget breach we dump receipts (per-stage timings, cache state,
+        baseline_attestation, the active verifier mode) at ERROR level so
+        the failure becomes a fileable ciris_verify issue rather than a
+        flake-of-the-week.
+        """
+        auth_service = self.service_initializer.auth_service if self.service_initializer else None
+        if auth_service is None or not hasattr(auth_service, "await_attestation_ready"):
+            logger.warning(
+                "AuthenticationService unavailable for attestation gate — "
+                "processor will start without a startup attestation barrier. "
+                "Per-thought batch_context will still block on attestation, "
+                "so first-thought latency may be elevated until cache fills."
+            )
+            return
+
+        logger.info("Awaiting startup attestation (15s budget) before processor start...")
+        try:
+            outcome = await auth_service.await_attestation_ready()
+            if isinstance(outcome, AttestationGateOutcome) and outcome.is_breach():
+                # The gate no longer raises on a latency breach, so the receipts
+                # have to be driven off the returned outcome instead. Without
+                # this the wedged-verifier case — the one this whole path exists
+                # for — would log "complete" and dump nothing.
+                self._log_attestation_failure_receipts(
+                    auth_service,
+                    RuntimeError(f"Startup attestation SLO breach: {outcome.value}"),
+                )
+                logger.warning(
+                    "Startup attestation breached its latency budget (%s) — starting the "
+                    "processor anyway (DEGRADED). batch_context still refuses to build a "
+                    "thought without an attestation result, so nothing runs unattested. "
+                    "Receipts above are a fileable ciris_verify issue.",
+                    outcome.value,
+                )
+                return
+            logger.info("Startup attestation complete — processor cleared to start.")
+        except Exception as e:
+            # Receipts first: this stays a fileable ciris_verify issue.
+            self._log_attestation_failure_receipts(auth_service, e)
+            # Then DEGRADE rather than abort. This gate is a latency pre-warm,
+            # not the enforcement point — per-thought batch_context blocks on
+            # the same await_attestation_ready() and refuses to build a thought
+            # without an attestation result, so starting the processor here
+            # cannot produce an unattested thought.
+            #
+            # Aborting instead cost a Windows user the whole app: 2.9.37 on
+            # py3.14 spent >18s inside one ciris_verify_tree() call, blew the
+            # 20s budget, and the runtime shut down 22s after boot — no UI, no
+            # setup wizard, no way in. A slow disk should degrade first-thought
+            # latency, not brick the install.
+            logger.warning(
+                "Startup attestation did not complete within budget — starting the "
+                "processor anyway (DEGRADED). First-thought latency will absorb the "
+                "remaining attestation time, and batch_context still refuses to build "
+                "a thought without an attestation result, so nothing runs unattested. "
+                "Receipts above are a fileable ciris_verify issue: %s",
+                e,
+            )
+
+    def _log_attestation_failure_receipts(self, auth_service: Any, exc: BaseException) -> None:
+        """Dump everything an upstream ciris_verify maintainer would need to
+        reproduce a budget breach: per-stage timings, cache state, baseline,
+        active mode, and the exception chain. Called from the gate's except
+        branch so the receipts land in incidents_latest.log adjacent to the
+        failure, alongside the raised RuntimeError."""
+        import platform
+        import sys
+        import traceback
+
+        def _safe(getter: Callable[[], Any]) -> Any:
+            try:
+                return getter()
+            except Exception as e:  # pragma: no cover — defensive
+                return f"<error reading: {e}>"
+
+        receipts = {
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc),
+            "attestation_started_at": _safe(lambda: getattr(auth_service, "_attestation_started_at", None)),
+            "attestation_task_done": _safe(
+                lambda: bool(getattr(auth_service, "_attestation_task", None) and auth_service._attestation_task.done())
+            ),
+            "attestation_cache_populated": _safe(lambda: getattr(auth_service, "_attestation_cache", None) is not None),
+            "baseline_attestation_populated": _safe(
+                lambda: getattr(auth_service, "_baseline_attestation", None) is not None
+            ),
+            "attestation_in_progress": _safe(lambda: bool(getattr(auth_service, "_attestation_in_progress", False))),
+            "stage_timings_seconds": _safe(lambda: getattr(auth_service, "_attestation_stage_timings", None)),
+            "platform": f"{platform.system()} {platform.release()}",
+            "python": sys.version.split()[0],
+            "running_tasks_count": _safe(lambda: len(asyncio.all_tasks())),
+        }
+
+        logger.error("=" * 70)
+        logger.error("ATTESTATION GATE BUDGET BREACH — receipts for ciris_verify issue:")
+        for key, value in receipts.items():
+            logger.error("  %s: %s", key, value)
+        logger.error("Exception chain:")
+        for line in traceback.format_exception(type(exc), exc, exc.__traceback__):
+            for sub_line in line.rstrip("\n").splitlines():
+                logger.error("  %s", sub_line)
+        logger.error("=" * 70)
+        logger.error("File this at https://github.com/CIRISAI/CIRISVerify/issues with the block above.")
 
     def _register_core_services(self) -> None:
         """Register core services in the service registry."""
@@ -1269,6 +1752,7 @@ class CIRISRuntime(ServicePropertyMixin):
             time_service=self.time_service,
             telemetry_service=self.telemetry_service,
             audit_service=self.audit_service,
+            resource_monitor=self.resource_monitor,
         )
 
         return build_action_dispatcher(
@@ -1389,11 +1873,36 @@ class CIRISRuntime(ServicePropertyMixin):
 
         logger.debug("Stopping core services...")
         await execute_service_shutdown_sequence(self)
+        await self._release_substrate()
 
         await finalize_shutdown_logging(self)
         await cleanup_runtime_resources(self)
         validate_shutdown_completion(self)
         logger.debug("Shutdown method returning")
+
+    async def _release_substrate(self) -> None:
+        """Stop the node fold and close the Edge transport before Python exits (#1102).
+
+        Order matters: the node (4243) serves on the edge (4242), so the node
+        goes first. Both calls block with the GIL released and are bounded; a
+        timeout is logged, never raised -- the process must still exit, and the
+        next boot's Edge init now names a held port in its own words (#1101).
+        """
+        from ciris_engine.logic.runtime import edge_runtime, node_fold
+
+        for label, fn, budget in (
+            ("node fold", lambda: node_fold.stop_node_fold(timeout_secs=30.0), 35.0),
+            ("edge runtime", lambda: edge_runtime.close_edge_runtime(), 15.0),
+        ):
+            try:
+                result = await asyncio.wait_for(asyncio.to_thread(fn), timeout=budget)
+                logger.info("Substrate release: %s -> %s", label, result)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Substrate release: %s did not finish within %.0fs; ports may stay bound (#1102)", label, budget
+                )
+            except Exception as exc:  # noqa: BLE001 -- shutdown must finish
+                logger.warning("Substrate release: %s raised (continuing): %s", label, exc)
 
     async def _create_startup_node(self) -> None:
         """Create startup node for continuity tracking."""

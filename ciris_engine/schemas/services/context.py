@@ -9,6 +9,9 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.services.agent_credits import DomainCategory
+from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
 
 class GuidanceContext(BaseModel):
     """Context for requesting guidance from Wise Authority."""
@@ -19,7 +22,7 @@ class GuidanceContext(BaseModel):
     ethical_considerations: List[str] = Field(default_factory=list, description="Ethical factors to consider")
     domain_context: Dict[str, str] = Field(default_factory=dict, description="Domain-specific context")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DeferralContext(BaseModel):
@@ -30,9 +33,29 @@ class DeferralContext(BaseModel):
     reason: str = Field(..., description="Reason for deferral")
     defer_until: Optional[datetime] = Field(None, description="When to reconsider")
     priority: Optional[str] = Field(None, description="Priority level for later consideration")
+    domain_hint: Optional[DomainCategory] = Field(
+        None,
+        description="Licensed domain category for routing (MEDICAL, FINANCIAL, etc.)",
+    )
+    reason_code: Optional[DeferralOperationalReason] = Field(
+        None,
+        description="Structured operational reason for the deferral",
+    )
+    needs_category: Optional[DeferralNeedCategory] = Field(
+        None,
+        description="Primary human-rights / needs category implicated by the deferral",
+    )
+    secondary_needs_categories: List[DeferralNeedCategory] = Field(
+        default_factory=list,
+        description="Additional rights/needs categories implicated by the deferral",
+    )
+    rights_basis: List[str] = Field(
+        default_factory=list,
+        description="Human-rights basis labels supporting the deferral classification",
+    )
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional deferral metadata")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ApprovalContext(BaseModel):
@@ -51,7 +74,7 @@ class ApprovalContext(BaseModel):
     # Additional context
     supporting_data: Dict[str, str] = Field(default_factory=dict, description="Supporting information")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WADecision(BaseModel):
@@ -77,7 +100,7 @@ class WADecision(BaseModel):
     # Signature
     signature: str = Field(..., description="Digital signature of decision")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class WAInteractionLog(BaseModel):
@@ -105,7 +128,7 @@ class WAInteractionLog(BaseModel):
     task_id: Optional[str] = Field(None, description="Associated task")
     thought_id: Optional[str] = Field(None, description="Associated thought")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["GuidanceContext", "DeferralContext", "ApprovalContext", "WADecision", "WAInteractionLog"]

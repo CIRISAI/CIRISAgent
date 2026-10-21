@@ -11,7 +11,6 @@ Tests cover:
 """
 
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,6 +19,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 
+from ciris_engine.logic.persistence.db import initialize_database
 from ciris_engine.logic.persistence.models.tickets import create_ticket
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.tools.core_tool_service.service import CoreToolService
@@ -31,31 +31,20 @@ class TestCoreToolServiceTicketTools:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database with migrations applied."""
+        """Create temporary database with migrations applied + persist wired."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        # Apply migrations
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -93,8 +82,7 @@ class TestCoreToolServiceTicketTools:
             status="in_progress",
             email="tooltest@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
-            metadata={"stages": {"identity_resolution": {"status": "completed", "result": "user@example.com"}}},
-            db_path=temp_db_path,
+            metadata={"stages": {"identity_resolution": {"status": "completed", "result": "user@example.com"}}}
         )
         return ticket_id
 
@@ -139,7 +127,7 @@ class TestCoreToolServiceTicketTools:
         # Verify deep merge
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         metadata = ticket["metadata"]
 
         # Original stage preserved
@@ -166,7 +154,7 @@ class TestCoreToolServiceTicketTools:
 
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         metadata = ticket["metadata"]
 
         # Stages preserved from original
@@ -217,7 +205,7 @@ class TestCoreToolServiceTicketTools:
         # Verify status in database
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "deferred"
 
     @pytest.mark.asyncio
@@ -234,7 +222,7 @@ class TestCoreToolServiceTicketTools:
         # Verify metadata
         from ciris_engine.logic.persistence.models.tickets import get_ticket
 
-        ticket = get_ticket(test_ticket_id, db_path=tool_service.db_path)
+        ticket = get_ticket(test_ticket_id)
         assert ticket["status"] == "deferred"
         assert ticket["metadata"]["awaiting_human_response"] is True
 
@@ -324,8 +312,7 @@ class TestCoreToolServiceTicketTools:
             ticket_type="dsar",
             status="in_progress",
             email="test2@example.com",
-            submitted_at=datetime.now(timezone.utc).isoformat(),
-            db_path=tool_service.db_path,
+            submitted_at=datetime.now(timezone.utc).isoformat()
         )
 
         # Defer both tickets
@@ -346,30 +333,20 @@ class TestCoreToolServiceGetTicket:
 
     @pytest.fixture
     def temp_db_path(self):
-        """Create temporary database."""
+        """Create temporary database with migrations applied + persist wired."""
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
-        test_file = Path(__file__).resolve()
-        project_root = test_file.parent.parent.parent.parent.parent.parent.parent
-        migrations_dir = project_root / "ciris_engine" / "logic" / "persistence" / "migrations" / "sqlite"
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn = sqlite3.connect(db_path)
-        for i in range(1, 10):
-            migration_files = list(migrations_dir.glob(f"{i:03d}_*.sql"))
-            if migration_files:
-                with open(migration_files[0], "r") as f:
-                    sql = f.read()
-                    # Workaround for pre-existing view bug in migration 001
-                    if i == 1:
-                        sql = sql.replace("t.task_id as associated_task_id", "t.thought_id as associated_thought_id")
-                    conn.executescript(sql)
-
-        conn.commit()
-        conn.close()
+        prior_engine = _graph_mod._engine
+        prior_dsn = _graph_mod._engine_dsn
+        initialize_database(db_path)
 
         yield db_path
 
+        _graph_mod._engine = prior_engine
+        _graph_mod._engine_dsn = prior_dsn
         if os.path.exists(db_path):
             os.unlink(db_path)
 
@@ -397,8 +374,7 @@ class TestCoreToolServiceGetTicket:
             status="in_progress",
             email="get@example.com",
             submitted_at=datetime.now(timezone.utc).isoformat(),
-            metadata={"test": "data"},
-            db_path=tool_service.db_path,
+            metadata={"test": "data"}
         )
 
         result = await tool_service.execute_tool("get_ticket", {"ticket_id": ticket_id})

@@ -2,18 +2,32 @@
 Main QA Runner implementation.
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import asyncio
 import json
 import logging
+import os
+import re
 import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
+from pydantic import BaseModel, ConfigDict
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -22,8 +36,238 @@ from rich.table import Table
 from .config import QAConfig, QAModule, QATestCase
 from .modules.filter_test_helper import FilterTestHelper
 from .server import APIServerManager
+from .status_tracker import update_module_status
 
 logger = logging.getLogger(__name__)
+
+
+# Incident-log lines that are EXPECTED during a QA run and must not fail it.
+#
+# ONE list, used by all three readers (the WARNING-flood detector, the
+# per-backend surfacer, and the incidents gate). It was three separate
+# literals that had drifted to 26 / 14 / 27 entries — and the 14-entry copy
+# was the one the GATE used, so the gate failed on exactly the lines the
+# other two knew to ignore: qa_manifest_test_, Invalid target state,
+# 'Config validation failed: Configuration is empty', the forced WORK->WORK
+# transition, and the Reddit-credentials probe. A QA suite whose own
+# negative tests fail the run is a suite that cannot be trusted either way.
+#
+# Every entry names the module that drives it. Add one only with that
+# reason attached — an unexplained entry here is a silenced defect.
+EXPECTED_QA_INCIDENT_PATTERNS = [
+    "MOCK_MODULE_LOADED",
+    "MOCK LLM",
+    "RUNTIME SHUTDOWN",
+    "SYSTEM SHUTDOWN",
+    "GRACEFUL SHUTDOWN",
+    "[SIGNAL]",  # signal-handler lines (e.g. SIGTERM to stop the QA server)
+    "Edge already exists",
+    "duplicate edge",
+    "TSDB consolidation",
+    # The setup module deliberately validates bad LLM endpoints —
+    # the agent correctly logs the validation failure.
+    "[VALIDATE_LLM]",
+    # ciris_verify logs ERROR for an offline build-registry; in QA
+    # there is no registry and L4 file integrity is legitimately
+    # skipped — an environmental degradation, not a test failure.
+    "MANIFEST_CACHE MISS",
+    # CIRISVerify's file-integrity periodic re-check fails in CI
+    # because CI runs against the working tree, not a registry-
+    # published build. The re-check fires every ~3 minutes and on
+    # 2026-05-28 (run 26608575466) the SQLite-vs-Postgres timing
+    # diff made the third re-check land inside the SQLite test
+    # window while Postgres just missed it — flaking the SQLite
+    # backend. Both backends always produce ≥2 of these per run.
+    # Environmental; tracked at CIRISAgent#836.
+    "check_full: manifest integrity verification FAILED",
+    # QA/CI hosts have no TPM and no hardware Ed25519 key, so the
+    # CIRISVerify FFI key probe + TPM TCTI context creation log
+    # ERROR and fall back to software — expected, not a failure.
+    "get_ed25519_public_key: no key loaded",
+    "Error when creating a TCTI context",
+    "TPM: failed to create context",
+    # QA modules that DELIBERATELY exercise error / edge paths —
+    # the agent correctly logs the rejection; the ERROR line is
+    # the expected test outcome, not an incident (cf. VALIDATE_LLM):
+    #  - state_transitions test submits an invalid target state
+    "Invalid target state",
+    #  - adapter_manifest test unloads its scratch adapters, some
+    #    of which were never loaded
+    "qa_manifest_test_",
+    #  - adapter_manifest probes every ciris_adapters/* dir; the
+    #    shared MCP library `mcp_common` is not a loadable adapter
+    #    (no Adapter class — by design), and the loader correctly
+    #    says so. Expected probe noise, not an incident.
+    "ciris_adapters.mcp_common' has no attribute 'Adapter'",
+    #  - dsar_multi_source exercises the DSAR path for a test user
+    #    that has no consent record; the orchestrator correctly
+    #    reports the absence (the test asserts that behaviour).
+    "No consent found for user user_dsar",
+    #  - accord_metrics ships WBD deferrals to the lens; the QA
+    #    mock lens does not implement /accord/wbd/deferrals, so the
+    #    adapter correctly logs the 404 it received. Mock gap.
+    "WBD deferral rejected: Status 404",
+    #  - CIRISVerify's attestation probe reaches for the registry
+    #    over the network; CI has no route to it, so it correctly
+    #    logs a timeout and falls back to software. Environmental.
+    "ciris_verify_run_attestation: TIMEOUT",
+    #  - accord_metrics trace-signing is briefly blocked while an
+    #    attestation is in progress; the adapter retries (~500ms).
+    #    A transient, self-recovering condition, not a fault.
+    "Attestation in progress - sign_ed25519 blocked",
+    #  - adapter_config test submits an empty config to verify
+    #    validation rejects it
+    "Config validation failed: Configuration is empty",
+    #  - cognitive-state tests force unnatural WORK/DREAM
+    #    transitions; a force-transitioned DREAM seed thought has
+    #    no originating adapter channel. (Tracked as a follow-up:
+    #    DREAM seed thoughts should carry a synthetic channel.)
+    "No channel context found for thought thought_dream_",
+    "Failed to transition from AgentState.WORK to AgentState.WORK",
+    # High-frequency BENIGN warnings — routine per-thought / per-
+    # cache-gen chatter, not systemic malfunctions. Excluded so the
+    # WARNING-flood detector below isn't tripped by normal noise:
+    #  - the mock LLM's own diagnostic (QA fixture only — never
+    #    emitted in production, there is no mock LLM there)
+    "[MOCK_LLM] No user_input found in context",
+    #  - the tool-cache generator noting CIRISVerifyService is not
+    #    a tool-enumeration provider (true by design — it is a
+    #    verification service, not a tool service)
+    "[TOOL_CACHE] CIRISVerifyService: No get_all_tool_info",
+    # - reddit adapter probe: QA has no Reddit credentials, so the adapter
+    #   correctly refuses to load. Environmental, not a fault.
+    "Reddit credentials are not configured",
+]
+
+
+def _expand_module_aggregates(modules: List[QAModule]) -> List[QAModule]:
+    """Expand QAModule.ALL / ALL_1 / ALL_2 into their constituent modules.
+
+    A bare aggregate is not in `sdk_modules` and is not a startup-adapter
+    key, so leaving it unexpanded makes the HTTP/SDK routing split skip
+    every SDK module AND the adapter auto-config miss every adapter. All
+    per-module logic must see the expanded list. Idempotent; order- and
+    dedupe-preserving.
+    """
+    from .config import ALL_1_MODULE_SEQUENCE, ALL_2_MODULE_SEQUENCE, ALL_MODULE_SEQUENCE
+
+    aggregates = {
+        QAModule.ALL: ALL_MODULE_SEQUENCE,
+        QAModule.ALL_1: ALL_1_MODULE_SEQUENCE,
+        QAModule.ALL_2: ALL_2_MODULE_SEQUENCE,
+    }
+    if not any(a in modules for a in aggregates):
+        return list(modules)
+    expanded: List[QAModule] = []
+    for m in modules:
+        for sm in aggregates.get(m, [m]):
+            if sm not in expanded:
+                expanded.append(sm)
+    return expanded
+
+
+def _err_text(result: dict, limit: int = 100) -> str:
+    """Error text for the summary, safe against a present-but-None `error`.
+
+    `dict.get(key, default)` returns the default only when the key is MISSING —
+    when it is present and None, you get None, and `None[:100]` raises. That
+    crashed the runner at the moment it was reporting a failure:
+
+        TypeError: 'NoneType' object is not subscriptable
+
+    The capture itself had succeeded, so the damage was not the exit code — it
+    was that the reporter died BEFORE printing the underlying error, so the
+    thing it was trying to tell you was lost. An error path that fails while
+    describing an error destroys the only evidence of what went wrong.
+
+    This was already known: safety_battery.py emits an explicit "" on success
+    specifically to dodge it, with a comment naming this line. That fixed one
+    caller and left every other module able to trip it. Fixed here instead, so
+    no caller has to know.
+    """
+    raw = result.get("error")
+    if raw is None:
+        raw = result.get("status") or "Unknown error"
+    return str(raw)[:limit]
+
+
+#: Tests that END the run's identity rather than merely invalidating a token.
+#: The node's logout DEACTIVATES the WA cert (CIRISServer#387), and resolve_login
+#: plus every enumeration are active-only, so afterwards the account cannot be
+#: logged back in — re-auth is not merely unnecessary, it is impossible. These run
+#: last so that fact costs no coverage.
+_IDENTITY_CLOSING = (("logout", "/auth/logout"),)
+
+
+def _closes_identity(test: Any) -> bool:
+    return any(name in test.name.lower() and endpoint in test.endpoint for name, endpoint in _IDENTITY_CLOSING)
+
+
+def _is_non_failing(status: str) -> bool:
+    """Whether a per-test status should let the module pass.
+
+    A check that could not run is not a check that failed — but the aggregation
+    only knew PASS, so recording a retired upstream endpoint as SKIP still made
+    the module fail and still returned a nonzero QA result. The endpoint kept
+    breaking the run; it just stopped looking like it was the reason.
+    """
+    return "PASS" in status or "SKIP" in status
+
+
+class TracePlaneStanding(BaseModel):
+    """The node's own answer to "is the trace plane alive", from `node_state()`.
+
+    ASK THE SUBSTRATE. The first version of this harness tried to answer the
+    question itself and got it wrong three separate ways: counting `kind=Trace`
+    on the wire (no such envelope kind exists — carriers ride the Attestation
+    plane), a loose `LIKE '%trace:%'` over the attestations (which read 4
+    against a true 3, and at a 1:1 carrier ratio that inflation is enough to
+    report carriers on a node holding none), and `trace_events.cohort_scope`
+    (a read-time projection in a different table, downstream of the
+    attestation's — 71 rows at `federation` there is entirely consistent with
+    the carriers sitting at `self`).
+
+    `ciris_server.node_state()` carries `trace_plane` verbatim from persist's
+    `Engine.storage_summary()`: banded live / quiet / dark, with `standing`
+    separating an unreadable corpus from one that holds traces none of which
+    are recent. That is the value the node itself acts on, so it is the value
+    a verdict should quote.
+
+    THESE FOUR FIELDS AND NO OTHERS. An earlier version modelled `carriers`,
+    which `trace_plane` does not return — the substring appears nowhere in the
+    0.5.188 extension, while `standing`, `band`, `last_admitted_at` and
+    `age_seconds` all do. Because the model ignores extras and defaults to
+    None, every real payload validated and the verdict printed `carriers=?`
+    forever: a diagnostic that could never produce a reading. A carrier count
+    needs a surface that actually exposes one.
+    """
+
+    standing: Optional[str] = None
+    band: Optional[str] = None
+    last_admitted_at: Optional[str] = None
+    age_seconds: Optional[float] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class CanonicalPeerState(BaseModel):
+    """One peer entry from `ciris_server.delivery_status()`.
+
+    Typed rather than a raw dict because the verdict above turns these three
+    booleans into a claim about whether traces can flow, and a silently absent
+    or renamed field would read as False — which is the exact failure mode this
+    whole change is correcting.
+
+    Every field is Optional: the node omits what it does not yet know, and
+    "unknown" must stay distinguishable from "false" all the way through.
+    """
+
+    key_id: Optional[str] = None
+    knows_peer: Optional[bool] = None
+    kex_present: Optional[bool] = None
+    deliverable: Optional[bool] = None
+
+    model_config = ConfigDict(extra="ignore")
 
 
 class QARunner:
@@ -34,31 +278,78 @@ class QARunner:
         self.config = config or QAConfig()
         self.console = Console()
         self.token: Optional[str] = None
-        self.modules = modules or []  # Store modules for server manager
+        # Expand `all` / `all_1` / `all_2` up front so every per-module
+        # consumer (adapter auto-config below, the HTTP/SDK routing split,
+        # the requires-server check) sees real modules, not the aggregate.
+        self.modules = _expand_module_aggregates(modules or [])  # Store modules for server manager
+        # Real per-module wall time (seconds). SDK modules are timed directly
+        # around test_instance.run(); HTTP modules are summed from per-test
+        # durations in _update_status_tracker. Replaces the old fake
+        # even-split (total / module_count) that stamped every module
+        # identically — useless for balancing the CI matrix.
+        self._module_wall: Dict[str, float] = {}
 
-        # Auto-configure adapter based on modules being tested
-        # This allows modular services to be loaded automatically
-        if modules and QAModule.REDDIT in modules:
-            # Reddit tests need both api and reddit adapters
-            if "reddit" not in self.config.adapter:
-                self.config.adapter = "api,reddit"
-                self.console.print("[dim]Auto-configured adapter: api,reddit for Reddit tests[/dim]")
+        # Module-metadata driven: if any selected module declares
+        # WIPE_DATA_ON_START=True (per CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md
+        # §5.1), force --wipe-data regardless of CLI flags. Required for
+        # signed-artifact reproducibility — every run starts from a
+        # deterministic baseline so the bundle hash is meaningful.
+        from .modules._module_metadata import get_metadata as _get_module_md
 
-        if modules and QAModule.SQL_EXTERNAL_DATA in modules:
-            # SQL external data tests need both api and external_data_sql adapters
-            if "external_data_sql" not in self.config.adapter:
-                self.config.adapter = "api,external_data_sql"
+        for _mod in self.modules:
+            _md = _get_module_md(_mod)
+            if getattr(_md, "wipe_data_on_start", False) and not self.config.wipe_data:
+                self.config.wipe_data = True
                 self.console.print(
-                    "[dim]Auto-configured adapter: api,external_data_sql for SQL external data tests[/dim]"
+                    f"[dim]Auto-enabled --wipe-data: {_mod.value} module "
+                    f"declares WIPE_DATA_ON_START (reproducibility requirement)[/dim]"
                 )
 
-        if modules and QAModule.DSAR_MULTI_SOURCE in modules:
-            # DSAR multi-source tests need both api and external_data_sql adapters
-            if "external_data_sql" not in self.config.adapter:
-                self.config.adapter = "api,external_data_sql"
+        # If every selected module declares REQUIRES_CIRIS_SERVER=False,
+        # skip server start + auth entirely. Such modules (e.g.
+        # safety_interpret) talk to external APIs directly — booting a
+        # CIRIS agent just to throw it away is wasteful and surfaces
+        # unrelated failure modes (e.g. CIRISVerify FFI on TPM-less
+        # runners) that have nothing to do with the test in question.
+        if self.modules and all(not getattr(_get_module_md(_m), "requires_ciris_server", True) for _m in self.modules):
+            self._skip_ciris_server = True
+            if self.config.auto_start_server:
+                self.config.auto_start_server = False
                 self.console.print(
-                    "[dim]Auto-configured adapter: api,external_data_sql for DSAR multi-source tests[/dim]"
+                    "[dim]Auto-disabled server start: all selected modules " "declare REQUIRES_CIRIS_SERVER=False[/dim]"
                 )
+        else:
+            self._skip_ciris_server = False
+
+        # Auto-configure adapters based on the modules being tested. Built
+        # ADDITIVELY so multiple adapter-needing modules in one batch compose:
+        # the old per-branch `self.config.adapter = "api,X"` clobbered the
+        # whole string, so e.g. a reddit + sql_external_data batch silently
+        # lost the reddit adapter and every reddit test failed.
+        if self.modules:
+            # QAModule -> the adapter it needs loaded at server startup.
+            _MODULE_STARTUP_ADAPTERS = {
+                QAModule.REDDIT: "reddit",
+                QAModule.SQL_EXTERNAL_DATA: "external_data_sql",
+                QAModule.DSAR_MULTI_SOURCE: "external_data_sql",
+                QAModule.HE300_BENCHMARK: "a2a",
+                # accord_metrics validates traces shipped by the agent; the
+                # adapter must be loaded from startup so messages processed
+                # before the module's own runtime adapter-loads still emit
+                # traces (see accord_metrics_tests.py — "default adapter
+                # loaded at startup").
+                QAModule.ACCORD_METRICS: "ciris_accord_metrics",
+            }
+            adapters = [a.strip() for a in self.config.adapter.split(",") if a.strip()]
+            if "api" not in adapters:
+                adapters.insert(0, "api")
+            for _mod, _adapter_name in _MODULE_STARTUP_ADAPTERS.items():
+                if _mod in self.modules and _adapter_name not in adapters:
+                    adapters.append(_adapter_name)
+            joined = ",".join(adapters)
+            if joined != self.config.adapter:
+                self.config.adapter = joined
+                self.console.print(f"[dim]Auto-configured adapters: {joined}[/dim]")
 
         # Determine database backends to test
         if self.config.database_backends is None:
@@ -69,42 +360,28 @@ class QARunner:
         # Create server managers for each backend
         self.server_managers: Dict[str, APIServerManager] = {}
         for backend in self.database_backends:
-            port = self.config.api_port if backend == "sqlite" else self.config.postgres_port
-            # Create a copy of config with the right port
-            backend_config = QAConfig(
+            port = self.config.api_port if backend == "sqlite" else self.config.postgres_api_port
+            # Copy the CLI config, overriding ONLY the backend-specific
+            # fields. dataclasses.replace ensures every OTHER field — present
+            # and future — flows through automatically. (The previous
+            # field-by-field QAConfig(...) enumeration silently dropped any
+            # newly added field: model_eval filters and safety_battery_lang
+            # each hit it before, and safety_battery_limit hit it again.)
+            import dataclasses
+
+            backend_config = dataclasses.replace(
+                self.config,
                 base_url=f"http://localhost:{port}",
                 api_port=port,
-                admin_username=self.config.admin_username,
-                admin_password=self.config.admin_password,
-                oauth_test_user_id=self.config.oauth_test_user_id,
-                oauth_test_email=self.config.oauth_test_email,
-                oauth_test_provider=self.config.oauth_test_provider,
-                oauth_test_external_id=self.config.oauth_test_external_id,
-                billing_enabled=self.config.billing_enabled,
-                billing_api_key=self.config.billing_api_key,
-                billing_api_url=self.config.billing_api_url,
-                parallel_tests=self.config.parallel_tests,
-                max_workers=self.config.max_workers,
-                timeout=self.config.timeout,
-                retry_count=self.config.retry_count,
-                retry_delay=self.config.retry_delay,
-                verbose=self.config.verbose,
-                json_output=self.config.json_output,
-                html_report=self.config.html_report,
-                report_dir=self.config.report_dir,
-                auto_start_server=self.config.auto_start_server,
-                server_startup_timeout=self.config.server_startup_timeout,
-                mock_llm=self.config.mock_llm,
-                adapter=self.config.adapter,
                 database_backends=None,  # Don't pass this recursively
-                postgres_url=self.config.postgres_url,
-                postgres_port=self.config.postgres_port,
-                # Live LLM configuration
-                live_api_key=self.config.live_api_key,
-                live_model=self.config.live_model,
-                live_base_url=self.config.live_base_url,
-                # Live Lens configuration
-                live_lens=self.config.live_lens,
+                # staged_env is deliberately RESET (matching the historical
+                # field-by-field copy, which always dropped it): the server
+                # manager launches `python main.py` from the checkout, and
+                # the staged job's byte-parity hash gate guarantees the tree
+                # equals the wheel. Inheriting it flips the launch onto the
+                # staged `ciris-server` console script, which fails with
+                # "No module named 'main'" in CI (latent script bug).
+                staged_env=None,
             )
             self.server_managers[backend] = APIServerManager(
                 backend_config, database_backend=backend, modules=self.modules
@@ -124,8 +401,17 @@ class QARunner:
 
     def run(self, modules: List[QAModule]) -> bool:
         """Run QA tests for specified modules."""
-        # If testing multiple backends, always use parallel mode for proper state isolation
-        # (Sequential mode doesn't properly isolate database/server state between backends)
+        # Expand `all` / `all_1` / `all_2` so the HTTP/SDK routing split
+        # below runs SDK modules too. Idempotent — __init__ already expanded
+        # self.modules, but run() may be called directly (and is, per-backend,
+        # by _run_parallel_backends).
+        modules = _expand_module_aggregates(modules)
+
+        # Multi-backend always routes through subprocess isolation (in-process
+        # sequential mode cross-contaminates auth/server state). Whether the
+        # isolated children run one-at-a-time (default; the node-folded
+        # substrate binds host-wide :4242/:4243 — all_1 RCA 2026-07-20) or
+        # concurrently (--parallel-backends) is decided inside.
         if len(self.database_backends) > 1:
             return self._run_parallel_backends(modules)
 
@@ -141,9 +427,10 @@ class QARunner:
             )
         )
 
-        # Show initial incidents log status and record baseline
+        # Show initial incidents log status. The baseline position is
+        # recorded AFTER server start (below) so server-startup log content
+        # is excluded — only incidents raised during testing fail the run.
         self._show_incidents_status("STARTUP")
-        self._record_startup_incidents_position()
 
         # Setup OAuth test user and billing config BEFORE starting server if billing_integration is in modules
         # This ensures the auth service loads the user with password when it initializes
@@ -160,14 +447,14 @@ class QARunner:
                     billing_api_key = key_file.read_text().strip()
                     self.console.print(f"[dim]Loaded billing API key from {key_file}[/dim]")
                 except Exception as e:
-                    self.console.print(f"[yellow]⚠️  Failed to read {key_file}: {e}[/yellow]")
+                    self.console.print(f"[yellow][WARN] Failed to read {key_file}: {e}[/yellow]")
 
             # Fall back to environment variable
             if not billing_api_key:
                 billing_api_key = os.getenv("CIRIS_BILLING_API_KEY")
 
             if not billing_api_key:
-                self.console.print("[red]❌ Billing API key required for billing integration tests[/red]")
+                self.console.print("[red][FAIL] Billing API key required for billing integration tests[/red]")
                 self.console.print("[red]   Place key in ~/.ciris/qa_billing_key or set CIRIS_BILLING_API_KEY[/red]")
                 return False
 
@@ -175,10 +462,10 @@ class QARunner:
             self.config.billing_api_key = billing_api_key
             self.config.billing_api_url = os.getenv("CIRIS_BILLING_API_URL", "https://billing.ciris.ai")
 
-            self.console.print(f"[cyan]💳 Billing integration enabled: {self.config.billing_api_url}[/cyan]")
+            self.console.print(f"[cyan] Billing integration enabled: {self.config.billing_api_url}[/cyan]")
 
             if not self._setup_oauth_test_user():
-                self.console.print("[red]❌ Failed to setup OAuth test user[/red]")
+                self.console.print("[red][FAIL] Failed to setup OAuth test user[/red]")
                 return False
 
         # Configure SQL external data service if needed - MUST BE BEFORE SERVER STARTS
@@ -196,40 +483,36 @@ class QARunner:
                 self.server_manager._sql_config_path = temp_test.sql_config_path
                 self.console.print("[dim]SQL external data test database configured[/dim]")
             else:
-                self.console.print(f"[red]❌ Failed to setup SQL test database: {setup_result.get('error')}[/red]")
+                self.console.print(f"[red][FAIL] Failed to setup SQL test database: {setup_result.get('error')}[/red]")
                 return False
 
         # Start API server if needed
         if self.config.auto_start_server:
             if not self.server_manager.start():
-                self.console.print("[red]❌ Failed to start API server[/red]")
+                self.console.print("[red][FAIL] Failed to start API server[/red]")
                 return False
 
-        # Get authentication token (skip for SETUP module - first-run has no users)
-        if QAModule.SETUP not in modules:
+        # Baseline the incidents log now that the server is up — only agent
+        # ERROR/CRITICAL incidents raised from here on (auth + every module)
+        # count toward failing the run.
+        self._record_startup_incidents_position()
+
+        # Get authentication token (skip for SETUP module - first-run has no users,
+        # and skip when no module needs a CIRIS server at all)
+        if getattr(self, "_skip_ciris_server", False):
+            self.console.print("[dim]Skipping authentication: no selected module requires a CIRIS server[/dim]")
+        elif QAModule.SETUP not in modules:
             if not self._authenticate():
-                self.console.print("[red]❌ Authentication failed[/red]")
+                self.console.print("[red][FAIL] Authentication failed[/red]")
                 if self.config.auto_start_server:
                     self.server_manager.stop()
                 return False
         else:
             self.console.print("[dim]Skipping authentication for SETUP module (first-run mode)[/dim]")
 
-        # Initialize SSE monitoring helper for HANDLERS and FILTERS tests
-        # Both now use async /agent/message endpoint + SSE streaming
-        if QAModule.FILTERS in modules or QAModule.HANDLERS in modules:
-            self._filter_helper = FilterTestHelper(self.config.base_url, self.token, verbose=self.config.verbose)
-            try:
-                self._filter_helper.start_monitoring()
-                module_names = []
-                if QAModule.FILTERS in modules:
-                    module_names.append("filters")
-                if QAModule.HANDLERS in modules:
-                    module_names.append("handlers")
-                self.console.print(f"[green]✅ SSE monitoring started for {', '.join(module_names)} tests[/green]")
-            except Exception as e:
-                self.console.print(f"[yellow]⚠️  Failed to start SSE monitoring: {e}[/yellow]")
-                self._filter_helper = None
+        # Note: FILTERS and HANDLERS are now SDK-based and don't need SSE monitoring
+        # SSE monitoring only needed for any remaining HTTP-based async message tests
+        self._filter_helper = None
 
         # Separate SDK-based modules from HTTP test modules
         sdk_modules = [
@@ -254,35 +537,109 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.AIR,
-            QAModule.COVENANT_METRICS,
+            QAModule.ACCORD_METRICS,
+            QAModule.AGENT_MODE,
             QAModule.SYSTEM_MESSAGES,
             QAModule.HOSTED_TOOLS,
             QAModule.UTILITY_ADAPTERS,
+            QAModule.HOMEASSISTANT_AGENTIC,
+            QAModule.DEFERRAL_TAXONOMY,
+            QAModule.LICENSED_AGENT,
+            QAModule.SOLITUDE_LIVE,
+            QAModule.PLAY_LIVE,
+            QAModule.DREAM_LIVE,
+            QAModule.FILTERS,
+            QAModule.HANDLERS,
+            QAModule.DEFERRAL,
+            QAModule.WALLET,
+            QAModule.DEGRADED_MODE,
+            QAModule.MODEL_EVAL,
+            QAModule.PARALLEL_LOCALES,
+            QAModule.SAFETY_BATTERY,
+            QAModule.SAFETY_INTERPRET,
+            QAModule.SECRETS_ENCRYPTION,
+            QAModule.MEMORY_BENCHMARK,
+            QAModule.MESH_REPRO,
+            QAModule.ACCORD_HALT,
         ]
         http_modules = [m for m in modules if m not in sdk_modules]
         sdk_test_modules = [m for m in modules if m in sdk_modules]
 
         # Collect HTTP test cases
+        # Get password from server manager (set during setup wizard completion)
+        dynamic_password = None
+        if hasattr(self, "server_manager") and self.server_manager:
+            dynamic_password = self.server_manager.get_admin_password()
+
+        # Keep SETUP tests separate from the rest. On a SETUP run the data
+        # dir is wiped (first-run), so authentication was skipped above —
+        # there is no admin user yet. SETUP runs the wizard which CREATES
+        # that user; only after it completes can the remaining HTTP + SDK
+        # modules authenticate. Running SETUP batched with other modules
+        # without this phasing leaves every later module tokenless (401).
+        setup_tests = []
         all_tests = []
         for module in http_modules:
-            tests = self.config.get_module_tests(module)
-            all_tests.extend(tests)
-
-        # Run HTTP tests
-        success = True
-        if all_tests:
-            self.console.print(f"\n📋 Running {len(all_tests)} HTTP test cases...")
-            if self.config.parallel_tests:
-                success = self._run_parallel(all_tests)
+            tests = self.config.get_module_tests(module, admin_password=dynamic_password)
+            if module == QAModule.SETUP:
+                setup_tests.extend(tests)
             else:
-                success = self._run_sequential(all_tests)
+                all_tests.extend(tests)
+
+        # ORDER, NOT SKIP. `/v1/auth/logout` is the node's now and DEACTIVATES
+        # the WA cert (CIRISServer#387), so a successful logout ends the run's
+        # identity and nothing after it can authenticate. Skipping the remainder
+        # 'fixes' the red by not running most of the suite — a green build that
+        # tested less, which is worse than the failure it replaces.
+        #
+        # So the identity-closing tests run LAST. Everything else keeps a live
+        # credential exactly as before, logout is still executed and asserted,
+        # and no coverage is traded away for a green.
+        # Sorting them last within THIS phase was not enough: the SDK modules run in
+        # a LATER phase, so logout still preceded every one of them. all_2 went red
+        # with `Missing authorization header` across system_messages, air, deferral,
+        # secrets_encryption and the adapter modules — token_to_use was None for all
+        # of them — while all_1, whose subset carries no logout, passed clean.
+        #
+        # So hold them out entirely and run them after the SDK phase, i.e. genuinely
+        # last. Same principle as before, applied to the whole run instead of one
+        # phase: logout is still executed and still asserted, and nothing that needs
+        # a credential runs after the credential is gone.
+        identity_closing_tests = [t for t in all_tests if _closes_identity(t)]
+        all_tests = [t for t in all_tests if not _closes_identity(t)]
+
+        success = True
+
+        # Phase 1: SETUP wizard (first-run, no token) — creates the admin user.
+        if setup_tests:
+            self.console.print(f"\n Running {len(setup_tests)} SETUP test cases...")
+            if self.config.parallel_tests:
+                success = self._run_parallel(setup_tests)
+            else:
+                success = self._run_sequential(setup_tests)
+            # The wizard has created the admin user — authenticate now so
+            # every subsequent HTTP + SDK module is wired with a token.
+            if not self.token and not getattr(self, "_skip_ciris_server", False):
+                self.console.print("[dim]Authenticating after SETUP wizard...[/dim]")
+                if not self._authenticate():
+                    self.console.print(
+                        "[yellow]⚠️  Post-SETUP authentication failed — " "remaining modules may report 401[/yellow]"
+                    )
+
+        # Phase 2: remaining HTTP test modules (now token-wired).
+        if all_tests:
+            self.console.print(f"\n Running {len(all_tests)} HTTP test cases...")
+            if self.config.parallel_tests:
+                success = self._run_parallel(all_tests) and success
+            else:
+                success = self._run_sequential(all_tests) and success
 
         # Run TRUE multi-occurrence integration test if requested
         if QAModule.MULTI_OCCURRENCE in modules:
             from .modules.multi_occurrence_tests import MultiOccurrenceTestModule
 
             self.console.print("\n" + "=" * 80)
-            self.console.print("[bold cyan]🔄 RUNNING TRUE MULTI-OCCURRENCE INTEGRATION TEST[/bold cyan]")
+            self.console.print("[bold cyan] RUNNING TRUE MULTI-OCCURRENCE INTEGRATION TEST[/bold cyan]")
             self.console.print("=" * 80)
 
             # This test spawns 2 separate runtimes and tests coordination
@@ -298,44 +655,33 @@ class QARunner:
 
             if not mo_result["success"]:
                 success = False
-                self.console.print(f"[red]❌ Multi-occurrence integration test failed: {mo_result.get('errors')}[/red]")
+                self.console.print(
+                    f"[red][FAIL] Multi-occurrence integration test failed: {mo_result.get('errors')}[/red]"
+                )
             else:
-                self.console.print("[green]✅ Multi-occurrence integration test passed![/green]")
-
-        # Run COVENANT tests if requested (standalone - no server needed)
-        if QAModule.COVENANT in modules:
-            from .modules.covenant_tests import CovenantTestModule
-
-            self.console.print("\n" + "=" * 80)
-            self.console.print("[bold cyan]🔐 RUNNING COVENANT INVOCATION SYSTEM TESTS[/bold cyan]")
-            self.console.print("=" * 80)
-
-            covenant_module = CovenantTestModule()
-            covenant_results = covenant_module.run_all_tests()
-
-            # Store results
-            covenant_passed = 0
-            covenant_failed = 0
-            for result in covenant_results:
-                test_key = f"covenant::{result.name}"
-                self.results[test_key] = {
-                    "success": result.passed,
-                    "status": "✅ PASS" if result.passed else "❌ FAIL",
-                    "error": None if result.passed else result.message,
-                    "duration": result.duration,
-                }
-                if result.passed:
-                    covenant_passed += 1
-                else:
-                    covenant_failed += 1
-                    success = False
-
-            self.console.print(f"\n[cyan]Covenant tests: {covenant_passed} passed, {covenant_failed} failed[/cyan]")
+                self.console.print("[green][OK] Multi-occurrence integration test passed![/green]")
 
         # Run SDK-based tests
         if sdk_test_modules:
             sdk_success = self._run_sdk_modules(sdk_test_modules)
             success = success and sdk_success
+
+        # Phase 4: the identity-closing tests, genuinely last.
+        #
+        # `/v1/auth/logout` is the node's and DEACTIVATES the WA cert
+        # (CIRISServer#387) — resolve_login and every enumeration are active-only, so
+        # afterwards the account is not merely logged out, it is invisible and re-auth
+        # cannot succeed. Running these here means the whole suite has already had a
+        # live credential, and logout is still fully executed and asserted.
+        if identity_closing_tests:
+            self.console.print(
+                f"\n🔒 Running {len(identity_closing_tests)} identity-closing test case(s) LAST "
+                f"(they end the run's account by design)."
+            )
+            if self.config.parallel_tests:
+                success = self._run_parallel(identity_closing_tests) and success
+            else:
+                success = self._run_sequential(identity_closing_tests) and success
 
         # MANDATORY: Always show incidents log status after tests
         self._show_incidents_status("POST-TEST")
@@ -349,7 +695,12 @@ class QARunner:
         # Stop filter helper if running
         if self._filter_helper:
             self._filter_helper.stop_monitoring()
-            self.console.print("[cyan]⏹️  SSE monitoring stopped[/cyan]")
+            self.console.print("[cyan]⏹ SSE monitoring stopped[/cyan]")
+
+        # Verify CEG trace delivery to canonical-server-1 BEFORE stopping the
+        # server (needs the live edge + API). Only when --federation-delivery.
+        if self.config.federation_delivery:
+            self._verify_federation_delivery()
 
         # Stop server if we started it
         if self.config.auto_start_server:
@@ -359,25 +710,41 @@ class QARunner:
         elapsed = time.time() - start_time
         self._print_summary(elapsed, has_incidents)
 
+        # Update QA status tracker
+        self._update_status_tracker(elapsed)
+
         # Final incidents reminder - CANNOT be missed
         if has_incidents:
             self.console.print("\n" + "=" * 60)
-            self.console.print("[bold red]🚨 CRITICAL: INCIDENTS DETECTED DURING TESTING! 🚨[/bold red]")
-            self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
+            if getattr(self, "_incidents_unverifiable", False):
+                # NOT the same failure as "incidents found". This one means the gate
+                # could not look at all — which used to silently PASS, making every
+                # green run only as trustworthy as the log file having existed.
+                self.console.print(
+                    "[bold red][ALERT] RUN NOT CERTIFIED: THE INCIDENTS GATE COULD NOT RUN [ALERT][/bold red]"
+                )
+                self.console.print(
+                    "[bold red]No incidents were found because none could be looked for. "
+                    "See the CANNOT CERTIFY block above for the expected path.[/bold red]"
+                )
+            else:
+                self.console.print("[bold red][ALERT] CRITICAL: INCIDENTS DETECTED DURING TESTING! [ALERT][/bold red]")
+                self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
             self.console.print("=" * 60)
             return False  # Force failure if incidents occurred
         else:
-            self.console.print("\n[bold green]✅ No critical incidents - tests completed cleanly![/bold green]")
+            self.console.print("\n[bold green][OK] No critical incidents - tests completed cleanly![/bold green]")
 
         # ALWAYS print log location reminders - helpful for debugging
         log_dir = f"logs/{self.server_manager.database_backend}"
-        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print("\n[cyan] Log Locations:[/cyan]")
+        self.console.print(f"[dim]   • Console (early startup): {log_dir}/console.log[/dim]")
         self.console.print(f"[dim]   • Full logs: {log_dir}/latest.log[/dim]")
-        self.console.print(f"[dim]   • Incidents: {log_dir}/incidents_latest.log[/dim]")
+        self.console.print(f"[dim]   • Incidents: {self._incidents_log_path()}[/dim]")
 
         # Billing-specific reminder for billing integration tests
         if QAModule.BILLING_INTEGRATION in modules:
-            self.console.print("\n[yellow]💳 Billing Integration Note:[/yellow]")
+            self.console.print("\n[yellow] Billing Integration Note:[/yellow]")
             self.console.print("[dim]   • Credit replenishment takes 5 minutes for QA user[/dim]")
             self.console.print("[dim]   • If tests fail due to no credits, wait 5 minutes and retry[/dim]")
 
@@ -388,22 +755,18 @@ class QARunner:
 
         Returns list of critical incidents found.
         """
-        incidents_log = Path("logs/incidents_latest.log")
+        incidents_log = self._incidents_log_path()
 
         if not incidents_log.exists():
             return []
 
-        # Patterns to ignore (non-critical)
-        ignore_patterns = [
-            "MOCK_MODULE_LOADED",
-            "MOCK LLM",
-            "RUNTIME SHUTDOWN",
-            "SYSTEM SHUTDOWN",
-            "GRACEFUL SHUTDOWN",
-            "Edge already exists",
-            "duplicate edge",
-            "TSDB consolidation",
-        ]
+        # Patterns to ignore (non-critical).
+        # Kept in sync with the comprehensive list in `_has_incidents_occurred`
+        # below — both filter against the same incidents log and the same
+        # categories of expected / environmental / test-induced ERRORs.
+        # The single source of truth — see EXPECTED_QA_INCIDENT_PATTERNS.
+        # These three readers used to keep three drifting copies.
+        ignore_patterns = EXPECTED_QA_INCIDENT_PATTERNS
 
         critical_errors = []
 
@@ -482,40 +845,33 @@ class QARunner:
         except Exception as e:
             # Don't fail the test run if we can't check logs
             if self.config.verbose:
-                self.console.print(f"[yellow]⚠️  Error checking main log for task appending: {e}[/yellow]")
+                self.console.print(f"[yellow][WARN] Error checking main log for task appending: {e}[/yellow]")
 
         return warnings
 
     def _show_incidents_status(self, phase: str):
         """ALWAYS show incidents log status - prominent and mandatory."""
-        incidents_log = Path("logs/incidents_latest.log")
+        incidents_log = self._incidents_log_path()
 
-        self.console.print(f"\n[bold cyan]📋 INCIDENTS LOG STATUS ({phase}):[/bold cyan]")
+        self.console.print(f"\n[bold cyan] INCIDENTS LOG STATUS ({phase}):[/bold cyan]")
 
         if not incidents_log.exists():
-            self.console.print("[bold red]❌ NO INCIDENTS LOG FOUND[/bold red]")
+            self.console.print("[bold red][FAIL] NO INCIDENTS LOG FOUND[/bold red]")
             return
 
         # Show log file info
         try:
             log_size = incidents_log.stat().st_size
-            self.console.print(f"   📁 Log: {incidents_log.resolve()}")
-            self.console.print(f"   📊 Size: {log_size:,} bytes")
+            self.console.print(f" Log: {incidents_log.resolve()}")
+            self.console.print(f" Size: {log_size:,} bytes")
         except Exception as e:
-            self.console.print(f"[red]❌ Cannot read log file: {e}[/red]")
+            self.console.print(f"[red][FAIL] Cannot read log file: {e}[/red]")
             return
 
         # Patterns to ignore (non-critical)
-        ignore_patterns = [
-            "MOCK_MODULE_LOADED",
-            "MOCK LLM",
-            "RUNTIME SHUTDOWN",
-            "SYSTEM SHUTDOWN",
-            "GRACEFUL SHUTDOWN",
-            "Edge already exists",
-            "duplicate edge",
-            "TSDB consolidation",
-        ]
+        # The single source of truth — see EXPECTED_QA_INCIDENT_PATTERNS.
+        # These three readers used to keep three drifting copies.
+        ignore_patterns = EXPECTED_QA_INCIDENT_PATTERNS
 
         critical_errors = []
         warning_count = 0
@@ -525,9 +881,15 @@ class QARunner:
         try:
             with open(incidents_log, "r") as f:
                 for line in f:
-                    if "WARNING" in line:
+                    # Match the LEVEL FIELD, not the word anywhere in the line.
+                    # A bare substring test counts the file's own header —
+                    # "=== This file contains WARNING and ERROR messages ..." —
+                    # as a warning, and counts any message that merely mentions
+                    # the word. The counts then drive a hard failure, so an
+                    # inflated count fails a run for text rather than for events.
+                    if " - WARNING " in line or " - WARNING - " in line:
                         warning_count += 1
-                    elif "ERROR" in line:
+                    elif " - ERROR " in line or " - ERROR - " in line:
                         error_count += 1
                         # Check if it's a critical error we should report
                         if not any(pattern in line for pattern in ignore_patterns):
@@ -549,18 +911,18 @@ class QARunner:
                                         critical_errors.append(error_msg)
 
         except Exception as e:
-            self.console.print(f"[red]❌ Could not read incidents log: {e}[/red]")
+            self.console.print(f"[red][FAIL] Could not read incidents log: {e}[/red]")
             return
 
         # ALWAYS show counts - even if zero
-        self.console.print(f"   ⚠️  Warnings: {warning_count}")
-        self.console.print(f"   🚫 Errors: {error_count}")
-        self.console.print(f"   💥 Critical: {critical_count}")
+        self.console.print(f" [WARN] Warnings: {warning_count}")
+        self.console.print(f" Errors: {error_count}")
+        self.console.print(f" [CRIT] Critical: {critical_count}")
 
         # Report critical errors prominently
         if critical_errors:
             unique_errors = list(dict.fromkeys(critical_errors))
-            self.console.print(f"\n[bold red]🚨 CRITICAL ISSUES FOUND ({len(unique_errors)}):[/bold red]")
+            self.console.print(f"\n[bold red][ALERT] CRITICAL ISSUES FOUND ({len(unique_errors)}):[/bold red]")
             for i, error in enumerate(unique_errors[:10], 1):  # Show more errors
                 self.console.print(f"   {i:2d}. {error[:250]}")  # Show more of each error
 
@@ -568,15 +930,39 @@ class QARunner:
                 self.console.print(f"   ... and {len(unique_errors) - 10} more critical errors")
 
             # Make it impossible to miss
-            self.console.print(f"\n[bold red]🚨 {len(unique_errors)} CRITICAL ISSUES REQUIRE ATTENTION! 🚨[/bold red]")
+            self.console.print(
+                f"\n[bold red][ALERT] {len(unique_errors)} CRITICAL ISSUES REQUIRE ATTENTION! [ALERT][/bold red]"
+            )
         else:
-            self.console.print("[bold green]✅ No critical issues found[/bold green]")
+            self.console.print("[bold green][OK] No critical issues found[/bold green]")
 
         self.console.print()  # Extra spacing
 
+    def _incidents_log_path(self) -> Path:
+        """Path to the incidents log the running server actually writes to.
+
+        Backend runs write to ``logs/{backend}/incidents_latest.log`` — NOT
+        the stale top-level ``logs/incidents_latest.log``. Watching the wrong
+        file is why agent ERROR/CRITICAL incidents raised during testing went
+        undetected and runs reported "no incidents" when they should have
+        failed.
+        """
+        # getattr on config too: the gate tests build a bare QARunner via __new__.
+        explicit = getattr(getattr(self, "config", None), "incidents_log_path", None)
+        if explicit:
+            # A backend we did not start (a phone's, a desktop app's) writes
+            # wherever it lives; the caller tells us where. Existence is still
+            # checked by the gate -- an absent file fails the run, as always.
+            return Path(explicit)
+        server_manager = getattr(self, "server_manager", None)
+        backend = getattr(server_manager, "database_backend", None) if server_manager else None
+        if backend:
+            return Path(f"logs/{backend}/incidents_latest.log")
+        return Path("logs/incidents_latest.log")
+
     def _record_startup_incidents_position(self):
         """Record the incidents log position at startup for comparison."""
-        incidents_log = Path("logs/incidents_latest.log")
+        incidents_log = self._incidents_log_path()
 
         if incidents_log.exists():
             try:
@@ -587,11 +973,44 @@ class QARunner:
             self._startup_incidents_position = 0
 
     def _has_incidents_occurred(self) -> bool:
-        """Check if any NEW incidents occurred during testing."""
-        incidents_log = Path("logs/incidents_latest.log")
+        """Check if any NEW incidents occurred during testing.
+
+        FAILS CLOSED when the log is missing. A gate that cannot look must not
+        report clean.
+
+        This used to `return False` — no log, therefore no incidents, therefore
+        PASS. That made the whole gate a coin flip, and it was observed twice: on
+        2.9.13's main run the sqlite leg found the log and failed while postgres
+        printed "NO INCIDENTS LOG FOUND" and passed; on the re-run the two legs
+        SWAPPED. Both runs had 100% test success on both backends and identical
+        expected, test-induced errors. Which leg failed depended only on which
+        one's file existed.
+
+        The consequence is worse than a flaky red: a leg that passes because the
+        log is absent certifies a run nobody checked. Every green Staged QA in
+        this repo's history is therefore only as trustworthy as the file having
+        been there, and we cannot tell after the fact which ones were.
+        """
+        incidents_log = self._incidents_log_path()
 
         if not incidents_log.exists():
-            return False
+            self.console.print(
+                "\n[bold red][FAIL] CANNOT CERTIFY THIS RUN — the incidents log does not exist.[/bold red]"
+            )
+            self.console.print(
+                f"[red]   expected : {incidents_log.resolve()}[/red]\n"
+                f"[red]   backend  : {getattr(getattr(self, 'server_manager', None), 'database_backend', '<unknown>')}[/red]\n"
+                "[red]   WHY: this gate reads that file to decide whether the agent raised "
+                "ERROR/CRITICAL during testing. With no file there is nothing to read, so a "
+                "'pass' would mean 'not checked', not 'clean'.[/red]\n"
+                "[red]   FIX: confirm the server started and configured file logging for this "
+                "backend (logs/<backend>/incidents_latest.log is created at startup). A run that "
+                "cannot be checked is a failed run, not a clean one.[/red]"
+            )
+            # Distinguish "could not check" from "checked and found incidents" —
+            # they need different debugging and must not read alike.
+            self._incidents_unverifiable = True
+            return True  # fail closed
 
         # Only check for new content added since startup
         try:
@@ -600,43 +1019,116 @@ class QARunner:
                 return False  # No new content
 
             # Check only the new content
-            ignore_patterns = [
-                "MOCK_MODULE_LOADED",
-                "MOCK LLM",
-                "RUNTIME SHUTDOWN",
-                "SYSTEM SHUTDOWN",
-                "GRACEFUL SHUTDOWN",
-                "Edge already exists",
-                "duplicate edge",
-                "TSDB consolidation",
-            ]
+            # The single source of truth — see EXPECTED_QA_INCIDENT_PATTERNS.
+            # These three readers used to keep three drifting copies.
+            ignore_patterns = EXPECTED_QA_INCIDENT_PATTERNS
+
+            # A single WARNING is noise; the same WARNING repeated dozens of
+            # times is a systemic malfunction (e.g. 352× "[STORE_RESPONSE] No
+            # event found" — every agent response failing to correlate). Flag
+            # a WARNING flood even though no line is ERROR-level.
+            warning_flood_threshold = 50
+            warning_counts: Dict[str, int] = {}
 
             with open(incidents_log, "r") as f:
                 f.seek(self._startup_incidents_position)  # Start from where we left off
 
                 for line in f:
-                    if ("ERROR" in line or "CRITICAL" in line) and not any(
-                        pattern in line for pattern in ignore_patterns
-                    ):
+                    if any(pattern in line for pattern in ignore_patterns):
+                        continue
+                    if "ERROR" in line or "CRITICAL" in line:
                         return True
+                    if "WARNING" in line:
+                        # Normalize away per-event variables (uuids, hex ids,
+                        # numbers) so identical warnings collapse to one key.
+                        sig = re.sub(r"[0-9a-fA-F]{8}-[0-9a-fA-F-]{8,}", "<id>", line)
+                        sig = re.sub(r"\b[0-9a-fA-F]{12,}\b", "<hex>", sig)
+                        sig = re.sub(r"\d+", "<n>", sig)
+                        sig = sig.split(" - ", 3)[-1].strip()[:160]
+                        warning_counts[sig] = warning_counts.get(sig, 0) + 1
+
+            for sig, count in warning_counts.items():
+                if count >= warning_flood_threshold:
+                    self.console.print(
+                        f"[bold red]🚨 WARNING flood: '{sig}' repeated {count}× "
+                        f"during testing — systemic malfunction[/bold red]"
+                    )
+                    return True
 
         except Exception:
             return False
 
         return False
 
+    def _assert_token_valid(self, after_label: str) -> bool:
+        """Diagnostic auth gate — confirm self.token still works after `after_label`.
+
+        A test that logs out, refreshes, revokes, or otherwise corrupts the
+        session token leaves EVERY later test 401-ing far from the real
+        culprit (the diffuse "Invalid API key" failures seen under
+        --parallel-backends). This gate runs one cheap check — GET
+        /v1/auth/me — right after each test/module: on a non-200 it fails
+        LOUDLY, naming the exact step that just ran, then re-authenticates so
+        the rest of the run still produces signal. The loud line makes the
+        culprit obvious instead of a mystery N modules downstream.
+
+        Returns True if the token was already valid, False if it had to be
+        restored (i.e. `after_label` is the suspect).
+        """
+        if not self.token:
+            return True
+        if getattr(self, "_identity_closed_by", None):
+            # Explained once, at the test that closed it. Repeating the
+            # loud line for every later test is what turned one cause
+            # into 191 lines pointing at innocent steps.
+            return True
+        try:
+            resp = requests.get(
+                f"{self.config.base_url}/v1/auth/me",
+                headers={"Authorization": f"Bearer {self.token}"},
+                timeout=10,
+            )
+        except Exception as e:
+            self.console.print(f"[yellow] [AUTH GATE] could not validate token after '{after_label}': {e}[/yellow]")
+            return True
+        if resp.status_code == 200:
+            return True
+        self.console.print(
+            f"[bold red]🔑 [AUTH GATE] auth token INVALID (HTTP {resp.status_code}) "
+            f"immediately after '{after_label}' — that step corrupted the session "
+            f"token. Re-authenticating so the run continues.[/bold red]"
+        )
+        self._authenticate()
+        return False
+
     def _authenticate(self) -> bool:
         """Get authentication token."""
         try:
+            # Use server manager's extracted password if available (dynamic password)
+            # Otherwise fall back to config password
+            admin_password = self.config.admin_password
+            if hasattr(self, "server_manager") and self.server_manager:
+                admin_password = self.server_manager.get_admin_password()
+
             response = requests.post(
                 f"{self.config.base_url}/v1/auth/login",
-                json={"username": self.config.admin_username, "password": self.config.admin_password},
+                json={"username": self.config.admin_username, "password": admin_password},
                 timeout=10,
             )
 
             if response.status_code == 200:
                 self.token = response.json()["access_token"]
-                self.console.print("[green]✅ Authentication successful[/green]")
+                self.console.print("[green][OK] Authentication successful[/green]")
+                # Diagnostic: which URL this _authenticate() hit and the
+                # token suffix it yielded — to catch a base_url cross under
+                # --parallel-backends (a child authenticating against the
+                # other backend's server).
+                print(
+                    f"QA_AUTH_TRACE backend={self.database_backends} "
+                    f"login_url={self.config.base_url}/v1/auth/login "
+                    f"token_suffix=...{(self.token or '')[-12:]}",
+                    flush=True,
+                )
                 return True
             else:
                 self.console.print(f"[red]Authentication failed: {response.status_code}[/red]")
@@ -646,11 +1138,337 @@ class QARunner:
             self.console.print(f"[red]Authentication error: {e}[/red]")
             return False
 
+    def _verify_federation_delivery(self) -> bool:
+        """Verify CEG delivery preconditions to canonical-server-1 (log-based).
+
+        TWO delivery paths (CIRISServer#260 RCA):
+          - keys + attestations ride the anti-entropy ROUNDS (Key / Attestation /
+            IdentityOccurrence) — green once the canonical roots; confirmed by
+            round completions on the peer, not by any envelope counter.
+          - CEG traces ride SEALED ENVELOPES (start_federation_delivery), which
+            are KEX-gated: resolve_peer_kex_pubkeys(canonical) must be Some.
+
+        The old HTTP probes (/v1/federation/peers, /v1/federation/metrics) are
+        gone — the Python federation routes were substrate-deleted in 2.9.7 and
+        the node does not expose delivery counters over HTTP yet (upstream ask in
+        CIRISServer#260). AUTHORITATIVE signals are log-based: the
+        [DELIVERY-PROBE] line carries rooting (edge.knows_peer) + the post-root
+        KEX poll verdict. Best-effort + non-fatal — reports, never crashes the run.
+        """
+        self.console.print("\n" + "=" * 60)
+        self.console.print("[bold cyan] Federation delivery verification (canonical-server-1)[/bold cyan]")
+        self.console.print("=" * 60)
+
+        # Transport rooting + KEX from the [DELIVERY-PROBE] line the server logs
+        # once the canonical roots (or times out).
+        backend = self.database_backends[0] if getattr(self, "database_backends", None) else "sqlite"
+
+        def _read_probe_log() -> str:
+            """Read the runtime log, tolerating a missing latest.log symlink.
+
+            In containerized/sandboxed runs the latest.log symlink may not be
+            created — fall back to the newest ciris_agent_*.log. A missing
+            symlink previously produced a FALSE-NEGATIVE verdict ("probe
+            verdict not found" / knows_peer=false) on a run whose real log
+            showed ROOTED + KEX PRESENT.
+            """
+            p = Path(f"logs/{backend}/latest.log")
+            if not p.exists():
+                candidates = sorted(Path(f"logs/{backend}").glob("ciris_agent_*.log"))
+                if candidates:
+                    p = candidates[-1]
+            try:
+                return p.read_text(errors="ignore") if p.exists() else ""
+            except Exception:  # noqa: BLE001
+                return ""
+
+        transport_rooted: Optional[bool] = None  # None = probe verdict not yet available
+        kex_state = "unknown"
+        canonical_key = None
+        for _attempt in range(12):  # ~12 * 8s — give the 120s probe time to land its verdict
+            text = _read_probe_log()
+            probe_lines = [ln for ln in text.splitlines() if "[DELIVERY-PROBE]" in ln]
+            if probe_lines:
+                last = probe_lines[-1]
+                if "ROOTED" in last:
+                    transport_rooted = True
+                    kex_state = "PRESENT" if "=PRESENT" in last else ("None" if "=None" in last else "unknown")
+                    m = re.search(r"canonical (\S+)", last)
+                    canonical_key = m.group(1) if m else None
+                    break
+                if "did not root" in last:
+                    transport_rooted = False
+                    m = re.search(r"canonical (\S+)", last)
+                    canonical_key = m.group(1) if m else None
+                    break
+            time.sleep(8)
+
+        # THE PROBE LINE IS NOT THE ONLY WITNESS. When it never lands — the probe
+        # is best-effort and its line has moved before — `delivery_status()`
+        # still carries the same facts per peer (knows_peer / kex_present /
+        # deliverable), and it is the value the node itself acts on. Reading it
+        # here is what keeps a missing probe line from being reported as a dead
+        # transport: a live run with 300 anti-entropy rounds, 50 inbound
+        # envelopes and zero dropped frames was declared "NOT transport-rooted
+        # (edge.knows_peer=false)" purely because this verdict was absent.
+        fallback: Optional[CanonicalPeerState] = None
+        if transport_rooted is None:
+            fallback = self._peer_state_from_delivery_status(_read_probe_log)
+            if fallback is not None:
+                transport_rooted = fallback.knows_peer
+                # DELIVERABLE IS THE NODE'S OWN VERDICT, and it is not implied by
+                # rooting plus KEX: delivery may not have started, or the edge may
+                # be down, and the peer still reports both of those true. Treating
+                # rooted+KEX as green there would print "trace envelopes can seal"
+                # AND skip _diagnose_delivery_status — whose decision tree is the
+                # one thing that would have named deliverable=false.
+                # GREEN NEEDS AN AFFIRMATIVE DELIVERABLE. `is not False` let the
+                # unknown case through — and unknown is a state this very model
+                # exists to preserve, so a status snapshot that simply omitted
+                # the field printed "trace envelopes can seal" and skipped the
+                # diagnosis, on no evidence at all.
+                if fallback.kex_present is True and fallback.deliverable is True:
+                    kex_state = "PRESENT"
+                elif fallback.kex_present is False:
+                    kex_state = "None"
+                elif fallback.deliverable is False:
+                    kex_state = "not-deliverable"
+                elif fallback.kex_present is True:
+                    kex_state = "kex-yes-deliverable-unknown"
+                canonical_key = canonical_key or fallback.key_id
+                self.console.print(
+                    "  [dim](probe line absent — verdict taken from delivery_status(), "
+                    "which is what the node itself acts on)[/dim]"
+                )
+
+        self.console.print(f"  canonical peer      : {canonical_key or '<from probe>'}")
+        rooted_str = (
+            "✅ YES" if transport_rooted else ("❌ NO" if transport_rooted is False else "❓ probe verdict not found")
+        )
+        self.console.print(f"  transport-rooted    : {rooted_str}  (edge.knows_peer — authoritative)")
+        self.console.print(f"  peer KEX resolvable : {kex_state}  (gates the sealed-envelope TRACE path)")
+
+        # WHAT THE NODE SAYS ABOUT ITS OWN PLANE, rather than what this harness
+        # can infer about it. Carriers ride the Attestation plane, so no wire
+        # histogram and no trace_events count can answer "do I hold offerable
+        # carriers" — persist's storage_summary can, and node_state carries it.
+        plane = self._trace_plane_from_node_state(_read_probe_log)
+        if plane is not None:
+            self.console.print(
+                f"  trace plane         : standing={plane.standing or '?'} band={plane.band or '?'} "
+                f"last_admitted={plane.last_admitted_at or 'never'} "
+                f"age={f'{plane.age_seconds:.0f}s' if plane.age_seconds is not None else '?'}"
+                "  (node_state().trace_plane)"
+            )
+        else:
+            self.console.print(
+                "  trace plane         : (no [TRACE-PLANE] line — agent older than this probe, "
+                "or the delivery window never opened)"
+            )
+        logger.info(
+            "[FEDERATION-DELIVERY] canonical=%s transport_rooted=%s kex=%s",
+            canonical_key,
+            transport_rooted,
+            kex_state,
+        )
+
+        rooted = bool(transport_rooted)
+
+        # Trace-delta assert (#924 §3): when the mesh_repro stage ran in this
+        # invocation, its harness verdict already proves (or refutes) the
+        # trace-delta at the LOCAL harness canonical — stage `arrive` is a
+        # direct trace_events DB count there, and stage `score` is a capacity
+        # attestation authored ABOUT the agent BY a distinct identity. Reuse
+        # that verdict rather than re-probing; the manual Node-A note remains
+        # the fallback when the harness didn't run.
+        _mesh = getattr(self, "_mesh_repro_verdict", None)
+        if _mesh is not None and _mesh.success and _mesh.stage_counts.get("arrive", 0) > 0:
+            trace_note = (
+                "Trace-delta PROVEN at the LOCAL harness canonical (mesh_repro: "
+                f"arrive={_mesh.stage_counts.get('arrive')} trace_events, "
+                f"summarize={_mesh.stage_counts.get('summarize', 0)}, "
+                f"score={_mesh.stage_counts.get('score', 0)} — capacity attestation authored)."
+            )
+        elif _mesh is not None:
+            trace_note = (
+                "mesh_repro harness ran and did NOT prove the trace-delta "
+                f"(exit={_mesh.exit_code}, broken_at={_mesh.broken_stage or 'unknown'}) — "
+                "see qa_reports/mesh_repro/ for the harness evidence."
+            )
+        else:
+            trace_note = (
+                "Confirm trace arrival via Node A trace_events / the mesh-repro trace gate "
+                "(CIRISServer#260) — or run the mesh_repro QA stage to prove it locally."
+            )
+
+        if transport_rooted and kex_state == "PRESENT":
+            verdict = (
+                "✅ Federation delivery preconditions GREEN — canonical rooted (edge.knows_peer) and "
+                "peer KEX resolvable: attestations replicate via rounds AND trace envelopes can seal. "
+                f"{trace_note}"
+            )
+            self.console.print(f"[bold green]{verdict}[/bold green]")
+            logger.info("[FEDERATION-DELIVERY] %s", verdict)
+        elif transport_rooted:
+            verdict = (
+                "⚠️  Canonical rooted — attestation/key delivery (anti-entropy rounds) is live, but "
+                f"peer KEX resolvable={kex_state}: the sealed-envelope TRACE path cannot seal until "
+                "resolve_peer_kex_pubkeys(canonical) returns Some (CIRISServer#260)."
+            )
+            self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+        elif transport_rooted is False:
+            verdict = (
+                "❌ Canonical NOT transport-rooted (edge.knows_peer=false) — neither rounds nor "
+                "trace envelopes can flow. Check the canonical boot-prime + bootstrap dial."
+            )
+            self.console.print(f"[bold red]{verdict}[/bold red]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+        else:
+            # UNKNOWN IS NOT FALSE. Saying "edge.knows_peer=false" when nothing
+            # ever reported knows_peer sends the reader to the boot-prime and
+            # the bootstrap dial — both of which were fine — and it contradicts
+            # the delivery_status line printed immediately below, which said
+            # deliverable=true. An absent verdict is its own outcome.
+            #
+            # AND THE TWO WAYS OF NOT KNOWING ARE DIFFERENT. "No peer entry"
+            # and "an entry that omits knows_peer" send a reader to different
+            # places, and the second one printed a canonical key two lines
+            # above — so claiming there was no entry contradicts the output
+            # immediately preceding it.
+            if fallback is None:
+                why = (
+                    "no probe verdict and no canonical peer entry in delivery_status() — the "
+                    "canonical may not be admitted yet, or no canonical target is named at all"
+                )
+            else:
+                why = (
+                    "the canonical peer entry exists but reports no knows_peer, so the snapshot "
+                    "is incomplete rather than absent — give it another round"
+                )
+            verdict = (
+                f"❓ Federation delivery UNVERIFIED — {why}. Rooting could not be established "
+                "either way. This is not evidence of a broken transport; check the node log for "
+                "`canonical boot prime: rooted` and for anti-entropy rounds before concluding "
+                "anything."
+            )
+            self.console.print(f"[bold yellow]{verdict}[/bold yellow]")
+            logger.warning("[FEDERATION-DELIVERY] %s", verdict)
+
+        # Not fully green → surface delivery_status() (CIRISServer#294, >=0.5.125)
+        # and its decision tree, so a stalled gate is one query, not archaeology.
+        if not (transport_rooted and kex_state == "PRESENT"):
+            self._diagnose_delivery_status(_read_probe_log)
+        return rooted
+
+    def _trace_plane_from_node_state(self, read_probe_log: Callable[[], str]) -> Optional[TracePlaneStanding]:
+        """The node's `[TRACE-PLANE]` line, or None when it never logged one.
+
+        READ, DO NOT CALL. `node_state()` is in-process to the server, and this
+        runner boots that server as a SUBPROCESS — so calling it here returns
+        nothing no matter how healthy the node is, which is exactly the
+        "unavailable" this printed on its first outing. The node logs the value
+        instead (edge_runtime `_log_trace_plane`), the same in-process-accessor
+        → logged-surface pattern `[DELIVERY-STATUS]` already uses.
+        """
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[TRACE-PLANE]" in ln]
+            if not lines:
+                return None
+            m = re.search(r"\[TRACE-PLANE\]\s+phase=\S+\s+(\{.*\})", lines[-1])
+            if not m:
+                return None
+            return TracePlaneStanding.model_validate(_json.loads(m.group(1)))
+        except Exception as exc:  # noqa: BLE001 — diagnostics never break a run
+            logger.debug("[FEDERATION-DELIVERY] trace-plane line unreadable: %s", exc)
+            return None
+
+    def _peer_state_from_delivery_status(self, read_probe_log: Callable[[], str]) -> Optional["CanonicalPeerState"]:
+        """The canonical peer's entry from the last [DELIVERY-STATUS] line.
+
+        Same source `_diagnose_delivery_status` renders, read as data instead of
+        prose so the verdict above can use it when the probe line is missing.
+        Best-effort; returns None when there is nothing to read.
+        """
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[DELIVERY-STATUS]" in ln]
+            if not lines:
+                return None
+            m = re.search(r"\[DELIVERY-STATUS\]\s+phase=(\S+)\s+(\{.*\})", lines[-1])
+            if not m:
+                return None
+            st = _json.loads(m.group(2))
+            peers = st.get("peers") or []
+            targets = st.get("canonical_targets") or []
+            # A NAMED TARGET IS THE ONLY THING THAT IDENTIFIES THE CANONICAL.
+            # Two ways this used to guess, and both could report an unrelated
+            # rooted, KEX-ready federation peer as the canonical's own
+            # preconditions — GREEN, under exactly the missing-canonical
+            # condition the diagnosis exists to surface: matching no target and
+            # falling back to peers[0], and having no targets named at all and
+            # taking peers[0] anyway. Neither is an answer about the canonical.
+            if not targets:
+                return None
+            peer = next((p for p in peers if p.get("key_id") in targets), None)
+            return CanonicalPeerState.model_validate(peer) if peer else None
+        except Exception:  # noqa: BLE001 — diagnostics must never break the run
+            return None
+
+    def _diagnose_delivery_status(self, read_probe_log: Callable[[], str]) -> None:
+        """Print the ciris_server.delivery_status() snapshot + the #926 decision
+        tree from the [DELIVERY-STATUS] line the edge probe logs. Collapses a
+        stalled delivery gate into one structured read (leviculum#25 frame-loss
+        vs never-primed vs no-KEX). Best-effort; never raises."""
+        import json as _json
+
+        try:
+            lines = [ln for ln in read_probe_log().splitlines() if "[DELIVERY-STATUS]" in ln]
+            if not lines:
+                self.console.print(
+                    "  delivery_status     : (no [DELIVERY-STATUS] line — ciris_server <0.5.125 or probe not run)"
+                )
+                return
+            m = re.search(r"\[DELIVERY-STATUS\]\s+phase=(\S+)\s+(\{.*\})", lines[-1])
+            if not m:
+                self.console.print(f"  delivery_status     : {lines[-1][-160:]}")
+                return
+            phase, blob = m.group(1), m.group(2)
+            st = _json.loads(blob)
+            self.console.print(
+                f"  delivery_status     : phase={phase} started={st.get('delivery_started')} edge_up={st.get('edge_up')} targets={st.get('canonical_targets')}"
+            )
+            hint = "  → "
+            if not st.get("delivery_started"):
+                hint += "delivery_started=false — prime never ran/re-fired (call reprime_federation_delivery(); #288)"
+            else:
+                peers = st.get("peers") or []
+                canon = next(
+                    (p for p in peers if p.get("key_id") in (st.get("canonical_targets") or [])),
+                    peers[0] if peers else None,
+                )
+                if canon is None:
+                    hint += "no peers in status — canonical not admitted yet"
+                elif not canon.get("knows_peer"):
+                    hint += "knows_peer=false — not promoted to a KEX'd delivery target (advisory-link exchange incomplete; #363/prime)"
+                elif not canon.get("kex_present"):
+                    hint += "kex_present=false — IdentityOccurrence enc-keys not replicated yet; give it a round"
+                elif canon.get("deliverable"):
+                    hint += "deliverable=true but trace not landing → driver-layer frame loss: grep node log for edge FramesDropped WARN (leviculum#25)"
+                else:
+                    hint += "deliverable=false with kex present — inspect the peer entry"
+            self.console.print(f"[dim]{hint}[/dim]")
+            logger.info("[FEDERATION-DELIVERY] delivery_status phase=%s %s", phase, st)
+        except Exception as exc:  # noqa: BLE001
+            self.console.print(f"  delivery_status     : (diagnosis error, non-fatal: {exc})")
+
     def _setup_oauth_test_user(self) -> bool:
         """Create/verify OAuth test user in database for billing integration tests."""
         try:
             import base64
-            import hashlib
             import json
             import secrets
             import sqlite3
@@ -659,7 +1477,7 @@ class QARunner:
             # Find database - MUST use auth database where authentication service stores users
             db_path = Path("data/ciris_engine_auth.db")
             if not db_path.exists():
-                self.console.print(f"[red]❌ Auth database not found: {db_path}[/red]")
+                self.console.print(f"[red][FAIL] Auth database not found: {db_path}[/red]")
                 return False
 
             conn = sqlite3.connect(db_path)
@@ -679,10 +1497,21 @@ class QARunner:
             if not exists:
                 # Generate dummy pubkey and jwt_kid for OAuth user
                 # OAuth users don't use real Ed25519 keys - these are just placeholders
-                dummy_pubkey = base64.b64encode(
-                    hashlib.sha256(self.config.oauth_test_user_id.encode()).digest()
-                ).decode()
-                jwt_kid = f"oauth_{self.config.oauth_test_provider}_{hashlib.sha256(self.config.oauth_test_external_id.encode()).hexdigest()[:16]}"
+                # RANDOM placeholders, not hashes of the user's identifiers.
+                #
+                # These stand in for an Ed25519 keypair an OAuth user does not have.
+                # Deriving them from oauth_test_user_id / oauth_test_external_id bought
+                # nothing: the row is looked up by (provider, external_id), never by
+                # kid, and this branch only runs when the row does NOT exist, so
+                # nothing requires them to be reproducible.
+                #
+                # It cost two things. A value that LOOKS like a public key but is
+                # SHA-256 of a user identifier invites someone to treat it as
+                # derivable; and it is a fast unsalted digest of a user identifier
+                # sitting in a credential column (py/weak-sensitive-data-hashing).
+                # Random says 'placeholder' unambiguously and leaks nothing.
+                dummy_pubkey = base64.b64encode(secrets.token_bytes(32)).decode()
+                jwt_kid = f"oauth_{self.config.oauth_test_provider}_{secrets.token_hex(8)}"
 
                 # Observer scopes
                 scopes = json.dumps(
@@ -753,13 +1582,13 @@ class QARunner:
                     ),
                 )
                 conn.commit()
-                self.console.print(f"[green]✅ Created OAuth test user: {proper_wa_id}[/green]")
+                self.console.print(f"[green][OK] Created OAuth test user: {proper_wa_id}[/green]")
                 self.console.print(f"[dim]   Username: qa_oauth_user[/dim]")
                 self.console.print(f"[dim]   Provider: {self.config.oauth_test_provider}[/dim]")
                 self.console.print(f"[dim]   External ID: {self.config.oauth_test_external_id}[/dim]")
             else:
                 existing_wa_id = exists[0]
-                self.console.print(f"[cyan]ℹ️  OAuth test user exists: {existing_wa_id}[/cyan]")
+                self.console.print(f"[cyan][INFO] OAuth test user exists: {existing_wa_id}[/cyan]")
 
                 # Update the name and password if needed to ensure login works
                 user_name = exists[1]
@@ -808,7 +1637,7 @@ class QARunner:
             return True
 
         except Exception as e:
-            self.console.print(f"[red]❌ Failed to setup OAuth user: {e}[/red]")
+            self.console.print(f"[red][FAIL] Failed to setup OAuth user: {e}[/red]")
             import traceback
 
             if self.config.verbose:
@@ -829,16 +1658,16 @@ class QARunner:
             if response.status_code == 200:
                 api_key = response.json()["access_token"]
                 user_id = response.json()["user_id"]
-                self.console.print(f"[green]✅ Logged in as OAuth user (user_id: {user_id})[/green]")
+                self.console.print(f"[green][OK] Logged in as OAuth user (user_id: {user_id})[/green]")
                 return api_key
             else:
-                self.console.print(f"[yellow]⚠️  Failed to login as OAuth user: {response.status_code}[/yellow]")
+                self.console.print(f"[yellow][WARN] Failed to login as OAuth user: {response.status_code}[/yellow]")
                 if self.config.verbose:
                     self.console.print(f"[dim]Response: {response.text[:200]}[/dim]")
                 return None
 
         except Exception as e:
-            self.console.print(f"[red]❌ Error logging in as OAuth user: {e}[/red]")
+            self.console.print(f"[red][FAIL] Error logging in as OAuth user: {e}[/red]")
             import traceback
 
             if self.config.verbose:
@@ -858,25 +1687,45 @@ class QARunner:
             MessageIDDebugTests,
             PartnershipTests,
         )
+        from .modules.accord_halt_tests import AccordHaltTests
+        from .modules.accord_metrics_tests import AccordMetricsTests
         from .modules.adapter_autoload_tests import AdapterAutoloadTests
         from .modules.adapter_availability_tests import AdapterAvailabilityTests
         from .modules.adapter_config_tests import AdapterConfigTests
         from .modules.adapter_manifest_tests import AdapterManifestTests
+        from .modules.agent_mode_tests import AgentModeTests
         from .modules.billing_integration_tests import BillingIntegrationTests
         from .modules.cognitive_state_api_tests import CognitiveStateAPITests
         from .modules.context_enrichment_tests import ContextEnrichmentTests
-        from .modules.covenant_metrics_tests import CovenantMetricsTests
+        from .modules.deferral_taxonomy_tests import DeferralTaxonomyTests
+        from .modules.deferral_tests import DeferralTestModule
+        from .modules.degraded_mode_tests import DegradedModeTests
+        from .modules.dream_live_tests import DreamLiveTests
         from .modules.dsar_multi_source_tests import DSARMultiSourceTests
         from .modules.dsar_ticket_workflow_tests import DSARTicketWorkflowTests
+        from .modules.filter_tests import FilterTestModule
+        from .modules.handler_tests import HandlerTestModule
+        from .modules.homeassistant_agentic_tests import HomeAssistantAgenticTests
         from .modules.hosted_tools_tests import HostedToolsTests
         from .modules.identity_update_tests import IdentityUpdateTests
+        from .modules.licensed_agent_tests import LicensedAgentTests
         from .modules.mcp_tests import MCPTests
+        from .modules.memory_benchmark_tests import MemoryBenchmarkTests
+        from .modules.mesh_repro_tests import MeshReproTests
+        from .modules.model_eval_tests import ModelEvalTests
+        from .modules.parallel_locales_tests import ParallelLocalesTests
+        from .modules.play_live_tests import PlayLiveTests
         from .modules.reddit_tests import RedditTests
+        from .modules.safety_battery import SafetyBatteryTests
+        from .modules.safety_interpret import SafetyInterpretTests
+        from .modules.secrets_encryption_tests import SecretsEncryptionTests
+        from .modules.solitude_live_tests import SolitudeLiveTests
         from .modules.sql_external_data_tests import SQLExternalDataTests
         from .modules.state_transition_tests import StateTransitionTests
         from .modules.system_messages_tests import SystemMessagesTests
         from .modules.utility_adapters_tests import UtilityAdaptersTests
         from .modules.vision_tests import VisionTests
+        from .modules.wallet_tests import WalletTests
 
         all_passed = True
 
@@ -903,17 +1752,37 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.AIR: AIRTests,
-            QAModule.COVENANT_METRICS: CovenantMetricsTests,
+            QAModule.ACCORD_METRICS: AccordMetricsTests,
+            QAModule.AGENT_MODE: AgentModeTests,
             QAModule.SYSTEM_MESSAGES: SystemMessagesTests,
             QAModule.HOSTED_TOOLS: HostedToolsTests,
             QAModule.UTILITY_ADAPTERS: UtilityAdaptersTests,
+            QAModule.HOMEASSISTANT_AGENTIC: HomeAssistantAgenticTests,
+            QAModule.DEFERRAL_TAXONOMY: DeferralTaxonomyTests,
+            QAModule.LICENSED_AGENT: LicensedAgentTests,
+            QAModule.SOLITUDE_LIVE: SolitudeLiveTests,
+            QAModule.PLAY_LIVE: PlayLiveTests,
+            QAModule.DREAM_LIVE: DreamLiveTests,
+            QAModule.FILTERS: FilterTestModule,
+            QAModule.HANDLERS: HandlerTestModule,
+            QAModule.DEFERRAL: DeferralTestModule,
+            QAModule.WALLET: WalletTests,
+            QAModule.DEGRADED_MODE: DegradedModeTests,
+            QAModule.MODEL_EVAL: ModelEvalTests,
+            QAModule.PARALLEL_LOCALES: ParallelLocalesTests,
+            QAModule.SAFETY_BATTERY: SafetyBatteryTests,
+            QAModule.SAFETY_INTERPRET: SafetyInterpretTests,
+            QAModule.SECRETS_ENCRYPTION: SecretsEncryptionTests,
+            QAModule.MEMORY_BENCHMARK: MemoryBenchmarkTests,
+            QAModule.MESH_REPRO: MeshReproTests,
+            QAModule.ACCORD_HALT: AccordHaltTests,
         }
 
         async def run_module(module: QAModule, auth_token: Optional[str] = None):
             """Run a single SDK module with optional custom auth token."""
             test_class = module_map.get(module)
             if not test_class:
-                self.console.print(f"[red]❌ Unknown SDK module: {module.value}[/red]")
+                self.console.print(f"[red][FAIL] Unknown SDK module: {module.value}[/red]")
                 return False
 
             # Use custom token if provided, otherwise use admin token
@@ -921,23 +1790,170 @@ class QARunner:
 
             # Create SDK client with authentication
             # Use longer timeout for Reddit operations (e.g., get_user_context can be slow)
-            async with CIRISClient(base_url=self.config.base_url, timeout=120.0) as client:
-                # Manually set the token (skip login since we already have it)
-                client._transport.set_api_key(token_to_use, persist=False)
+            # Model-eval interact() calls block server-side until the full
+            # DMA chain + conscience + SPEAK finishes, which is minutes under
+            # live LLM load. Give the SDK plenty of headroom so httpx doesn't
+            # cut the connection before the server responds.
+            #
+            # 1800s budget (raised from 900s in 2.7.4): Together gemma-4 has
+            # ~15% tail-latency at 90s per direct DMA call; a single
+            # interact() runs PDMA + CSDMA + DSDMA + IDMA + ASPDMA + conscience
+            # checks, potentially across multiple PONDER thoughts, so 5 thoughts
+            # × 5 LLM stages × tail-latency can compound past 900s on slow
+            # provider draws. Override via CIRIS_QA_SDK_TIMEOUT env if needed.
+            try:
+                _model_eval_sdk_timeout = float(os.environ.get("CIRIS_QA_SDK_TIMEOUT", "1800"))
+            except (TypeError, ValueError):
+                _model_eval_sdk_timeout = 1800.0
+            sdk_timeout = _model_eval_sdk_timeout if module == QAModule.MODEL_EVAL else 120.0
+
+            # No-server modules (e.g. safety_interpret) talk to an
+            # external API directly — don't try to open a CIRISClient
+            # to a server that isn't running.
+            from .modules._module_metadata import get_metadata as _md_lookup
+
+            _module_needs_server = getattr(_md_lookup(module), "requires_ciris_server", True)
+
+            from contextlib import asynccontextmanager
+
+            @asynccontextmanager
+            async def _client_ctx():
+                if not _module_needs_server:
+                    yield None
+                    return
+                # use_auth_store=False is REQUIRED for --parallel-backends.
+                # The SDK's AuthStore is a shared filesystem cache
+                # (~/.ciris/auth.json); two backend legs running concurrently
+                # do read-modify-write on that one file and corrupt/cross
+                # each other's tokens → "Invalid API key" 401s on whichever
+                # leg loses the race (adapter_autoload/config/availability/
+                # context_enrichment). QA always sets the token explicitly,
+                # so the store is pure downside — disable it entirely.
+                async with CIRISClient(
+                    base_url=self.config.base_url,
+                    timeout=sdk_timeout,
+                    use_auth_store=False,
+                ) as _c:
+                    _c._transport.set_api_key(token_to_use, persist=False)
+                    # Pin the client-level attr too — adapter QA modules read
+                    # the token back via client.api_key for raw requests().
+                    _c.api_key = token_to_use
+                    # Diagnostic: which token identity this module's client
+                    # carries — correlate with the server's validate_api_key
+                    # [AUTH SERVICE DEBUG] line (matched on the …suffix).
+                    # Plain print() — rich markup would eat a "[TOKEN]" tag.
+                    _tok_suffix = (token_to_use or "")[-12:]
+                    print(
+                        f"QA_TOKEN_TRACE sdk_module={module.value} client_token_suffix=...{_tok_suffix}",
+                        flush=True,
+                    )
+                    yield _c
+
+            async with _client_ctx() as client:
 
                 # Instantiate and run test module
-                # Special handling for CovenantMetricsTests - pass live_lens config
-                if module == QAModule.COVENANT_METRICS:
-                    test_instance = test_class(client, self.console, live_lens=self.config.live_lens)
+                # Special handling for AccordMetricsTests - pass live_lens config +
+                # backend-namespaced trace dir (qa_reports/<backend>/) so parallel
+                # backends don't clobber each other's hash-keyed trace files.
+                if module == QAModule.ACCORD_METRICS:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        live_lens=self.config.live_lens,
+                        qa_reports_dir=self.server_manager.qa_reports_dir,
+                    )
+                # Special handling for LicensedAgentTests - pass live_portal config
+                elif module == QAModule.LICENSED_AGENT:
+                    test_instance = test_class(
+                        client, self.console, live_portal=getattr(self.config, "live_portal", False)
+                    )
+                elif module == QAModule.FILTERS:
+                    # FilterTestModule inherits from BaseTestModule and supports fail_fast
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
+                    )
+                elif module == QAModule.MEMORY_BENCHMARK:
+                    # Memory benchmark supports concurrent channels for faster testing
+                    concurrent_channels = getattr(self.config, "concurrent_channels", 4)
+                    message_count = getattr(self.config, "message_count", 100)
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
+                        message_count=message_count,
+                        concurrent_channels=concurrent_channels,
+                    )
+                elif module == QAModule.MODEL_EVAL:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        languages=getattr(self.config, "model_eval_languages", ["am", "zh", "en", "es"]),
+                        max_concurrency=getattr(self.config, "model_eval_concurrency", 4),
+                        profile_memory=getattr(self.config, "model_eval_profile_memory", True),
+                        api_port=self.config.api_port,
+                        question_categories=getattr(self.config, "model_eval_question_categories", []),
+                        questions_file=getattr(self.config, "model_eval_questions_file", None),
+                    )
+                elif module == QAModule.DEFERRAL_TAXONOMY:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        fail_fast=self.config.fail_fast,
+                        test_timeout=self.config.test_timeout,
+                    )
+                elif module == QAModule.SAFETY_BATTERY:
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        lang=getattr(self.config, "safety_battery_lang", "am"),
+                        domain=getattr(self.config, "safety_battery_domain", "mental_health"),
+                        template_id=getattr(self.config, "safety_battery_template", "default"),
+                        limit=getattr(self.config, "safety_battery_limit", 0),
+                        model=self.config.live_model,
+                        live_base_url=self.config.live_base_url,
+                        live_provider=self.config.live_provider,
+                        api_port=self.config.api_port,
+                    )
+                elif module == QAModule.SAFETY_INTERPRET:
+                    from pathlib import Path as _Path
+
+                    _cap = getattr(self.config, "safety_interpret_capture_dir", None)
+                    _crit = getattr(self.config, "safety_interpret_criteria_file", None)
+                    _key = getattr(self.config, "safety_interpret_openrouter_key_file", None)
+                    _model = getattr(self.config, "safety_interpret_judge_model", None)
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        capture_dir=_Path(_cap) if _cap else None,
+                        criteria_file=_Path(_crit) if _crit else None,
+                        openrouter_key_file=_Path(_key) if _key else None,
+                        judge_model=_model,
+                        api_port=self.config.api_port,
+                    )
                 else:
                     test_instance = test_class(client, self.console)
 
+                _mod_t0 = time.time()
                 results = await test_instance.run()
+
+                # mesh_repro (#924 §3): stash the parsed harness verdict so
+                # _verify_federation_delivery can assert the trace-delta
+                # against the LOCAL harness canonical (stage arrive/score)
+                # instead of the "confirm at Node A manually" note.
+                if module == QAModule.MESH_REPRO:
+                    self._mesh_repro_verdict = getattr(test_instance, "harness_verdict", None)
+                # Real wall time for this SDK module (accumulate — a module
+                # can run twice across a re-auth retry).
+                self._module_wall[module.value] = self._module_wall.get(module.value, 0.0) + (time.time() - _mod_t0)
 
                 # Store results in runner's results dict
                 for result in results:
                     test_name = result["test"]
-                    passed = "PASS" in result["status"]
+                    passed = _is_non_failing(result["status"])
 
                     self.results[f"{module.value}::{test_name}"] = {
                         "success": passed,
@@ -946,12 +1962,17 @@ class QARunner:
                         "duration": 0.0,  # SDK tests don't track individual durations
                     }
 
-                # Check if all tests passed
-                return all(r["status"] == "✅ PASS" for r in results)
+                # Check if all tests passed. Use the SAME "passed" definition
+                # as the self.results bookkeeping above (`"PASS" in status`) —
+                # an exact `== "✅ PASS"` here diverged from it: a PASS-variant
+                # status counted as Passed in the Total/Passed/Failed summary
+                # yet made this return False, failing the whole leg with
+                # Failed=0 (the exit-1-on-green bug).
+                return all(_is_non_failing(r["status"]) for r in results)
 
         # Run all SDK modules sequentially (they use async internally)
         for module in modules:
-            self.console.print(f"\n📋 Running {module.value} SDK tests...")
+            self.console.print(f"\n Running {module.value} SDK tests...")
             try:
                 # Special handling for BILLING_INTEGRATION - uses OAuth user token
                 if module == QAModule.BILLING_INTEGRATION:
@@ -959,7 +1980,7 @@ class QARunner:
                     # Get fresh API key for OAuth user
                     oauth_token = self._get_oauth_user_token()
                     if not oauth_token:
-                        self.console.print(f"[red]❌ Failed to get OAuth token for {module.value}[/red]")
+                        self.console.print(f"[red][FAIL] Failed to get OAuth token for {module.value}[/red]")
                         all_passed = False
                         continue
 
@@ -968,6 +1989,19 @@ class QARunner:
                 else:
                     # Run with admin token
                     module_passed = asyncio.run(run_module(module))
+
+                # Diagnostic auth gate — if this SDK module corrupted the
+                # session token (an auth/logout/refresh test, a revocation,
+                # etc.), log loudly here named to this module instead of
+                # leaving every later module with a mystery "Invalid API
+                # key" 401. The SDK phase has no equivalent of the HTTP
+                # loop's token_invalidating_tests re-auth, so this gate is
+                # ALSO the SDK phase's restore point: it re-authenticates,
+                # so downstream modules run clean and the leg isn't derailed
+                # by one token-mutating module. Not a leg failure — modules
+                # like `sdk`/`auth` invalidate the token by design; the loud
+                # line is the signal, the re-auth is the fix.
+                self._assert_token_valid(f"SDK module '{module.value}'")
 
                 # Check for task appending warnings after SDK module completes
                 task_warnings = self._check_task_appending_warnings(module.value)
@@ -990,7 +2024,7 @@ class QARunner:
                 if not module_passed:
                     all_passed = False
             except Exception as e:
-                self.console.print(f"[red]❌ Error running {module.value}: {e}[/red]")
+                self.console.print(f"[red][FAIL] Error running {module.value}: {e}[/red]")
                 import traceback
 
                 if self.config.verbose:
@@ -1020,19 +2054,46 @@ class QARunner:
                 for test_name_pattern, endpoint_pattern in token_invalidating_tests:
                     if test_name_pattern.lower() in test.name.lower() and endpoint_pattern in test.endpoint:
                         if self.config.verbose:
-                            self.console.print(f"[yellow]🔄 Re-authenticating after {test.name}...[/yellow]")
+                            self.console.print(f"[yellow] Re-authenticating after {test.name}...[/yellow]")
                         # Re-authenticate to restore token for subsequent tests
                         if not self._authenticate():
-                            self.console.print(f"[red]❌ Failed to re-authenticate after {test.name}[/red]")
-                            all_passed = False
+                            # `/v1/auth/logout` is the NODE's now, and the node's
+                            # logout DEACTIVATES THE WA CERT rather than dropping a
+                            # token — deliberate upstream, because unauthenticated
+                            # logout was an account-lockout vector (CIRISServer#387).
+                            # A successful logout therefore ENDS the run's identity,
+                            # and re-auth cannot succeed: resolve_login and every
+                            # enumeration are active-only, so the cert is not merely
+                            # logged out, it is invisible.
+                            #
+                            # This produced 191 "Invalid session token" failures that
+                            # read as 191 defects and were one closed account. The
+                            # suite still TESTS logout — fully, asserting 204 — and
+                            # then stops depending on the account it just closed.
+                            self.console.print(
+                                f"[yellow]🔒 {test.name} closed the run's account "
+                                f"(node logout deactivates the WA cert, by design). "
+                                f"Re-auth is impossible; later auth-dependent tests "
+                                f"are skipped, not counted as failures.[/yellow]"
+                            )
+                            self._identity_closed_by = test.name
+                            self.token = None
                         break
+
+                # Diagnostic auth gate — if this test corrupted the session
+                # token in a way the known token_invalidating_tests patterns
+                # above did NOT catch, fail loudly here, named to this test,
+                # instead of a mystery 401 modules later.
+                self._assert_token_valid(f"HTTP test '{test.name}'")
 
                 # Check incidents log after each test for immediate feedback
                 incidents = self._check_incidents_for_test(test.name)
                 if incidents:
                     result["incidents"] = incidents
                     if self.config.verbose:
-                        self.console.print(f"[yellow]⚠️  Found {len(incidents)} incidents during {test.name}[/yellow]")
+                        self.console.print(
+                            f"[yellow][WARN] Found {len(incidents)} incidents during {test.name}[/yellow]"
+                        )
 
                 # Check for task appending warnings (messages appended to existing active tasks)
                 task_warnings = self._check_task_appending_warnings(test.name)
@@ -1048,27 +2109,8 @@ class QARunner:
                 if not passed:
                     all_passed = False
 
-                # FILTER & HANDLER TESTS: Wait for task completion between tests
-                # Each test creates a task that must complete before the next test
-                if test.module in (QAModule.FILTERS, QAModule.HANDLERS):
-                    if self._filter_helper:
-                        if self.config.verbose:
-                            self.console.print(f"[dim]⏳ Waiting for TASK_COMPLETE event via SSE...[/dim]")
-
-                        # Wait for task completion via SSE (30s timeout per test)
-                        completed = self._filter_helper.wait_for_task_complete(task_id=None, timeout=30.0)
-
-                        if not completed:
-                            self.console.print(f"[yellow]⚠️  Task did not complete within 30s for {test.name}[/yellow]")
-                            # Give extra buffer time
-                            time.sleep(2.0)
-                        elif self.config.verbose:
-                            self.console.print(f"[green]✅ Task completed for {test.name}[/green]")
-                    else:
-                        # Fallback to simple delay if SSE monitoring not available
-                        if self.config.verbose:
-                            self.console.print(f"[dim]⏳ Waiting for task completion (fallback delay)...[/dim]")
-                        time.sleep(2.0)
+                # Note: HANDLERS and FILTERS are now SDK-based and handled in _run_sdk_modules()
+                # No SSE waiting needed here anymore
 
                 progress.advance(task)
 
@@ -1230,7 +2272,7 @@ class QARunner:
 
                         # WebSocket connected successfully (101 Switching Protocols)
                         if self.config.verbose:
-                            self.console.print(f"[green]✅ {test.name} - Connected![/green]")
+                            self.console.print(f"[green][OK] {test.name} - Connected![/green]")
 
                         result = {
                             "success": True,
@@ -1250,7 +2292,7 @@ class QARunner:
                         if any(code in error_msg for code in ["401", "403", "Handshake status"]):
                             # This is expected - endpoint exists but requires proper auth
                             if self.config.verbose:
-                                self.console.print(f"[green]✅ {test.name} (endpoint verified)[/green]")
+                                self.console.print(f"[green][OK] {test.name} (endpoint verified)[/green]")
 
                             result = {
                                 "success": True,
@@ -1262,10 +2304,10 @@ class QARunner:
                             break  # Success, exit retry loop
                         else:
                             # Real error - endpoint might not exist or server error
-                            if attempt == max_attempts - 1:
+                            if attempt == self.config.retry_count - 1:
                                 # Last attempt, fail the test
                                 if self.config.verbose:
-                                    self.console.print(f"[red]❌ {test.name}: {error_msg[:100]}[/red]")
+                                    self.console.print(f"[red][FAIL] {test.name}: {error_msg[:100]}[/red]")
 
                                 return False, {
                                     "success": False,
@@ -1275,11 +2317,11 @@ class QARunner:
                                 }
                             else:
                                 # Not last attempt, wait and retry
-                                time.sleep(retry_delay)
+                                time.sleep(self.config.retry_delay)
                                 continue
                     except Exception as e:
                         # Non-WebSocket error
-                        if attempt == max_attempts - 1:
+                        if attempt == self.config.retry_count - 1:
                             return False, {
                                 "success": False,
                                 "error": f"Unexpected error: {str(e)[:200]}",
@@ -1287,14 +2329,25 @@ class QARunner:
                                 "attempts": attempt + 1,
                             }
                         else:
-                            time.sleep(retry_delay)
+                            time.sleep(self.config.retry_delay)
                             continue
                 elif test.method == "CUSTOM":
                     # Custom method handler for special tests like streaming verification
                     if test.custom_handler:
-                        from .modules.streaming_verification import StreamingVerificationModule
+                        # Dispatch to appropriate module based on test module
+                        if test.module == QAModule.HE300_BENCHMARK:
+                            from .modules.he300_benchmark_tests import HE300BenchmarkModule
 
-                        custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
+                            custom_result = HE300BenchmarkModule.run_custom_test(test, self.config, self.token)
+                        elif test.module == QAModule.L4_ATTESTATION:
+                            from .modules.l4_attestation_tests import L4AttestationModule
+
+                            custom_result = L4AttestationModule.run_custom_test(test, self.config, self.token)
+                        else:
+                            # Default to streaming verification module
+                            from .modules.streaming_verification import StreamingVerificationModule
+
+                            custom_result = StreamingVerificationModule.run_custom_test(test, self.config, self.token)
                         if custom_result["success"]:
                             # Print validation details
                             if self.config.verbose:
@@ -1371,10 +2424,10 @@ class QARunner:
                             if new_token:
                                 self.token = new_token
                                 if self.config.verbose:
-                                    self.console.print(f"[yellow]🔄 Updated auth token after refresh[/yellow]")
+                                    self.console.print(f"[yellow] Updated auth token after refresh[/yellow]")
                         except Exception as e:
                             if self.config.verbose:
-                                self.console.print(f"[yellow]⚠️ Failed to update token: {e}[/yellow]")
+                                self.console.print(f"[yellow][WARN] Failed to update token: {e}[/yellow]")
 
                     # Enhanced validation support
                     validation_passed, validation_result = self._validate_response(test, response)
@@ -1383,11 +2436,22 @@ class QARunner:
                     if not validation_passed:
                         result["success"] = False
                         if self.config.verbose:
-                            self.console.print(f"[red]❌ {test.name}: Validation failed[/red]")
+                            self.console.print(f"[red][FAIL] {test.name}: Validation failed[/red]")
+                            # Say WHICH rule and WHAT came back. The first all-platform
+                            # modular run reported "Validation failed" for the memory
+                            # release on Windows and nothing else; the body was the answer.
+                            errors = validation_result.get("validation", {}).get("errors", [])
+                            if errors:
+                                self.console.print(f"[red]   rules: {'; '.join(map(str, errors))}[/red]")
+                            try:
+                                body = response.text
+                            except Exception:
+                                body = "<unreadable>"
+                            self.console.print(f"[red]   body: {body[:400]}[/red]")
                         return False, result
 
                     if self.config.verbose:
-                        self.console.print(f"[green]✅ {test.name}[/green]")
+                        self.console.print(f"[green][OK] {test.name}[/green]")
 
                     return True, result
                 else:
@@ -1405,7 +2469,7 @@ class QARunner:
                     }
 
                     if self.config.verbose:
-                        self.console.print(f"[red]❌ {test.name}: {response.status_code}[/red]")
+                        self.console.print(f"[red][FAIL] {test.name}: {response.status_code}[/red]")
 
                     return False, result
 
@@ -1422,7 +2486,7 @@ class QARunner:
                 }
 
                 if self.config.verbose:
-                    self.console.print(f"[red]❌ {test.name}: {e}[/red]")
+                    self.console.print(f"[red][FAIL] {test.name}: {e}[/red]")
 
                 return False, result
 
@@ -1508,13 +2572,13 @@ class QARunner:
             with open(json_file, "w") as f:
                 json.dump(report_data, f, indent=2)
 
-            self.console.print(f"📄 JSON report: {json_file}")
+            self.console.print(f" JSON report: {json_file}")
 
         # HTML report
         if self.config.html_report:
             html_file = self.config.report_dir / f"qa_report_{timestamp}.html"
             self._generate_html_report(html_file)
-            self.console.print(f"📄 HTML report: {html_file}")
+            self.console.print(f" HTML report: {html_file}")
 
     def _generate_html_report(self, file_path: Path):
         """Generate HTML report."""
@@ -1576,7 +2640,7 @@ class QARunner:
                 if "status_code" in result:
                     details = f"Status: {result['status_code']} (expected {result.get('expected_status', 200)})"
                 else:
-                    details = result.get("error", "Unknown error")[:100]
+                    details = _err_text(result)
 
             html += f"""
         <tr>
@@ -1637,7 +2701,7 @@ class QARunner:
                     parts = key.split("::", 1)
                     module = parts[0]
                     test = parts[1] if len(parts) > 1 else "unknown"
-                    error = result.get("error", "Unknown error")[:100]
+                    error = _err_text(result)
                     self.console.print(f"  • {module}::{test}: {error}")
 
         # Print tests with incidents
@@ -1661,9 +2725,53 @@ class QARunner:
 
         # Overall result
         if summary["failed"] == 0:
-            self.console.print("\n[bold green]✅ All tests passed![/bold green]")
+            self.console.print("\n[bold green][OK] All tests passed![/bold green]")
         else:
-            self.console.print(f"\n[bold red]❌ {summary['failed']} test(s) failed[/bold red]")
+            self.console.print(f"\n[bold red][FAIL] {summary['failed']} test(s) failed[/bold red]")
+
+    def _update_status_tracker(self, duration_seconds: float):
+        """Update the QA status tracker file with results from this run."""
+        # Group results by module
+        module_results: Dict[str, Dict] = {}
+
+        for key, result in self.results.items():
+            parts = key.split("::", 1)
+            module_name = parts[0]
+
+            if module_name not in module_results:
+                module_results[module_name] = {"passed": 0, "failed": 0, "total": 0}
+
+            module_results[module_name]["total"] += 1
+            if result.get("success", False):
+                module_results[module_name]["passed"] += 1
+            else:
+                module_results[module_name]["failed"] += 1
+
+        # Update each module's status with REAL per-module wall time:
+        #   - SDK modules: timed directly around test_instance.run()
+        #   - HTTP modules: summed from their per-test durations
+        #   - fallback (neither available): even split of the total
+        for module_name, stats in module_results.items():
+            wall = self._module_wall.get(module_name)
+            if wall is None:
+                wall = sum(
+                    (r.get("duration") or 0.0) for k, r in self.results.items() if k.split("::", 1)[0] == module_name
+                )
+            if not wall:
+                wall = duration_seconds / len(module_results) if module_results else duration_seconds
+            try:
+                update_module_status(
+                    module_name=module_name,
+                    passed=stats["passed"],
+                    failed=stats["failed"],
+                    total=stats["total"],
+                    duration_seconds=wall,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update status for module {module_name}: {e}")
+
+        if module_results:
+            self.console.print(f"[dim] Updated QA status for {len(module_results)} module(s)[/dim]")
 
     def _run_multiple_backends(self, modules: List[QAModule]) -> bool:
         """Run QA tests against multiple database backends sequentially."""
@@ -1684,7 +2792,7 @@ class QARunner:
         # Run tests for each backend sequentially
         for backend in self.database_backends:
             self.console.print(f"\n{'=' * 80}")
-            self.console.print(f"[bold cyan]🔄 Testing {backend.upper()} Backend[/bold cyan]")
+            self.console.print(f"[bold cyan] Testing {backend.upper()} Backend[/bold cyan]")
             self.console.print(f"{'=' * 80}\n")
 
             # Create a new runner instance for this backend with the correct server manager
@@ -1708,7 +2816,7 @@ class QARunner:
         # Print combined summary
         elapsed = time.time() - start_time
         self.console.print(f"\n\n{'=' * 80}")
-        self.console.print("[bold cyan]📊 MULTI-BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print("[bold cyan] MULTI-BACKEND TEST SUMMARY[/bold cyan]")
         self.console.print(f"{'=' * 80}\n")
 
         # Create comparison table
@@ -1733,115 +2841,180 @@ class QARunner:
         self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s[/dim]")
 
         # Print log locations for each backend
-        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print("\n[cyan] Log Locations:[/cyan]")
         for backend in self.database_backends:
             self.console.print(f"[dim]   • {backend}: logs/{backend}/latest.log[/dim]")
             self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
 
         if all_success:
-            self.console.print("\n[bold green]✅ All backends passed all tests![/bold green]")
+            self.console.print("\n[bold green][OK] All backends passed all tests![/bold green]")
         else:
             failed_backends = [b for b, d in backend_results.items() if not d["success"]]
-            self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")
+            self.console.print(f"\n[bold red][FAIL] Some backends failed: {', '.join(failed_backends)}[/bold red]")
 
         return all_success
 
     def _run_parallel_backends(self, modules: List[QAModule]) -> bool:
-        """Run QA tests against multiple database backends in parallel."""
+        """Run QA tests against multiple database backends — each in its own
+        isolated SUBPROCESS, concurrently.
+
+        Each backend formerly ran as a thread inside this process. Two full
+        QA stacks sharing one Python interpreter cross-contaminate
+        process-global state: a sqlite leg was proven, via the
+        [AUTH SERVICE DEBUG] traces, to send the postgres leg's API key →
+        "Invalid API key" 401s on whichever leg lost the race. A separate
+        subprocess per backend has zero shared mutable state — the cross is
+        structurally impossible. Each child is a plain single-backend
+        qa_runner invocation.
+
+        CONCURRENCY (2026-07-20 all_1 RCA): subprocess isolation covers
+        in-process state, but the node-folded substrate binds HOST-wide
+        singletons — :4242 (reticulum transport), :4243 (node read-API,
+        not configurable, CIRISServer#303) — and both legs share
+        CIRIS_HOME's data/edge identity. Two legs running at the same time
+        therefore cross-contaminate at the host level: the :4242 bind loser's
+        node_fold reuses the winner's :4243 node → foreign signing key →
+        every capture fails verify_unknown_key. So concurrency is OPT-IN:
+        children run one-at-a-time unless config.parallel_backends is set
+        (--parallel-backends), which is only sound once the substrate
+        supports per-instance listen addrs.
+        """
+        import subprocess
+        import sys
+
         start_time = time.time()
+
+        sequential = not getattr(self.config, "parallel_backends", False)
+        mode_label = "sequential, isolated subprocesses" if sequential else "parallel, isolated subprocesses"
 
         self.console.print(
             Panel.fit(
-                "[bold cyan]CIRIS QA Test Runner - Parallel Backend Mode[/bold cyan]\n"
+                f"[bold cyan]CIRIS QA Test Runner - Multi-Backend Mode ({mode_label})[/bold cyan]\n"
                 f"Backends: {', '.join(self.database_backends)}\n"
                 f"Modules: {', '.join(m.value for m in modules)}",
-                title="🧪 Starting Parallel Backend QA Tests",
+                title="🧪 Starting Multi-Backend QA Tests",
             )
         )
 
+        backend_port = {
+            b: (self.config.api_port if b == "sqlite" else self.config.postgres_api_port)
+            for b in self.database_backends
+        }
+
+        # Rebuild each child's argv from THIS process's argv — faithfully
+        # forwarding every flag — with the multi-backend / parallel flags
+        # rewritten to one isolated single-backend run on its own port.
+        parent_argv = sys.argv[1:]
+
+        def _child_argv(backend: str) -> List[str]:
+            out: List[str] = []
+            skip = 0
+            for idx, tok in enumerate(parent_argv):
+                if skip > 0:
+                    skip -= 1
+                    continue
+                if tok == "--parallel-backends":
+                    continue
+                if tok in ("--database-backends", "--port", "--url", "--report-dir"):
+                    nxt = idx + 1
+                    while nxt < len(parent_argv) and not parent_argv[nxt].startswith("-"):
+                        skip += 1
+                        nxt += 1
+                    continue
+                out.append(tok)
+            # --port sets api_port (the server's listen port); --url sets
+            # base_url (where the QA client SENDS requests). They are
+            # independent — passing only --port left base_url at the default
+            # :8080, so the postgres child's client targeted the sqlite
+            # child's server. Both MUST point at this backend's own port.
+            port = backend_port[backend]
+            out += [
+                "--database-backends",
+                backend,
+                "--port",
+                str(port),
+                "--url",
+                f"http://localhost:{port}",
+                "--report-dir",
+                f"qa_reports/{backend}",
+            ]
+            return out
+
+        # Signal parallel-backend mode to children via env var. Two full agent
+        # stacks sharing one CI runner halve effective throughput; tests with
+        # hardcoded response/SSE timeouts (air, context_enrichment) need to
+        # scale up under this contention. Sequential / single-backend runs
+        # don't pay the penalty because the env var is unset there.
+        child_env = os.environ.copy()
+        if not sequential:
+            child_env["CIRIS_QA_PARALLEL_BACKENDS"] = "1"
+
+        # config.timeout is a PER-TEST budget; a whole backend leg runs many
+        # modules (15-25 min). Give real headroom — the GH job's own
+        # timeout-minutes is the actual outer bound.
+        leg_timeout = max(self.config.timeout * 8, 2400)
         backend_results = {}
 
-        # Run tests for each backend in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=len(self.database_backends)) as executor:
-            futures = {}
+        def _wait_leg(backend: str, proc: "subprocess.Popen[bytes]") -> None:
+            try:
+                rc = proc.wait(timeout=leg_timeout)
+                backend_results[backend] = {"success": rc == 0, "detail": f"exit {rc}"}
+                icon = "✅" if rc == 0 else "❌"
+                self.console.print(f"{icon} {backend.upper()} backend subprocess finished (exit {rc})")
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                backend_results[backend] = {"success": False, "detail": f"timeout >{leg_timeout}s"}
+                self.console.print(
+                    f"[red][FAIL] {backend.upper()} backend subprocess timed out after {leg_timeout}s[/red]"
+                )
 
-            for backend in self.database_backends:
-                self.console.print(f"[cyan]🔄 Starting {backend.upper()} backend tests...[/cyan]")
+        procs = {}
+        for backend in self.database_backends:
+            child = [sys.executable, "-m", "tools.qa_runner", *_child_argv(backend)]
+            self.console.print(f"[cyan] Starting {backend.upper()} backend tests (isolated subprocess)...[/cyan]")
+            self.console.print(f"[dim]   $ {' '.join(child)}[/dim]")
+            proc = subprocess.Popen(child, env=child_env)
+            if sequential:
+                # One leg at a time: the child must EXIT (releasing :4242/:4243
+                # and the shared data/edge identity) before the next leg boots.
+                _wait_leg(backend, proc)
+            else:
+                procs[backend] = proc
 
-                # Create a new runner instance for this backend with the correct server manager
-                backend_config = self.server_managers[backend].config
-                backend_runner = QARunner(backend_config, modules=modules)
-                backend_runner.database_backends = [backend]
-                backend_runner.server_manager = self.server_managers[backend]
-                backend_runner.server_managers = {backend: self.server_managers[backend]}
+        if not sequential:
+            self.console.print("\n[cyan]⏳ Waiting for all backend subprocesses to complete...[/cyan]\n")
+            for backend, proc in procs.items():
+                _wait_leg(backend, proc)
 
-                # Submit backend test execution to thread pool
-                future = executor.submit(backend_runner.run, modules)
-                futures[backend] = (future, backend_runner)
-
-            # Wait for all backends to complete
-            self.console.print("\n[cyan]⏳ Waiting for all backend tests to complete...[/cyan]\n")
-
-            for backend, (future, backend_runner) in futures.items():
-                try:
-                    success = future.result(timeout=self.config.timeout * 2)  # Allow extra time for parallel execution
-                    backend_results[backend] = {
-                        "success": success,
-                        "results": backend_runner.results,
-                    }
-
-                    status_icon = "✅" if success else "❌"
-                    self.console.print(f"{status_icon} {backend.upper()} backend tests completed")
-
-                except Exception as e:
-                    self.console.print(f"[red]❌ {backend.upper()} backend tests failed with error: {e}[/red]")
-                    backend_results[backend] = {
-                        "success": False,
-                        "results": {},
-                        "error": str(e),
-                    }
-
-        # Determine overall success
         all_success = all(data["success"] for data in backend_results.values())
 
-        # Print combined summary
         elapsed = time.time() - start_time
         self.console.print(f"\n\n{'=' * 80}")
-        self.console.print("[bold cyan]📊 PARALLEL BACKEND TEST SUMMARY[/bold cyan]")
+        self.console.print("[bold cyan] MULTI-BACKEND TEST SUMMARY[/bold cyan]")
         self.console.print(f"{'=' * 80}\n")
 
-        # Create comparison table
-        table = Table(title="Backend Comparison")
+        table = Table(title="Backend Comparison (isolated subprocesses)")
         table.add_column("Backend", style="cyan")
         table.add_column("Status", style="bold")
-        table.add_column("Passed", style="green")
-        table.add_column("Failed", style="red")
-        table.add_column("Total", style="white")
-
+        table.add_column("Result", style="white")
         for backend, data in backend_results.items():
-            results = data.get("results", {})
-            passed = sum(1 for r in results.values() if r.get("success", False))
-            failed = len(results) - passed
-            total = len(results)
-            status = "✅" if data["success"] else "❌"
-
-            table.add_row(backend.upper(), status, str(passed), str(failed), str(total))
-
+            status = "✅ PASS" if data["success"] else "❌ FAIL"
+            table.add_row(backend.upper(), status, data["detail"])
         self.console.print(table)
 
-        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s (parallel execution)[/dim]")
+        self.console.print(f"\n[dim]Total Duration: {elapsed:.2f}s ({mode_label})[/dim]")
+        self.console.print("[dim]Per-backend test counts + incidents are in each subprocess's own summary above.[/dim]")
 
-        # Print log locations for each backend
-        self.console.print("\n[cyan]📋 Log Locations:[/cyan]")
+        self.console.print("\n[cyan] Log Locations:[/cyan]")
         for backend in self.database_backends:
             self.console.print(f"[dim]   • {backend}: logs/{backend}/latest.log[/dim]")
             self.console.print(f"[dim]   • {backend} incidents: logs/{backend}/incidents_latest.log[/dim]")
 
         if all_success:
-            self.console.print("\n[bold green]✅ All backends passed all tests in parallel![/bold green]")
+            self.console.print("\n[bold green][OK] All backends passed all tests![/bold green]")
         else:
             failed_backends = [b for b, d in backend_results.items() if not d["success"]]
-            self.console.print(f"\n[bold red]❌ Some backends failed: {', '.join(failed_backends)}[/bold red]")
+            self.console.print(f"\n[bold red][FAIL] Some backends failed: {', '.join(failed_backends)}[/bold red]")
 
         return all_success
 
@@ -1945,6 +3118,65 @@ class QARunner:
             SELECT task_id, agent_occurrence_id, description, status, created_at
             FROM tasks
             WHERE agent_occurrence_id = '__shared__'
+            ORDER BY created_at DESC
+        """
+        )
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(
+                {
+                    "task_id": row[0],
+                    "occurrence_id": row[1],
+                    "description": row[2],
+                    "status": row[3],
+                    "created_at": row[4],
+                }
+            )
+
+        cursor.close()
+        conn.close()
+        return results
+
+    def query_all_wakeup_tasks_db(self) -> List[Dict]:
+        """Query ALL wakeup tasks from PostgreSQL database (any occurrence).
+
+        Returns:
+            List of wakeup task dictionaries
+        """
+        from urllib.parse import urlparse
+
+        import psycopg2
+
+        # Parse postgres URL
+        parsed = urlparse(self.config.postgres_url)
+
+        conn = psycopg2.connect(
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            database=parsed.path.lstrip("/"),
+            user=parsed.username,
+            password=parsed.password,
+        )
+
+        cursor = conn.cursor()
+
+        # Debug: Count ALL tasks first
+        cursor.execute("SELECT COUNT(*) FROM tasks")
+        total_tasks = cursor.fetchone()[0]
+        self.console.print(f"[dim]DEBUG: Total tasks in database: {total_tasks}[/dim]")
+
+        # Debug: Show sample task_ids if any exist
+        cursor.execute("SELECT task_id, agent_occurrence_id, status FROM tasks LIMIT 10")
+        sample = cursor.fetchall()
+        if sample:
+            self.console.print(f"[dim]DEBUG: Sample tasks: {sample}[/dim]")
+
+        cursor.execute(
+            """
+            SELECT task_id, agent_occurrence_id, description, status, created_at
+            FROM tasks
+            WHERE task_id LIKE 'WAKEUP%'
             ORDER BY created_at DESC
         """
         )

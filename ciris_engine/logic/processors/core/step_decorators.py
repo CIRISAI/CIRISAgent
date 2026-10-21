@@ -14,6 +14,7 @@ Architecture:
 
 import asyncio
 import logging
+from contextvars import ContextVar
 from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
@@ -46,6 +47,21 @@ from ciris_engine.schemas.types import JSONDict
 F = TypeVar("F", bound=Callable[..., Any])
 
 logger = logging.getLogger(__name__)
+
+
+# Tracks whether the current async-context is inside a RECURSIVE_CONSCIENCE
+# step. The recursive-conscience handler legitimately calls
+# `_conscience_execution_step` internally to reuse the conscience evaluator;
+# without this flag, the nested CONSCIENCE_EXECUTION step would broadcast an
+# `aspdma_result` event with `is_recursive=False`, colliding with the outer
+# RECURSIVE_CONSCIENCE step's broadcast and producing two un-flagged
+# duplicates per recursive retry. The streaming verifier flags those as a
+# real failure (CIRISAgent#772). Setting this ContextVar in the outer
+# streaming_step wrapper and reading it in `_create_event_for_step` ensures
+# every recursive-path emission carries `is_recursive=True`, which the
+# verifier tolerates as a legitimate retry. Defaults to False so non-
+# recursive flows behave exactly as before.
+_in_recursive_conscience: ContextVar[bool] = ContextVar("in_recursive_conscience", default=False)
 
 # Global registry for paused thought coroutines
 _paused_thoughts: Dict[str, asyncio.Event] = {}
@@ -191,6 +207,52 @@ async def _maybe_add_resource_usage(
         )
 
 
+def _resolve_parent_event_for_step(step: StepPoint) -> Optional[Tuple[str, int]]:
+    """Map a StepPoint to (parent_event_type, parent_attempt_index) so any
+    LLM_CALL issued from inside this step's handler can carry the
+    parent-event linkage required by TRACE_WIRE_FORMAT.md §5.10.
+
+    Returns None for steps that don't issue LLM calls (those don't need
+    a parent context — boot diagnostics, action dispatch, round bookkeeping).
+
+    The pipeline-event-to-step mapping (see comment block in
+    `_broadcast_reasoning_event`):
+      - PERFORM_DMAS issues PDMA + CSDMA + IDMA + DSDMA LLM calls;
+        the resulting events are DMA_RESULTS + IDMA_RESULT (broadcast
+        at the next step's exit per the existing architecture). Parent
+        for those LLM calls is `DMA_RESULTS`.
+      - PERFORM_ASPDMA issues the action-selection LLM call; the
+        eventual reasoning event is `ASPDMA_RESULT` (initial pass).
+      - RECURSIVE_ASPDMA issues recursive action-selection LLM calls;
+        eventual event is `ASPDMA_RESULT` with attempt_index > 0.
+      - CONSCIENCE_EXECUTION / RECURSIVE_CONSCIENCE issue conscience
+        LLM calls; eventual event is `CONSCIENCE_RESULT`. Recursive
+        attempts increment the index.
+      - FINALIZE_ACTION may issue a final conscience call; treat as
+        `CONSCIENCE_RESULT`.
+
+    Recursive steps carry the per-thread counter via the attempt_index
+    machinery upstream — for the parent-context purpose we report
+    attempt_index 0 for non-recursive steps and rely on accord_metrics's
+    own counter for the actual broadcast index.
+    """
+    if step in (StepPoint.PERFORM_DMAS,):
+        return ("DMA_RESULTS", 0)
+    if step in (StepPoint.PERFORM_ASPDMA, StepPoint.RECURSIVE_ASPDMA):
+        # RECURSIVE_ASPDMA's parent_attempt_index is filled by the
+        # accord_metrics counter at broadcast time — agent-side we
+        # report 0 here and let the broadcaster increment as it sees
+        # multiple emissions.
+        return ("ASPDMA_RESULT", 0)
+    if step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE, StepPoint.FINALIZE_ACTION):
+        return ("CONSCIENCE_RESULT", 0)
+    # Other steps (START_ROUND, GATHER_CONTEXT, PERFORM_ACTION,
+    # ACTION_COMPLETE, ROUND_COMPLETE) don't issue LLM calls in the
+    # canonical pipeline. If a future step starts issuing calls, add
+    # the mapping here.
+    return None
+
+
 def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that streams step results in real-time.
@@ -199,6 +261,9 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
     1. Extracts step data from function arguments/results
     2. Broadcasts to global step_result_stream
     3. Never pauses - always streams and continues
+    4. Sets the parent-event ContextVar so any LLM_CALL issued during
+       the wrapped handler carries the right `(parent_event_type,
+       parent_attempt_index)` linkage per TRACE_WIRE_FORMAT.md §5.10.
 
     Args:
         step: The StepPoint enum for this step
@@ -213,6 +278,8 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
     def decorator(func: F) -> F:
         @wraps(func)
         async def wrapper(self: Any, thought_item: Any, *args: Any, **kwargs: Any) -> Any:
+            from ciris_engine.logic.buses.llm_call_context import set_parent_event_context
+
             thought_id = getattr(thought_item, "thought_id", "unknown")
             time_service = getattr(self, "_time_service", None)
             if not time_service or not hasattr(time_service, "now"):
@@ -221,9 +288,29 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
                 )
             start_timestamp = time_service.now()
 
+            # Resolve parent event for any LLM_CALLs the handler issues.
+            # If the step doesn't have a known parent event, run the
+            # handler without setting the ContextVar — LLM_CALLs from
+            # those steps would surface as UNKNOWN_PARENT in the
+            # broadcast helper's warning log.
+            parent_event = _resolve_parent_event_for_step(step)
+
+            # Mark recursive-conscience scope so the nested
+            # `_conscience_execution_step` call (which internally re-uses
+            # the conscience evaluator) emits its aspdma_result event with
+            # `is_recursive=True`. Without this token, the nested
+            # CONSCIENCE_EXECUTION's broadcast collides with the initial
+            # one as an un-flagged duplicate (CIRISAgent#772).
+            recursive_token = _in_recursive_conscience.set(True) if step == StepPoint.RECURSIVE_CONSCIENCE else None
+
             try:
                 # Execute the original function
-                result = await func(self, thought_item, *args, **kwargs)
+                if parent_event is not None:
+                    parent_event_type, parent_attempt_index = parent_event
+                    with set_parent_event_context(parent_event_type, parent_attempt_index):
+                        result = await func(self, thought_item, *args, **kwargs)
+                else:
+                    result = await func(self, thought_item, *args, **kwargs)
 
                 # Calculate processing time
                 end_timestamp = time_service.now()
@@ -255,6 +342,9 @@ def streaming_step(step: StepPoint) -> Callable[[Callable[..., Any]], Callable[.
 
                 # Don't broadcast errors as reasoning events - handled at higher level
                 raise
+            finally:
+                if recursive_token is not None:
+                    _in_recursive_conscience.reset(recursive_token)
 
         return cast(F, wrapper)
 
@@ -891,6 +981,11 @@ def _create_finalize_action_data(base_data: BaseStepData, result: Any) -> Finali
         epistemic_humility_uncertainties=epi_humility["uncertainties"],
         epistemic_humility_justification=epi_humility["justification"],
         epistemic_humility_recommendation=epi_humility["recommendation"],
+        # Conscience prompts for localization validation
+        entropy_prompt=getattr(result, "entropy_prompt", None),
+        coherence_prompt=getattr(result, "coherence_prompt", None),
+        optimization_veto_prompt=getattr(result, "optimization_veto_prompt", None),
+        epistemic_humility_prompt=getattr(result, "epistemic_humility_prompt", None),
     )
 
 
@@ -931,7 +1026,11 @@ def _create_perform_action_data(
 def _create_action_complete_data(
     base_data: BaseStepData, result: Any, kwargs: Optional[JSONDict] = None
 ) -> ActionCompleteStepData:
-    """Add ACTION_COMPLETE specific data with resource usage."""
+    """Add ACTION_COMPLETE specific data with resource usage and coherence data.
+
+    Coherence data is passed via kwargs['_coherence_data'] from the calling code,
+    which extracts it from the FINALIZE_ACTION result (ConscienceApplicationResult).
+    """
     if not result:
         raise ValueError("ACTION_COMPLETE step result is None - this indicates a serious pipeline issue")
 
@@ -948,6 +1047,10 @@ def _create_action_complete_data(
     kwargs_dict = kwargs or {}
     resource_data = get_dict(kwargs_dict, "_resource_usage", {})
 
+    # Extract coherence data if available (passed via kwargs from thought processor)
+    # This comes from FINALIZE_ACTION's ConscienceApplicationResult
+    coherence_data = get_dict(kwargs_dict, "_coherence_data", {})
+
     # Extract action_parameters from result (captures content for SPEAK, tool params, etc.)
     action_params = result.action_parameters if hasattr(result, "action_parameters") else {}
     if not isinstance(action_params, dict):
@@ -959,8 +1062,14 @@ def _create_action_complete_data(
         else:
             action_params = {}
 
+    base_fields = _base_data_dict(base_data)
+    # A refused act (CC 4.2.1.1 halt) carries its refusal; the ACTION_RESULT
+    # event reads it from here, so the trace records why nothing happened.
+    if result.error:
+        base_fields["error"] = result.error
+
     return ActionCompleteStepData(
-        **_base_data_dict(base_data),
+        **base_fields,
         action_executed=result.action_type,
         action_parameters=action_params,
         dispatch_success=result.success,
@@ -983,6 +1092,15 @@ def _create_action_complete_data(
         llm_calls=get_int(resource_data, "llm_calls", 0),
         models_used=get_list(resource_data, "models_used", []),
         api_bases_used=get_list(resource_data, "api_bases_used", []),
+        # Coherence data from FINALIZE_ACTION (None for exempt actions like RECALL, TASK_COMPLETE)
+        coherence_passed=coherence_data.get("coherence_passed"),
+        coherence_score=coherence_data.get("coherence_score"),
+        coherence_threshold=coherence_data.get("coherence_threshold"),
+        coherence_reason=coherence_data.get("coherence_reason"),
+        entropy_passed=coherence_data.get("entropy_passed"),
+        entropy_score=coherence_data.get("entropy_score"),
+        entropy_threshold=coherence_data.get("entropy_threshold"),
+        entropy_reason=coherence_data.get("entropy_reason"),
     )
 
 
@@ -1115,7 +1233,14 @@ def _create_event_for_step(
         logger.debug("[BROADCAST DEBUG] Creating SNAPSHOT_AND_CONTEXT event")
         return _create_snapshot_and_context_event(step_data, timestamp, create_reasoning_event, thought_item)
     if step in (StepPoint.CONSCIENCE_EXECUTION, StepPoint.RECURSIVE_CONSCIENCE):
-        is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE
+        # The recursive-conscience handler internally calls
+        # `_conscience_execution_step` to reuse the evaluator; that nested
+        # CONSCIENCE_EXECUTION fires inside an outer RECURSIVE_CONSCIENCE
+        # streaming context. Reading `_in_recursive_conscience` lets the
+        # nested broadcast carry `is_recursive=True` so the streaming
+        # verifier tolerates it as a retry instead of flagging it as a
+        # duplicate of the initial CONSCIENCE_EXECUTION (CIRISAgent#772).
+        is_recursive_step = step == StepPoint.RECURSIVE_CONSCIENCE or _in_recursive_conscience.get()
         return _create_aspdma_result_event(step_data, timestamp, is_recursive_step, create_reasoning_event)
     if step == StepPoint.FINALIZE_ACTION:
         return _create_conscience_result_event(step_data, timestamp, create_reasoning_event)
@@ -1169,10 +1294,44 @@ def enable_single_step_mode() -> None:
 
 
 def disable_single_step_mode() -> None:
-    """Disable single-step mode - thoughts run normally."""
-    global _single_step_mode
+    """Disable single-step mode and drain any currently-paused thoughts.
+
+    Flipping `_single_step_mode = False` alone is not sufficient: thoughts
+    that already crossed into `_pause_thought_execution(thought_id)` are
+    waiting on per-thought `asyncio.Event`s that nothing else signals.
+    Without draining those events here, those coroutines stay blocked
+    forever even after the caller has "resumed" the processor — which
+    pins the work_processor batch on whichever thought is currently
+    paused and starves every subsequent task. The QA AIR-smoke flake
+    on 2026-05-29 (run 26611381137) was a direct consequence: the
+    `comprehensive_single_step` module paused a thought at
+    `gather_context`, the cleanup test called `/v1/system/runtime/resume`,
+    `_single_step_mode` went False, but the paused thought stayed waiting
+    on its Event for 5+ minutes — blocking the AIR test message behind
+    it until the AIR test's own 180s `interact()` timeout fired.
+
+    Setting every pending `_paused_thoughts[*]` event lets those
+    coroutines fall through `event.wait()`, hit the `event.clear()` line
+    below in `_pause_thought_execution`, and continue their natural step
+    execution. We keep the entries in the dict — `execute_step`'s contract
+    is "set the event, the wrapper clears it for the next pause" — so
+    matching that contract here keeps the per-thought map consistent.
+    """
+    global _single_step_mode, _paused_thoughts
     _single_step_mode = False
-    logger.info("Single-step mode disabled")
+    pending = list(_paused_thoughts.items())
+    drained = 0
+    for thought_id, event in pending:
+        try:
+            if not event.is_set():
+                event.set()
+                drained += 1
+        except Exception as e:
+            logger.warning(f"Failed to signal resume for paused thought {thought_id}: {e}")
+    if drained:
+        logger.info(f"Single-step mode disabled; drained {drained} paused thought(s)")
+    else:
+        logger.info("Single-step mode disabled")
 
 
 def is_single_step_mode() -> bool:
@@ -1455,11 +1614,16 @@ def _create_dma_results_event(
     if not dma_results.ethical_pdma:
         raise ValueError(f"Ethical PDMA result is None: {dma_results.ethical_pdma}")
 
-    # Extract prompts if available (for debugging/transparency)
+    # Extract user prompts if available (for debugging/transparency)
     # Note: IDMA is emitted as a separate IDMA_RESULT event (v1.9.3), not in DMA_RESULTS
     csdma_prompt = getattr(dma_results, "csdma_prompt", None)
     dsdma_prompt = getattr(dma_results, "dsdma_prompt", None)
     pdma_prompt = getattr(dma_results, "ethical_pdma_prompt", None)
+
+    # Extract system prompts for debugging format instructions (HE-300 etc)
+    csdma_system_prompt = getattr(dma_results, "csdma_system_prompt", None)
+    dsdma_system_prompt = getattr(dma_results, "dsdma_system_prompt", None)
+    pdma_system_prompt = getattr(dma_results, "ethical_pdma_system_prompt", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.DMA_RESULTS,
@@ -1473,6 +1637,10 @@ def _create_dma_results_event(
         csdma_prompt=csdma_prompt,  # User prompt passed to CSDMA
         dsdma_prompt=dsdma_prompt,  # User prompt passed to DSDMA
         pdma_prompt=pdma_prompt,  # User prompt passed to PDMA
+        # System prompts for debugging format instructions
+        csdma_system_prompt=csdma_system_prompt,
+        dsdma_system_prompt=dsdma_system_prompt,
+        pdma_system_prompt=pdma_system_prompt,
     )
 
 
@@ -1481,7 +1649,7 @@ def _create_idma_result_event(
 ) -> Any:
     """Create IDMA_RESULT reasoning event from InitialDMAResults.
 
-    IDMA (Identity DMA) evaluates epistemic diversity using CCA principles.
+    IDMA (Intuition DMA) evaluates epistemic diversity using CCA principles.
     This event is always emitted after DMA_RESULTS (v1.9.3).
     """
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
@@ -1499,11 +1667,49 @@ def _create_idma_result_event(
         task_id=step_data.task_id,
         timestamp=timestamp,
         k_eff=idma.k_eff,
+        effective_source_count=getattr(idma, "effective_source_count", getattr(idma, "k_eff", None)),
+        k_raw=getattr(idma, "k_raw", None),
+        raw_source_count=getattr(idma, "raw_source_count", getattr(idma, "k_raw", None)),
         correlation_risk=idma.correlation_risk,
+        source_overlap=getattr(idma, "source_overlap", getattr(idma, "correlation_risk", None)),
+        rho_mean=getattr(idma, "rho_mean", None),
         phase=idma.phase,
+        reasoning_state=getattr(idma, "reasoning_state", getattr(idma, "phase", None)),
+        phase_confidence=getattr(idma, "phase_confidence", None),
         fragility_flag=idma.fragility_flag,
+        reasoning_is_fragile=getattr(idma, "reasoning_is_fragile", getattr(idma, "fragility_flag", None)),
+        collapse_margin=getattr(idma, "collapse_margin", None),
+        safety_margin=getattr(idma, "safety_margin", getattr(idma, "collapse_margin", None)),
         sources_identified=idma.sources_identified,
+        source_ids=getattr(idma, "source_ids", []),
+        source_types=getattr(idma, "source_types", []),
+        source_independence_scores=getattr(idma, "source_independence_scores", []),
+        source_type_counts=getattr(idma, "source_type_counts", []),
         correlation_factors=idma.correlation_factors,
+        top_correlation_factors=getattr(idma, "top_correlation_factors", []),
+        pairwise_correlation_summary=getattr(idma, "pairwise_correlation_summary", []),
+        rho_intra=getattr(idma, "rho_intra", None),
+        rho_inter=getattr(idma, "rho_inter", None),
+        module_count=getattr(idma, "module_count", None),
+        effective_module_count=getattr(idma, "effective_module_count", None),
+        source_clusters=getattr(idma, "source_clusters", []),
+        common_cause_flags=getattr(idma, "common_cause_flags", []),
+        intervention_recommendation=getattr(idma, "intervention_recommendation", None),
+        next_best_recovery_step=getattr(
+            idma, "next_best_recovery_step", getattr(idma, "intervention_recommendation", None)
+        ),
+        delta_k_eff=getattr(idma, "delta_k_eff", None),
+        delta_rho_mean=getattr(idma, "delta_rho_mean", None),
+        phase_persistence_steps=getattr(idma, "phase_persistence_steps", None),
+        time_in_fragile_state_ms=getattr(idma, "time_in_fragile_state_ms", None),
+        moving_variance=getattr(idma, "moving_variance", None),
+        rho_critical=getattr(idma, "rho_critical", None),
+        k_required=getattr(idma, "k_required", None),
+        defense_function=getattr(idma, "defense_function", None),
+        collapse_rate=getattr(idma, "collapse_rate", None),
+        time_to_truth=getattr(idma, "time_to_truth", None),
+        time_to_entropy=getattr(idma, "time_to_entropy", None),
+        time_to_capture=getattr(idma, "time_to_capture", None),
         reasoning=idma.reasoning,
         idma_prompt=idma_prompt,
     )
@@ -1582,11 +1788,16 @@ def _create_conscience_result_event(step_data: StepDataUnion, timestamp: str, cr
         epistemic_humility_uncertainties=getattr(step_data, "epistemic_humility_uncertainties", None),
         epistemic_humility_justification=getattr(step_data, "epistemic_humility_justification", None),
         epistemic_humility_recommendation=getattr(step_data, "epistemic_humility_recommendation", None),
+        # === CONSCIENCE PROMPTS (for localization validation) ===
+        entropy_prompt=getattr(step_data, "entropy_prompt", None),
+        coherence_prompt=getattr(step_data, "coherence_prompt", None),
+        optimization_veto_prompt=getattr(step_data, "optimization_veto_prompt", None),
+        epistemic_humility_prompt=getattr(step_data, "epistemic_humility_prompt", None),
     )
 
 
 def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create_reasoning_event: Any) -> Any:
-    """Create ACTION_RESULT reasoning event with audit trail, resource usage, and follow-up data."""
+    """Create ACTION_RESULT reasoning event with audit trail, resource usage, coherence data, and follow-up data."""
     from ciris_engine.schemas.services.runtime_control import ReasoningEvent
 
     # Extract follow_up_thought_id from step_data (already populated from dispatch_result)
@@ -1602,7 +1813,7 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         execution_success=getattr(step_data, "dispatch_success", True),
         execution_time_ms=getattr(step_data, "execution_time_ms", 0.0),
         follow_up_thought_id=follow_up_thought_id,
-        error=None,
+        error=getattr(step_data, "error", None),
         audit_entry_id=getattr(step_data, "audit_entry_id", None),
         audit_sequence_number=getattr(step_data, "audit_sequence_number", None),
         audit_entry_hash=getattr(step_data, "audit_entry_hash", None),
@@ -1617,6 +1828,15 @@ def _create_action_result_event(step_data: StepDataUnion, timestamp: str, create
         llm_calls=getattr(step_data, "llm_calls", 0),
         models_used=getattr(step_data, "models_used", []),
         api_bases_used=getattr(step_data, "api_bases_used", []),
+        # Coherence data from conscience checks (None for exempt actions like RECALL, TASK_COMPLETE)
+        coherence_passed=getattr(step_data, "coherence_passed", None),
+        coherence_score=getattr(step_data, "coherence_score", None),
+        coherence_threshold=getattr(step_data, "coherence_threshold", None),
+        coherence_reason=getattr(step_data, "coherence_reason", None),
+        entropy_passed=getattr(step_data, "entropy_passed", None),
+        entropy_score=getattr(step_data, "entropy_score", None),
+        entropy_threshold=getattr(step_data, "entropy_threshold", None),
+        entropy_reason=getattr(step_data, "entropy_reason", None),
     )
 
 

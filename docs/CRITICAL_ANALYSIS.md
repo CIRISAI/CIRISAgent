@@ -55,12 +55,33 @@
 - Secrets management not fully validated
 
 ### 7. ✅ VERIFIED: Resource Constraints EXCELLENT
-- **ACTUAL PRODUCTION USAGE: 228 MB RAM** (well under 4GB target!)
-- Running on agents.ciris.ai for 3.5+ hours (12,826 seconds)
-- CPU usage: 1.0% average
-- Memory usage: 5% of available (228MB used)
-- No memory leaks observed in production
+
+**Memory Benchmark Results** (see `.github/workflows/memory-benchmark.yml` for reproducible CI):
+
+| Metric | Value | Date |
+|--------|-------|------|
+| Cold Start Peak | ~250 MB | Measured via `tools/introspect_memory.py` |
+| 100-msg Peak | ~280 MB | Measured via `tools/memory_benchmark.py` |
+| 1000-msg Peak | ~320 MB | Measured via `tools/memory_benchmark.py` |
+| Target | 4 GB | Constraint met with 10x+ margin |
+
+**Production Observation** (agents.ciris.ai):
+- Running stable for extended periods
+- CPU usage: ~1% average
+- No memory leaks observed
 - Successfully handling real traffic with minimal resources
+
+**To reproduce locally:**
+```bash
+# Cold start measurement
+python3 tools/introspect_memory.py --adapters cli --duration 30
+
+# Load test measurement
+python3 tools/memory_benchmark.py --messages 100 --adapter api
+python3 tools/memory_benchmark.py --messages 1000 --adapter api
+```
+
+**CI integration:** Memory benchmarks run weekly and on PRs modifying core engine code.
 
 ### 8. Critical Features Incomplete
 - Adaptive filter service implementation unclear

@@ -1,0 +1,585 @@
+"""
+Server Manager for Web UI Testing
+
+Manages CIRIS API server lifecycle including:
+- Data wipe (clean slate)
+- Wheel installation
+- Server startup/shutdown
+- Health monitoring
+"""
+
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+import requests
+
+
+@dataclass
+class ServerConfig:
+    """Configuration for CIRIS server management."""
+
+    # Server settings
+    host: str = "127.0.0.1"
+    port: int = 8080
+    mock_llm: bool = False  # Use mock LLM for testing
+
+    # Paths
+    project_root: Optional[str] = None  # Auto-detect if not set
+    data_dir: Optional[str] = None  # Data directory to wipe
+    log_dir: str = "logs"
+
+    # Timeouts
+    startup_timeout: int = 60  # Seconds to wait for server startup
+    health_check_interval: float = 1.0  # Seconds between health checks
+
+    # Build settings
+    install_wheel: bool = False  # Install fresh wheel before starting
+    wipe_data: bool = True  # Wipe data for clean slate
+    first_run_mode: bool = False  # Enable first-run/setup wizard mode (no CIRIS_CONFIGURED)
+
+
+@dataclass
+class ServerStatus:
+    """Current server status."""
+
+    running: bool = False
+    healthy: bool = False
+    url: Optional[str] = None
+    pid: Optional[int] = None
+    agent_state: Optional[str] = None
+    services_online: int = 0
+    error: Optional[str] = None
+
+
+class ServerManager:
+    """
+    Manages CIRIS API server for web UI testing.
+
+    Handles:
+    - Data cleanup for fresh tests
+    - Wheel building and installation
+    - Server process management
+    - Health monitoring
+    """
+
+    def __init__(self, config: Optional[ServerConfig] = None):
+        self.config = config or ServerConfig()
+        self._process: Optional[subprocess.Popen] = None
+        self._log_file = None
+
+        # Auto-detect project root
+        if not self.config.project_root:
+            self.config.project_root = self._find_project_root()
+
+        # Set data directory
+        if not self.config.data_dir:
+            self.config.data_dir = os.path.join(self.config.project_root, "data")
+
+    @property
+    def backend_home(self) -> str:
+        """The backend's CIRIS_HOME: an exported one wins over project_root (start_env's setdefault)."""
+        return os.environ.get("CIRIS_HOME") or str(self.config.project_root)
+
+    def _find_project_root(self) -> str:
+        """Find CIRIS project root directory."""
+        # Try current working directory
+        cwd = os.getcwd()
+        if os.path.exists(os.path.join(cwd, "main.py")):
+            return cwd
+
+        # Try relative paths
+        for path in ["..", "../..", "../../.."]:
+            full_path = os.path.abspath(os.path.join(cwd, path))
+            if os.path.exists(os.path.join(full_path, "main.py")):
+                return full_path
+
+        # Default to CIRISAgent in home directory
+        home_path = os.path.expanduser("~/CIRISAgent")
+        if os.path.exists(os.path.join(home_path, "main.py")):
+            return home_path
+
+        raise RuntimeError("Could not find CIRIS project root. Set project_root in config.")
+
+    @property
+    def base_url(self) -> str:
+        """Get the base URL for the server."""
+        return f"http://{self.config.host}:{self.config.port}"
+
+    def wipe_data(self) -> bool:
+        """
+        Wipe all data for a clean slate test.
+
+        Removes:
+        - SQLite databases
+        - Log files
+        - Cache files
+
+        Returns:
+            True if successful
+        """
+        print(" Wiping data for clean slate...")
+
+        # Wipe BOTH potential data-dir locations. CIRIS_HOME is pinned to
+        # project_root via start_env (avoids the drift that left admin
+        # in DB-1 while restart queried DB-2), but defensively wipe the
+        # legacy ~/ciris/data path too in case the operator ran the
+        # backend outside the qa_runner between sessions.
+        home_data_dir = os.path.join(os.path.expanduser("~"), "ciris", "data")
+        home_dot_env = os.path.join(os.path.expanduser("~"), "ciris", ".env")
+        data_paths = [
+            self.config.data_dir,
+            os.path.join(self.config.project_root, "ciris_engine.db"),
+            os.path.join(self.config.project_root, "ciris_engine.db-wal"),
+            os.path.join(self.config.project_root, "ciris_engine.db-shm"),
+            os.path.join(self.config.project_root, "audit.db"),
+            os.path.join(self.config.project_root, "secrets.db"),
+            # Also remove .env to reset first-run state (both locations checked in dev mode)
+            os.path.join(self.config.project_root, ".env"),
+            os.path.join(self.config.project_root, "ciris", ".env"),  # Dev mode first-priority path
+            # Belt-and-suspenders: clear ~/ciris/ data + .env so a
+            # stale ambient state from a prior non-qa_runner agent
+            # boot can't seed the auth probe with the wrong admin set.
+            home_data_dir,
+            home_dot_env,
+        ]
+
+        for path in data_paths:
+            if path and os.path.exists(path):
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                        print(f"   Removed directory: {path}")
+                    else:
+                        os.remove(path)
+                        print(f"   Removed file: {path}")
+                except Exception as e:
+                    print(f" [WARN] Could not remove {path}: {e}")
+
+        # Clear logs but keep directory
+        log_dir = os.path.join(self.config.project_root, self.config.log_dir)
+        if os.path.exists(log_dir):
+            for f in os.listdir(log_dir):
+                try:
+                    fp = os.path.join(log_dir, f)
+                    if os.path.isfile(fp):
+                        os.remove(fp)
+                except Exception:
+                    pass
+            print(f"   Cleared logs in: {log_dir}")
+
+        print("[OK] Data wiped successfully")
+        return True
+
+    def build_wheel(self) -> bool:
+        """
+        Build and install the CIRIS wheel.
+
+        Returns:
+            True if successful
+        """
+        print(" Building wheel...")
+
+        try:
+            # Build wheel
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "wheel", ".", "-w", "dist", "--no-deps"],
+                cwd=self.config.project_root,
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode != 0:
+                print(f" [WARN] Wheel build failed: {result.stderr}")
+                return False
+
+            # Find and install the wheel
+            dist_dir = os.path.join(self.config.project_root, "dist")
+            wheels = sorted(Path(dist_dir).glob("ciris_engine-*.whl"), reverse=True)
+
+            if not wheels:
+                print(" [WARN] No wheel found after build")
+                return False
+
+            wheel_path = str(wheels[0])
+            print(f"   Installing: {wheel_path}")
+
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--force-reinstall", wheel_path],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode != 0:
+                print(f" [WARN] Wheel install failed: {result.stderr}")
+                return False
+
+            print("[OK] Wheel built and installed")
+            return True
+
+        except Exception as e:
+            print(f" [WARN] Build error: {e}")
+            return False
+
+    def start(self) -> ServerStatus:
+        """
+        Start the CIRIS API server.
+
+        Returns:
+            ServerStatus with startup result
+        """
+        status = ServerStatus(url=self.base_url)
+
+        # Check if already running
+        if self.is_running():
+            print("[WARN] Server already running, stopping first...")
+            self.stop()
+            time.sleep(2)
+
+        # Wipe data if requested
+        if self.config.wipe_data:
+            self.wipe_data()
+
+        # Build wheel if requested
+        if self.config.install_wheel:
+            if not self.build_wheel():
+                status.error = "Failed to build/install wheel"
+                return status
+
+        print(f" Starting CIRIS API server on port {self.config.port}...")
+
+        # Build command
+        cmd = [
+            sys.executable,
+            "main.py",
+            "--adapter",
+            "api",
+            "--port",
+            str(self.config.port),
+        ]
+
+        if self.config.mock_llm:
+            cmd.append("--mock-llm")
+
+        # Ensure minimal .env file exists (needed for QA testing)
+        # In first_run_mode, do NOT create .env so server enters setup wizard
+        if not self.config.first_run_mode:
+            env_path = os.path.join(self.config.project_root, ".env")
+            if not os.path.exists(env_path):
+                with open(env_path, "w") as f:
+                    f.write("# Auto-generated minimal .env for QA testing\n")
+                    f.write("CIRIS_CONFIGURED=true\n")
+                    if self.config.mock_llm:
+                        f.write("CIRIS_LLM_PROVIDER=mock\n")
+                        f.write("CIRIS_MOCK_LLM=true\n")
+                print("   Created minimal .env file (configured mode)")
+        else:
+            print("   Skipping .env creation (first-run mode)")
+            # A FIRST RUN HAS NO RECORDED ANSWER. The gate runs a no-AI pass and
+            # then a with-AI pass on the same home; when the reset between them
+            # fails, the no-AI pass's CIRIS_RUN_WITHOUT_AI is still in .env when
+            # the with-AI pass starts. ciris-client 0.5.209 honours that flag: it
+            # resolved :4243, found no node, and launched one of its own -- which
+            # bound :4242 0.7s after our with-AI agent had started, and the agent
+            # died on "Edge transport ports are held by another process"
+            # (run #34177749800, macOS). 0.5.208 ignored the flag, which is the
+            # only reason this never showed. Strip the recorded answer and its
+            # key id; nothing else in the file is this mode's business.
+            # THE BACKEND'S HOME, NOT THE CHECKOUT. start_env pins CIRIS_HOME to
+            # project_root with setdefault, so an exported CIRIS_HOME (the gate
+            # exports ${RUNNER_TEMP}/ciris-<plat>) wins and the agent writes its
+            # .env THERE. The first version of this strip looked in project_root
+            # and found nothing (run #34179671711: no "Stripped" line), which is
+            # the wrong-file shape the per-launch-log fix had just closed.
+            effective_home = self.backend_home
+            env_path = os.path.join(effective_home, ".env")
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8", errors="replace") as f:
+                    lines = f.readlines()
+                kept = [ln for ln in lines if not ln.startswith(("CIRIS_RUN_WITHOUT_AI=", "CIRIS_NODE_KEY_ID="))]
+                if len(kept) != len(lines):
+                    with open(env_path, "w", encoding="utf-8") as f:
+                        f.writelines(kept)
+                    print(
+                        f"   Stripped a recorded run-without-AI answer from {env_path} "
+                        f"({len(lines) - len(kept)} line(s)): a first run starts with no answer"
+                    )
+
+        # Open log file
+        log_path = os.path.join(self.config.project_root, self.config.log_dir, "web_ui_qa_server.log")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        self._log_file = open(log_path, "w")
+
+        # Set up environment variables like the regular QA runner
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        # Every backend this harness starts is a harness run (CIRISAgent#1245):
+        # "qa" unless the job declared "battery"; never an inherited "production".
+        from tools.qa_runner.run_kind import declare_run_kind
+
+        declare_run_kind(env)
+
+        # Force deterministic data path across BOTH the first-run and
+        # configured-mode backend invocations. Without this:
+        #   - First run (CIRIS_FORCE_FIRST_RUN=1): path_resolution falls
+        #     to dev-mode → Path.cwd()/data → <project_root>/data
+        #   - Restart (configured mode): path_resolution may resolve
+        #     differently and write to ~/ciris/data
+        # The two runs end up using DIFFERENT SQLite databases. Admin
+        # user created in run 1 lives in DB-1; auth probe in run 2
+        # queries DB-2 (no SYSTEM_ADMIN) → setup_required stays True →
+        # desktop stuck on Setup wizard → walk-test login cascades to
+        # SKIP. Pinning CIRIS_HOME to project_root makes both runs land
+        # on the same data dir deterministically.
+        #
+        # setdefault, NOT assignment. This used to overwrite unconditionally,
+        # which silently discarded an explicitly-set CIRIS_HOME -- and that made
+        # the Windows UI job prove nothing at all. That job pins
+        #
+        #     CIRIS_HOME=C:\Users\runneradmin\franc\ciris
+        #
+        # precisely because `\f` is the escape sequence that corrupted a real
+        # user's paths. The harness threw it away and substituted the repo
+        # checkout, so the path written into .env was
+        # D:\a\CIRISAgent\CIRISAgent\data\... -- which contains no escape
+        # trigger. Both boots then passed the control-character assertion
+        # trivially, because nothing dangerous was ever written, and the
+        # assertion failed only because it went looking for .env in the home it
+        # had asked for and found none.
+        #
+        # The determinism argument above is fully satisfied by setdefault: what
+        # it needs is that BOTH runs agree on one home, not that the harness
+        # chooses it. When nothing is set, behaviour is unchanged.
+        env.setdefault("CIRIS_HOME", self.config.project_root)
+        # CIRIS_AGENT_ID stabilizes the signer_key_id across runs so
+        # persist's process-singleton Engine guardrail (3.6.3+) doesn't
+        # see EngineConfigMismatch on the restart.
+        env.setdefault("CIRIS_AGENT_ID", "qa-runner-ciris-agent")
+
+        # For first-run mode, set the environment variable to force first-run detection
+        if self.config.first_run_mode:
+            env["CIRIS_FORCE_FIRST_RUN"] = "1"
+            print("   Setting CIRIS_FORCE_FIRST_RUN=1")
+
+        # Start server process
+        # Use start_new_session=True to isolate from terminal signals
+        # Use stdin=DEVNULL to prevent any terminal read attempts
+        try:
+            self._process = subprocess.Popen(
+                cmd,
+                cwd=self.config.project_root,
+                stdin=subprocess.DEVNULL,
+                stdout=self._log_file,
+                stderr=subprocess.STDOUT,
+                env=env,
+                start_new_session=True,
+            )
+            status.pid = self._process.pid
+            print(f"   Server PID: {self._process.pid}")
+
+        except Exception as e:
+            status.error = f"Failed to start server: {e}"
+            return status
+
+        # Wait for server to be ready
+        print("   Waiting for server to be ready...")
+        start_time = time.time()
+
+        while time.time() - start_time < self.config.startup_timeout:
+            time.sleep(self.config.health_check_interval)
+
+            # Check if process actually died (not just signaled)
+            # Note: In some shell environments, poll() can return -17 (SIGCHLD) spuriously
+            # when the process is still running. We verify by re-polling.
+            #
+            # This used to "double-check" with os.kill(pid, 0). That is a liveness
+            # probe on POSIX ONLY. On Windows, signal 0 is CTRL_C_EVENT, so
+            # os.kill(pid, 0) does not ask whether the process is alive -- it
+            # sends the process group a Ctrl+C, which is a request to STOP. The
+            # check meant to confirm the server survived was capable of killing
+            # the server, and of interrupting the harness sharing its console.
+            poll_result = self._process.poll()
+            if poll_result is not None:
+                # Re-poll once: a genuinely dead process stays dead, while a
+                # spurious result clears. No signal is sent either way.
+                time.sleep(0.2)
+                if self._process.poll() is not None:
+                    status.error = f"Server process exited unexpectedly (exit code: {poll_result})"
+                    return status
+                print(f"   (poll returned {poll_result} spuriously; process {self._process.pid} is alive)")
+
+            # Check health endpoint
+            try:
+                response = requests.get(f"{self.base_url}/v1/system/health", timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    # Response format: {"data": {"cognitive_state": "work"|null, ...}}
+                    health_data = data.get("data", data)
+                    agent_state = health_data.get("cognitive_state")
+
+                    # In first-run mode, cognitive_state is null - that's OK
+                    # Check for healthy status or normal operation states
+                    is_healthy = health_data.get("status") == "healthy"
+                    is_ready = agent_state and agent_state.lower() in ["work", "ready"]
+                    is_first_run = agent_state is None and is_healthy
+
+                    # SETUP means the API is up and waiting for /v1/setup/complete.
+                    #
+                    # This deliberately does NOT require status == "healthy",
+                    # which it used to and which made the condition impossible to
+                    # satisfy -- so first-run bring-up timed out after 60s on
+                    # EVERY platform, not just Windows. Before the wizard runs
+                    # there is no LLM provider and no services are registered, so
+                    # the registry is empty and determine_overall_status()
+                    # correctly reports "critical":
+                    #
+                    #     {"status": "critical", "services": {},
+                    #      "initialization_complete": true,
+                    #      "cognitive_state": "SETUP", "degraded_mode": true}
+                    #
+                    # Waiting for "healthy" here asks the agent to finish
+                    # initialising before running the step whose whole job is to
+                    # initialise it. initialization_complete is the right signal:
+                    # the API is serving and can accept the wizard's POST.
+                    is_setup = (
+                        bool(agent_state)
+                        and agent_state.lower() == "setup"
+                        and health_data.get("initialization_complete", False)
+                    )
+
+                    if is_ready or is_first_run or (self.config.first_run_mode and is_setup):
+                        status.running = True
+                        status.healthy = True
+                        status.agent_state = agent_state or "first-run"
+                        state_msg = agent_state or "first-run (setup required)"
+                        print(f"[OK] Server ready (state: {state_msg})")
+                        return status
+                    else:
+                        print(f"   Agent state: {agent_state}, healthy: {is_healthy}")
+
+            except requests.exceptions.ConnectionError:
+                pass  # Server not ready yet
+            except Exception as e:
+                print(f"   Health check error: {e}")
+
+        status.error = f"Server startup timeout ({self.config.startup_timeout}s)"
+        return status
+
+    def stop(self) -> bool:
+        """
+        Stop the CIRIS API server.
+
+        Returns:
+            True if stopped successfully
+        """
+        if not self._process:
+            return True
+
+        print(" Stopping CIRIS API server...")
+
+        try:
+            # Try graceful shutdown first
+            self._process.terminate()
+
+            # Wait for graceful shutdown
+            try:
+                self._process.wait(timeout=10)
+                print("   Server stopped gracefully")
+            except subprocess.TimeoutExpired:
+                # Force kill
+                print("   Force killing server...")
+                self._process.kill()
+                self._process.wait()
+
+            self._process = None
+
+        except Exception as e:
+            print(f" [WARN] Error stopping server: {e}")
+            return False
+
+        finally:
+            if self._log_file:
+                self._log_file.close()
+                self._log_file = None
+
+        return True
+
+    def is_running(self) -> bool:
+        """Check if server is running."""
+        if self._process and self._process.poll() is None:
+            return True
+
+        # Also check by port
+        try:
+            response = requests.get(f"{self.base_url}/v1/system/health", timeout=2)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def get_status(self) -> ServerStatus:
+        """Get current server status."""
+        status = ServerStatus(url=self.base_url)
+
+        if self._process:
+            status.pid = self._process.pid
+            status.running = self._process.poll() is None
+
+        if status.running or self.is_running():
+            try:
+                response = requests.get(f"{self.base_url}/v1/system/health", timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    health_data = data.get("data", data)
+                    status.healthy = True
+                    status.agent_state = health_data.get("cognitive_state")
+            except Exception as e:
+                status.error = str(e)
+
+        return status
+
+    def kill_existing_servers(self) -> None:
+        """Kill any existing CIRIS servers on the configured port."""
+        import subprocess
+
+        try:
+            # Find processes using the port
+            # `lsof` is POSIX-only; on Windows this raised FileNotFoundError.
+            # None means "could not determine"; [] means a lookup ran and found
+            # no listener. Either way there is nothing for us to kill.
+            from tools.qa_runner.platform_procs import pids_listening_on
+
+            _found = pids_listening_on(self.config.port)
+
+            if _found:
+                pids = [str(x) for x in _found]
+                for pid in pids:
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                        print(f"   Killed existing process: {pid}")
+                    except Exception:
+                        pass
+                time.sleep(1)
+
+        except FileNotFoundError:
+            # Kept as a last resort, but pids_listening_on() no longer raises
+            # FileNotFoundError — it returns None when it cannot tell — so this
+            # branch is now effectively unreachable. `pkill` is POSIX-only and
+            # would itself have raised here on Windows, which is the bug this
+            # whole change is fixing.
+            from tools.qa_runner.platform_procs import kill_processes_matching
+
+            kill_processes_matching(f"python.*main.py.*{self.config.port}")
+
+    def __enter__(self) -> "ServerManager":
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit - stop server."""
+        self.stop()

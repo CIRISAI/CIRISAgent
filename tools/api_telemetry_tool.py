@@ -23,7 +23,7 @@ class APITelemetryTester:
     """Test telemetry endpoints."""
 
     def __init__(
-        self, base_url: str = "http://localhost:8000", username: str = "admin", password: str = "ciris_admin_password"
+        self, base_url: str = "http://localhost:8000", username: str = "admin", password: str = "qa_test_password_12345"
     ):
         self.base_url = base_url
         self.username = username
@@ -41,13 +41,13 @@ class APITelemetryTester:
                 data = response.json()
                 self.token = data.get("access_token")
                 self.headers = {"Authorization": f"Bearer {self.token}"}
-                console.print(f"[green]✓[/green] Authenticated as {self.username}")
+                console.print(f"[green][OK][/green] Authenticated as {self.username}")
                 return True
             else:
-                console.print(f"[red]✗[/red] Authentication failed: {response.status_code}")
+                console.print(f"[red][FAIL][/red] Authentication failed: {response.status_code}")
                 return False
         except Exception as e:
-            console.print(f"[red]✗[/red] Authentication error: {e}")
+            console.print(f"[red][FAIL][/red] Authentication error: {e}")
             return False
 
     def test_unified(self) -> Dict[str, Any]:
@@ -76,10 +76,10 @@ class APITelemetryTester:
 
                 return data
             else:
-                console.print(f"[red]✗[/red] Unified telemetry failed: {response.status_code}")
+                console.print(f"[red][FAIL][/red] Unified telemetry failed: {response.status_code}")
                 return {}
         except Exception as e:
-            console.print(f"[red]✗[/red] Unified telemetry error: {e}")
+            console.print(f"[red][FAIL][/red] Unified telemetry error: {e}")
             return {}
 
     def test_metrics(self) -> Dict[str, Any]:
@@ -102,10 +102,10 @@ class APITelemetryTester:
 
                 return data
             else:
-                console.print(f"[red]✗[/red] Metrics failed: {response.status_code}")
+                console.print(f"[red][FAIL][/red] Metrics failed: {response.status_code}")
                 return {}
         except Exception as e:
-            console.print(f"[red]✗[/red] Metrics error: {e}")
+            console.print(f"[red][FAIL][/red] Metrics error: {e}")
             return {}
 
     def test_traces(self) -> Dict[str, Any]:
@@ -126,12 +126,12 @@ class APITelemetryTester:
 
                 return data
             else:
-                console.print(f"[red]✗[/red] Traces failed: {response.status_code}")
+                console.print(f"[red][FAIL][/red] Traces failed: {response.status_code}")
                 if response.text:
                     console.print(f"  Response: {response.text[:200]}")
                 return {}
         except Exception as e:
-            console.print(f"[red]✗[/red] Traces error: {e}")
+            console.print(f"[red][FAIL][/red] Traces error: {e}")
             return {}
 
     def test_logs(self) -> Dict[str, Any]:
@@ -153,10 +153,10 @@ class APITelemetryTester:
 
                 return data
             else:
-                console.print(f"[red]✗[/red] Logs failed: {response.status_code}")
+                console.print(f"[red][FAIL][/red] Logs failed: {response.status_code}")
                 return {}
         except Exception as e:
-            console.print(f"[red]✗[/red] Logs error: {e}")
+            console.print(f"[red][FAIL][/red] Logs error: {e}")
             return {}
 
     def test_prometheus(self) -> str:
@@ -188,10 +188,10 @@ class APITelemetryTester:
 
                 return metrics
             else:
-                console.print(f"[red]✗[/red] Prometheus metrics failed: {response.status_code}")
+                console.print(f"[red][FAIL][/red] Prometheus metrics failed: {response.status_code}")
                 return ""
         except Exception as e:
-            console.print(f"[red]✗[/red] Prometheus metrics error: {e}")
+            console.print(f"[red][FAIL][/red] Prometheus metrics error: {e}")
             return ""
 
     def test_service_health(self) -> Dict[str, Any]:
@@ -223,7 +223,7 @@ class APITelemetryTester:
             return unified.get("services", {})
 
         except Exception as e:
-            console.print(f"[red]✗[/red] Service health error: {e}")
+            console.print(f"[red][FAIL][/red] Service health error: {e}")
             return {}
 
     def run_all_tests(self):
@@ -245,7 +245,7 @@ class APITelemetryTester:
         self.test_service_health()
 
         console.print("\n" + "=" * 50)
-        console.print("[green]✓[/green] All telemetry tests completed")
+        console.print("[green][OK][/green] All telemetry tests completed")
 
     def monitor(self, interval: int = 5):
         """Monitor telemetry in real-time."""
@@ -303,7 +303,7 @@ def main():
     parser.add_argument("--host", default="localhost", help="API host")
     parser.add_argument("--port", default=8000, type=int, help="API port")
     parser.add_argument("--username", default="admin", help="Auth username")
-    parser.add_argument("--password", default="ciris_admin_password", help="Auth password")
+    parser.add_argument("--password", default="qa_test_password_12345", help="Auth password")
     parser.add_argument("--monitor", action="store_true", help="Monitor mode")
     parser.add_argument("--interval", default=5, type=int, help="Monitor refresh interval")
 

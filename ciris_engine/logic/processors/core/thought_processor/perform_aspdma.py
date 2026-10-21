@@ -2,7 +2,7 @@
 Action Selection Phase - H3ERE Pipeline Step 3.
 
 ASPDMA (Action Selection Powered Decision Making Algorithm) uses LLM
-to synthesize the 3 parallel DMA results into a specific action selection.
+to synthesize the 4 DMA results, including IDMA fragility analysis, into a specific action selection.
 """
 
 import logging
@@ -27,7 +27,7 @@ class ActionSelectionPhase:
     """
     Phase 3: Action Selection (ASPDMA)
 
-    Uses LLM-powered Action Selection to synthesize the 3 parallel DMA results:
+    Uses LLM-powered Action Selection to synthesize the 4 DMA results:
     - Analyzes all DMA perspectives
     - Selects optimal action based on comprehensive analysis
     - Handles Wise Authority deferrals

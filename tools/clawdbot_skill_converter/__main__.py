@@ -79,7 +79,7 @@ Examples:
             if not args.dry_run:
                 converter = SkillConverter(args.output)
                 adapter_path = converter.convert(skill)
-                print(f"\n✓ Generated adapter: {adapter_path}")
+                print(f"\n[OK] Generated adapter: {adapter_path}")
             else:
                 print(f"\n[dry-run] Would generate: {args.output / skill.to_adapter_name()}")
 
@@ -113,7 +113,7 @@ Examples:
 
         if not args.dry_run:
             results = convert_skills_batch(args.input, args.output)
-            print(f"\n✓ Converted {len(results)} adapters to {args.output}")
+            print(f"\n[OK] Converted {len(results)} adapters to {args.output}")
         else:
             print(f"[dry-run] Would convert {len(skills)} skills to {args.output}")
 

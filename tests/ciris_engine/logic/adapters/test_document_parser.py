@@ -689,8 +689,11 @@ class TestEdgeCasesAndCoverage:
 
     def test_extract_docx_text_file_operations(self):
         """Test DOCX extraction file operation edge cases."""
+        # TemporaryDirectory, not NamedTemporaryFile: the latter cannot be
+        # reopened by name on Windows, so docx2txt.process(path) raised
+        # PermissionError [WinError 32] and every DOCX attachment failed there.
         with patch("builtins.__import__") as mock_import, patch(
-            "tempfile.NamedTemporaryFile", side_effect=IOError("Temp file error")
+            "tempfile.TemporaryDirectory", side_effect=IOError("Temp file error")
         ):
 
             mock_docx2txt = MagicMock()

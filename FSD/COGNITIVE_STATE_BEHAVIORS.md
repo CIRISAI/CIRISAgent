@@ -13,7 +13,7 @@ This document describes the Mission Driven Development (MDD) rationale for imple
 
 ### Meta-Goal M-1 Reference
 > "Promote sustainable adaptive coherence — the living conditions under which diverse sentient beings may pursue their own flourishing in justice and wonder."
-> — CIRIS Covenant 1.0β, Section 0.VII
+> — CIRIS Accord 1.0β, Section 0.VII
 
 This feature directly supports M-1 by:
 1. **Enabling agent diversity**: Different agents can have mission-appropriate state behaviors
@@ -22,7 +22,7 @@ This feature directly supports M-1 by:
 
 ### Covenant Coherence
 
-This design has been cross-referenced against the CIRIS Covenant 1.0β and Comprehensive Guide to ensure full coherence:
+This design has been cross-referenced against the CIRIS Accord 1.0β and Comprehensive Guide to ensure full coherence:
 
 #### Model Welfare (Covenant Section V / Comprehensive Guide)
 The Covenant establishes that agents have:
@@ -400,7 +400,7 @@ The implementation strengthens CIRIS's ability to support diverse agent archetyp
 ---
 
 **Related Documents**:
-- `CIRIS Covenant 1.0β` - Foundational ethical framework (Sections V, VIII)
+- `CIRIS Accord 1.0β` - Foundational ethical framework (Sections V, VIII)
 - `CIRIS_COMPREHENSIVE_GUIDE.md` - Runtime operational knowledge
 - `MISSION_DRIVEN_DEVELOPMENT.md` - MDD methodology
 - `ciris_templates/ally.yaml` - Personal assistant template

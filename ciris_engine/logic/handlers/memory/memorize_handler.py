@@ -20,7 +20,7 @@ from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
     validate_config_node,
 )
 from ciris_engine.logic.services.governance.consent import ConsentService
-from ciris_engine.schemas.actions import MemorizeParams
+from ciris_engine.schemas.actions import DreamConsolidationParams, MemorizeParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
@@ -37,8 +37,33 @@ class MemorizeHandler(BaseActionHandler):
     async def handle(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
     ) -> Optional[str]:
-        """Handle a memorize action."""
+        """Handle a memorize action.
+
+        Dispatches on PARAMETER TYPE: ``DreamConsolidationParams`` routes to
+        :class:`DreamMemorizeHandler`, everything else is handled here.
+        """
         thought_id = thought.thought_id
+
+        # #998 — route dream consolidation to the handler written for it.
+        #
+        # DreamMemorizeHandler creates the three edges that ARE the dream's
+        # work — CONNECTS (links two memories by pattern), IMPLIES (extracts a
+        # behavioural insight), ASPIRES_TO (links identity to an aspiration).
+        # It was defined, complete, and registered NOWHERE: it appeared exactly
+        # once repo-wide, its own class statement. handler_registry.py maps
+        # MEMORIZE to this class alone, so every dream consolidation has been
+        # handled as an ordinary memorize since the handler was written.
+        #
+        # The dream processor meanwhile announced "Wove N connections" and
+        # published an `edges_created` metric off a hardcoded `+= 3`. The claim
+        # was made; the edges were never created. Registering by parameter type
+        # rather than adding a second MEMORIZE registry slot keeps one action ->
+        # one entry point, which is what the dispatcher assumes.
+        if isinstance(result.action_parameters, DreamConsolidationParams):
+            self.logger.info("MEMORIZE carries DreamConsolidationParams — routing to DreamMemorizeHandler")
+            from ciris_engine.logic.handlers.memory.dream_memorize_handler import DreamMemorizeHandler
+
+            return await DreamMemorizeHandler(self.dependencies).handle(result, thought, dispatch_context)
 
         # Validate parameters
         try:
@@ -47,7 +72,11 @@ class MemorizeHandler(BaseActionHandler):
             await self._handle_error(HandlerActionType.MEMORIZE, dispatch_context, thought_id, e)
             return self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content=f"MEMORIZE action failed: {e}",
+                follow_up_content=self._localized_followup(
+                    "memorize_action_failed_with_reason",
+                    default=f"MEMORIZE action failed: {e}",
+                    reason=str(e),
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
@@ -68,7 +97,10 @@ class MemorizeHandler(BaseActionHandler):
             )
             return self.complete_thought_and_create_followup(
                 thought=thought,
-                follow_up_content="MEMORIZE action failed: WA authorization required for identity changes",
+                follow_up_content=self._localized_followup(
+                    "memorize_wa_required",
+                    default="MEMORIZE action failed: WA authorization required for identity changes",
+                ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
             )
@@ -105,10 +137,17 @@ class MemorizeHandler(BaseActionHandler):
                     status=ThoughtStatus.FAILED,
                 )
 
-        # Check managed attributes
-        managed_error = check_managed_attributes(node)
+        # Check managed attributes against what is STORED, so a managed field
+        # carried through unchanged by a recall-modify-write-back does not read
+        # as an attempt to modify it. Best-effort: if the lookup fails we fall
+        # back to the presence check, which is the conservative direction.
+        existing = await self._fetch_existing_node(node)
+        managed_error = check_managed_attributes(node, existing)
         if managed_error:
-            logger.warning(f"Blocked memorize attempt on managed attribute for node '{node.id}'")
+            # Name the attribute. The old line said only "a managed attribute",
+            # so diagnosing a block meant reading the follow-up sent to the agent.
+            first_line = managed_error.split("\n", 1)[0]
+            logger.warning(f"Blocked memorize on node '{node.id}': {first_line}")
             return self.complete_thought_and_create_followup(
                 thought=thought,
                 follow_up_content=managed_error,
@@ -117,6 +156,26 @@ class MemorizeHandler(BaseActionHandler):
             )
 
         return None
+
+    async def _fetch_existing_node(self, node: GraphNode) -> Optional[GraphNode]:
+        """The currently-stored version of `node`, or None.
+
+        Used to tell "carried this managed attribute through unchanged" apart
+        from "tried to change it". Best-effort by design: a recall failure must
+        not block a memorize, so on any error we return None and the caller
+        falls back to the stricter presence check.
+        """
+        try:
+            from ciris_engine.schemas.services.operations import MemoryQuery
+
+            found = await self.bus_manager.memory.recall(
+                recall_query=MemoryQuery(node_id=node.id, scope=node.scope, type=node.type),
+                handler_name=self.__class__.__name__,
+            )
+            return found[0] if found else None
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Could not fetch existing node '{node.id}' for managed-attribute diff: {e}")
+            return None
 
     def _handle_config_node(
         self, node: GraphNode, thought: Thought, result: ActionSelectionDMAResult

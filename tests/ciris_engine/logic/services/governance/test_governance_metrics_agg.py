@@ -17,7 +17,6 @@ Each service test validates:
 import asyncio
 import json
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import Dict
@@ -43,6 +42,7 @@ from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task, Thought
 from ciris_engine.schemas.services.authority_core import DeferralRequest, DeferralResponse, WARole
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult, TriggerType
+from tests.fixtures.persist_engine import persist_engine  # noqa: F401  (pytest fixture)
 from tests.test_metrics_base import BaseMetricsTest
 
 
@@ -58,41 +58,20 @@ class TestWiseAuthorityServiceMetrics(BaseMetricsTest):
     }
 
     @pytest.fixture
-    def temp_db(self):
-        """Create temporary database with required tables."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
+    def temp_db(self, persist_engine):
+        """Provide a temp db_path string with a wired persist engine.
 
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # Create tasks table for deferrals
-        cursor.execute(
-            """
-            CREATE TABLE tasks (
-                task_id TEXT PRIMARY KEY,
-                channel_id TEXT NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT NOT NULL,
-                priority INTEGER DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                parent_task_id TEXT,
-                context_json TEXT,
-                outcome_json TEXT,
-                retry_count INTEGER DEFAULT 0,
-                signed_by TEXT,
-                signature TEXT,
-                signed_at TEXT
-            )
+        2.9.0: tasks/thoughts schemas live in persist (`cirislens_*`). The
+        persist_engine fixture wires a fresh Engine into
+        persistence.models.graph so add_task/add_thought go through the
+        persist write path. We return the underlying file path so call
+        sites that still accept a `db_path` arg keep their signatures.
         """
-        )
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        conn.commit()
-        conn.close()
-
+        dsn = _graph_mod._engine_dsn or ""
+        db_path = dsn.replace("sqlite:///", "") if dsn.startswith("sqlite:///") else dsn
         yield db_path
-        os.unlink(db_path)
 
     @pytest_asyncio.fixture
     async def auth_service(self, temp_db, mock_time_service):
@@ -135,25 +114,31 @@ class TestWiseAuthorityServiceMetrics(BaseMetricsTest):
         )
         initial_total = initial_metrics.get("wise_authority_deferrals_total", 0)
 
-        # Create a task to defer
-        conn = sqlite3.connect(temp_db)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO tasks (task_id, channel_id, description, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """,
-            (
-                "test_task",
-                "test_channel",
-                "Test task",
-                "pending",
-                datetime.now().isoformat(),
-                datetime.now().isoformat(),
+        # Create a task to defer via the persist substrate so the wise
+        # authority's read path sees it. (A sibling sqlite3 INSERT lands in
+        # the file but isn't visible to persist's pool — see CIRISAgent#763.)
+        from ciris_engine.logic.persistence.models.tasks import add_task
+        from ciris_engine.schemas.runtime.enums import TaskStatus
+        from ciris_engine.schemas.runtime.models import Task, TaskContext
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        add_task(
+            Task(
+                task_id="test_task",
+                channel_id="test_channel",
+                description="Test task",
+                status=TaskStatus.PENDING,
+                priority=5,
+                created_at=now_iso,
+                updated_at=now_iso,
+                context=TaskContext(
+                    channel_id="test_channel",
+                    user_id="test_user",
+                    correlation_id="test_correlation",
+                    parent_task_id=None,
+                ),
             ),
         )
-        conn.commit()
-        conn.close()
 
         # Create and send a deferral
         deferral = DeferralRequest(
@@ -320,56 +305,16 @@ class TestVisibilityServiceMetrics(BaseMetricsTest):
     }
 
     @pytest.fixture
-    def temp_db_visibility(self):
-        """Create temporary database for visibility tests."""
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
+    def temp_db_visibility(self, persist_engine):
+        """Provide a temp db_path string with a wired persist engine.
 
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # Create tasks table
-        cursor.execute(
-            """
-            CREATE TABLE tasks (
-                task_id TEXT PRIMARY KEY,
-                channel_id TEXT NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT NOT NULL,
-                priority INTEGER DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                parent_task_id TEXT,
-                context_json TEXT,
-                outcome_json TEXT
-            )
+        2.9.0: tasks/thoughts schemas live in persist (`cirislens_*`).
         """
-        )
+        from ciris_engine.logic.persistence.models import graph as _graph_mod
 
-        # Create thoughts table
-        cursor.execute(
-            """
-            CREATE TABLE thoughts (
-                thought_id TEXT PRIMARY KEY,
-                task_id TEXT,
-                thought_content TEXT,
-                thought_context TEXT,
-                created_at TEXT,
-                updated_at TEXT,
-                status TEXT DEFAULT 'pending',
-                channel_id TEXT,
-                user_id TEXT,
-                priority TEXT DEFAULT 'medium',
-                resolution_json TEXT
-            )
-        """
-        )
-
-        conn.commit()
-        conn.close()
-
+        dsn = _graph_mod._engine_dsn or ""
+        db_path = dsn.replace("sqlite:///", "") if dsn.startswith("sqlite:///") else dsn
         yield db_path
-        os.unlink(db_path)
 
     @pytest_asyncio.fixture
     async def mock_bus_manager(self):
@@ -422,44 +367,53 @@ class TestVisibilityServiceMetrics(BaseMetricsTest):
     @pytest.mark.asyncio
     async def test_visibility_current_state(self, visibility_service, temp_db_visibility):
         """Test visibility service current state functionality."""
-        # Add some test data to database
-        conn = sqlite3.connect(temp_db_visibility)
-        cursor = conn.cursor()
+        # Add some test data via the persist substrate so visibility's
+        # read path sees it. Raw sqlite3 INSERTs against the legacy
+        # tables/thoughts tables don't reach persist's pool — see
+        # CIRISAgent#763 / 2.9.0 absorption.
+        from ciris_engine.logic.persistence.models.tasks import add_task
+        from ciris_engine.logic.persistence.models.thoughts import add_thought
+        from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus, ThoughtType
+        from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought, ThoughtContext
 
-        # Insert a test task
-        cursor.execute(
-            """
-            INSERT INTO tasks (task_id, channel_id, description, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """,
-            (
-                "test_task",
-                "test_channel",
-                "Test task",
-                "active",
-                datetime.now().isoformat(),
-                datetime.now().isoformat(),
+        now_iso = datetime.now(timezone.utc).isoformat()
+        add_task(
+            Task(
+                task_id="test_task",
+                channel_id="test_channel",
+                description="Test task",
+                status=TaskStatus.ACTIVE,
+                priority=5,
+                created_at=now_iso,
+                updated_at=now_iso,
+                context=TaskContext(
+                    channel_id="test_channel",
+                    user_id="test_user",
+                    correlation_id="test_correlation",
+                    parent_task_id=None,
+                ),
             ),
         )
-
-        # Insert a test thought
-        cursor.execute(
-            """
-            INSERT INTO thoughts (thought_id, task_id, thought_content, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """,
-            (
-                "test_thought",
-                "test_task",
-                "Test thought",
-                "pending",
-                datetime.now().isoformat(),
-                datetime.now().isoformat(),
+        add_thought(
+            Thought(
+                thought_id="test_thought",
+                source_task_id="test_task",
+                channel_id="test_channel",
+                thought_type=ThoughtType.STANDARD,
+                status=ThoughtStatus.PENDING,
+                content="Test thought",
+                created_at=now_iso,
+                updated_at=now_iso,
+                round_number=0,
+                context=ThoughtContext(
+                    task_id="test_task",
+                    channel_id="test_channel",
+                    round_number=0,
+                    depth=0,
+                    correlation_id="test_correlation",
+                ),
             ),
         )
-
-        conn.commit()
-        conn.close()
 
         # Get current state
         snapshot = await visibility_service.get_current_state()

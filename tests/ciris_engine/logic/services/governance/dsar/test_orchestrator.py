@@ -106,7 +106,8 @@ def mock_tool_bus():
     bus.get_tools_by_metadata = MagicMock(return_value=[mock_tool])
 
     # Robust side effect based on tool name
-    def execute_tool_side_effect(tool_name, parameters, handler_name=None):
+    # `subject` is the ToolInvocationSubject the bus now carries (CIRISAgent#938).
+    def execute_tool_side_effect(tool_name, parameters, handler_name=None, subject=None):
         mock_res = MagicMock()
         if tool_name == "sql_export_user":
             mock_res.data = {"data": {"table1": [{"id": 1}]}, "tables_scanned": ["table1"], "total_records": 1}

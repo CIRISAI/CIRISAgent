@@ -39,13 +39,15 @@ class TestSingleStepEndpoint:
 
     @pytest.fixture
     def app(self):
-        """Create FastAPI app with required services."""
+        """Create FastAPI app with required services.
+
+        Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
+        """
+        from tests.fixtures.auth import setup_test_admin_user
+
         app = create_app()
-
-        # Initialize auth service (required for auth endpoints)
         app.state.auth_service = APIAuthService()
-        app.state.auth_service._dev_mode = True
-
+        setup_test_admin_user(app.state.auth_service)
         return app
 
     @pytest.fixture
@@ -53,10 +55,7 @@ class TestSingleStepEndpoint:
         """Create test client."""
         return TestClient(app)
 
-    @pytest.fixture
-    def auth_headers(self):
-        """Get auth headers for testing using dev credentials."""
-        return {"Authorization": "Bearer admin:ciris_admin_password"}
+    # NOTE: auth_headers fixture provided by tests.fixtures.auth via conftest.py
 
     @pytest.fixture
     def mock_app_with_services(self, app, mock_api_runtime_control_service, mock_runtime):

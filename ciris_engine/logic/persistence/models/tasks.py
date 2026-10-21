@@ -1,14 +1,27 @@
+"""Tasks persistence — routed through ciris-persist substrate APIs.
+
+Part of 2.9.0 T-lane migration (CIRISAgent#763 / CIRISPersist#58):
+removes the second libsqlite writer on `ciris_engine.db` to stop the
+B-tree corruption from shared WAL pages. Public function signatures
+are preserved verbatim so callers across the codebase need no changes.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
-from ciris_engine.logic.persistence.db import get_db_connection
-from ciris_engine.logic.persistence.db.dialect import get_adapter
-from ciris_engine.logic.persistence.utils import map_row_to_task
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.audit.core import EventPayload
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.schemas.runtime.models import Task, TaskContext
+from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome
+from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
+from ciris_engine.schemas.services.graph.audit import AuditEventData
 
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
@@ -16,211 +29,399 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_task_by_id_any_occurrence(task_id: str, db_path: Optional[str] = None) -> Optional[Task]:
+# ---------------------------------------------------------------------------
+# Persist engine accessor + payload conversion helpers.
+# ---------------------------------------------------------------------------
+
+
+def _get_engine() -> Any:
+    """Return the wired persist engine; raise if not yet bootstrapped."""
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    engine = get_persist_engine()
+    if engine is None:
+        raise RuntimeError("persist engine not initialized — call initialize_database() " "before any tasks operation")
+    return engine
+
+
+def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
+    """Convert a Task into the dict shape `engine.task_upsert` accepts.
+
+    Persist accepts `context`/`outcome` as nested dicts and json.dumps them
+    internally. Images are not represented in persist; we carry them in
+    `context.images` round-trip but the agent layer holds the canonical
+    list — see add_task() for the storage strategy.
     """
-    Get a task by ID without filtering by occurrence_id.
+    task_dict = task.model_dump(mode="json")
+    payload: Dict[str, Any] = {
+        "task_id": task.task_id,
+        "channel_id": task.channel_id,
+        "agent_occurrence_id": task.agent_occurrence_id,
+        "description": task.description,
+        "status": task.status.value if isinstance(task.status, TaskStatus) else task.status,
+        "priority": task.priority,
+        "created_at": task.created_at,
+        "updated_at": task.updated_at,
+        "parent_task_id": task.parent_task_id,
+        "signed_by": task.signed_by,
+        "signature": task.signature,
+        "signed_at": task.signed_at,
+        "updated_info_available": task.updated_info_available,
+    }
+    if task.updated_info_content is not None:
+        payload["updated_info_content"] = task.updated_info_content
 
-    This is needed for task completion handlers that need to read the task's
-    actual occurrence_id before updating it. Unlike get_task_by_id() which filters
-    by occurrence_id, this function retrieves the task regardless of occurrence.
+    # Context: merge agent's TaskContext + private images carry-through.
+    # Task is the record of truth for preferred_language; mirror it into
+    # context so load-time round-trips correctly (legacy parity).
+    ctx = task_dict.get("context")
+    images = task_dict.get("images") or []
+    if ctx is None and (images or task.preferred_language is not None):
+        ctx = {}
+    if ctx is not None:
+        ctx = dict(ctx)
+        if task.preferred_language is not None and not ctx.get("preferred_language"):
+            ctx["preferred_language"] = task.preferred_language
+        if images:
+            ctx["__agent_images__"] = images
+        payload["context"] = ctx
 
-    Args:
-        task_id: The task ID to look up
-        db_path: Optional database path (defaults to main database)
+    outcome = task_dict.get("outcome")
+    if outcome is not None:
+        payload["outcome"] = outcome
+    return payload
 
-    Returns:
-        The Task object, or None if task not found
 
-    Examples:
-        >>> task = get_task_by_id_any_occurrence("SHUTDOWN_SHARED_20251031")
-        >>> task.agent_occurrence_id
-        '__shared__'
+def _decode_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
+    """Decode the task-scoped authorization envelope from a persisted context.
+
+    A decode failure resolves to ``None``, which is the fail-closed direction:
+    absence of an envelope is a denial to a future tool gate (CIRISAgent#938),
+    never "unconstrained". The failure is logged loudly because a task silently
+    losing its envelope would look identical to a task that never had one.
     """
-    sql = "SELECT * FROM tasks WHERE task_id = ? LIMIT 1"
+    if raw is None:
+        return None
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (task_id,))
-            row = cursor.fetchone()
-            if row:
-                return map_row_to_task(row)
-            logger.warning(f"Task {task_id} not found (any occurrence)")
-            return None
+        return TaskEnvelope.model_validate(raw)
+    except Exception as exc:
+        logger.warning(
+            "Failed to decode task envelope for task %s; treating as no envelope (deny): %s",
+            task_id,
+            exc,
+        )
+        return None
+
+
+def _persist_row_to_task(row: Dict[str, Any]) -> Task:
+    """Materialize a persist task row into a Task model."""
+    agent_occurrence_id = str(row.get("agent_occurrence_id", "default"))
+
+    try:
+        status = TaskStatus(row.get("status", TaskStatus.PENDING.value))
+    except Exception:
+        logger.warning(
+            "Invalid status value '%s' for task %s. Defaulting to PENDING.",
+            row.get("status"),
+            row.get("task_id"),
+        )
+        status = TaskStatus.PENDING
+
+    # Context.
+    context: Optional[TaskContext]
+    ctx_data = row.get("context")
+    if isinstance(ctx_data, str):
+        try:
+            ctx_data = json.loads(ctx_data)
+        except json.JSONDecodeError:
+            ctx_data = None
+    if isinstance(ctx_data, dict):
+        try:
+            context = TaskContext(
+                channel_id=ctx_data.get("channel_id"),
+                user_id=ctx_data.get("user_id"),
+                correlation_id=ctx_data.get("correlation_id", str(uuid.uuid4())),
+                parent_task_id=ctx_data.get("parent_task_id"),
+                agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
+                preferred_language=ctx_data.get("preferred_language"),
+                envelope=_decode_envelope(ctx_data.get("envelope"), row.get("task_id")),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to decode context for task {row.get('task_id')}: {e}")
+            context = TaskContext(
+                channel_id=None,
+                user_id=None,
+                correlation_id=str(uuid.uuid4()),
+                parent_task_id=None,
+                agent_occurrence_id=agent_occurrence_id,
+            )
+    else:
+        context = TaskContext(
+            channel_id=None,
+            user_id=None,
+            correlation_id=str(uuid.uuid4()),
+            parent_task_id=None,
+            agent_occurrence_id=agent_occurrence_id,
+        )
+
+    preferred_language: Optional[str] = context.preferred_language if context is not None else None
+
+    # Outcome.
+    outcome: Optional[TaskOutcome] = None
+    outcome_data = row.get("outcome")
+    if isinstance(outcome_data, str):
+        try:
+            outcome_data = json.loads(outcome_data)
+        except json.JSONDecodeError:
+            outcome_data = None
+    if isinstance(outcome_data, dict) and outcome_data:
+        try:
+            outcome = TaskOutcome.model_validate(outcome_data)
+        except Exception:
+            logger.warning(f"Failed to decode outcome for task {row.get('task_id')}")
+            outcome = None
+
+    # Images: carried in context's __agent_images__ private namespace.
+    images: List[ImageContent] = []
+    if isinstance(ctx_data, dict):
+        raw_images = ctx_data.get("__agent_images__") or []
+        if isinstance(raw_images, list):
+            for img in raw_images:
+                try:
+                    if isinstance(img, dict):
+                        images.append(ImageContent.model_validate(img))
+                except Exception as e:
+                    logger.warning(f"Failed to decode image for task {row.get('task_id')}: {e}")
+
+    updated_info_available = bool(row.get("updated_info_available", False))
+
+    return Task(
+        task_id=str(row["task_id"]),
+        channel_id=str(row.get("channel_id", "")),
+        agent_occurrence_id=agent_occurrence_id,
+        description=str(row.get("description", "")),
+        status=status,
+        priority=int(row.get("priority", 0)),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        parent_task_id=row.get("parent_task_id"),
+        context=context,
+        preferred_language=preferred_language,
+        outcome=outcome,
+        signed_by=row.get("signed_by"),
+        signature=row.get("signature"),
+        signed_at=row.get("signed_at"),
+        updated_info_available=updated_info_available,
+        updated_info_content=row.get("updated_info_content"),
+        images=images,
+    )
+
+
+def _list_with_filter(
+    filter_dict: Dict[str, Any],
+    *,
+    limit: Optional[int] = None,
+) -> List[Task]:
+    """Paginate `task_list`. Returns Task objects DESC by created_at."""
+    engine = _get_engine()
+    last_ts = "9999-12-31T23:59:59Z"
+    last_id = ""
+    page_size = 200 if limit is None else min(200, max(limit, 1))
+    collected: List[Task] = []
+
+    while True:
+        cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+        raw = engine.task_list(json.dumps(filter_dict), cursor_json, page_size)
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            break
+        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+        if not items:
+            break
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            try:
+                collected.append(_persist_row_to_task(row))
+            except Exception as e:
+                logger.warning(
+                    "Failed to materialize persist task row %s: %s",
+                    row.get("task_id"),
+                    e,
+                )
+            last_ts = str(row.get("created_at", last_ts))
+            last_id = str(row.get("task_id", ""))
+            if limit is not None and len(collected) >= limit:
+                return collected
+        if len(items) < page_size:
+            break
+    return collected
+
+
+# ---------------------------------------------------------------------------
+# Public API — signatures preserved verbatim from the legacy raw-sqlite3 impl.
+# ---------------------------------------------------------------------------
+
+
+def get_task_raw_context(task_id: str) -> Dict[str, Any]:
+    """The task's PERSISTED context dict, before materialization drops most of it.
+
+    ``_persist_row_to_task`` builds a ``TaskContext`` out of seven named fields
+    (channel_id, user_id, correlation_id, parent_task_id, agent_occurrence_id,
+    preferred_language, envelope). Everything else the row carries is silently
+    discarded — including the signed deferral resolution that
+    ``WiseAuthorityService.resolve_deferral`` writes to
+    ``context["deferral"]["resolution"]``.
+
+    So a caller that needs to know whether a wise authority has ANSWERED cannot
+    learn it from a ``Task``: the marker is real in the database and absent
+    from the object. Reading the row is the only way to see it, and this
+    function exists so that fact is stated once instead of being rediscovered
+    as a guard that silently never fires.
+
+    Returns an empty dict when the task is missing or the context is
+    unreadable — callers treat "no marker" as "not answered", which is the
+    conservative direction for every current caller.
+    """
+    try:
+        # _get_engine() RAISES when persistence is not bootstrapped, so it has to
+        # be inside the guard, not above it. Before this helper existed the
+        # caller read an attribute off an already-loaded Task and touched no
+        # database at all; leaving the lookup unguarded turned a path that never
+        # needed persistence into one that hard-fails without it — which is a
+        # regression in reach, not just in tests. "No engine" means "no marker
+        # visible", and the caller then falls back to the status check exactly
+        # as it did before.
+        engine = _get_engine()
+        raw = engine.task_get(task_id)
+    except Exception as e:
+        logger.debug(f"Raw context unavailable for task {task_id}: {e}")
+        return {}
+    if raw is None:
+        return {}
+    row = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(row, dict):
+        return {}
+    ctx = row.get("context")
+    if isinstance(ctx, str):
+        try:
+            ctx = json.loads(ctx)
+        except (ValueError, TypeError):
+            return {}
+    return ctx if isinstance(ctx, dict) else {}
+
+
+def get_task_by_id_any_occurrence(task_id: str) -> Optional[Task]:
+    """Get a task by ID without filtering by occurrence_id."""
+    engine = _get_engine()
+    try:
+        raw = engine.task_get(task_id)
     except Exception as e:
         logger.exception(f"Failed to get task {task_id} (any occurrence): {e}")
         return None
+    if raw is None:
+        logger.warning(f"Task {task_id} not found (any occurrence)")
+        return None
+    row = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(row, dict):
+        return None
+    return _persist_row_to_task(row)
 
 
-def get_task_occurrence_id_for_update(task_id: str, db_path: Optional[str] = None) -> Optional[str]:
+def get_task_occurrence_id_for_update(task_id: str) -> Optional[str]:
+    """Get the correct occurrence_id for updating a task's status.
+
+    See the docstring on the legacy impl for the 6-scenario matrix; this
+    function just reads the persisted row's agent_occurrence_id since
+    persist holds the authoritative value.
     """
-    Get the correct occurrence_id for updating a task's status.
-
-    This handles 6 scenarios robustly:
-    1. SQLite single agent (default) - returns "default"
-    2. SQLite multi-occurrence claiming agent - returns actual occurrence_id
-    3. SQLite multi-occurrence non-claimant - returns "__shared__"
-    4. PostgreSQL single agent (default) - returns "default"
-    5. PostgreSQL multi-occurrence claiming agent - returns actual occurrence_id
-    6. PostgreSQL multi-occurrence non-claimant - returns "__shared__"
-
-    Args:
-        task_id: The task ID to look up
-        db_path: Optional database path (defaults to main database)
-
-    Returns:
-        The occurrence_id to use for UPDATE queries, or None if task not found
-
-    Examples:
-        >>> get_task_occurrence_id_for_update("SHUTDOWN_SHARED_20251031")
-        '__shared__'
-        >>> get_task_occurrence_id_for_update("regular-task-123")
-        'default'
-    """
-    sql = "SELECT agent_occurrence_id FROM tasks WHERE task_id = ? LIMIT 1"
+    engine = _get_engine()
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (task_id,))
-            row = cursor.fetchone()
-            if row:
-                return str(row[0])
-            logger.warning(f"Task {task_id} not found when looking up occurrence_id for update")
-            return None
+        raw = engine.task_get(task_id)
     except Exception as e:
         logger.exception(f"Failed to get occurrence_id for task {task_id}: {e}")
         return None
+    if raw is None:
+        logger.warning(f"Task {task_id} not found when looking up occurrence_id for update")
+        return None
+    row = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(row, dict):
+        return None
+    return str(row.get("agent_occurrence_id", "default"))
 
 
-def get_tasks_by_status(
-    status: TaskStatus, occurrence_id: str = "default", db_path: Optional[str] = None
-) -> List[Task]:
-    """Returns all tasks with the given status and occurrence from the tasks table as Task objects."""
+def get_tasks_by_status(status: TaskStatus, occurrence_id: str = "default") -> List[Task]:
+    """Returns all tasks with the given status and occurrence as Task objects, ASC by created_at."""
     if not isinstance(status, TaskStatus):
         raise TypeError(f"Expected TaskStatus enum, got {type(status)}: {status}")
-    status_val = status.value
-    sql = "SELECT * FROM tasks WHERE status = ? AND agent_occurrence_id = ? ORDER BY created_at ASC"
-    tasks_list: List[Any] = []
+
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (status_val, occurrence_id))
-            rows = cursor.fetchall()
-            for row in rows:
-                tasks_list.append(map_row_to_task(row))
+        tasks = _list_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
     except Exception as e:
-        logger.exception(f"Failed to get tasks with status {status_val} for occurrence {occurrence_id}: {e}")
-    return tasks_list
+        logger.exception(f"Failed to get tasks with status {status.value} for occurrence {occurrence_id}: {e}")
+        return []
+    tasks.sort(key=lambda t: t.created_at)
+    return tasks
 
 
-def get_all_tasks(occurrence_id: str = "default", db_path: Optional[str] = None) -> List[Task]:
-    sql = "SELECT * FROM tasks WHERE agent_occurrence_id = ? ORDER BY created_at ASC"
-    tasks_list: List[Any] = []
+def get_all_tasks(occurrence_id: str = "default") -> List[Task]:
+    """Returns all tasks for the occurrence, ASC by created_at."""
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (occurrence_id,))
-            rows = cursor.fetchall()
-            for row in rows:
-                tasks_list.append(map_row_to_task(row))
+        tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
     except Exception as e:
         logger.exception(f"Failed to get all tasks for occurrence {occurrence_id}: {e}")
-    return tasks_list
+        return []
+    tasks.sort(key=lambda t: t.created_at)
+    return tasks
 
 
 def _is_correlation_id_constraint_violation(error_msg: str) -> bool:
-    """
-    Check if error message indicates a unique constraint violation on correlation_id.
-
-    Args:
-        error_msg: Lowercase error message from database exception
-
-    Returns:
-        True if this is a correlation_id constraint violation
-    """
+    """Check if error message indicates a unique constraint violation on correlation_id."""
     return "unique constraint" in error_msg and ("correlation" in error_msg or "json_extract" in error_msg)
 
 
 def _get_correlation_id_from_task(task: Task) -> Optional[str]:
-    """
-    Extract correlation_id from task context if available.
-
-    Args:
-        task: Task object to extract correlation_id from
-
-    Returns:
-        correlation_id if present, None otherwise
-    """
+    """Extract correlation_id from task context if available."""
     if not task.context:
         return None
     return getattr(task.context, "correlation_id", None)
 
 
-def _handle_duplicate_task(task: Task, db_path: Optional[str]) -> str:
-    """
-    Handle duplicate task detection by returning existing task_id.
-
-    Args:
-        task: Task that triggered duplicate constraint
-        db_path: Optional database path
-
-    Returns:
-        Existing task_id if found, otherwise the attempted task_id
-    """
+def _handle_duplicate_task(task: Task) -> str:
+    """Handle duplicate task detection by returning existing task_id."""
     correlation_id = _get_correlation_id_from_task(task)
     logger.info(
         f"Task with correlation_id={correlation_id} already exists for occurrence {task.agent_occurrence_id}, "
         "skipping duplicate (race condition prevented)"
     )
-
-    # Treat empty string as None
     if not correlation_id:
         return task.task_id
-
-    existing_task = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id, db_path)
+    existing_task = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id)
     if existing_task:
         return existing_task.task_id
-
     return task.task_id
 
 
-def add_task(task: Task, db_path: Optional[str] = None) -> str:
-    task_dict = task.model_dump(mode="json")
+def add_task(task: Task) -> str:
+    """Insert a task. Returns the task_id. On correlation_id conflict, returns the existing id.
 
-    # Serialize images for storage
-    images_data = task_dict.get("images", [])
-    images_json = json.dumps(images_data) if images_data else None
-
-    sql = """
-        INSERT INTO tasks (task_id, channel_id, agent_occurrence_id, description, status, priority,
-                           created_at, updated_at, parent_task_id, context_json, outcome_json,
-                           signed_by, signature, signed_at, updated_info_available, updated_info_content,
-                           images_json)
-        VALUES (:task_id, :channel_id, :agent_occurrence_id, :description, :status, :priority,
-                :created_at, :updated_at, :parent_task_id, :context, :outcome,
-                :signed_by, :signature, :signed_at, :updated_info_available, :updated_info_content,
-                :images)
+    Legacy DB had a UNIQUE INDEX on tasks.context_json.correlation_id (migration
+    006). Persist's `cirislens_tasks` doesn't carry that constraint, so we
+    enforce it client-side here before upsert.
     """
-    params = {
-        **task_dict,
-        "status": task.status.value,
-        "agent_occurrence_id": task.agent_occurrence_id,
-        "context": json.dumps(task_dict.get("context")) if task_dict.get("context") is not None else None,
-        "outcome": json.dumps(task_dict.get("outcome")) if task_dict.get("outcome") is not None else None,
-        "signed_by": task_dict.get("signed_by"),
-        "signature": task_dict.get("signature"),
-        "signed_at": task_dict.get("signed_at"),
-        "updated_info_available": 1 if task_dict.get("updated_info_available") else 0,
-        "updated_info_content": task_dict.get("updated_info_content"),
-        "images": images_json,
-    }
+    engine = _get_engine()
+    correlation_id = _get_correlation_id_from_task(task)
+    if correlation_id:
+        existing = get_task_by_correlation_id(correlation_id, task.agent_occurrence_id)
+        if existing is not None and existing.task_id != task.task_id:
+            return _handle_duplicate_task(task)
     try:
-        with get_db_connection(db_path) as conn:
-            conn.execute(sql, params)
-            conn.commit()
-        image_count = len(images_data) if images_data else 0
-        if image_count > 0:
+        engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        images_count = len(task.images) if task.images else 0
+        if images_count > 0:
             logger.info(
-                f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) with {image_count} images."
+                f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) with {images_count} images."
             )
         else:
             logger.info(f"Added task ID {task.task_id} (occurrence: {task.agent_occurrence_id}) to database.")
@@ -228,44 +429,46 @@ def add_task(task: Task, db_path: Optional[str] = None) -> str:
     except Exception as e:
         error_msg = str(e).lower()
         if _is_correlation_id_constraint_violation(error_msg):
-            return _handle_duplicate_task(task, db_path)
+            return _handle_duplicate_task(task)
         logger.exception(f"Failed to add task {task.task_id}: {e}")
         raise
 
 
-def get_task_by_id(task_id: str, occurrence_id: str = "default", db_path: Optional[str] = None) -> Optional[Task]:
-    sql = "SELECT * FROM tasks WHERE task_id = ? AND agent_occurrence_id = ?"
+def get_task_by_id(task_id: str, occurrence_id: str = "default") -> Optional[Task]:
+    engine = _get_engine()
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (task_id, occurrence_id))
-            row = cursor.fetchone()
-            if row:
-                return map_row_to_task(row)
-            return None
+        raw = engine.task_get(task_id)
     except Exception as e:
         logger.exception(f"Failed to get task {task_id} for occurrence {occurrence_id}: {e}")
         return None
+    if raw is None:
+        return None
+    row = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(row, dict):
+        return None
+    if str(row.get("agent_occurrence_id")) != occurrence_id:
+        return None
+    return _persist_row_to_task(row)
 
 
 def update_task_status(
     task_id: str,
     new_status: TaskStatus,
     occurrence_id: str,
-    time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> bool:
-    sql = "UPDATE tasks SET status = ?, updated_at = ? WHERE task_id = ? AND agent_occurrence_id = ?"
-    params = (new_status.value, time_service.now_iso(), task_id, occurrence_id)
+    """Update the status of a task."""
+    engine = _get_engine()
+
+    existing = get_task_by_id(task_id, occurrence_id)
+    if existing is None:
+        logger.warning(f"Task ID {task_id} not found for status update in occurrence {occurrence_id}.")
+        return False
+
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
-            if cursor.rowcount > 0:
-                logger.info(f"Updated status of task ID {task_id} to {new_status.value}.")
-                return True
-            logger.warning(f"Task ID {task_id} not found for status update in occurrence {occurrence_id}.")
-            return False
+        # persist's task_update_status writes status + updated_at, no outcome.
+        engine.task_update_status(task_id, new_status.value, None)
+        logger.info(f"Updated status of task ID {task_id} to {new_status.value}.")
+        return True
     except Exception as e:
         logger.exception(f"Failed to update task status for {task_id}: {e}")
         return False
@@ -277,47 +480,40 @@ def transfer_task_ownership(
     to_occurrence_id: str,
     time_service: TimeServiceProtocol,
     audit_service: AuditServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Transfer task ownership from one occurrence to another.
 
-    This is used when claiming shared tasks to transfer ownership from '__shared__'
-    to the claiming occurrence so seed thoughts can be processed.
-
-    Args:
-        task_id: The task ID to transfer
-        from_occurrence_id: Current occurrence ID (typically '__shared__')
-        to_occurrence_id: New occurrence ID (the claiming occurrence)
-        time_service: Time service for timestamp
-        audit_service: Audit service for logging ownership transfer events
-        db_path: Optional database path
-
-    Returns:
-        True if transfer successful, False otherwise
+    Used when claiming shared tasks (transfer from '__shared__' to the
+    claiming occurrence so seed thoughts can be processed).
     """
-    sql = "UPDATE tasks SET agent_occurrence_id = ?, updated_at = ? WHERE task_id = ? AND agent_occurrence_id = ?"
-    params = (to_occurrence_id, time_service.now_iso(), task_id, from_occurrence_id)
-
     success = False
+    engine = _get_engine()
+
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
-            if cursor.rowcount > 0:
+        raw = engine.task_get(task_id)
+    except Exception as e:
+        logger.exception(f"Failed to load task {task_id} for ownership transfer: {e}")
+        raw = None
+
+    if raw is None:
+        logger.warning(f"Task {task_id} not found with occurrence {from_occurrence_id} for ownership transfer")
+    else:
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(row, dict):
+            logger.warning(f"Task {task_id} returned non-dict row for ownership transfer")
+        elif str(row.get("agent_occurrence_id")) != from_occurrence_id:
+            logger.warning(f"Task {task_id} not found with occurrence {from_occurrence_id} for ownership transfer")
+        else:
+            try:
+                row["agent_occurrence_id"] = to_occurrence_id
+                row["updated_at"] = time_service.now_iso()
+                task = _persist_row_to_task(row)
+                engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
                 logger.info(f"Transferred ownership of task {task_id} from {from_occurrence_id} to {to_occurrence_id}")
                 success = True
-            else:
-                logger.warning(f"Task {task_id} not found with occurrence {from_occurrence_id} for ownership transfer")
-    except Exception as e:
-        logger.exception(f"Failed to transfer task ownership for {task_id}: {e}")
-        success = False
-
-    # Log audit event for ownership transfer (fire and forget)
-    import asyncio
-    from typing import cast
-
-    from ciris_engine.schemas.audit.core import EventPayload
-    from ciris_engine.schemas.services.graph.audit import AuditEventData
+            except Exception as e:
+                logger.exception(f"Failed to transfer task ownership for {task_id}: {e}")
+                success = False
 
     audit_event = AuditEventData(
         entity_id=task_id,
@@ -335,13 +531,9 @@ def transfer_task_ownership(
     )
 
     try:
-        # Try to get the running event loop
         loop = asyncio.get_running_loop()
-        # Schedule the audit event as a task - cast to EventPayload for protocol compatibility
         loop.create_task(audit_service.log_event("task_ownership_transfer", cast(EventPayload, audit_event)))
     except RuntimeError:
-        # No event loop running - this is expected in sync contexts like tests
-        # The audit service will still track the call via the mock
         logger.debug("No event loop running, audit logging deferred")
 
     return success
@@ -355,47 +547,34 @@ def update_task_context_and_signing(
     signed_by: Optional[str] = None,
     signature: Optional[str] = None,
     signed_at: Optional[str] = None,
-    db_path: Optional[str] = None,
 ) -> bool:
     """Update the context and signing metadata for an existing task."""
+    engine = _get_engine()
 
-    context_json = json.dumps(context.model_dump(mode="json"))
-    sql = """
-        UPDATE tasks
-        SET context_json = ?,
-            signed_by = ?,
-            signature = ?,
-            signed_at = ?,
-            updated_at = ?
-        WHERE task_id = ? AND agent_occurrence_id = ?
-    """
-    params = (
-        context_json,
-        signed_by,
-        signature,
-        signed_at,
-        time_service.now_iso(),
-        task_id,
-        occurrence_id,
-    )
+    existing = get_task_by_id(task_id, occurrence_id)
+    if existing is None:
+        logger.warning(
+            "Task %s not found when updating context/signature for occurrence %s",
+            task_id,
+            occurrence_id,
+        )
+        return False
+
+    existing.context = context
+    existing.preferred_language = context.preferred_language
+    existing.signed_by = signed_by
+    existing.signature = signature
+    existing.signed_at = signed_at
+    existing.updated_at = time_service.now_iso()
 
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
-            if cursor.rowcount > 0:
-                logger.info(
-                    "Updated context and signing metadata for task %s (occurrence: %s)",
-                    task_id,
-                    occurrence_id,
-                )
-                return True
-            logger.warning(
-                "Task %s not found when updating context/signature for occurrence %s",
-                task_id,
-                occurrence_id,
-            )
-            return False
+        engine.task_upsert(json.dumps(_task_to_persist_payload(existing)))
+        logger.info(
+            "Updated context and signing metadata for task %s (occurrence: %s)",
+            task_id,
+            occurrence_id,
+        )
+        return True
     except Exception as e:
         logger.exception(
             "Failed to update context/signature for task %s (occurrence: %s): %s",
@@ -410,57 +589,35 @@ def clear_task_images(
     task_id: str,
     occurrence_id: str,
     time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> bool:
-    """Clear images from a task (for privacy/storage cleanup on completion).
+    """Clear images from a task (for privacy/storage cleanup on completion)."""
+    engine = _get_engine()
 
-    Args:
-        task_id: The task ID to clear images from
-        occurrence_id: The occurrence ID for the task
-        time_service: Time service for timestamp
-        db_path: Optional database path
+    existing = get_task_by_id(task_id, occurrence_id)
+    if existing is None:
+        logger.debug(f"Task {task_id} not found or no images to clear (occurrence: {occurrence_id})")
+        return False
 
-    Returns:
-        True if images were cleared, False otherwise
-    """
-    sql = "UPDATE tasks SET images_json = NULL, updated_at = ? WHERE task_id = ? AND agent_occurrence_id = ?"
-    params = (time_service.now_iso(), task_id, occurrence_id)
-
+    existing.images = []
+    existing.updated_at = time_service.now_iso()
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
-            if cursor.rowcount > 0:
-                logger.info(f"Cleared images from task {task_id} (occurrence: {occurrence_id})")
-                return True
-            logger.debug(f"Task {task_id} not found or no images to clear (occurrence: {occurrence_id})")
-            return False
+        engine.task_upsert(json.dumps(_task_to_persist_payload(existing)))
+        logger.info(f"Cleared images from task {task_id} (occurrence: {occurrence_id})")
+        return True
     except Exception as e:
         logger.exception(f"Failed to clear images for task {task_id}: {e}")
         return False
 
 
-def task_exists(task_id: str, db_path: Optional[str] = None) -> bool:
-    return get_task_by_id(task_id, db_path=db_path) is not None
+def task_exists(task_id: str) -> bool:
+    return get_task_by_id(task_id) is not None
 
 
 async def add_system_task(
-    task: Task, auth_service: Optional["AuthenticationServiceProtocol"] = None, db_path: Optional[str] = None
+    task: Task,
+    auth_service: Optional["AuthenticationServiceProtocol"] = None,
 ) -> str:
-    """Add a system task with automatic signing by the system WA.
-
-    This should be used by authorized processors (wakeup, dream, shutdown) to create
-    system tasks that are properly signed.
-
-    Args:
-        task: The task to add
-        auth_service: Authentication service for signing (optional)
-        db_path: Database path (optional)
-
-    Returns:
-        The task ID
-    """
-    # If auth service is available, sign the task
+    """Add a system task with automatic signing by the system WA."""
     if auth_service:
         try:
             system_wa_id = await auth_service.get_system_wa_id()
@@ -474,194 +631,219 @@ async def add_system_task(
                 logger.warning("No system WA available for signing task")
         except Exception as e:
             logger.error(f"Failed to sign system task: {e}")
-            # Continue without signature
-
-    # Add the task (with or without signature)
-    return add_task(task, db_path=db_path)
+    return add_task(task)
 
 
 def get_recent_completed_tasks(
-    occurrence_id: str = "default", limit: int = 10, db_path: Optional[str] = None
+    occurrence_id: str = "default",
+    limit: int = 10,
 ) -> List[Task]:
-    tasks_list = get_all_tasks(occurrence_id, db_path=db_path)
+    tasks_list = get_all_tasks(occurrence_id)
     completed = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.COMPLETED]
     completed_sorted = sorted(completed, key=lambda t: getattr(t, "updated_at", ""), reverse=True)
     return completed_sorted[:limit]
 
 
-def get_top_tasks(occurrence_id: str = "default", limit: int = 10, db_path: Optional[str] = None) -> List[Task]:
+def get_top_tasks(
+    occurrence_id: str = "default",
+    limit: int = 10,
+) -> List[Task]:
     """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date."""
-    tasks_list = get_all_tasks(occurrence_id, db_path=db_path)
-    # Filter to PENDING tasks only - exclude COMPLETED, DEFERRED, FAILED, REJECTED
+    tasks_list = get_all_tasks(occurrence_id)
     pending = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.PENDING]
     sorted_tasks = sorted(pending, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
     return sorted_tasks[:limit]
 
 
 def get_pending_tasks_for_activation(
-    occurrence_id: str = "default", limit: int = 10, db_path: Optional[str] = None
+    occurrence_id: str = "default",
+    limit: int = 10,
 ) -> List[Task]:
-    """Get pending tasks for occurrence ordered by priority (highest first) then by creation date, with optional limit."""
-    pending_tasks = get_tasks_by_status(TaskStatus.PENDING, occurrence_id, db_path=db_path)
-    # Sort by priority (descending) then by created_at (ascending for oldest first)
+    """Get pending tasks for occurrence ordered by priority (highest first) then by creation date."""
+    pending_tasks = get_tasks_by_status(TaskStatus.PENDING, occurrence_id)
     sorted_tasks = sorted(pending_tasks, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
     return sorted_tasks[:limit]
 
 
-def count_tasks(
-    status: Optional[TaskStatus] = None, occurrence_id: str = "default", db_path: Optional[str] = None
-) -> int:
-    """
-    Count tasks using SQL COUNT(*) for performance.
-
-    This function uses a SQL COUNT(*) query instead of loading all tasks into memory,
-    which prevents event loop blocking when counting large numbers of tasks.
-
-    Args:
-        status: Optional task status to filter by
-        occurrence_id: Agent occurrence ID (default: "default")
-        db_path: Optional database path
-
-    Returns:
-        Number of tasks matching the criteria
-    """
+def count_tasks(status: Optional[TaskStatus] = None, occurrence_id: str = "default") -> int:
+    """Count tasks matching the criteria."""
     try:
-        with get_db_connection(db_path) as conn:
-            # Get adapter AFTER connection is established to ensure correct dialect
-            # (get_db_connection calls init_dialect which sets the global adapter)
-            adapter = get_adapter()
-            cursor = conn.cursor()
-
-            if status:
-                sql = adapter.translate_placeholders(
-                    "SELECT COUNT(*) FROM tasks WHERE agent_occurrence_id = ? AND status = ?"
-                )
-                cursor.execute(sql, (occurrence_id, status.value))
-            else:
-                sql = adapter.translate_placeholders("SELECT COUNT(*) FROM tasks WHERE agent_occurrence_id = ?")
-                cursor.execute(sql, (occurrence_id,))
-
-            result = cursor.fetchone()
-            return adapter.extract_scalar(result) or 0
+        if status:
+            tasks = _list_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
+        else:
+            tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
+        return len(tasks)
     except Exception as e:
         logger.exception(f"Failed to count tasks for occurrence {occurrence_id}: {e}")
         return 0
 
 
-def delete_tasks_by_ids(task_ids: List[str], db_path: Optional[str] = None) -> bool:
-    """Deletes tasks and their associated thoughts and feedback_mappings with the given IDs from the database."""
+def delete_tasks_by_ids(task_ids: List[str]) -> int:
+    """Deletes tasks (and cascades thoughts + feedback_mappings) with the given IDs.
+
+    Persist's `task_delete` cascades to thoughts via FK. The legacy
+    `feedback_mappings` cascade is handled by persist's row-deletion
+    cascade on `cirislens_thoughts` (and is otherwise unused at the
+    agent layer, see CIRISAgent#763 inventory).
+    """
     if not task_ids:
         logger.warning("No task IDs provided for deletion.")
-        return False
+        return 0
 
     logger.warning(f"DELETE_OPERATION: delete_tasks_by_ids called with {len(task_ids)} tasks: {task_ids}")
     import traceback
 
     logger.warning(f"DELETE_OPERATION: Called from: {''.join(traceback.format_stack()[-3:-1])}")
 
-    placeholders = ",".join("?" for _ in task_ids)
-
-    sql_get_thought_ids = f"SELECT thought_id FROM thoughts WHERE source_task_id IN ({placeholders})"  # nosec B608 - placeholders are '?' strings
-    sql_delete_feedback_mappings = "DELETE FROM feedback_mappings WHERE target_thought_id IN ({})"
-    sql_delete_thoughts = (
-        f"DELETE FROM thoughts WHERE source_task_id IN ({placeholders})"  # nosec B608 - placeholders are '?' strings
-    )
-    sql_delete_tasks = (
-        f"DELETE FROM tasks WHERE task_id IN ({placeholders})"  # nosec B608 - placeholders are '?' strings
-    )
-
+    engine = _get_engine()
     deleted_count = 0
+    failed_ids: List[str] = []
+    for tid in task_ids:
+        try:
+            ok = engine.task_delete(tid)
+        except Exception as e:
+            # persist's `task_delete` cascades the task's child thoughts via
+            # migration V035, so the old "FK-blocked by child thoughts"
+            # soft-cancel fallback no longer applies. A Conflict here means
+            # some *other* row still references the task — log it honestly
+            # rather than masking a stale row as a successful cancel.
+            logger.exception(f"Failed to delete task {tid}: {e}")
+            failed_ids.append(tid)
+            continue
+        if ok:
+            deleted_count += 1
+
+    if deleted_count > 0:
+        logger.info(f"Successfully deleted {deleted_count} task(s) with IDs: {task_ids}.")
+
+    # A FAILURE IS NOT AN ABSENCE (CIRISAgent#1070).
+    #
+    # Every exception above was swallowed into `continue`, so a delete that
+    # ERRORED fell through to the "or they were already deleted" line — telling
+    # an operator the row was gone when it was still there and had refused to go:
+    #
+    #   ERROR   Failed to delete task WAKEUP_SHARED_...: FOREIGN KEY constraint failed
+    #   WARNING No tasks found with IDs: [...] (or they were already deleted).
+    #
+    # Two lines apart, flatly contradicting each other. Say which happened.
+    if failed_ids:
+        logger.error(
+            "%d task(s) could NOT be deleted and are still present: %s " "(see the exception(s) above for why)",
+            len(failed_ids),
+            failed_ids,
+        )
+    elif deleted_count == 0:
+        logger.warning(f"No tasks found with IDs: {task_ids} for deletion (or they were already deleted).")
+
+    # Returns a COUNT, not a bool. It was typed `bool` while two callers already
+    # named the result a count — `orphaned_tasks_deleted_count` and
+    # `deleted_tasks` — and one of them logged it straight into a message,
+    # producing "Deleted False stale active wakeup tasks".
+    return deleted_count
+
+
+def get_tasks_older_than(older_than_timestamp: str, occurrence_id: str = "default") -> List[Task]:
+    """Get all tasks for occurrence with created_at older than the given ISO timestamp."""
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-
-            cursor.execute(sql_get_thought_ids, task_ids)
-            thought_rows = cursor.fetchall()
-            thought_ids_to_delete = [row["thought_id"] for row in thought_rows]
-
-            if thought_ids_to_delete:
-                feedback_placeholders = ",".join("?" for _ in thought_ids_to_delete)
-                current_sql_delete_feedback_mappings = sql_delete_feedback_mappings.format(
-                    feedback_placeholders
-                )  # nosec B608 - placeholders are '?' strings
-                cursor.execute(current_sql_delete_feedback_mappings, thought_ids_to_delete)
-                logger.info(
-                    f"Deleted {cursor.rowcount} associated feedback mappings for thought IDs: {thought_ids_to_delete}."
-                )
-            else:
-                logger.info(f"No associated feedback mappings found for task IDs: {task_ids}.")
-
-            cursor.execute(sql_delete_thoughts, task_ids)
-            thoughts_deleted = cursor.rowcount
-            logger.warning(f"DELETE_OPERATION: Deleted {thoughts_deleted} thoughts for tasks: {task_ids}")
-            logger.info(f"Deleted {thoughts_deleted} associated thoughts for task IDs: {task_ids}.")
-
-            cursor.execute(sql_delete_tasks, task_ids)
-            deleted_count = cursor.rowcount
-
-            conn.commit()
-
-            if deleted_count > 0:
-                logger.info(f"Successfully deleted {deleted_count} task(s) with IDs: {task_ids}.")
-                return True
-            logger.warning(f"No tasks found with IDs: {task_ids} for deletion (or they were already deleted).")
-            return False
-    except Exception as e:
-        logger.exception(f"Failed to delete tasks with IDs {task_ids}: {e}")
-        return False
-
-
-def get_tasks_older_than(
-    older_than_timestamp: str, occurrence_id: str = "default", db_path: Optional[str] = None
-) -> List[Task]:
-    """Get all tasks for occurrence with created_at older than the given ISO timestamp, returning Task objects."""
-    sql = "SELECT * FROM tasks WHERE created_at < ? AND agent_occurrence_id = ?"
-    tasks_list: List[Any] = []
-    try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (older_than_timestamp, occurrence_id))
-            rows = cursor.fetchall()
-            for row in rows:
-                tasks_list.append(map_row_to_task(row))
+        all_tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
     except Exception as e:
         logger.exception(f"Failed to get tasks older than {older_than_timestamp} for occurrence {occurrence_id}: {e}")
-    return tasks_list
+        return []
+    return [t for t in all_tasks if t.created_at < older_than_timestamp]
 
 
-def get_active_task_for_channel(
-    channel_id: str, occurrence_id: str = "default", db_path: Optional[str] = None
-) -> Optional[Task]:
-    """Get the active task for a specific channel and occurrence, if one exists.
-
-    Args:
-        channel_id: The channel to check
-        occurrence_id: Runtime occurrence ID (default: "default")
-        db_path: Optional database path
-
-    Returns:
-        The active task for the channel in this occurrence, or None if no active task exists
-    """
-    sql = """SELECT * FROM tasks
-             WHERE channel_id = ? AND status = ? AND agent_occurrence_id = ?
-             ORDER BY created_at DESC LIMIT 1"""
+def get_active_task_for_channel(channel_id: str, occurrence_id: str = "default") -> Optional[Task]:
+    """Get the active task for a specific channel and occurrence, if one exists."""
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (channel_id, TaskStatus.ACTIVE.value, occurrence_id))
-            row = cursor.fetchone()
-            if row:
-                task = map_row_to_task(row)
-                logger.info(
-                    f"[GET_ACTIVE_TASK] Found active task for channel {channel_id}: task_id={task.task_id}, description={task.description[:100] if task.description else 'N/A'}"
-                )
-                return task
-            else:
-                logger.info(f"[GET_ACTIVE_TASK] No active task found for channel {channel_id}")
-            return None
+        active_tasks = _list_with_filter(
+            {
+                "status": TaskStatus.ACTIVE.value,
+                "agent_occurrence_id": occurrence_id,
+                "channel_id": channel_id,
+            }
+        )
     except Exception as e:
         logger.exception(f"Failed to get active task for channel {channel_id} occurrence {occurrence_id}: {e}")
         return None
+    # Persist returns DESC by created_at; pick the newest matching.
+    for task in active_tasks:
+        if task.channel_id == channel_id:
+            logger.info(
+                f"[GET_ACTIVE_TASK] Found active task for channel {channel_id}: task_id={task.task_id}, "
+                f"description={task.description[:100] if task.description else 'N/A'}"
+            )
+            return task
+    logger.info(f"[GET_ACTIVE_TASK] No active task found for channel {channel_id}")
+    return None
+
+
+def _is_committed_action(action_type: str) -> bool:
+    """Check if an action type represents a committed (non-PONDER) action."""
+    return action_type != "PONDER" and action_type != HandlerActionType.PONDER.value
+
+
+def _task_has_committed_action(task_id: str, occurrence_id: str) -> bool:
+    """Check if task has any completed thoughts with non-PONDER action."""
+    from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_task_id
+
+    thoughts = get_thoughts_by_task_id(task_id, occurrence_id)
+    for thought in thoughts:
+        if thought.status != ThoughtStatus.COMPLETED:
+            continue
+        if thought.final_action and _is_committed_action(thought.final_action.action_type):
+            logger.info(
+                f"Task {task_id} already committed to action {thought.final_action.action_type}, "
+                "cannot set updated_info_available flag"
+            )
+            return True
+    return False
+
+
+def _serialize_image(img: Any) -> Any:
+    """Serialize an image to dict format."""
+    if hasattr(img, "model_dump"):
+        return img.model_dump()
+    return img if isinstance(img, dict) else {}
+
+
+def _prepare_images(task: Task, images: List[Any]) -> tuple[List[ImageContent], int]:
+    """Prepare combined image list from existing and new images.
+
+    Returns:
+        Tuple of (combined_images, new_images_count)
+    """
+    existing_images = task.images if task else []
+    new_images_data = [_serialize_image(img) for img in images]
+    combined_raw = [_serialize_image(img) for img in existing_images] + new_images_data
+    combined: List[ImageContent] = []
+    for img in combined_raw:
+        try:
+            if isinstance(img, ImageContent):
+                combined.append(img)
+            elif isinstance(img, dict):
+                combined.append(ImageContent.model_validate(img))
+        except Exception as e:
+            logger.warning(f"Skipping invalid image while preparing task {task.task_id}: {e}")
+    return combined, len(new_images_data)
+
+
+def clear_task_updated_info_flag(task_id: str) -> bool:
+    """Clear updated_info_available on a task (any occurrence). Returns True on a write."""
+    engine = _get_engine()
+    try:
+        raw = engine.task_get(task_id)
+        if raw is None:
+            return False
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(row, dict):
+            return False
+        task = _persist_row_to_task(row)
+        task.updated_info_available = False
+        engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        return True
+    except Exception as e:
+        logger.exception(f"Failed to clear updated_info_available flag for task {task_id}: {e}")
+        return False
 
 
 def set_task_updated_info_flag(
@@ -670,70 +852,35 @@ def set_task_updated_info_flag(
     occurrence_id: str,
     time_service: TimeServiceProtocol,
     db_path: Optional[str] = None,
+    images: Optional[List[Any]] = None,
 ) -> bool:
     """Set the updated_info_available flag on a task with new observation content.
 
-    This function checks if the task has already passed conscience checks. If the task
-    has passed conscience with any action OTHER than PONDER, it returns False (too late).
-    If the task hasn't passed conscience yet, or passed with PONDER, it sets the flag
-    and returns True.
-
-    Args:
-        task_id: The task to update
-        updated_content: The new observation content
-        occurrence_id: Runtime occurrence ID for safety check
-        time_service: Time service for timestamps
-        db_path: Optional database path
-
-    Returns:
-        True if flag was set successfully, False if task already committed to action or
-        doesn't belong to this occurrence
+    Returns False if task already committed to non-PONDER action or doesn't belong to occurrence.
     """
-    # First, verify the task belongs to this occurrence
-    task = get_task_by_id(task_id, occurrence_id, db_path)
+    task = get_task_by_id(task_id, occurrence_id)
     if not task or task.agent_occurrence_id != occurrence_id:
         logger.warning(
             f"Task {task_id} does not belong to occurrence {occurrence_id}, cannot set updated_info_available flag"
         )
         return False
 
-    # Check if task has any completed thoughts with non-PONDER action
-    from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_task_id
+    if _task_has_committed_action(task_id, occurrence_id):
+        return False
 
-    thoughts = get_thoughts_by_task_id(task_id, occurrence_id, db_path)
+    task.updated_info_available = True
+    task.updated_info_content = updated_content
+    task.updated_at = time_service.now_iso()
+    if images:
+        combined, new_count = _prepare_images(task, images)
+        task.images = combined
+        logger.info(f"[VISION] Appending {new_count} images to task {task_id}")
 
-    # Check if any thought is completed with a non-PONDER action
-    for thought in thoughts:
-        if thought.status == ThoughtStatus.COMPLETED:  # Thoughts use ThoughtStatus enum
-            # Check if final_action exists and is not PONDER
-            if thought.final_action:
-                action_type = thought.final_action.action_type
-                # If action is anything other than PONDER, it's too late
-                if action_type != "PONDER" and action_type != HandlerActionType.PONDER.value:
-                    logger.info(
-                        f"Task {task_id} already committed to action {action_type}, "
-                        f"cannot set updated_info_available flag"
-                    )
-                    return False
-
-    # Safe to update - either no thoughts completed yet, or only PONDER actions
-    sql = """
-        UPDATE tasks
-        SET updated_info_available = 1,
-            updated_info_content = ?,
-            updated_at = ?
-        WHERE task_id = ? AND agent_occurrence_id = ?
-    """
-    params = (updated_content, time_service.now_iso(), task_id, occurrence_id)
+    engine = _get_engine()
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
-            if cursor.rowcount > 0:
-                logger.info(f"Set updated_info_available flag for task {task_id}")
-                return True
-            logger.warning(f"Task {task_id} not found for update in occurrence {occurrence_id}")
-            return False
+        engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        logger.info(f"Set updated_info_available flag for task {task_id}")
+        return True
     except Exception as e:
         logger.exception(f"Failed to set updated_info_available flag for task {task_id}: {e}")
         return False
@@ -742,60 +889,61 @@ def set_task_updated_info_flag(
 # ==================== Multi-Occurrence Shared Task Functions ====================
 
 
+class SharedTaskClaimNotPersisted(RuntimeError):
+    """A shared-task claim reported success but the row is not in the store.
+
+    Raised rather than returned so the caller cannot accidentally continue as if
+    it held the task — the failure mode in #1057 was precisely an agent
+    proceeding on a claim it did not have.
+    """
+
+
+#: Claim verifications that failed this process. Surfaced by /v1/system/health
+#: so CIRISManager can see it without shelling into the container — the whole
+#: reason #1057 took a fleet-wide inspection to find.
+_SHARED_CLAIM_FAILURES: List[Dict[str, str]] = []
+
+
+def record_shared_claim_failure(task_id: str, outcome: str) -> None:
+    """Remember a claim that did not persist (bounded; newest kept)."""
+    _SHARED_CLAIM_FAILURES.append(
+        {"task_id": task_id, "outcome": outcome, "at": datetime.now(timezone.utc).isoformat()}
+    )
+    del _SHARED_CLAIM_FAILURES[:-20]
+
+
+def get_shared_claim_failures() -> List[Dict[str, str]]:
+    """Claim verifications that failed in this process, for health reporting."""
+    return list(_SHARED_CLAIM_FAILURES)
+
+
 def try_claim_shared_task(
     task_type: str,
     channel_id: str,
     description: str,
     priority: int,
     time_service: TimeServiceProtocol,
-    db_path: Optional[str] = None,
 ) -> tuple[Task, bool]:
     """Atomically create or retrieve a shared agent-level task.
 
-    Uses deterministic task_id based on date to prevent race conditions when
-    multiple occurrences try to create the same shared task simultaneously.
-
-    The task is created with agent_occurrence_id="__shared__" to make it visible
-    to all occurrences of the agent.
-
-    Args:
-        task_type: Type of task (e.g., "wakeup", "shutdown")
-        channel_id: Channel where task originated
-        description: Task description
-        priority: Task priority (0-10)
-        time_service: Time service for timestamps
-        db_path: Optional database path
-
-    Returns:
-        Tuple of (Task, was_created) where was_created=True if this call created
-        the task, False if it already existed.
-
-    Example:
-        >>> task, created = try_claim_shared_task("wakeup", "system", "Identity affirmation", 10, time_service)
-        >>> if created:
-        ...     print("This occurrence will process wakeup")
-        ... else:
-        ...     print("Another occurrence already claimed wakeup")
+    Uses persist's `task_try_claim_shared`, which performs the atomic
+    "create if not exists, return existing otherwise" semantics that the
+    legacy INSERT-OR-IGNORE provided. Stale-task handling preserved from
+    legacy implementation.
     """
-    from datetime import datetime, timezone
-
-    # Create deterministic task ID based on type and date
     date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
     task_id = f"{task_type.upper()}_SHARED_{date_str}"
 
-    # First, check if task already exists
-    existing = get_task_by_id(task_id, "__shared__", db_path)
+    # Stale-task pre-check: if an existing shared task is in terminal status
+    # or too old, delete it before claiming so the new agent gets a fresh task.
+    existing = get_task_by_id(task_id, "__shared__")
     if existing:
-        # CRITICAL: Only reuse task if it's in a valid reusable state
-        # Stale tasks (completed, failed, or very old active tasks) should NOT be reused
-        # This prevents infinite loops from reusing tasks with completed seed thoughts
-
-        from datetime import timedelta
-
-        # Parse created_at string to datetime for age calculation
-        created_at = datetime.fromisoformat(existing.created_at.replace("Z", "+00:00"))
+        try:
+            created_at = datetime.fromisoformat(existing.created_at.replace("Z", "+00:00"))
+        except Exception:
+            created_at = time_service.now()
         task_age = time_service.now() - created_at
-        is_fresh = task_age < timedelta(minutes=10)  # Fresh if created within last 10 minutes
+        is_fresh = task_age < timedelta(minutes=10)
         is_reusable_status = existing.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]
 
         if not is_reusable_status:
@@ -803,241 +951,130 @@ def try_claim_shared_task(
                 f"Shared task {task_id} exists but has terminal status {existing.status.value}. "
                 "This stale task should have been cleaned up. Creating new task instead."
             )
-            # Delete the stale task and create a new one
-            delete_tasks_by_ids([task_id], db_path)
+            delete_tasks_by_ids([task_id])
         elif not is_fresh:
             logger.warning(
                 f"Shared task {task_id} exists but is stale (age: {task_age}). "
                 "This old active task should have been cleaned up. Creating new task instead."
             )
-            # Delete the stale task and create a new one
-            delete_tasks_by_ids([task_id], db_path)
+            delete_tasks_by_ids([task_id])
         else:
-            # Task is fresh and in valid state - safe to reuse
             logger.info(
                 f"Shared task {task_id} already exists (status={existing.status.value}, age={task_age}), "
                 "returning existing task"
             )
             return (existing, False)
 
-    # Try to create the task with INSERT OR IGNORE for race safety
-    # Use dialect adapter for database compatibility
-    from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-    adapter = get_adapter()
     now = time_service.now_iso()
+    payload = {
+        "task_id": task_id,
+        "channel_id": channel_id,
+        "agent_occurrence_id": "__shared__",
+        "description": description,
+        "status": TaskStatus.PENDING.value,
+        "priority": priority,
+        "created_at": now,
+        "updated_at": now,
+    }
 
-    columns = [
-        "task_id",
-        "channel_id",
-        "agent_occurrence_id",
-        "description",
-        "status",
-        "priority",
-        "created_at",
-        "updated_at",
-        "parent_task_id",
-        "context_json",
-        "outcome_json",
-        "signed_by",
-        "signature",
-        "signed_at",
-        "updated_info_available",
-        "updated_info_content",
-        "images_json",
-    ]
-    conflict_columns = ["task_id"]  # Primary key constraint (task_id only)
-
-    sql = adapter.insert_or_ignore("tasks", columns, conflict_columns)
-    params = (
-        task_id,
-        channel_id,
-        "__shared__",
-        description,
-        TaskStatus.PENDING.value,
-        priority,
-        now,
-        now,
-        None,  # parent_task_id
-        None,  # context_json
-        None,  # outcome_json
-        None,  # signed_by
-        None,  # signature
-        None,  # signed_at
-        0,  # updated_info_available
-        None,  # updated_info_content
-        None,  # images_json (shared tasks don't have images)
-    )
-
+    engine = _get_engine()
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.execute(sql, params)
-            conn.commit()
-
-            if cursor.rowcount > 0:
-                # We successfully created the task
-                logger.info(f"Successfully claimed shared task {task_id}")
-                created_task = get_task_by_id(task_id, "__shared__", db_path)
-                if created_task:
-                    return (created_task, True)
-                else:
-                    # This shouldn't happen, but handle gracefully
-                    logger.error(f"Created shared task {task_id} but couldn't retrieve it")
-                    raise RuntimeError(f"Failed to retrieve newly created shared task {task_id}")
-            else:
-                # INSERT OR IGNORE returned 0 rows - another occurrence created it between our check and insert
-                logger.info(f"Another occurrence claimed shared task {task_id} during race")
-                existing = get_task_by_id(task_id, "__shared__", db_path)
-                if existing:
-                    return (existing, False)
-                else:
-                    # This shouldn't happen, but handle gracefully
-                    logger.error(f"INSERT OR IGNORE for {task_id} returned 0 rows but task doesn't exist")
-                    raise RuntimeError(f"Shared task {task_id} creation race condition failed")
-
+        raw = engine.task_try_claim_shared(json.dumps(payload))
     except Exception as e:
         logger.exception(f"Failed to claim shared task {task_id}: {e}")
         raise
 
+    parsed = json.loads(raw) if isinstance(raw, str) else raw
+    outcome = parsed.get("outcome") if isinstance(parsed, dict) else None
+    task_row = parsed.get("task") if isinstance(parsed, dict) else None
+    if not isinstance(task_row, dict):
+        raise RuntimeError(f"Shared task {task_id} claim returned no task row")
+
+    task = _persist_row_to_task(task_row)
+
+    # READ BACK BEFORE DECLARING SUCCESS (CIRISAgent#1057).
+    #
+    # This used to return on the substrate's word alone. datum logged
+    # "This occurrence claimed shared ..." on every boot while its store held NO
+    # wakeup task for that day — and no row of any kind for 17 days. The agent
+    # then found 0 PENDING thoughts and span in WAKEUP to round 66, reporting
+    # healthy the whole time, because nothing ever checked that the row it
+    # believed it had written was actually there.
+    #
+    # A claim whose row cannot be read back is not a claim. We cannot fix the
+    # write from here — we do not know yet why it fails — but an agent must not
+    # proceed believing it holds a task it does not hold.
+    readback = get_task_by_id(task_id, "__shared__")
+    if readback is None:
+        record_shared_claim_failure(task_id, outcome or "unknown")
+        logger.critical(
+            "SHARED TASK CLAIM DID NOT PERSIST: %s reported outcome=%r but the row cannot be read back "
+            "from the store. The agent has NOT claimed this task and will find no work. "
+            "This is CIRISAgent#1057 — check that the process is reading the same database it wrote to.",
+            task_id,
+            outcome,
+        )
+        raise SharedTaskClaimNotPersisted(
+            f"Shared task {task_id} reported outcome={outcome!r} but is absent from the store"
+        )
+
+    if outcome == "stored":
+        logger.info(f"Successfully claimed shared task {task_id} (verified present in store)")
+        return (task, True)
+    logger.info(f"Another occurrence claimed shared task {task_id} during race")
+    return (task, False)
+
 
 def get_shared_task_status(
-    task_type: str, within_hours: int = 24, db_path: Optional[str] = None
+    task_type: str,
+    within_hours: int = 24,
 ) -> Optional[TaskStatus]:
-    """Get the status of the most recent shared task of a given type.
-
-    Args:
-        task_type: Type of task (e.g., "wakeup", "shutdown")
-        within_hours: Only consider tasks created within this many hours (default: 24)
-        db_path: Optional database path
-
-    Returns:
-        TaskStatus enum if task found, None if no recent task exists
-    """
-    from datetime import datetime, timedelta, timezone
-
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
-    cutoff_iso = cutoff_time.isoformat()
-
-    sql = """
-        SELECT status FROM tasks
-        WHERE agent_occurrence_id = '__shared__'
-          AND task_id LIKE ?
-          AND created_at > ?
-        ORDER BY created_at DESC
-        LIMIT 1
-    """
-    pattern = f"{task_type.upper()}_SHARED_%"
-
-    try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            # Note: PostgreSQLCursorWrapper automatically translates ? to %s
-            cursor.execute(sql, (pattern, cutoff_iso))
-            row = cursor.fetchone()
-            if row:
-                return TaskStatus(row["status"])
-            return None
-    except Exception as e:
-        logger.exception(f"Failed to get shared task status for {task_type}: {e}")
+    """Get the status of the most recent shared task of a given type."""
+    latest = get_latest_shared_task(task_type, within_hours)
+    if latest is None:
         return None
+    return latest.status
 
 
-def is_shared_task_completed(task_type: str, within_hours: int = 24, db_path: Optional[str] = None) -> bool:
-    """Check if a shared task of the given type has been completed recently.
-
-    Args:
-        task_type: Type of task (e.g., "wakeup", "shutdown")
-        within_hours: Only consider tasks created within this many hours (default: 24)
-        db_path: Optional database path
-
-    Returns:
-        True if a completed task exists, False otherwise
-    """
-    status = get_shared_task_status(task_type, within_hours, db_path)
+def is_shared_task_completed(
+    task_type: str,
+    within_hours: int = 24,
+) -> bool:
+    """Check if a shared task of the given type has been completed recently."""
+    status = get_shared_task_status(task_type, within_hours)
     return status == TaskStatus.COMPLETED if status else False
 
 
-def get_latest_shared_task(task_type: str, within_hours: int = 24, db_path: Optional[str] = None) -> Optional[Task]:
-    """Get the most recent shared task of a given type.
-
-    Args:
-        task_type: Type of task (e.g., "wakeup", "shutdown")
-        within_hours: Only consider tasks created within this many hours (default: 24)
-        db_path: Optional database path
-
-    Returns:
-        Task object if found, None otherwise
-    """
-    from datetime import datetime, timedelta, timezone
-
+def get_latest_shared_task(task_type: str, within_hours: int = 24) -> Optional[Task]:
+    """Get the most recent shared task of a given type."""
     cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
     cutoff_iso = cutoff_time.isoformat()
-
-    sql = """
-        SELECT * FROM tasks
-        WHERE agent_occurrence_id = '__shared__'
-          AND task_id LIKE ?
-          AND created_at > ?
-        ORDER BY created_at DESC
-        LIMIT 1
-    """
-    pattern = f"{task_type.upper()}_SHARED_%"
+    pattern_prefix = f"{task_type.upper()}_SHARED_"
 
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            # Note: PostgreSQLCursorWrapper automatically translates ? to %s
-            cursor.execute(sql, (pattern, cutoff_iso))
-            row = cursor.fetchone()
-            if row:
-                return map_row_to_task(row)
-            return None
+        shared_tasks = _list_with_filter({"agent_occurrence_id": "__shared__"})
     except Exception as e:
         logger.exception(f"Failed to get latest shared task for {task_type}: {e}")
         return None
 
+    candidates = [t for t in shared_tasks if t.task_id.startswith(pattern_prefix) and t.created_at > cutoff_iso]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: t.created_at, reverse=True)
+    return candidates[0]
 
-def get_task_by_correlation_id(
-    correlation_id: str, occurrence_id: str = "default", db_path: Optional[str] = None
-) -> Optional[Task]:
-    """
-    Query for a task by correlation_id (e.g., Reddit post/comment ID).
 
-    Args:
-        correlation_id: The correlation ID to search for (stored in context_json)
-        occurrence_id: Agent occurrence ID (default: "default")
-        db_path: Optional database path
-
-    Returns:
-        Task if found, None otherwise
-    """
-    from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
-    from ciris_engine.logic.persistence.db.dialect import get_adapter, init_dialect
-
-    # Initialize dialect based on db_path BEFORE building SQL
-    # This ensures the correct dialect (SQLite or PostgreSQL) is used
-    init_dialect(db_path if db_path else get_sqlite_db_full_path())
-
-    # Use dialect adapter for JSON extraction (SQLite vs PostgreSQL)
-    adapter = get_adapter()
-    json_expr = adapter.json_extract("context_json", "$.correlation_id")
-
-    sql = f"""
-        SELECT * FROM tasks
-        WHERE agent_occurrence_id = {adapter.placeholder()}
-          AND {json_expr} = {adapter.placeholder()}
-        ORDER BY created_at DESC
-        LIMIT 1
-    """
-
+def get_task_by_correlation_id(correlation_id: str, occurrence_id: str = "default") -> Optional[Task]:
+    """Query for a task by correlation_id (e.g., Reddit post/comment ID)."""
     try:
-        with get_db_connection(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, (occurrence_id, correlation_id))
-            row = cursor.fetchone()
-            if row:
-                return map_row_to_task(row)
-            return None
+        all_tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
     except Exception as e:
         logger.exception(f"Failed to get task by correlation_id {correlation_id}: {e}")
         return None
+    matches = [
+        t for t in all_tasks if t.context is not None and getattr(t.context, "correlation_id", None) == correlation_id
+    ]
+    if not matches:
+        return None
+    matches.sort(key=lambda t: t.created_at, reverse=True)
+    return matches[0]

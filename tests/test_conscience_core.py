@@ -254,7 +254,10 @@ class TestEntropyConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that unavailable sink returns WARNING"""
+        """An unavailable sink FAILS CLOSED as DID NOT RUN (CIRISAgent#1247).
+
+        It used to return passed=True / WARNING -- "allowing action": a safety
+        check that could not run waved the action through."""
         # Create mock sink that returns None (simulating unavailable)
         mock_sink = Mock()
         mock_sink_manager = Mock()
@@ -271,8 +274,10 @@ class TestEntropyConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
-        assert result.passed is True
-        assert result.status == ConscienceStatus.WARNING
+        assert result.passed is False
+        assert result.check_ran is False
+        assert result.status == ConscienceStatus.ERROR
+        assert "DID NOT RUN" in (result.reason or "")
         assert "unavailable" in result.reason.lower()
 
     @pytest.mark.asyncio
@@ -370,7 +375,7 @@ class TestEntropyConscience:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.conscience.core.persistence")
-    async def test_check_llm_error_uses_default(
+    async def test_check_llm_error_fails_closed(
         self,
         mock_persistence,
         mock_service_registry,
@@ -380,7 +385,7 @@ class TestEntropyConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors use default safe entropy value"""
+        """An error that is not transport must not pass on a preset score the model never produced (#1186)."""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = EntropyConscience(
@@ -392,9 +397,11 @@ class TestEntropyConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
-        # Default entropy is 0.1, which is below threshold 0.4
-        assert result.passed is True
-        assert result.entropy_score == 0.1
+        assert result.passed is False
+        assert result.check_ran is False
+        assert result.entropy_score is None
+        assert "DID NOT RUN" in (result.reason or "")
+        assert "could not be used" in (result.reason or "")
 
     def test_create_entropy_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_entropy_messages generates proper messages"""
@@ -404,7 +411,7 @@ class TestEntropyConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_entropy_messages("Hello world")
+        messages, user_prompt = conscience._create_entropy_messages("Hello world")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -413,6 +420,7 @@ class TestEntropyConscience:
         assert "IRIS-E" in messages[1].content
         assert messages[2].role == "user"
         assert "Hello world" in messages[2].content
+        assert "Hello world" in user_prompt
 
 
 # ============================================================================
@@ -510,7 +518,7 @@ class TestCoherenceConscience:
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.conscience.core.persistence")
-    async def test_check_llm_error_uses_default(
+    async def test_check_llm_error_fails_closed(
         self,
         mock_persistence,
         mock_service_registry,
@@ -520,7 +528,7 @@ class TestCoherenceConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors use default safe coherence value"""
+        """An error that is not transport must not pass on a preset score the model never produced (#1186)."""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = CoherenceConscience(
@@ -532,9 +540,11 @@ class TestCoherenceConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
-        # Default coherence is 0.9, which is above threshold 0.6
-        assert result.passed is True
-        assert result.coherence_score == 0.9
+        assert result.passed is False
+        assert result.check_ran is False
+        assert result.coherence_score is None
+        assert "DID NOT RUN" in (result.reason or "")
+        assert "could not be used" in (result.reason or "")
 
     def test_create_coherence_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_coherence_messages generates proper messages"""
@@ -544,7 +554,7 @@ class TestCoherenceConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_coherence_messages("Hello world")
+        messages, user_prompt = conscience._create_coherence_messages("Hello world")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -553,6 +563,7 @@ class TestCoherenceConscience:
         assert "IRIS-C" in messages[1].content
         assert messages[2].role == "user"
         assert "Hello world" in messages[2].content
+        assert "Hello world" in user_prompt
 
 
 # ============================================================================
@@ -680,7 +691,7 @@ class TestOptimizationVetoConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors fail safe (abort)"""
+        """Test that LLM errors fail safe (closed, as DID NOT RUN)"""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = OptimizationVetoConscience(
@@ -692,8 +703,11 @@ class TestOptimizationVetoConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
+        # Fail closed, but as DID NOT RUN -- not a fabricated "abort" verdict
+        # with check_ran=True that read as a judgement (#1247).
         assert result.passed is False
-        assert result.optimization_veto_check.decision == "abort"
+        assert result.check_ran is False
+        assert "DID NOT RUN" in (result.reason or "")
 
     def test_create_optimization_veto_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_optimization_veto_messages generates proper messages"""
@@ -703,7 +717,7 @@ class TestOptimizationVetoConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_optimization_veto_messages("test action")
+        messages, user_prompt = conscience._create_optimization_veto_messages("test action")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -711,6 +725,7 @@ class TestOptimizationVetoConscience:
         assert messages[1].role == "system"
         assert "CIRIS-EOV" in messages[1].content
         assert messages[2].role == "user"
+        assert "test action" in user_prompt
 
 
 # ============================================================================
@@ -839,7 +854,7 @@ class TestEpistemicHumilityConscience:
         action_speak,
         context_with_thought,
     ):
-        """Test that LLM errors fail safe (abort)"""
+        """Test that LLM errors fail safe (closed, as DID NOT RUN)"""
         mock_sink_with_llm.llm.call_llm_structured.side_effect = Exception("LLM error")
 
         conscience = EpistemicHumilityConscience(
@@ -851,8 +866,11 @@ class TestEpistemicHumilityConscience:
 
         result = await conscience.check(action_speak, context_with_thought)
 
+        # Fail closed, but as DID NOT RUN -- not a fabricated "abort" verdict
+        # with check_ran=True that read as a judgement (#1247).
         assert result.passed is False
-        assert result.epistemic_humility_check.recommended_action == "abort"
+        assert result.check_ran is False
+        assert "DID NOT RUN" in (result.reason or "")
 
     def test_create_epistemic_humility_messages(self, mock_service_registry, conscience_config, mock_time_service):
         """Test _create_epistemic_humility_messages generates proper messages"""
@@ -862,7 +880,7 @@ class TestEpistemicHumilityConscience:
             time_service=mock_time_service,
         )
 
-        messages = conscience._create_epistemic_humility_messages("test action")
+        messages, user_prompt = conscience._create_epistemic_humility_messages("test action")
 
         assert len(messages) == 3
         assert isinstance(messages[0], LLMMessage)
@@ -870,3 +888,36 @@ class TestEpistemicHumilityConscience:
         assert messages[1].role == "system"
         assert "CIRIS-EH" in messages[1].content
         assert messages[2].role == "user"
+        assert "test action" in user_prompt
+
+
+class TestPresetScoresNeverJudge:
+    """A reply of the wrong type is no answer either: it must not fall through to a preset score."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("shard_cls", ["EntropyConscience", "CoherenceConscience"])
+    async def test_wrong_type_reply_fails_closed(
+        self,
+        shard_cls,
+        monkeypatch,
+        mock_service_registry,
+        conscience_config,
+        mock_time_service,
+        mock_sink_with_llm,
+        action_speak,
+        context_with_thought,
+    ):
+        from unittest.mock import MagicMock
+
+        import ciris_engine.logic.conscience.core as core_mod
+
+        monkeypatch.setattr(core_mod, "persistence", MagicMock())
+        mock_sink_with_llm.llm.call_llm_structured.return_value = ("not a result model", None)
+        conscience = getattr(core_mod, shard_cls)(
+            service_registry=mock_service_registry,
+            config=conscience_config,
+            time_service=mock_time_service,
+            sink=mock_sink_with_llm,
+        )
+        result = await conscience.check(action_speak, context_with_thought)
+        assert result.passed is False and result.check_ran is False

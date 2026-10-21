@@ -210,7 +210,7 @@ async def test_visibility_with_recent_decisions(visibility_service):
             "ciris_engine.logic.services.governance.visibility.service.get_thoughts_by_status"
         ) as mock_get_thoughts:
             # Return empty for PENDING, decisions for COMPLETED
-            def side_effect(status, db_path):
+            def side_effect(status, *args, **kwargs):
                 if status == ThoughtStatus.PENDING:
                     return []
                 elif status == ThoughtStatus.COMPLETED:
@@ -433,7 +433,7 @@ async def test_get_task_history(visibility_service):
     # Mock persistence
     with patch("ciris_engine.logic.services.governance.visibility.service.get_tasks_by_status") as mock_get_tasks:
 
-        def side_effect(status, db_path):
+        def side_effect(status, *args, **kwargs):
             if status == TaskStatus.COMPLETED:
                 return completed_tasks
             elif status == TaskStatus.FAILED:

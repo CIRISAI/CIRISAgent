@@ -53,11 +53,13 @@ class ConsentStatus(BaseModel):
     impact_score: float = Field(0.0, ge=0.0, description="Contribution to collective learning")
     attribution_count: int = Field(0, ge=0, description="Number of patterns attributed")
 
-    model_config = ConfigDict(use_enum_values=True)
+    model_config = ConfigDict(use_enum_values=True, defer_build=True)
 
 
 class ConsentRequest(BaseModel):
     """Request to grant or modify consent - EXPLICIT, NO ASSUMPTIONS."""
+
+    model_config = ConfigDict(defer_build=True)
 
     user_id: str = Field(..., description="User requesting consent change")
     stream: ConsentStream = Field(..., description="Requested stream")
@@ -67,6 +69,8 @@ class ConsentRequest(BaseModel):
 
 class ConsentAuditEntry(BaseModel):
     """Audit trail for consent changes - IMMUTABLE RECORD."""
+
+    model_config = ConfigDict(defer_build=True)
 
     entry_id: str = Field(..., description="Unique audit entry ID")
     user_id: str = Field(..., description="User whose consent changed")
@@ -81,6 +85,8 @@ class ConsentAuditEntry(BaseModel):
 
 class ConsentDecayStatus(BaseModel):
     """Track decay protocol progress - NO FAKE DELETION."""
+
+    model_config = ConfigDict(defer_build=True)
 
     user_id: str = Field(..., description="User being forgotten")
     decay_started: datetime = Field(..., description="When decay began")
@@ -104,6 +110,8 @@ class ConsentImpactReport(BaseModel):
     Not currency. Not scorekeeping. Recognition for contributions traditional systems ignore.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     user_id: str = Field(..., description="User requesting report")
     total_interactions: int = Field(..., ge=0, description="Total interactions")
     patterns_contributed: int = Field(..., ge=0, description="Patterns learned")
@@ -118,6 +126,8 @@ class ConsentImpactReport(BaseModel):
 
 class DSARAccessPackage(BaseModel):
     """Package of user data for DSAR access requests - REAL DATA ONLY."""
+
+    model_config = ConfigDict(defer_build=True)
 
     user_id: str = Field(..., description="User requesting access")
     request_id: str = Field(..., description=REQUEST_ID_DESC)
@@ -142,6 +152,8 @@ class DSARExportFormat(str, Enum):
 class DSARExportPackage(BaseModel):
     """Package for DSAR data portability export."""
 
+    model_config = ConfigDict(defer_build=True)
+
     user_id: str = Field(..., description="User requesting export")
     request_id: str = Field(..., description=REQUEST_ID_DESC)
     export_format: DSARExportFormat = Field(..., description="Format of exported data")
@@ -156,6 +168,8 @@ class DSARExportPackage(BaseModel):
 class DSARCorrectionRequest(BaseModel):
     """Request to correct user data under GDPR Article 16."""
 
+    model_config = ConfigDict(defer_build=True)
+
     user_id: str = Field(..., description="User requesting correction")
     field_name: str = Field(..., description="Field to correct (e.g., 'email', 'preferences.language')")
     current_value: Optional[str] = Field(None, description="Current (incorrect) value")
@@ -165,6 +179,8 @@ class DSARCorrectionRequest(BaseModel):
 
 class DSARCorrectionResult(BaseModel):
     """Result of DSAR correction request."""
+
+    model_config = ConfigDict(defer_build=True)
 
     user_id: str = Field(..., description="User whose data was corrected")
     request_id: str = Field(..., description=REQUEST_ID_DESC)
@@ -177,6 +193,8 @@ class DSARCorrectionResult(BaseModel):
 
 class DSARDeletionStatus(BaseModel):
     """Track DSAR deletion request progress (linked to decay protocol)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     ticket_id: str = Field(..., description="DSAR ticket ID")
     user_id: str = Field(..., description="User being deleted")
@@ -222,6 +240,8 @@ class PartnershipPriority(str, Enum):
 class PartnershipRequest(BaseModel):
     """Partnership request awaiting approval."""
 
+    model_config = ConfigDict(defer_build=True)
+
     user_id: str = Field(..., description="User requesting partnership")
     task_id: str = Field(..., description="Agent approval task ID")
     categories: List[ConsentCategory] = Field(..., description="Categories requested")
@@ -237,6 +257,8 @@ class PartnershipRequest(BaseModel):
 class PartnershipOutcome(BaseModel):
     """Outcome of partnership decision."""
 
+    model_config = ConfigDict(defer_build=True)
+
     user_id: str = Field(..., description="User whose partnership was decided")
     task_id: str = Field(..., description="Task ID for this partnership")
     outcome_type: PartnershipOutcomeType = Field(..., description="Decision outcome")
@@ -248,6 +270,8 @@ class PartnershipOutcome(BaseModel):
 
 class PartnershipMetrics(BaseModel):
     """Partnership system metrics."""
+
+    model_config = ConfigDict(defer_build=True)
 
     total_requests: int = Field(..., ge=0, description="Total requests all-time")
     total_approvals: int = Field(..., ge=0, description="Total approved")
@@ -265,6 +289,8 @@ class PartnershipMetrics(BaseModel):
 class PartnershipHistory(BaseModel):
     """Historical partnership decisions for a user."""
 
+    model_config = ConfigDict(defer_build=True)
+
     user_id: str = Field(..., description="User ID")
     total_requests: int = Field(..., ge=0, description="Total requests by this user")
     outcomes: List[PartnershipOutcome] = Field(..., description="All past outcomes")
@@ -279,6 +305,8 @@ class PartnershipHistory(BaseModel):
 class PartnershipCounters(BaseModel):
     """Partnership counters for metrics collection."""
 
+    model_config = ConfigDict(defer_build=True)
+
     requests: int = Field(..., ge=0, description="Total partnership requests")
     approvals: int = Field(..., ge=0, description="Total approvals")
     rejections: int = Field(..., ge=0, description="Total rejections")
@@ -288,6 +316,8 @@ class PartnershipCounters(BaseModel):
 class DecayCounters(BaseModel):
     """Decay protocol counters for metrics collection."""
 
+    model_config = ConfigDict(defer_build=True)
+
     total_initiated: int = Field(..., ge=0, description="Total decays initiated")
     completed: int = Field(..., ge=0, description="Decays completed")
     active_count: int = Field(..., ge=0, description="Currently active decays")
@@ -295,6 +325,8 @@ class DecayCounters(BaseModel):
 
 class OperationalCounters(BaseModel):
     """Operational counters for metrics collection."""
+
+    model_config = ConfigDict(defer_build=True)
 
     consent_checks: int = Field(..., ge=0, description="Consent status checks")
     consent_grants: int = Field(..., ge=0, description="Consent grants/updates")
@@ -310,6 +342,8 @@ class OperationalCounters(BaseModel):
 class ConsentStatusResponse(BaseModel):
     """Response for consent status endpoint."""
 
+    model_config = ConfigDict(defer_build=True)
+
     has_consent: bool = Field(..., description="Whether consent exists")
     user_id: str = Field(..., description=USER_ID_DESC)
     stream: Optional[str] = Field(None, description=CURRENT_STREAM_DESC)
@@ -320,6 +354,8 @@ class ConsentStatusResponse(BaseModel):
 
 class ConsentRecordResponse(BaseModel):
     """Individual consent record for query responses."""
+
+    model_config = ConfigDict(defer_build=True)
 
     id: str = Field(..., description="Consent record ID")
     user_id: str = Field(..., description=USER_ID_DESC)
@@ -334,12 +370,16 @@ class ConsentRecordResponse(BaseModel):
 class ConsentQueryResponse(BaseModel):
     """Response for consent query endpoint."""
 
+    model_config = ConfigDict(defer_build=True)
+
     consents: list[ConsentRecordResponse] = Field(..., description="List of consent records")
     total: int = Field(..., ge=0, description="Total number of records")
 
 
 class StreamMetadata(BaseModel):
     """Metadata for a consent stream."""
+
+    model_config = ConfigDict(defer_build=True)
 
     name: str = Field(..., description="Display name")
     description: str = Field(..., description="Stream description")
@@ -353,12 +393,16 @@ class StreamMetadata(BaseModel):
 class ConsentStreamsResponse(BaseModel):
     """Response for consent streams endpoint."""
 
+    model_config = ConfigDict(defer_build=True)
+
     streams: dict[str, StreamMetadata] = Field(..., description="Available consent streams")
     default: str = Field(..., description="Default stream value")
 
 
 class CategoryMetadata(BaseModel):
     """Metadata for a consent category."""
+
+    model_config = ConfigDict(defer_build=True)
 
     name: str = Field(..., description="Display name")
     description: str = Field(..., description="Category description")
@@ -367,11 +411,15 @@ class CategoryMetadata(BaseModel):
 class ConsentCategoriesResponse(BaseModel):
     """Response for consent categories endpoint."""
 
+    model_config = ConfigDict(defer_build=True)
+
     categories: dict[str, CategoryMetadata] = Field(..., description="Available consent categories")
 
 
 class PartnershipStatusResponse(BaseModel):
     """Response for partnership status check."""
+
+    model_config = ConfigDict(defer_build=True)
 
     current_stream: str = Field(..., description=CURRENT_STREAM_DESC)
     partnership_status: str = Field(..., description="Partnership request status")
@@ -381,12 +429,16 @@ class PartnershipStatusResponse(BaseModel):
 class ConsentCleanupResponse(BaseModel):
     """Response for consent cleanup operation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     cleaned: int = Field(..., ge=0, description="Number of records cleaned")
     message: str = Field(..., description="Cleanup result message")
 
 
 class DSARInitiateResponse(BaseModel):
     """Response for DSAR initiation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     request_id: str = Field(..., description="DSAR request identifier")
     user_id: str = Field(..., description=USER_ID_DESC)
@@ -397,6 +449,8 @@ class DSARInitiateResponse(BaseModel):
 
 class DSARStatusResponse(BaseModel):
     """Response for DSAR status check."""
+
+    model_config = ConfigDict(defer_build=True)
 
     request_id: str = Field(..., description="DSAR request identifier")
     user_id: str = Field(..., description=USER_ID_DESC)

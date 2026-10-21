@@ -94,13 +94,20 @@ def create_test_thought(thought_id: str = "test_thought", task_id: str = "test_t
 
 
 @pytest.mark.asyncio
-async def test_memorize_handler_with_graph_node(monkeypatch):
-    """Test memorize handler with proper GraphNode schema."""
+async def test_memorize_handler_with_graph_node(monkeypatch, persist_engine):
+    """Test memorize handler with proper GraphNode schema.
+
+    `persist_engine` fixture wires a fresh persist Engine so
+    `persistence.update_thought_status` (called via base_handler) doesn't
+    raise "engine not initialized".
+    """
     # Mock persistence to avoid database operations
     mock_persistence = Mock()
     mock_persistence.add_thought = Mock()
     mock_persistence.update_thought_status = Mock()
     monkeypatch.setattr("ciris_engine.logic.handlers.memory.memorize_handler.persistence", mock_persistence)
+    # base_handler reads `persistence` via its own import; patch there too.
+    monkeypatch.setattr("ciris_engine.logic.infrastructure.handlers.base_handler.persistence", mock_persistence)
 
     # Setup
     memory_service = Mock()

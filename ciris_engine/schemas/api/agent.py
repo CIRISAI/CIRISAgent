@@ -5,13 +5,15 @@ Agent API response schemas - fully typed replacements for Dict[str, Any].
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.types import JSONDict
 
 
 class MessageContext(BaseModel):
     """Context information for messages."""
+
+    model_config = ConfigDict(defer_build=True)
 
     channel_id: Optional[str] = Field(None, description="Channel/conversation ID")
     thread_id: Optional[str] = Field(None, description="Thread ID if in thread")
@@ -21,6 +23,8 @@ class MessageContext(BaseModel):
 
 class AgentLineage(BaseModel):
     """Agent lineage information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     model: str = Field(..., description="Base model used")
     version: str = Field(..., description="Agent version")
@@ -32,6 +36,8 @@ class AgentLineage(BaseModel):
 class ServiceAvailability(BaseModel):
     """Service availability counts by type."""
 
+    model_config = ConfigDict(defer_build=True)
+
     graph: int = Field(0, description="Graph services available")
     core: int = Field(0, description="Core services available")
     infrastructure: int = Field(0, description="Infrastructure services available")
@@ -41,6 +47,8 @@ class ServiceAvailability(BaseModel):
 
 class ActiveTask(BaseModel):
     """Active task information."""
+
+    model_config = ConfigDict(defer_build=True)
 
     task_id: str = Field(..., description="Unique task ID")
     type: str = Field(..., description="Task type")

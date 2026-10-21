@@ -4,13 +4,17 @@
 # ===========================
 # One-command installation for CIRISAgent + CIRISGUI
 #
-# Usage:
-#   curl -sSL https://ciris.ai/install.sh | bash
+# Usage (download, optionally inspect, then run — avoids piping unreviewed code
+# straight into a shell; see CIRISAgent#850):
+#   curl -fsSLO https://ciris.ai/install.sh
+#   # (optional) inspect install.sh, then:
+#   bash install.sh
 #
 # Or with options:
-#   curl -sSL https://ciris.ai/install.sh | bash -s -- --skip-service --install-dir ~/my-ciris
+#   curl -fsSLO https://ciris.ai/install.sh
+#   bash install.sh --skip-service --install-dir ~/my-ciris
 #
-# Copyright © 2025 Eric Moore and CIRIS L3C | Apache 2.0 License
+# Copyright © 2025 Eric Moore and CIRIS L3C | AGPL-3.0 License
 #
 
 set -e
@@ -33,8 +37,30 @@ trap cleanup_on_error EXIT
 INSTALL_DIR="${CIRIS_INSTALL_DIR:-$HOME/ciris}"
 AGENT_REPO="https://github.com/CIRISAI/CIRISAgent.git"
 GUI_REPO="https://github.com/CIRISAI/CIRISGUI-Standalone.git"
-AGENT_BRANCH="${CIRIS_AGENT_BRANCH:-main}"
-GUI_BRANCH="${CIRIS_GUI_BRANCH:-main}"
+
+# Resolve the latest published GitHub release tag for a repo.
+# $1 = repo slug (e.g. CIRISAI/CIRISAgent). Prints the tag, or nothing on failure.
+resolve_latest_tag() {  # $1 = repo (e.g. CIRISAI/CIRISAgent)
+    curl -fsSL "https://api.github.com/repos/$1/releases/latest" 2>/dev/null \
+        | grep -oE '"tag_name"\s*:\s*"[^"]+"' | head -1 | grep -oE '"[^"]+"$' | tr -d '"'
+}
+
+# Pin installs to the latest published RELEASE TAG rather than a moving branch
+# (CIRISAgent#850). If CIRIS_AGENT_BRANCH / CIRIS_GUI_BRANCH are set, or the
+# --agent-branch / --gui-branch CLI flags are passed, those win. If release
+# resolution fails (no network, API rate limit, etc.) we fall back to `main`
+# so installs never break.
+AGENT_BRANCH="${CIRIS_AGENT_BRANCH:-$(resolve_latest_tag CIRISAI/CIRISAgent)}"
+: "${AGENT_BRANCH:=main}"
+GUI_BRANCH="${CIRIS_GUI_BRANCH:-$(resolve_latest_tag CIRISAI/CIRISGUI)}"
+: "${GUI_BRANCH:=main}"
+
+# Docker image tag for the generated docker-compose. Defaults to the resolved
+# release tag (AGENT_BRANCH) so generated compose pins to a release instead of
+# a moving `:latest`. Operators can override with CIRIS_IMAGE_TAG. If AGENT_BRANCH
+# resolved to `main` (release lookup failed), the tag is `main` — an acceptable
+# fallback. (CIRISAgent#850)
+CIRIS_IMAGE_TAG="${CIRIS_IMAGE_TAG:-${AGENT_BRANCH}}"
 
 # Service names
 AGENT_SERVICE_NAME="ciris-agent"
@@ -235,7 +261,8 @@ version: "3.8"
 
 services:
   ciris-agent:
-    image: ghcr.io/cirisai/ciris-agent:latest
+    # Pinned to the resolved release tag (CIRIS_IMAGE_TAG) instead of :latest (CIRISAgent#850)
+    image: ghcr.io/cirisai/ciris-agent:${CIRIS_IMAGE_TAG}
     container_name: ciris-agent
     platform: linux/amd64
     user: "0:0"  # Run as root to fix permissions, init script switches to ciris user
@@ -271,7 +298,8 @@ services:
       - ciris-network
 
   ciris-gui:
-    image: ghcr.io/cirisai/ciris-gui:latest
+    # Pinned to the resolved release tag (CIRIS_IMAGE_TAG) instead of :latest (CIRISAgent#850)
+    image: ghcr.io/cirisai/ciris-gui:${CIRIS_IMAGE_TAG}
     container_name: ciris-gui
     platform: linux/amd64
     environment:
@@ -499,6 +527,29 @@ install_dependencies() {
         fi
 
         # Version already verified by get_best_python()
+    fi
+
+    # TPM2 TSS runtime libraries for CIRISVerify (Linux/apt only).
+    # Per the verify team: libtss2-esys0 + libtss2-tctildr0 + libtss2-mu0
+    # are the runtime deps the .so needs to dlopen. Once those resolve,
+    # CIRISVerify's Rust factory degrades cleanly to software-only signing
+    # if no TPM is present. Best-effort install with fallback chain to
+    # cover Debian, newer Debian, and Ubuntu 24.04 t64 package renames.
+    if [ "$pkg_mgr" = "apt" ]; then
+        log_info "Ensuring CIRISVerify runtime libraries are present (TPM2 TSS)"
+        if ! sudo apt-get install -y libtss2-esys0 libtss2-tctildr0 libtss2-mu0 >/dev/null 2>&1; then
+            if ! sudo apt-get install -y \
+                libtss2-esys-3.0.2-0 \
+                libtss2-tctildr0 \
+                libtss2-mu-4.0.1-0 \
+                >/dev/null 2>&1; then
+                sudo apt-get install -y \
+                libtss2-esys-3.0.2-0t64 \
+                libtss2-tctildr0t64 \
+                libtss2-mu-4.0.1-0t64 \
+                >/dev/null 2>&1 || log_warn "Could not auto-install TPM2 TSS libs; install manually if setup fails"
+            fi
+        fi
     fi
 
     # Check Node.js
@@ -1261,15 +1312,20 @@ Environment Variables:
   CIRIS_AGENT_PORT      Agent API port (default: 8080)
   CIRIS_GUI_PORT        Web UI port (default: 3000)
 
-Examples:
+Examples (download, optionally inspect, then run — avoids piping unreviewed
+code into a shell; see CIRISAgent#850):
   # Default installation
-  curl -sSL https://ciris.ai/install.sh | bash
+  curl -fsSLO https://ciris.ai/install.sh
+  # (optional) inspect install.sh, then:
+  bash install.sh
 
   # Custom installation directory
-  curl -sSL https://ciris.ai/install.sh | bash -s -- --install-dir /opt/ciris
+  curl -fsSLO https://ciris.ai/install.sh
+  bash install.sh --install-dir /opt/ciris
 
   # Development installation
-  curl -sSL https://ciris.ai/install.sh | bash -s -- --dev
+  curl -fsSLO https://ciris.ai/install.sh
+  bash install.sh --dev
 
 EOF
 }

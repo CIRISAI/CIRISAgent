@@ -1,0 +1,393 @@
+"""
+Tests for localization file completeness.
+
+This module validates that all localized files have:
+1. Complete key coverage (all keys from en.json present)
+2. No duplicate keys
+3. Complete ACCORD and Guide translations
+4. Complete DMA prompt translations
+
+Language lists are dynamically loaded from localization/manifest.json.
+"""
+
+import json
+from pathlib import Path
+from typing import List, Set
+
+# Locales deliberately shipped INCOMPLETE, with English fallback, because a
+# translator declined to certify them. Withholding is a decision, not a gap:
+# recorded here so the suite states it rather than a shard failing with a
+# bare count, and so removing a locale from this dict is a deliberate act.
+#
+# xfail (not skip) because the keys ARE expected to be missing — an xpass
+# means someone filled them in and the entry should go.
+WITHHELD_LOCALES = {
+    # yo: 2,991 of 2,999 shipped. The 8 held back are unstandardized LOANWORD
+    # transliterations (àdírẹ́sì, nẹ́tíwọ̀kì, fáìlì, sáfà, ìbuwọ́lù...) where the
+    # translator's diacritics are invention rather than recall — proven by two
+    # independent attempts producing ìbuwọ́lù vs ìbùwọ́lù on the same word.
+    # 5 of the 8 are the tool-disclosure CONSENT screen, where a user decides
+    # what an agent may do to their device and network: the worst place in this
+    # corpus to guess, so English fallback is the safer default there.
+    #
+    # RE-TESTED 2026-08-06, because "just translate the last 8" is a reasonable
+    # thing to want and this entry should either survive the attempt or go. Two
+    # further independent attempts, neither shown the other's output:
+    #   - agreed on 1 of 8 strings; diverged on 7.
+    #   - `nẹ́tíwọ̀ọ̀kì` in both, against `nẹ́tíwọ̀kì` recorded above: a third
+    #     spelling of the same word across three attempts.
+    #   - approval_budget_unsigned, an Ed25519 attestation status, came back as
+    #     "unregistered / registration key" (ìforúkọsílẹ̀) in one and "unsigned /
+    #     signing key" (ìbùwọ́lù) in the other. Those are different claims about
+    #     whether a key exists, and one of them is simply false. This is the
+    #     failure the prediction named, landing on the string where it costs the
+    #     most.
+    #   - the two attempts did not even agree how to ADDRESS the user on the
+    #     consent screen — informal ìwọ/o against formal yín/ẹ.
+    # So the entry stays, now with the divergence data rather than an assertion.
+    #
+    # What DID ship in this window: agent.still_processing and
+    # agent.processor_paused (#1012). Those are new keys, outside this entry's
+    # scope, and they are not the same kind of text — every word in them
+    # (aṣojú ×100, ìdánilójú ×18, ìṣiṣẹ́ ×12, Olùṣàgbékalẹ̀ ×3, ìlà ìdúró ×2) was
+    # already in yo.json. Recall, not invention. That is the line: this locale
+    # can take vocabulary the bundle already carries, and cannot take coinage.
+    "yo": "8 loanword-transliteration strings held for a native speaker; 2,991 shipped",
+    # my: entry REMOVED — the bundle is complete (2,999 of 2,999). The previous
+    # withdrawal was a translator's judgement on its OWN output, not a finding
+    # about Burmese; a fresh pass produced all 55 outstanding strings, and they
+    # were checked against this bundle's established conventions rather than
+    # merely against the schema: the four Latin-script runs it leaves in place
+    # ("Processor", "ID", "request header", "command") are consistent with the
+    # 3,176 such runs already in my.json, so they are house style, not leakage.
+    #
+    # Stated plainly because the distinction matters to whoever reads this next:
+    # that is a STRUCTURAL and STYLISTIC clearance, not a native reading. No
+    # Burmese speaker has certified this text. If one ever does and finds it
+    # wanting, the honest fix is to withhold again, not to defend the pass.
+}
+
+
+
+import pytest
+
+# Project root for file lookups
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+
+
+def get_supported_languages() -> List[str]:
+    """Get list of supported languages from manifest.json (excluding 'en')."""
+    manifest_path = PROJECT_ROOT / "ciris_engine" / "data" / "localized" / "manifest.json"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    return sorted([code for code in manifest.get("languages", {}).keys() if code != "en"])
+
+
+def get_all_languages() -> List[str]:
+    """Get list of all languages from manifest.json (including 'en')."""
+    manifest_path = PROJECT_ROOT / "ciris_engine" / "data" / "localized" / "manifest.json"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    return sorted(manifest.get("languages", {}).keys())
+
+
+# Dynamic language lists from manifest
+SUPPORTED_LANGUAGES = get_supported_languages()
+ALL_LANGUAGES = get_all_languages()
+
+
+def get_nested_keys(obj: dict, prefix: str = "") -> Set[str]:
+    """Extract all nested keys from a dict using dot notation."""
+    keys = set()
+    for k, v in obj.items():
+        full_key = f"{prefix}{k}" if prefix else k
+        if isinstance(v, dict):
+            keys.update(get_nested_keys(v, f"{full_key}."))
+        else:
+            keys.add(full_key)
+    return keys
+
+
+#: ``prompts.language_guidance`` is DUAL-SHAPED since #997: an ordered dict of
+#: single-class parts in the five locales whose prose partitions on the English
+#: boundaries (en, es, fr, it, pt), the original single scalar in the other 24.
+#: Both compose the SAME block byte for byte — the split changes what a research
+#: ablation can address, not what the model receives — so for key-parity
+#: purposes the two shapes are one key. Pinned by
+#: ``test_language_guidance_split_997.py``, which hashes the composed block in
+#: all 29 locales against its pre-split value.
+_LANGUAGE_GUIDANCE = "prompts.language_guidance"
+
+
+def collapse_dual_shaped(keys: Set[str]) -> Set[str]:
+    """Fold ``prompts.language_guidance.<part>`` back onto its parent key."""
+    prefix = f"{_LANGUAGE_GUIDANCE}."
+    folded = {k for k in keys if not k.startswith(prefix)}
+    if len(folded) != len(keys):
+        folded.add(_LANGUAGE_GUIDANCE)
+    return folded
+
+
+def check_duplicate_keys(filepath: Path) -> list:
+    """Check for duplicate keys in JSON file by parsing raw content."""
+    duplicates = []
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Use json decoder with custom object_pairs_hook to detect duplicates
+    def detect_duplicates(pairs):
+        seen = {}
+        for key, value in pairs:
+            if key in seen:
+                duplicates.append(key)
+            seen[key] = value
+        return seen
+
+    json.loads(content, object_pairs_hook=detect_duplicates)
+    return duplicates
+
+
+class TestLocalizationKeyCompleteness:
+    """Tests that all language files have complete key coverage."""
+
+    @pytest.fixture(scope="class")
+    def localization_dir(self) -> Path:
+        """Get the localization directory.
+
+        Source-of-truth was moved into the package in 2.8.8 — the JSON files
+        live at ``ciris_engine/data/localized/*.json`` (git-tracked, packaged
+        via ``setup.py::package_data``). Previously they were authored at
+        ``localization/*.json`` (gitignored copy at the package path) and a
+        custom ``build_py`` step copied them in at wheel-build time, which
+        produced the sign-vs-install drift CIRISAgent#744 closed.
+        """
+        return PROJECT_ROOT / "ciris_engine" / "data" / "localized"
+
+    @pytest.fixture(scope="class")
+    def english_keys(self, localization_dir: Path) -> Set[str]:
+        """Load all keys from the English source file."""
+        en_path = localization_dir / "en.json"
+        with open(en_path, "r", encoding="utf-8") as f:
+            en_data = json.load(f)
+        return get_nested_keys(en_data)
+
+    @pytest.fixture(scope="class")
+    def language_files(self, localization_dir: Path) -> list:
+        """Get all language JSON files except manifest."""
+        return [f for f in localization_dir.glob("*.json") if f.name != "manifest.json" and f.name != "en.json"]
+
+    def test_english_has_expected_key_count(self, english_keys: Set[str]):
+        """Verify English has the expected number of keys."""
+        # As of current version, we expect ~1257 keys
+        assert len(english_keys) >= 1200, f"English has only {len(english_keys)} keys"
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_language_has_all_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
+        """Test that a language file has all keys from English."""
+        lang_path = localization_dir / f"{lang_code}.json"
+        if not lang_path.exists():
+            pytest.skip(f"{lang_code}.json does not exist yet")
+
+        with open(lang_path, "r", encoding="utf-8") as f:
+            lang_data = json.load(f)
+
+        lang_keys = collapse_dual_shaped(get_nested_keys(lang_data))
+        missing = collapse_dual_shaped(english_keys) - lang_keys
+
+        if lang_code in WITHHELD_LOCALES and missing:
+            pytest.xfail(
+                f"{lang_code} is WITHHELD ({WITHHELD_LOCALES[lang_code]}); "
+                f"{len(missing)} key(s) fall back to English by design"
+            )
+
+        assert len(missing) == 0, (
+            f"{lang_code}.json is missing {len(missing)} keys. " f"First 10 missing: {sorted(missing)[:10]}"
+        )
+
+    @pytest.mark.parametrize("lang_code", ALL_LANGUAGES)
+    def test_no_extra_keys(self, localization_dir: Path, english_keys: Set[str], lang_code: str):
+        """Test that a language file has no extra keys not in English."""
+        lang_path = localization_dir / f"{lang_code}.json"
+        if not lang_path.exists():
+            pytest.skip(f"{lang_code}.json does not exist yet")
+
+        with open(lang_path, "r", encoding="utf-8") as f:
+            lang_data = json.load(f)
+
+        lang_keys = collapse_dual_shaped(get_nested_keys(lang_data))
+        extra = lang_keys - collapse_dual_shaped(english_keys)
+
+        # Allow _meta keys which may vary
+        extra = {k for k in extra if not k.startswith("_meta")}
+
+        assert len(extra) == 0, f"{lang_code}.json has {len(extra)} extra keys. " f"Extra keys: {sorted(extra)[:10]}"
+
+    @pytest.mark.parametrize("lang_code", ALL_LANGUAGES)
+    def test_no_duplicate_keys(self, localization_dir: Path, lang_code: str):
+        """Test that language files have no duplicate keys."""
+        lang_path = localization_dir / f"{lang_code}.json"
+        if not lang_path.exists():
+            pytest.skip(f"{lang_code}.json does not exist yet")
+
+        duplicates = check_duplicate_keys(lang_path)
+        assert len(duplicates) == 0, f"{lang_code}.json has duplicate keys: {duplicates}"
+
+
+class TestACCORDCompleteness:
+    """Tests that ACCORD translations are complete."""
+
+    @pytest.fixture(scope="class")
+    def data_dir(self) -> Path:
+        """Get the data directory."""
+        return PROJECT_ROOT / "ciris_engine" / "data"
+
+    @pytest.fixture(scope="class")
+    def english_accord_lines(self, data_dir: Path) -> int:
+        """Get line count of English ACCORD."""
+        # The English canon is localized/accord_1.2b_en.txt; the root-level
+        # accord_1.2b.txt was an unloaded duplicate carrying withdrawn claims.
+        en_path = data_dir / "localized" / "accord_1.2b_en.txt"
+        with open(en_path, "r", encoding="utf-8") as f:
+            return len(f.readlines())
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_accord_translation_complete(self, data_dir: Path, english_accord_lines: int, lang_code: str):
+        """Test that ACCORD translation has similar line count to English."""
+        localized_dir = data_dir / "localized"
+        accord_path = localized_dir / f"accord_1.2b_{lang_code}.txt"
+
+        if not accord_path.exists():
+            pytest.skip(f"accord_1.2b_{lang_code}.txt does not exist yet")
+
+        with open(accord_path, "r", encoding="utf-8") as f:
+            lang_lines = len(f.readlines())
+
+        # Allow 10% variance for translation expansion/contraction
+        min_lines = int(english_accord_lines * 0.9)
+        max_lines = int(english_accord_lines * 1.1)
+
+        assert min_lines <= lang_lines <= max_lines, (
+            f"accord_1.2b_{lang_code}.txt has {lang_lines} lines, "
+            f"expected ~{english_accord_lines} (English reference)"
+        )
+
+
+class TestGuideCompleteness:
+    """Tests that Comprehensive Guide translations are complete."""
+
+    @pytest.fixture(scope="class")
+    def data_dir(self) -> Path:
+        """Get the data directory."""
+        return PROJECT_ROOT / "ciris_engine" / "data"
+
+    @pytest.fixture(scope="class")
+    def english_guide_lines(self, data_dir: Path) -> int:
+        """Get line count of English Guide.
+
+        Path migrated in 2.8.5: was repo-root ``CIRIS_COMPREHENSIVE_GUIDE.md``
+        (not shipped in the wheel — broken on installs); now lives at
+        ``ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE.txt``
+        alongside the locale variants. Extension changed .md → .txt
+        (load-bearing markdown migrated to .txt; .md is now devnotes only).
+        """
+        en_path = data_dir / "localized" / "CIRIS_COMPREHENSIVE_GUIDE.txt"
+        if not en_path.exists():
+            return 560  # Expected line count
+        with open(en_path, "r", encoding="utf-8") as f:
+            return len(f.readlines())
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_guide_translation_exists(self, data_dir: Path, lang_code: str):
+        """Test that Guide translation exists."""
+        # 2.8.5: extension migrated .md → .txt (parity with accord_*.txt convention).
+        localized_dir = data_dir / "localized"
+        guide_path = localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt"
+
+        assert guide_path.exists(), f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt does not exist"
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_guide_translation_complete(self, data_dir: Path, english_guide_lines: int, lang_code: str):
+        """Test that Guide translation has reasonable line count."""
+        localized_dir = data_dir / "localized"
+        guide_path = localized_dir / f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt"
+
+        if not guide_path.exists():
+            pytest.skip(f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt does not exist yet")
+
+        with open(guide_path, "r", encoding="utf-8") as f:
+            lang_lines = len(f.readlines())
+
+        # Allow 20% variance for translation expansion/contraction
+        min_lines = int(english_guide_lines * 0.8)
+
+        assert lang_lines >= min_lines, (
+            f"CIRIS_COMPREHENSIVE_GUIDE_{lang_code}.txt has only {lang_lines} lines, "
+            f"expected at least {min_lines} (English has {english_guide_lines})"
+        )
+
+
+class TestDMAPromptCompleteness:
+    """Tests that DMA prompt translations are complete."""
+
+    @pytest.fixture(scope="class")
+    def prompts_dir(self) -> Path:
+        """Get the DMA prompts directory."""
+        return PROJECT_ROOT / "ciris_engine" / "logic" / "dma" / "prompts"
+
+    @pytest.fixture(scope="class")
+    def english_prompt_files(self, prompts_dir: Path) -> list:
+        """Get list of English prompt files."""
+        return [f.name for f in prompts_dir.glob("*.yml") if f.is_file()]
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_dma_prompts_directory_exists(self, prompts_dir: Path, lang_code: str):
+        """Test that localized DMA prompts directory exists."""
+        localized_dir = prompts_dir / "localized" / lang_code
+        assert localized_dir.exists(), f"DMA prompts directory for {lang_code} does not exist"
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_dma_prompts_complete(self, prompts_dir: Path, english_prompt_files: list, lang_code: str):
+        """Test that all English prompt files exist in localized directory."""
+        localized_dir = prompts_dir / "localized" / lang_code
+
+        if not localized_dir.exists():
+            pytest.skip(f"DMA prompts directory for {lang_code} does not exist yet")
+
+        localized_files = [f.name for f in localized_dir.glob("*.yml")]
+        missing = set(english_prompt_files) - set(localized_files)
+
+        # Filter out test/example files that may not need translation
+        missing = {f for f in missing if not f.startswith("test_")}
+
+        assert len(missing) == 0, f"{lang_code} DMA prompts missing {len(missing)} files: {missing}"
+
+
+class TestGlossaryCompleteness:
+    """Tests that translation glossaries exist for all languages."""
+
+    @pytest.fixture(scope="class")
+    def glossary_dir(self) -> Path:
+        """Get the glossary directory."""
+        return PROJECT_ROOT / "docs" / "localization" / "glossaries"
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_glossary_exists(self, glossary_dir: Path, lang_code: str):
+        """Test that glossary exists for each language."""
+        glossary_path = glossary_dir / f"{lang_code}_glossary.md"
+        assert glossary_path.exists(), f"Glossary for {lang_code} does not exist"
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_glossary_has_content(self, glossary_dir: Path, lang_code: str):
+        """Test that glossary has meaningful content."""
+        glossary_path = glossary_dir / f"{lang_code}_glossary.md"
+
+        if not glossary_path.exists():
+            pytest.skip(f"Glossary for {lang_code} does not exist yet")
+
+        with open(glossary_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Check for expected sections
+        assert "Core Action Verbs" in content, f"{lang_code} glossary missing Core Action Verbs"
+        assert "Core Concepts" in content, f"{lang_code} glossary missing Core Concepts"
+        assert len(content) > 3000, f"{lang_code} glossary seems too short ({len(content)} chars)"

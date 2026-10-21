@@ -1,5 +1,6 @@
 """SQL Tool Service for external data access - Refactored with dialects."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -12,7 +13,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from ciris_engine.logic.audit.signature_manager import AuditSignatureManager
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services import TimeServiceProtocol, ToolService
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
@@ -83,10 +83,11 @@ class SQLToolService(BaseService, ToolService):
         self._schema_loader = PrivacySchemaLoader()
         self._privacy_schema_path = privacy_schema_path
 
-        # Signature manager for GDPR deletion verification (RSA-PSS signatures)
-        self._signature_manager: Optional[AuditSignatureManager] = None
-        self._signature_key_path = Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "sql_deletion_keys"
-        self._signature_db_path = str(Path(os.environ.get("CIRIS_DATA_DIR", "data")) / "ciris.db")
+        # Signer for GDPR deletion verification. 2.9.7 (second-signer
+        # removal): the persist Engine's local Ed25519 signer — the same
+        # federation-registered identity that signs audit entries. The
+        # legacy CIRISVerifySigner (agent-{sha12}) was deleted.
+        self._signer: Optional[Any] = None  # persist Engine (local_sign surface)
 
         # Result tracking and tool metadata
         self._results: Dict[str, ToolExecutionResult] = {}
@@ -126,22 +127,19 @@ class SQLToolService(BaseService, ToolService):
         self._logger.info(f"SQLToolService has {len(self._tool_schemas)} tool schemas ready")
         self._logger.info(f"SQLToolService has {len(self._tool_info)} tool info objects ready")
 
-        # Initialize signature manager for GDPR deletion verification
-        if self._time_service:
-            try:
-                self._signature_manager = AuditSignatureManager(
-                    key_path=str(self._signature_key_path),
-                    db_path=self._signature_db_path,
-                    time_service=self._time_service,
-                )
-                self._signature_manager.initialize()
-                logger.info(f"Initialized deletion signature manager with key ID: {self._signature_manager.key_id}")
-            except Exception as e:
-                logger.warning(f"Failed to initialize signature manager: {e}. Signatures will not be available.")
-                self._signature_manager = None
-        else:
-            logger.warning("Time service not available - deletion verification signatures unavailable")
-            self._signature_manager = None
+        # Initialize the engine-backed signer for GDPR deletion verification.
+        try:
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+            self._signer = get_persist_engine()
+            if self._signer is None:
+                raise RuntimeError("persist engine not wired")
+            logger.info(
+                f"Initialized deletion signer via persist engine (key: {str(self._signer.local_derived_key_id())[:8]}...)"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize deletion signer: {e}. Signatures will not be available.")
+            self._signer = None
 
         if self._config:
             # Initialize dialect
@@ -384,15 +382,23 @@ class SQLToolService(BaseService, ToolService):
                     correlation_id=correlation_id,
                 )
 
-            # Load privacy schema if path provided
+            # Load privacy schema from path or dict
             privacy_schema = None
-            if privacy_schema_path and isinstance(privacy_schema_path, str):
-                try:
-                    with open(privacy_schema_path, "r") as f:
-                        import yaml
+            privacy_schema_dict = parameters.get("privacy_schema")
 
-                        schema_data = yaml.safe_load(f)
-                        privacy_schema = PrivacySchemaConfig(**schema_data)
+            # Option 1: Load from file path
+            if privacy_schema_path and isinstance(privacy_schema_path, str):
+                def _load_schema(path: str) -> Any:
+                    import yaml
+
+                    with open(path, "r") as f:
+                        return yaml.safe_load(f)
+
+                try:
+                    # Off the event loop (Sonar python:S7493): a synchronous read
+                    # blocks every other coroutine for the duration of the I/O.
+                    schema_data = await asyncio.to_thread(_load_schema, privacy_schema_path)
+                    privacy_schema = PrivacySchemaConfig(**schema_data)
                 except Exception as e:
                     self._logger.error(f"Failed to load privacy schema from {privacy_schema_path}: {e}")
                     return ToolExecutionResult(
@@ -401,6 +407,20 @@ class SQLToolService(BaseService, ToolService):
                         success=False,
                         data={},
                         error=f"Failed to load privacy schema: {str(e)}",
+                        correlation_id=correlation_id,
+                    )
+            # Option 2: Load from dict directly
+            elif privacy_schema_dict and isinstance(privacy_schema_dict, dict):
+                try:
+                    privacy_schema = PrivacySchemaConfig(**privacy_schema_dict)
+                except Exception as e:
+                    self._logger.error(f"Failed to parse privacy schema dict: {e}")
+                    return ToolExecutionResult(
+                        tool_name="initialize_sql_connector",
+                        status=ToolExecutionStatus.FAILED,
+                        success=False,
+                        data={},
+                        error=f"Failed to parse privacy schema: {str(e)}",
                         correlation_id=correlation_id,
                     )
 
@@ -990,44 +1010,57 @@ class SQLToolService(BaseService, ToolService):
 
             zero_data_confirmed = len(remaining_data) == 0
 
-            # Check if time_service is available
+            # This timestamp is signed into a GDPR Article 17 deletion proof, so it
+            # must come from the injected clock when there is one. Both branches were
+            # byte-identical -- the comment claimed TimeServiceProtocol had no suitable
+            # method, but it has now_iso() -- so the service was injected and then
+            # ignored, and the signed proof carried a wall clock no test could control.
             if self._time_service is None:
-                # Fallback timestamp using datetime
-                from datetime import datetime
+                from datetime import datetime, timezone
 
-                timestamp = datetime.utcnow().isoformat() + "Z"
+                # utcnow() is deprecated and returns a naive datetime.
+                timestamp = datetime.now(timezone.utc).isoformat()
             else:
-                # Try to get timestamp from time service
-                # TimeServiceProtocol doesn't have get_utc_timestamp_str, use alternative
-                from datetime import datetime
+                timestamp = self._time_service.now_iso()
+            # Normalise both to a trailing Z so the signed payload is stable.
+            timestamp = timestamp.replace("+00:00", "Z")
 
-                timestamp = datetime.utcnow().isoformat() + "Z"
-
-            # Generate RSA-PSS signature for GDPR Article 17 deletion verification
+            # Generate Ed25519 signature for GDPR Article 17 deletion verification
             cryptographic_proof = None
             if sign and zero_data_confirmed:
-                if self._signature_manager:
+                if self._signer is not None:
                     try:
                         # Create deterministic hash of verification data
                         verification_data = (
                             f"{user_identifier}|{timestamp}|{zero_data_confirmed}|{','.join(sorted(tables_scanned))}"
                         )
-                        data_hash = hashlib.sha256(verification_data.encode("utf-8")).hexdigest()
+                        data_hash = hashlib.sha256(verification_data.encode("utf-8")).digest()
 
-                        # Sign the hash using RSA-PSS
-                        signature = self._signature_manager.sign_entry(data_hash)
-                        key_id = self._signature_manager.key_id or "unknown"
-                        cryptographic_proof = f"rsa-pss:{key_id}:{signature}"
+                        # Sign the hash via the persist Engine's local signer
+                        # (2.9.7: the ONE federation-registered signer identity).
+                        # Through substrate_signing because that ONE identity's
+                        # classical half is keystore-sealed, and the sync verb
+                        # refuses a sealed key permanently. Same 64 Ed25519 bytes,
+                        # so the `ed25519:<key_id>:<sig>` proof format is unchanged.
+                        from ciris_engine.logic.utils import substrate_signing
+
+                        signature_bytes = substrate_signing.sign_classical(self._signer, data_hash)
+                        import base64 as _b64
+
+                        signature_b64 = _b64.b64encode(signature_bytes).decode("ascii")
+                        key_id = str(self._signer.local_derived_key_id())
+                        algo = "ed25519"
+                        cryptographic_proof = f"{algo}:{key_id}:{signature_b64}"
 
                         logger.info(
                             f"Generated deletion verification signature for {user_identifier} "
-                            f"(key: {key_id[:8]}...)"
+                            f"({algo} key: {key_id[:8]}...)"
                         )
                     except Exception as e:
                         logger.error(f"Failed to generate deletion verification signature: {e}")
                         cryptographic_proof = None
                 else:
-                    logger.warning("Signature manager not available - deletion verification signature unavailable")
+                    logger.warning("Deletion signer not available - verification signature unavailable")
 
             verification_result = SQLVerificationResult(
                 success=True,

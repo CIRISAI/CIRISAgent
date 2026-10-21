@@ -6,14 +6,18 @@ Provides information about available tools from all tool providers.
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Set, Tuple
+from typing import Annotated, Any, Dict, List, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ciris_engine.schemas.api.auth import AuthContext
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.types import JSONDict
 
-from ...dependencies.auth import AuthContext, require_observer
+from ...dependencies.auth import require_observer
+
+# Annotated type alias for FastAPI dependency injection (S8410)
+AuthObserverDep = Annotated[AuthContext, Depends(require_observer)]
 from .schemas import ToolInfoResponse
 
 logger = logging.getLogger(__name__)
@@ -112,8 +116,8 @@ def _build_tools_response(unique_tools: List[ToolInfoResponse], tool_providers: 
     }
 
 
-@router.get("/tools")
-async def get_available_tools(request: Request, auth: AuthContext = Depends(require_observer)) -> JSONDict:
+@router.get("/tools", responses={500: {"description": "Failed to retrieve tools"}})
+async def get_available_tools(request: Request, auth: AuthObserverDep) -> JSONDict:
     """
     Get list of all available tools from all tool providers.
 

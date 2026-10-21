@@ -45,9 +45,40 @@ class TestSetupSignalHandlers:
         assert sigint_registered
 
     @patch("main.signal.signal")
+    def test_registers_sighup_handler(self, mock_signal):
+        """Should register SIGHUP handler."""
+        from main import setup_signal_handlers
+
+        mock_runtime = MockRuntime()
+        setup_signal_handlers(mock_runtime)
+
+        # Check SIGHUP was registered
+        calls = mock_signal.call_args_list
+        sighup_registered = any(call[0][0] == signal.SIGHUP for call in calls)
+        assert sighup_registered
+
+    @patch("main.signal.signal")
+    def test_registers_sigquit_handler_if_available(self, mock_signal):
+        """Should register SIGQUIT handler if available on platform."""
+        from main import setup_signal_handlers
+
+        mock_runtime = MockRuntime()
+        setup_signal_handlers(mock_runtime)
+
+        # Check SIGQUIT was registered (if available)
+        if hasattr(signal, "SIGQUIT"):
+            calls = mock_signal.call_args_list
+            sigquit_registered = any(call[0][0] == signal.SIGQUIT for call in calls)
+            assert sigquit_registered
+
+    @patch("main.signal.signal")
     def test_signal_handler_requests_shutdown(self, mock_signal):
         """Signal handler should request graceful shutdown."""
+        import main
         from main import setup_signal_handlers
+
+        # Reset the shutdown reason flag for this test
+        main._shutdown_reason_logged["value"] = False
 
         mock_runtime = MockRuntime()
         setup_signal_handlers(mock_runtime)
@@ -66,7 +97,32 @@ class TestSetupSignalHandlers:
 
         # Should have requested shutdown
         assert mock_runtime._shutdown_reason is not None
-        assert "Signal" in mock_runtime._shutdown_reason or str(signal.SIGTERM) in mock_runtime._shutdown_reason
+        assert "SIGTERM" in mock_runtime._shutdown_reason
+
+    @patch("main.signal.signal")
+    def test_signal_handler_sets_shutdown_reason_logged(self, mock_signal):
+        """Signal handler should set _shutdown_reason_logged flag."""
+        import main
+        from main import setup_signal_handlers
+
+        # Reset the flag
+        main._shutdown_reason_logged["value"] = False
+
+        mock_runtime = MockRuntime()
+        setup_signal_handlers(mock_runtime)
+
+        # Get the registered handler
+        signal_handler = None
+        for call in mock_signal.call_args_list:
+            if call[0][0] == signal.SIGTERM:
+                signal_handler = call[0][1]
+                break
+
+        # Trigger the signal handler
+        signal_handler(signal.SIGTERM, None)
+
+        # Should have set the flag
+        assert main._shutdown_reason_logged["value"] is True
 
     @patch("main.signal.signal")
     def test_second_signal_raises_keyboard_interrupt(self, mock_signal):
@@ -114,6 +170,56 @@ class TestSetupSignalHandlers:
         # Should raise KeyboardInterrupt even when shutdown fails
         with pytest.raises(KeyboardInterrupt, match="Shutdown error"):
             signal_handler(signal.SIGTERM, None)
+
+
+class TestAtexitHandler:
+    """Test atexit handler for shutdown logging."""
+
+    def test_atexit_handler_logs_warning_when_no_shutdown_reason(self):
+        """Should log critical warning when no shutdown reason was logged."""
+        import main
+
+        # Reset the flag to simulate unexpected exit
+        main._shutdown_reason_logged["value"] = False
+
+        with patch("main.logger") as mock_logger:
+            main._atexit_handler()
+
+            # Should have logged critical warning
+            assert mock_logger.critical.call_count >= 1
+            critical_calls = [str(call) for call in mock_logger.critical.call_args_list]
+            assert any("no shutdown signal logged" in str(call) for call in critical_calls)
+
+    def test_atexit_handler_logs_normal_exit_when_reason_logged(self):
+        """Should log normal exit when shutdown reason was logged."""
+        import main
+
+        # Set the flag to simulate normal shutdown
+        main._shutdown_reason_logged["value"] = True
+
+        with patch("main.logger") as mock_logger:
+            main._atexit_handler()
+
+            # Should have logged info, not critical
+            assert mock_logger.info.call_count >= 1
+            info_calls = [str(call) for call in mock_logger.info.call_args_list]
+            assert any("exiting normally" in str(call) for call in info_calls)
+
+    def test_atexit_handler_includes_pid(self):
+        """Should include PID in log messages."""
+        import os
+
+        import main
+
+        main._shutdown_reason_logged["value"] = False
+
+        with patch("main.logger") as mock_logger:
+            main._atexit_handler()
+
+            # Check that PID is in the log message
+            critical_calls = [str(call) for call in mock_logger.critical.call_args_list]
+            pid_str = f"PID={os.getpid()}"
+            assert any(pid_str in str(call) for call in critical_calls)
 
 
 class TestSetupGlobalExceptionHandler:
@@ -362,12 +468,14 @@ class TestRunRuntime:
         mock_runtime.shutdown = AsyncMock()
 
         async def slow_run(rounds):
-            await asyncio.sleep(10)  # Longer than timeout
+            # Use a short sleep that is still longer than timeout
+            # This makes the test run faster while still testing timeout behavior
+            await asyncio.sleep(0.2)
 
         mock_runtime.run = slow_run
 
-        # 0.5 second timeout
-        await _run_runtime(mock_runtime, timeout=0.5, num_rounds=1)
+        # 0.05 second timeout (run function takes 0.2s, so this will timeout)
+        await _run_runtime(mock_runtime, timeout=0.05, num_rounds=1)
 
         # Should have requested shutdown
         assert mock_runtime._shutdown_reason is not None

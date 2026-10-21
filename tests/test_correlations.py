@@ -6,13 +6,15 @@ These tests align with CIRIS principles:
 - Database integrity
 - Error handling
 - Backward compatibility
+
+Migrated for 2.9.0 A1 absorption: correlations.py now routes through the
+ciris-persist substrate. Tests use the shared `persist_engine` fixture
+(wires a real persist Engine module-global) instead of raw sqlite3 temp DBs.
 """
 
 import json
-import tempfile
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -33,7 +35,6 @@ from ciris_engine.logic.persistence.models.correlations import (
     update_correlation,
 )
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest, MetricsQuery
-from ciris_engine.schemas.persistence.correlations import ChannelInfo
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     LogData,
@@ -47,46 +48,15 @@ from ciris_engine.schemas.telemetry.core import (
 
 
 @pytest.fixture
-def temp_db():
-    """Create a temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-        db_path = tmp.name
+def temp_db(persist_engine):
+    """Compat alias — older tests parameterize on `temp_db` for the db_path.
 
-    # Initialize database schema
-    from ciris_engine.logic.persistence.db import get_db_connection
-
-    with get_db_connection(db_path=db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS service_correlations (
-                correlation_id TEXT PRIMARY KEY,
-                service_type TEXT,
-                handler_name TEXT,
-                action_type TEXT,
-                request_data TEXT,
-                response_data TEXT,
-                status TEXT,
-                created_at TEXT,
-                updated_at TEXT,
-                correlation_type TEXT,
-                timestamp TEXT,
-                metric_name TEXT,
-                metric_value REAL,
-                log_level TEXT,
-                trace_id TEXT,
-                span_id TEXT,
-                parent_span_id TEXT,
-                tags TEXT,
-                retention_policy TEXT
-            )
-        """
-        )
-        conn.commit()
-
-    yield db_path
-
-    # Cleanup
-    Path(db_path).unlink(missing_ok=True)
+    Under the migrated implementation, `db_path` is accepted but ignored
+    (the wired persist Engine owns the underlying SQLite database). Yield
+    a non-None placeholder so call sites that pass `db_path=temp_db`
+    continue to work without code changes.
+    """
+    return "<persist-engine-wired>"
 
 
 @pytest.fixture
@@ -132,9 +102,7 @@ def telemetry_service():
     from unittest.mock import AsyncMock
 
     service = MagicMock()
-    # Add the _store_correlation method that add_correlation_with_telemetry expects
     service._store_correlation = AsyncMock(return_value="success")
-    # Also add memorize_metric for other tests that might need it
     service.memorize_metric = AsyncMock(return_value="success")
     return service
 
@@ -206,23 +174,19 @@ def correlation_factory():
 
 
 @pytest.fixture
-def populated_db(temp_db, correlation_factory):
+def populated_db(persist_engine, correlation_factory):
     """Database with sample correlations for testing."""
     base_time = datetime.now(timezone.utc)
 
-    # Add diverse correlations for various test scenarios
     correlations = [
-        # Standard correlations
         correlation_factory("std_001", timestamp=base_time - timedelta(minutes=10)),
         correlation_factory("std_002", timestamp=base_time - timedelta(minutes=5)),
-        # API channel correlations
         correlation_factory(
             "api_001", channel_id="api_channel_123", action_type="speak", timestamp=base_time - timedelta(hours=1)
         ),
         correlation_factory(
             "api_002", channel_id="api_channel_123", action_type="observe", timestamp=base_time - timedelta(minutes=30)
         ),
-        # Different service types
         correlation_factory("llm_001", service_type="llm", action_type="think"),
         correlation_factory(
             "tel_001",
@@ -232,31 +196,26 @@ def populated_db(temp_db, correlation_factory):
                 metric_name="test_metric", metric_value=42.0, metric_unit="count", metric_type="gauge", labels={}
             ),
         ),
-        # Admin channel correlation
         correlation_factory("admin_001", channel_id="api_admin_channel", tags={"user_role": "ADMIN", "test": "true"}),
-        # Failed correlation
         correlation_factory("failed_001", status=ServiceCorrelationStatus.FAILED),
     ]
 
     for corr in correlations:
-        add_correlation(corr, db_path=temp_db)
+        add_correlation(corr)
 
-    return temp_db
+    return "<persist-engine-wired>"
 
 
 class TestParseResponseData:
     """Test _parse_response_data function."""
 
     def test_parse_none_returns_none(self):
-        """Test that None input returns None."""
         assert _parse_response_data(None) is None
 
     def test_parse_empty_dict_returns_none(self):
-        """Test that empty dict returns None."""
         assert _parse_response_data({}) is None
 
     def test_adds_response_timestamp_if_missing(self):
-        """Test that response_timestamp is added for backward compatibility."""
         data = {"success": True, "error_message": None}
         result = _parse_response_data(data)
 
@@ -265,7 +224,6 @@ class TestParseResponseData:
         assert result["success"] is True
 
     def test_preserves_existing_response_timestamp(self):
-        """Test that existing response_timestamp is preserved."""
         timestamp = datetime.now(timezone.utc).isoformat()
         data = {"success": True, "response_timestamp": timestamp}
         result = _parse_response_data(data)
@@ -274,7 +232,6 @@ class TestParseResponseData:
         assert result["response_timestamp"] == timestamp
 
     def test_uses_provided_timestamp_for_missing(self):
-        """Test that provided timestamp is used when response_timestamp missing."""
         timestamp = datetime.now(timezone.utc)
         data = {"success": False}
         result = _parse_response_data(data, timestamp)
@@ -286,19 +243,16 @@ class TestParseResponseData:
 class TestAddCorrelation:
     """Test add_correlation function."""
 
-    def test_add_correlation_success(self, sample_correlation, time_service, temp_db):
-        """Test successful correlation addition."""
-        correlation_id = add_correlation(sample_correlation, time_service, db_path=temp_db)
+    def test_add_correlation_success(self, sample_correlation, time_service, persist_engine):
+        correlation_id = add_correlation(sample_correlation, time_service)
 
         assert correlation_id == "test_corr_001"
 
-        # Verify it was added to database
-        retrieved = get_correlation(correlation_id, db_path=temp_db)
+        retrieved = get_correlation(correlation_id)
         assert retrieved is not None
         assert retrieved.correlation_id == correlation_id
 
-    def test_add_correlation_with_metric_data(self, time_service, temp_db):
-        """Test adding correlation with metric data."""
+    def test_add_correlation_with_metric_data(self, time_service, persist_engine):
         correlation = ServiceCorrelation(
             correlation_id="metric_corr_001",
             service_type="telemetry",
@@ -318,17 +272,16 @@ class TestAddCorrelation:
             ),
         )
 
-        correlation_id = add_correlation(correlation, time_service, db_path=temp_db)
+        correlation_id = add_correlation(correlation, time_service)
         assert correlation_id == "metric_corr_001"
 
-        retrieved = get_correlation(correlation_id, db_path=temp_db)
+        retrieved = get_correlation(correlation_id)
         assert retrieved is not None
         assert retrieved.metric_data is not None
         assert retrieved.metric_data.metric_name == "test_metric"
         assert retrieved.metric_data.metric_value == 42.5
 
-    def test_add_correlation_with_trace_context(self, time_service, temp_db):
-        """Test adding correlation with trace context."""
+    def test_add_correlation_with_trace_context(self, time_service, persist_engine):
         correlation = ServiceCorrelation(
             correlation_id="trace_corr_001",
             service_type="api",
@@ -344,59 +297,75 @@ class TestAddCorrelation:
             ),
         )
 
-        correlation_id = add_correlation(correlation, time_service, db_path=temp_db)
+        correlation_id = add_correlation(correlation, time_service)
         assert correlation_id == "trace_corr_001"
 
-        retrieved = get_correlation(correlation_id, db_path=temp_db)
+        retrieved = get_correlation(correlation_id)
         assert retrieved is not None
         assert retrieved.trace_context is not None
         assert retrieved.trace_context.trace_id == "trace_123"
         assert retrieved.trace_context.span_id == "span_456"
         assert retrieved.trace_context.parent_span_id == "parent_789"
 
-    def test_add_correlation_handles_exception(self, sample_correlation, time_service):
-        """Test that exceptions are handled properly."""
-        with patch("ciris_engine.logic.persistence.models.correlations.get_db_connection") as mock_db:
-            mock_db.side_effect = Exception("Database error")
-
+    def test_add_correlation_handles_exception(self, sample_correlation, time_service, persist_engine):
+        """Exceptions from the persist engine propagate."""
+        mock_engine = MagicMock()
+        mock_engine.correlation_record.side_effect = Exception("Engine error")
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations._get_engine",
+            return_value=mock_engine,
+        ):
             with pytest.raises(Exception) as exc_info:
                 add_correlation(sample_correlation, time_service)
 
-            assert "Database error" in str(exc_info.value)
+            assert "Engine error" in str(exc_info.value)
 
 
 class TestUpdateCorrelation:
     """Test update_correlation function."""
 
-    def test_update_with_new_signature(self, time_service, temp_db, sample_correlation):
-        """Test update with new CorrelationUpdateRequest signature."""
-        # First add a correlation
-        add_correlation(sample_correlation, time_service, db_path=temp_db)
+    def test_update_with_new_signature(self, time_service, persist_engine, sample_correlation):
+        """status + response_data update via persist's correlation_update_status.
 
-        # Update it
+        Note: persist's contract is `correlation_record` insert-only and
+        `correlation_update_status` mutates only `status` + `response_data`,
+        so the `tags` and `metric_value` fields on CorrelationUpdateRequest
+        are no-ops on the persisted row (production code never sets them on
+        update). The legacy SQL implementation did support them.
+        """
+        add_correlation(sample_correlation, time_service)
+
         update_request = CorrelationUpdateRequest(
             correlation_id="test_corr_001",
             status=ServiceCorrelationStatus.FAILED,
             response_data={"success": "false", "error_message": "Test error", "execution_time_ms": "200.5"},
-            metric_value=200.5,
-            tags={"updated": "true"},
         )
 
-        result = update_correlation(update_request, time_service, db_path=temp_db)
+        result = update_correlation(update_request, time_service)
         assert result is True
 
-        # Verify update
-        retrieved = get_correlation("test_corr_001", db_path=temp_db)
+        retrieved = get_correlation("test_corr_001")
         assert retrieved is not None
         assert retrieved.status == ServiceCorrelationStatus.FAILED
-        assert retrieved.tags["updated"] == "true"
 
-    def test_update_with_old_signature(self, time_service, temp_db, sample_correlation):
-        """Test backward compatibility with old signature."""
-        # First add a correlation
-        add_correlation(sample_correlation, time_service, db_path=temp_db)
+    def test_update_status_only(self, time_service, persist_engine, sample_correlation):
+        """Status-only updates flow through correlation_update_status cleanly."""
+        add_correlation(sample_correlation, time_service)
 
-        # Create an updated correlation
+        update_request = CorrelationUpdateRequest(
+            correlation_id="test_corr_001",
+            status=ServiceCorrelationStatus.FAILED,
+        )
+
+        assert update_correlation(update_request, time_service) is True
+
+        retrieved = get_correlation("test_corr_001")
+        assert retrieved is not None
+        assert retrieved.status == ServiceCorrelationStatus.FAILED
+
+    def test_update_with_old_signature(self, time_service, persist_engine, sample_correlation):
+        add_correlation(sample_correlation, time_service)
+
         updated_corr = ServiceCorrelation(
             correlation_id="test_corr_001",
             service_type="llm",
@@ -415,24 +384,20 @@ class TestUpdateCorrelation:
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        # Use old signature
-        result = update_correlation("test_corr_001", updated_corr, time_service, db_path=temp_db)
+        result = update_correlation("test_corr_001", updated_corr, time_service)
         assert result is True
 
-        # Verify update
-        retrieved = get_correlation("test_corr_001", db_path=temp_db)
+        retrieved = get_correlation("test_corr_001")
         assert retrieved is not None
         assert retrieved.status == ServiceCorrelationStatus.FAILED
 
-    def test_update_nonexistent_returns_false(self, time_service, temp_db):
-        """Test updating non-existent correlation returns False."""
+    def test_update_nonexistent_returns_false(self, time_service, persist_engine):
         update_request = CorrelationUpdateRequest(correlation_id="nonexistent", status=ServiceCorrelationStatus.FAILED)
 
-        result = update_correlation(update_request, time_service, db_path=temp_db)
+        result = update_correlation(update_request, time_service)
         assert result is False
 
     def test_update_invalid_arguments_raises(self):
-        """Test that invalid arguments raise ValueError."""
         with pytest.raises(ValueError) as exc_info:
             update_correlation("invalid", "not_a_correlation")
 
@@ -442,61 +407,35 @@ class TestUpdateCorrelation:
 class TestGetCorrelation:
     """Test get_correlation function."""
 
-    def test_get_existing_correlation(self, sample_correlation, time_service, temp_db):
-        """Test retrieving an existing correlation."""
-        add_correlation(sample_correlation, time_service, db_path=temp_db)
+    def test_get_existing_correlation(self, sample_correlation, time_service, persist_engine):
+        add_correlation(sample_correlation, time_service)
 
-        retrieved = get_correlation("test_corr_001", db_path=temp_db)
+        retrieved = get_correlation("test_corr_001")
         assert retrieved is not None
         assert retrieved.correlation_id == "test_corr_001"
         assert retrieved.service_type == "llm"
         assert retrieved.handler_name == "test_handler"
 
-    def test_get_nonexistent_returns_none(self, temp_db):
-        """Test that non-existent correlation returns None."""
-        retrieved = get_correlation("nonexistent", db_path=temp_db)
+    def test_get_nonexistent_returns_none(self, persist_engine):
+        retrieved = get_correlation("nonexistent")
         assert retrieved is None
 
-    def test_get_handles_malformed_data(self, temp_db):
-        """Test handling of malformed database data."""
-        # Insert malformed data directly
-        from ciris_engine.logic.persistence.db import get_db_connection
-
-        with get_db_connection(db_path=temp_db) as conn:
-            conn.execute(
-                """
-                INSERT INTO service_correlations (
-                    correlation_id, service_type, handler_name, action_type,
-                    request_data, response_data, status, correlation_type,
-                    timestamp, retention_policy
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    "malformed_001",
-                    "test",
-                    "handler",
-                    "action",
-                    "invalid_json",
-                    "{not valid json}",
-                    "COMPLETED",
-                    "service_interaction",
-                    datetime.now(timezone.utc).isoformat(),
-                    "raw",
-                ),
-            )
-            conn.commit()
-
-        # Should handle gracefully
-        retrieved = get_correlation("malformed_001", db_path=temp_db)
-        assert retrieved is None  # Returns None on parse error
+    def test_get_handles_engine_error(self, persist_engine):
+        """Engine-side errors return None gracefully."""
+        mock_engine = MagicMock()
+        mock_engine.correlation_get.side_effect = Exception("Engine down")
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations._get_engine",
+            return_value=mock_engine,
+        ):
+            retrieved = get_correlation("any_id")
+            assert retrieved is None
 
 
 class TestGetCorrelationsByTaskAndAction:
     """Test get_correlations_by_task_and_action function."""
 
-    def test_get_by_task_and_action(self, time_service, temp_db):
-        """Test retrieving correlations by task and action."""
-        # Add multiple correlations
+    def test_get_by_task_and_action(self, time_service, persist_engine):
         for i in range(3):
             correlation = ServiceCorrelation(
                 correlation_id=f"task_corr_{i}",
@@ -517,36 +456,30 @@ class TestGetCorrelationsByTaskAndAction:
                 created_at=datetime.now(timezone.utc).isoformat(),
                 updated_at=datetime.now(timezone.utc).isoformat(),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        # Get all correlations for task
-        correlations = get_correlations_by_task_and_action("task_123", "process", db_path=temp_db)
+        correlations = get_correlations_by_task_and_action("task_123", "process")
         assert len(correlations) == 3
 
-        # Get only completed correlations
         completed = get_correlations_by_task_and_action(
-            "task_123", "process", status=ServiceCorrelationStatus.COMPLETED, db_path=temp_db
+            "task_123", "process", status=ServiceCorrelationStatus.COMPLETED
         )
         assert len(completed) == 2
 
-        # Get only failed correlations
         failed = get_correlations_by_task_and_action(
-            "task_123", "process", status=ServiceCorrelationStatus.FAILED, db_path=temp_db
+            "task_123", "process", status=ServiceCorrelationStatus.FAILED
         )
         assert len(failed) == 1
 
-    def test_get_empty_list_for_no_matches(self, temp_db):
-        """Test that empty list is returned when no matches."""
-        correlations = get_correlations_by_task_and_action("nonexistent_task", "nonexistent_action", db_path=temp_db)
+    def test_get_empty_list_for_no_matches(self, persist_engine):
+        correlations = get_correlations_by_task_and_action("nonexistent_task", "nonexistent_action")
         assert correlations == []
 
 
 class TestGetCorrelationsByTypeAndTime:
     """Test get_correlations_by_type_and_time function."""
 
-    def test_get_by_type_and_time(self, time_service, temp_db):
-        """Test getting correlations by type and time range."""
-        # Add correlations with different timestamps
+    def test_get_by_type_and_time(self, time_service, persist_engine):
         base_time = datetime.now(timezone.utc)
         for i in range(5):
             correlation = ServiceCorrelation(
@@ -562,36 +495,30 @@ class TestGetCorrelationsByTypeAndTime:
                 created_at=(base_time - timedelta(hours=i)).isoformat(),
                 updated_at=(base_time - timedelta(hours=i)).isoformat(),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        # Get service interactions from last 3 hours
-        start_time = base_time - timedelta(hours=3)
-        end_time = base_time
+        start_time = (base_time - timedelta(hours=3)).isoformat()
+        end_time = base_time.isoformat()
 
         service_correlations = get_correlations_by_type_and_time(
             correlation_type=CorrelationType.SERVICE_INTERACTION,
             start_time=start_time,
             end_time=end_time,
-            db_path=temp_db,
         )
-        assert len(service_correlations) == 2  # i=0,2 within 3 hours
+        assert len(service_correlations) == 2  # i=0, 2 within 3 hours
 
-        # Get all metrics
         metric_correlations = get_correlations_by_type_and_time(
             correlation_type=CorrelationType.METRIC_DATAPOINT,
-            start_time=base_time - timedelta(days=1),
-            end_time=base_time,
-            db_path=temp_db,
+            start_time=(base_time - timedelta(days=1)).isoformat(),
+            end_time=base_time.isoformat(),
         )
-        assert len(metric_correlations) == 2  # i=1,3
+        assert len(metric_correlations) == 2  # i=1, 3
 
 
 class TestGetCorrelationsByChannel:
     """Test get_correlations_by_channel function."""
 
-    def test_get_by_channel(self, time_service, temp_db):
-        """Test getting correlations by channel ID."""
-        # Add correlations for different channels
+    def test_get_by_channel(self, time_service, persist_engine):
         channels = ["channel_123", "channel_123", "channel_456", "channel_123"]
         for i, channel_id in enumerate(channels):
             correlation = ServiceCorrelation(
@@ -613,14 +540,12 @@ class TestGetCorrelationsByChannel:
                 created_at=datetime.now(timezone.utc).isoformat(),
                 updated_at=datetime.now(timezone.utc).isoformat(),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        # Get correlations for channel_123
-        channel_correlations = get_correlations_by_channel("channel_123", db_path=temp_db)
+        channel_correlations = get_correlations_by_channel("channel_123")
         assert len(channel_correlations) == 3
 
-        # Get correlations for channel_456
-        other_correlations = get_correlations_by_channel("channel_456", db_path=temp_db)
+        other_correlations = get_correlations_by_channel("channel_456")
         assert len(other_correlations) == 1
         assert other_correlations[0].correlation_id == "channel_corr_2"
 
@@ -628,9 +553,7 @@ class TestGetCorrelationsByChannel:
 class TestGetMetricsTimeseries:
     """Test get_metrics_timeseries function."""
 
-    def test_get_metrics_by_name(self, time_service, temp_db):
-        """Test getting metrics timeseries by name."""
-        # Add metric correlations
+    def test_get_metrics_by_name(self, time_service, persist_engine):
         for i in range(5):
             correlation = ServiceCorrelation(
                 correlation_id=f"metric_{i}",
@@ -650,24 +573,21 @@ class TestGetMetricsTimeseries:
                     labels={},
                 ),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        # Query CPU metrics
         query = MetricsQuery(
             metric_name="cpu_usage",
             start_time=datetime.now(timezone.utc) - timedelta(days=1),
             end_time=datetime.now(timezone.utc),
         )
 
-        cpu_metrics = get_metrics_timeseries(query, db_path=temp_db)
+        cpu_metrics = get_metrics_timeseries(query)
         assert len(cpu_metrics) == 3  # i=0, 2, 4
         assert all(c.metric_data.metric_name == "cpu_usage" for c in cpu_metrics)
 
-    def test_get_metrics_with_time_range(self, time_service, temp_db):
-        """Test getting metrics with time range."""
+    def test_get_metrics_with_time_range(self, time_service, persist_engine):
         base_time = datetime.now(timezone.utc)
 
-        # Add metrics at different times
         for i in range(5):
             correlation = ServiceCorrelation(
                 correlation_id=f"timed_metric_{i}",
@@ -687,23 +607,19 @@ class TestGetMetricsTimeseries:
                     labels={},
                 ),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        # Query last 6 hours
         query = MetricsQuery(metric_name="test_metric", start_time=base_time - timedelta(hours=6), end_time=base_time)
 
-        recent_metrics = get_metrics_timeseries(query, db_path=temp_db)
+        recent_metrics = get_metrics_timeseries(query)
         assert len(recent_metrics) == 4  # i=0,1,2,3 (within 6 hours)
 
 
 class TestGetRecentCorrelations:
     """Test get_recent_correlations function."""
 
-    def test_get_recent_correlations_default_limit(self, time_service, temp_db):
-        """Test getting recent correlations with default limit."""
-        # Add multiple correlations at different times
+    def test_get_recent_correlations_default_limit(self, time_service, persist_engine):
         base_time = datetime.now(timezone.utc)
-        correlations_added = []
 
         for i in range(10):
             correlation = ServiceCorrelation(
@@ -713,25 +629,20 @@ class TestGetRecentCorrelations:
                 action_type="test_action",
                 status=ServiceCorrelationStatus.COMPLETED,
                 correlation_type=CorrelationType.SERVICE_INTERACTION,
-                timestamp=base_time - timedelta(minutes=i),  # Newest first
+                timestamp=base_time - timedelta(minutes=i),
                 created_at=(base_time - timedelta(minutes=i)).isoformat(),
                 updated_at=(base_time - timedelta(minutes=i)).isoformat(),
                 retention_policy="raw",
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
-            correlations_added.append(correlation)
+            add_correlation(correlation, time_service)
 
-        # Get recent correlations (default limit 100)
-        recent = get_recent_correlations(db_path=temp_db)
+        recent = get_recent_correlations()
 
         assert len(recent) == 10
-        # Should be ordered by timestamp DESC (newest first)
-        assert recent[0].correlation_id == "recent_corr_0"  # Most recent
-        assert recent[9].correlation_id == "recent_corr_9"  # Oldest
+        assert recent[0].correlation_id == "recent_corr_0"
+        assert recent[9].correlation_id == "recent_corr_9"
 
-    def test_get_recent_correlations_custom_limit(self, time_service, temp_db):
-        """Test getting recent correlations with custom limit."""
-        # Add 15 correlations
+    def test_get_recent_correlations_custom_limit(self, time_service, persist_engine):
         base_time = datetime.now(timezone.utc)
 
         for i in range(15):
@@ -746,21 +657,17 @@ class TestGetRecentCorrelations:
                 created_at=(base_time - timedelta(seconds=i)).isoformat(),
                 updated_at=(base_time - timedelta(seconds=i)).isoformat(),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        # Get only 5 most recent
-        recent = get_recent_correlations(limit=5, db_path=temp_db)
+        recent = get_recent_correlations(limit=5)
 
         assert len(recent) == 5
-        # Verify order (newest first)
         for i in range(5):
             assert recent[i].correlation_id == f"limited_corr_{i}"
 
-    def test_get_recent_correlations_mixed_types(self, time_service, temp_db):
-        """Test getting recent correlations with mixed correlation types."""
+    def test_get_recent_correlations_mixed_types(self, time_service, persist_engine):
         base_time = datetime.now(timezone.utc)
 
-        # Add correlations of different types
         correlation_types = [
             CorrelationType.SERVICE_INTERACTION,
             CorrelationType.METRIC_DATAPOINT,
@@ -780,18 +687,15 @@ class TestGetRecentCorrelations:
                 created_at=(base_time - timedelta(minutes=i)).isoformat(),
                 updated_at=(base_time - timedelta(minutes=i)).isoformat(),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        recent = get_recent_correlations(limit=10, db_path=temp_db)
+        recent = get_recent_correlations(limit=10)
 
         assert len(recent) == 4
-        # Verify all types are present
         types_found = {corr.correlation_type for corr in recent}
         assert types_found == set(correlation_types)
 
-    def test_get_recent_correlations_with_metric_data(self, time_service, temp_db):
-        """Test getting recent correlations that include metric data."""
-        # Add correlations with metric data
+    def test_get_recent_correlations_with_metric_data(self, time_service, persist_engine):
         for i in range(3):
             correlation = ServiceCorrelation(
                 correlation_id=f"metric_recent_{i}",
@@ -811,20 +715,17 @@ class TestGetRecentCorrelations:
                     labels={"test": f"value_{i}"},
                 ),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        recent = get_recent_correlations(limit=5, db_path=temp_db)
+        recent = get_recent_correlations(limit=5)
 
         assert len(recent) == 3
-        # Verify metric data is properly reconstructed
         for i, corr in enumerate(recent):
             assert corr.metric_data is not None
             assert corr.metric_data.metric_name == f"test_metric_{i}"
             assert corr.metric_data.metric_value == float(100 + i)
 
-    def test_get_recent_correlations_with_trace_context(self, time_service, temp_db):
-        """Test getting recent correlations that include trace context."""
-        # Add correlations with trace context
+    def test_get_recent_correlations_with_trace_context(self, time_service, persist_engine):
         for i in range(2):
             correlation = ServiceCorrelation(
                 correlation_id=f"trace_recent_{i}",
@@ -843,20 +744,17 @@ class TestGetRecentCorrelations:
                     parent_span_id=f"parent_{i}" if i > 0 else None,
                 ),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        recent = get_recent_correlations(limit=5, db_path=temp_db)
+        recent = get_recent_correlations(limit=5)
 
         assert len(recent) == 2
-        # Verify trace context is properly reconstructed
         for i, corr in enumerate(recent):
             assert corr.trace_context is not None
             assert corr.trace_context.trace_id == f"trace_{i}"
             assert corr.trace_context.span_id == f"span_{i}"
 
-    def test_get_recent_correlations_with_log_data(self, time_service, temp_db):
-        """Test getting recent correlations that include log data."""
-        # Add correlations with log data
+    def test_get_recent_correlations_with_log_data(self, time_service, persist_engine):
         for i in range(2):
             correlation = ServiceCorrelation(
                 correlation_id=f"log_recent_{i}",
@@ -869,7 +767,7 @@ class TestGetRecentCorrelations:
                 created_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
                 updated_at=(datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
                 log_data=LogData(
-                    log_level=f"INFO" if i == 0 else "ERROR",
+                    log_level="INFO" if i == 0 else "ERROR",
                     log_message=f"Test message {i}",
                     logger_name="test_logger",
                     module_name="test_module",
@@ -877,18 +775,16 @@ class TestGetRecentCorrelations:
                     line_number=100 + i,
                 ),
             )
-            add_correlation(correlation, time_service, db_path=temp_db)
+            add_correlation(correlation, time_service)
 
-        recent = get_recent_correlations(limit=5, db_path=temp_db)
+        recent = get_recent_correlations(limit=5)
 
         assert len(recent) == 2
-        # Verify log data is properly reconstructed
         for i, corr in enumerate(recent):
             assert corr.log_data is not None
             assert corr.log_data.log_level == ("INFO" if i == 0 else "ERROR")
 
-    def test_get_recent_correlations_with_complex_request_data(self, time_service, temp_db):
-        """Test getting correlations with complex request data structures."""
+    def test_get_recent_correlations_with_complex_request_data(self, time_service, persist_engine):
         correlation = ServiceCorrelation(
             correlation_id="complex_request",
             service_type="complex_service",
@@ -916,9 +812,9 @@ class TestGetRecentCorrelations:
             tags={"environment": "test", "priority": "high"},
         )
 
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        recent = get_recent_correlations(limit=1, db_path=temp_db)
+        recent = get_recent_correlations(limit=1)
 
         assert len(recent) == 1
         retrieved = recent[0]
@@ -928,70 +824,33 @@ class TestGetRecentCorrelations:
         assert retrieved.tags["environment"] == "test"
         assert retrieved.tags["priority"] == "high"
 
-    def test_get_recent_correlations_empty_database(self, temp_db):
-        """Test getting recent correlations from empty database."""
-        recent = get_recent_correlations(db_path=temp_db)
+    def test_get_recent_correlations_empty_database(self, persist_engine):
+        recent = get_recent_correlations()
         assert recent == []
 
-    def test_get_recent_correlations_handles_database_error(self):
-        """Test that database errors are handled gracefully."""
-        with patch("ciris_engine.logic.persistence.models.correlations.get_db_connection") as mock_db:
-            mock_db.side_effect = Exception("Database connection failed")
-
+    def test_get_recent_correlations_handles_engine_error(self, persist_engine):
+        """Engine-side errors return an empty list."""
+        mock_engine = MagicMock()
+        mock_engine.correlation_query.side_effect = Exception("Engine down")
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations._get_engine",
+            return_value=mock_engine,
+        ):
             recent = get_recent_correlations()
-            assert recent == []  # Should return empty list on error
+            assert recent == []
 
-    def test_get_recent_correlations_timestamp_parsing_error(self, time_service, temp_db):
-        """Test handling of malformed timestamp data."""
-        # Insert correlation with malformed timestamp directly
-        from ciris_engine.logic.persistence.db import get_db_connection
-
-        with get_db_connection(db_path=temp_db) as conn:
-            conn.execute(
-                """
-                INSERT INTO service_correlations (
-                    correlation_id, service_type, handler_name, action_type,
-                    status, correlation_type, timestamp, created_at, updated_at,
-                    retention_policy
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    "malformed_timestamp",
-                    "test",
-                    "handler",
-                    "action",
-                    "completed",  # Use correct lowercase enum value
-                    "service_interaction",
-                    "not-a-timestamp",  # Malformed timestamp
-                    datetime.now(timezone.utc).isoformat(),
-                    datetime.now(timezone.utc).isoformat(),
-                    "raw",
-                ),
-            )
-            conn.commit()
-
-        # Should handle gracefully and use current time as fallback
-        recent = get_recent_correlations(db_path=temp_db)
-        assert len(recent) == 1
-        assert recent[0].correlation_id == "malformed_timestamp"
-        assert recent[0].timestamp is not None  # Should have fallback timestamp
-
-    def test_get_recent_correlations_zero_limit(self, correlation_factory, time_service, temp_db):
-        """Test getting recent correlations with zero limit."""
+    def test_get_recent_correlations_zero_limit(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("test_zero_limit")
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        # Get with zero limit
-        recent = get_recent_correlations(limit=0, db_path=temp_db)
+        recent = get_recent_correlations(limit=0)
         assert recent == []
 
 
 class TestGetActiveChannelsByAdapter:
     """Test get_active_channels_by_adapter function."""
 
-    def test_get_active_channels_api_adapter(self, correlation_factory, time_service, temp_db):
-        """Test getting active channels for API adapter."""
-        # Add correlations with API channels
+    def test_get_active_channels_api_adapter(self, correlation_factory, time_service, persist_engine):
         base_time = datetime.now(timezone.utc)
         correlations = [
             correlation_factory(
@@ -1012,157 +871,154 @@ class TestGetActiveChannelsByAdapter:
         ]
 
         for corr in correlations:
-            add_correlation(corr, time_service, db_path=temp_db)
+            add_correlation(corr, time_service)
 
-        # Get API channels from last 2 hours
-        channels = get_active_channels_by_adapter("api", since_days=0.1, time_service=time_service, db_path=temp_db)
+        channels = get_active_channels_by_adapter("api", since_days=0.1, time_service=time_service)
 
         assert len(channels) == 2
         channel_ids = [ch.channel_id for ch in channels]
         assert "api_channel_123" in channel_ids
         assert "api_channel_456" in channel_ids
-        assert "discord_channel_789" not in channel_ids  # Different adapter type
+        assert "discord_channel_789" not in channel_ids
 
-    def test_get_active_channels_with_memory_graph(self, correlation_factory, time_service, temp_db):
-        """Test getting active channels including memory graph activity."""
-        # Add correlation
+    def test_get_active_channels_with_memory_graph(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("api_1", channel_id="api_test_channel", action_type="speak")
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        channels = get_active_channels_by_adapter("api", since_days=1, time_service=time_service, db_path=temp_db)
+        channels = get_active_channels_by_adapter("api", since_days=1, time_service=time_service)
 
         channel_ids = [ch.channel_id for ch in channels]
         assert "api_test_channel" in channel_ids
-        # Find the channel and check its message count
         test_channel = next(ch for ch in channels if ch.channel_id == "api_test_channel")
         assert test_channel.message_count >= 1
 
-    def test_get_active_channels_no_time_service(self, correlation_factory, temp_db):
-        """Test getting active channels without time service."""
+    def test_get_active_channels_no_time_service(self, correlation_factory, persist_engine):
         correlation = correlation_factory("api_1", channel_id="api_no_time", action_type="speak")
-        add_correlation(correlation, db_path=temp_db)
+        # Default-construct without time_service to exercise the Optional path.
+        add_correlation(correlation)
 
-        # Should work without time_service (uses datetime.now)
-        channels = get_active_channels_by_adapter("api", since_days=1, db_path=temp_db)
+        channels = get_active_channels_by_adapter("api", since_days=1)
 
         channel_ids = [ch.channel_id for ch in channels]
         assert "api_no_time" in channel_ids
 
-    def test_get_active_channels_database_error(self, time_service):
-        """Test handling of database errors."""
-        # Use non-existent database path to trigger exception
-        channels = get_active_channels_by_adapter(
-            "api", since_days=1, time_service=time_service, db_path="/nonexistent/path.db"
-        )
-        assert channels == []  # Function returns empty list on error
+    def test_get_active_channels_engine_error(self, time_service, persist_engine):
+        """Engine errors return empty list."""
+        mock_engine = MagicMock()
+        mock_engine.correlation_query.side_effect = Exception("Engine down")
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations._get_engine",
+            return_value=mock_engine,
+        ):
+            channels = get_active_channels_by_adapter("api", since_days=1, time_service=time_service)
+            assert channels == []
 
 
 class TestGetChannelLastActivity:
     """Test get_channel_last_activity function."""
 
-    def test_get_channel_last_activity_found(self, correlation_factory, time_service, temp_db):
-        """Test getting last activity for existing channel."""
+    def test_get_channel_last_activity_found(self, correlation_factory, time_service, persist_engine):
         target_time = datetime.now(timezone.utc) - timedelta(hours=2)
         correlation = correlation_factory(
             "activity_1", channel_id="api_active_channel", action_type="speak", timestamp=target_time
         )
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        last_activity = get_channel_last_activity("api_active_channel", db_path=temp_db)
+        last_activity = get_channel_last_activity("api_active_channel")
 
         assert last_activity is not None
-        assert abs((last_activity - target_time).total_seconds()) < 5  # Within 5 seconds
+        assert abs((last_activity - target_time).total_seconds()) < 5
 
-    def test_get_channel_last_activity_not_found(self, temp_db):
-        """Test getting last activity for non-existent channel."""
-        last_activity = get_channel_last_activity("nonexistent_channel", db_path=temp_db)
+    def test_get_channel_last_activity_not_found(self, persist_engine):
+        last_activity = get_channel_last_activity("nonexistent_channel")
         assert last_activity is None
 
-    def test_get_channel_last_activity_memory_graph_fallback(self, correlation_factory, time_service, temp_db):
-        """Test fallback to memory graph for channel activity."""
-        # This tests the memory graph query path
+    def test_get_channel_last_activity_memory_graph_fallback(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("memory_1", channel_id="api_memory_channel", action_type="speak")
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        last_activity = get_channel_last_activity("api_memory_channel", db_path=temp_db)
+        last_activity = get_channel_last_activity("api_memory_channel")
         assert last_activity is not None
 
-    def test_get_channel_last_activity_database_error(self):
-        """Test handling of database errors."""
-        # Use non-existent database path
-        last_activity = get_channel_last_activity("any_channel", db_path="/nonexistent/path.db")
-        assert last_activity is None
+    def test_get_channel_last_activity_engine_error(self, persist_engine):
+        """Engine errors return None."""
+        mock_engine = MagicMock()
+        mock_engine.correlation_query.side_effect = Exception("Engine down")
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations._get_engine",
+            return_value=mock_engine,
+        ):
+            last_activity = get_channel_last_activity("any_channel")
+            assert last_activity is None
 
 
 class TestIsAdminChannel:
     """Test is_admin_channel function."""
 
-    def test_is_admin_channel_true_for_admin_role(self, correlation_factory, time_service, temp_db):
-        """Test identifying admin channel by ADMIN role."""
+    def test_is_admin_channel_true_for_admin_role(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory(
             "admin_1", channel_id="api_admin_channel", tags={"user_role": "ADMIN", "test": "true"}
         )
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        assert is_admin_channel("api_admin_channel", db_path=temp_db) is True
+        assert is_admin_channel("api_admin_channel") is True
 
-    def test_is_admin_channel_true_for_authority_role(self, correlation_factory, time_service, temp_db):
-        """Test identifying admin channel by AUTHORITY role."""
+    def test_is_admin_channel_true_for_authority_role(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("auth_1", channel_id="api_authority_channel", tags={"user_role": "AUTHORITY"})
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        assert is_admin_channel("api_authority_channel", db_path=temp_db) is True
+        assert is_admin_channel("api_authority_channel") is True
 
-    def test_is_admin_channel_true_for_system_admin(self, correlation_factory, time_service, temp_db):
-        """Test identifying admin channel by SYSTEM_ADMIN role."""
+    def test_is_admin_channel_true_for_system_admin(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory(
             "sys_1", channel_id="api_sysadmin_channel", tags={"user_role": "SYSTEM_ADMIN"}
         )
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        assert is_admin_channel("api_sysadmin_channel", db_path=temp_db) is True
+        assert is_admin_channel("api_sysadmin_channel") is True
 
-    def test_is_admin_channel_true_for_is_admin_flag(self, correlation_factory, time_service, temp_db):
-        """Test identifying admin channel by is_admin flag."""
-        # Skip this test - the query expects integer 1, but tags only accept strings
-        # This tests the SQL query logic that expects tags.is_admin = 1 (integer)
-        pytest.skip("Tags only accept string values, but SQL expects integer comparison")
+    def test_is_admin_channel_true_for_is_admin_flag(self, correlation_factory, time_service, persist_engine):
+        """Identifying admin channel by is_admin flag (Python-side comparison now allows string '1')."""
+        correlation = correlation_factory("flag_1", channel_id="api_isadmin_channel", tags={"is_admin": "1"})
+        add_correlation(correlation, time_service)
 
-    def test_is_admin_channel_true_for_auth_role_nested(self, correlation_factory, time_service, temp_db):
-        """Test identifying admin channel by nested auth.role."""
-        # Use JSON string to simulate nested structure that the SQL query expects
+        assert is_admin_channel("api_isadmin_channel") is True
+
+    def test_is_admin_channel_true_for_auth_role_nested(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory(
             "nested_1", channel_id="api_nested_channel", tags={"auth.role": "ADMIN"}
-        )  # Use dot notation key
-        add_correlation(correlation, time_service, db_path=temp_db)
+        )
+        add_correlation(correlation, time_service)
 
-        # This tests the SQL query path for nested JSON extraction
-        result = is_admin_channel("api_nested_channel", db_path=temp_db)
-        # The actual result depends on how SQLite handles JSON extraction
+        result = is_admin_channel("api_nested_channel")
         assert isinstance(result, bool)
+        # `auth.role` flat key matches the admin role path
+        assert result is True
 
-    def test_is_admin_channel_false_for_regular_user(self, correlation_factory, time_service, temp_db):
-        """Test regular user channel is not identified as admin."""
+    def test_is_admin_channel_false_for_regular_user(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("user_1", channel_id="api_user_channel", tags={"user_role": "USER"})
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation, time_service)
 
-        assert is_admin_channel("api_user_channel", db_path=temp_db) is False
+        assert is_admin_channel("api_user_channel") is False
 
-    def test_is_admin_channel_false_for_discord_channel(self, correlation_factory, time_service, temp_db):
-        """Test Discord channels are never admin (only API channels can be admin)."""
+    def test_is_admin_channel_false_for_discord_channel(self, correlation_factory, time_service, persist_engine):
         correlation = correlation_factory("discord_1", channel_id="discord_admin_channel", tags={"user_role": "ADMIN"})
-        add_correlation(correlation, time_service, db_path=temp_db)
+        add_correlation(correlation)
 
-        assert is_admin_channel("discord_admin_channel", db_path=temp_db) is False
+        assert is_admin_channel("discord_admin_channel") is False
 
-    def test_is_admin_channel_false_for_nonexistent_channel(self, temp_db):
-        """Test non-existent channel returns False."""
-        assert is_admin_channel("api_nonexistent", db_path=temp_db) is False
+    def test_is_admin_channel_false_for_nonexistent_channel(self, persist_engine):
+        assert is_admin_channel("api_nonexistent") is False
 
-    def test_is_admin_channel_database_error(self):
-        """Test handling of database errors."""
-        # Use non-existent database path
-        assert is_admin_channel("api_any_channel", db_path="/nonexistent/path.db") is False
+    def test_is_admin_channel_engine_error(self, persist_engine):
+        """Engine errors return False (deny by default)."""
+        mock_engine = MagicMock()
+        mock_engine.correlation_query.side_effect = Exception("Engine down")
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations._get_engine",
+            return_value=mock_engine,
+        ):
+            assert is_admin_channel("api_any_channel") is False
 
 
 class TestAddCorrelationWithTelemetry:
@@ -1170,47 +1026,42 @@ class TestAddCorrelationWithTelemetry:
 
     @pytest.mark.asyncio
     async def test_add_correlation_with_telemetry_success(
-        self, correlation_factory, time_service, telemetry_service, temp_db
+        self, correlation_factory, time_service, telemetry_service, persist_engine
     ):
-        """Test successfully adding correlation with telemetry."""
         correlation = correlation_factory("telemetry_1")
 
-        correlation_id = await add_correlation_with_telemetry(
-            correlation, time_service, telemetry_service, db_path=temp_db
-        )
+        correlation_id = await add_correlation_with_telemetry(correlation, time_service, telemetry_service)
 
         assert correlation_id == "telemetry_1"
 
-        # Verify it was stored in SQLite
-        stored = get_correlation(correlation_id, db_path=temp_db)
+        stored = get_correlation(correlation_id)
         assert stored is not None
         assert stored.correlation_id == correlation_id
 
-        # Verify telemetry service was called with _store_correlation
         assert telemetry_service._store_correlation.called
 
     @pytest.mark.asyncio
-    async def test_add_correlation_with_telemetry_no_services(self, correlation_factory, temp_db):
-        """Test adding correlation without optional services."""
+    async def test_add_correlation_with_telemetry_no_services(self, correlation_factory, persist_engine):
         correlation = correlation_factory("no_services_1")
 
-        correlation_id = await add_correlation_with_telemetry(correlation, db_path=temp_db)
+        correlation_id = await add_correlation_with_telemetry(correlation)
 
         assert correlation_id == "no_services_1"
 
-        # Verify it was still stored in SQLite
-        stored = get_correlation(correlation_id, db_path=temp_db)
+        stored = get_correlation(correlation_id)
         assert stored is not None
 
     @pytest.mark.asyncio
-    async def test_add_correlation_with_telemetry_sqlite_error(
-        self, correlation_factory, time_service, telemetry_service
+    async def test_add_correlation_with_telemetry_engine_error(
+        self, correlation_factory, time_service, telemetry_service, persist_engine
     ):
-        """Test handling SQLite errors."""
+        """Engine errors during persistence propagate."""
         correlation = correlation_factory("error_1")
-
-        # This will test the exception handling path by using an invalid path
-        with pytest.raises(Exception):  # Expect an exception for invalid database path
-            await add_correlation_with_telemetry(
-                correlation, time_service, telemetry_service, db_path="/invalid/path.db"
-            )
+        mock_engine = MagicMock()
+        mock_engine.correlation_record.side_effect = Exception("Engine down")
+        with patch(
+            "ciris_engine.logic.persistence.models.correlations._get_engine",
+            return_value=mock_engine,
+        ):
+            with pytest.raises(Exception):
+                await add_correlation_with_telemetry(correlation, time_service, telemetry_service)

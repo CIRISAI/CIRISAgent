@@ -24,9 +24,23 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from ciris_engine.logic.persistence.stores import authentication_store
 from ciris_engine.logic.services.base_infrastructure_service import BaseInfrastructureService
+from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import get_verifier, has_verifier
 from ciris_engine.logic.services.lifecycle.time import TimeService
+from ciris_engine.logic.utils.mobile_exclusions import (
+    compute_files_missing_list,
+    compute_files_unexpected_list,
+    compute_mobile_excluded_count,
+    compute_mobile_excluded_list,
+)
+from ciris_engine.logic.utils.path_resolution import get_secrets_home
+from ciris_engine.logic.utils.shutdown_manager import request_global_shutdown
 from ciris_engine.protocols.services.infrastructure.authentication import AuthenticationServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.attestation import (
+    AttestationCacheStatus,
+    AttestationGateOutcome,
+    AttestationResult,
+)
 from ciris_engine.schemas.services.authority.wise_authority import AuthenticationResult, TokenVerification, WAUpdate
 from ciris_engine.schemas.services.authority_core import (
     AuthorizationContext,
@@ -42,11 +56,105 @@ from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.schemas.runtime.models import Task
+    from ciris_engine.schemas.services.authority_core import DeferralResponse
 
 logger = logging.getLogger(__name__)
 
 # Type variable for decorators
 F = TypeVar("F", bound=Callable[..., Any])
+
+# Key file names
+SYSTEM_WA_KEY_FILENAME = "system_wa.key"
+
+
+# End-to-end budget for startup attestation, measured from when the
+# AuthenticationService's background `_attestation_task` is scheduled until
+# the cache is populated. The agent processor is gated on this completing,
+# so a slow attestation directly delays the first thought.
+#
+# The contract is 15s — longer is a bug, not a tuning knob. We sit at 20s
+# (5s headroom over the contract) as a temporary buffer while CIRISVerify
+# ships the verifier-side fix in CIRISAgent#843. The 10s network-probe
+# timeout in ciris_verify_ffi blows past 15s under CI's offline egress + a
+# second backend competing for CPU. Once the verifier short-circuits the
+# probe when egress is detected unreachable (or pre-warms the attestation
+# cache before spawning), drop this back to 15.0 and assert it stays there.
+#
+# Do not raise above 20.0 without filing a NEW issue against ciris_verify.
+# The per-worker safety net is ATTESTATION_TIMEOUT=90 in verifier_runner.py;
+# that exists to prevent infinite hangs, not to license a slow happy path.
+#
+# Env-overridable (CIRISVerify#212 workaround): the 20s contract holds in
+# production, but a dev/QA/unregistered build cannot meet it while verify v10.5.0
+# blocks ~27s on the missing-registry-record fetch. CIRIS_STARTUP_ATTESTATION_
+# BUDGET_SECONDS lets those builds tolerate the slow degrade (paired with
+# CIRIS_ATTESTATION_SKIP_REGISTRY, which removes the block entirely on verify
+# that accepts it). Default unchanged → production still enforces 20s.
+#
+# READ AT CALL TIME. This used to be a module-level constant evaluated at
+# import, which silently discarded every override that arrived later:
+# mobile_main sets CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS=45 during startup,
+# but authentication.service had already been imported, so the value stayed
+# 20.0 and the Android log read "exceeded the 20s budget" on a runtime that had
+# explicitly asked for 45. An env var that only works if it is set before an
+# unrelated import is not a knob, it is a coin flip.
+def _startup_attestation_budget() -> float:
+    raw = os.environ.get("CIRIS_STARTUP_ATTESTATION_BUDGET_SECONDS", "").strip()
+    if raw:
+        try:
+            return max(1.0, float(raw))
+        except ValueError:
+            pass
+    return 20.0
+
+
+# Kept for the import-time default and for callers that only want a number to
+# print. Anything ENFORCING the budget must call _startup_attestation_budget()
+# so a late override is honoured.
+STARTUP_ATTESTATION_BUDGET_SECONDS = _startup_attestation_budget()
+
+
+# THE GATE MUST NOT RACE THE DEGRADE IT IS WAITING FOR.
+#
+# verifier_runner already keeps the promise that "an attestation is always
+# produced within the budget": attestation_deadline_seconds() bounds its own
+# run and hands back a degraded `level=0, binary=FAIL` result instead of
+# hanging. The gate below waits for that result.
+#
+# Both were bounded by the SAME budget, measured from (within milliseconds of)
+# the same instant — so the gate's wait expired just before the runner could
+# assemble and cache its degraded result, and the gate lost the race every
+# time. Field report (2.9.37, Windows 11 / py3.14): one ciris_verify_tree()
+# call, `elapsed=20.0s` dead on the budget, `attestation_task_done: False`,
+# `stage_timings_seconds: {}` — the runner was mid-degrade — and the runtime
+# aborted 22s after boot with no UI and no way into the setup wizard.
+#
+# The grace is what lets the runner's bounded degrade actually land. It is not
+# "more budget for a slow verifier": past deadline+grace the runner's own
+# timeout has failed, which is a different bug (see the ceiling branch below).
+ATTESTATION_GATE_GRACE_SECONDS = 5.0
+
+
+def _attestation_gate_deadline(budget_seconds: float) -> float:
+    """How long the gate waits, given the CALLER's budget.
+
+    The grace exists for one reason: to outlast verifier_runner's own bounded
+    degrade so its result can land. It therefore applies only when the caller
+    is actually long enough to be racing that degrade.
+
+    A caller asking for LESS than the runner's deadline (refresh and audit
+    paths pass budgets as short as 0.05s) is deliberately giving up early and
+    is not racing anything — honour that budget exactly rather than silently
+    stretching it to the global deadline.
+
+    Read at call time, like every other budget knob here: a value frozen at
+    import silently discards the override mobile_main sets during startup.
+    """
+    from .attestation.verifier_runner import attestation_deadline_seconds
+
+    if budget_seconds < attestation_deadline_seconds():
+        return budget_seconds
+    return budget_seconds + ATTESTATION_GATE_GRACE_SECONDS
 
 
 class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProtocol):
@@ -58,12 +166,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         Args:
             db_path: Path to SQLite database
             time_service: TimeService instance for time operations (required)
-            key_dir: Directory for key storage (defaults to ~/.ciris/)
+            key_dir: Directory for key storage (defaults to platform-appropriate secrets dir)
         """
         super().__init__()  # Initialize BaseService
         self.db_path = db_path
-        self.key_dir = Path(key_dir or os.path.expanduser("~/.ciris"))
-        self.key_dir.mkdir(mode=0o700, exist_ok=True)
+        # Use platform-aware secrets directory (mobile: CIRIS_HOME/secrets, desktop: ~/ciris/secrets)
+        self.key_dir = Path(key_dir) if key_dir else get_secrets_home()
+        self.key_dir.mkdir(mode=0o700, exist_ok=True, parents=True)
 
         # Store injected time service
         self._time_service = time_service
@@ -82,6 +191,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._started = False
         self._start_time: Optional[datetime] = None
 
+        # Set to hold references to background tasks, preventing garbage collection
+        self._background_tasks: set[asyncio.Task[None]] = set()
+
         # Authentication metrics tracking
         self._auth_attempts = 0
         self._auth_successes = 0
@@ -93,6 +205,43 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         self._expired_sessions = 0
         self._active_tokens = 0
         self._revoked_tokens = 0
+
+        # Attestation cache (CIRISVerify integration)
+        self._attestation_cache: Optional[AttestationResult] = None
+        self._last_known_attestation: Optional[AttestationResult] = None  # Stale-while-revalidate
+        self._attestation_in_progress = False
+        self._attestation_lock = asyncio.Lock()
+        self._attestation_cache_ttl = 3600  # 1 hour cache TTL
+        self._attestation_stale_ttl = 7200  # 2 hour max stale data (fallback after TTL)
+        self._attestation_refresh_interval = 2700  # 45 min refresh (before 1h TTL)
+        self._attestation_refresh_task: Optional[asyncio.Task[None]] = None
+        # The startup attestation task — kicked off in start(), awaited by
+        # any consumer that needs the populated cache. None until start().
+        self._attestation_task: Optional[asyncio.Task[None]] = None
+        # Wall-clock timestamp (asyncio loop monotonic) when the startup
+        # task was scheduled. Lets await_attestation_ready() enforce the
+        # 15s end-to-end budget regardless of how late in startup the
+        # caller arrives — the budget is measured from task creation, not
+        # from when each caller starts awaiting.
+        self._attestation_started_at: Optional[float] = None
+        # Receipts for budget-breach diagnostics. Populated by
+        # run_startup_attestation as stages complete; consumed by the
+        # processor gate's failure logger when it files a ciris_verify
+        # issue. Keys mirror AttestationResult booleans plus a
+        # "run_attestation_total" entry so reviewers can spot which stage
+        # ate the budget. Heterogeneous on purpose — floats for timings,
+        # bools/strs/ints for stage outcomes, plus exception receipts on
+        # the failure branch.
+        self._attestation_stage_timings: Dict[str, Any] = {}
+        self._attestation_slo_breach_logged: bool = False
+        self._baseline_attestation: Optional[AttestationResult] = (
+            None  # First successful result for degradation detection
+        )
+
+        # CIRISVerify singleton - all code should use get_verifier() instead of creating instances
+        self._verifier: Any = None
+        self._verifier_lock = asyncio.Lock()
+        self._verifier_sync_lock: Any = None  # threading.Lock for sync contexts
 
     def get_service_type(self) -> ServiceType:
         """Get service type - authentication is part of wise authority infrastructure."""
@@ -125,12 +274,60 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             "generate_keypair",
             "sign_data",
             "hash_password",
+            # Attestation operations (CIRISVerify)
+            "run_attestation",
+            "get_cached_attestation",
+            "get_attestation_cache_status",
+            "is_attestation_in_progress",
+            "run_startup_attestation",
+            "verify_play_integrity_token",
         ]
 
     def _check_dependencies(self) -> bool:
         """Check if all required dependencies are available."""
         # Only requires time service which is provided in __init__
         return self._time_service is not None
+
+    def _get_current_time(self) -> datetime:
+        """Get the current time from the time service or fallback to system time.
+
+        Returns:
+            Current datetime in UTC timezone.
+        """
+        return self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+
+    def _get_current_timestamp(self) -> int:
+        """Get the current Unix timestamp from the time service or fallback to system time.
+
+        Returns:
+            Current Unix timestamp as integer.
+        """
+        return int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
+
+    def _build_base_jwt_payload(
+        self, wa: "WACertificate", sub_type: JWTSubType, expires_in_seconds: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Build the base JWT payload with common fields.
+
+        Args:
+            wa: The WA certificate to build the payload for.
+            sub_type: The JWT subject type (USER, OAUTH, AUTHORITY, ANON).
+            expires_in_seconds: Optional TTL in seconds. If None, no expiry is added.
+
+        Returns:
+            Dictionary containing the base JWT payload fields.
+        """
+        now = self._get_current_timestamp()
+        payload: Dict[str, Any] = {
+            "sub": wa.wa_id,
+            "sub_type": sub_type.value,
+            "name": wa.name,
+            "scope": wa.scopes,
+            "iat": now,
+        }
+        if expires_in_seconds is not None:
+            payload["exp"] = now + expires_in_seconds
+        return payload
 
     @staticmethod
     def _encode_public_key(pubkey_bytes: bytes) -> str:
@@ -169,7 +366,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 import socket
 
                 hostname = socket.gethostname()
-        except Exception:
+        except (OSError, IOError):
+            # File read or network/socket error - use fallback
             hostname = "default"
 
         # Combine machine-specific data with purpose identifier
@@ -255,7 +453,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             try:
                 encrypted = encrypted_path.read_bytes()
                 return self._decrypt_secret(encrypted)
-            except Exception as e:
+            except (ValueError, OSError, IOError) as e:
+                # ValueError from _decrypt_secret, OSError/IOError from file operations
                 logger.warning(f"Failed to decrypt gateway secret: {type(e).__name__}")
                 # Fall through to regenerate
 
@@ -294,7 +493,8 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     for link in raw_links:
                         try:
                             oauth_links.append(OAuthIdentityLink(**link))
-                        except Exception as exc:
+                        except (TypeError, ValueError) as exc:
+                            # Pydantic validation errors are ValueError, invalid dict keys are TypeError
                             logger.warning("Invalid OAuth link entry skipped: %s", exc)
             except json.JSONDecodeError:
                 logger.warning("Invalid oauth_links_json for WA %s", row_dict.get("wa_id"))
@@ -329,19 +529,19 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def get_wa(self, wa_id: str) -> Optional[WACertificate]:
         """Get WA certificate by ID."""
-        return authentication_store.get_wa_by_id(wa_id, self.db_path)
+        return authentication_store.get_wa_by_id(wa_id)
 
     async def _get_wa_by_kid(self, jwt_kid: str) -> Optional[WACertificate]:
         """Get WA certificate by JWT key ID."""
-        return authentication_store.get_wa_by_kid(jwt_kid, self.db_path)
+        return authentication_store.get_wa_by_kid(jwt_kid)
 
     async def get_wa_by_oauth(self, provider: str, external_id: str) -> Optional[WACertificate]:
         """Get WA certificate by OAuth identity."""
-        return authentication_store.get_wa_by_oauth(provider, external_id, self.db_path)
+        return authentication_store.get_wa_by_oauth(provider, external_id)
 
     async def _get_wa_by_adapter(self, adapter_id: str) -> Optional[WACertificate]:
         """Get WA certificate by adapter ID."""
-        return authentication_store.get_wa_by_adapter(adapter_id, self.db_path)
+        return authentication_store.get_wa_by_adapter(adapter_id)
 
     async def link_oauth_identity(
         self,
@@ -363,7 +563,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             raise ValueError(f"OAuth identity {provider}:{external_id} already linked to another WA")
 
         links = list(existing.oauth_links)
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         found = False
         for idx, link in enumerate(links):
             if link.provider == provider and link.external_id == external_id:
@@ -405,9 +605,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                         confidence=1.0,
                         source="oauth",
                     )
-                    logger.info(
-                        f"Created identity mapping: wa_id:{wa_id} -> {provider}_id:{external_id}"
-                    )  # NOSONAR - IDs not secrets
+                    logger.info("Created identity mapping for OAuth link")
                 except Exception as e:
                     logger.warning(f"Failed to create identity mapping for OAuth link: {e}")
                     # Non-fatal - OAuth link still works even if graph mapping fails
@@ -462,8 +660,54 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         return await self.get_wa(wa_id)
 
     async def _store_wa_certificate(self, wa: WACertificate) -> None:
-        """Store a WA certificate in the database."""
-        authentication_store.store_wa_certificate(wa, self.db_path)
+        """Store a WA certificate in the database, and verify it is really there.
+
+        WRITE-VERIFY, because a silent loss here is invisible until login. Staged
+        QA logged "✅ Created NEW WA: … name=jeff" and six seconds later BOTH the
+        node and this side enumerated the same five certs with no `jeff` among
+        them — a write that reported success and did not survive.
+
+        The read-back is deliberately narrow: `get_wa_by_id` on the id we just
+        wrote. It answers the question the enumeration cannot, because
+        `list_wa_certificates` is ALWAYS active-only (persist exposes only
+        `wa_cert_list_by_role`, which restricts to active=true), so an absent row
+        and an inactive row look identical from there — and they need opposite
+        fixes.
+
+        Never raises. A verification probe that can fail the operation it verifies
+        would turn a diagnostic into an outage.
+        """
+        authentication_store.store_wa_certificate(wa)
+
+        try:
+            readback = authentication_store.get_wa_by_id(wa.wa_id)
+        except Exception as exc:  # noqa: BLE001 — diagnostics must not break writes
+            logger.warning("WA_WRITE_VERIFY: could not read back %s: %s", wa.wa_id, exc)
+            return
+
+        if readback is None:
+            logger.error(
+                "WA_WRITE_VERIFY: LOST WRITE — stored WA %s (name=%s, role=%s) and it is "
+                "NOT readable immediately afterwards. Any login as this identity will fail "
+                "with 'no cert resolved', and the creation log above will say it succeeded.",
+                wa.wa_id,
+                wa.name,
+                wa.role,
+            )
+        elif not getattr(readback, "active", True):
+            logger.error(
+                "WA_WRITE_VERIFY: WA %s (name=%s) persisted INACTIVE. It exists but is "
+                "invisible to every active-only listing, including the node's login scan.",
+                wa.wa_id,
+                wa.name,
+            )
+        else:
+            logger.info(
+                "WA_WRITE_VERIFY: %s (name=%s, role=%s) written and read back active",
+                wa.wa_id,
+                wa.name,
+                wa.role,
+            )
 
     async def _create_adapter_observer(self, adapter_id: str, name: str) -> WACertificate:
         """Create or reactivate adapter observer WA."""
@@ -475,7 +719,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Generate new observer WA
         private_key, public_key = self.generate_keypair()
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         wa_id = self._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
 
@@ -515,7 +759,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             return await self.get_wa(wa_id)
 
         # Update via store
-        authentication_store.update_wa_certificate(wa_id, kwargs, self.db_path)
+        authentication_store.update_wa_certificate(wa_id, kwargs)
 
         # Return updated WA
         return await self.get_wa(wa_id)
@@ -538,7 +782,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 details={
                     "wa_id": wa_id,
                     "reason": reason,
-                    "timestamp": self._time_service.now().isoformat() if self._time_service else None,
+                    "timestamp": self._get_current_time().isoformat(),
                 },
             )
         logger.info(f"Revoked WA {wa_id}: {reason}")
@@ -546,13 +790,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     async def _list_all_was(self, active_only: bool = True) -> List[WACertificate]:
         """List all WA certificates."""
-        return authentication_store.list_wa_certificates(active_only, self.db_path)
+        return authentication_store.list_wa_certificates(active_only)
 
     async def update_last_login(self, wa_id: str) -> None:
         """Update last login timestamp."""
-        await self.update_wa(
-            wa_id, last_login=self._time_service.now() if self._time_service else datetime.now(timezone.utc)
-        )
+        await self.update_wa(wa_id, last_login=self._get_current_time())
 
     # JWTService Protocol Implementation
 
@@ -563,50 +805,22 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not wa:
             raise ValueError(f"WA {wa_id} not found")
 
-        payload = {
-            "sub": wa.wa_id,
-            "sub_type": JWTSubType.ANON.value,
-            "name": wa.name,
-            "scope": wa.scopes,
-            "iat": int(
-                self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp()
-            ),
-        }
-
         # For observer tokens, use adapter_id and make them long-lived (no expiry)
         if wa.role == WARole.OBSERVER and wa.adapter_id:
+            # Only add expiry if explicitly requested with ttl > 0
+            payload = self._build_base_jwt_payload(wa, JWTSubType.ANON, ttl if ttl > 0 else None)
             payload["adapter"] = wa.adapter_id
-            # No expiry for observer tokens by default
-            if ttl > 0:
-                # Only add expiry if explicitly requested
-                payload["exp"] = (
-                    int(
-                        self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp()
-                    )
-                    + ttl
-                )
         else:
             # For non-observer tokens, include channel and expiry
+            payload = self._build_base_jwt_payload(wa, JWTSubType.ANON, ttl)
             payload["channel"] = channel_id
-            payload["exp"] = (
-                int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
-                + ttl
-            )
 
         return jwt.encode(payload, self.gateway_secret, algorithm="HS256", headers={"kid": wa.jwt_kid})
 
     def create_gateway_token(self, wa: WACertificate, expires_hours: int = 8) -> str:
         """Create gateway-signed token (OAuth/password auth)."""
-        now = int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
-
-        payload = {
-            "sub": wa.wa_id,
-            "sub_type": JWTSubType.OAUTH.value if wa.oauth_provider else JWTSubType.USER.value,
-            "name": wa.name,
-            "scope": wa.scopes,
-            "iat": now,
-            "exp": now + (expires_hours * 3600),
-        }
+        sub_type = JWTSubType.OAUTH if wa.oauth_provider else JWTSubType.USER
+        payload = self._build_base_jwt_payload(wa, sub_type, expires_hours * 3600)
 
         if wa.oauth_provider:
             payload["oauth_provider"] = wa.oauth_provider
@@ -615,16 +829,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     def _create_authority_token(self, wa: WACertificate, private_key: bytes) -> str:
         """Create WA-signed authority token."""
-        now = int(self._time_service.timestamp() if self._time_service else datetime.now(timezone.utc).timestamp())
-
-        payload = {
-            "sub": wa.wa_id,
-            "sub_type": JWTSubType.AUTHORITY.value,
-            "name": wa.name,
-            "scope": wa.scopes,
-            "iat": now,
-            "exp": now + (24 * 3600),  # 24 hours
-        }
+        payload = self._build_base_jwt_payload(wa, JWTSubType.AUTHORITY, 24 * 3600)  # 24 hours
 
         # Load Ed25519 private key
         signing_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key)
@@ -747,11 +952,18 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
             return (context, expiration)
 
+        except jwt.ExpiredSignatureError:
+            logger.debug("[TOKEN_VERIFY] JWT token has expired")
+            return None
+        except jwt.DecodeError as e:
+            logger.debug(f"[TOKEN_VERIFY] JWT decode error: {e}")
+            return None
         except jwt.InvalidTokenError as e:
             logger.debug(f"[TOKEN_VERIFY] JWT InvalidTokenError: {type(e).__name__}: {str(e)}")
             return None
-        except Exception as e:
-            logger.debug(f"[TOKEN_VERIFY] Unexpected exception: {type(e).__name__}: {str(e)}", exc_info=True)
+        except (KeyError, ValueError, TypeError) as e:
+            # Handle malformed token payload or type conversion errors
+            logger.debug(f"[TOKEN_VERIFY] Token payload error: {type(e).__name__}: {str(e)}")
             return None
 
     # WACrypto Protocol Implementation
@@ -821,7 +1033,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             import hmac
 
             return hmac.compare_digest(key, stored_key)
-        except Exception:
+        except (ValueError, TypeError, IndexError):
             return False
 
     # codeql[py/weak-sensitive-data-hashing]
@@ -894,13 +1106,21 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 expires_at=(
                     datetime.fromtimestamp(claims.get("exp", 0), tz=timezone.utc)
                     if hasattr(claims, "get")
-                    else (self._time_service.now() if self._time_service else datetime.now(timezone.utc))
+                    else self._get_current_time()
                 ),
                 permissions=wa.scopes,
                 metadata={},
             )
-        except Exception as e:
-            logger.error(f"Authentication failed: {e}")
+        except jwt.ExpiredSignatureError:
+            logger.warning("Authentication failed: Token has expired")
+            self._auth_failures += 1
+            return None
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"Authentication failed: Invalid token - {type(e).__name__}")
+            self._auth_failures += 1
+            return None
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Authentication failed: Malformed token data - {type(e).__name__}: {e}")
             self._auth_failures += 1
             return None
 
@@ -934,11 +1154,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             wa_name = wa.name if wa else context.wa_id
 
             # Use expiration from token, or current time as fallback
-            expires_at = (
-                expiration
-                if expiration
-                else (self._time_service.now() if self._time_service else datetime.now(timezone.utc))
-            )
+            expires_at = expiration if expiration else self._get_current_time()
 
             return TokenVerification(
                 valid=True,
@@ -948,8 +1164,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 expires_at=expires_at,
                 error=None,
             )
-        except Exception as e:
-            logger.error(f"Token verification failed: {e}")
+        except jwt.ExpiredSignatureError:
+            logger.warning("Token verification failed: Token has expired")
+            return TokenVerification(
+                valid=False, wa_id=None, name=None, role=None, expires_at=None, error="Token expired"
+            )
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"Token verification failed: {type(e).__name__}")
+            return TokenVerification(valid=False, wa_id=None, name=None, role=None, expires_at=None, error=str(e))
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Token verification failed: Malformed data - {type(e).__name__}: {e}")
             return TokenVerification(valid=False, wa_id=None, name=None, role=None, expires_at=None, error=str(e))
 
     async def create_wa(
@@ -960,7 +1184,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         private_key, public_key = self.generate_keypair()
 
         # Create certificate
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         wa_id = self._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
 
@@ -975,10 +1199,30 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         )
 
         # Store in database
+        # ENTRY MARKER. `create_wa` is linear — this call always runs — so if a
+        # "✅ Created NEW WA" appears in the setup log with no WA_CREATE_ENTRY and
+        # no WA_WRITE_VERIFY beside it, the module executing is not this one.
+        # Staged QA showed exactly that shape for `jeff`, and this workflow has an
+        # error string for the mechanism: "Canonical staged tree and wheel install
+        # diverge". Absence of a log is weak evidence; this makes presence the
+        # signal instead.
+        logger.warning(
+            "WA_CREATE_ENTRY: about to store %s (name=%s, role=%s) via %s",
+            wa_cert.wa_id,
+            wa_cert.name,
+            wa_cert.role,
+            __file__,
+        )
         await self._store_wa_certificate(wa_cert)
 
-        # Store private key (in production, this would be in a secure key store)
-        # For now, we're not storing it as it's managed externally
+        # Store private key in CIRISVerify for signing capability
+        try:
+            if has_verifier():
+                verifier = get_verifier()
+                verifier.store_named_key(wa_id, private_key)
+                logger.info(f"Stored signing key for WA {wa_id} in CIRISVerify")
+        except Exception as e:
+            logger.warning(f"Could not store WA key in CIRISVerify: {e}")
 
         # Add audit log entry for WA creation (mint)
         if hasattr(self, "_audit_service") and self._audit_service:
@@ -1096,90 +1340,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return decorator
 
-    def _require_wa_auth(self, scope: str) -> Callable[[F], F]:
-        """Decorator to require WA authentication with specific scope.
-
-        This decorator checks for authentication tokens in the following order:
-        1. 'token' parameter in the function arguments
-        2. 'auth_context' in the function arguments
-        3. Token from the context (if available)
-
-        Args:
-            scope: The required scope for accessing the decorated function
-
-        Returns:
-            Decorated function that enforces authentication
-        """
-
-        def decorator(func: F) -> F:
-            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
-                # Extract token from various sources
-                token = None
-                auth_context = None
-
-                # Check if 'token' is in kwargs
-                if "token" in kwargs:
-                    token = kwargs.get("token")
-
-                # Check if 'auth_context' is already provided
-                if "auth_context" in kwargs:
-                    auth_context = kwargs.get("auth_context")
-
-                # If no auth context yet, try to verify the token
-                if not auth_context and token:
-                    auth_context = await self.verify_token(token)
-
-                # Check if authentication succeeded
-                if not auth_context:
-                    raise ValueError("Authentication required: No valid token provided")
-
-                # Verify the required scope
-                if not auth_context.has_scope(scope):
-                    raise ValueError(
-                        f"Insufficient permissions: Requires scope '{scope}', "
-                        f"but user has scopes: {auth_context.scopes}"
-                    )
-
-                # Check if the function accepts auth_context parameter
-                sig = inspect.signature(func)
-
-                # If function has **kwargs or auth_context parameter, pass it
-                if "auth_context" in sig.parameters or any(
-                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
-                ):
-                    kwargs["auth_context"] = auth_context
-
-                # Call the original function
-                return await func(*args, **kwargs)
-
-            def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
-                # For synchronous functions, we need to handle auth differently
-                # This is a simplified version that expects auth_context to be pre-verified
-                auth_context = kwargs.get("auth_context")
-
-                if not auth_context:
-                    raise ValueError("Authentication required: No auth_context provided")
-
-                # Verify the required scope
-                if not hasattr(auth_context, "has_scope") or not auth_context.has_scope(scope):
-                    raise ValueError(f"Insufficient permissions: Requires scope '{scope}'")
-
-                return func(*args, **kwargs)
-
-            # Preserve function metadata and check if the function is async
-            if asyncio.iscoroutinefunction(func):
-                wrapper = functools.wraps(func)(async_wrapper)
-            else:
-                wrapper = functools.wraps(func)(sync_wrapper)
-
-            # Add metadata to indicate this function requires authentication
-            setattr(wrapper, "_requires_wa_auth", True)
-            setattr(wrapper, "_required_scope", scope)
-
-            return wrapper  # type: ignore
-
-        return decorator
-
     def _get_adapter_token(self, adapter_id: str) -> Optional[str]:
         """Get cached adapter token."""
         return self._channel_token_cache.get(adapter_id)
@@ -1218,7 +1378,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             if wa.role == WARole.ROOT:
                 # Create system WA as child of root
                 new_system_wa = await self._create_system_wa_certificate(wa.wa_id)
-                logger.info(f"✅ Created system WA {new_system_wa.wa_id} as child of ROOT {wa.wa_id}")
+                logger.info(f"[OK] Created system WA {new_system_wa.wa_id} as child of ROOT {wa.wa_id}")
                 return new_system_wa.wa_id
 
         logger.warning("Cannot create system WA - no ROOT WA found")
@@ -1233,13 +1393,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Generate keypair for system WA
         private_key, public_key = self.generate_keypair()
 
-        # Store the private key securely
-        system_key_path = self.key_dir / "system_wa.key"
+        # Store the private key securely (file fallback)
+        system_key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
         system_key_path.write_bytes(private_key)
         system_key_path.chmod(0o600)
 
         # Create the system WA certificate
-        timestamp = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        timestamp = self._get_current_time()
         wa_id = self._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
 
@@ -1283,12 +1443,25 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Store in database
         await self._store_wa_certificate(system_wa)
+
+        # Also store in CIRISVerify for TPM/Keystore protection
+        try:
+            if has_verifier():
+                verifier = get_verifier()
+                verifier.store_named_key(wa_id, private_key)
+                logger.info(f"Stored System WA key in CIRISVerify: {wa_id}")
+        except Exception as e:
+            logger.warning(f"Could not store System WA key in CIRISVerify: {e}")
+
         logger.info(f"Created system WA certificate: {wa_id} (child of {parent_wa_id})")
 
         return system_wa
 
     async def sign_task(self, task: "Task", wa_id: str) -> Tuple[str, str]:
         """Sign a task with a WA's private key.
+
+        Uses CIRISVerify named keys for TPM/Keystore-protected signing.
+        Falls back to file-based keys for System WA (backward compat).
 
         Returns:
             Tuple of (signature, signed_at timestamp)
@@ -1297,17 +1470,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         wa = await self.get_wa(wa_id)
         if not wa:
             raise ValueError(f"WA {wa_id} not found")
-
-        # Load the private key
-        if wa.name == "CIRIS System Authority":
-            # System WA key is stored locally
-            key_path = self.key_dir / "system_wa.key"
-            if not key_path.exists():
-                raise ValueError("System WA private key not found")
-            private_key = key_path.read_bytes()
-        else:
-            # Other WAs would have their keys managed differently
-            raise ValueError(f"Private key management not implemented for WA {wa_id}")
 
         # Create canonical representation of task for signing
         task_data = {
@@ -1319,12 +1481,293 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             "parent_task_id": task.parent_task_id,
             "context": task.context.model_dump() if task.context else None,
         }
-
         canonical_json = json.dumps(task_data, sort_keys=True, separators=(",", ":"))
-        signature = self.sign_data(canonical_json.encode("utf-8"), private_key)
-        signed_at = (self._time_service.now() if self._time_service else datetime.now(timezone.utc)).isoformat()
+        data_bytes = canonical_json.encode("utf-8")
 
-        return signature, signed_at
+        # Try CIRISVerify named key first (TPM/Keystore protected)
+        if has_verifier():
+            try:
+                verifier = get_verifier()
+                if verifier.has_named_key(wa_id):
+                    signature_bytes = verifier.sign_with_named_key(wa_id, data_bytes)
+                    signature = base64.b64encode(signature_bytes).decode()
+                    signed_at = self._get_current_time().isoformat()
+                    return signature, signed_at
+            except Exception as e:
+                logger.debug(f"CIRISVerify signing failed for {wa_id}: {e}")
+
+        # Fallback to file-based key for System WA
+        if wa.name == "CIRIS System Authority":
+            key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
+            if not key_path.exists():
+                raise ValueError("System WA private key not found")
+            private_key = key_path.read_bytes()
+            signature = self.sign_data(data_bytes, private_key)
+            signed_at = self._get_current_time().isoformat()
+            return signature, signed_at
+
+        raise ValueError(f"No signing key available for WA {wa_id}")
+
+    async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
+        """Sign arbitrary data with a WA's private key.
+
+        Uses CIRISVerify named keys for TPM/Keystore-protected signing.
+        Falls back to file-based keys for System WA.
+
+        Args:
+            wa_id: The WA ID to sign with
+            data: The data to sign
+
+        Returns:
+            Base64-encoded signature
+
+        Raises:
+            ValueError: If WA not found or no signing key available
+        """
+        # Verify WA exists
+        wa = await self.get_wa(wa_id)
+        if not wa:
+            raise ValueError(f"WA {wa_id} not found")
+
+        # Try CIRISVerify named key first (TPM/Keystore protected)
+        if has_verifier():
+            try:
+                verifier = get_verifier()
+                if verifier.has_named_key(wa_id):
+                    signature_bytes = verifier.sign_with_named_key(wa_id, data)
+                    return base64.b64encode(signature_bytes).decode()
+            except Exception as e:
+                logger.debug(f"CIRISVerify signing failed for {wa_id}: {e}")
+
+        # Fallback to file-based key for System WA
+        if wa.name == "CIRIS System Authority":
+            key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
+            if not key_path.exists():
+                raise ValueError("System WA private key not found")
+            private_key = key_path.read_bytes()
+            return self.sign_data(data, private_key)
+
+        raise ValueError(f"No signing key available for WA {wa_id}")
+
+    @staticmethod
+    def _deferral_canonical_bytes(deferral_id: str, response: "DeferralResponse", signed_at: str) -> bytes:
+        """Canonical bytes the deferral-resolution signature commits to.
+
+        Sorted compact JSON, matching ``sign_task``/``verify_task_signature``.
+        #944 suggests JCS to share one story with the 2.9.6 trace cut; adopting
+        it here alone would create two stories *inside* the signing code
+        instead of one, so unifying all three belongs in its own change.
+        """
+        from ciris_engine.schemas.services.authority_core import deferral_resolution_payload
+
+        payload = deferral_resolution_payload(deferral_id, response, signed_at)
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    @staticmethod
+    def _owner_key_id(engine: object, signing_key_id: str) -> Optional[str]:
+        """The CEG federation identity that owns ``signing_key_id``, if any.
+
+        ``owner_of_json`` is the substrate's single-owner resolver — purpose
+        filtered to the owner-binding sub-relation, so at most one. It returns
+        JSON ``null`` for an unowned node, which is the honest answer on a
+        deployment that has not been owner-provisioned; the signature is still
+        sound, it simply does not yet chain anywhere.
+        """
+        owner_of_json = getattr(engine, "owner_of_json", None)
+        if owner_of_json is None:
+            return None
+        try:
+            raw = owner_of_json(signing_key_id)
+        except Exception as exc:
+            # Includes the substrate's fail-closed `federation_ambiguous_node_owner`
+            # pre-gate. Ambiguity is an authority problem worth seeing, but it does
+            # not make the node's own signature less valid.
+            logger.warning("Could not resolve owner of signing key %s: %s", signing_key_id, exc)
+            return None
+        if not raw:
+            return None
+        try:
+            owner = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        return owner if isinstance(owner, str) and owner else None
+
+    @staticmethod
+    def _signing_pubkeys(engine: object, signing_key_id: str) -> Optional[Tuple[str, Optional[str]]]:
+        """``(ed25519_b64, ml_dsa_65_b64 | None)`` for ``signing_key_id``.
+
+        The local signer first — the ordinary case, since the node that records
+        a resolution is the node that consumes it — then the federation
+        directory, which is what makes a resolution signed by a sibling
+        occurrence verifiable here.
+        """
+        try:
+            if signing_key_id == engine.local_derived_key_id():  # type: ignore[attr-defined]
+                ed: str = engine.local_public_key_b64()  # type: ignore[attr-defined]
+                try:
+                    pqc: Optional[str] = engine.local_pqc_public_key_b64()  # type: ignore[attr-defined]
+                except Exception:
+                    pqc = None  # Hybrid-pending deployment (no PQC seed).
+                return ed, pqc
+        except Exception:
+            pass  # Fall through to the directory.
+
+        try:
+            raw = engine.lookup_public_key(signing_key_id)  # type: ignore[attr-defined]
+        except Exception as exc:
+            logger.warning("Federation directory lookup failed for %s: %s", signing_key_id, exc)
+            return None
+        if not raw:
+            return None
+        try:
+            record = json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(record, dict):
+            return None
+        ed_key = record.get("pubkey_ed25519_base64")
+        if not isinstance(ed_key, str) or not ed_key:
+            return None
+        pqc_key = record.get("pubkey_ml_dsa_65_base64")
+        return ed_key, pqc_key if isinstance(pqc_key, str) and pqc_key else None
+
+    async def sign_deferral_resolution(
+        self, deferral_id: str, response: "DeferralResponse", signed_at: str
+    ) -> "DeferralResponse":
+        """Sign a deferral resolution with the owner's CEG identity chain (#944).
+
+        Before this the ``signature`` on a resolved deferral was
+        ``f"api_{user_id}_{timestamp}"`` — an identifier and a clock reading,
+        forgeable by anything able to write the row. Under #938 that record is
+        the budget-issuance event, so "approval can be verified after the fact"
+        has to be true of it rather than merely claimed.
+
+        **Which key signs.** The local node's persist signing key, hybrid
+        (Ed25519 + ML-DSA-65) via ``local_sign_hybrid`` — the substrate's single
+        hybrid-sign verb, so the bound-signature rule
+        ``pqc = Sign_PQC(message || ed25519_sig)`` is not re-derived here. That
+        key is the *delegate*: what authorizes the agent to operate at all is
+        the owner's CEG federation identity signing the delegation to it. The
+        record therefore carries ``owner_key_id`` so an approval chains to that
+        same root of authority instead of standing on a second, ad-hoc key.
+
+        The owner's own private key deliberately does not cross into this
+        process — the substrate releases it only under a verified owner session
+        — so this signs as the delegate and *names* the root, rather than
+        pretending to be the root.
+
+        Returns the response with its signing fields filled. Raises on any
+        failure: the caller must refuse to record an unsigned resolution rather
+        than record an unverifiable one.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not initialized — cannot sign deferral resolution")
+
+        canonical = self._deferral_canonical_bytes(deferral_id, response, signed_at)
+        signing_key_id = engine.local_derived_key_id()
+
+        # Hybrid-pending is still a state the substrate models, but it is now read
+        # off the RESULT instead of caught as an exception and served by a second
+        # verb. The old fallback called `local_sign` when no PQC signer was wired
+        # — locally reasonable, and permanently broken once the classical key is
+        # sealed (0.5.162 refuses it outright). It would have failed in exactly
+        # the deployments it was written to help.
+        from ciris_engine.logic.utils import substrate_signing
+
+        classical_sig, pqc_sig = substrate_signing.sign_hybrid(engine, canonical)
+        classical = base64.b64encode(classical_sig).decode("ascii")
+        pqc: Optional[str] = base64.b64encode(pqc_sig).decode("ascii") if pqc_sig else None
+        if pqc is None:
+            logger.info("Signing deferral resolution %s hybrid-pending (no PQC signer)", deferral_id)
+
+        return response.model_copy(
+            update={
+                "signature": classical,
+                "signature_pqc": pqc,
+                "signed_at": signed_at,
+                "signing_key_id": signing_key_id,
+                "owner_key_id": self._owner_key_id(engine, signing_key_id),
+            }
+        )
+
+    async def verify_deferral_resolution(self, deferral_id: str, response: "DeferralResponse", signed_at: str) -> bool:
+        """Verify a deferral resolution's signature. **Fails closed.**
+
+        Returns False for an absent, legacy-placeholder, or invalid signature,
+        for an unresolvable signing key, and when the substrate is unavailable
+        to check against. A caller must not act on an unverified approval; a
+        signature nothing checks is the same defect one layer along.
+
+        Legacy records are distinguishable via
+        ``is_unverifiable_legacy_signature`` so they can be surfaced as
+        *unverified* rather than reported as forged — the difference between a
+        migration gap and an attack. Callers wanting that distinction should
+        test it before calling here; this returns a bare False either way.
+
+        The owner binding is re-resolved from the federation directory rather
+        than trusted from the record. A stored ``owner_key_id`` that disagrees
+        with the directory is refused — which is what stops the field from
+        being decoration an attacker could simply fill in.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.schemas.services.authority_core import is_unverifiable_legacy_signature
+
+        if not response.signature or is_unverifiable_legacy_signature(response.signature):
+            return False
+
+        if not response.signing_key_id:
+            # A signature we cannot attribute to a key is not evidence.
+            logger.warning("Deferral resolution %s carries a signature but no signing_key_id", deferral_id)
+            return False
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.error("persist engine not initialized — cannot verify deferral resolution %s", deferral_id)
+            return False
+
+        pubkeys = self._signing_pubkeys(engine, response.signing_key_id)
+        if pubkeys is None:
+            logger.warning("No public key for deferral signer %s", response.signing_key_id)
+            return False
+        ed_pubkey, pqc_pubkey = pubkeys
+
+        # The PQC signature and pubkey are paired: both present for a full
+        # hybrid verify, both absent for a hybrid-pending row.
+        if response.signature_pqc and pqc_pubkey:
+            pqc_sig: Optional[str] = response.signature_pqc
+            pqc_key: Optional[str] = pqc_pubkey
+            policy = "strict"
+        else:
+            pqc_sig = None
+            pqc_key = None
+            policy = "ed25519_fallback"
+
+        canonical = self._deferral_canonical_bytes(deferral_id, response, signed_at)
+        try:
+            engine.verify_hybrid(canonical, response.signature, pqc_sig, ed_pubkey, pqc_key, policy)
+        except Exception as exc:
+            logger.warning("Deferral resolution %s failed signature verification: %s", deferral_id, exc)
+            return False
+
+        # A claimed owner must be the one the directory actually binds — including
+        # the case where the directory binds none. Anything else would let the
+        # field be filled in at will, which is what makes it decoration rather
+        # than a control. A record claiming *no* owner is not refused: it asserts
+        # nothing, and predates provisioning rather than contradicting it.
+        directory_owner = self._owner_key_id(engine, response.signing_key_id)
+        if response.owner_key_id and response.owner_key_id != directory_owner:
+            logger.error(
+                "Deferral resolution %s claims owner %s but the directory binds %s",
+                deferral_id,
+                response.owner_key_id,
+                directory_owner,
+            )
+            return False
+
+        return True
 
     async def verify_task_signature(self, task: "Task") -> bool:
         """Verify a task's signature.
@@ -1356,6 +1799,60 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Verify the signature
         return self._verify_signature(canonical_json.encode("utf-8"), task.signature, wa.pubkey)
 
+    @staticmethod
+    def _holds_deferral_jurisdiction(scopes: List[str]) -> bool:
+        """Does any held scope name `resolve_deferral` (or everything) as its action?
+
+        A STRUCTURAL check, not a grant check. Asking `scope_grants(s,
+        "resolve_deferral", <probe>)` would report False for a legitimately
+        narrow `resolve_deferral:medical_*` against any probe outside that
+        domain, and the backfill would then widen exactly the certificates an
+        operator deliberately narrowed. Presence of the action half is the
+        question here; whether it grants THIS resource is the gate's job.
+        """
+        for raw in scopes:
+            scope = (raw or "").strip()
+            if not scope:
+                continue
+            if scope == "*":
+                return True
+            action, sep, pattern = scope.partition(":")
+            if sep and pattern.strip() and action.strip() in ("resolve_deferral", "*"):
+                return True
+        return False
+
+    async def _backfill_deferral_scopes(self) -> None:
+        """Give pre-existing AUTHORITY certificates the scope the F1 gate needs.
+
+        routes/wa.py refuses a domain-tagged deferral unless the resolving WA
+        holds `resolve_deferral:<pattern>`. No minting path issued that before
+        2.9.29 — setup authorities got `read:any, write:any` and OAuth
+        authorities got the `wa.resolve_deferral` PERMISSION, which is a
+        different grammar and grants no jurisdiction. Without this backfill,
+        turning the gate on would 403 every authority that already exists,
+        i.e. it would close a security finding by breaking the human-resolution
+        path for everyone who currently uses it.
+
+        `:any` restores exactly the breadth these certificates already had
+        under role-only authorization — this widens nobody. Certificates that
+        already name the action (including narrow ones) are left alone.
+        """
+        try:
+            for wa in await self._list_all_was():
+                if wa.role != WARole.AUTHORITY:
+                    continue  # ROOT bypasses the scope gate; OBSERVER must not resolve
+                if self._holds_deferral_jurisdiction(list(wa.scopes or [])):
+                    continue
+                scopes = list(wa.scopes or []) + ["resolve_deferral:any"]
+                await self.update_wa(wa.wa_id, scopes_json=json.dumps(scopes))
+                logger.info(
+                    "Backfilled resolve_deferral:any onto AUTHORITY %s — it predates the "
+                    "scope grammar and would otherwise be refused every domain-tagged deferral",
+                    wa.wa_id,
+                )
+        except Exception as e:  # pragma: no cover - never block startup on a backfill
+            logger.warning("Could not backfill deferral scopes: %s", e, exc_info=True)
+
     async def bootstrap_if_needed(self) -> None:
         """Bootstrap the system if no WAs exist."""
         was = await self._list_all_was()
@@ -1367,7 +1864,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Load and insert root certificate
             seed_path = Path(__file__).parent.parent.parent / "seed" / "root_pub.json"
             if seed_path.exists():
-                async with aiofiles.open(seed_path) as f:
+                async with aiofiles.open(seed_path, encoding="utf-8") as f:
                     content = await f.read()
                     root_data = json.loads(content)
 
@@ -1397,6 +1894,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 await self._create_system_wa_certificate(found_root_wa.wa_id)
             else:
                 logger.warning("No root WA certificate found - cannot create system WA")
+
+        # Certificates minted before the scope grammar existed would be refused
+        # every domain-tagged deferral by the F1 gate. Restore the breadth they
+        # already had, without widening anyone who named the action explicitly.
+        await self._backfill_deferral_scopes()
 
     async def _create_channel_token_for_adapter(self, adapter_type: str, adapter_info: JSONDict) -> str:
         """Create a channel token for an adapter."""
@@ -1429,36 +1931,43 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return token
 
-    def verify_token_sync(self, token: str) -> Optional[JSONDict]:
+    def verify_token_sync(self, token: str) -> Optional[TokenVerification]:
         """Synchronously verify a token (for non-async contexts)."""
+        # For sync verification, we can only verify gateway-signed tokens
+        # since authority tokens require async DB lookups for public keys
+
         try:
-            # For sync verification, we can only verify gateway-signed tokens
-            # since authority tokens require async DB lookups for public keys
+            # Verify the token with gateway secret first
+            decoded = jwt.decode(token, self.gateway_secret, algorithms=["HS256"])
 
-            # Try gateway-signed token verification
-            try:
-                # Verify the token with gateway secret first
-                decoded = jwt.decode(token, self.gateway_secret, algorithms=["HS256"])
+            # Now that the token is verified, we can trust its contents
+            # Validate that this is indeed a gateway-signed token type
+            sub_type = decoded.get("sub_type")
+            if sub_type in [JWTSubType.ANON.value, JWTSubType.OAUTH.value, JWTSubType.USER.value]:
+                # Valid gateway token - convert to TokenVerification
+                exp_timestamp = decoded.get("exp")
+                expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc) if exp_timestamp else None
+                return TokenVerification(
+                    valid=True,
+                    wa_id=decoded.get("sub"),
+                    name=decoded.get("name"),
+                    role=decoded.get("role"),
+                    expires_at=expires_at,
+                )
+            else:
+                # Invalid sub_type for gateway token
+                return None
 
-                # Now that the token is verified, we can trust its contents
-                # Validate that this is indeed a gateway-signed token type
-                sub_type = decoded.get("sub_type")
-                if sub_type in [JWTSubType.ANON.value, JWTSubType.OAUTH.value, JWTSubType.USER.value]:
-                    # Valid gateway token
-                    return dict(decoded)
-                else:
-                    # Invalid sub_type for gateway token
-                    return None
-
-            except jwt.InvalidTokenError:
-                # Token failed verification with gateway secret
-                pass
-
+        except jwt.ExpiredSignatureError:
+            # Token has expired
+            return None
+        except jwt.InvalidTokenError:
+            # Token failed verification with gateway secret
             # Authority tokens require async DB access for public key retrieval
             # So we cannot verify them in sync mode
             return None
-
-        except Exception:
+        except (KeyError, TypeError):
+            # Malformed token payload
             return None
 
     def get_capabilities(self) -> ServiceCapabilities:
@@ -1484,6 +1993,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "create_channel_token",
                 "verify_token_sync",
                 "update_last_login",
+                # Attestation (CIRISVerify)
+                "run_attestation",
+                "get_cached_attestation",
+                "get_attestation_cache_status",
+                "is_attestation_in_progress",
             ],
             version="1.0.0",
             dependencies=["TimeService"],
@@ -1500,7 +2014,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         # Count certificates by type
         try:
-            counts = authentication_store.get_certificate_counts(self.db_path)
+            counts = authentication_store.get_certificate_counts()
             cert_count = counts.get("active", 0)
             revoked_count = counts.get("revoked", 0)
             # Extract by_role dict with type assertion
@@ -1510,15 +2024,20 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 if isinstance(role_counts_raw, dict)
                 else {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
             )
-        except Exception as e:
-            logger.warning(
-                f"Authentication service health check failed: {type(e).__name__}: {str(e)} - Unable to access auth database"
-            )
+        except (OSError, IOError) as e:
+            # Database file access errors
+            logger.warning(f"Authentication service health check failed: {type(e).__name__} - Database access error")
+            cert_count = 0
+            role_counts = {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
+            revoked_count = 0
+        except (KeyError, TypeError, ValueError) as e:
+            # Malformed data from database
+            logger.warning(f"Authentication service health check failed: {type(e).__name__} - Malformed database data")
             cert_count = 0
             role_counts = {"OBSERVER": 0, "USER": 0, "ADMIN": 0, "AUTHORITY": 0, "ROOT": 0}
             revoked_count = 0
 
-        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        current_time = self._get_current_time()
         uptime_seconds = 0.0
         if self._start_time:
             uptime_seconds = (current_time - self._start_time).total_seconds()
@@ -1556,21 +2075,239 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             last_health_check=current_time,
         )
 
+    async def _migrate_wa_keys_to_verify(self) -> None:
+        """Migrate existing WA signing keys to CIRISVerify.
+
+        This handles the transition to TPM/Keystore protected keys:
+        1. System WA: migrate from file if exists
+        2. User WAs (admin, etc.): rotate keys since old keys were discarded
+           (no prior signatures exist, so rotation is safe)
+        """
+        if not has_verifier():
+            logger.debug("CIRISVerify not available - skipping key migration")
+            return
+
+        try:
+            verifier = get_verifier()
+
+            # 1. Migrate System WA key if it exists on disk but not in CIRISVerify
+            system_key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
+            if system_key_path.exists():
+                system_wa = await self._get_system_wa()
+                if system_wa and not verifier.has_named_key(system_wa.wa_id):
+                    private_key = system_key_path.read_bytes()
+                    verifier.store_named_key(system_wa.wa_id, private_key)
+                    logger.info(f"Migrated System WA key to CIRISVerify: {system_wa.wa_id}")
+
+            # 2. Auto-rotate keys for user WAs that don't have keys in CIRISVerify
+            # Since prior releases discarded private keys, nothing was ever signed,
+            # so we can safely generate new keys without breaking anything.
+            all_was = await self._list_all_was(active_only=True)
+            for wa in all_was:
+                # Skip System WA (handled above via file migration) and default admin
+                # Only migrate actual user WAs created during setup (the responsible human)
+                if wa.name in ("CIRIS System Authority", "admin"):
+                    # Clean up any erroneously stored admin keys from prior versions
+                    if wa.name == "admin" and verifier.has_named_key(wa.wa_id):
+                        verifier.delete_named_key(wa.wa_id)
+                        logger.info(f"Removed default admin key from CIRISVerify: {wa.wa_id}")
+                    continue
+
+                # Check if this WA already has a key in CIRISVerify
+                if not verifier.has_named_key(wa.wa_id):
+                    # Generate new keypair and store in CIRISVerify
+                    private_key, public_key = self.generate_keypair()
+                    verifier.store_named_key(wa.wa_id, private_key)
+
+                    # Update the public key in the database
+                    new_pubkey = self._encode_public_key(public_key)
+                    await self.update_wa(wa.wa_id, pubkey=new_pubkey)
+                    logger.info(f"Auto-rotated signing key for WA {wa.wa_id} ({wa.name})")
+
+        except Exception as e:
+            logger.warning(f"WA key migration failed (non-fatal): {e}")
+
+    def _register_agent_pubkey_with_persist(self) -> None:
+        """Register the agent's CIRISVerify-managed Ed25519 pubkey with
+        persist's `accord_public_keys` table (the lens audit-chain
+        pubkey directory). 2.9.0 Lane C C3, CIRISAgent#765.
+
+        `accord_public_keys` is the table audit-chain verifiers query
+        to resolve `signing_key_id` → raw Ed25519 pubkey. Required for
+        A0b (audit chain bridge entry — verifier looks up the agent's
+        TPM-backed signing key here to validate the bridge signature)
+        and A3 (GraphAuditService cutover — every audit_record_entry
+        write carries a signing_key_id that resolves through this
+        table).
+
+        Distinct from `federation_keys` (the federation directory for
+        peer trust / Counter-RII / consent_role / V020 trust columns),
+        which uses `engine.register_federation_key(...)` and requires
+        the Engine to be constructed with `local_key_id` +
+        `local_key_path`. That's a follow-up step (C3') with its own
+        key-bootstrap design question — the agent's TPM-backed key
+        isn't loadable as a filesystem path.
+
+        Idempotent:
+          - register_public_key is a no-op on (key_id, public_key)
+            collision with matching content
+          - raises on collision with differing content (intentional —
+            signals key rotation that the operator must approve)
+        """
+        from ciris_engine.logic.persistence import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.debug("[AuthenticationService] persist engine not wired; " "skipping steward key registration")
+            return
+
+        # #1009 — id AND key both come from the ENGINE, or neither does.
+        #
+        # `local_derived_key_id()` is derive_key_id output, and derive_key_id is a
+        # function of the PUBLIC KEY: same alias with a different key yields a
+        # different id (verified — ciris-agent-bootstrap-f6wqvxosm2 vs
+        # ...-gpjyxfcrm3). So the id and the pubkey in a row are not independent
+        # fields; a row pairing one key's id with another key's bytes is not a
+        # weaker registration, it is a wrong one, and every verifier that
+        # resolves through it gets the wrong key.
+        #
+        # This function was written for 2.9.0, when the agent signed with the
+        # CIRISVerify/TPM key and `agent-{sha256(pub)[:12]}` correctly named that
+        # key. 2.9.7 moved signing to the engine's local signer and this site was
+        # not updated — so it registered a key nothing signs with, under an id no
+        # peer had ever seen. canonical-server-1 answered 401 verify_unknown_key
+        # 8,631 times a day for 71 hours while trace delivery sat at zero.
+        try:
+            key_id = engine.local_derived_key_id()
+            pubkey_b64 = engine.local_public_key_b64()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[AuthenticationService] no federation identity on the persist Engine "
+                "(%s); skipping pubkey registration. The Engine needs local_key_id + "
+                "local_key_path. NOT falling back to an agent-{fingerprint} id: that "
+                "namespace is unverifiable to peers and fails silently (#1009).",
+                exc,
+            )
+            return
+
+        if not key_id or not pubkey_b64:
+            logger.warning(
+                "[AuthenticationService] engine returned an empty federation key id or "
+                "pubkey; skipping registration rather than writing an unverifiable row (#1009)."
+            )
+            return
+
+        try:
+            engine.register_public_key(
+                signature_key_id=key_id,
+                public_key_b64=pubkey_b64,
+                algorithm="ed25519",
+                description="CIRISAgent federation signing key (persist local signer)",
+                added_by="agent_bootstrap",
+            )
+            logger.info(
+                "[AuthenticationService] registered federation signing key %s in " "accord_public_keys",
+                key_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[AuthenticationService] accord_public_keys registration failed for %s: %s",
+                key_id,
+                exc,
+            )
+        return
+
     async def start(self) -> None:
         """Start the service."""
         await super().start()
         self._started = True
-        self._start_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        self._start_time = self._get_current_time()
         logger.info("AuthenticationService started")
+
+        # Migrate existing WA keys to CIRISVerify (runs once per key)
+        # Note: CIRISVerify singleton must be initialized before this runs
+        await self._migrate_wa_keys_to_verify()
+
+        # Surface CIRISVerify storage descriptor at boot so operators can
+        # confirm where the agent's identity seed lives. Best-effort — silent
+        # when ciris-verify <1.8.0 is loaded (descriptor not yet exposed).
+        # See issue #708 / CIRISVerify#1 for the PoB substrate-primitive
+        # context: the same Ed25519 key signs traces, addresses Reticulum
+        # destinations, and authors gratitude signals — losing it silently
+        # on container restart resets the federation S-factor decay window.
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                log_storage_descriptor_at_boot,
+            )
+
+            log_storage_descriptor_at_boot()
+        except Exception as e:
+            # MUST NOT raise from start(); identity-seed observability is
+            # opt-in by ciris-verify version, not a hard dependency.
+            logger.debug(f"[AuthenticationService] storage_descriptor boot log skipped: {e}")
+
+        # 2.9.0 Lane C C3: register agent's CIRISVerify-managed pubkey
+        # with persist's `accord_public_keys` table so audit-chain
+        # verifiers (A0b bridge entry, A3 audit_record_entry calls)
+        # can resolve our signing_key_id back to the raw Ed25519
+        # pubkey. Distinct from `federation_keys` registration (C3'),
+        # which needs the Engine constructed with local_key_id +
+        # local_key_path. MUST NOT raise from start(); persist
+        # availability is checked at call sites that need it.
+        # See CIRISAgent#765.
+        try:
+            self._register_agent_pubkey_with_persist()
+        except Exception as e:
+            logger.warning(f"[AuthenticationService] persist federation key registration " f"skipped (non-fatal): {e}")
+
+        # Kick off startup attestation in the BACKGROUND — but capture the
+        # task so any code that *needs* the attestation result can await it.
+        # Attestation MUST run fresh on every startup to verify the current
+        # binary/environment. Caching across restarts would defeat L1/L4
+        # integrity guarantees (replay/poisoning risk).
+        # Record the start timestamp so await_attestation_ready() can
+        # enforce the 15s end-to-end budget from this moment, not from
+        # when each caller arrives.
+        self._attestation_started_at = asyncio.get_event_loop().time()
+        self._attestation_task = asyncio.create_task(self.run_startup_attestation())
+        self._background_tasks.add(self._attestation_task)
+        self._attestation_task.add_done_callback(self._background_tasks.discard)
+
+        # Start periodic attestation refresh loop
+        self._attestation_refresh_task = asyncio.create_task(self._attestation_refresh_loop())
+        self._background_tasks.add(self._attestation_refresh_task)
+        self._attestation_refresh_task.add_done_callback(self._background_tasks.discard)
 
     async def stop(self) -> None:
         """Stop the service."""
-        await super().stop()
-        self._started = False
-        # Clear caches
-        self._token_cache.clear()
-        self._channel_token_cache.clear()
-        logger.info("AuthenticationService stopped")
+        try:
+            # Cancel both attestation tasks and await their completion so they
+            # don't outlive the service. Without this, the startup attestation
+            # task (live FFI + registry lookup) can survive teardown — fine in
+            # production where the process exits, but under pytest-xdist the
+            # orphan task corrupts worker state and crashes neighbouring tests.
+            for task in (self._attestation_refresh_task, self._attestation_task):
+                if task and not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:  # noqa: ASYNC910  # NOSONAR
+                        # Expected: we just cancelled this child task on line above.
+                        # Do NOT re-raise - this is OUR cancellation, not external.
+                        pass
+            await super().stop()
+            self._started = False
+            # Clear caches
+            self._token_cache.clear()
+            self._channel_token_cache.clear()
+            logger.info("AuthenticationService stopped")
+        except asyncio.CancelledError:  # noqa: ASYNC910
+            # External cancellation of stop() - cleanup then re-raise per asyncio contract
+            self._started = False
+            self._token_cache.clear()
+            self._channel_token_cache.clear()
+            logger.info("AuthenticationService stopped (cancelled)")
+            raise  # Re-raised after cleanup per asyncio contract
 
     def _collect_custom_metrics(self) -> Dict[str, float]:
         """Collect authentication-specific metrics."""
@@ -1607,7 +2344,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # Get all base + custom metrics
         metrics = self._collect_metrics()
 
-        current_time = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
+        current_time = self._get_current_time()
         uptime_seconds = 0.0
         if self._start_time:
             uptime_seconds = (current_time - self._start_time).total_seconds()
@@ -1631,4 +2368,703 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             return False
 
         # Check database connection via store
-        return authentication_store.check_database_health(self.db_path)
+        return authentication_store.check_database_health()
+
+    # =========================================================================
+    # CIRISVerify Singleton Management
+    # =========================================================================
+
+    def get_verifier(self) -> Any:
+        """Get the shared CIRISVerify singleton instance (thread-safe).
+
+        All code that needs CIRISVerify should use this method instead of
+        creating instances directly. This ensures:
+        - Single instance across the application
+        - Portal key is imported once and shared
+        - Hardware keystore access is consistent
+
+        Returns:
+            CIRISVerify instance, or None if not available.
+        """
+        try:
+            from ciris_engine.logic.services.infrastructure.authentication.verifier_singleton import (
+                get_verifier as get_global_verifier,
+            )
+
+            return get_global_verifier()
+        except ImportError:
+            logger.debug("[CIRISVerify] Not available (import failed)")
+            return None
+        except Exception as e:
+            logger.warning(f"[CIRISVerify] Failed to get singleton: {e}")
+            return None
+
+    def import_portal_key(self, private_key_bytes: bytes) -> bool:
+        """Import a Portal-issued Ed25519 signing key into the CIRISVerify vault.
+
+        This uses the singleton verifier to import the key. CIRISVerify handles
+        storage in Android Keystore, Secure Enclave, TPM, or SW fallback.
+
+        Args:
+            private_key_bytes: 32-byte Ed25519 private key from Portal
+
+        Returns:
+            True if import succeeded, False otherwise.
+        """
+        verifier = self.get_verifier()
+        if verifier is None:
+            logger.warning("[CIRISVerify] Cannot import key - verifier not available")
+            return False
+
+        try:
+            if not hasattr(verifier, "import_key_sync"):
+                logger.warning("[CIRISVerify] import_key_sync not available")
+                return False
+
+            verifier.import_key_sync(private_key_bytes)
+            logger.info("[CIRISVerify] Portal key imported successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"[CIRISVerify] Failed to import portal key: {e}")
+            return False
+
+    def has_signing_key(self) -> bool:
+        """Check if a signing key exists in the CIRISVerify vault.
+
+        Returns:
+            True if a key exists, False otherwise.
+        """
+        verifier = self.get_verifier()
+        if verifier is None:
+            return False
+
+        try:
+            if not hasattr(verifier, "has_key_sync"):
+                return False
+            return bool(verifier.has_key_sync())
+        except Exception:
+            return False
+
+    # =========================================================================
+    # Attestation Methods (CIRISVerify Integration)
+    # =========================================================================
+
+    async def run_attestation(
+        self,
+        mode: str = "partial",
+        play_integrity_token: Optional[str] = None,
+        play_integrity_nonce: Optional[str] = None,
+        force_refresh: bool = False,
+    ) -> AttestationResult:
+        """Run full attestation check and cache the result.
+
+        This wraps calls to CIRISVerify and caches the result for subsequent
+        calls. The cache is used by both the startup badge and Trust page.
+
+        Args:
+            mode: Attestation mode - 'full' or 'partial' (default)
+            play_integrity_token: Optional Google Play Integrity token
+            play_integrity_nonce: Nonce used for Play Integrity request
+            force_refresh: Force re-run even if cache is valid
+
+        Returns:
+            AttestationResult with all verification details
+        """
+        # Check cache first (unless force_refresh)
+        if not force_refresh:
+            cached = self.get_cached_attestation()
+            if cached is not None:
+                logger.info(
+                    f"[attestation] Returning cached result (early check), instance={hex(id(self))}, level={cached.max_level}"
+                )
+                return cached
+
+        # Set in_progress flag BEFORE acquiring lock so callers can see it
+        self._attestation_in_progress = True
+        logger.info("[attestation] Setting _attestation_in_progress=True")
+        try:
+            # Acquire lock to prevent concurrent attestation runs
+            async with self._attestation_lock:
+                # Double-check cache after acquiring lock
+                if not force_refresh:
+                    cached = self.get_cached_attestation()
+                    if cached is not None:
+                        logger.info(
+                            f"[attestation] Returning cached result (lock-check), instance={hex(id(self))}, level={cached.max_level}"
+                        )
+                        return cached
+                result = await self._run_attestation_internal(
+                    mode=mode,
+                    play_integrity_token=play_integrity_token,
+                    play_integrity_nonce=play_integrity_nonce,
+                )
+                # Cache the result
+                result.cached_at = self._get_current_time()
+                result.cache_ttl_seconds = self._attestation_cache_ttl
+                self._attestation_cache = result
+                # Also save as last known (for stale-while-revalidate)
+                self._last_known_attestation = result
+                logger.info(
+                    f"[attestation] Cached result: level={result.max_level}, instance={hex(id(self))}, binary={'OK' if result.binary_ok else 'FAIL'}"
+                )
+                return result
+        finally:
+            self._attestation_in_progress = False
+            logger.info("[attestation] Setting _attestation_in_progress=False")
+
+    async def _run_attestation_internal(
+        self,
+        mode: str,
+        play_integrity_token: Optional[str],
+        play_integrity_nonce: Optional[str],
+    ) -> AttestationResult:
+        """Internal method to run attestation via CIRISVerify.
+
+        This method delegates to the attestation module for modular,
+        testable attestation processing.
+
+        Args:
+            mode: Attestation mode ("full" or "partial")
+            play_integrity_token: Optional Play Integrity token
+            play_integrity_nonce: Optional Play Integrity nonce
+
+        Returns:
+            AttestationResult with verification data
+        """
+        from .attestation import build_attestation_result, run_verification_thread
+
+        attestation_mode = "partial" if mode not in ("full", "partial") else mode
+
+        logger.info("[attestation] Starting CIRISVerify attestation")
+
+        # Run verification in a separate thread (Rust Tokio stack requirement)
+        verify_result = await run_verification_thread(
+            get_verifier=self.get_verifier,
+            attestation_mode=attestation_mode,
+        )
+
+        # Build and return attestation result
+        result = build_attestation_result(verify_result, attestation_mode)
+        return result
+
+    def _log_attestation_slo_breach(self, message: str) -> None:
+        """Report a startup-attestation latency-SLO breach without killing the run.
+
+        One definition so the two breach sites (completed-but-slow, and
+        still-running-past-budget) read identically in the log and stay in
+        step. Logged at WARNING, not ERROR: the run continues, and the
+        incident-capture handler already promotes a repeated warning. The
+        fileable receipts dump still happens at the processor gate.
+        """
+        # Once at WARNING, then DEBUG. Every per-thought batch_context call
+        # lands here too once the deadline has passed, and a warning per
+        # thought buries the one that matters.
+        if getattr(self, "_attestation_slo_breach_logged", False):
+            logger.debug("[attestation] SLO BREACH (repeat): %s", message)
+            return
+        self._attestation_slo_breach_logged = True
+        logger.warning("[attestation] SLO BREACH: %s", message)
+
+    async def await_attestation_ready(
+        self,
+        budget_seconds: Optional[float] = None,
+    ) -> AttestationGateOutcome:
+        """Block until the startup attestation task has completed.
+
+        ciris_verify is a hard runtime dependency — there is no path that
+        runs without verified attestation. Startup attestation is launched
+        as a background task in `start()` so the service can return quickly
+        and other init can run in parallel; any consumer that requires the
+        populated cache (e.g., batch_context building a thought context,
+        or the runtime processor gate) calls this method first.
+
+        Budget semantics:
+          The budget is measured from when the task was scheduled in
+          `start()`, NOT from when this method begins awaiting. That
+          captures the end-to-end promise: 15s from service start to
+          cache-populated, no matter how late in startup the caller
+          shows up. A caller that arrives 14s after start() only has
+          ~1s of remaining budget; a caller after 15s is already late
+          and times out immediately.
+
+        Behavior:
+          - If start() never ran: RuntimeError (no task to await).
+          - If task is still running and budget remains: await up to
+            the remaining budget. On timeout: report an SLO breach and
+            keep waiting to the hard ceiling (the breach is a latency
+            regression, not a correctness failure),
+            because per the contract any run that takes >15s should be
+            investigated as a verifier regression, not waited out.
+          - If task already finished: returns immediately.
+          - If task raised: the exception is re-raised so the caller
+            fails loudly. We do not swallow attestation failures.
+        """
+        # Resolve at CALL time. As a default argument this was evaluated at
+        # import, so a runtime override (mobile_main sets 45) was discarded and
+        # the frozen 20.0 was enforced instead — the Android log said "20s
+        # budget" on a runtime that had asked for 45.
+        if budget_seconds is None:
+            budget_seconds = _startup_attestation_budget()
+
+        if self._attestation_task is None:
+            raise RuntimeError(
+                "AuthenticationService.start() has not been called — "
+                "no attestation task to await. ciris_verify attestation is "
+                "mandatory; the service must be started before consumers "
+                "can request the attestation context."
+            )
+
+        # Capture the started-at timestamp once — both branches need it.
+        # getattr fallback keeps older test fixtures (bare services) working
+        # without setup.
+        started_at = getattr(self, "_attestation_started_at", None)
+
+        # Fast path: task already done. The contract is "the verifier
+        # completes within 15s", measured by its OWN wall-clock — not by
+        # elapsed-since-caller-arrival, which would inflate with caller
+        # lateness. Use the recorded total from stage_timings (set by
+        # run_startup_attestation on completion) so a 20s+ run still
+        # raises here even if the gate-side wait was a no-op.
+        if self._attestation_task.done():
+            total = getattr(self, "_attestation_stage_timings", {}).get("run_attestation_total_seconds")
+            if isinstance(total, (int, float)) and total > budget_seconds:
+                # SLO breach on a SUCCESSFUL attestation. The result is valid —
+                # a slow filesystem does not make the tree hash wrong — so this
+                # is reported, not raised. Raising here used to poison every
+                # later caller for the life of the process.
+                self._log_attestation_slo_breach(
+                    f"Startup attestation completed but exceeded the "
+                    f"{budget_seconds:.0f}s budget (total={total:.1f}s). "
+                    f"The attestation is VALID and startup continues — this is "
+                    f"a latency regression, not a correctness failure. "
+                    f"Investigate the verifier (slow filesystem walk? blocking "
+                    f"I/O? network probe? CIRISVerify#212 registry fetch?) "
+                    f"rather than raising the budget."
+                )
+                # Awaiting a completed task is a no-op except that exceptions
+                # raised inside the task are re-raised here.
+                await self._attestation_task
+                return AttestationGateOutcome.SLO_BREACH_COMPLETED
+            await self._attestation_task
+            return AttestationGateOutcome.READY
+
+        # Compute remaining budget from task-creation time. If for any
+        # reason the timestamp wasn't recorded (shouldn't happen — set
+        # alongside task creation), fall back to the full budget.
+        # Wait against the GATE deadline, not the raw budget: the runner
+        # degrades at attestation_deadline_seconds(), and the gate has to
+        # outlast that by the grace or it times out mid-degrade and loses the
+        # race it is supposed to be observing.
+        gate_deadline = _attestation_gate_deadline(budget_seconds)
+        if started_at is not None:
+            elapsed = asyncio.get_event_loop().time() - started_at
+            remaining = max(0.0, gate_deadline - elapsed)
+        else:
+            remaining = gate_deadline
+
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(self._attestation_task),
+                timeout=remaining,
+            )
+            return AttestationGateOutcome.READY
+        except asyncio.TimeoutError as exc:
+            # Past deadline+grace the runner's OWN bounded degrade did not
+            # land, so this is not "a slow verifier" — verifier_runner's
+            # timeout has itself failed. Report it as a fileable bug.
+            #
+            # Never cancel the task: refresh/audit paths still want the result.
+            #
+            # Reported, not raised. Raising here was permanent for the process:
+            # `remaining` is measured from task-creation time, so once elapsed
+            # passed the deadline every later caller found max(0.0, ...) == 0.0
+            # and timed out instantly. The per-thought batch_context gate calls
+            # this same method, so one slow boot meant the agent could never
+            # think again — even after the attestation landed a second later.
+            elapsed_total = asyncio.get_event_loop().time() - started_at if started_at is not None else None
+            elapsed_str = f"{elapsed_total:.1f}s" if elapsed_total is not None else "unknown"
+            self._log_attestation_slo_breach(
+                f"Startup attestation exceeded the {gate_deadline:.0f}s gate deadline "
+                f"(budget {budget_seconds:.0f}s + {ATTESTATION_GATE_GRACE_SECONDS:.0f}s grace, "
+                f"elapsed={elapsed_str}) and is STILL RUNNING. verifier_runner's own "
+                f"bounded degrade should have produced a result by now — investigate "
+                f"the verifier (slow filesystem walk? blocking I/O? network probe? "
+                f"CIRISVerify#212 registry fetch?) rather than raising the budget. "
+                f"Startup continues; callers get the result when it lands. ({exc!r})"
+            )
+            return AttestationGateOutcome.SLO_BREACH_PENDING
+
+    def get_cached_attestation(self, allow_stale: bool = False) -> Optional[AttestationResult]:
+        """Get the cached attestation result if available.
+
+        Args:
+            allow_stale: If True, return last known result even if TTL expired (stale-while-revalidate)
+
+        Returns:
+            Cached AttestationResult or None if cache is empty/expired (unless allow_stale=True)
+        """
+        if self._attestation_cache is None:
+            logger.info(f"[attestation] get_cached_attestation: cache is None, instance={hex(id(self))}")
+            # If allowing stale, return last known
+            if allow_stale and self._last_known_attestation is not None:
+                logger.debug("[attestation] Returning stale last_known_attestation")
+                return self._last_known_attestation
+            return None
+
+        # Check if cache has expired
+        if self._attestation_cache.cached_at:
+            cache_age = (self._get_current_time() - self._attestation_cache.cached_at).total_seconds()
+            if cache_age > self._attestation_cache.cache_ttl_seconds:
+                logger.debug(f"Attestation cache expired (age={cache_age:.1f}s)")
+                # If allowing stale, check if within stale TTL (1 hour)
+                if allow_stale and cache_age <= self._attestation_stale_ttl:
+                    logger.debug(f"[attestation] Returning stale cache (age={cache_age:.1f}s)")
+                    return self._attestation_cache
+                return None
+
+        return self._attestation_cache
+
+    def _get_stale_data_info(
+        self, has_cached: bool, cache_expired: bool, cache_age: Optional[float], max_level: Optional[int]
+    ) -> Tuple[bool, Optional[int]]:
+        """Check for stale attestation data (expired but within stale TTL).
+
+        Args:
+            has_cached: Whether we have cached data
+            cache_expired: Whether the cache has expired
+            cache_age: Age of cache in seconds
+            max_level: Current max attestation level
+
+        Returns:
+            Tuple of (has_stale, stale_level)
+        """
+        # Expired cache within stale TTL
+        if cache_expired and has_cached and cache_age is not None and cache_age <= self._attestation_stale_ttl:
+            return True, max_level
+
+        # No current cache but have last known within stale TTL
+        if not has_cached and self._last_known_attestation is not None and self._last_known_attestation.cached_at:
+            last_age = (self._get_current_time() - self._last_known_attestation.cached_at).total_seconds()
+            if last_age <= self._attestation_stale_ttl:
+                return True, self._last_known_attestation.max_level
+
+        return False, None
+
+    def get_attestation_cache_status(self) -> AttestationCacheStatus:
+        """Get status of the attestation cache.
+
+        Returns:
+            AttestationCacheStatus with cache metadata
+        """
+        has_cached = self._attestation_cache is not None
+        cached_at = self._attestation_cache.cached_at if self._attestation_cache else None
+        cache_age: Optional[float] = None
+        cache_expired = False
+        max_level: Optional[int] = None
+
+        if has_cached and cached_at:
+            cache_age = (self._get_current_time() - cached_at).total_seconds()
+            cache_expired = cache_age > (self._attestation_cache.cache_ttl_seconds if self._attestation_cache else 300)
+            max_level = self._attestation_cache.max_level if self._attestation_cache else None
+
+        has_stale, stale_level = self._get_stale_data_info(has_cached, cache_expired, cache_age, max_level)
+
+        return AttestationCacheStatus(
+            has_cached_result=has_cached and not cache_expired,
+            cached_at=cached_at,
+            cache_age_seconds=cache_age,
+            cache_expired=cache_expired,
+            attestation_in_progress=self._attestation_in_progress,
+            max_level=max_level,
+            has_stale_result=has_stale,
+            stale_level=stale_level,
+        )
+
+    def invalidate_attestation_cache(self) -> None:
+        """Invalidate the attestation cache to force a re-run.
+
+        Called after device attestation (App Attest / Play Integrity) completes
+        so the next run_attestation includes the device attestation data and
+        recalculates the level.
+        """
+        logger.info(f"[attestation] Invalidating cache, instance={hex(id(self))}")
+        self._attestation_cache = None
+
+    def is_attestation_in_progress(self) -> bool:
+        """Check if attestation is currently running.
+
+        Returns:
+            True if attestation is in progress
+        """
+        return self._attestation_in_progress
+
+    async def run_startup_attestation(self) -> None:
+        """Run attestation at startup in the background.
+
+        This is called during service startup to pre-populate the cache.
+        It runs in parallel with other startup tasks and logs progress.
+
+        Timing receipts: total wall-clock and per-bool stage outcomes are
+        recorded in `self._attestation_stage_timings` so the processor
+        gate's failure logger can attach them to a ciris_verify bug report
+        when the 15s budget is blown.
+        """
+        logger.info(f"[attestation] Starting background attestation check on instance={hex(id(self))}...")
+        attestation_start = asyncio.get_event_loop().time()
+        try:
+            result = await self.run_attestation(mode="full")
+            elapsed = asyncio.get_event_loop().time() - attestation_start
+            # Store as baseline for degradation detection
+            self._baseline_attestation = result
+            # Capture per-bool stage outcomes (the verifier doesn't expose
+            # per-stage durations today, so we record at least which stages
+            # passed/failed alongside total wall-clock — enough signal to
+            # file a useful ciris_verify issue if total > 15s).
+            self._attestation_stage_timings = {
+                "run_attestation_total_seconds": round(elapsed, 3),
+                "binary_ok": result.binary_ok,
+                "function_integrity": result.function_integrity,
+                "python_integrity_ok": result.python_integrity_ok,
+                "registry_ok": result.registry_ok,
+                "audit_ok": result.audit_ok,
+                "max_level": result.max_level,
+                "level_pending": result.level_pending,
+            }
+            if elapsed > _startup_attestation_budget():
+                logger.warning(
+                    "[attestation] Startup attestation exceeded the %.0fs budget: "
+                    "took %.2fs. Per-bool: binary=%s functions=%s python=%s "
+                    "registry=%s audit=%s. Investigate the verifier — do not "
+                    "raise the budget.",
+                    _startup_attestation_budget(),
+                    elapsed,
+                    result.binary_ok,
+                    result.function_integrity,
+                    result.python_integrity_ok,
+                    result.registry_ok,
+                    result.audit_ok,
+                )
+            logger.info(
+                f"[attestation] Startup attestation completed in {elapsed:.2f}s: "
+                f"level={result.max_level}/5, "
+                f"binary={'OK' if result.binary_ok else 'FAIL'}, "
+                f"functions={'OK' if result.function_integrity == 'verified' else 'FAIL'}, "
+                f"instance={hex(id(self))}, cache_set={self._attestation_cache is not None}"
+            )
+            # Print to stdout for mobile UI to parse (Kotlin StartupViewModel)
+            # Must contain "VERIFY" for Kotlin's line filter at StartupViewModel.kt:213
+            checks_passed = sum(
+                [
+                    result.binary_ok,
+                    result.function_integrity == "verified",
+                    result.python_integrity_ok,
+                    result.registry_ok,
+                    result.audit_ok,
+                ]
+            )
+            import sys
+
+            is_valid = result.attestation_status == "verified"
+            msg = (
+                f"VERIFY Unified attestation complete, valid={str(is_valid).lower()}, "
+                f"level={result.max_level}, level_pending={str(result.level_pending).lower()}, "
+                f"checks_passed={checks_passed}, checks_total=5"
+            )
+            sys.stdout.write(f"{msg}\n")
+            sys.stdout.flush()
+        except Exception as e:
+            elapsed = asyncio.get_event_loop().time() - attestation_start
+            # Capture the failure receipts so the gate's logger has something
+            # to attach even if run_attestation raised before any stage
+            # finished. Best-effort: never re-raise from receipt capture.
+            self._attestation_stage_timings = {
+                "run_attestation_total_seconds": round(elapsed, 3),
+                "raised": True,
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+            }
+            logger.exception(
+                "[attestation] Startup attestation failed after %.2fs on instance=%s",
+                elapsed,
+                hex(id(self)),
+            )
+
+    async def _attestation_refresh_loop(self) -> None:
+        """Periodically refresh attestation before cache TTL expires.
+
+        Runs every _attestation_refresh_interval seconds (default 45 min).
+        Compares L1 (binary), L2 (environment/key), and L4 (file integrity)
+        against the startup baseline. If any degrade (ignoring network-only
+        failures), triggers an emergency shutdown.
+        """
+        # Wait for the initial startup attestation to complete
+        while self._attestation_in_progress:
+            await asyncio.sleep(1)
+
+        logger.info(
+            f"[attestation-refresh] Periodic refresh loop started (interval={self._attestation_refresh_interval}s)"
+        )
+
+        while self._started:
+            try:
+                await asyncio.sleep(self._attestation_refresh_interval)
+                if not self._started:
+                    break
+
+                logger.info("[attestation-refresh] Running scheduled attestation refresh")
+                result = await self.run_attestation(mode="full", force_refresh=True)
+
+                logger.info(
+                    f"[attestation-refresh] Refresh completed: level={result.max_level}/5, "
+                    f"binary={'OK' if result.binary_ok else 'FAIL'}, "
+                    f"file_integrity={'OK' if result.file_integrity_ok else 'FAIL'}"
+                )
+
+                # Check for integrity degradation against baseline
+                self._check_integrity_degradation(result)
+
+            except asyncio.CancelledError:
+                logger.info("[attestation-refresh] Refresh loop cancelled (shutdown)")
+                raise
+            except Exception as e:
+                logger.error(f"[attestation-refresh] Refresh failed: {e}")
+                # Don't crash the loop on transient errors; retry next interval
+                continue
+
+    def _check_integrity_degradation(self, current: AttestationResult) -> None:
+        """Compare current attestation against baseline for L1/L2/L4 degradation.
+
+        Network/registry-unreachable failures are NOT degradation — "unable to
+        verify" must never be treated as "verified bad" (CIRISAgent#862). Only
+        POSITIVE tamper evidence is grounds for emergency shutdown: a binary
+        self-check that ran and failed (L1), an env/key check that flipped (L2),
+        or actual file hash mismatches (L4 `files_failed > 0`). A registry the
+        agent couldn't reach — or a build record the registry didn't have — keeps
+        the agent running, because turning a registry outage into a fleet-wide
+        outage is the bug, not the safe behavior.
+
+        If genuine degradation is detected, initiates emergency shutdown.
+        """
+        baseline = self._baseline_attestation
+        if baseline is None:
+            # No baseline yet — store current as baseline
+            self._baseline_attestation = current
+            logger.info("[attestation-refresh] No baseline yet, storing current as baseline")
+            return
+
+        # #862: gate on registry reachability. CIRISVerify reports `reachable`
+        # separately from `valid` per source and a multi-source classifier
+        # (NoSourcesReachable / ValidationError = network failure). If the
+        # registry could not be reached this cycle, the result is UNVERIFIABLE,
+        # not degraded — log and stay up rather than shutting the fleet down.
+        network_failure_statuses = {"nosourcesreachable", "validationerror"}
+        status_normalized = (current.source_validation_status or "").lower().replace("_", "")
+        if not current.registry_reachable or status_normalized in network_failure_statuses:
+            logger.warning(
+                "[attestation-refresh] Registry unreachable this cycle "
+                f"(reachable={current.registry_reachable}, validation_status={current.source_validation_status}) "
+                "— attestation is UNVERIFIABLE, NOT degraded. Agent stays up; this is expected during "
+                "a registry/network outage and must not trigger shutdown (#862)."
+            )
+            return
+
+        degradations: list[str] = []
+
+        # L1: Binary integrity — was OK at startup, now failing. The binary
+        # self-check is local (no registry needed); once we know the registry
+        # was reachable this cycle, a False here is a genuine tamper signal —
+        # unless the self-check itself couldn't run (unavailable:*), which is
+        # not tamper.
+        binary_unverifiable = (current.binary_self_check or "").startswith("unavailable")
+        if baseline.binary_ok and not current.binary_ok and not binary_unverifiable:
+            degradations.append(f"L1 binary_ok degraded: {baseline.binary_ok} -> {current.binary_ok}")
+
+        # L2: Environment/key integrity (local check)
+        if baseline.env_ok and not current.env_ok:
+            degradations.append(f"L2 env_ok degraded: {baseline.env_ok} -> {current.env_ok}")
+
+        # L4: File integrity — require POSITIVE evidence (actual hash mismatches).
+        # `file_integrity_ok` also goes False when the registry has no build
+        # record for this version (404) or the manifest fetch failed — neither is
+        # tamper. Only `files_failed > 0` (Mismatch/Extra) is a real signal.
+        if baseline.file_integrity_ok and not current.file_integrity_ok and (current.files_failed or 0) > 0:
+            degradations.append(
+                f"L4 file_integrity_ok degraded with {current.files_failed} failed file(s): "
+                f"{baseline.file_integrity_ok} -> {current.file_integrity_ok}"
+            )
+
+        if not degradations:
+            logger.info("[attestation-refresh] Integrity check passed — no degradation detected")
+            return
+
+        # Integrity degradation detected — emergency shutdown
+        detail = "; ".join(degradations)
+        shutdown_msg = "CIRIS ENGINE OR VERIFY INTEGRITY DEGRADATION DETECTED - SHUTTING DOWN"
+        logger.critical(f"[attestation-refresh] {shutdown_msg} | Details: {detail}")
+
+        request_global_shutdown(f"{shutdown_msg} | {detail}")
+
+    async def verify_play_integrity_token(
+        self,
+        token: str,
+        nonce: str,
+    ) -> Dict[str, Any]:
+        """Verify a Google Play Integrity token via CIRISVerify FFI.
+
+        This method provides crash protection by running the FFI call in a
+        separate thread with timeout. If the FFI crashes, it returns an error
+        instead of crashing the entire process.
+
+        Args:
+            token: The Play Integrity token from Google
+            nonce: The nonce used when requesting the token
+
+        Returns:
+            Dict with verification result or error
+        """
+        import asyncio
+
+        from .attestation import get_verifier_or_error, run_play_integrity_verification
+
+        logger.info("[play-integrity] Verifying Play Integrity token via auth service")
+
+        # Validate inputs
+        if not token or not nonce:
+            return {"error": "Token and nonce are required", "verified": False}
+
+        # Get verifier
+        verifier, error = get_verifier_or_error()
+        if error:
+            return error
+
+        # Run verification in thread with crash protection
+        loop = asyncio.get_event_loop()
+        verify_result = await loop.run_in_executor(None, run_play_integrity_verification, verifier, token, nonce, 45)
+
+        # Handle post-verification
+        return await self._handle_play_integrity_result(verify_result)
+
+    async def _handle_play_integrity_result(self, verify_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle Play Integrity verification result and update attestation.
+
+        Args:
+            verify_result: Result from Play Integrity verification
+
+        Returns:
+            Updated verify_result with attestation info if successful
+        """
+        if verify_result.get("verified"):
+            logger.info("[play-integrity] Verification successful")
+            # Re-run attestation to pick up the cached device attestation
+            logger.info("[play-integrity] Re-running attestation to update level with device attestation")
+            try:
+                updated_result = await self.run_attestation(mode="full", force_refresh=True)
+                logger.info(f"[play-integrity] Attestation updated: level={updated_result.max_level}/5")
+                verify_result["attestation_level"] = updated_result.max_level
+                verify_result["level_pending"] = updated_result.level_pending
+            except Exception as e:
+                logger.warning(f"[play-integrity] Failed to re-run attestation: {e}")
+        else:
+            logger.warning("[play-integrity] Verification failed")
+
+        return verify_result

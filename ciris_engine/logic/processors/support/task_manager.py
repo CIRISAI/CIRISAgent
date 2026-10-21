@@ -8,6 +8,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
 from ciris_engine.schemas.runtime.enums import TaskStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
 from ciris_engine.schemas.types import JSONDict
@@ -16,6 +17,10 @@ if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 
 logger = logging.getLogger(__name__)
+
+# A message coalesced onto a task the agent then refused is re-queued only while
+# it is fresh (#1250); an older flag is cleared rather than answered late.
+REQUEUE_MAX_AGE_SECONDS = 3600.0
 
 
 class TaskManager:
@@ -79,6 +84,12 @@ class TaskManager:
             signed_at=None,
         )
 
+        # Task-scoped authorization envelope (CIRISAgent#938). This site is
+        # synchronous, so it resolves the enabled-tool set from the cache the
+        # ToolBus primes; a cold cache yields an empty grant and a warning
+        # rather than an implicit "everything".
+        issue_task_envelope_best_effort(task, time_service=self._time_service)
+
         persistence.add_task(task)
         logger.info(f"Created task {task.task_id} (occurrence: {self.agent_occurrence_id}): {description}")
         return task
@@ -103,9 +114,7 @@ class TaskManager:
         activated_count = 0
 
         for task in pending_tasks:
-            if persistence.update_task_status(
-                task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service
-            ):
+            if persistence.update_task_status(task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id):
                 logger.info(f"Activated task {task.task_id} (Priority: {task.priority})")
                 activated_count += 1
             else:
@@ -145,6 +154,61 @@ class TaskManager:
         logger.debug(f"[TASK DEBUG] After filtering: {len(filtered)} tasks need recovery thoughts")
         return filtered
 
+    def requeue_updates_from_rejected_tasks(self, limit: int = 50) -> int:
+        """Give a message that arrived during a refusal its own task (#1250).
+
+        A message that lands in a channel while a task there is in flight is
+        coalesced onto that task (``updated_info_available``) rather than getting
+        a task of its own. UpdatedStatusConscience used to answer that by turning
+        the in-flight action into a PONDER — including a REJECT, which rewrote
+        the agent's refusal. It no longer touches a REJECT, so the refused task
+        goes terminal still carrying the newcomer's message. This picks it up
+        from OUTSIDE the reasoning loop (task envelopes cannot be minted inside
+        it, #938) and re-queues it as a fresh task in the same channel, so the
+        refusal stands and the new message is still answered.
+
+        Returns the number of tasks created.
+        """
+        from ciris_engine.logic.persistence.models.tasks import clear_task_updated_info_flag
+
+        created = 0
+        rejected = persistence.get_tasks_by_status(TaskStatus.REJECTED, self.agent_occurrence_id)
+        for task in rejected:
+            if created >= limit:
+                break
+            if not getattr(task, "updated_info_available", False):
+                continue
+            content = getattr(task, "updated_info_content", None) or ""
+            # Clear first: a failed clear must not re-queue the same message every round.
+            if not clear_task_updated_info_flag(task.task_id):
+                logger.error(f"[REJECT] Could not clear the pending update on rejected task {task.task_id}")
+                continue
+            if not content.strip() or self._older_than(task.updated_at, REQUEUE_MAX_AGE_SECONDS):
+                # Nothing to answer, or a flag left on an old row from before this
+                # path existed: cleared, not answered hours late.
+                continue
+            user_id = getattr(task.context, "user_id", None) if task.context else None
+            self.create_task(
+                description=f"Respond to message in #{task.channel_id}: '{content}'",
+                channel_id=task.channel_id,
+                priority=task.priority,
+                context={"user_id": user_id} if user_id else None,
+                parent_task_id=task.task_id,
+            )
+            created += 1
+            logger.info(f"[REJECT] Re-queued the message that arrived during the refusal of task {task.task_id}")
+        return created
+
+    def _older_than(self, iso_timestamp: Optional[str], seconds: float) -> bool:
+        """True when ``iso_timestamp`` is more than ``seconds`` old (unparseable counts as old)."""
+        from datetime import datetime
+
+        try:
+            then = datetime.fromisoformat(str(iso_timestamp).replace("Z", "+00:00"))
+            return (self.time_service.now() - then).total_seconds() > seconds
+        except (TypeError, ValueError):
+            return True
+
     def complete_task(self, task_id: str, outcome: Optional[JSONDict] = None) -> bool:
         """Mark a task as completed with optional outcome."""
         task = persistence.get_task_by_id(task_id, self.agent_occurrence_id)
@@ -158,9 +222,7 @@ class TaskManager:
         if outcome:
             logger.info(f"Task {task_id} completed with outcome: {outcome}")
 
-        return persistence.update_task_status(
-            task_id, TaskStatus.COMPLETED, self.agent_occurrence_id, self.time_service
-        )
+        return persistence.update_task_status(task_id, TaskStatus.COMPLETED, self.agent_occurrence_id)
 
     def fail_task(self, task_id: str, reason: str) -> bool:
         """Mark a task as failed with a reason."""
@@ -174,7 +236,7 @@ class TaskManager:
         # For now, we just log the failure reason and update the status
         logger.info(f"Task {task_id} failed: {reason}")
 
-        return persistence.update_task_status(task_id, TaskStatus.FAILED, self.agent_occurrence_id, self.time_service)
+        return persistence.update_task_status(task_id, TaskStatus.FAILED, self.agent_occurrence_id)
 
     def create_wakeup_sequence_tasks(self, channel_id: Optional[str] = None) -> List[Task]:
         """Create the WAKEUP sequence tasks using v1 schema."""
@@ -213,12 +275,11 @@ class TaskManager:
             signed_at=None,
         )
 
-        if not persistence.task_exists(root_task.task_id, self.agent_occurrence_id):
+        if not persistence.task_exists(root_task.task_id):
+            issue_task_envelope_best_effort(root_task, time_service=self._time_service)
             persistence.add_task(root_task)
         else:
-            persistence.update_task_status(
-                root_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id, self.time_service
-            )
+            persistence.update_task_status(root_task.task_id, TaskStatus.ACTIVE, self.agent_occurrence_id)
 
         wakeup_steps = [
             (
@@ -272,6 +333,7 @@ class TaskManager:
                 signature=None,
                 signed_at=None,
             )
+            issue_task_envelope_best_effort(step_task, time_service=self._time_service)
             persistence.add_task(step_task)
             tasks.append(step_task)
 
@@ -296,7 +358,7 @@ class TaskManager:
 
         if completed_old:
             task_ids = [t.task_id for t in completed_old]
-            deleted = persistence.delete_tasks_by_ids(task_ids, self.agent_occurrence_id)
+            deleted = persistence.delete_tasks_by_ids(task_ids)
             logger.info(f"Cleaned up {deleted} old completed tasks for occurrence {self.agent_occurrence_id}")
             return deleted
 

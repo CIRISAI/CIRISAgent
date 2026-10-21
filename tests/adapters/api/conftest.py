@@ -7,6 +7,8 @@ High-quality centralized fixtures for comprehensive API testing including:
 - WebSocket client simulation
 - Time service mocking for consistent timestamps
 - Service correlation fixtures for testing message fetching
+
+Note: CIRIS_TESTING_MODE is set globally in tests/conftest.py
 """
 
 import asyncio
@@ -185,14 +187,19 @@ def mock_persistence():
 
 @pytest.fixture
 def app():
-    """Create FastAPI app with minimal required state."""
+    """Create FastAPI app with minimal required state.
+
+    Note: CIRIS_TESTING_MODE is set by the autouse enable_testing_mode fixture.
+    """
+    from tests.fixtures.auth import setup_test_admin_user
+
     app = create_app()
 
     # Initialize auth service (required for auth endpoints)
     app.state.auth_service = APIAuthService()
 
-    # Initialize auth service with dev mode if needed
-    app.state.auth_service._dev_mode = True
+    # Set up test admin user for auth (tests don't go through setup wizard)
+    setup_test_admin_user(app.state.auth_service)
 
     return app
 
@@ -203,11 +210,9 @@ def client(app):
     return TestClient(app)
 
 
-@pytest.fixture
-def auth_headers():
-    """Get auth headers for testing using dev credentials."""
-    # In dev mode, username:password format is supported
-    return {"Authorization": "Bearer admin:ciris_admin_password"}
+# NOTE: auth_headers fixture is now provided by tests.fixtures.auth
+# which is loaded via pytest_plugins in tests/conftest.py
+# This ensures all tests use the dynamically generated fallback password
 
 
 @pytest.fixture
@@ -288,7 +293,9 @@ def mock_agent_processor():
 def mock_api_config():
     """Create mock API configuration."""
     config = Mock()
-    config.interaction_timeout = 55.0
+    # Fixture pins an explicit value so it does not silently track the
+    # production default; aligned to it (110.0, #1013) so the two agree.
+    config.interaction_timeout = 110.0
     config.max_message_length = 4000
     config.rate_limit_per_minute = 60
     return config

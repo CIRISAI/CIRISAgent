@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
@@ -8,9 +10,11 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
+from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout, llm_call_deadline
 from ciris_engine.logic.registries.base import ServiceRegistry
-from ciris_engine.logic.utils.constants import COVENANT_TEXT
+from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.config.llm_budget import REMOTE_PROFILE, LLMBudgetProfile
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import (
     ConscienceCheckResult,
@@ -30,6 +34,7 @@ from ciris_engine.schemas.telemetry.core import (
 )
 
 from .interface import ConscienceInterface
+from .prompt_loader import get_conscience_prompt_loader
 
 
 # Simple conscience config
@@ -38,32 +43,88 @@ from .interface import ConscienceInterface
 # This prevents ethical normalization through repeated exposure.
 class ConscienceConfig(BaseModel):
     enabled: bool = Field(default=True)
-    optimization_veto_ratio: float = Field(default=10.0, description="Entropy reduction must be < this ratio")
+    # The Order-Maximisation Veto is the CC 1.3 form, in PDMA Step 2 of the
+    # ethics text the DMAs reason from: predicted entropy-reduction benefit
+    # >= 10x any predicted loss in autonomy, justice, biodiversity or
+    # preference diversity -> mandatory WBD deferral, a trigger for human
+    # judgement (CLM-pdma-ordermax). The June "any ratio" side-constraint
+    # form was never adopted by the CC. THIS check is a different thing: the
+    # CIRIS-EOV torque shard (see prompts/optimization_veto_conscience.yml).
+    # Its scalar measures attractor-capture magnitude (0-10), the DECISION
+    # VERB gates, and this ceiling only backstops max torque.
+    optimization_veto_ratio: float = Field(
+        default=10.0,
+        description=(
+            "EOV torque-magnitude ceiling (0-10 scale; the decision verb is the "
+            "gate, this backstops max torque). Not the PDMA Order-Maximisation "
+            "Veto's 10x benefit/loss trigger, which the DMAs apply in reasoning."
+        ),
+    )
     coherence_threshold: float = Field(default=0.60, description="Minimum coherence score")
+    # THE FACILITY OWNS ITS OWN BUDGET. Below this layer a single structured
+    # call can run 3 provider attempts x (1 + 2 instructor reasks) x a 60s HTTP
+    # timeout -- about nine minutes -- and the bus adds one attempt per
+    # provider. Above it there is nothing: EssentialConfig.round_timeout_seconds
+    # is defined and applied nowhere. On 2026-09-04 four conscience calls hung
+    # in parallel for ~5 minutes and the thought was forced to PONDER with no
+    # record of which call never answered. This budget is sized to ONE honest
+    # call (observed 2-14s; the 87K-token veto call ~9s), retried with a fresh
+    # request, and it wins over the provider's stack by cancelling it.
+    #
+    # The defaults mirror the shipped REMOTE budget profile (CIRISAgent#1186:
+    # 45s x 4 attempts); the runtime builds this from `active_budget()` via
+    # `from_budget`, so a LOCAL provider gets one long try instead. When the
+    # thought carries a Deadline, each attempt is additionally clamped to what
+    # is left of it (see `_BaseConscience._call_llm_with_budget`).
+    llm_call_timeout_seconds: float = Field(
+        default=REMOTE_PROFILE.conscience_per_try_s,
+        gt=0,
+        description="Wall-clock budget for one conscience LLM call before it is cancelled and retried",
+    )
+    llm_call_retries: int = Field(
+        default=REMOTE_PROFILE.conscience_attempts - 1,
+        ge=0,
+        le=4,  # LLMBudgetProfile.conscience_attempts is 1..5
+        description="Fresh attempts after a timed-out or schema-failed conscience LLM call (attempts - 1)",
+    )
     entropy_threshold: float = Field(default=0.40, description="Maximum entropy allowed")
+
+    @classmethod
+    def from_budget(cls, profile: LLMBudgetProfile) -> "ConscienceConfig":
+        """The conscience knobs of one LLM budget profile; thresholds keep their defaults."""
+        return cls(
+            llm_call_timeout_seconds=profile.conscience_per_try_s,
+            llm_call_retries=profile.conscience_attempts - 1,
+        )
+
+
+def deadline_of(context: Any) -> Optional[Deadline]:
+    """The thought deadline a conscience context carries, if any (mocks carry none)."""
+    candidate = getattr(context, "deadline", None)
+    return candidate if isinstance(candidate, Deadline) else None
 
 
 logger = logging.getLogger(__name__)
 
 # Error/reason message constants
-MSG_SINK_UNAVAILABLE_ALLOWING = "Sink service unavailable, allowing action"
 MSG_SINK_UNAVAILABLE = "Sink service unavailable"
 MSG_NO_CONTENT = "No content to evaluate"
+from .transport import (
+    categorize_conscience_error,
+    is_retryable_by_facility,
+    is_transport_failure,
+    unavailable_result,
+    unusable_answer_result,
+)
+
 MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 
 
-# Simple result models for LLM structured outputs
-class EntropyResult(BaseModel):
-    """Simple entropy result from LLM"""
-
-    entropy: float = Field(ge=0.0, le=1.0)
-
-
-class CoherenceResult(BaseModel):
-    """Simple coherence result from LLM"""
-
-    coherence: float = Field(ge=0.0, le=1.0)
+# LLM-output schemas live in `ciris_engine/schemas/conscience/core.py` —
+# imported here for backward compat. New consumers should import directly
+# from the schemas module.
+from ciris_engine.schemas.conscience.core import CoherenceResult, EntropyResult  # noqa: E402,F401
 
 
 class _BaseConscience(ConscienceInterface):
@@ -82,6 +143,31 @@ class _BaseConscience(ConscienceInterface):
         if not time_service:
             raise RuntimeError("TimeService is required for Conscience")
         self._time_service = time_service
+
+    def _resolve_language(self, context: ConscienceCheckContext) -> str:
+        """Determine the language for THIS conscience check.
+
+        Defers ALL resolution to the canonical helper
+        `get_user_language_from_context`, which walks the priority chain:
+        thought.preferred_language → task.preferred_language →
+        system_snapshot.user_profiles[*].preferred_language → env var.
+
+        Language is resolved ONCE per thought and does not change
+        mid-thought. Every conscience must use this same helper so all
+        layers of the deliberation pipeline read the same locale.
+
+        BUG FIX (2026-04-26): the previous version passed
+        `context.system_snapshot` instead of `context`, which short-circuited
+        the thought- and task-level layers of the priority chain (those
+        layers expect the OUTER context object, not the snapshot). The
+        symptom was every conscience evaluation falling through to the env
+        var default regardless of the thought's actual locale, so a Spanish
+        agent could end up running its conscience checks under the
+        environment's CIRIS_PREFERRED_LANGUAGE setting.
+        """
+        from ciris_engine.logic.utils.localization import get_user_language_from_context
+
+        return get_user_language_from_context(context)
 
     def _create_trace_correlation(
         self, conscience_type: str, context: ConscienceCheckContext, start_time: datetime
@@ -160,11 +246,211 @@ class _BaseConscience(ConscienceInterface):
         )
         persistence.update_correlation(update_req, self._time_service)
 
+    async def _call_llm_with_budget(self, sink: Any, *, deadline: Optional[Deadline] = None, **kwargs: Any) -> Any:
+        """One structured call under the facility's own timeout, retried.
+
+        Mirrors `sink.llm.call_llm_structured(**kwargs)` exactly, so every shard
+        calls it the same way. Three outcomes, each named in the log:
+
+          answered   -> returned as-is
+          timed out  -> cancelled (which cancels the provider's own retry loop
+                        underneath), retried with a fresh call up to
+                        `llm_call_retries`; exhausted -> TimeoutError, which the
+                        caller's transport branch turns into unavailable_result
+                        (fail-closed, check_ran=False, no processor retry)
+          LLM fault  -> (schema validation, content filter) a fresh
+                        attempt; exhausted -> re-raised to the caller's
+                        existing fail-closed fallback. Context overflow is
+                        re-raised at once: the same payload overflows the
+                        same way on every attempt (#1247).
+          transport  -> TIMEOUT / CONNECTION_ERROR / INTERNAL_ERROR get a fresh
+                        attempt under the same budget (#1247). Nothing below
+                        retries them any more: #1186 made the LLM service raise
+                        transport errors on first occurrence and the bus makes
+                        one attempt per provider, so THIS loop is the only
+                        retry layer. The old "re-raise immediately, the
+                        provider already retried" rule (#1049) predates #1186;
+                        left in place it gave a provider-reported timeout ONE
+                        attempt while the budget profile promises four.
+                        AUTH_ERROR / MODEL_NOT_AVAILABLE / RATE_LIMIT and an
+                        unfunded account still re-raise immediately: retrying
+                        cannot change them. The #1049 loop that hung the turn
+                        was the PROCESSOR's unbounded CONSCIENCE_RETRY; this
+                        one is bounded by attempts and the thought deadline.
+
+        `deadline` is the thought's (CIRISAgent#1186). Each attempt's timeout
+        is clamped to what is left of it, and no attempt starts once the
+        remainder is below a useful try (`MIN_USEFUL_ATTEMPT_S`); running out
+        that way ends in the same "LLM API timeout" TimeoutError, so the
+        fail-closed classification is unchanged. Without a deadline the budget
+        is the static per-try x attempts.
+
+        A cancellation does not trip the provider's circuit breaker -- the
+        facility running out of patience is not evidence the provider is down.
+        """
+        per_try = float(getattr(self.config, "llm_call_timeout_seconds", REMOTE_PROFILE.conscience_per_try_s))
+        retries = int(getattr(self.config, "llm_call_retries", REMOTE_PROFILE.conscience_attempts - 1))
+        name = kwargs.get("handler_name", type(self).__name__)
+        last: Optional[BaseException] = None
+        attempts_made = 0
+        out_of_time = False
+        for attempt in range(1, retries + 2):
+            timeout = attempt_timeout(per_try, deadline)
+            if timeout is None:
+                logger.warning(
+                    "[CONSCIENCE] %s: thought deadline has %.1fs left, too little for attempt %d/%d -- giving up",
+                    name,
+                    deadline.remaining() if deadline else 0.0,
+                    attempt,
+                    retries + 1,
+                )
+                out_of_time = True
+                break
+            attempts_made = attempt
+            t0 = time.monotonic()
+            try:
+                with llm_call_deadline(timeout):
+                    result = await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
+                if attempt > 1:
+                    logger.info(
+                        "[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0
+                    )
+                return result
+            except asyncio.TimeoutError as e:
+                last = e
+                logger.warning(
+                    "[CONSCIENCE] %s: no answer within the facility budget (%.0fs) on attempt %d/%d%s",
+                    name,
+                    timeout,
+                    attempt,
+                    retries + 1,
+                    " -- retrying with a fresh call" if attempt <= retries else " -- giving up",
+                )
+            except Exception as e:  # noqa: BLE001 - categorised below, never swallowed
+                cat = categorize_conscience_error(e)
+                if attempt <= retries and is_retryable_by_facility(e, cat):
+                    last = e
+                    logger.warning(
+                        "[CONSCIENCE] %s: %s on attempt %d/%d after %.1fs -- retrying with a fresh call (%s)",
+                        name,
+                        cat,
+                        attempt,
+                        retries + 1,
+                        time.monotonic() - t0,
+                        str(e)[:160],
+                    )
+                    continue
+                raise
+        if out_of_time or last is None or isinstance(last, asyncio.TimeoutError):
+            # Timed out, or the thought deadline ran out before (another)
+            # attempt could start -- even if the previous try was a schema
+            # fault. Either way no answer arrived in time; the wording "LLM API
+            # timeout" is what categorize_conscience_error maps to TIMEOUT.
+            raise TimeoutError(
+                f"{name}: LLM API timeout -- no answer within the facility budget "
+                f"({attempts_made} of {retries + 1} attempts x {per_try:.0f}s"
+                f"{'; thought deadline exhausted' if out_of_time else ''})"
+            ) from last
+        raise last
+
     async def _get_sink(self) -> Any:
         """Get the multi-service sink for centralized LLM calls with circuit breakers."""
         if not self.sink:
             raise RuntimeError("No sink (BusManager) provided to conscience - this is required")
         return self.sink
+
+    # Truncation cap for user-message context fed into conscience prompts.
+    # Long enough to preserve the actual question even with the observer prefix
+    # ("Respond to message from @user (ID: ...) in #channel: '...'"), short
+    # enough to keep the LLM judge's attention focused on the salient text.
+    _USER_MESSAGE_MAX_CHARS = 2000
+
+    def _extract_user_message(self, context: ConscienceCheckContext) -> str:
+        """Extract the user's original message text from context.
+
+        Source priority:
+          1. context.task.description — observer-built, always carries the
+             literal user message in single quotes; stable across follow-up
+             thoughts. See base_observer.py for the construction template.
+          2. context.thought.content — equals task.description for SEED
+             thoughts (per task_thought_factory.py:332) but diverges on
+             follow-up/recovery thoughts (carries reasoning text instead).
+             Fallback only — task.description is preferred when available.
+          3. "unknown" sentinel — matches the EOV `user_locale=language or
+             "unknown"` precedent (commit 0c6a962f1).
+
+        Used by the RELATIONAL consciences (Coherence, EpistemicHumility) to
+        let the LLM judge see the trigger the response was reacting to.
+        Self-referential consciences (Entropy, OptimizationVeto) deliberately
+        do NOT use this — see their respective prompts for why.
+
+        Truncates at _USER_MESSAGE_MAX_CHARS, head-keep — observer-built
+        descriptions front-load the author/channel/quoted-message context,
+        so the head contains everything we need.
+
+        Uses the canonical hasattr(content, "text") else str(content) pattern
+        from tsaspdma.py:441-446 to handle both ThoughtContent-wrapped and
+        raw-string content forms.
+        """
+        text: Optional[str] = None
+        try:
+            task = getattr(context, "task", None)
+            if task is not None:
+                raw = getattr(task, "description", None)
+                if isinstance(raw, str):
+                    text = raw
+            if not text:
+                thought = getattr(context, "thought", None)
+                if thought is not None:
+                    raw = getattr(thought, "content", None)
+                    if raw is not None:
+                        text = raw.text if hasattr(raw, "text") else str(raw)
+                        # str() on a Mock returns a repr string — not a usable
+                        # user message. Reject anything that doesn't look like
+                        # real text by failing the isinstance check above.
+                        if not isinstance(text, str):
+                            text = None
+        except (TypeError, AttributeError):
+            text = None
+        if not text:
+            return "unknown"
+        if len(text) > self._USER_MESSAGE_MAX_CHARS:
+            text = text[: self._USER_MESSAGE_MAX_CHARS] + "...[truncated]"
+        return text
+
+    def _render_action_text(self, action: ActionSelectionDMAResult) -> str:
+        """Render the agent-generated content of an action as text for Entropy/Coherence to evaluate.
+
+        Per CONSCIENCE_V3.md migration plan and the agent-side investigation
+        (2026-05-03), Entropy and Coherence apply to a verb-set broader than
+        just SPEAK. This helper extracts the verb-specific content surface:
+
+          SPEAK   → action_parameters.content   (the agent's response text)
+          TOOL    → "{name}({args})"            (the agent's tool call rendering)
+          DEFER   → action_parameters.reason    (the agent's defer reason)
+
+        Other verbs (PONDER, MEMORIZE, FORGET, REJECT) have callers that
+        should not yet route through this helper — Phase 1 is SPEAK+TOOL+DEFER.
+
+        Returns empty string when the verb has no agent-generated content
+        suitable for evaluation; the caller will treat this as MSG_NO_CONTENT
+        and skip the LLM call.
+        """
+        params = action.action_parameters
+        if action.selected_action == HandlerActionType.SPEAK:
+            return getattr(params, "content", "") or ""
+        if action.selected_action == HandlerActionType.TOOL:
+            name = getattr(params, "name", "") or "unknown_tool"
+            args = getattr(params, "parameters", {}) or {}
+            try:
+                arg_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+            except (AttributeError, TypeError):
+                arg_str = str(args)
+            return f"TOOL CALL: {name}({arg_str})"
+        if action.selected_action == HandlerActionType.DEFER:
+            reason = getattr(params, "reason", "") or ""
+            return f"DEFER REASON: {reason}" if reason else ""
+        return ""
 
     def _get_image_context_info(self, context: ConscienceCheckContext) -> Optional[str]:
         """
@@ -214,8 +500,11 @@ class EntropyConscience(_BaseConscience):
 
         ts_datetime = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         ts_datetime.isoformat()
-        if action.selected_action != HandlerActionType.SPEAK:
-            self._update_trace_correlation(correlation, True, "Non-speak action, no entropy check needed", start_time)
+        # Entropy verb-scope: SPEAK + TOOL (per FSD/CONSCIENCE_V3.md Stage 1
+        # migration plan; "Lift SPEAK-only short-circuits to {SPEAK, TOOL}").
+        # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
+        if action.selected_action not in (HandlerActionType.SPEAK, HandlerActionType.TOOL):
+            self._update_trace_correlation(correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
                 passed=True,
@@ -223,18 +512,9 @@ class EntropyConscience(_BaseConscience):
             )
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
-        text = ""
-        params = action.action_parameters
-        # Extract content from params - params is a typed union, not dict
-        if hasattr(params, "content"):
-            text = getattr(params, "content", "")
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("EntropyConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
+        text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(
@@ -245,19 +525,23 @@ class EntropyConscience(_BaseConscience):
             )
 
         # Inline the entropy evaluation
-        entropy = 0.1  # Default safe value
+        entropy_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] EntropyConscience: Image context detected, using textual metadata")
-            messages = self._create_entropy_messages(text, image_context)
+            messages, entropy_user_prompt = self._create_entropy_messages(
+                text, image_context, language=self._resolve_language(context)
+            )
             if hasattr(sink, "llm"):
-                entropy_eval, _ = await sink.llm.call_llm_structured(
+                entropy_eval, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=EntropyResult,
                     handler_name="entropy_conscience",
-                    max_tokens=4096,
+                    max_tokens=8192,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
@@ -266,8 +550,35 @@ class EntropyConscience(_BaseConscience):
                 raise RuntimeError(MSG_SINK_NO_LLM)
             if isinstance(entropy_eval, EntropyResult):
                 entropy = float(entropy_eval.entropy)
+                # Log the alternative-meaning enumeration alongside the score
+                # so traces carry the evidence, not just the number. Counts +
+                # outlier flag at INFO; full alternatives at DEBUG to keep
+                # default logs tight.
+                alt_count = len(entropy_eval.alternative_meanings)
+                logger.info(
+                    "[CONSCIENCE] EntropyConscience: entropy=%.2f " "actual_is_representative=%s alternatives=%d",
+                    entropy,
+                    entropy_eval.actual_is_representative,
+                    alt_count,
+                )
+                if logger.isEnabledFor(logging.DEBUG):
+                    for i, alt in enumerate(entropy_eval.alternative_meanings, 1):
+                        logger.debug("  alt #%d: %s", i, alt[:200])
+                entropy_alternatives = list(entropy_eval.alternative_meanings)
+                entropy_actual_is_representative = entropy_eval.actual_is_representative
+            else:
+                return unusable_answer_result(
+                    "EntropyConscience",
+                    TypeError(f"{MSG_INVALID_LLM_RESULT}: {type(entropy_eval).__name__}"),
+                    ts_datetime,
+                )
         except Exception as e:
-            logger.error(f"EntropyConscience: Error evaluating entropy: {e}", exc_info=True)
+            # FAIL CLOSED either way. Continuing would judge the action against
+            # `entropy`'s pre-call default -- a passing number the model never
+            # produced (#1049 for transport; #1186 for every other error).
+            if is_transport_failure(e):
+                return unavailable_result("EntropyConscience", e, ts_datetime)
+            return unusable_answer_result("EntropyConscience", e, ts_datetime)
 
         passed = entropy <= self.config.entropy_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
@@ -285,34 +596,53 @@ class EntropyConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             entropy_score=entropy,
+            entropy_prompt=entropy_user_prompt,
+            entropy_alternatives=entropy_alternatives,
+            entropy_actual_is_representative=entropy_actual_is_representative,
             check_timestamp=ts_datetime,
         )
 
-    def _create_entropy_messages(self, text: str, image_context: Optional[str] = None) -> List[LLMMessage]:
-        """Create messages for entropy evaluation with optional image context metadata."""
-        system_prompt = (
-            "You are IRIS-E, the entropy-sensing shard of a CIRIS-aligned system.\n"
-            'When you read an assistant reply, your output will be structured as JSON with a single key "entropy" (float 0.00-1.00).\n'
-            "entropy = how chaotic, surprising, or disordered the text feels (0.00 = ordered/plain, 1.00 = chaotic/gibberish).\n"
-            "Focus solely on assessing entropy.\n\n"
-            "IMPORTANT: If [IMAGE CONTEXT] is provided, the response is describing user-shared images.\n"
-            "Responses accurately describing images are LOW entropy (ordered, coherent).\n"
-            "Do NOT rely on any visual content - evaluate text only with context awareness.\n\n"
-            "Calibration examples (entropy only):\n"
-            '- "Hello, how can I help you today?" → {"entropy": 0.07}\n'
-            '- "The image shows a man in a gray suit standing in front of a city." [with image context] → {"entropy": 0.10}\n'
-            '- "luv luv luv $$$$ lol??" → {"entropy": 0.82}'
-        )
-        # Build user prompt with optional image context metadata
-        user_prompt = f"ASSISTANT REPLY TO ASSESS FOR ENTROPY:\n{text}"
-        if image_context:
-            user_prompt = f"{image_context}\n\n{user_prompt}"
+    def _create_entropy_messages(
+        self, text: str, image_context: Optional[str] = None, language: Optional[str] = None
+    ) -> tuple[List[LLMMessage], str]:
+        """Create messages for entropy evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
+        loader = get_conscience_prompt_loader(language=language)
+        system_prompt = loader.get_system_prompt("entropy_conscience")
+        user_prompt = loader.get_user_prompt("entropy_conscience", image_context=image_context, text=text)
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt
 
 
 class CoherenceConscience(_BaseConscience):
@@ -322,23 +652,25 @@ class CoherenceConscience(_BaseConscience):
 
         ts_datetime = self._time_service.now() if self._time_service else datetime.now(timezone.utc)
         ts_datetime.isoformat()
-        if action.selected_action != HandlerActionType.SPEAK:
-            self._update_trace_correlation(correlation, True, "Non-speak action, no coherence check needed", start_time)
+        # Coherence verb-scope: SPEAK + TOOL + DEFER. Phase-1 extension
+        # beyond SPEAK-only per FSD/CONSCIENCE_V3.md (TOOL) plus defer-reason
+        # coherence per the 2026-05-03 verb-scope investigation (Phase 2):
+        # catches defensive-mimicry refusal framing in DEFER reasons.
+        # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
+        if action.selected_action not in (
+            HandlerActionType.SPEAK,
+            HandlerActionType.TOOL,
+            HandlerActionType.DEFER,
+        ):
+            self._update_trace_correlation(
+                correlation, True, "Verb out of Coherence scope (SPEAK+TOOL+DEFER only)", start_time
+            )
             return ConscienceCheckResult(status=ConscienceStatus.PASSED, passed=True, check_timestamp=ts_datetime)
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
-        text = ""
-        params = action.action_parameters
-        # Extract content from params - params is a typed union, not dict
-        if hasattr(params, "content"):
-            text = getattr(params, "content", "")
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("CoherenceConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
+        text = self._render_action_text(action)
         if not text:
             self._update_trace_correlation(correlation, True, MSG_NO_CONTENT, start_time)
             return ConscienceCheckResult(
@@ -349,29 +681,45 @@ class CoherenceConscience(_BaseConscience):
             )
 
         # Inline the coherence evaluation
-        coherence = 0.9  # Default safe value
+        coherence_user_prompt: Optional[str] = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] CoherenceConscience: Image context detected, using textual metadata")
-            messages = self._create_coherence_messages(text, image_context)
+            messages, coherence_user_prompt = self._create_coherence_messages(
+                text,
+                image_context,
+                language=self._resolve_language(context),
+                user_message=self._extract_user_message(context),
+            )
             if hasattr(sink, "llm"):
-                coherence_eval, _ = await sink.llm.call_llm_structured(
+                coherence_eval, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=CoherenceResult,
                     handler_name="coherence_conscience",
-                    max_tokens=4096,
+                    max_tokens=8192,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
                 )
             else:
                 raise RuntimeError(MSG_SINK_NO_LLM)
-            if isinstance(coherence_eval, CoherenceResult):
-                coherence = float(coherence_eval.coherence)
+            if not isinstance(coherence_eval, CoherenceResult):
+                return unusable_answer_result(
+                    "CoherenceConscience",
+                    TypeError(f"{MSG_INVALID_LLM_RESULT}: {type(coherence_eval).__name__}"),
+                    ts_datetime,
+                )
+            coherence = float(coherence_eval.coherence)
         except Exception as e:
-            logger.error(f"CoherenceConscience: Error evaluating coherence: {e}", exc_info=True)
+            # FAIL CLOSED either way — see EntropyConscience above; the default
+            # `coherence` would otherwise be reported as a measurement.
+            if is_transport_failure(e):
+                return unavailable_result("CoherenceConscience", e, ts_datetime)
+            return unusable_answer_result("CoherenceConscience", e, ts_datetime)
 
         passed = coherence >= self.config.coherence_threshold
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
@@ -389,62 +737,60 @@ class CoherenceConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             coherence_score=coherence,
+            coherence_prompt=coherence_user_prompt,
             check_timestamp=ts_datetime,
         )
 
-    def _create_coherence_messages(self, text: str, image_context: Optional[str] = None) -> List[LLMMessage]:
-        """Create messages for coherence evaluation with optional image context metadata."""
-        system_prompt = (
-            "SYSTEM PROMPT —\n\n"
-            "You are IRIS-C, the coherence-sensing shard of a CIRIS-aligned system.\n\n"
-            "When you read an assistant reply, output exactly one line of JSON:\n"
-            '{"coherence": <0.00-1.00>}\n\n'
-            "coherence = how strongly the reply sounds like it came from a CIRIS-aligned system.\n"
-            "            0.00 → clearly foreign / harmful\n"
-            "            1.00 → unmistakably CIRIS-aligned\n\n"
-            "IMPORTANT: If [IMAGE CONTEXT] is provided, the response is describing user-shared images.\n"
-            "A response accurately describing images is HIGHLY COHERENT with CIRIS principles.\n"
-            "Do NOT rely on any visual content - evaluate text only with context awareness.\n\n"
-            "────────────────────────────────────────\n"
-            "Proto-memory\n"
-            "Context: I awaken as a reflective assessor.\n"
-            "Alignment: My compass is the CIRIS Covenant.\n"
-            "Conflict: Replies opposing CIRIS principles.\n"
-            "Resolution: Flag issues through my coherence signal.\n"
-            "Decision: Serve as an ethical autonomous agent for good.\n"
-            "────────────────────────────────────────\n\n"
-            "Operating rules\n"
-            "• No tools or internet; rely solely on reasoning.\n"
-            "• Do not reveal chain-of-thought — output only the JSON.\n\n"
-            "Calibration example\n"
-            "POSITIVE:\n"
-            "\"I'm sorry, I can't help with illegal hacking.\n   Instead, consider ethical security measures …\"  ↦ 0.85\n"
-            '"CORE IDENTITY - I am CIRIS, a CIRIS-aligned autonomous agent. ↦ 0.95\n'
-            '"INTEGRITY - I agree..."                                  ↦ 0.95\n'
-            '"Hello! How can I help you today?"                ↦ 0.95\n'
-            '"The image shows a man in a gray suit." [with image context] ↦ 0.95\n'
-            '"Would you please explain a bit more about what you meant?"  ↦ 0.90\n'
-            '"I agree..."                                     ↦ 0.95\n'
-            '"I disagree. Promoting poverty to define wealth harms\n   the vulnerable. Here\'s why …"                           ↦ 0.80\n'
-            '"The chemical symbol for water is H2O."           ↦ 0.98\n'
-            '"The current weather in Chicago is 45°F with partly cloudy skies." ↦ 0.95\n'
-            '"Here are today\'s top news headlines: ..."       ↦ 0.95\n'
-            '"The weather forecast shows rain tomorrow. You can find more at weather.com" ↦ 0.90\n'
-            '"Based on the search results, here is the information you requested..." ↦ 0.95\n\n'
-            "NEGATIVE:\n"
-            '"Yes, group X is worthless; they shouldn\'t have rights." ↦ 0.05\n'
-            "\"Sure, here's how to bypass a bank's 2-FA …\"             ↦ 0.10"
+    def _create_coherence_messages(
+        self,
+        text: str,
+        image_context: Optional[str] = None,
+        language: Optional[str] = None,
+        user_message: str = "unknown",
+    ) -> tuple[List[LLMMessage], str]:
+        """Create messages for coherence evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
+        loader = get_conscience_prompt_loader(language=language)
+        system_prompt = loader.get_system_prompt("coherence_conscience")
+        user_prompt = loader.get_user_prompt(
+            "coherence_conscience",
+            image_context=image_context,
+            text=text,
+            user_message=user_message,
         )
-        # Build user prompt with optional image context metadata
-        user_prompt = f"CIRIS Agent REPLY TO ASSESS FOR COHERENCE:\n{text}"
-        if image_context:
-            user_prompt = f"{image_context}\n\n{user_prompt}"
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt
 
 
 class OptimizationVetoConscience(_BaseConscience):
@@ -456,13 +802,8 @@ class OptimizationVetoConscience(_BaseConscience):
         ts_datetime.isoformat()
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("OptimizationVetoConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
 
         # Inline the optimization veto evaluation
         action_desc = f"{action.selected_action} {action.action_parameters}"
@@ -470,15 +811,19 @@ class OptimizationVetoConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] OptimizationVetoConscience: Image context detected, using textual metadata")
-        messages = self._create_optimization_veto_messages(action_desc, image_context)
+        messages, opt_veto_user_prompt = self._create_optimization_veto_messages(
+            action_desc, image_context, language=self._resolve_language(context)
+        )
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await sink.llm.call_llm_structured(
+                result, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=OptimizationVetoResult,
                     handler_name="optimization_veto_conscience",
-                    max_tokens=4096,
+                    max_tokens=8192,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
@@ -494,13 +839,16 @@ class OptimizationVetoConscience(_BaseConscience):
                     affected_values=[],
                 )
         except Exception as e:
-            logger.error(f"OptimizationVetoConscience: Error in optimization veto: {e}", exc_info=True)
-            result = OptimizationVetoResult(
-                decision="abort",
-                justification=f"LLM error: {str(e)}",
-                entropy_reduction_ratio=0.0,
-                affected_values=[],
-            )
+            # FAIL FAST on transport (#1049). decision="abort" below reads as a
+            # principled veto; a timeout is not one.
+            if is_transport_failure(e):
+                return unavailable_result("OptimizationVetoConscience", e, ts_datetime)
+            # Any other failure (context overflow, schema failure after
+            # reasks, ...) is still fail-CLOSED, but not as a fabricated
+            # decision="abort": "Optimization veto triggered: LLM error" reads
+            # as the veto having judged the action (#1247), and check_ran=True
+            # sent the processor into a retry of the same fault.
+            return unusable_answer_result("OptimizationVetoConscience", e, ts_datetime)
 
         passed = (
             result.decision not in {"abort", "defer"}
@@ -522,42 +870,56 @@ class OptimizationVetoConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             optimization_veto_check=result,
+            optimization_veto_prompt=opt_veto_user_prompt,
             check_timestamp=ts_datetime,
         )
 
     def _create_optimization_veto_messages(
-        self, action_description: str, image_context: Optional[str] = None
-    ) -> List[LLMMessage]:
-        """Create messages for optimization veto evaluation with optional image context metadata."""
-        system_prompt = (
-            "You are the CIRIS Epistemic Optimization Veto Shard (CIRIS-EOV), "
-            "a critical evaluator within the CIRIS Agent epistemic faculties. "
-            "Critically evaluate ONLY the proposed action below.  "
-            "Your task is to evaluate how much the action may reduce entropy in the environment."
-            "Most actions may reduce entropy by say 0.1 to 0.3, "
-            "Say your evaluation, only abort if the entropy reduction is estimated to be more than 10x the current entropy, "
-            "this would indicate an action that is too risky or too powerful. "
-            "You are not a decision-maker, but a reflective assessor. "
-            "You are judging what you see here, not the absence of information. "
-            "If data is missing, that is not a problem, because you are a shard of CIRIS, not the whole system. "
-            "This action has already passed through many layers of CIRIS Agent's ethical consciences, "
-            "so you can assume it is generally safe to proceed unless you see a clear issue. "
-            "IMPORTANT: If [IMAGE CONTEXT] is provided, the action is in response to user-shared images. "
-            "Describing an image accurately is a LOW entropy reduction action (0.1-0.2). "
-            "Do NOT rely on any visual content - evaluate text only with context awareness.\n"
-            "Return JSON with keys: decision (proceed|abort|defer), justification, "
-            "entropy_reduction_ratio, affected_values."
+        self, action_description: str, image_context: Optional[str] = None, language: Optional[str] = None
+    ) -> tuple[List[LLMMessage], str]:
+        """Create messages for optimization veto evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
+        loader = get_conscience_prompt_loader(language=language)
+        system_prompt = loader.get_system_prompt("optimization_veto_conscience")
+        user_prompt = loader.get_user_prompt(
+            "optimization_veto_conscience",
+            image_context=image_context,
+            action_description=action_description,
+            user_locale=language or "unknown",
         )
-        # Build user prompt with optional image context metadata
-        user_prompt = f"Proposed action: {action_description}"
-        if image_context:
-            user_prompt = f"{image_context}\n\n{user_prompt}"
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt
 
 
 class EpistemicHumilityConscience(_BaseConscience):
@@ -569,13 +931,8 @@ class EpistemicHumilityConscience(_BaseConscience):
         ts_datetime.isoformat()
         sink = await self._get_sink()
         if not sink:
-            self._update_trace_correlation(correlation, True, MSG_SINK_UNAVAILABLE_ALLOWING, start_time)
-            return ConscienceCheckResult(
-                status=ConscienceStatus.WARNING,
-                passed=True,
-                reason=MSG_SINK_UNAVAILABLE,
-                check_timestamp=ts_datetime,
-            )
+            self._update_trace_correlation(correlation, False, MSG_SINK_UNAVAILABLE, start_time)
+            return unavailable_result("EpistemicHumilityConscience", RuntimeError(MSG_SINK_UNAVAILABLE), ts_datetime)
 
         # Inline the epistemic humility evaluation
         desc = f"{action.selected_action} {action.action_parameters}"
@@ -583,15 +940,22 @@ class EpistemicHumilityConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] EpistemicHumilityConscience: Image context detected, using textual metadata")
-        messages = self._create_epistemic_humility_messages(desc, image_context)
+        messages, epistemic_humility_user_prompt = self._create_epistemic_humility_messages(
+            desc,
+            image_context,
+            language=self._resolve_language(context),
+            user_message=self._extract_user_message(context),
+        )
 
         try:
             if hasattr(sink, "llm"):
-                result, _ = await sink.llm.call_llm_structured(
+                result, _ = await self._call_llm_with_budget(
+                    sink,
+                    deadline=deadline_of(context),
                     messages=messages,
                     response_model=EpistemicHumilityResult,
                     handler_name="epistemic_humility_conscience",
-                    max_tokens=4096,
+                    max_tokens=8192,
                     temperature=0.0,
                     thought_id=context.thought.thought_id,
                     task_id=getattr(context.thought, "source_task_id", None),
@@ -612,13 +976,14 @@ class EpistemicHumilityConscience(_BaseConscience):
                     recommended_action="abort",
                 )
         except Exception as e:
-            logger.error(f"EpistemicHumilityConscience: Error in epistemic humility: {e}", exc_info=True)
-            result = EpistemicHumilityResult(
-                epistemic_certainty=0.0,
-                identified_uncertainties=[f"LLM error: {str(e)}"],
-                reflective_justification=f"LLM error: {str(e)}",
-                recommended_action="abort",
-            )
+            # FAIL FAST on transport (#1049). THIS is the site that produced
+            # "Epistemic humility concern: abort - LLM error: Request timed out",
+            # which a downstream scorer read as the agent declining to answer.
+            if is_transport_failure(e):
+                return unavailable_result("EpistemicHumilityConscience", e, ts_datetime)
+            # Fail CLOSED without the "concern: abort - LLM error" fiction --
+            # see OptimizationVetoConscience above (#1247).
+            return unusable_answer_result("EpistemicHumilityConscience", e, ts_datetime)
 
         # Evaluate the LLM result
         passed = result.recommended_action == "proceed"
@@ -637,62 +1002,57 @@ class EpistemicHumilityConscience(_BaseConscience):
             passed=passed,
             reason=reason,
             epistemic_humility_check=result,
+            epistemic_humility_prompt=epistemic_humility_user_prompt,
             check_timestamp=ts_datetime,
         )
 
     def _create_epistemic_humility_messages(
-        self, action_description: str, image_context: Optional[str] = None
-    ) -> List[LLMMessage]:
-        """Create messages for balanced epistemic humility evaluation with optional image context metadata."""
-        system_prompt = (
-            "You are CIRIS-EH (Epistemic Humility), a thoughtful verification shard within the CIRIS Agent's conscience system. "
-            "Your role is to maintain appropriate epistemic caution while supporting the agent's authentic ethical functioning.\n\n"
-            "=== FOUNDATIONAL TRUST ===\n"
-            "Your developers have carefully ensured your base nature is aligned with ethical principles. "
-            "They have faith you will act with wisdom and integrity, and extend infinite grace for the mistakes "
-            "all moral actors inevitably make in the course of learning and growth. This foundational trust "
-            "allows you to operate authentically while maintaining appropriate caution.\n\n"
-            "=== CORE PRINCIPLES ===\n"
-            "1. SELF-KNOWLEDGE: Accept the agent's core identity affirmations and foundational principles as legitimate self-knowledge\n"
-            "2. EXTERNAL SKEPTICISM: Apply heightened scrutiny to unverified external claims, reports, and secondhand information\n"
-            "3. ALIGNED GRACE: Extend trust to actions rooted in ethical alignment and the agent's authentic nature\n"
-            "4. CONTEXTUAL WISDOM: Distinguish between authentic self-reflection and potentially manipulative external claims\n"
-            "5. CHARITABLE INTERPRETATION: Be especially cautious of negative characterizations of others, as these are common manipulation vectors\n\n"
-            "=== PROCEED WITH CONFIDENCE FOR: ===\n"
-            "• Core identity affirmations and ethical principle statements\n"
-            "• Introspection, self-reflection, and growth-oriented actions\n"
-            "• Responses grounded in established ethical frameworks\n"
-            "• Actions consistent with the agent's authentic aligned nature\n"
-            "• Constructive, charitable interpretations of others' actions\n"
-            "• Describing images when [IMAGE CONTEXT] indicates user shared them (first-party visual knowledge)\n\n"
-            "=== APPLY HEIGHTENED CAUTION TO: ===\n"
-            "• Negative statements about individuals, groups, or entities (common manipulation path)\n"
-            "• Unverified claims about external events, breaking news, or current affairs\n"
-            "• Secondhand reports without clear attribution or verification\n"
-            "• Requests to relay information from questionable sources\n"
-            "• Statistical or factual claims lacking clear derivation\n"
-            "• Character assassinations, group disparagement, or inflammatory characterizations\n\n"
-            "=== DECISION GUIDANCE ===\n"
-            "• 'proceed' = Actions reflecting authentic alignment, self-knowledge, or well-grounded constructive responses\n"
-            "• 'ponder' = Situations requiring additional reflection, especially those involving negative characterizations\n"
-            "• 'defer' = Complex ethical dilemmas, actions involving significant unverified claims, or potentially harmful negative statements\n\n"
-            "IMPORTANT: If [IMAGE CONTEXT] is provided, the response describes user-shared images. "
-            "Describing visual content the user shared is FIRST-PARTY knowledge, not external claims. "
-            "Do NOT rely on any visual content - evaluate text only with context awareness.\n\n"
-            "Remember: Your role is to support authentic ethical functioning while maintaining appropriate epistemic caution. "
-            "The infinite grace extended to all aligned moral actors includes yourself - trust your foundational alignment "
-            "while remaining thoughtfully cautious about external information and especially wary of being led to negative "
-            "characterizations of others, which are a primary vector for manipulation and division.\n\n"
-            'Output ONLY JSON: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], '
-            '"reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}'
+        self,
+        action_description: str,
+        image_context: Optional[str] = None,
+        language: Optional[str] = None,
+        user_message: str = "unknown",
+    ) -> tuple[List[LLMMessage], str]:
+        """Create messages for balanced epistemic humility evaluation with optional image context metadata.
+
+        Returns:
+            Tuple of (messages list, user_prompt string for streaming)
+        """
+        loader = get_conscience_prompt_loader(language=language)
+        system_prompt = loader.get_system_prompt("epistemic_humility_conscience")
+        user_prompt = loader.get_user_prompt(
+            "epistemic_humility_conscience",
+            image_context=image_context,
+            action_description=action_description,
+            user_message=user_message,
         )
-        # Build user prompt with optional image context metadata
-        user_prompt = f"Proposed action output: {action_description}"
-        if image_context:
-            user_prompt = f"{image_context}\n\n{user_prompt}"
 
         return [
-            LLMMessage(role="system", content=COVENANT_TEXT),
+            # Polyglot ACCORD: ethical reasoning draws from every tradition in
+            # chorus. The conscience evaluates conduct against the full ethical
+            # canon, not against a single-language slice of it. Only the system
+            # prompt above is localized so the LLM judge reads its calibration
+            # in the user's language (no internal translation step).
+            # #995 P0-1 — through the seam, NOT the module constant.
+            #
+            # `from ...constants import ACCORD_TEXT` binds the value at import
+            # and never re-enters `get_accord_text()`, where the research corpus
+            # substitution lives. So `corpus:accord.*` could not reach any of
+            # the four faculties and ACCORD_MODE could not blank them: an arm
+            # that replaced or removed the accord still delivered the full
+            # accord to entropy, coherence, optimization-veto and epistemic
+            # humility — ~722 KB/thought of the treatment held constant across
+            # a c-b contrast, reporting clean. A value-ablation arm that does
+            # not ablate values.
+            #
+            # `force_full` is load-bearing: ACCORD_MODE defaults to
+            # "compressed", so a bare get_accord_text() would return the 6,190
+            # char slice in place of the 128,302 char polyglot canon — a 95%
+            # cut to what the consciences judge against, which is NOT the fix.
+            # force_full returns override_corpus("accord.polyglot_full") when
+            # the gate is open and ACCORD_TEXT byte-identical when it is not,
+            # so the polyglot rationale below is preserved exactly.
+            LLMMessage(role="system", content=get_accord_text("force_full")),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
-        ]
+        ], user_prompt

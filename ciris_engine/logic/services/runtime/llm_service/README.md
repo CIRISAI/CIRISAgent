@@ -357,24 +357,18 @@ ciris_engine/logic/services/runtime/llm_service/
 ## 🛡️ Reliability & Error Handling
 
 ### Error Classification
-```python
-# Retryable Errors
-retryable_exceptions = (
-    APIConnectionError,    # Network issues
-    RateLimitError,       # Rate limit exceeded
-    InternalServerError   # Server-side errors
-)
+Timeouts come from the LLM budget profile, `ciris_engine/logic/config/llm_budget.py` (#1186).
+Each failure is retried by exactly one layer:
 
-# Non-Retryable Errors
-non_retryable_exceptions = (
-    APIStatusError,       # Authentication, invalid requests
-)
-```
+| Failure | Retried by | Attempts |
+|---|---|---|
+| Answer did not fit the schema (pydantic/JSON validation) | instructor reask | 2 |
+| Remediable 400 (context length, content filter) | `_retry_with_backoff`, with a remediation message | `max_retries` (≤3) |
+| Timeout, connection error, 5xx, 429 | **not retried in the service** — raised on first occurrence (a timeout as `TimeoutError`); the enclosing DMA / conscience per-try retries it, and the LLM bus applies its polite 429/5xx backoff | — |
+| Authentication | never | — |
 
-### Retry Strategy
-- **Exponential Backoff**: 1s, 2s, 4s delays
-- **Maximum Attempts**: 3 retries per request
-- **Circuit Breaker Integration**: Fast-fail when provider unhealthy
+The OpenAI, Anthropic and mobile local clients are built with SDK `max_retries=0`;
+the Google client is given the profile timeout and no retry options.
 
 ### Failover Sequence
 1. Primary provider (highest priority)
@@ -391,8 +385,8 @@ class OpenAIConfig(BaseModel):
     model_name: str = "gpt-4o-mini"     # Default model
     base_url: Optional[str] = None       # Custom API endpoint
     instructor_mode: str = "JSON"        # Structured output mode
-    max_retries: int = 3                 # Retry attempts
-    timeout_seconds: int = 30            # Request timeout
+    max_retries: int = 3                 # Remediation attempts for fixable 400s
+    timeout_seconds: int = 60            # HTTP timeout; set from the LLM budget profile at startup
 ```
 
 ### Environment Variables
@@ -415,8 +409,9 @@ class OpenAIConfig(BaseModel):
 
 **Other Settings**:
 - `MOCK_LLM`: Enable mock mode for offline operation
-- `CIRIS_LLM_TIMEOUT`: Request timeout in seconds (default: 20)
-- `CIRIS_DMA_TIMEOUT`: DMA evaluation timeout in seconds (default: 90)
+- `CIRIS_LLM_TIMEOUT`: HTTP timeout per LLM request, overriding the budget profile (45s remote / 240s local; `ciris_engine/logic/config/llm_budget.py`, #1186)
+- `CIRIS_DMA_TIMEOUT`: DMA per-try timeout, overriding the budget profile (90s remote / 300s local)
+- `CIRIS_LLM_BUDGET_PROFILE`: force `local` or `remote` instead of classifying the provider
 
 ## 🌱 Future Enhancements
 

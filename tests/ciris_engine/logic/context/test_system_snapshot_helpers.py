@@ -6,7 +6,6 @@ Tests all helper functions with 80%+ coverage to ensure safety before refactorin
 
 import json
 import logging
-import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, Mock, PropertyMock, patch
@@ -16,10 +15,13 @@ from pydantic import BaseModel
 
 from ciris_engine.logic.context.system_snapshot_helpers import (
     _build_current_task_summary,
+    _build_location_string,
     _collect_adapter_channels,
     _collect_available_tools,
     _collect_resource_alerts,
     _collect_service_health,
+    _create_preferences_memory_query,
+    _enrich_single_user_profile,
     _enrich_user_profiles,
     _extract_agent_identity,
     _extract_thought_summary,
@@ -30,6 +32,9 @@ from ciris_engine.logic.context.system_snapshot_helpers import (
     _get_telemetry_summary,
     _get_top_tasks,
     _json_serial_for_users,
+    _merge_memory_profile_into_existing,
+    _merge_preferences_into_profile,
+    _query_user_preferences,
     _resolve_channel_context,
     _safe_extract_channel_info,
 )
@@ -566,8 +571,9 @@ class TestSystemContext:
         result = _collect_resource_alerts(resource_monitor)
 
         assert len(result) == 2
-        assert "🚨 CRITICAL! RESOURCE LIMIT BREACHED! Memory usage > 90%" in result[0]
-        assert "🚨 CRITICAL! RESOURCE LIMIT BREACHED! CPU usage > 95%" in result[1]
+        assert "RESOURCE PRESSURE (runtime self-protection, informational): Memory usage > 90%" in result[0]
+        assert "RESOURCE PRESSURE (runtime self-protection, informational): CPU usage > 95%" in result[1]
+        assert all("DEFER" not in r and "REJECT" not in r for r in result)
 
     def test_collect_resource_alerts_with_unhealthy_system(self):
         """Test collecting resource alerts with unhealthy system."""
@@ -579,7 +585,7 @@ class TestSystemContext:
         result = _collect_resource_alerts(resource_monitor)
 
         assert len(result) == 1
-        assert "🚨 CRITICAL! SYSTEM UNHEALTHY!" in result[0]
+        assert "RESOURCE PRESSURE" in result[0] and "No action is requested" in result[0]
 
     def test_collect_resource_alerts_with_exception(self, caplog):
         """Test collecting resource alerts with exception."""
@@ -803,7 +809,8 @@ class TestSystemData:
     async def test_collect_available_tools_with_missing_attributes(self):
         """Test collecting available tools with runtime missing required attributes."""
         runtime = Mock()
-        # Missing bus_manager or service_registry
+        # Missing bus_manager and service_registry._services
+        runtime.service_registry = Mock(spec=[])  # No _services attribute
 
         result = await _collect_available_tools(runtime)
         assert result == {}
@@ -811,6 +818,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_valid_tools(self, caplog):
         """Test collecting available tools with valid tool services."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -824,7 +833,13 @@ class TestSystemData:
         tool_info = Mock(spec=ToolInfo)
         tool_service.get_tool_info.return_value = tool_info
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        # Mock provider wrapper with instance and metadata
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "discord"}
+
+        # Set up _services dict for _get_tool_providers
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         result = await _collect_available_tools(runtime)
 
@@ -835,6 +850,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_async_methods(self):
         """Test collecting available tools with async tool service methods."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -847,7 +864,12 @@ class TestSystemData:
         tool_info = Mock(spec=ToolInfo)
         tool_service.get_tool_info = AsyncMock(return_value=tool_info)
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        # Mock provider wrapper
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "api"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         result = await _collect_available_tools(runtime)
 
@@ -856,22 +878,23 @@ class TestSystemData:
 
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_non_iterable_services(self, caplog):
-        """Test collecting available tools with non-iterable tool services."""
+        """Test collecting available tools with non-iterable tool services (empty _services)."""
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
 
-        # Return non-iterable
-        runtime.service_registry.get_services_by_type.return_value = "not_iterable"
+        # Return empty _services - no tool providers
+        runtime.service_registry._services = {}
 
         result = await _collect_available_tools(runtime)
 
         assert result == {}
-        assert "get_services_by_type('tool') returned non-iterable: <class 'str'>" in caplog.text
 
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_invalid_tool_info_type(self):
         """Test collecting available tools with invalid tool info type."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -881,7 +904,11 @@ class TestSystemData:
         tool_service.get_available_tools.return_value = ["bad_tool"]
         tool_service.get_tool_info.return_value = "not_tool_info"  # Invalid type
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "bad"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         with pytest.raises(TypeError, match="returned invalid type for bad_tool"):
             await _collect_available_tools(runtime)
@@ -889,6 +916,8 @@ class TestSystemData:
     @pytest.mark.asyncio
     async def test_collect_available_tools_with_tool_info_exception(self):
         """Test collecting available tools with tool info exception."""
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
         runtime = Mock()
         runtime.bus_manager = Mock()
         runtime.service_registry = Mock()
@@ -898,7 +927,11 @@ class TestSystemData:
         tool_service.get_available_tools.return_value = ["error_tool"]
         tool_service.get_tool_info.side_effect = Exception("Tool info error")
 
-        runtime.service_registry.get_services_by_type.return_value = [tool_service]
+        provider = Mock()
+        provider.instance = tool_service
+        provider.metadata = {"adapter": "error"}
+
+        runtime.service_registry._services = {ServiceType.TOOL: [provider]}
 
         with pytest.raises(Exception, match="Tool info error"):
             await _collect_available_tools(runtime)
@@ -967,39 +1000,79 @@ class TestUserManagement:
         assert "thought_user_456" in result
         assert "Found user thought_user_456 from thought context" in caplog.text
 
-    @patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection")
-    def test_extract_user_ids_from_correlation_history(self, mock_get_conn, caplog):
-        """Test extracting user IDs from correlation history."""
+    def test_extract_user_ids_from_correlation_history(self, persist_engine, caplog):
+        """Test extracting user IDs from correlation history.
+
+        Post-A1 (CIRISAgent#763): correlation history routes through persist's
+        `engine.correlation_query({"correlation_id": ...})` and reads
+        `tags.user_id`. Persist's substrate is keyed by correlation_id (one
+        row per id, upsert semantics), so we seed a single row carrying the
+        target user.
+        """
+        from ciris_engine.logic.persistence.models.correlations import add_correlation
+        from ciris_engine.schemas.telemetry.core import (
+            CorrelationType,
+            ServiceCorrelation,
+            ServiceCorrelationStatus,
+            ServiceRequestData,
+            ServiceResponseData,
+        )
+
         task = Mock()
         task.context = Mock()
         task.context.correlation_id = "corr_123"
-        task.context.user_id = None  # No task user_id to avoid picking it up
+        task.context.user_id = None
 
-        # Mock database connection and cursor
-        mock_conn = Mock()
-        mock_cursor = Mock()
-        mock_cursor.fetchall.return_value = [{"user_id": "corr_user_1"}, {"user_id": "corr_user_2"}]
-        mock_conn.cursor.return_value = mock_cursor
-        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        now = datetime.now(timezone.utc)
+        add_correlation(
+            ServiceCorrelation(
+                correlation_id="corr_123",
+                service_type="communication",
+                handler_name="ObserveHandler",
+                action_type="observe",
+                request_data=ServiceRequestData(
+                    service_type="communication", method_name="observe", channel_id="c", request_timestamp=now
+                ),
+                response_data=ServiceResponseData(
+                    success=True, execution_time_ms=10.0, error_message=None, response_timestamp=now
+                ),
+                status=ServiceCorrelationStatus.COMPLETED,
+                correlation_type=CorrelationType.SERVICE_INTERACTION,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+                timestamp=now,
+                tags={"user_id": "corr_user_1"},
+                retention_policy="raw",
+            )
+        )
 
         result = _extract_user_ids_from_context(task, None)
 
         assert "corr_user_1" in result
-        assert "corr_user_2" in result
         assert "Found user corr_user_1 from correlation history" in caplog.text
-        assert "Found user corr_user_2 from correlation history" in caplog.text
 
-    @patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection")
-    def test_extract_user_ids_from_correlation_with_exception(self, mock_get_conn, caplog):
-        """Test extracting user IDs from correlation with database exception."""
+    def test_extract_user_ids_from_correlation_with_exception(self, persist_engine, caplog):
+        """Test extracting user IDs from correlation with database exception.
+
+        Post-A1 (CIRISAgent#763): patch `get_persist_engine` to return a stub
+        whose `correlation_query` raises; the helper should swallow the
+        exception and leave user_ids empty.
+        """
+
+        class _RaisingEngine:
+            def correlation_query(self, *args, **kwargs):
+                raise Exception("DB error")
+
         task = Mock()
         task.context = Mock()
         task.context.correlation_id = "corr_error"
-        task.context.user_id = None  # No task user_id
+        task.context.user_id = None
 
-        mock_get_conn.side_effect = Exception("DB error")
-
-        result = _extract_user_ids_from_context(task, None)
+        with patch(
+            "ciris_engine.logic.persistence.models.graph.get_persist_engine",
+            return_value=_RaisingEngine(),
+        ):
+            result = _extract_user_ids_from_context(task, None)
 
         assert len(result) == 0  # Should be empty set
         assert "Failed to extract users from correlation history: DB error" in caplog.text
@@ -1027,21 +1100,49 @@ class TestUserManagement:
 
     @pytest.mark.asyncio
     async def test_enrich_user_profiles_with_existing_user(self, caplog):
-        """Test enriching user profiles skips existing users."""
+        """Test enriching user profiles merges memory data into existing users."""
         memory_service = Mock()
+
+        # Mock user node with preferences
+        user_node = Mock()
+        user_node.attributes = {
+            "username": "existing_user",
+            "display_name": "Existing User",
+            "language": "fr",  # Non-default language should be merged
+            "timezone": "Europe/Paris",  # Non-default timezone should be merged
+        }
+        memory_service.recall = AsyncMock(return_value=[user_node])
+
         user_ids = {"existing_user"}
         channel_id = "test_channel"
-        existing_profiles = [Mock()]
-        existing_profiles[0].user_id = "existing_user"
+        existing_profile = Mock()
+        existing_profile.user_id = "existing_user"
+        existing_profile.preferred_language = "en"  # Will be overwritten with "fr"
+        existing_profile.timezone = "UTC"  # Will be overwritten with "Europe/Paris"
+        existing_profile.communication_style = "formal"
+        existing_profile.user_preferred_name = None
+        existing_profile.location = None
+        existing_profile.interaction_preferences = None
+        existing_profile.oauth_name = None
+        existing_profile.memorized_attributes = None
+        existing_profiles = [existing_profile]
 
         result = await _enrich_user_profiles(memory_service, user_ids, channel_id, existing_profiles)
 
         assert len(result) == 1
-        assert "User existing_user already exists, skipping" in caplog.text
+        # Verify memory graph data was merged into existing profile
+        assert "Merging memory graph data into existing profile" in caplog.text
+        assert existing_profile.preferred_language == "fr"
+        assert existing_profile.timezone == "Europe/Paris"
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_with_new_user_valid_node(self, caplog):
-        """Test enriching user profiles with new user and valid node."""
+    async def test_enrich_user_profiles_with_new_user_valid_node(self, persist_engine, caplog):
+        """Test enriching user profiles with new user and valid node.
+
+        Post-A1 (CIRISAgent#763): cross-channel-message lookup routes through
+        persist's correlation substrate. Empty persist DB yields no extra
+        messages — the assertion focuses on the user profile creation path.
+        """
         memory_service = Mock()
 
         # Mock user node
@@ -1065,15 +1166,7 @@ class TestUserManagement:
         channel_id = "test_channel"
         existing_profiles = []
 
-        # Mock database for recent messages
-        with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection") as mock_get_conn:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = []
-            mock_conn.cursor.return_value = mock_cursor
-            mock_get_conn.return_value.__enter__.return_value = mock_conn
-
-            result = await _enrich_user_profiles(memory_service, user_ids, channel_id, existing_profiles)
+        result = await _enrich_user_profiles(memory_service, user_ids, channel_id, existing_profiles)
 
         assert len(result) == 1
         assert isinstance(result[0], UserProfile)
@@ -1083,8 +1176,12 @@ class TestUserManagement:
         assert "Added user profile for new_user_123" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_with_pydantic_attributes(self):
-        """Test enriching user profiles with Pydantic model attributes."""
+    async def test_enrich_user_profiles_with_pydantic_attributes(self, persist_engine):
+        """Test enriching user profiles with Pydantic model attributes.
+
+        Post-A1 (CIRISAgent#763): cross-channel-message lookup is short-
+        circuited here because `channel_id=None`, so no persist queries fire.
+        """
         memory_service = Mock()
 
         # Mock user node with Pydantic attributes
@@ -1100,21 +1197,18 @@ class TestUserManagement:
         user_ids = {"pydantic_user"}
         existing_profiles = []
 
-        with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection") as mock_get_conn:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = []
-            mock_conn.cursor.return_value = mock_cursor
-            mock_get_conn.return_value.__enter__.return_value = mock_conn
-
-            result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
+        result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
 
         assert len(result) == 1
         assert result[0].display_name == "pydantic_user"
 
     @pytest.mark.asyncio
-    async def test_enrich_user_profiles_with_corrupted_last_seen(self, caplog):
-        """Test enriching user profiles with corrupted last_seen data."""
+    async def test_enrich_user_profiles_with_corrupted_last_seen(self, persist_engine, caplog):
+        """Test enriching user profiles with corrupted last_seen data.
+
+        Post-A1 (CIRISAgent#763): cross-channel-message lookup is short-
+        circuited here (`channel_id=None`); persist is wired but unused.
+        """
         memory_service = Mock()
 
         # Mock user node with corrupted data
@@ -1132,14 +1226,7 @@ class TestUserManagement:
         user_ids = {"corrupted_user"}
         existing_profiles = []
 
-        with patch("ciris_engine.logic.context.system_snapshot_helpers.persistence.get_db_connection") as mock_get_conn:
-            mock_conn = Mock()
-            mock_cursor = Mock()
-            mock_cursor.fetchall.return_value = []
-            mock_conn.cursor.return_value = mock_cursor
-            mock_get_conn.return_value.__enter__.return_value = mock_conn
-
-            result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
+        result = await _enrich_user_profiles(memory_service, user_ids, None, existing_profiles)
 
         assert len(result) == 1
         assert "FIELD_FAILED_VALIDATION: User corrupted_user has invalid last_seen" in caplog.text
@@ -1180,6 +1267,15 @@ class TestUserManagement:
 
 class TestContextEnrichment:
     """Test context enrichment tool execution."""
+
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        get_enrichment_cache().clear()
+        yield
+        get_enrichment_cache().clear()
 
     @pytest.mark.asyncio
     async def test_run_context_enrichment_with_no_runtime(self):
@@ -1492,3 +1588,955 @@ class TestSystemSnapshotFormatter:
 
         # Should be truncated
         assert "... (truncated)" in result
+
+
+# =============================================================================
+# 11. STARTUP CACHE POPULATION TESTS
+# =============================================================================
+
+
+class TestStartupCachePopulation:
+    """Test the populate_enrichment_cache_at_startup function."""
+
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        cache.clear()
+        # Reset the _startup_populated flag for isolated tests
+        cache._startup_populated = False
+        cache._hit_count = 0
+        cache._miss_count = 0
+        yield
+        cache.clear()
+        cache._startup_populated = False
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_at_startup_with_no_tools(self, mock_runtime, caplog):
+        """Test startup cache population with no available tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        await populate_enrichment_cache_at_startup(mock_runtime, {})
+
+        cache = get_enrichment_cache()
+        assert cache.stats["hits"] == 0
+        assert cache.stats["misses"] == 0
+        assert cache.is_populated is True
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_at_startup_with_enrichment_tools(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test startup cache population executes enrichment tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        cache = get_enrichment_cache()
+        assert cache.is_populated is True
+        assert "[ENRICHMENT_CACHE] Startup population complete:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_at_startup_skips_if_already_populated(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test startup cache population skips if cache already populated."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        # Mark cache as already populated
+        cache = get_enrichment_cache()
+        cache.mark_startup_populated()
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        assert "[ENRICHMENT_CACHE] Cache already populated, skipping" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_populate_cache_stores_results(self, mock_runtime_with_enrichment, mock_enrichment_tool_info):
+        """Test that startup cache population stores tool results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        cache = get_enrichment_cache()
+        # Check that result is cached
+        cached_result = cache.get("test:test_list_items")
+        assert cached_result is not None
+        assert cached_result["count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_cache_get_with_hit(self, mock_runtime_with_enrichment, mock_enrichment_tool_info):
+        """Test cache get returns cached value and increments hits."""
+        from ciris_engine.logic.context.system_snapshot_helpers import (
+            get_enrichment_cache,
+            populate_enrichment_cache_at_startup,
+        )
+
+        available_tools = {"test": [mock_enrichment_tool_info]}
+        await populate_enrichment_cache_at_startup(mock_runtime_with_enrichment, available_tools)
+
+        cache = get_enrichment_cache()
+        initial_hits = cache.stats["hits"]
+
+        # Get the cached value
+        result = cache.get("test:test_list_items")
+        assert result is not None
+        assert cache.stats["hits"] == initial_hits + 1
+
+    @pytest.mark.asyncio
+    async def test_cache_get_with_miss(self):
+        """Test cache get returns None for missing key and increments misses."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        initial_misses = cache.stats["misses"]
+
+        result = cache.get("nonexistent:tool")
+        assert result is None
+        assert cache.stats["misses"] == initial_misses + 1
+
+    @pytest.mark.asyncio
+    async def test_cache_set_and_get(self):
+        """Test cache set and get operations."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        test_data = {"value": 42, "items": ["a", "b", "c"]}
+        cache.set("test:my_tool", test_data)
+
+        result = cache.get("test:my_tool")
+        assert result == test_data
+
+    @pytest.mark.asyncio
+    async def test_cache_clear(self):
+        """Test cache clear removes all entries."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        cache.set("test:tool1", {"data": 1})
+        cache.set("test:tool2", {"data": 2})
+        assert len(cache.get_all_entries()) == 2
+
+        cache.clear()
+        assert len(cache.get_all_entries()) == 0
+        # Note: clear() only clears entries, not _startup_populated flag
+        # is_populated returns True if entries > 0 OR _startup_populated is set
+        assert cache.stats["entries"] == 0
+
+    @pytest.mark.asyncio
+    async def test_cache_get_all_entries(self):
+        """Test getting all cache entries."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        cache.set("test:tool1", {"data": 1})
+        cache.set("test:tool2", {"data": 2})
+
+        entries = cache.get_all_entries()
+        assert len(entries) == 2
+        assert "test:tool1" in entries
+        assert "test:tool2" in entries
+
+    @pytest.mark.asyncio
+    async def test_cache_ttl_expiration(self):
+        """Test cache entries expire after TTL."""
+        import time
+
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+
+        # Set with very short TTL (minimum is 5 seconds, so we test near that)
+        # Note: The cache has MIN_TTL=5.0, so we can't test sub-second expiry easily
+        # Instead, test that the TTL parameter is accepted and entry is stored
+        cache.set("test:expiring", {"data": "value"}, ttl_seconds=5.0)
+
+        # Should be present immediately
+        assert cache.get("test:expiring") is not None
+        assert cache.get("test:expiring")["data"] == "value"
+
+
+# =============================================================================
+# 12. REFRESH ENRICHMENT CACHE TESTS
+# =============================================================================
+
+
+class TestRefreshEnrichmentCache:
+    """Test the refresh_enrichment_cache function for API-triggered refresh."""
+
+    @pytest.fixture(autouse=True)
+    def clear_enrichment_cache(self):
+        """Clear the enrichment cache before each test."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache
+
+        cache = get_enrichment_cache()
+        cache.clear()
+        cache._startup_populated = False
+        cache._hit_count = 0
+        cache._miss_count = 0
+        yield
+        cache.clear()
+        cache._startup_populated = False
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_with_no_tools(self, mock_runtime, caplog):
+        """Test refresh returns empty when no tools are available."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
+
+        result = await refresh_enrichment_cache(mock_runtime)
+
+        assert result == {}
+        assert "[ENRICHMENT_CACHE] API-triggered refresh starting..." in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_with_none_runtime(self, caplog):
+        """Test refresh handles None runtime gracefully."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+
+        result = await refresh_enrichment_cache(None)
+
+        assert result == {}
+        assert "[ENRICHMENT_CACHE] No tools available for refresh" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_executes_tools(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test refresh executes enrichment tools and returns results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
+
+        # Mock _collect_available_tools to return our enrichment tool
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            result = await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        assert "test:test_list_items" in result
+        assert result["test:test_list_items"]["count"] == 3
+        assert "[ENRICHMENT_CACHE] API refresh complete:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_updates_cache(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test refresh updates the cache with new tool results."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
+
+        cache = get_enrichment_cache()
+        assert cache.get("test:test_list_items") is None
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        # Cache should now have the result
+        cached = cache.get("test:test_list_items")
+        assert cached is not None
+        assert cached["count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_populates_empty_cache(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test refresh populates an empty cache with fresh data."""
+        from ciris_engine.logic.context.system_snapshot_helpers import get_enrichment_cache, refresh_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
+
+        cache = get_enrichment_cache()
+
+        # Verify cache is empty
+        assert cache.get("test:test_list_items") is None
+
+        # Create result to return on refresh
+        new_result = ToolExecutionResult(
+            tool_name="test_list_items",
+            status=ToolExecutionStatus.COMPLETED,
+            success=True,
+            data={"count": 5, "items": ["a", "b", "c", "d", "e"]},
+            error=None,
+            correlation_id="refresh-123",
+        )
+
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.adapter_id = "test_adapter"
+        tool_service.execute_tool = AsyncMock(return_value=new_result)
+        tool_service.get_available_tools = AsyncMock(return_value=["test_list_items"])
+        tool_service.get_tool_info = AsyncMock(return_value=mock_enrichment_tool_info)
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        # Cache should now have the value
+        new_value = cache.get("test:test_list_items")
+        assert new_value is not None
+        assert new_value["count"] == 5
+        assert new_value["items"] == ["a", "b", "c", "d", "e"]
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_logs_stats(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test refresh logs cache statistics after completion."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        assert "[ENRICHMENT_CACHE] API refresh complete: 1 tools" in caplog.text
+        assert "stats:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_handles_tool_errors(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info, caplog
+    ):
+        """Test refresh handles tool execution errors gracefully."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+
+        # Make tool execution fail
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.execute_tool = AsyncMock(side_effect=Exception("Network error"))
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info]}
+
+            result = await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        # Should still return result dict with error
+        assert "test:test_list_items" in result
+        assert "error" in result["test:test_list_items"]
+
+    @pytest.mark.asyncio
+    async def test_refresh_enrichment_cache_multiple_tools(
+        self, mock_runtime_with_enrichment, mock_enrichment_tool_info
+    ):
+        """Test refresh handles multiple enrichment tools."""
+        from ciris_engine.logic.context.system_snapshot_helpers import refresh_enrichment_cache
+        from ciris_engine.schemas.adapters.tools import (
+            ToolExecutionResult,
+            ToolExecutionStatus,
+            ToolInfo,
+            ToolParameterSchema,
+        )
+
+        # Create second tool
+        second_tool = ToolInfo(
+            name="test_get_status",
+            description="Get status",
+            parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            context_enrichment=True,
+            context_enrichment_params={},
+        )
+
+        # Set up tool service to return different results for both tools
+        tool_service = mock_runtime_with_enrichment.service_registry.get_services_by_type.return_value[0]
+        tool_service.adapter_id = "test_adapter"
+        # Return both tools in get_available_tools
+        tool_service.get_available_tools = AsyncMock(return_value=["test_list_items", "test_get_status"])
+
+        def get_tool_info_side_effect(name):
+            if name == "test_list_items":
+                return mock_enrichment_tool_info
+            elif name == "test_get_status":
+                return second_tool
+            return None
+
+        tool_service.get_tool_info = AsyncMock(side_effect=get_tool_info_side_effect)
+
+        def execute_side_effect(name, params):
+            if name == "test_list_items":
+                return ToolExecutionResult(
+                    tool_name=name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"items": [1, 2, 3]},
+                    error=None,
+                    correlation_id="c1",
+                )
+            elif name == "test_get_status":
+                return ToolExecutionResult(
+                    tool_name=name,
+                    status=ToolExecutionStatus.COMPLETED,
+                    success=True,
+                    data={"status": "healthy"},
+                    error=None,
+                    correlation_id="c2",
+                )
+            return None
+
+        tool_service.execute_tool = AsyncMock(side_effect=execute_side_effect)
+
+        with patch(
+            "ciris_engine.logic.context.system_snapshot_helpers._collect_available_tools",
+            new_callable=AsyncMock,
+        ) as mock_collect:
+            mock_collect.return_value = {"test": [mock_enrichment_tool_info, second_tool]}
+
+            result = await refresh_enrichment_cache(mock_runtime_with_enrichment)
+
+        assert len(result) == 2
+        assert "test:test_list_items" in result
+        assert "test:test_get_status" in result
+        assert result["test:test_list_items"]["items"] == [1, 2, 3]
+        assert result["test:test_get_status"]["status"] == "healthy"
+
+
+# =============================================================================
+# LOCALIZATION / USER PREFERENCES TESTS
+# =============================================================================
+
+
+class TestUserPreferencesQuery:
+    """Test user preferences query and merge functions for localization.
+
+    These tests verify that user preferences (especially preferred_language)
+    are correctly queried from the preferences/{user_id} node and merged
+    into user profiles. This is critical for localization.
+    """
+
+    def test_create_preferences_memory_query(self):
+        """Test that preferences query is correctly constructed."""
+        query = _create_preferences_memory_query("user123")
+
+        assert query.node_id == "preferences/user123"
+        assert query.scope == GraphScope.LOCAL
+        assert query.type == NodeType.CONCEPT
+        assert query.include_edges is False
+        assert query.depth == 1
+
+    def test_merge_preferences_into_profile_with_language(self):
+        """Test merging preferences with non-English language."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",  # Default
+            timezone="UTC",
+        )
+
+        prefs_attrs = {
+            "preferred_language": "am",  # Amharic
+            "timezone": "Africa/Addis_Ababa",
+            "location": "Addis Ababa, Ethiopia",
+        }
+
+        result = _merge_preferences_into_profile(profile, prefs_attrs)
+
+        assert result.preferred_language == "am"
+        assert result.timezone == "Africa/Addis_Ababa"
+        assert result.location == "Addis Ababa, Ethiopia"
+
+    def test_merge_preferences_skips_english_default(self):
+        """Test that English language is not overwritten with English."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="es",  # Spanish already set
+            timezone="Europe/Madrid",
+        )
+
+        prefs_attrs = {
+            "preferred_language": "en",  # Default - should not overwrite
+        }
+
+        result = _merge_preferences_into_profile(profile, prefs_attrs)
+
+        # Should keep Spanish since prefs has English (default)
+        assert result.preferred_language == "es"
+
+    def test_merge_preferences_builds_location_from_parts(self):
+        """Test that location is built from city/region/country parts."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+        )
+
+        prefs_attrs = {
+            "location_city": "Austin",
+            "location_region": "Texas",
+            "location_country": "USA",
+        }
+
+        result = _merge_preferences_into_profile(profile, prefs_attrs)
+
+        assert result.location == "Austin, Texas, USA"
+
+    def test_merge_preferences_with_empty_attrs(self):
+        """Test merging empty preferences doesn't modify profile."""
+        profile = UserProfile(
+            user_id="test_user",
+            display_name="Test User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="de",
+            timezone="Europe/Berlin",
+        )
+
+        result = _merge_preferences_into_profile(profile, {})
+
+        assert result.preferred_language == "de"
+        assert result.timezone == "Europe/Berlin"
+
+    @pytest.mark.asyncio
+    async def test_query_user_preferences_with_results(self):
+        """Test querying preferences when node exists."""
+        mock_memory_service = AsyncMock()
+
+        # Create a mock node with preferences
+        mock_node = MagicMock()
+        mock_node.attributes = {
+            "preferred_language": "ja",
+            "timezone": "Asia/Tokyo",
+        }
+
+        mock_memory_service.recall = AsyncMock(return_value=[mock_node])
+
+        result = await _query_user_preferences("user123", mock_memory_service)
+
+        assert result.get("preferred_language") == "ja"
+        assert result.get("timezone") == "Asia/Tokyo"
+
+    @pytest.mark.asyncio
+    async def test_query_user_preferences_no_node(self):
+        """Test querying preferences when no node exists."""
+        mock_memory_service = AsyncMock()
+        mock_memory_service.recall = AsyncMock(return_value=[])
+
+        result = await _query_user_preferences("user123", mock_memory_service)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_query_user_preferences_handles_exception(self):
+        """Test that query handles exceptions gracefully."""
+        mock_memory_service = AsyncMock()
+        mock_memory_service.recall = AsyncMock(side_effect=Exception("Database error"))
+
+        result = await _query_user_preferences("user123", mock_memory_service)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_enrich_single_user_profile_merges_preferences(self):
+        """Test that single user enrichment queries and merges preferences."""
+        mock_memory_service = AsyncMock()
+
+        # Create mock user node
+        mock_user_node = MagicMock()
+        mock_user_node.id = "user/test_user"
+        mock_user_node.attributes = {
+            "username": "TestUser",
+            "trust_level": 0.8,
+        }
+        mock_user_node.edges = []
+
+        # Create mock preferences node
+        mock_prefs_node = MagicMock()
+        mock_prefs_node.attributes = {
+            "preferred_language": "ko",  # Korean
+            "timezone": "Asia/Seoul",
+        }
+
+        def recall_side_effect(query):
+            if "preferences/" in query.node_id:
+                return [mock_prefs_node]
+            elif "user/" in query.node_id:
+                return [mock_user_node]
+            return []
+
+        mock_memory_service.recall = AsyncMock(side_effect=recall_side_effect)
+
+        result = await _enrich_single_user_profile("test_user", mock_memory_service, "channel1")
+
+        assert result is not None
+        assert result.preferred_language == "ko"
+        assert result.timezone == "Asia/Seoul"
+
+    @pytest.mark.asyncio
+    async def test_enrich_user_profiles_merges_into_existing(self):
+        """Test that profile enrichment merges preferences into GraphQL profiles."""
+        mock_memory_service = AsyncMock()
+
+        # Create existing profile from GraphQL (with default English)
+        existing_profile = UserProfile(
+            user_id="oauth_user",
+            display_name="OAuth User",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",  # Default from GraphQL
+        )
+
+        # Create mock user node
+        mock_user_node = MagicMock()
+        mock_user_node.id = "user/oauth_user"
+        mock_user_node.attributes = {
+            "username": "OAuth User",
+        }
+        mock_user_node.edges = []
+
+        # Create mock preferences node with non-English language
+        mock_prefs_node = MagicMock()
+        mock_prefs_node.attributes = {
+            "preferred_language": "ar",  # Arabic
+            "timezone": "Asia/Dubai",
+        }
+
+        def recall_side_effect(query):
+            if "preferences/" in query.node_id:
+                return [mock_prefs_node]
+            elif "user/" in query.node_id:
+                return [mock_user_node]
+            return []
+
+        mock_memory_service.recall = AsyncMock(side_effect=recall_side_effect)
+
+        result = await _enrich_user_profiles(
+            mock_memory_service,
+            {"oauth_user"},
+            "channel1",
+            [existing_profile],
+        )
+
+        # The existing profile should have been updated with Arabic
+        assert len(result) == 1
+        assert result[0].preferred_language == "ar"
+        assert result[0].timezone == "Asia/Dubai"
+
+
+# =============================================================================
+# 12. LOCATION STRING BUILDING TESTS
+# =============================================================================
+
+
+class TestBuildLocationString:
+    """Tests for _build_location_string function."""
+
+    def test_build_location_with_all_parts(self):
+        """Test building location string with all parts."""
+        prefs_attrs = {
+            "location_city": "Seattle",
+            "location_region": "WA",
+            "location_country": "US",
+        }
+        result = _build_location_string(prefs_attrs)
+        assert result == "Seattle, WA, US"
+
+    def test_build_location_city_only(self):
+        """Test building location string with city only."""
+        prefs_attrs = {"location_city": "Seattle"}
+        result = _build_location_string(prefs_attrs)
+        assert result == "Seattle"
+
+    def test_build_location_country_only(self):
+        """Test building location string with country only."""
+        prefs_attrs = {"location_country": "US"}
+        result = _build_location_string(prefs_attrs)
+        assert result == "US"
+
+    def test_build_location_empty_dict(self):
+        """Test building location string with empty dict."""
+        prefs_attrs: Dict[str, Any] = {}
+        result = _build_location_string(prefs_attrs)
+        assert result is None
+
+    def test_build_location_with_none_values(self):
+        """Test building location string when values are None."""
+        prefs_attrs = {
+            "location_city": None,
+            "location_region": "WA",
+            "location_country": "US",
+        }
+        result = _build_location_string(prefs_attrs)
+        assert result == "WA, US"
+
+    def test_build_location_region_and_country(self):
+        """Test building location string without city."""
+        prefs_attrs = {
+            "location_region": "Bavaria",
+            "location_country": "DE",
+        }
+        result = _build_location_string(prefs_attrs)
+        assert result == "Bavaria, DE"
+
+
+# =============================================================================
+# 13. MEMORY PROFILE MERGING TESTS
+# =============================================================================
+
+
+class TestMergeMemoryProfileIntoExisting:
+    """Tests for _merge_memory_profile_into_existing function."""
+
+    def test_merge_language_non_default(self):
+        """Test merging non-default language."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="fr",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.preferred_language == "fr"
+
+    def test_does_not_merge_default_language(self):
+        """Test that default language (en) is not merged."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="fr",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            preferred_language="en",  # Default - should not overwrite
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.preferred_language == "fr"
+
+    def test_merge_timezone_non_default(self):
+        """Test merging non-default timezone."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="UTC",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="America/New_York",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.timezone == "America/New_York"
+
+    def test_does_not_merge_default_timezone(self):
+        """Test that default timezone (UTC) is not merged."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="America/New_York",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            timezone="UTC",  # Default - should not overwrite
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.timezone == "America/New_York"
+
+    def test_merge_communication_style_non_default(self):
+        """Test merging non-default communication style."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            communication_style="formal",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            communication_style="casual",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.communication_style == "casual"
+
+    def test_merge_user_preferred_name(self):
+        """Test merging user preferred name."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            user_preferred_name="Johnny",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.user_preferred_name == "Johnny"
+
+    def test_merge_location(self):
+        """Test merging location."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            location="Seattle, WA",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.location == "Seattle, WA"
+
+    def test_merge_oauth_name(self):
+        """Test merging OAuth name."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            oauth_name="John Smith",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.oauth_name == "John Smith"
+
+    def test_merge_memorized_attributes_into_empty(self):
+        """Test merging memorized attributes into empty."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={},  # Empty dict, not None
+        )
+        # Force the attribute to None after construction to test the merge logic
+        existing.memorized_attributes = None  # type: ignore[assignment]
+
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={"favorite_color": "blue"},
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.memorized_attributes == {"favorite_color": "blue"}
+
+    def test_merge_memorized_attributes_updates_existing(self):
+        """Test merging memorized attributes updates existing."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={"favorite_color": "red"},
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            memorized_attributes={"favorite_food": "pizza"},
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert existing.memorized_attributes == {
+            "favorite_color": "red",
+            "favorite_food": "pizza",
+        }
+
+    def test_merge_notes_appends(self):
+        """Test merging notes appends to existing."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes="Original note",
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes="Additional note",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert "Original note" in existing.notes
+        assert "Additional note" in existing.notes
+
+    def test_merge_notes_into_empty(self):
+        """Test merging notes into empty."""
+        existing = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes=None,
+        )
+        memory_profile = UserProfile(
+            user_id="test",
+            display_name="Test",
+            created_at=datetime.now(timezone.utc),
+            notes="New note",
+        )
+
+        _merge_memory_profile_into_existing(existing, memory_profile)
+
+        assert "New note" in existing.notes

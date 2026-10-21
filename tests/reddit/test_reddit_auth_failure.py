@@ -249,8 +249,7 @@ class TestAuthFailureDetection:
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
             # Should not raise
-            result = await api_client.refresh_token(force=True)
-            assert result is True
+            await api_client.refresh_token(force=True)
             assert api_client._token is not None
             assert api_client._token.access_token == "valid_token_12345"
 

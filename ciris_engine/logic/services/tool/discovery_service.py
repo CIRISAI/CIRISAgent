@@ -2,7 +2,7 @@
 
 Extends the base AdapterLoader to scan multiple directories:
 1. ciris_adapters/         - Built-in adapters
-2. ~/.ciris/adapters/      - User-installed adapters
+2. ~/ciris/adapters/       - User-installed adapters
 3. .ciris/adapters/        - Workspace-local adapters
 4. CIRIS_EXTRA_ADAPTERS    - Additional paths from env var
 
@@ -42,7 +42,7 @@ class AdapterDiscoveryService:
     Discovery paths (in priority order):
     1. ciris_adapters/ relative to ciris_engine (works on Android)
     2. ciris_adapters/ relative to cwd (works on desktop)
-    3. ~/.ciris/adapters/      - User-installed adapters
+    3. ~/ciris/adapters/       - User-installed adapters
     4. .ciris/adapters/        - Workspace-local adapters
     5. CIRIS_EXTRA_ADAPTERS    - Colon-separated additional paths
     """
@@ -53,7 +53,7 @@ class AdapterDiscoveryService:
     DISCOVERY_PATHS = [
         Path(__file__).parent.parent.parent.parent / "ciris_adapters",  # Relative to ciris_engine (Android)
         Path("ciris_adapters"),  # Built-in (desktop)
-        Path.home() / ".ciris" / "adapters",  # User
+        Path.home() / "ciris" / "adapters",  # User
         Path(".ciris") / "adapters",  # Workspace
     ]
 
@@ -70,6 +70,14 @@ class AdapterDiscoveryService:
         """
         self.checker = eligibility_checker or ToolEligibilityChecker()
         self.extra_paths = extra_paths or []
+
+        # Why a given adapter's tools could not be enumerated (#945).
+        # "provides no tools", "instantiation failed: <what>" and "needs live
+        # collaborators" are three different answers, and collapsing all of
+        # them to (None, None) is what left the first-run wizard telling an
+        # operator only "unavailable" for wallet and home_assistant — the two
+        # adapters whose tools an operator would most want disclosed.
+        self._enumeration_failures: Dict[str, str] = {}
 
         # Parse CIRIS_EXTRA_ADAPTERS env var
         extra_from_env = os.environ.get("CIRIS_EXTRA_ADAPTERS", "")
@@ -167,7 +175,7 @@ class AdapterDiscoveryService:
                 try:
                     files = pkg_resources.files(package_name)
                     manifest_path = files.joinpath("manifest.json")
-                    manifest_text = manifest_path.read_text()
+                    manifest_text = manifest_path.read_text(encoding="utf-8")
                     manifest_data = json.loads(manifest_text)
 
                     # Parse into ServiceManifest
@@ -223,12 +231,12 @@ class AdapterDiscoveryService:
 
         return loader.load_service_class(manifest, class_path)
 
-    def _load_class_via_importlib(self, adapter_name: str, class_path: str) -> Optional[Type[Any]]:
+    def _load_class_via_importlib(self, _adapter_name: str, class_path: str) -> Optional[Type[Any]]:
         """Load a service class via importlib (for Android/Chaquopy).
 
         Args:
-            adapter_name: The adapter name (e.g., 'ciris_covenant_metrics')
-            class_path: The class path (e.g., 'ciris_covenant_metrics.services.CovenantMetricsService')
+            _adapter_name: The adapter name (unused, kept for API compatibility)
+            class_path: The class path (e.g., 'ciris_accord_metrics.services.AccordMetricsService')
 
         Returns:
             The service class or None if not found
@@ -237,7 +245,7 @@ class AdapterDiscoveryService:
 
         try:
             # Parse the class path - it's relative to ciris_adapters
-            # e.g., "ciris_covenant_metrics.services.CovenantMetricsService"
+            # e.g., "ciris_accord_metrics.services.AccordMetricsService"
             parts = class_path.rsplit(".", 1)
             if len(parts) != 2:
                 logger.debug(f"Invalid class path format: {class_path}")
@@ -266,8 +274,8 @@ class AdapterDiscoveryService:
     def get_eligible_adapters(self, disabled_adapters: Optional[List[str]] = None) -> List[ServiceManifest]:
         """Get adapters whose tools all pass eligibility checks.
 
-        An adapter is eligible if ALL of its tools are eligible.
-        This ensures the adapter can function fully.
+        An adapter is eligible if ALL of its tools are eligible AND
+        the adapter allows auto-loading (doesn't require consent/opt-in).
 
         Args:
             disabled_adapters: List of adapter names to exclude
@@ -282,6 +290,13 @@ class AdapterDiscoveryService:
             if manifest.module.name in disabled:
                 logger.info(f"Adapter '{manifest.module.name}' disabled by config")
                 continue
+
+            # Check manifest flags - skip adapters that require explicit enablement
+            skip_reason = self._should_skip_for_auto_load(manifest)
+            if skip_reason:
+                logger.info(f"Adapter skipped for auto-load: {skip_reason}")
+                continue
+
             eligible.append(manifest)
             logger.debug(f"Adapter '{manifest.module.name}' eligible")
 
@@ -308,24 +323,78 @@ class AdapterDiscoveryService:
         eligible, _ = await self.load_adapters_with_status(disabled_adapters, service_dependencies)
         return eligible
 
+    async def _process_adapter_services(
+        self,
+        manifest: "ServiceManifest",
+        deps: Dict[str, Any],
+        eligible_services: Dict[str, Any],
+        ineligible_adapters: List[IneligibleAdapterInfo],
+    ) -> None:
+        """Process all services in an adapter manifest."""
+        adapter_name = manifest.module.name
+        for service_def in manifest.services:
+            try:
+                service, ineligible_info = await self._instantiate_and_check_with_info(manifest, service_def, deps)
+                if service:
+                    eligible_services[adapter_name] = service
+                    logger.info(f"[AUTO-LOAD] Eligible adapter: {adapter_name}")
+                elif ineligible_info:
+                    ineligible_adapters.append(ineligible_info)
+                    logger.info(
+                        f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}"
+                    )
+            except Exception as e:
+                logger.debug(f"[AUTO-LOAD] Failed to check adapter '{adapter_name}': {e}")
+
+    def _should_skip_for_auto_load(self, manifest: ServiceManifest) -> Optional[str]:
+        """Check if manifest should be skipped during auto-load.
+
+        Adapters are skipped if they have:
+        - MOCK=true (a mock module is loaded ONLY on an explicit mock request:
+          ``--mock-llm``, ``CIRIS_MOCK_LLM`` or an operator load; never by discovery)
+        - auto_load=False (require explicit enablement via setup wizard)
+        - requires_consent=True (require user consent)
+        - opt_in_required=True (require explicit opt-in)
+
+        These adapters should only be loaded via the post-setup adapter loading
+        path (load_post_setup_adapters_for_resume) after the user enables them.
+
+        Returns:
+            Skip reason string if should skip, None otherwise
+        """
+        module_name = manifest.module.name
+
+        # MOCK modules are never discovered (CIRISAgent#1244 regression, 2.15.0):
+        # discovery INSTANTIATES each service to read its tools, and constructing
+        # MockLLMService latches the mock-LLM trace guard for the whole process.
+        # A live install that merely listed adapters in the setup wizard (or ran
+        # one action-selection context build) then refused every trace export.
+        if getattr(manifest.module, "is_mock", False):
+            return f"MOCK module (loaded only on an explicit mock request): {module_name}"
+
+        # Check auto_load flag (defaults to True if not specified)
+        if hasattr(manifest.module, "auto_load") and not manifest.module.auto_load:
+            return f"auto_load=False (requires explicit enablement): {module_name}"
+
+        # Check requires_consent flag (defaults to False if not specified)
+        if hasattr(manifest.module, "requires_consent") and manifest.module.requires_consent:
+            return f"requires_consent=True (requires user consent): {module_name}"
+
+        # Check opt_in_required flag (defaults to False if not specified)
+        if hasattr(manifest.module, "opt_in_required") and manifest.module.opt_in_required:
+            return f"opt_in_required=True (requires explicit opt-in): {module_name}"
+
+        return None
+
     async def load_adapters_with_status(
         self,
         disabled_adapters: Optional[List[str]] = None,
         service_dependencies: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Dict[str, Any], List[IneligibleAdapterInfo]]:
-        """Load adapters and return both eligible services and ineligible info.
-
-        Args:
-            disabled_adapters: Adapter names to exclude from loading
-            service_dependencies: Dependencies to pass to service constructors
-
-        Returns:
-            Tuple of (eligible_services dict, list of IneligibleAdapterInfo)
-        """
+        """Load adapters and return both eligible services and ineligible info."""
         disabled = set(disabled_adapters or [])
         deps = service_dependencies or {}
 
-        # Inject config service into checker if available and needed
         if self.checker and not self.checker.config_service and "config_service" in deps:
             self.checker.config_service = deps["config_service"]
 
@@ -333,27 +402,17 @@ class AdapterDiscoveryService:
         ineligible_adapters: List[IneligibleAdapterInfo] = []
 
         for manifest in self.discover_adapters():
-            adapter_name = manifest.module.name
-
-            # Skip disabled adapters
-            if adapter_name in disabled:
-                logger.info(f"[AUTO-LOAD] Skipping disabled adapter: {adapter_name}")
+            if manifest.module.name in disabled:
+                logger.info(f"[AUTO-LOAD] Skipping disabled adapter: {manifest.module.name}")
                 continue
 
-            # Try to load and check eligibility for each service in manifest
-            for service_def in manifest.services:
-                try:
-                    service, ineligible_info = await self._instantiate_and_check_with_info(manifest, service_def, deps)
-                    if service:
-                        eligible_services[adapter_name] = service
-                        logger.info(f"[AUTO-LOAD] Eligible adapter: {adapter_name}")
-                    elif ineligible_info:
-                        ineligible_adapters.append(ineligible_info)
-                        logger.info(
-                            f"[AUTO-LOAD] Adapter '{adapter_name}' not eligible: {ineligible_info.eligibility.reason}"
-                        )
-                except Exception as e:
-                    logger.debug(f"[AUTO-LOAD] Failed to check adapter '{adapter_name}': {e}")
+            # Check manifest flags - skip adapters that require explicit enablement
+            skip_reason = self._should_skip_for_auto_load(manifest)
+            if skip_reason:
+                logger.info(f"[AUTO-LOAD] Skipping adapter: {skip_reason}")
+                continue
+
+            await self._process_adapter_services(manifest, deps, eligible_services, ineligible_adapters)
 
         logger.info(
             f"[AUTO-LOAD] Loaded {len(eligible_services)} eligible, {len(ineligible_adapters)} ineligible adapters"
@@ -391,6 +450,7 @@ class AdapterDiscoveryService:
 
         service = self._try_instantiate_service(manifest, service_def, deps, adapter_name)
         if not service:
+            # Reason was recorded by _try_instantiate_service (#945).
             return None, None
 
         # Check if service has get_all_tool_info (tool service)
@@ -419,6 +479,7 @@ class AdapterDiscoveryService:
 
         except Exception as e:
             logger.debug(f"Error checking eligibility for {adapter_name}: {e}")
+            self._record_enumeration_failure(adapter_name, f"its tool list could not be read ({type(e).__name__}: {e})")
             return None, None
 
     def _try_instantiate_service(
@@ -428,9 +489,21 @@ class AdapterDiscoveryService:
         deps: Dict[str, Any],
         adapter_name: str,
     ) -> Optional[Any]:
-        """Try to instantiate a service with deps, falling back to no-args."""
+        """Try to instantiate a service with deps, falling back to no-args.
+
+        Never instantiates a MOCK module: this is the one place discovery
+        constructs services, so it is the choke point for every discovery path
+        (listing, per-adapter eligibility, the action-selection installable-tools
+        cache, skill auto-load). See ``_should_skip_for_auto_load``.
+        """
+        if getattr(manifest.module, "is_mock", False):
+            self._record_enumeration_failure(
+                adapter_name, "it is a MOCK module, loaded only on an explicit mock request"
+            )
+            return None
         service_class = self.load_service_class(manifest, service_def.class_path)
         if not service_class:
+            self._record_enumeration_failure(adapter_name, "its tool service class could not be imported")
             return None
 
         try:
@@ -440,7 +513,30 @@ class AdapterDiscoveryService:
                 return service_class()
             except Exception as e:
                 logger.debug(f"Cannot instantiate {adapter_name}: {e}")
+                # The reason, not just the fact (#945). A TypeError on the
+                # no-args path means the constructor requires collaborators
+                # this context cannot supply — which is "enumerable after
+                # load", a different and much more useful thing to tell an
+                # operator than "unavailable".
+                if isinstance(e, TypeError):
+                    reason = "its tool service needs runtime collaborators, so its tools are listed once it loads"
+                else:
+                    reason = f"its tool service could not be constructed ({type(e).__name__}: {e})"
+                self._record_enumeration_failure(adapter_name, reason)
                 return None
+
+    def _record_enumeration_failure(self, adapter_name: str, reason: str) -> None:
+        """Remember why an adapter's tools could not be listed."""
+        self._enumeration_failures[adapter_name] = reason
+
+    def enumeration_failure_reason(self, adapter_name: str) -> Optional[str]:
+        """Why this adapter's tools could not be enumerated, if they could not.
+
+        Consumed by the first-run tool disclosure so it can say *why* rather
+        than only *that* — an operator deciding what to enable is owed the
+        difference between "needs credentials first" and "is broken".
+        """
+        return self._enumeration_failures.get(adapter_name)
 
     def _check_tools_eligibility(self, tools: List[ToolInfo]) -> EligibilityResult:
         """Check eligibility of all tools and return combined result."""

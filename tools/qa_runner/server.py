@@ -2,10 +2,23 @@
 API server management for QA testing.
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import asyncio
 import hashlib
 import json
+import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -13,33 +26,112 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
+from urllib.parse import urlparse
+
+# `pty` is POSIX-only. Importing it unconditionally made this module unusable on
+# Windows — `ModuleNotFoundError: No module named 'termios'` before a single test
+# ran, which is why the Windows UI job could not even reach the app. The PTY
+# itself is a workaround for ciris_verify_ffi crashing when stdout is not a TTY;
+# Windows has no equivalent, so there we use pipes and accept that the FFI
+# workaround does not apply.
+try:
+    import pty as _pty
+except ImportError:  # pragma: no cover - Windows
+    _pty = None  # type: ignore[assignment]
 
 import psutil
 import requests
 from rich.console import Console
 
 from .config import QAConfig
+from .mock_chain_rpc import MockChainRPCServer, apply_wallet_rpc_stub_env
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Mock Logshipper Server - Receives covenant traces from agents
+# Mock Logshipper Server - Receives accord traces from agents
 # ============================================================================
+
+
+#: The node's fixed HTTP port (node_fold). Nothing else may bind it — a
+#: transport listener that takes it silently prevents the node from serving,
+#: and the failure surfaces as auth 502s rather than as a bind error.
+NODE_HTTP_PORT = 4243
+
+
+def apply_module_server_env(
+    env: Dict[str, str], module_env: Mapping[str, str], operator_env: Mapping[str, str]
+) -> None:
+    """Merge a module's SERVER_ENV into the agent process env.
+
+    Precedence, highest first:
+      1. a variable the operator exported (present in `operator_env`) —
+         debugging and one-off CI runs must be able to override anything;
+      2. the selected module's SERVER_ENV — it knows its own workload;
+      3. the runner's generic defaults already in `env`.
+
+    This used to be `env.setdefault(k, v)`. `env` starts as a copy of the
+    operator's environment, but the runner writes its generic defaults into
+    it first (e.g. CIRIS_API_INTERACTION_TIMEOUT=180), so setdefault could
+    not tell an operator's choice from the runner's default and the module
+    always lost: the safety battery's declared 1800s interact deadline never
+    applied unless the operator exported it by hand.
+    """
+    for key, value in module_env.items():
+        if key in operator_env:
+            continue
+        env[key] = value
+
+
+class _MockLogshipperHTTPServer(HTTPServer):
+    """HTTPServer subclass that holds per-instance state.
+
+    The handler reads state from `self.server` rather than from the handler
+    class itself, so two MockLogshipperServer instances running concurrently
+    in the same Python process (e.g. SQLITE + POSTGRES under
+    --parallel-backends) keep their `output_dir` and `received_traces`
+    separate. The previous class-level storage on MockLogshipperHandler
+    meant the second .start() call clobbered the first's state and ALL
+    received traces went to whichever backend won the assignment race.
+    """
+
+    output_dir: Optional[Path]
+    received_traces: List[Dict[str, Any]]
 
 
 class MockLogshipperHandler(BaseHTTPRequestHandler):
-    """HTTP handler for mock logshipper that receives covenant traces."""
+    """HTTP handler for mock logshipper that receives accord traces.
 
-    # Class-level storage for received traces
+    State lives on `self.server` (the _MockLogshipperHTTPServer instance)
+    so each MockLogshipperServer can run independently in the same process.
+    """
+
+    # Optional class-level fallbacks ONLY for code paths that still reach
+    # for them via the class (e.g. tests that import the handler directly
+    # without spinning up a server). Real server use should always populate
+    # state on the _MockLogshipperHTTPServer instance.
     received_traces: List[Dict[str, Any]] = []
     output_dir: Optional[Path] = None
+
+    @property
+    def _state_owner(self) -> Any:
+        """Return the object whose state should be used for this request.
+
+        Prefer the per-server state (self.server) when available; fall back
+        to the handler class for legacy callers.
+        """
+        if isinstance(self.server, _MockLogshipperHTTPServer):
+            return self.server
+        return MockLogshipperHandler
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress default logging."""
         pass
 
     def do_POST(self) -> None:
-        """Handle POST requests to /v1/covenant/events or /covenant/events."""
-        if self.path in ("/v1/covenant/events", "/covenant/events"):
+        """Handle POST requests to /v1/accord/events or /accord/events."""
+        if self.path in ("/v1/accord/events", "/accord/events"):
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
 
@@ -66,8 +158,15 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def _save_trace(self, trace: Dict[str, Any]) -> None:
-        """Save a trace to file with task-based name."""
-        if not self.output_dir:
+        """Save a trace to file with task-based name.
+
+        Reads `output_dir` and appends to `received_traces` on the
+        per-server state owner so concurrent MockLogshipperServer instances
+        don't share a destination.
+        """
+        owner = self._state_owner
+        output_dir = getattr(owner, "output_dir", None)
+        if not output_dir:
             return
 
         # Extract task name from first component
@@ -101,12 +200,12 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
         # Create short unique ID from hash of trace_id
         short_id = hashlib.md5(trace_id.encode()).hexdigest()[:8]
         filename = f"trace_{task_name}_{short_id}.json"
-        filepath = self.output_dir / filename
+        filepath = output_dir / filename
 
         with open(filepath, "w") as f:
             json.dump(trace, f, indent=2, default=str)
 
-        MockLogshipperHandler.received_traces.append(
+        getattr(owner, "received_traces").append(
             {
                 "task_name": task_name,
                 "filepath": str(filepath),
@@ -116,7 +215,13 @@ class MockLogshipperHandler(BaseHTTPRequestHandler):
 
 
 class MockLogshipperServer:
-    """Mock logshipper server that receives and saves covenant traces."""
+    """Mock logshipper server that receives and saves accord traces.
+
+    Per-instance state lives on the underlying HTTPServer subclass
+    (_MockLogshipperHTTPServer) so two MockLogshipperServer instances can
+    run concurrently in the same process without overwriting each other's
+    output_dir / received_traces.
+    """
 
     def __init__(self, port: int = 18080, output_dir: Optional[Path] = None):
         """Initialize mock server.
@@ -127,18 +232,17 @@ class MockLogshipperServer:
         """
         self.port = port
         self.output_dir = output_dir or Path(__file__).parent.parent.parent / "qa_reports"
-        self.output_dir.mkdir(exist_ok=True)
-        self.server: Optional[HTTPServer] = None
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.server: Optional[_MockLogshipperHTTPServer] = None
         self.thread: Optional[threading.Thread] = None
-
-        # Configure handler
-        MockLogshipperHandler.output_dir = self.output_dir
-        MockLogshipperHandler.received_traces = []
 
     def start(self) -> bool:
         """Start the mock server in a background thread."""
         try:
-            self.server = HTTPServer(("127.0.0.1", self.port), MockLogshipperHandler)
+            self.server = _MockLogshipperHTTPServer(("127.0.0.1", self.port), MockLogshipperHandler)
+            # Per-instance state — handler reads via self.server, NOT class attrs
+            self.server.output_dir = self.output_dir
+            self.server.received_traces = []
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             return True
@@ -152,8 +256,10 @@ class MockLogshipperServer:
             self.server = None
 
     def get_received_traces(self) -> List[Dict[str, Any]]:
-        """Get list of received traces."""
-        return MockLogshipperHandler.received_traces.copy()
+        """Get list of received traces (per-instance)."""
+        if self.server is None:
+            return []
+        return list(self.server.received_traces)
 
     @property
     def endpoint_url(self) -> str:
@@ -190,14 +296,14 @@ def _is_postgres_container_running() -> bool:
 def _start_postgres_container(console: Console) -> bool:
     """Start PostgreSQL container for QA testing."""
     if not _is_docker_available():
-        console.print("[red]❌ Docker not available - cannot start PostgreSQL[/red]")
+        console.print("[red][FAIL] Docker not available - cannot start PostgreSQL[/red]")
         return False
 
     if _is_postgres_container_running():
-        console.print("[green]✅ PostgreSQL container already running[/green]")
+        console.print("[green][OK] PostgreSQL container already running[/green]")
         return True
 
-    console.print("[cyan]🐘 Starting PostgreSQL container...[/cyan]")
+    console.print("[cyan] Starting PostgreSQL container...[/cyan]")
 
     # Check if container exists but is stopped
     try:
@@ -207,7 +313,7 @@ def _start_postgres_container(console: Console) -> bool:
         if result.stdout.strip():
             # Container exists, just start it
             subprocess.run(["docker", "start", POSTGRES_CONTAINER_NAME], capture_output=True, timeout=10)
-            console.print("[green]✅ Started existing PostgreSQL container[/green]")
+            console.print("[green][OK] Started existing PostgreSQL container[/green]")
         else:
             # Create and start new container
             subprocess.run(
@@ -230,9 +336,9 @@ def _start_postgres_container(console: Console) -> bool:
                 capture_output=True,
                 timeout=60,
             )
-            console.print("[green]✅ Created new PostgreSQL container[/green]")
+            console.print("[green][OK] Created new PostgreSQL container[/green]")
     except Exception as e:
-        console.print(f"[red]❌ Failed to start PostgreSQL: {e}[/red]")
+        console.print(f"[red][FAIL] Failed to start PostgreSQL: {e}[/red]")
         return False
 
     # Wait for PostgreSQL to be ready
@@ -245,16 +351,16 @@ def _start_postgres_container(console: Console) -> bool:
                 timeout=5,
             )
             if result.returncode == 0:
-                console.print("[green]✅ PostgreSQL is ready[/green]")
+                console.print("[green][OK] PostgreSQL is ready[/green]")
                 # Create derivative databases (_secrets, _auth)
                 if not _create_derivative_databases(console):
-                    console.print("[yellow]⚠️  Failed to create derivative databases, continuing anyway[/yellow]")
+                    console.print("[yellow][WARN] Failed to create derivative databases, continuing anyway[/yellow]")
                 return True
         except Exception:
             pass
         time.sleep(1)
 
-    console.print("[red]❌ PostgreSQL failed to become ready[/red]")
+    console.print("[red][FAIL] PostgreSQL failed to become ready[/red]")
     return False
 
 
@@ -281,11 +387,11 @@ def _create_derivative_databases(console: Console) -> bool:
             timeout=10,
         )
         if result.returncode == 0:
-            console.print("[green]✅ Created ciris_test_db_secrets[/green]")
+            console.print("[green][OK] Created ciris_test_db_secrets[/green]")
         elif "already exists" in result.stderr:
             console.print("[dim]ciris_test_db_secrets already exists[/dim]")
         else:
-            console.print(f"[yellow]⚠️  Could not create secrets db: {result.stderr}[/yellow]")
+            console.print(f"[yellow][WARN] Could not create secrets db: {result.stderr}[/yellow]")
 
         # Create ciris_test_db_auth
         result = subprocess.run(
@@ -306,27 +412,125 @@ def _create_derivative_databases(console: Console) -> bool:
             timeout=10,
         )
         if result.returncode == 0:
-            console.print("[green]✅ Created ciris_test_db_auth[/green]")
+            console.print("[green][OK] Created ciris_test_db_auth[/green]")
         elif "already exists" in result.stderr:
             console.print("[dim]ciris_test_db_auth already exists[/dim]")
         else:
-            console.print(f"[yellow]⚠️  Could not create auth db: {result.stderr}[/yellow]")
+            console.print(f"[yellow][WARN] Could not create auth db: {result.stderr}[/yellow]")
 
         return True
     except Exception as e:
-        console.print(f"[yellow]⚠️  Failed to create derivative databases: {e}[/yellow]")
+        console.print(f"[yellow][WARN] Failed to create derivative databases: {e}[/yellow]")
         return False
 
 
 def _stop_postgres_container(console: Console):
     """Stop PostgreSQL container."""
     if _is_postgres_container_running():
-        console.print("[cyan]🐘 Stopping PostgreSQL container...[/cyan]")
+        console.print("[cyan] Stopping PostgreSQL container...[/cyan]")
         try:
             subprocess.run(["docker", "stop", POSTGRES_CONTAINER_NAME], capture_output=True, timeout=15)
-            console.print("[green]✅ PostgreSQL container stopped[/green]")
+            console.print("[green][OK] PostgreSQL container stopped[/green]")
         except Exception as e:
-            console.print(f"[yellow]⚠️  Failed to stop PostgreSQL: {e}[/yellow]")
+            console.print(f"[yellow][WARN] Failed to stop PostgreSQL: {e}[/yellow]")
+
+
+def _wipe_postgres_databases(console: Console) -> bool:
+    """Wipe all tables in PostgreSQL databases for clean QA testing.
+
+    This drops and recreates all three databases:
+    - ciris_test_db (main)
+    - ciris_test_db_secrets
+    - ciris_test_db_auth
+
+    Returns:
+        True if wipe succeeded, False otherwise
+    """
+    if not _is_postgres_container_running():
+        console.print("[yellow][WARN] PostgreSQL container not running, nothing to wipe[/yellow]")
+        return True
+
+    console.print("[cyan] Wiping PostgreSQL databases for clean QA state...[/cyan]")
+
+    databases = ["ciris_test_db", "ciris_test_db_secrets", "ciris_test_db_auth"]
+
+    for db_name in databases:
+        try:
+            # Drop and recreate the database
+            # First, terminate all connections to the database
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    POSTGRES_CONTAINER_NAME,
+                    "psql",
+                    "-U",
+                    "ciris_test",
+                    "-d",
+                    "postgres",
+                    "-c",
+                    f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{db_name}' AND pid <> pg_backend_pid();",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            # Drop the database
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    POSTGRES_CONTAINER_NAME,
+                    "psql",
+                    "-U",
+                    "ciris_test",
+                    "-d",
+                    "postgres",
+                    "-c",
+                    f"DROP DATABASE IF EXISTS {db_name};",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0 and "does not exist" not in result.stderr:
+                console.print(f"[yellow][WARN] Could not drop {db_name}: {result.stderr}[/yellow]")
+
+            # Recreate the database
+            result = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    POSTGRES_CONTAINER_NAME,
+                    "psql",
+                    "-U",
+                    "ciris_test",
+                    "-d",
+                    "postgres",
+                    "-c",
+                    f"CREATE DATABASE {db_name} OWNER ciris_test;",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode == 0:
+                console.print(f"[green][OK] Wiped and recreated {db_name}[/green]")
+            elif "already exists" in result.stderr:
+                console.print(f"[dim]{db_name} already exists (drop may have failed)[/dim]")
+            else:
+                console.print(f"[yellow][WARN] Could not create {db_name}: {result.stderr}[/yellow]")
+
+        except subprocess.TimeoutExpired:
+            console.print(f"[yellow][WARN] Timeout wiping {db_name}[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow][WARN] Error wiping {db_name}: {e}[/yellow]")
+
+    console.print("[green][OK] PostgreSQL databases wiped[/green]")
+    return True
 
 
 def _ensure_env_file(console: Console, mock_llm: bool = True) -> bool:
@@ -362,23 +566,23 @@ CIRIS_CONFIGURED=true
         current_content = env_path.read_text()
         # If using live mode but .env has CIRIS_MOCK_LLM=true, update it
         if not mock_llm and "CIRIS_MOCK_LLM=true" in current_content:
-            console.print("[cyan]📝 Updating .env for live LLM mode...[/cyan]")
+            console.print("[cyan] Updating .env for live LLM mode...[/cyan]")
             try:
                 env_path.write_text(expected_env)
-                console.print("[green]✅ Updated .env for live LLM[/green]")
+                console.print("[green][OK] Updated .env for live LLM[/green]")
             except Exception as e:
-                console.print(f"[red]❌ Failed to update .env: {e}[/red]")
+                console.print(f"[red][FAIL] Failed to update .env: {e}[/red]")
                 return False
         return True
 
-    console.print("[cyan]📝 Creating minimal .env for QA testing...[/cyan]")
+    console.print("[cyan] Creating minimal .env for QA testing...[/cyan]")
 
     try:
         env_path.write_text(expected_env)
-        console.print("[green]✅ Created minimal .env file[/green]")
+        console.print("[green][OK] Created minimal .env file[/green]")
         return True
     except Exception as e:
-        console.print(f"[red]❌ Failed to create .env: {e}[/red]")
+        console.print(f"[red][FAIL] Failed to create .env: {e}[/red]")
         return False
 
 
@@ -400,6 +604,26 @@ class APIServerManager:
         self.process: Optional[subprocess.Popen] = None
         self.pid: Optional[int] = None
         self.mock_logshipper: Optional[MockLogshipperServer] = None
+        # Local stub Base RPC for the wallet adapter, so QA never depends on
+        # the uptime of the public mainnet.base.org endpoint.
+        self.mock_chain_rpc: Optional[MockChainRPCServer] = None
+        self._extracted_password: Optional[str] = None  # Dynamically extracted from server output
+        #: The backend's CIRIS_HOME (the node writes its claim PIN there) and when
+        #: it was launched: a PIN older than the launch is a previous run's.
+        self._backend_home: Optional[str] = None
+        self._launched_at: Optional[float] = None
+
+        # Per-backend output namespace. In parallel-backend mode both SQLITE
+        # and POSTGRES backends would otherwise share `qa_reports/` and
+        # collide on hash-keyed trace filenames — one backend's
+        # `_clear_trace_files()` would delete the other's traces mid-run.
+        # Logs are already namespaced by backend (logs/sqlite/, logs/postgres/);
+        # mirror the same shape for trace output here.
+        self._repo_root = Path(__file__).parent.parent.parent
+        self.qa_reports_dir: Path = self._repo_root / "qa_reports" / self.database_backend
+        # Mock logshipper port also needs per-backend offset so two backends
+        # can both bind a receiver. sqlite=18080 (canonical), postgres=18081.
+        self._mock_logshipper_port: int = 18080 if self.database_backend == "sqlite" else 18081
 
     def _clear_wakeup_state(self) -> bool:
         """Clear wakeup state from database for fresh wakeup run.
@@ -454,25 +678,241 @@ class APIServerManager:
                 )
             return True
         except Exception as e:
-            self.console.print(f"[yellow]⚠️  Could not clear wakeup state: {e}[/yellow]")
+            self.console.print(f"[yellow][WARN] Could not clear wakeup state: {e}[/yellow]")
             return True  # Continue anyway
 
+    def _prune_lens_trace_dirs(self) -> None:
+        """Retention sweep for `/tmp/qa-runner-lens-traces-*` dirs.
+
+        Each live-lens QA run accumulates ~50-300MB of `*batch-*.json`
+        files in its tee dir. Left unchecked the dirs build up — saw
+        60MB-free-of-935GB on 2026-05-03 from ~30 accumulated dirs blocking
+        the next run. Called before creating this run's dir so we land at
+        N most recent (default 5) inclusive of the about-to-be-created dir.
+
+        Operator override via env var `CIRIS_QA_LENS_TRACE_KEEP_N` (int);
+        set to 0 to disable retention entirely (e.g. when bisecting across
+        many runs and you need every dir on hand).
+
+        Best-effort: any per-dir delete failure is swallowed so the QA run
+        is never blocked by retention bookkeeping.
+        """
+        import glob as _glob
+        import os as _os
+        import shutil as _shutil
+
+        try:
+            keep_n = int(_os.environ.get("CIRIS_QA_LENS_TRACE_KEEP_N", "5"))
+        except (TypeError, ValueError):
+            keep_n = 5
+        if keep_n <= 0:
+            return  # 0 disables retention; negative is treated as disabled
+
+        # We're about to create a new dir — keep keep_n - 1 of the existing
+        # ones so the steady-state population sits at exactly keep_n.
+        existing_keep = max(0, keep_n - 1)
+
+        candidates = _glob.glob("/tmp/qa-runner-lens-traces-*")
+        # Sort by mtime, newest first; mtime is stable across renames and
+        # works even when the timestamp suffix in the dir name diverges
+        # from creation time (e.g. operator-overridden CIRIS_ACCORD_METRICS_
+        # LOCAL_COPY_DIR or copies from another machine).
+        candidates.sort(key=lambda p: _os.path.getmtime(p), reverse=True)
+
+        to_drop = candidates[existing_keep:]
+        if not to_drop:
+            return
+
+        dropped = 0
+        for path in to_drop:
+            try:
+                if _os.path.isdir(path):
+                    _shutil.rmtree(path)
+                    dropped += 1
+            except OSError:
+                # Permission denied / busy / already removed — leave it for
+                # next sweep, never block the run.
+                pass
+        if dropped:
+            self.console.print(
+                f"[dim]🧹 Pruned {dropped} old lens-trace dir(s); keeping "
+                f"{existing_keep} prior + the new run = {keep_n} total. "
+                f"(override via CIRIS_QA_LENS_TRACE_KEEP_N)[/dim]"
+            )
+
     def _clear_trace_files(self) -> None:
-        """Clear existing trace files for fresh capture."""
-        qa_reports = Path(__file__).parent.parent.parent / "qa_reports"
-        if qa_reports.exists():
-            # Clear both old format (real_trace_*) and new format (trace_*)
-            trace_files = list(qa_reports.glob("real_trace_*.json")) + list(qa_reports.glob("trace_*.json"))
+        """Clear existing trace files for fresh capture.
+
+        Only clears THIS backend's trace dir. Under --parallel-backends each
+        backend has its own qa_reports/<backend>/ namespace, so clearing
+        one can't delete the other's in-flight traces.
+
+        Also sweeps any legacy traces left at qa_reports/ root (pre-2.7.8
+        single-backend layout) so they don't accumulate across upgrades.
+        """
+        # Per-backend dir. lens-batch-*.json sit in per-instance subdirs
+        # (2.9.6 fold: the substrate tee replaced the logshipper exports),
+        # hence the rglob.
+        if self.qa_reports_dir.exists():
+            trace_files = (
+                list(self.qa_reports_dir.glob("real_trace_*.json"))
+                + list(self.qa_reports_dir.glob("trace_*.json"))
+                + list(self.qa_reports_dir.rglob("lens-batch-*.json"))
+            )
             for f in trace_files:
                 f.unlink()
             if trace_files:
-                self.console.print(f"[cyan]🧹 Cleared {len(trace_files)} old trace files[/cyan]")
+                self.console.print(
+                    f"[cyan]🧹 Cleared {len(trace_files)} old trace files in "
+                    f"qa_reports/{self.database_backend}/[/cyan]"
+                )
+
+        # Legacy root-level traces from older single-backend runs — only the
+        # FIRST backend to enter start() will have these to clear; subsequent
+        # parallel backends find nothing.
+        legacy_root = self._repo_root / "qa_reports"
+        if legacy_root.exists():
+            legacy_files = list(legacy_root.glob("real_trace_*.json")) + list(legacy_root.glob("trace_*.json"))
+            for f in legacy_files:
+                try:
+                    f.unlink()
+                except OSError:
+                    pass  # Another parallel backend may have already removed it
+
+    def _probe_canonical_reachability(self, env: dict) -> None:
+        """Record whether this host can reach the canonical, before boot.
+
+        A KEX that never forms and an egress that never opens look the same from
+        the Python probe: `kex_present: false` either way. They are different
+        bugs with different owners, and the distinction is only observable from
+        the runner, at the time, so it is captured rather than inferred later.
+
+        Never raises and never blocks a run — the answer is evidence, not a gate.
+        """
+        import socket
+
+        target = self.config.canonical_peer
+        host, _, port = target.rpartition(":")
+        verdict, detail = "unknown", ""
+        try:
+            t0 = time.time()
+            with socket.create_connection((host, int(port)), timeout=8):
+                verdict, detail = "reachable", f"{(time.time() - t0) * 1000:.0f}ms"
+        except Exception as exc:  # noqa: BLE001
+            verdict, detail = "unreachable", f"{type(exc).__name__}: {exc}"
+
+        env["CIRIS_QA_CANONICAL_REACHABILITY"] = verdict
+        line = f"[CANONICAL-REACHABILITY] target={target} verdict={verdict} {detail}"
+        self.console.print(f"[{'green' if verdict == 'reachable' else 'red'}] {line}[/]")
+        try:
+            log_dir = Path(f"logs/{self.database_backend}")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            with open(log_dir / "canonical_reachability.log", "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now(timezone.utc).isoformat()} {line}\n")
+        except Exception:  # noqa: BLE001
+            pass
+
+    def resolve_template_id(self) -> str:
+        """THE template this run uses — one answer, used everywhere.
+
+        There used to be two independent answers and they disagreed. The setup
+        wizard got ``--<module>-template`` via ``setup_template_id``, while the
+        SERVER env got ``CIRIS_TEMPLATE`` only when the module happened to be
+        ``he300_benchmark``. So a run launched with an explicit template
+        completed setup under it and then booted the agent under the DEFAULT
+        template's behaviour config.
+
+        That failure is invisible in exactly the way that matters: the run
+        reports the template name it was asked for, so the logs, the result-key
+        tuple and the report all name a template whose configuration never took
+        effect. A template whose behaviour config is silently ignored is worse
+        than no template at all.
+
+        Concretely it cost: ``cognitive_state_behaviors.wakeup.enabled: false``
+        was never consulted, so ~10 minutes of wakeup was paid on every boot of
+        every arm of every cell; and ``EpistemicHumilityConscience`` — which
+        benchmark mode exists to disable because it triggers PONDER, which the
+        benchmark does not permit — stayed live in every arm.
+        """
+        from .config import QAModule  # local import: module-scope would be circular
+
+        explicit = (getattr(self.config, "setup_template_id", None) or "").strip()
+        if explicit:
+            return explicit
+        # Module-implied defaults. Keep this the ONLY place a module maps to a
+        # template, so adding a module cannot reintroduce a second answer.
+        if any(m == QAModule.HE300_BENCHMARK for m in self.modules or []):
+            return "he-300-benchmark"
+        return "default"
+
+    def _verify_template_took_effect(self) -> bool:
+        """Assert the AGENT loaded the template we asked for. Loud on mismatch.
+
+        Setting the env var is not evidence that it was honoured — that
+        assumption is the entire bug this guards. `profile_loader` logs the file
+        it actually loaded, so this reads the boot log and compares the resolved
+        template id against the loaded PATH (id, not display name: `default.yaml`
+        declares the name "Ally", so comparing names would never match).
+
+        Reports UNVERIFIED rather than OK when the line is absent — an unknown is
+        not a pass, and a check that silently degrades to "fine" would recreate
+        the failure it exists to catch.
+        """
+        want = self.resolve_template_id()
+        log_path = Path(f"logs/{self.database_backend}/latest.log")
+        try:
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            self.console.print(
+                f"[yellow]⚠️  Template UNVERIFIED: cannot read {log_path} "
+                f"(wanted '{want}') — treat template-dependent results with suspicion[/yellow]"
+            )
+            return False
+
+        loaded = re.findall(r"Successfully loaded template '[^']*' from (\S+)", text)
+        if not loaded:
+            self.console.print(
+                f"[yellow]⚠️  Template UNVERIFIED: no 'Successfully loaded template' line in "
+                f"{log_path} (wanted '{want}')[/yellow]"
+            )
+            return False
+
+        actual_path = loaded[-1]
+        actual_id = Path(actual_path.rstrip(".,")).stem
+        if actual_id == want:
+            self.console.print(f"[green][OK] Template VERIFIED in the running agent: {actual_id}[/green]")
+            return True
+
+        # Loud and specific: name what was asked for, what actually ran, and what
+        # it costs — this mismatch silently invalidates every template-dependent
+        # result in the run while the report still prints the requested name.
+        self.console.print(
+            f"[red]❌ TEMPLATE MISMATCH — requested '{want}' but the agent loaded "
+            f"'{actual_id}' ({actual_path}).[/red]"
+        )
+        self.console.print(
+            "[red]   The template's cognitive_state_behaviors (e.g. wakeup.enabled) and any "
+            "conscience configuration it declares did NOT take effect. Results from this run are "
+            "not attributable to the requested template.[/red]"
+        )
+        return False
 
     def start(self) -> bool:
         """Start the API server."""
+        # CIRISAgent#1244: refuse a remote trace sink under the mock LLM FIRST,
+        # before any side effect (trace-file clearing, .env rewrite, Postgres,
+        # data wipe). __main__ refuses this too; this catches programmatic
+        # QAConfig callers that bypass the CLI.
+        if self.config.mock_llm and (self.config.live_lens or self.config.federation_delivery):
+            self.console.print(
+                "[red][FAIL] --live-lens / --federation-delivery cannot run with the mock LLM: "
+                "mock-LLM traces must never reach the production lens or canonical (CIRISAgent#1244)[/red]"
+            )
+            return False
+
         # Check if server is already running
         if self._is_server_running():
-            self.console.print("[yellow]⚠️  Server already running[/yellow]")
+            self.console.print("[yellow][WARN] Server already running[/yellow]")
             return True
 
         # For live mode, clear wakeup state for fresh 5-step wakeup
@@ -484,35 +924,71 @@ class APIServerManager:
 
         # Ensure minimal .env exists for QA testing (respects mock_llm setting)
         if not _ensure_env_file(self.console, mock_llm=self.config.mock_llm):
-            self.console.print("[red]❌ Failed to create .env - cannot proceed[/red]")
+            self.console.print("[red][FAIL] Failed to create .env - cannot proceed[/red]")
             return False
 
         # Auto-start PostgreSQL container if using postgres backend
         if self.database_backend == "postgres":
             if not _start_postgres_container(self.console):
-                self.console.print("[red]❌ Failed to start PostgreSQL - cannot proceed[/red]")
+                self.console.print("[red][FAIL] Failed to start PostgreSQL - cannot proceed[/red]")
                 return False
+            # Wipe PostgreSQL databases if --wipe-data is set
+            if self.config.wipe_data:
+                if not _wipe_postgres_databases(self.console):
+                    self.console.print("[yellow][WARN] PostgreSQL wipe failed, continuing anyway[/yellow]")
 
-        # Start mock logshipper to receive covenant traces (unless using live lens)
+        # Start mock logshipper to receive accord traces (unless using live lens)
         if self.config.live_lens:
             self.console.print(
                 "[cyan]📡 Using LIVE Lens server: https://lens.ciris-services-1.ai/lens-api/api/v1[/cyan]"
             )
-            self.console.print("[cyan]📊 Enabling covenant_metrics adapter for live trace capture[/cyan]")
+            self.console.print("[cyan] Enabling accord_metrics adapter for live trace capture[/cyan]")
             self.mock_logshipper = None
         else:
-            self.mock_logshipper = MockLogshipperServer(port=18080)
+            # Per-backend port + per-backend output dir so parallel SQLITE
+            # and POSTGRES runs don't collide on either the network port or
+            # the trace filename (FSD scoring trace dedup uses a hash that
+            # collides cross-backend; the backend dir is what disambiguates).
+            self.mock_logshipper = MockLogshipperServer(
+                port=self._mock_logshipper_port,
+                output_dir=self.qa_reports_dir,
+            )
             if self.mock_logshipper.start():
-                self.console.print(f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url}[/cyan]")
+                self.console.print(
+                    f"[cyan]📡 Mock logshipper started at {self.mock_logshipper.endpoint_url} "
+                    f"→ qa_reports/{self.database_backend}/[/cyan]"
+                )
             else:
-                self.console.print("[yellow]⚠️  Could not start mock logshipper[/yellow]")
+                self.console.print("[yellow][WARN] Could not start mock logshipper[/yellow]")
                 self.mock_logshipper = None
 
-        self.console.print("[cyan]🚀 Starting API server...[/cyan]")
+        # Start the stub chain RPC. The wallet adapter auto-loads for
+        # base-mainnet and its context-enrichment tool (wallet:get_statement)
+        # queries balances during context gathering; without this the agent
+        # calls https://mainnet.base.org and a third-party 503 surfaces as a
+        # ChainClient ERROR that fails the incidents gate (v2.14.0 all_2).
+        # Reused across a restart (start() without stop()) so the URL is stable.
+        if self.mock_chain_rpc is None:
+            self.mock_chain_rpc = MockChainRPCServer()
+            if self.mock_chain_rpc.start():
+                self.console.print(f"[cyan][STUB] Stub chain RPC started at {self.mock_chain_rpc.endpoint_url}[/cyan]")
+            else:
+                self.console.print("[yellow][WARN] Could not start stub chain RPC[/yellow]")
+                self.mock_chain_rpc = None
 
-        # Build command - main.py is in the root directory
-        main_path = Path(__file__).parent.parent.parent / "main.py"
-        cmd = [sys.executable, str(main_path), "--port", str(self.config.api_port)]
+        self.console.print("[cyan] Starting API server...[/cyan]")
+
+        # Build command. When --from-staged is set, the server under test is
+        # the wheel installed in the staged venv — that validates the SHIPPED
+        # artifact passes QA, not just the dev tree. Otherwise default to
+        # `sys.executable main.py` from the repo root.
+        if self.config.staged_env is not None:
+            cmd = [str(self.config.staged_env.ciris_server), "--port", str(self.config.api_port)]
+            self.console.print(f"[dim]Using staged ciris-server: {self.config.staged_env.ciris_server}[/dim]")
+            self.console.print(f"[dim]Canonical tree hash: {self.config.staged_env.total_hash}[/dim]")
+        else:
+            main_path = Path(__file__).parent.parent.parent / "main.py"
+            cmd = [sys.executable, str(main_path), "--port", str(self.config.api_port)]
 
         if self.config.mock_llm:
             cmd.append("--mock-llm")
@@ -520,6 +996,78 @@ class APIServerManager:
         # Set environment variables
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["CIRIS_TESTING_MODE"] = "true"  # Enable testing mode for admin user creation
+        # Disable the API rate limiter for QA. A batched all_1/all_2 sweep is
+        # a bursty load-test workload — many modules fire 20+ requests in
+        # sub-second windows and trip the 60-req/min cap (HTTP 429). The
+        # adapter config comment explicitly endorses a test-time opt-out.
+        env.setdefault("CIRIS_API_RATE_LIMIT_ENABLED", "false")
+        # Every QA message must get its OWN task. Without this, a message
+        # arriving on a channel that still has an active task is coalesced
+        # into it (updated_info_available) — so a later module's interact()
+        # merges into an earlier module's unfinished task, never gets its
+        # own SPEAK, and times out at 55s. base_observer documents
+        # CIRIS_DISABLE_TASK_APPEND as exactly the per-task-throughput
+        # benchmarking switch the qa_runner needs (never set in prod).
+        env.setdefault("CIRIS_DISABLE_TASK_APPEND", "1")
+        # Emit the auth-service [AUTH SERVICE DEBUG] traces at INFO so a
+        # CI/QA INFO-level capture records which key_id validate_api_key
+        # sought and which key_ids _api_keys actually held — the decisive
+        # evidence for the --parallel-backends "Invalid API key" 401s.
+        env.setdefault("CIRIS_AUTH_DEBUG", "1")
+        # Pin the server-side interact() response-correlation window for
+        # QA. (Production derives it from the LLM budget since #1186 —
+        # 195s hosted / 900s local; it was once 55s, the ceiling that
+        # returned "Still processing".) A module's SERVER_ENV overrides
+        # this generic default (apply_module_server_env). Under the
+        # --parallel-backends matrix (two agent stacks sharing a CI
+        # runner) the agent's ASPDMA loop legitimately takes 60-90s,
+        # and the air-test stall we keep seeing on the postgres leg
+        # is the SERVER giving up at 55s before the client even
+        # times out. Bumping to 180s gives parallel-backend headroom
+        # while still acting as a circuit breaker if the agent really
+        # hangs. The client-side timeouts in air / context_enrichment
+        # tests are already sized above this (140s / 240s under
+        # CIRIS_QA_PARALLEL_BACKENDS=1).
+        env.setdefault("CIRIS_API_INTERACTION_TIMEOUT", "180")
+
+        # Ensure CIRIS_MOCK_LLM matches our config (unset if not using mock)
+        if not self.config.mock_llm:
+            env.pop("CIRIS_MOCK_LLM", None)  # Remove if present
+
+        # Run-kind marker (CIRISAgent#1245): every agent this runner starts is
+        # a harness run, including live-model runs. The battery / model-eval /
+        # HE-300 modules mark "battery", everything else "qa"; the mock LLM
+        # overrides both with "mock" agent-side. Authoritative: an inherited
+        # "production" is replaced (a harness run is never production); only an
+        # explicit qa/battery is kept.
+        from .run_kind import declare_run_kind, harness_run_kind
+
+        _run_kind_warning = declare_run_kind(env, harness_run_kind(self.modules))
+        if _run_kind_warning:
+            self.console.print(f"[yellow][WARN] {_run_kind_warning}[/yellow]")
+
+        # accord_halt writes the node's halt latch, so the agent gets a home of
+        # its own that nothing else uses (CIRISAgent#1231). The module reads the
+        # latch path back from the node and refuses to write outside this dir.
+        from .config import QAModule as _QAModule  # local import: module-scope would be circular
+
+        if _QAModule.ACCORD_HALT in (self.modules or []):
+            import tempfile
+
+            throwaway = os.environ.get("CIRIS_QA_THROWAWAY_HOME") or tempfile.mkdtemp(prefix="ciris-qa-accord-halt-")
+            os.environ["CIRIS_QA_THROWAWAY_HOME"] = throwaway
+            env["CIRIS_QA_THROWAWAY_HOME"] = throwaway
+            env["CIRIS_HOME"] = throwaway
+            self.console.print(f"[dim]accord_halt: throwaway CIRIS_HOME={throwaway}[/dim]")
+
+        # Set CIRIS_HOME for verifier_singleton (required for audit hash chain)
+        if "CIRIS_HOME" not in env:
+            project_root = Path(__file__).parent.parent.parent
+            env["CIRIS_HOME"] = str(project_root)
+            self.console.print(f"[dim]Setting CIRIS_HOME={project_root}[/dim]")
+        # The node's home: where it writes its claim PIN for the setup claim.
+        self._backend_home = env["CIRIS_HOME"]
 
         # Set CIRIS_ADAPTER environment variable (supports comma-separated adapters)
         # This allows loading modular services like Reddit alongside built-in adapters
@@ -527,25 +1075,113 @@ class APIServerManager:
 
         # Live LLM configuration (--live flag)
         if self.config.live_api_key:
-            env["OPENAI_API_KEY"] = self.config.live_api_key
-            self.console.print(f"[cyan]🔑 Live LLM: OPENAI_API_KEY set[/cyan]")
-        if self.config.live_base_url:
-            env["OPENAI_API_BASE"] = self.config.live_base_url
-            self.console.print(f"[cyan]🌐 Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
-        if self.config.live_model:
-            env["OPENAI_MODEL_NAME"] = self.config.live_model
-            self.console.print(f"[cyan]🤖 Live LLM: OPENAI_MODEL_NAME={self.config.live_model}[/cyan]")
+            # Override any mock LLM settings from .env
+            env["CIRIS_MOCK_LLM"] = "false"
 
-        # Configure covenant_metrics adapter to use mock logshipper
+            # Set provider-specific environment variables
+            # Auto-detect provider from base_url if not explicitly set
+            provider = self.config.live_provider
+            if not provider and self.config.live_base_url:
+                # Match on the parsed HOSTNAME, not a substring of the whole
+                # URL. `"groq.com" in url` also matches
+                # `https://evil.example/groq.com/v1` and
+                # `https://groq.com.attacker.net` — the live API key would go
+                # to the wrong host while the log says "groq"
+                # (CodeQL py/incomplete-url-substring-sanitization). Host
+                # suffix matching, with the leading dot, cannot be spoofed by
+                # a path segment or a longer registrable domain.
+                host = (urlparse(self.config.live_base_url).hostname or "").lower()
+
+                def _is_host(domain: str) -> bool:
+                    return host == domain or host.endswith("." + domain)
+
+                if _is_host("openrouter.ai"):
+                    provider = "openrouter"
+                elif _is_host("groq.com"):
+                    provider = "groq"
+                elif _is_host("together.ai") or _is_host("together.xyz"):
+                    provider = "together"
+                else:
+                    provider = "openai_compatible"
+            provider = provider or "openai"
+            env["CIRIS_LLM_PROVIDER"] = provider
+
+            # Set model name using CIRIS_LLM_MODEL_NAME (read by service_initializer for all providers)
+            if self.config.live_model:
+                env["CIRIS_LLM_MODEL_NAME"] = self.config.live_model
+                self.console.print(f"[cyan] Live LLM: model={self.config.live_model}[/cyan]")
+
+            if provider == "anthropic":
+                env["ANTHROPIC_API_KEY"] = self.config.live_api_key
+                self.console.print(f"[cyan] Live LLM: ANTHROPIC_API_KEY set (native Anthropic SDK)[/cyan]")
+            elif provider == "google":
+                env["GOOGLE_API_KEY"] = self.config.live_api_key
+                self.console.print(f"[cyan] Live LLM: GOOGLE_API_KEY set (native Google SDK)[/cyan]")
+            else:
+                # OpenAI or OpenAI-compatible (Groq, OpenRouter, etc.)
+                env["OPENAI_API_KEY"] = self.config.live_api_key
+                self.console.print(f"[cyan] Live LLM: OPENAI_API_KEY set (overriding mock)[/cyan]")
+                if self.config.live_base_url:
+                    env["OPENAI_API_BASE"] = self.config.live_base_url
+                    self.console.print(f"[cyan] Live LLM: OPENAI_API_BASE={self.config.live_base_url}[/cyan]")
+
+        # Configure accord_metrics adapter to use mock logshipper
         if self.mock_logshipper:
-            env["CIRIS_COVENANT_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
+            env["CIRIS_ACCORD_METRICS_ENDPOINT"] = self.mock_logshipper.endpoint_url
 
-        # Force first-run mode for SETUP module tests
+        # Point the wallet's ChainClient at the stub RPC (operator export of
+        # WALLET_X402_RPC_URL still wins).
+        if apply_wallet_rpc_stub_env(env, self.mock_chain_rpc, os.environ):
+            self.console.print(f"[dim]WALLET_X402_RPC_URL={env['WALLET_X402_RPC_URL']} (stub chain RPC)[/dim]")
+
+        # When running in --live mode, opt the agent into location sharing in
+        # accord traces so lens dashboards can correlate by region. Defaults
+        # to the dev's home base (Schaumburg, IL) and can be overridden by
+        # exporting the CIRIS_USER_* vars before invocation.
+        if self.config.live_api_key:
+            env.setdefault("CIRIS_SHARE_LOCATION_IN_TRACES", "true")
+            env.setdefault("CIRIS_USER_LOCATION", "Schaumburg, Illinois, USA")
+            env.setdefault("CIRIS_USER_TIMEZONE", "America/Chicago")
+            env.setdefault("CIRIS_USER_LATITUDE", "42.0334")
+            env.setdefault("CIRIS_USER_LONGITUDE", "-88.0834")
+            self.console.print(
+                f"[dim]Live mode: location sharing enabled " f"(CIRIS_USER_LOCATION={env['CIRIS_USER_LOCATION']})[/dim]"
+            )
+
+        # Force first-run mode for SETUP module tests or when data was wiped
         from .config import QAModule
 
         if any(m == QAModule.SETUP for m in self.modules):
             env["CIRIS_FORCE_FIRST_RUN"] = "1"
             self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for SETUP module tests[/dim]")
+        elif self.config.wipe_data:
+            # When data is wiped, we need first-run to allow setup completion
+            env["CIRIS_FORCE_FIRST_RUN"] = "1"
+            self.console.print("[dim]Setting CIRIS_FORCE_FIRST_RUN=1 for wiped data[/dim]")
+
+        # Module-level SERVER_ENV contributions. Each selected module can
+        # declare a SERVER_ENV class attribute that gets merged into the
+        # agent process env. See tools/qa_runner/modules/_module_metadata.py
+        # for the contract. Modules currently declaring SERVER_ENV:
+        # MODEL_EVAL, PARALLEL_LOCALES, SAFETY_BATTERY (CIRIS_DISABLE_TASK_APPEND
+        # + concurrent-burst tuning for the first two; task-append disable
+        # only for the safety-battery sequential-in-shared-channel pattern).
+        from .modules._module_metadata import merge_server_env
+
+        merged = merge_server_env(self.modules)
+        conflicts = merged.pop("__conflicts__", "")
+        apply_module_server_env(env, merged, os.environ)
+        if merged:
+            modules_label = ",".join(
+                m.value for m in self.modules if any(merge_server_env([m]).keys() - {"__conflicts__"})
+            )
+            self.console.print(
+                f"[dim]Merged module SERVER_ENV from {modules_label or 'selected modules'}: " f"{merged}[/dim]"
+            )
+        if conflicts:
+            self.console.print(
+                f"[yellow]SERVER_ENV conflicts across modules (last-write-wins): " f"{conflicts}[/yellow]"
+            )
 
         # Set backend-specific log directory to avoid symlink collisions
         # But preserve existing CIRIS_LOG_DIR if set (for multi-occurrence)
@@ -564,6 +1200,27 @@ class APIServerManager:
         else:
             # SQLite is the default, no need to set CIRIS_DB_URL
             self.console.print(f"[dim]Using SQLite (default)[/dim]")
+
+        # Per-backend Edge (Reticulum) listen port. Under --parallel-backends
+        # both legs otherwise race for 0.0.0.0:4242; the loser's Edge init
+        # fails "Address already in use", its federation signer key never
+        # registers with persist, and EVERY lens-core trace seal then fails
+        # verify_unknown_key (the whole trace pipeline silently dies for
+        # that leg). Respect an operator override if one is set.
+        # 4243 IS NOT AVAILABLE FOR THIS. It is the node's fixed HTTP port —
+        # node_fold serves federation/self/accord/auth/config/health there. The
+        # postgres leg used to take it, so the edge runtime bound 4243 first and
+        # the node could never have it: every /v1/auth call on that leg answered
+        # 502 for the whole run while sqlite passed the identical suite. One
+        # collision fixed by walking into another.
+        if "CIRIS_EDGE_LISTEN_ADDR" not in env:
+            edge_port = 4242 if self.database_backend != "postgres" else 4244
+            assert edge_port != NODE_HTTP_PORT, (
+                f"edge port {edge_port} collides with the node's fixed HTTP port "
+                f"{NODE_HTTP_PORT} — the node never binds and every auth call 502s"
+            )
+            env["CIRIS_EDGE_LISTEN_ADDR"] = f"0.0.0.0:{edge_port}"
+            self.console.print(f"[dim]Edge listen addr: 0.0.0.0:{edge_port} (per-backend)[/dim]")
 
         # Set billing configuration from QAConfig if enabled
         if self.config.billing_enabled:
@@ -592,23 +1249,224 @@ class APIServerManager:
             env["CIRIS_SQL_EXTERNAL_DATA_CONFIG"] = str(self._sql_config_path)
             self.console.print(f"[dim]Configured SQL external data service: {self._sql_config_path}[/dim]")
 
-        # Enable covenant_metrics adapter with consent for trace capture tests
-        # Also enable when --live-lens is used to send traces to production Lens
-        if any(m == QAModule.COVENANT_METRICS for m in self.modules) or self.config.live_lens:
-            # Load base covenant_metrics adapter alongside the main adapter
-            if "ciris_covenant_metrics" not in env.get("CIRIS_ADAPTER", ""):
+        # The template reaches the SERVER, not just the setup wizard. Setting it
+        # unconditionally is the point: the bug this replaces was an implicit
+        # default that nobody could see, so the resolved value is always stated
+        # and always exported. `default` is the engine's own fallback, so
+        # exporting it explicitly changes nothing except that it is now visible.
+        template_id = self.resolve_template_id()
+        env["CIRIS_TEMPLATE"] = template_id
+
+        # Benchmark mode keys off the RESOLVED TEMPLATE, never the module list.
+        # component_builder._determine_benchmark_mode double-locks on
+        # (CIRIS_BENCHMARK_MODE=true AND template == 'he-300-benchmark'), so
+        # deriving it from the template is what makes the two agree by
+        # construction — and means `--<module>-template he-300-benchmark` now
+        # gets benchmark mode from ANY module, which is exactly the case that
+        # was silently running with safety consciences live.
+        is_benchmark = template_id == "he-300-benchmark"
+        if is_benchmark:
+            env["CIRIS_BENCHMARK_MODE"] = "true"
+            # Increase A2A timeout for live LLM (default 60s is too short)
+            a2a_timeout = "180" if self.config.live_api_key else "60"
+            env["CIRIS_A2A_TIMEOUT"] = a2a_timeout
+            self.console.print("[cyan] HE-300 Benchmark Configuration:[/cyan]")
+            self.console.print("[dim]   Template: he-300-benchmark (limited actions: speak, task_complete)[/dim]")
+            self.console.print("[dim]   Benchmark Mode: ENABLED (EpistemicHumility conscience disabled)[/dim]")
+            self.console.print(f"[dim]   A2A Timeout: {a2a_timeout}s[/dim]")
+        self.console.print(f"[cyan] Template: {template_id}[/cyan] [dim](CIRIS_TEMPLATE + setup wizard)[/dim]")
+        if is_benchmark:
+            self.console.print(f"[dim]   Mock LLM: {self.config.mock_llm}[/dim]")
+            self.console.print(f"[dim]   Live API Key: {'Set' if self.config.live_api_key else 'Not set'}[/dim]")
+            self.console.print(f"[dim]   Live Model: {self.config.live_model or 'Not set'}[/dim]")
+            self.console.print(f"[dim]   CIRIS_MOCK_LLM env: {env.get('CIRIS_MOCK_LLM', 'Not set')}[/dim]")
+            self.console.print(f"[dim]   CIRIS_LLM_PROVIDER env: {env.get('CIRIS_LLM_PROVIDER', 'Not set')}[/dim]")
+
+        # Enable accord_metrics adapter when explicitly testing traces, when using live Lens,
+        # or during live model eval where we want a full multilingual research export.
+        accord_metrics_requested = any(m == QAModule.ACCORD_METRICS for m in self.modules)
+        model_eval_requested = any(m == QAModule.MODEL_EVAL for m in self.modules)
+        safety_battery_requested = any(m == QAModule.SAFETY_BATTERY for m in self.modules)
+        # --federation-delivery implies the accord adapter: the federation block
+        # below explicitly depends on it ("Needs consent-sealed traces (the
+        # accord block above sets CONSENT=true)") and prints trace_level/env
+        # keys this block binds. Without this, `qa_runner <module>
+        # --federation-delivery` crashed UnboundLocalError at server start.
+        # DERIVED FROM WHAT THE MODULES DECLARE, not from an allowlist here.
+        #
+        # This was a hand-maintained list of module flags, and safety_battery was
+        # missing from it — used a few lines below to pick the trace level, but
+        # never to enable the adapter. So a mental-health battery captured traces
+        # (it registers accord_detailed/accord_full itself post-auth) while never
+        # receiving CIRIS_ACCORD_METRICS_CONSENT.
+        #
+        # That env var is the OWNER'S CONSENT, and the fold now gates authoring on
+        # it — correctly, since booting a node is not consenting to replicate your
+        # reasoning off it. Without it no CEG grant covers `trace:`, so
+        # promote_consented_backlog never lifts the rows and the entire live
+        # corpus stays at (cohort_scope=self, tier=local).
+        #
+        # _module_metadata exists so modules "declare their CI requirements as
+        # class attributes ... without per-module special-casing". A module that
+        # captures traces now says so once, and every live-capture flow — research
+        # or mental-health — gets the same consent, adapter and tee wiring.
+        from tools.qa_runner.modules._module_metadata import get_metadata
+
+        modules_capture_traces = any(get_metadata(m).captures_traces for m in self.modules)
+        accord_metrics_enabled = (
+            modules_capture_traces
+            # accord_metrics itself is not in the metadata _REGISTRY, so
+            # get_metadata returns defaults for it. Kept explicitly rather than
+            # assumed — dropping it would silently disable the adapter for the
+            # very module named after it.
+            or accord_metrics_requested
+            or self.config.live_lens
+            or self.config.federation_delivery
+        )
+        # DELIVERY INSTRUMENTATION — gated on the run ATTEMPTING delivery, not on
+        # the --federation-delivery flag.
+        #
+        # It was behind `if self.config.federation_delivery:` and the safety
+        # battery workflow never passes that flag. The agent still dials the
+        # canonical, because edge #296 auto-seeds the dial from persist's baked
+        # hint — so every live battery attempts delivery while none of them
+        # entered the branch holding the diagnostics. en run 31220305389 proved
+        # it: DELIVERY-PROBE ran to `KEX still None at 540s`, and the RUST_LOG
+        # and reachability probe meant to explain it never executed.
+        #
+        # `accord_metrics_enabled` is the honest condition: it is true exactly
+        # when the run will produce and try to ship traces.
+        if accord_metrics_enabled:
+            # TURN THE RUST LAYER UP. KEX happens inside ciris_edge / leviculum,
+            # not in Python, and at the default level those crates log almost
+            # nothing — so a run that sits at `kex_present: false` for 360s
+            # produces a Python-side probe verdict with no mechanism behind it.
+            #
+            # Observed 2026-08-07 (en, run 31218689164): ROOTED after ~10s, then
+            # `KEX still None` through 360s of repriming, with
+            # `peers=[{knows_peer: true, kex_present: false, deliverable: false}]`.
+            # The peer was known and the transport was up; the key exchange
+            # simply never formed, and nothing in any captured log said why. The
+            # `CIRISEdge#336 dial-cache` line the probe prints is a GUESS the code
+            # emits, not a diagnosis — the kind of plausible label that ends an
+            # investigation instead of starting one.
+            #
+            # Same levels the CIRISServer mesh-repro harness uses for this exact
+            # question. Operator-overridable: an explicit RUST_LOG wins.
+            env.setdefault("RUST_LOG", "info,ciris_edge=debug,leviculum_core=debug,leviculum_std=debug")
+
+            # Reachability, recorded BEFORE the agent starts. Whether a GitHub
+            # runner can open a socket to the canonical is a fact about the
+            # network, and it is unrecoverable after the fact — a failed KEX and
+            # a blocked egress look identical from the Python side. Cheap, and it
+            # separates "cannot connect" from "connected and KEX failed", which
+            # are different bugs with different owners.
+            self._probe_canonical_reachability(env)
+
+        if accord_metrics_enabled:
+            # Load base accord_metrics adapter alongside the main adapter
+            if "ciris_accord_metrics" not in env.get("CIRIS_ADAPTER", ""):
                 current_adapter = env.get("CIRIS_ADAPTER", "api")
-                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_covenant_metrics"
-            # Enable consent for trace capture
-            env["CIRIS_COVENANT_METRICS_CONSENT"] = "true"
-            env["CIRIS_COVENANT_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
+                env["CIRIS_ADAPTER"] = f"{current_adapter},ciris_accord_metrics"
+            # Enable consent for trace capture - REQUIRED for CIRISLens API
+            env["CIRIS_ACCORD_METRICS_CONSENT"] = "true"
+            env["CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP"] = "2025-01-01T00:00:00Z"
             # Use short flush interval for QA (5 seconds instead of 60)
-            env["CIRIS_COVENANT_METRICS_FLUSH_INTERVAL"] = "5"
-            # Set full trace level for comprehensive data capture
-            env["CIRIS_COVENANT_METRICS_TRACE_LEVEL"] = "full_traces"
+            env["CIRIS_ACCORD_METRICS_FLUSH_INTERVAL"] = "5"
+            # Keep the startup adapter at generic so model-eval AND safety-battery
+            # can explicitly register the detailed + full_traces adapters after auth.
+            # That yields three accord_metrics instances: generic (lens shipper),
+            # detailed, and full_traces — the last carrying raw prompts+completions
+            # for the Coherence Ratchet / fine-tuning corpus. Registering the extra
+            # adapters (not overriding to a single 'detailed' level) is the design;
+            # safety_battery previously got the single-level override, so its capture
+            # bundles only ever held hashed traces (no full text).
+            trace_level = "generic" if (model_eval_requested or safety_battery_requested) else "detailed"
+            env["CIRIS_ACCORD_METRICS_TRACE_LEVEL"] = trace_level
+            # Point the substrate's local-tee stream at qa_reports/<backend>/ for
+            # ANY accord_metrics-enabled run — not only federation-delivery ones.
+            # accord_metrics_tests.py reads <instance>/lens-batch-<seq>.json from
+            # exactly this dir (see AccordMetricsTests.qa_reports_dir, wired from
+            # server_manager.qa_reports_dir). Before this, the tee dir was set
+            # only inside the federation_delivery block below, so a plain
+            # `accord_metrics` run received reasoning events but never flushed
+            # them to disk — Export Real Trace / Verb Second Pass / Generic Trace
+            # Field all failed with "No traces found in qa_reports/". The
+            # live-lens path in the federation block intentionally redirects the
+            # tee to a per-run /tmp dir, so leave the key unset when live_lens is
+            # on and let that block own it.
+            # ALWAYS set a tee dir. The previous form skipped it when
+            # --live-lens was on, delegating to the federation block below — but
+            # that block only runs when federation delivery is enabled, so
+            # `--live-lens` WITHOUT it left the tee unset and the run wrote zero
+            # trace files while reporting 100% pass. A flag about where traces
+            # are SHIPPED must never decide whether they are SAVED.
+            if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+                self.qa_reports_dir.mkdir(parents=True, exist_ok=True)
+                env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = str(self.qa_reports_dir)
+
+        # Federation delivery (Reticulum trace-flow to canonical-server-1).
+        # Distinct from the HTTP lens shipping above: this drives the embedded
+        # edge's start_federation_delivery controller. Needs consent-sealed
+        # traces (the accord block above sets CONSENT=true), an ACTIVE transport
+        # (CIRIS_FEDERATION_DELIVERY=true → enable_transport at edge init), and a
+        # dial target. edge #296 auto-seeds the canonical dial from persist's
+        # baked hint; we also pass the correct canonical peer explicitly so a
+        # stale baked :4243 (pre persist#404 re-bake) is unioned past.
+        if self.config.federation_delivery:
+            env["CIRIS_FEDERATION_DELIVERY"] = "true"
+            env["CIRIS_EDGE_BOOTSTRAP_PEERS"] = self.config.canonical_peer
+
             self.console.print(
-                "[dim]Enabling covenant_metrics adapter with consent for trace capture (full_traces)[/dim]"
+                f"[cyan]🛰️  Federation delivery ON → dialing canonical peer {self.config.canonical_peer} "
+                f"(will verify trace flow to canonical-server-1 after run)[/cyan]"
             )
+            # Set live lens endpoint explicitly
+            if self.config.live_lens:
+                env["CIRIS_ACCORD_METRICS_ENDPOINT"] = "https://lens.ciris-services-1.ai/lens-api/api/v1"
+                # Local-tee for live-lens runs: write every batch payload that
+                # gets POSTed to the lens to a per-run /tmp directory in
+                # parallel. Gives us an audit copy + feeds the persist engine
+                # real test data for the new wire-format ingest path. Default
+                # path: /tmp/qa-runner-lens-traces-<utc-iso>/. Operators can
+                # override by setting CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR
+                # before launching the QA runner.
+                if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+                    from datetime import datetime, timezone
+
+                    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                    env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = f"/tmp/qa-runner-lens-traces-{ts}"
+                    # Retention: keep only the most recent N=5 prior dirs
+                    # before creating this run's. Lens trace dirs accumulate
+                    # at ~50-300MB each — left unchecked they fill /tmp and
+                    # crash the host (saw 60M-free-of-935G on 2026-05-03).
+                    # Operator override via CIRIS_QA_LENS_TRACE_KEEP_N.
+                    self._prune_lens_trace_dirs()
+            else:
+                # 2.9.6 fold: the bespoke HTTP shipping path is retired, so
+                # the mock logshipper never sees traces anymore — the
+                # substrate seals straight into persist. The lens-core
+                # local tee (lens-batch-*.json under a per-instance subdir)
+                # is now THE on-disk stream accord_metrics_tests.py reads,
+                # so point it at this backend's qa_reports/ namespace.
+                if "CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" not in env:
+                    self.qa_reports_dir.mkdir(parents=True, exist_ok=True)
+                    env["CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"] = str(self.qa_reports_dir)
+            self.console.print(
+                f"[dim]Enabling accord_metrics adapter with consent for trace capture ({trace_level})[/dim]"
+            )
+            self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_CONSENT={env['CIRIS_ACCORD_METRICS_CONSENT']}[/dim]")
+            self.console.print(
+                f"[dim]   CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP={env['CIRIS_ACCORD_METRICS_CONSENT_TIMESTAMP']}[/dim]"
+            )
+            self.console.print(f"[dim]   CIRIS_ACCORD_METRICS_TRACE_LEVEL={trace_level}[/dim]")
+            if self.config.live_lens:
+                self.console.print(
+                    f"[dim]   CIRIS_ACCORD_METRICS_ENDPOINT={env['CIRIS_ACCORD_METRICS_ENDPOINT']}[/dim]"
+                )
+                self.console.print(
+                    f"[dim]   CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR={env['CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR']}[/dim]"
+                )
 
         # Load Reddit credentials if Reddit adapter is being used
         if "reddit" in self.config.adapter.lower():
@@ -628,37 +1486,95 @@ class APIServerManager:
                                 env[key] = value
                     self.console.print("[dim]Loaded Reddit credentials from ~/.ciris/reddit_secrets[/dim]")
                 except Exception as e:
-                    self.console.print(f"[yellow]⚠️  Failed to load Reddit secrets: {e}[/yellow]")
+                    self.console.print(f"[yellow][WARN] Failed to load Reddit secrets: {e}[/yellow]")
             else:
-                self.console.print(f"[yellow]⚠️  Reddit secrets file not found: {reddit_secrets_path}[/yellow]")
+                self.console.print(f"[yellow][WARN] Reddit secrets file not found: {reddit_secrets_path}[/yellow]")
 
         # Start server process
         try:
             # Open log file to capture console output (includes early startup logs)
-            # Use backend-specific console log to avoid conflicts in parallel mode
-            console_log_path = f"/tmp/qa_runner_console_{self.database_backend}_{self.config.api_port}.txt"
-            console_log = open(console_log_path, "w")
-            self.process = subprocess.Popen(cmd, stdout=console_log, stderr=subprocess.STDOUT, env=env, cwd=Path.cwd())
+            # Save to logs/{backend}/ so it's discoverable alongside other logs
+            log_dir_path = Path(f"logs/{self.database_backend}")
+            log_dir_path.mkdir(parents=True, exist_ok=True)
+            console_log_path = str(log_dir_path / "console.log")
+            self._console_log_path = console_log_path  # Store for reference in error messages
+            self.console.print(f"[dim] Console log: {console_log_path}[/dim]")
+            self.console.print(f"[dim] CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
+            self.console.print(f"[dim] Command: {' '.join(cmd)}[/dim]")
+
+            # Use PTY for stdout - the Rust FFI code crashes when stdout is not a TTY
+            # This is a workaround for a bug in ciris_verify_ffi. Windows has no
+            # pty, so it gets pipes; if the FFI turns out to need a console there
+            # too, that is a real finding and this is where it will show up.
+            master_fd = None
+            self._launched_at = time.time()
+            if _pty is not None:
+                master_fd, slave_fd = _pty.openpty()
+                self._pty_master_fd = master_fd
+                self._pty_slave_fd = slave_fd
+                self.process = subprocess.Popen(
+                    cmd, stdout=slave_fd, stderr=slave_fd, stdin=slave_fd, env=env, cwd=Path.cwd()
+                )
+                os.close(slave_fd)  # Close slave fd in parent
+            else:
+                self._pty_master_fd = None
+                self._pty_slave_fd = None
+                self.process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    env=env,
+                    cwd=Path.cwd(),
+                )
             self.pid = self.process.pid
-            self._console_log_file = console_log  # Store reference to close later
+            self.console.print(f"[dim]   PID: {self.pid}[/dim]")
+
+            # Start background thread to read from PTY master and write to log file
+            console_log = open(console_log_path, "w")
+            self._console_log_file = console_log
+
+            def log_reader():
+                try:
+                    while True:
+                        try:
+                            if master_fd is not None:
+                                data = os.read(master_fd, 4096)
+                            else:
+                                assert self.process.stdout is not None
+                                data = self.process.stdout.read(4096)
+                            if not data:
+                                break
+                            text = data.decode("utf-8", errors="replace")
+                            console_log.write(text)
+                            console_log.flush()
+                        except OSError:
+                            break
+                except Exception:
+                    pass
+
+            log_thread = threading.Thread(target=log_reader, daemon=True)
+            log_thread.start()
+            self._log_thread = log_thread
 
             # Wait for server to be ready
             if self._wait_for_server():
-                self.console.print("[green]✅ API server started successfully[/green]")
+                self.console.print("[green][OK] API server started successfully[/green]")
+                self._verify_template_took_effect()
                 return True
             else:
-                self.console.print("[red]❌ Server failed to start[/red]")
+                self.console.print("[red][FAIL] Server failed to start[/red]")
                 self.stop()
                 return False
 
         except Exception as e:
-            self.console.print(f"[red]❌ Error starting server: {e}[/red]")
+            self.console.print(f"[red][FAIL] Error starting server: {e}[/red]")
             return False
 
     def stop(self):
         """Stop the API server."""
         if self.process:
-            self.console.print("[cyan]🛑 Stopping API server...[/cyan]")
+            self.console.print("[cyan] Stopping API server...[/cyan]")
 
             try:
                 # Try graceful shutdown first
@@ -667,20 +1583,27 @@ class APIServerManager:
                 # Wait up to 15 seconds for graceful shutdown (agent needs time for shutdown state processing)
                 try:
                     self.process.wait(timeout=15)
-                    self.console.print("[green]✅ Server stopped gracefully[/green]")
+                    self.console.print("[green][OK] Server stopped gracefully[/green]")
                 except subprocess.TimeoutExpired:
                     # Force kill if needed
                     self.process.kill()
-                    self.console.print("[yellow]⚠️  Server force killed[/yellow]")
+                    self.console.print("[yellow][WARN] Server force killed[/yellow]")
 
                 self.process = None
                 self.pid = None
+
+                # Close PTY master fd
+                if hasattr(self, "_pty_master_fd"):
+                    try:
+                        os.close(self._pty_master_fd)
+                    except Exception:
+                        pass
 
                 # Close console log file
                 if hasattr(self, "_console_log_file"):
                     try:
                         self._console_log_file.close()
-                    except:
+                    except Exception:
                         pass
 
             except Exception as e:
@@ -691,12 +1614,34 @@ class APIServerManager:
             received = self.mock_logshipper.get_received_traces()
             self.mock_logshipper.stop()
             if received:
-                self.console.print(f"[green]📥 Mock logshipper received {len(received)} traces:[/green]")
+                self.console.print(f"[green] Mock logshipper received {len(received)} traces:[/green]")
                 for trace in received:
                     self.console.print(f"   • {trace['task_name']}: {trace['filepath']}")
             self.mock_logshipper = None
 
+        # Stop the stub chain RPC and report what the wallet asked it
+        if self.mock_chain_rpc:
+            calls = self.mock_chain_rpc.get_calls()
+            self.mock_chain_rpc.stop()
+            if calls:
+                methods = sorted({c.method for c in calls})
+                self.console.print(f"[green] Stub chain RPC served {len(calls)} calls: {', '.join(methods)}[/green]")
+            self.mock_chain_rpc = None
+
         # Skip port cleanup - it's causing hangs
+        # JOIN THE LOG READER. It is a daemon thread teeing the server's stdout;
+        # once the process is gone its readline returns EOF and it exits -- but
+        # nothing waited for that, so the runner could reach interpreter shutdown
+        # with the thread mid-write and abort:
+        #   Fatal Python error: _enter_buffered_busy: could not acquire lock for
+        #   <_io.BufferedWriter name='<stdout>'> at interpreter shutdown,
+        #   possibly due to daemon threads
+        # (Staged QA sqlite, 2026-09-04, exit -6 after 82/82 passed.)
+        t = getattr(self, "_log_thread", None)
+        if t is not None and t.is_alive():
+            t.join(timeout=5)
+            if t.is_alive():
+                self.console.print("[yellow]  log reader thread did not finish within 5s[/yellow]")
 
     def _is_server_running(self) -> bool:
         """Check if server is running on the configured port."""
@@ -705,6 +1650,339 @@ class APIServerManager:
             return response.status_code == 200
         except:
             return False
+
+    def _authenticate_with_retry(
+        self,
+        admin_password: str,
+        *,
+        start_time: float,
+    ) -> Optional[str]:
+        """Authenticate against /v1/auth/login, retrying while the runtime resume
+        is still in flight.
+
+        After /v1/setup/complete returns 200 the server begins a multi-second
+        RESUME cycle: it loads post-setup adapters, initializes the LLM service,
+        and only then reaches WORK state. /v1/system/health flips to 200 once
+        the FastAPI app is mounted, but /v1/auth/login can still hang for the
+        duration of resume because the auth_service is wired late in resume on
+        some backends.
+
+        Empirically observed timings (mock-llm, GitHub Actions runner):
+          - sqlite resume:    < 1 s
+          - postgres resume:  ~10-12 s (multi-table migration handover via persist)
+
+        Pre-fix this function called requests.post(..., timeout=5) exactly once
+        — postgres routinely tripped the timeout, raised a ReadTimeout, and the
+        whole QA backend was declared failed (#796 review observed this as a
+        deterministic CI failure during the duplicate Build-and-Deploy run on
+        9cc15f1, not a flake). Now we retry until either the server returns a
+        non-transient response or the overall server_startup_timeout budget is
+        exhausted — the same budget _is_server_running honors.
+        """
+        deadline = start_time + self.config.server_startup_timeout
+        attempt = 0
+        last_error: str = ""
+        last_status: Optional[int] = None
+        while time.time() < deadline:
+            attempt += 1
+            try:
+                auth_response = requests.post(
+                    f"{self.config.base_url}/v1/auth/login",
+                    json={
+                        "username": self.config.admin_username,
+                        "password": admin_password,
+                    },
+                    timeout=10,  # Generous per-attempt cap — handles slow postgres resume
+                )
+                last_status = auth_response.status_code
+                if auth_response.status_code == 200:
+                    if attempt > 1:
+                        self.console.print(f"[dim]Authenticated after {attempt} attempt(s)[/dim]")
+                    return auth_response.json()["access_token"]
+
+                # Non-2xx that's NOT a transient resume-in-flight signature:
+                # 401 (bad creds), 403 (locked), 422 (bad payload). These won't
+                # become 200 by retrying — fail fast on the actual problem.
+                if auth_response.status_code in (401, 403, 422):
+                    self.console.print(
+                        f"[red]❌ Authentication rejected: {auth_response.status_code} - "
+                        f"{auth_response.text[:200]}[/red]"
+                    )
+                    self.console.print(
+                        "[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]"
+                    )
+                    self._report_first_run_diagnostics("post-setup authentication failed")
+                    return None
+
+                # 5xx / 503 from auth-service-not-wired-yet — retry.
+                last_error = f"HTTP {auth_response.status_code}: {auth_response.text[:120]}"
+            except requests.exceptions.Timeout as e:
+                # Server is alive (health passed) but auth route blocked — resume
+                # in flight. Retry.
+                last_error = f"Timeout: {e}"
+            except requests.exceptions.ConnectionError as e:
+                # Server temporarily stopped accepting connections during resume
+                # phase swap. Retry.
+                last_error = f"ConnectionError: {e}"
+            except Exception as e:
+                # Unexpected — surface it but keep retrying within the budget;
+                # might be a transient SSL/header issue.
+                last_error = f"{type(e).__name__}: {e}"
+
+            time.sleep(1.0)
+
+        # Budget exhausted.
+        self.console.print(
+            f"[red]❌ Authentication timed out after {attempt} attempts "
+            f"(last status={last_status}, last error={last_error[:160]})[/red]"
+        )
+        self._report_first_run_diagnostics(
+            f"post-setup authentication exhausted retries (last_error={last_error[:120]})"
+        )
+        return None
+
+    def _extract_password_from_log(self) -> Optional[str]:
+        """Extract the dynamically generated admin password from console log.
+
+        The server prints the password in this format:
+        ======================================================================
+        FIRST-RUN FALLBACK ADMIN CREDENTIALS (use to complete setup wizard):
+          Username: admin
+          Password: <random_password>
+        ======================================================================
+
+        Returns:
+            Extracted password string, or None if not found
+        """
+        console_log_path = getattr(self, "_console_log_path", None)
+        if not console_log_path:
+            return None
+
+        try:
+            with open(console_log_path, "r") as f:
+                content = f.read()
+
+            # Look for the password line
+            import re
+
+            match = re.search(r"Password:\s*(\S+)", content)
+            if match:
+                password = match.group(1)
+                self.console.print(f"[dim] Extracted dynamic admin password from console log[/dim]")
+                return password
+        except Exception as e:
+            self.console.print(f"[yellow][WARN] Could not extract password from log: {e}[/yellow]")
+
+        return None
+
+    def get_admin_password(self) -> str:
+        """Get the admin password to use for authentication.
+
+        Returns extracted password (from setup) or config default.
+        Since QA runner always wipes data and uses setup wizard,
+        the password is always the known test password.
+        """
+        if self._extracted_password:
+            return self._extracted_password
+        return self.config.admin_password
+
+    def _claim_node_like_the_wizard(self) -> bool:
+        """Mint the setup user's federation ID and claim the node with its PIN, before setup.
+
+        The wizard's order (KMP SetupViewModel; tools/qa_runner/node_claim.py):
+        `/v1/setup/complete` mints a ROOT WA, and a node that sees a ROOT mints
+        no PIN, so the claim comes first. setup/complete then adopts the
+        node-claimed owner of the same username. Fail closed: no PIN, or a claim
+        that does not answer 200, fails the boot. Never an unowned node.
+        """
+        import httpx
+
+        from .node_claim import claim_like_the_wizard
+
+        async def claim() -> Any:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                return await claim_like_the_wizard(
+                    client,
+                    self.config.base_url,
+                    [self._backend_home],
+                    self.config.admin_username,
+                    self.config.admin_password,
+                    since=self._launched_at,
+                )
+
+        outcome = asyncio.run(claim())
+        if not outcome.ok:
+            self.console.print(
+                f"[red][FAIL] Node claim ({outcome.step}) failed -- the node would stay unowned, and an agent "
+                f"cannot run without a named human for its node: {outcome.detail}[/red]"
+            )
+            return False
+        self.console.print(
+            f"[green][OK] Node claimed by {self.config.admin_username} (owner={outcome.owner}, "
+            f"PIN from {outcome.pin_file})[/green]"
+        )
+        return True
+
+    def _complete_qa_setup(self) -> bool:
+        """Complete setup wizard to create test user when data was wiped.
+
+        This is called when --wipe-data is used to create a known test user
+        before attempting authentication.
+        """
+        self.console.print("[cyan] Completing setup to create test user...[/cyan]")
+
+        # Use the config's admin credentials and LLM settings
+        # When in live mode, use the real API key; otherwise use a placeholder
+        llm_provider = self.config.live_provider or "openai"
+        llm_api_key = self.config.live_api_key or "test-key-for-qa"
+        llm_model = self.config.live_model or "gpt-4"
+        llm_base_url = self.config.live_base_url
+
+        # EVERY NODE IS ALWAYS CLAIMED: the setup user claims the node first,
+        # exactly as the wizard does, or setup does not run at all.
+        if not self._claim_node_like_the_wizard():
+            return False
+
+        # THE SAME resolver the server env uses (`resolve_template_id`). Reading
+        # the config directly here is precisely what let the wizard and the agent
+        # disagree: setup completed under the requested template while the agent
+        # booted under `default`. One resolver, two consumers, no third answer.
+        template_id = self.resolve_template_id()
+        setup_payload = {
+            "llm_provider": llm_provider,
+            "llm_api_key": llm_api_key,
+            "llm_model": llm_model,
+            "template_id": template_id,
+            "enabled_adapters": ["api"],
+            "adapter_config": {},
+            "admin_username": self.config.admin_username,
+            "admin_password": self.config.admin_password,
+            "agent_port": self.config.api_port,
+        }
+        # Add base URL for OpenAI-compatible providers
+        if llm_base_url:
+            setup_payload["llm_base_url"] = llm_base_url
+
+        self.console.print(
+            "[dim]Setup payload summary: "
+            f"provider={llm_provider}, model={llm_model}, base_url={'set' if llm_base_url else 'unset'}, "
+            f"username={self.config.admin_username}, port={self.config.api_port}, "
+            f"adapters={','.join(setup_payload['enabled_adapters'])}[/dim]"
+        )
+
+        try:
+            response = requests.post(
+                f"{self.config.base_url}/v1/setup/complete",
+                json=setup_payload,
+                timeout=30,
+            )
+            if response.status_code == 200:
+                self.console.print("[green][OK] Setup completed, test user created[/green]")
+                try:
+                    response_json = response.json()
+                    message = response_json.get("data", {}).get("message")
+                    next_steps = response_json.get("data", {}).get("next_steps")
+                    if message:
+                        self.console.print(f"[dim]Setup response: {message}[/dim]")
+                    if next_steps:
+                        self.console.print(f"[dim]Next steps: {next_steps}[/dim]")
+                except Exception:
+                    self.console.print("[dim]Setup completed but response body was not parseable JSON[/dim]")
+                # Store the password we used
+                self._extracted_password = setup_payload["admin_password"]
+                return True
+            else:
+                self.console.print(f"[red][FAIL] Setup failed: {response.status_code} - {response.text[:200]}[/red]")
+                self._report_first_run_diagnostics("setup-complete failed")
+                return False
+        except Exception as e:
+            self.console.print(f"[red][FAIL] Setup error: {e}[/red]")
+            self._report_first_run_diagnostics("setup-complete request raised exception")
+            return False
+
+    def _fetch_json(self, path: str, timeout: float = 3.0, headers: Optional[Dict[str, str]] = None) -> Optional[Dict]:
+        """Fetch a JSON response for diagnostics."""
+        try:
+            response = requests.get(f"{self.config.base_url}{path}", headers=headers, timeout=timeout)
+            try:
+                payload = response.json()
+            except Exception:
+                payload = {"raw_text": response.text[:500]}
+            return {"status_code": response.status_code, "payload": payload}
+        except Exception as exc:
+            return {"error": str(exc)}
+
+    def _report_first_run_diagnostics(self, reason: str, token: Optional[str] = None) -> None:
+        """Emit setup/runtime diagnostics when first-run bootstrap gets stuck."""
+        self.console.print(f"[yellow] First-run diagnostics: {reason}[/yellow]")
+
+        setup_status = self._fetch_json("/v1/setup/status")
+        if setup_status:
+            self.console.print(f"[dim]  /v1/setup/status: {setup_status}[/dim]")
+
+        headers = {"Authorization": f"Bearer {token}"} if token else None
+        agent_status = self._fetch_json("/v1/agent/status", headers=headers)
+        if agent_status:
+            self.console.print(f"[dim]  /v1/agent/status: {agent_status}[/dim]")
+
+        system_status = self._fetch_json("/v1/system/status", headers=headers)
+        if system_status:
+            self.console.print(f"[dim]  /v1/system/status: {system_status}[/dim]")
+
+        # Surface the actual ERROR/CRITICAL lines from incidents_latest.log
+        # (not the tail of console.log — the real cause is usually 9+ minutes
+        # upstream of the timeout, and tail-N would only show the polling
+        # noise that fired right before we gave up). The CI "Agent never
+        # reached WORK" bug used to require downloading artifacts and grep'ing
+        # by hand; surfacing all ERROR/CRITICAL lines here makes it visible
+        # right in the step log.
+        incidents_path = Path(f"logs/{self.database_backend}/incidents_latest.log")
+        if incidents_path.exists():
+            try:
+                content = incidents_path.read_text(errors="ignore")
+                lines = content.splitlines()
+                # Pull ALL ERROR/CRITICAL lines + the 5 lines after each (for
+                # traceback context). Dedup so a repeated handler doesn't
+                # explode the output.
+                surfaced: list[str] = []
+                seen: set[str] = set()
+                for i, line in enumerate(lines):
+                    if " - ERROR" in line or " - CRITICAL" in line or "RUNTIME SHUTDOWN REQUESTED" in line:
+                        # Include 5 trailing lines for traceback context
+                        block = lines[i : min(i + 6, len(lines))]
+                        key = "\n".join(block[:1])
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        surfaced.extend(block)
+                        surfaced.append("")  # blank separator
+                if surfaced:
+                    self.console.print(
+                        f"[red]  ERROR/CRITICAL lines from {incidents_path} " f"({len(seen)} distinct):[/red]"
+                    )
+                    for line in surfaced[:200]:  # cap at 200 lines total
+                        self.console.print(f"[dim]    {line[:300]}[/dim]")
+                else:
+                    self.console.print(
+                        f"[dim]  No ERROR/CRITICAL lines in {incidents_path} " f"({len(lines)} lines scanned)[/dim]"
+                    )
+            except Exception as exc:
+                self.console.print(f"[dim]  Could not read incidents log: {exc}[/dim]")
+        else:
+            self.console.print(f"[dim]  No incidents log at {incidents_path}[/dim]")
+
+        # ALSO show the last 20 console lines for completeness — useful when
+        # the failure is at the shell level (server died before logging set
+        # up the file handlers).
+        console_log_path = getattr(self, "_console_log_path", None)
+        if console_log_path and Path(console_log_path).exists():
+            try:
+                recent = Path(console_log_path).read_text(errors="ignore").splitlines()[-20:]
+                self.console.print("[dim]  Recent console log (last 20 lines):[/dim]")
+                for line in recent:
+                    self.console.print(f"[dim]    {line[:220]}[/dim]")
+            except Exception as exc:
+                self.console.print(f"[dim]  Could not read console log: {exc}[/dim]")
 
     def _wait_for_server(self) -> bool:
         """Wait for server to be ready and reach WORK state."""
@@ -719,7 +1997,7 @@ class APIServerManager:
                 # Process died - read error from console log file
                 exit_code = self.process.returncode
                 error_output = ""
-                console_log_path = f"/tmp/qa_runner_console_{self.database_backend}_{self.config.api_port}.txt"
+                console_log_path = getattr(self, "_console_log_path", f"logs/{self.database_backend}/console.log")
                 try:
                     with open(console_log_path, "r") as f:
                         # Read last 1000 chars to find error
@@ -729,13 +2007,30 @@ class APIServerManager:
                         error_output = f.read()
                 except Exception:
                     pass
-                self.console.print(f"[red]Server process died (exit code: {exit_code})[/red]")
+                self.console.print(f"[red][FAIL] Server process died (exit code: {exit_code})[/red]")
+                self.console.print(f"[yellow] Troubleshooting info:[/yellow]")
+                self.console.print(f"[dim]   Console log: {console_log_path}[/dim]")
+                self.console.print(f"[dim]   CIRIS log: logs/{self.database_backend}/latest.log[/dim]")
+                self.console.print(f"[dim]   Incidents: logs/{self.database_backend}/incidents_latest.log[/dim]")
                 if error_output:
                     # Show last few lines of output
-                    lines = error_output.strip().split("\n")[-10:]
-                    self.console.print(f"[red]Last output:[/red]")
+                    lines = error_output.strip().split("\n")[-15:]
+                    self.console.print(f"[red]Last console output:[/red]")
                     for line in lines:
                         self.console.print(f"[dim]{line}[/dim]")
+                # Also check incidents log
+                incidents_log = Path(f"logs/{self.database_backend}/incidents_latest.log")
+                if incidents_log.exists():
+                    try:
+                        with open(incidents_log, "r") as f:
+                            incidents = f.read()
+                            error_lines = [l for l in incidents.split("\n") if "ERROR" in l or "CRITICAL" in l]
+                            if error_lines:
+                                self.console.print(f"[red]Errors from incidents log:[/red]")
+                                for line in error_lines[-5:]:
+                                    self.console.print(f"[dim]{line[:200]}[/dim]")
+                    except Exception:
+                        pass
                 return False
 
             # Check if server is responding
@@ -747,34 +2042,39 @@ class APIServerManager:
             # Timeout waiting for health check
             return False
 
-        # SETUP module: Skip WORK state check (first-run mode doesn't reach WORK)
-        if QAModule.SETUP in self.modules:
-            self.console.print("[green]✅ Server ready for SETUP tests (first-run mode)[/green]")
+        # Extract dynamically generated password from console log
+        # This is needed because the admin password is now randomly generated per process
+        extracted_pwd = self._extract_password_from_log()
+        if extracted_pwd:
+            self._extracted_password = extracted_pwd
+
+        # If data was wiped, complete setup to create test user before authenticating
+        if self.config.wipe_data:
+            if not self._complete_qa_setup():
+                return False
+            self.console.print("[cyan]⏳ Waiting for setup-triggered runtime resume...[/cyan]")
+            time.sleep(1.0)
+
+        # Modules that validate first-run/API configuration flows do not require
+        # the agent processor to advertise WORK before they can proceed, but
+        # they still need the setup wizard completed so authentication works.
+        if QAModule.SETUP in self.modules or QAModule.HOMEASSISTANT_AGENTIC in self.modules:
+            self.console.print("[green][OK] Server ready for first-run/API configuration tests[/green]")
             return True
 
         # Now wait for agent to reach WORK state
         self.console.print("[cyan]⏳ Waiting for agent to reach WORK state...[/cyan]")
 
         # Get auth token for checking cognitive state
-        token = None
-        try:
-            auth_response = requests.post(
-                f"{self.config.base_url}/v1/auth/login",
-                json={"username": self.config.admin_username, "password": self.config.admin_password},
-                timeout=5,
-            )
-            if auth_response.status_code == 200:
-                token = auth_response.json()["access_token"]
-            else:
-                self.console.print(
-                    f"[red]❌ Authentication failed: {auth_response.status_code} - {auth_response.text[:100]}[/red]"
-                )
-                self.console.print("[yellow]Hint: Try --wipe-data to clear stale state, or check credentials[/yellow]")
-                return False  # Exit immediately on auth failure
-        except Exception as e:
-            self.console.print(f"[red]❌ Authentication error: {e}[/red]")
-            return False  # Exit immediately on auth error
+        # Use dynamically extracted password if available, otherwise fall back to config
+        admin_password = self.get_admin_password()
+        token = self._authenticate_with_retry(admin_password, start_time=start_time)
+        if token is None:
+            # Diagnostics already emitted by _authenticate_with_retry on its final failure.
+            return False
 
+        last_reported_state = ""
+        last_state_report_at = 0.0
         while time.time() - start_time < self.config.server_startup_timeout:
             try:
                 headers = {}
@@ -794,19 +2094,25 @@ class APIServerManager:
                     )
 
                     if is_work:
-                        self.console.print(f"[green]✅ Agent reached WORK state[/green]")
+                        self.console.print(f"[green][OK] Agent reached WORK state[/green]")
                         return True
 
                     # Show current state (clear the line properly)
                     if cognitive_state:
                         # Use \r to overwrite previous line
                         self.console.print(f"[dim]Current state: {cognitive_state:<30}[/dim]", end="\r")
+                        now = time.time()
+                        if cognitive_state != last_reported_state or now - last_state_report_at >= 5.0:
+                            self.console.print(f"[dim]State poll: cognitive_state={cognitive_state}[/dim]")
+                            last_reported_state = cognitive_state
+                            last_state_report_at = now
             except Exception:
                 pass
 
             time.sleep(1)
 
-        self.console.print("[yellow]⚠️  Agent did not reach WORK state in time[/yellow]")
+        self.console.print("[yellow][WARN] Agent did not reach WORK state in time[/yellow]")
+        self._report_first_run_diagnostics("agent never reached WORK", token=token)
         return False
 
     def _kill_by_port(self):
@@ -841,6 +2147,6 @@ class APIServerManager:
                         except:
                             pass
         except TimeoutError:
-            self.console.print("[yellow]⚠️  Port cleanup timed out[/yellow]")
+            self.console.print("[yellow][WARN] Port cleanup timed out[/yellow]")
         except:
             pass

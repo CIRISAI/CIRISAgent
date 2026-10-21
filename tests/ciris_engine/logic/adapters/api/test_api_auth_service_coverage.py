@@ -4,7 +4,6 @@ Covers uncovered code paths:
 - _hash_key / _verify_key
 - _get_key_id
 - store_api_key / validate_api_key / revoke_api_key
-- create_oauth_user
 - _wa_role_to_api_role
 - _user_role_to_api_role
 - get_permissions_for_role
@@ -18,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, OAuthUser, StoredAPIKey, User
+from ciris_engine.logic.adapters.api.services.auth_service import APIAuthService, StoredAPIKey, User
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.api import APIRole
 from ciris_engine.schemas.services.authority_core import WARole
@@ -130,8 +129,12 @@ class TestStoreAndValidateAPIKey:
 
         assert result is None
 
-    def test_validate_creates_system_admin_user(self):
-        """validate_api_key creates system admin user if missing."""
+    def test_validate_key_without_user(self):
+        """validate_api_key works even if user doesn't exist in cache.
+
+        API key validation is separate from user existence.
+        Users are created via setup wizard, not auto-created.
+        """
         service = APIAuthService()
         key = "ciris_admin_sysadminkey123"
 
@@ -141,13 +144,15 @@ class TestStoreAndValidateAPIKey:
             role=UserRole.SYSTEM_ADMIN,
         )
 
-        # Clear the user
+        # Clear the user (simulates user not in cache)
         service._users.clear()
 
+        # Key validation should still succeed (key exists)
         result = service.validate_api_key(key)
-
         assert result is not None
-        assert "wa-system-admin" in service._users
+
+        # But user is NOT auto-created (users come from setup wizard)
+        assert "wa-system-admin" not in service._users
 
 
 class TestRevokeAPIKey:
@@ -176,66 +181,6 @@ class TestRevokeAPIKey:
         service = APIAuthService()
         service.revoke_api_key("nonexistent-key-id")
         # Should not raise
-
-
-class TestCreateOAuthUser:
-    """Tests for create_oauth_user."""
-
-    def test_creates_new_user(self):
-        """Creates new OAuth user."""
-        service = APIAuthService()
-
-        user = service.create_oauth_user(
-            provider="google",
-            external_id="12345",
-            email="test@example.com",
-            name="Test User",
-            role=UserRole.OBSERVER,
-        )
-
-        assert user.user_id == "google:12345"
-        assert user.email == "test@example.com"
-        assert user.provider == "google"
-
-    def test_updates_existing_user(self):
-        """Updates existing OAuth user."""
-        service = APIAuthService()
-
-        # Create first
-        service.create_oauth_user(
-            provider="google",
-            external_id="12345",
-            email="old@example.com",
-            name="Old Name",
-            role=UserRole.OBSERVER,
-        )
-
-        # Update
-        user = service.create_oauth_user(
-            provider="google",
-            external_id="12345",
-            email="new@example.com",
-            name="New Name",
-            role=UserRole.ADMIN,
-        )
-
-        assert user.email == "new@example.com"
-        assert user.name == "New Name"
-
-    def test_marketing_opt_in(self):
-        """Stores marketing opt-in preference."""
-        service = APIAuthService()
-
-        user = service.create_oauth_user(
-            provider="google",
-            external_id="12345",
-            email="test@example.com",
-            name="Test User",
-            role=UserRole.OBSERVER,
-            marketing_opt_in=True,
-        )
-
-        assert user.marketing_opt_in is True
 
 
 class TestWARoleToAPIRole:

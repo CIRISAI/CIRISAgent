@@ -18,11 +18,12 @@ from ciris_engine.protocols.runtime.base import BaseDMAProtocol
 class PDMAProtocol(BaseDMAProtocol):
     """Principled Decision Making Algorithm - evaluates ethical implications."""
 
-    # The evaluate method from BaseDMAProtocol is sufficient
-    # Implementation returns EthicalDMAResult which contains:
-    # - alignment_check: Detailed ethical analysis
-    # - decision: The ethically optimal action
-    # - rationale: Justification for the decision
+    # The evaluate method from BaseDMAProtocol is sufficient.
+    # Implementation returns EthicalDMAResult (v3.0 reshape) which contains:
+    # - action: Recommended next HandlerActionType
+    # - rationale: One paragraph weaving subject / stakeholders / conflicts /
+    #   principles analysis, carrying the proposed content implicitly
+    # - alignment_score: torque-felt [0,1] confidence; bounce gate at 0.5
 
 
 class CSDMAProtocol(BaseDMAProtocol):

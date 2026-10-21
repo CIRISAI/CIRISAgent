@@ -9,8 +9,9 @@ This is a refactored version with better modularity and testability.
 
 import html
 import logging
+import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse, Response
@@ -20,7 +21,17 @@ from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
 from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult, MemoryOpStatus
 
-from ..dependencies.auth import AuthContext, require_admin, require_observer
+from ..dependencies.auth import AuthContext
+from ._common import (
+    RESPONSES_403,
+    RESPONSES_404,
+    RESPONSES_404_500_503,
+    RESPONSES_500,
+    RESPONSES_500_503,
+    RESPONSES_503,
+    AuthAdminDep,
+    AuthObserverDep,
+)
 from .memory_filters import filter_nodes_by_user_attribution, get_user_allowed_ids, should_apply_user_filtering
 
 # Import extracted modules
@@ -29,6 +40,23 @@ from .memory_queries import get_memory_stats, query_timeline_nodes, search_nodes
 from .memory_visualization import generate_svg
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging.
+
+    Prevents log injection by removing control characters and truncating.
+    """
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    # Remove control characters (C0: 0x00-0x1f, DEL+C1: 0x7f-0x9f)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    # Truncate to prevent log flooding
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -49,6 +77,10 @@ def get_memory_service(request: Request) -> Any:
     if not memory_service:
         raise HTTPException(status_code=503, detail=MEMORY_SERVICE_NOT_AVAILABLE)
     return memory_service
+
+
+# Annotated type alias for memory service dependency (SonarCloud S8410)
+MemoryServiceDep = Annotated[Any, Depends(get_memory_service)]
 
 
 # ============================================================================
@@ -84,7 +116,7 @@ async def get_user_filter_ids_for_observer(request: Request, auth: AuthContext) 
     if not user_id:
         raise HTTPException(status_code=401, detail=USER_ID_NOT_FOUND)
 
-    allowed_user_ids = await get_user_allowed_ids(auth_service, user_id)
+    allowed_user_ids = await get_user_allowed_ids(user_id)
     return list(allowed_user_ids)
 
 
@@ -293,12 +325,12 @@ def generate_html_wrapper(svg: str, hours: int, layout: str, node_count: int, wi
 # ============================================================================
 
 
-@router.post("/store", response_model=SuccessResponse[MemoryOpResult[GraphNode]])
+@router.post("/store", responses=RESPONSES_500_503)
 async def store_memory(
     request: Request,
     body: StoreRequest,
-    auth: AuthContext = Depends(require_admin),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthAdminDep,
+    memory_service: MemoryServiceDep,
 ) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Store typed nodes in memory (MEMORIZE).
@@ -325,12 +357,12 @@ async def store_memory(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/query", response_model=SuccessResponse[List[GraphNode]])
+@router.post("/query", responses=RESPONSES_500_503)
 async def query_memory(
     request: Request,
     body: QueryRequest,
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
 ) -> SuccessResponse[List[GraphNode]]:
     """
     Query memories with flexible filters (RECALL).
@@ -397,12 +429,13 @@ async def query_memory(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{node_id}", response_model=SuccessResponse[MemoryOpResult[GraphNode]])
+@router.delete("/{node_id}", responses=RESPONSES_500_503)
 async def forget_memory(
     request: Request,
-    node_id: str = Path(..., description="Node ID to forget"),
-    auth: AuthContext = Depends(require_admin),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthAdminDep,
+    memory_service: MemoryServiceDep,
+    node_id: Annotated[str, Path(description="Node ID to forget")],
+    scope: Annotated[Optional[str], Query(description="Graph scope (local, environment, community)")] = None,
 ) -> SuccessResponse[MemoryOpResult[GraphNode]]:
     """
     Forget a specific memory node (FORGET).
@@ -415,10 +448,19 @@ async def forget_memory(
         # The forget method will look up the full node internally
         from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
+        # Parse scope from query param, default to LOCAL for backwards compatibility
+        graph_scope = GraphScope.LOCAL
+        if scope:
+            scope_lower = scope.lower()
+            if scope_lower == "environment":
+                graph_scope = GraphScope.ENVIRONMENT
+            elif scope_lower == "community":
+                graph_scope = GraphScope.COMMUNITY
+
         node_to_forget = GraphNode(
             id=node_id,
             type=NodeType.CONCEPT,  # Default type, will be looked up by forget method
-            scope=GraphScope.LOCAL,  # Default scope
+            scope=graph_scope,
             attributes={},
         )
 
@@ -443,14 +485,16 @@ async def forget_memory(
 # ============================================================================
 
 
-@router.get("/timeline", response_model=SuccessResponse[TimelineResponse])
+@router.get("/timeline", responses=RESPONSES_500_503)
 async def get_timeline(
     request: Request,
-    hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    scope: Optional[str] = Query(None, description="Filter by scope"),
-    type: Optional[str] = Query(None, description="Filter by node type"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
+    hours: Annotated[int, Query(ge=1, le=168, description="Hours to look back")] = 24,
+    scope: Annotated[Optional[str], Query(description="Filter by scope (None = all scopes)")] = None,
+    type: Annotated[Optional[str], Query(description="Filter by node type")] = None,
+    include_edges: Annotated[bool, Query(description="Include edges in response")] = True,
+    include_metrics: Annotated[bool, Query(description="Include metric/tsdb nodes")] = False,
 ) -> SuccessResponse[TimelineResponse]:
     """
     Get a timeline view of recent memories.
@@ -463,9 +507,15 @@ async def get_timeline(
         # Determine user filtering before queries (for OBSERVER users)
         user_filter_ids = await get_user_filter_ids_for_observer(request, auth)
 
+        # Sanitize user-controlled data before logging
         logger.info(
-            f"[TIMELINE] Request: hours={hours}, scope={scope}, type={type}, "
-            f"user={auth.user_id}, role={auth.role}, filter_ids={user_filter_ids}"
+            "[TIMELINE] Request: hours=%d, scope=%s, type=%s, user=%s, role=%s, filter_count=%d",
+            hours,
+            _sanitize_for_log(scope),
+            _sanitize_for_log(type),
+            _sanitize_for_log(auth.user_id),
+            _sanitize_for_log(auth.role),
+            len(user_filter_ids) if user_filter_ids else 0,
         )
 
         # Query timeline nodes (with SQL Layer 1 filtering if OBSERVER)
@@ -475,6 +525,7 @@ async def get_timeline(
             scope=scope,
             node_type=type,
             limit=1000,
+            exclude_metrics=not include_metrics,  # Include metrics if requested
             user_filter_ids=user_filter_ids,  # SECURITY LAYER 1: SQL-level filtering
         )
 
@@ -494,8 +545,24 @@ async def get_timeline(
         start_time = now - timedelta(hours=hours)
         buckets = calculate_time_buckets(nodes, hours)
 
+        # Fetch edges in a single batch query if requested
+        edges: List[GraphEdge] = []
+        if include_edges and nodes:
+            import time as time_module
+
+            edge_start = time_module.time()
+            from ciris_engine.logic.persistence.models.graph import get_edges_for_nodes_batch
+
+            node_ids = [n.id for n in nodes]
+            # Parse scope for edge query (None = all scopes)
+            edge_scope = GraphScope(scope) if scope else None
+            edges = get_edges_for_nodes_batch(node_ids=node_ids, scope=edge_scope)
+            edge_ms = (time_module.time() - edge_start) * 1000
+            logger.info(f"[TIMELINE] Batch edge fetch: {len(edges)} edges in {edge_ms:.1f}ms")
+
         response = TimelineResponse(
             memories=nodes,
+            edges=edges,
             buckets=buckets,
             start_time=start_time,
             end_time=now,
@@ -515,11 +582,11 @@ async def get_timeline(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/stats", response_model=SuccessResponse[MemoryStats])
+@router.get("/stats", responses=RESPONSES_500_503)
 async def get_stats(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
 ) -> SuccessResponse[MemoryStats]:
     """
     Get statistics about memory storage.
@@ -528,7 +595,7 @@ async def get_stats(
     """
     try:
         # Get stats from database
-        stats_data = await get_memory_stats(memory_service)
+        stats_data = await get_memory_stats()
 
         # Get date range
         oldest = None
@@ -580,17 +647,17 @@ async def get_stats(
 # ============================================================================
 
 
-@router.get("/visualize/graph")
+@router.get("/visualize/graph", responses=RESPONSES_500_503)
 async def visualize_graph(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
     layout: str = Query("hierarchy", description="Layout: hierarchy, timeline, circular"),
     width: int = Query(800, ge=400, le=2000, description="SVG width"),
     height: int = Query(600, ge=300, le=1500, description="SVG height"),
     scope: Optional[str] = Query(None, description="Filter by scope"),
     type: Optional[str] = Query(None, description="Filter by node type"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> Response:
     """
     Generate an interactive SVG visualization of the memory graph.
@@ -638,12 +705,12 @@ async def visualize_graph(
 # No direct API endpoint should be exposed for manual memory manipulation
 
 
-@router.get("/{node_id}/edges", response_model=SuccessResponse[List[GraphEdge]])
+@router.get("/{node_id}/edges", responses=RESPONSES_500_503)
 async def get_node_edges(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[List[GraphEdge]]:
     """
     Get all edges connected to a node.
@@ -673,12 +740,12 @@ async def get_node_edges(
 # ============================================================================
 
 
-@router.get("/recall/{node_id}", response_model=SuccessResponse[GraphNode])
+@router.get("/recall/{node_id}", responses={**RESPONSES_403, **RESPONSES_404, **RESPONSES_500, **RESPONSES_503})
 async def recall_by_id(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID to recall"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Recall a specific node by ID (legacy endpoint).
@@ -688,17 +755,30 @@ async def recall_by_id(
     SECURITY: OBSERVER users can only access nodes they created or participated in.
     """
     try:
-        # Use recall method with a query for the specific node
+        # Use recall method with a query for the specific node.
+        # Node IDs are globally unique, but the MemoryQuery requires a
+        # scope — we probe scopes in usage-order so a typical LOCAL node
+        # resolves in one query and cross-scope nodes (e.g. the singleton
+        # ``agent/identity`` in the IDENTITY scope) still resolve.
         from ciris_engine.schemas.services.operations import MemoryQuery
 
-        query = MemoryQuery(
-            node_id=node_id,
-            scope=GraphScope.LOCAL,
-            type=None,
-            include_edges=True,  # Include edges for detail view
-            depth=1,
-        )
-        nodes = await memory_service.recall(query)
+        nodes = []
+        for probe_scope in (
+            GraphScope.LOCAL,
+            GraphScope.IDENTITY,
+            GraphScope.ENVIRONMENT,
+            GraphScope.COMMUNITY,
+        ):
+            query = MemoryQuery(
+                node_id=node_id,
+                scope=probe_scope,
+                type=None,
+                include_edges=True,  # Include edges for detail view
+                depth=1,
+            )
+            nodes = await memory_service.recall(query)
+            if nodes:
+                break
         if not nodes:
             raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
 
@@ -734,16 +814,22 @@ async def recall_by_id(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{node_id}", response_model=SuccessResponse[GraphNode])
+@router.get("/{node_id:path}", responses={**RESPONSES_403, **RESPONSES_404, **RESPONSES_500, **RESPONSES_503})
 async def get_node(
     request: Request,
+    auth: AuthObserverDep,
+    memory_service: MemoryServiceDep,
     node_id: str = Path(..., description="Node ID"),
-    auth: AuthContext = Depends(require_observer),
-    memory_service: Any = Depends(get_memory_service),
 ) -> SuccessResponse[GraphNode]:
     """
     Get a specific node by ID.
 
     Standard RESTful endpoint for node retrieval.
+
+    Uses `{node_id:path}` so IDs containing forward slashes
+    (e.g. ``agent/identity``, hardcoded in
+    ``ciris_engine/logic/persistence/models/identity.py``) route
+    correctly. Without ``:path`` FastAPI splits the URL at the slash
+    and the route never matches.
     """
-    return await recall_by_id(request, node_id, auth, memory_service)
+    return await recall_by_id(request, auth, memory_service, node_id)

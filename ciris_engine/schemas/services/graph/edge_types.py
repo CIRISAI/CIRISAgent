@@ -18,7 +18,7 @@ class EdgeAttributes(BaseModel):
     confidence: float = Field(1.0, ge=0.0, le=1.0, description="Confidence score")
     metadata: JSONDict = Field(default_factory=dict, description="Additional metadata")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class ParticipantData(BaseModel):
@@ -31,7 +31,7 @@ class ParticipantData(BaseModel):
     last_seen: Optional[str] = Field(None, description="Last interaction timestamp")
     role: Optional[str] = Field(None, description="User role if known")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class EdgeSpecification(BaseModel):

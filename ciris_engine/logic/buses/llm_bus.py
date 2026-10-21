@@ -3,9 +3,13 @@ LLM message bus - handles all LLM service operations with redundancy and distrib
 """
 
 import asyncio
+import hashlib
+import json
 import logging
+import os
 import random
 import re
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
 from ciris_engine.logic.utils import error_emitter
@@ -14,16 +18,23 @@ from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
+    from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
     from ciris_engine.schemas.services.llm import LLMMessage
 
 from collections import defaultdict
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
 from enum import Enum
 
 from pydantic import BaseModel
 
-from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
+from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, current_call_deadline
+from ciris_engine.logic.registries.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitState,
+    ProviderCircuitOpenError,
+    breaker_call_scope,
+)
 from ciris_engine.protocols.services import LLMService
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -36,6 +47,195 @@ from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from .base_bus import BaseBus, BusMessage
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _ProviderPass:
+    """What one pass over the providers produced (internal to call_llm_structured)."""
+
+    result: Optional[Tuple[BaseModel, ResourceUsage]] = None
+    tried_any: bool = False
+    breaker_skipped: List[Tuple[str, Any]] = field(default_factory=list)
+    last_error: Optional[Exception] = None
+
+
+def _classify_error(exc: BaseException) -> str:
+    """Map an exception to one of the LLMCallEvent.status enum values.
+
+    Keep this list consistent with the schema docstring. Any class not matched
+    here lands in 'other_error'; the exception class name is preserved in
+    error_class so we don't lose fidelity for unrecognized failures.
+    """
+    cls = exc.__class__.__name__.lower()
+    if "timeout" in cls or "deadlineexceeded" in cls:
+        return "timeout"
+    if "ratelimit" in cls or "429" in str(exc)[:32].lower():
+        return "rate_limited"
+    if "modelnotfound" in cls or "model_not_available" in str(exc)[:64].lower():
+        return "model_not_available"
+    if "instructorretry" in cls:
+        return "instructor_retry"
+    return "other_error"
+
+
+def _safe_messages_to_text(messages: List[JSONDict]) -> str:
+    """Serialize the prompt messages list to a flat string for byte-counting
+    and content hashing. Uses JSON for round-trippability."""
+    try:
+        return json.dumps(messages, ensure_ascii=False, sort_keys=False)
+    except (TypeError, ValueError):
+        # Fall back to repr() if any nested object isn't JSON-able
+        return repr(messages)
+
+
+@dataclass
+class LLMCallEventContext:
+    """Bundle of arguments for emitting one ReasoningEvent.LLM_CALL.
+
+    Grouping these into a context dataclass keeps the broadcast helper's
+    parameter count under the 13-arg threshold (was 14 individual kwargs)
+    and gives callers one symbol to construct + reuse on success / failure
+    paths instead of repeating the kwarg list at each emit site.
+    """
+
+    success: bool
+    handler_name: str
+    service_name: str
+    selected_service: Any
+    api_base: Optional[str]
+    response_model: Type[BaseModel]
+    messages: List[JSONDict]
+    result: Optional[BaseModel]
+    usage: Optional[ResourceUsage]
+    duration_ms: float
+    thought_id: Optional[str]
+    task_id: Optional[str]
+    retry_count: int
+    error: Optional[BaseException] = None
+
+
+def _extract_call_model(selected_service: Any) -> Optional[str]:
+    """Get the provider model identifier from whichever attribute the
+    selected_service exposes (varies between services)."""
+    if hasattr(selected_service, "model_name"):
+        return cast(Optional[str], getattr(selected_service, "model_name", None))
+    if hasattr(selected_service, "openai_config") and selected_service.openai_config:
+        return cast(Optional[str], getattr(selected_service.openai_config, "model_name", None))
+    return None
+
+
+def _extract_usage_metrics(
+    usage: Optional[ResourceUsage],
+) -> Tuple[Optional[int], Optional[int], Optional[float]]:
+    """Return (prompt_tokens, completion_tokens, cost_usd) from a
+    ResourceUsage record. Tolerates both modern (tokens_input) and legacy
+    (prompt_tokens) field names."""
+    if usage is None:
+        return None, None, None
+    prompt_tokens = getattr(usage, "tokens_input", None) or getattr(usage, "prompt_tokens", None)
+    completion_tokens = getattr(usage, "tokens_output", None) or getattr(usage, "completion_tokens", None)
+    cost_cents = getattr(usage, "cost_cents", None)
+    cost_usd = float(cost_cents) / 100.0 if cost_cents is not None else None
+    return prompt_tokens, completion_tokens, cost_usd
+
+
+def _serialize_response(result: Optional[BaseModel]) -> Tuple[Optional[str], Optional[int]]:
+    """Return (response_text, completion_bytes) from a Pydantic result.
+    Failures here MUST NOT block the broadcast — fall back to (None, None)."""
+    if result is None:
+        return None, None
+    try:
+        if hasattr(result, "model_dump_json"):
+            response_text = result.model_dump_json()
+        else:
+            response_text = json.dumps(getattr(result, "__dict__", {}), default=str)
+    except Exception:
+        return None, None
+    return response_text, len(response_text.encode("utf-8"))
+
+
+def _resolve_status_and_error_class(success: bool, error: Optional[BaseException]) -> Tuple[str, Optional[str]]:
+    """Map (success, error) to (status_enum, error_class_name)."""
+    if success:
+        return "ok", None
+    if error is None:
+        return "other_error", None
+    return _classify_error(error), error.__class__.__name__
+
+
+async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
+    """Emit one ReasoningEvent.LLM_CALL per provider invocation.
+
+    Called from BOTH the success path (in _execute_llm_call after the call
+    returns) and the failure path (in _try_service's exception handler) so
+    every call — successful, retried, or failed — produces exactly one
+    discrete event. Best-effort: any exception in the broadcast itself is
+    logged and swallowed so the LLM call path is never affected by trace-side
+    issues.
+    """
+    try:
+        from ciris_engine.logic.buses.llm_call_context import UNKNOWN_PARENT_EVENT_TYPE, get_parent_event_context
+        from ciris_engine.logic.infrastructure.step_streaming import reasoning_event_stream
+        from ciris_engine.schemas.services.runtime_control import ReasoningEvent
+        from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
+
+        model = _extract_call_model(ctx.selected_service)
+        prompt_tokens, completion_tokens, cost_usd = _extract_usage_metrics(ctx.usage)
+
+        prompt_text = _safe_messages_to_text(ctx.messages)
+        prompt_bytes = len(prompt_text.encode("utf-8"))
+        prompt_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
+
+        response_text, completion_bytes = _serialize_response(ctx.result)
+        status, error_class = _resolve_status_and_error_class(ctx.success, ctx.error)
+
+        # Parent-event linkage per TRACE_WIRE_FORMAT.md §5.10. Required
+        # as of 2.7.9 — emit on every LLM_CALL. Sentinel surfaces uncovered
+        # code paths so we can wire them as we find them.
+        parent_event_type, parent_attempt_index = get_parent_event_context()
+        if parent_event_type == UNKNOWN_PARENT_EVENT_TYPE:
+            logger.warning(
+                "[LLM_CALL parent] no streaming_step on the call stack — "
+                "emitting parent_event_type=%r. Wire a parent context at "
+                "the call site to fix this.",
+                parent_event_type,
+            )
+
+        event = create_reasoning_event(
+            event_type=ReasoningEvent.LLM_CALL,
+            thought_id=ctx.thought_id,
+            task_id=ctx.task_id,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            handler_name=ctx.handler_name,
+            service_name=ctx.service_name,
+            model=model,
+            base_url=ctx.api_base,
+            response_model=ctx.response_model.__name__,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            prompt_bytes=prompt_bytes,
+            completion_bytes=completion_bytes,
+            cost_usd=cost_usd,
+            duration_ms=float(ctx.duration_ms),
+            status=status,
+            error_class=error_class,
+            attempt_count=1,  # Instructor-level attempt count not surfaced through bus today; reserved
+            retry_count=ctx.retry_count,
+            prompt_hash=prompt_hash,
+            # prompt and response_text are populated for the trace adapter to gate
+            # by trace level (DETAILED+ keeps hash; FULL keeps full text). The bus
+            # ships them and lets the adapter strip per-level.
+            prompt=prompt_text,
+            response_text=response_text,
+            # Parent linkage — see comment above.
+            parent_event_type=parent_event_type,
+            parent_attempt_index=parent_attempt_index,
+        )
+        await reasoning_event_stream.broadcast_reasoning_event(event)
+    except Exception as broadcast_exc:
+        # Trace plumbing failure must never break the LLM call path. Log once
+        # at warning level so the gap is visible in incidents.
+        logger.warning(f"[LLM_CALL broadcast] failed: {broadcast_exc!r}", exc_info=False)
 
 
 class DistributionStrategy(str, Enum):
@@ -104,8 +304,11 @@ class LLMBus(BaseBus[LLMService]):
         telemetry_service: Optional[TelemetryServiceProtocol] = None,
         distribution_strategy: DistributionStrategy = DistributionStrategy.LATENCY_BASED,
         circuit_breaker_config: Optional[JSONDict] = None,
+        resource_monitor: Optional["ResourceMonitorServiceProtocol"] = None,
     ):
         super().__init__(service_type=ServiceType.LLM, service_registry=service_registry)
+        # Receives each completed call's tokens (tokens_hour / tokens_day budgets).
+        self.resource_monitor = resource_monitor
 
         self._time_service = time_service
         self._start_time = time_service.now() if time_service else None
@@ -116,6 +319,10 @@ class LLMBus(BaseBus[LLMService]):
         # Service metrics and circuit breakers
         self.service_metrics: dict[str, ServiceMetrics] = defaultdict(ServiceMetrics)
         self.circuit_breakers: dict[str, CircuitBreaker] = {}
+        # The last error each provider actually RETURNED. A breaker skip sends
+        # no request, so it has no error of its own; this is what the skip
+        # reports instead of "Last error: None".
+        self._last_provider_error: dict[str, Exception] = {}
 
         # Track services that have had full error logs to reduce log verbosity
         self._services_with_full_error_logged: set[str] = set()
@@ -128,10 +335,244 @@ class LLMBus(BaseBus[LLMService]):
         self._rate_limited_until: dict[str, float] = {}
         self._rate_limit_cooldown_seconds = 60.0  # Default cooldown when rate limit exhausted
 
+        # Per-service FIFO concurrency gate. asyncio.Semaphore is fair — waiters
+        # are released in the order they called acquire() — so excess callers
+        # queue up rather than blasting the provider. Default 4 in-flight is
+        # conservative for a single external endpoint (Groq/OpenRouter/etc) and
+        # spreads load across a primary+backup pair (4+4 = 8 effective
+        # parallelism while keeping any one provider's queue shallow). Lowered
+        # from 8 in 2.7.4 after the production datum incident: 8-in-flight on
+        # gemma-4 at ~16s/call meant queue depth grew faster than it drained
+        # whenever the backup was unavailable; 4 forces spillover sooner.
+        # Override with CIRIS_LLM_MAX_CONCURRENT for higher-rate-tier providers.
+        try:
+            self._max_in_flight_per_service = max(1, int(os.environ.get("CIRIS_LLM_MAX_CONCURRENT", "4")))
+        except (TypeError, ValueError):
+            self._max_in_flight_per_service = 4
+        self._service_semaphores: dict[str, asyncio.Semaphore] = {}
+        # Explicit pending counter, incremented at selection and decremented on
+        # completion. Needed because asyncio.Semaphore._value only decreases
+        # after `async with` has awaited its turn — under bursty concurrency,
+        # many callers race selection before any of them have acquired, so
+        # LEAST_LOADED needs this counter to see pending-but-unacquired load.
+        self._in_flight: dict[str, int] = defaultdict(int)
+
         # Round-robin state
         self.round_robin_index: dict[int, int] = defaultdict(int)  # priority -> index
 
-        logger.info(f"LLMBus initialized with {distribution_strategy} distribution strategy")
+        logger.info(
+            f"LLMBus initialized with {distribution_strategy} distribution strategy "
+            f"(max {self._max_in_flight_per_service} in-flight per service)"
+        )
+
+    def _get_service_semaphore(self, service_name: str) -> asyncio.Semaphore:
+        """Get or create the FIFO concurrency gate for a service."""
+        sem = self._service_semaphores.get(service_name)
+        if sem is None:
+            sem = asyncio.Semaphore(self._max_in_flight_per_service)
+            self._service_semaphores[service_name] = sem
+        return sem
+
+    def _is_server_error(self, error_str: str, full_error: str) -> bool:
+        """Detect transient upstream server errors (5xx and upstream-provider errors).
+
+        These get the same polite-backoff treatment as 429s — wait, retry, and
+        do NOT count against the circuit breaker. Covers:
+          - HTTP 502 Bad Gateway (upstream dead or overloaded)
+          - HTTP 503 Service Unavailable
+          - HTTP 504 Gateway Timeout
+          - OpenRouter "Provider returned error" (upstream relay error)
+        """
+        combined = f"{error_str} {full_error}".lower()
+        # Match HTTP-shape patterns only — bare "503" or "service unavailable"
+        # are too broad (a generic RuntimeError mentioning "service unavailable"
+        # would trip backoff and retry-loop on a non-transient error).
+        # Look for status codes attached to HTTP-style markers, or specific
+        # provider/proxy error envelopes.
+        return any(
+            marker in combined
+            for marker in (
+                "http 502",
+                "http 503",
+                "http 504",
+                "status 502",
+                "status 503",
+                "status 504",
+                "code: 502",
+                "code: 503",
+                "code: 504",
+                "code': 502",
+                "code': 503",
+                "code': 504",
+                "error code: 502",
+                "error code: 503",
+                "error code: 504",
+                "(502)",
+                "(503)",
+                "(504)",
+                "provider returned error",
+            )
+        )
+
+    # Class-level once-flags so misconfiguration / first-success logs fire
+    # exactly once per process per (handler_filter, path) pair, regardless
+    # of which bus instance ran the call. The capture path is process-
+    # global state already (env vars + filesystem), so process-global once
+    # tracking is the right granularity. Key shape: (filter_str, path_str).
+    _capture_active_logged: set[Tuple[str, str]] = set()
+    _capture_failure_logged: set[Tuple[str, str]] = set()
+
+    def _maybe_capture_call(
+        self,
+        *,
+        handler_name: str,
+        service_name: str,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        messages: List[JSONDict],
+        response_model: Type[BaseModel],
+        result: Any,
+        temperature: float,
+        max_tokens: int,
+    ) -> None:
+        """Diagnostic capture for replay against the bounce harness.
+
+        Writes one JSONL row per matched call. Gated by env vars so
+        production paths are zero-cost (early return on the os.environ
+        lookup if the capture env var is unset).
+
+        Env vars:
+          CIRIS_LLM_CAPTURE_HANDLER  comma-separated list of handler
+                                     names to match against handler_name
+                                     (e.g. 'optimization_veto_conscience'
+                                     or 'entropy_conscience,EthicalPDMA
+                                     Evaluator'), or '*' for all. Unset =
+                                     disabled. Whitespace around list
+                                     items is stripped.
+          CIRIS_LLM_CAPTURE_FILE     output JSONL path. Defaults to
+                                     `~/.ciris/llm_capture.jsonl` (a
+                                     user-private path). Explicitly do
+                                     NOT default to /tmp/ — captured
+                                     data contains LLM messages with
+                                     potentially sensitive content, and
+                                     a world-writable default invites
+                                     symlink attacks and data leakage
+                                     between local users.
+
+        Reliability / observability:
+          - First successful capture write per (filter, path) pair logs
+            INFO so operators can confirm capture is flowing without
+            tailing the file. The agent process log is the authoritative
+            "capture is on" signal.
+          - First failed write per (filter, path) pair logs WARNING with
+            the failure reason so misconfiguration (path doesn't exist,
+            wrong perms, symlink trap) is visible immediately. Subsequent
+            failures stay at debug — the warning fired once and the
+            operator can act.
+          - Exceptions never escape — the diagnostic capture must not
+            crash the real LLM call. The WARNING log replaces the silent-
+            debug failure mode that previously hid all misconfigs.
+
+        Hardening:
+          - The output file is opened with O_NOFOLLOW so a pre-existing
+            symlink at the path (e.g., a hostile local user pointing
+            it at a sensitive file the agent uid can write) causes
+            the open to fail rather than overwrite the symlink target.
+          - O_CREAT with mode 0600 means new files are owner-readable
+            only.
+          - The parent directory is created with mode 0700 if missing
+            (default path only — explicit paths are operator-managed).
+        """
+        import os
+
+        match = os.environ.get("CIRIS_LLM_CAPTURE_HANDLER")
+        if not match:
+            return
+
+        # Comma-separated list support: 'a,b,c' matches if handler_name
+        # equals any of {a, b, c}. Single-name unchanged. '*' anywhere
+        # in the list still wildcards everything.
+        if match == "*":
+            pass  # match all
+        else:
+            match_set = {part.strip() for part in match.split(",") if part.strip()}
+            if "*" not in match_set and handler_name not in match_set:
+                return
+
+        default_dir = os.path.join(os.path.expanduser("~"), ".ciris")
+        default_path = os.path.join(default_dir, "llm_capture.jsonl")
+        out_path = os.environ.get("CIRIS_LLM_CAPTURE_FILE", default_path)
+        _key = (match, out_path)
+
+        try:
+            import json
+
+            # Ensure the parent directory exists with restrictive perms
+            # when we're using the default. We do NOT mkdir for an
+            # explicitly-set path — that's the operator's responsibility.
+            if out_path == default_path:
+                os.makedirs(default_dir, mode=0o700, exist_ok=True)
+
+            row = {
+                "handler": handler_name,
+                "service": service_name,
+                "thought_id": thought_id,
+                "task_id": task_id,
+                "response_model": response_model.__name__,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "messages": messages,
+                "result": (result.model_dump() if hasattr(result, "model_dump") else str(result)),
+            }
+
+            # O_NOFOLLOW: refuse to follow a symlink at out_path. If a
+            # hostile local user pre-created out_path as a symlink to a
+            # sensitive file, the open raises ELOOP rather than writing
+            # the captured data into the symlink target. O_APPEND for
+            # multi-call accumulation. Mode 0o600 = owner-only on the
+            # newly-created file; ignored if the file already exists.
+            flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW
+            fd = os.open(out_path, flags, 0o600)
+            try:
+                with os.fdopen(fd, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            except Exception:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                raise
+
+            # First successful capture per (filter, path) — emit a
+            # one-shot INFO so operators see "capture is active" in
+            # the agent's own log without tailing the file.
+            if _key not in LLMBus._capture_active_logged:
+                LLMBus._capture_active_logged.add(_key)
+                logger.info(
+                    "[LLM_CAPTURE] active: filter=%r path=%r first_handler=%r",
+                    match,
+                    out_path,
+                    handler_name,
+                )
+        except Exception as e:
+            # Failure-safe: never raise out of capture. But promote the
+            # FIRST failure per (filter, path) to WARNING so silent
+            # misconfiguration (bad path, missing parent dir, symlink
+            # trap) is visible. Subsequent failures stay at debug to
+            # avoid log floods.
+            if _key not in LLMBus._capture_failure_logged:
+                LLMBus._capture_failure_logged.add(_key)
+                logger.warning(
+                    "[LLM_CAPTURE] write failed (filter=%r path=%r): %s — "
+                    "subsequent failures will log at debug. Common causes: "
+                    "parent dir missing for explicit path, symlink at path, "
+                    "perms denied.",
+                    match,
+                    out_path,
+                    e,
+                )
+            else:
+                logger.debug(f"[LLM_CAPTURE] failed to write: {e}")
 
     def _normalize_messages(self, messages: Union[List[JSONDict], List["LLMMessage"]]) -> List[JSONDict]:
         """Normalize messages to dict format for LLM providers.
@@ -225,9 +666,21 @@ class LLMBus(BaseBus[LLMService]):
         error_str = str(e).lower()
         full_error = self._extract_full_error_from_cause_chain(e)
 
-        # Handle rate limit errors
-        if self._is_rate_limit_error(error_str, full_error):
+        # Handle rate limit errors AND upstream server errors (502/503/504,
+        # "Provider returned error"). Both are transient/external — polite
+        # backoff, don't count against the circuit breaker, share the same
+        # retry budget so concurrent waves don't escalate server hiccups into
+        # a cascade of "LLM UNEXPECTED ERROR"s.
+        is_rate_limit = self._is_rate_limit_error(error_str, full_error)
+        is_server_error = self._is_server_error(error_str, full_error)
+        if is_rate_limit or is_server_error:
             rate_limit_retry_count += 1
+            if is_server_error and not is_rate_limit:
+                logger.warning(
+                    f"Upstream server error on {service_name} "
+                    f"(attempt {rate_limit_retry_count}/{max_rate_limit_retries}): "
+                    f"{type(e).__name__} — applying rate-limit backoff"
+                )
             should_continue, _, rate_limit_start_time = await self._handle_rate_limit_retry(
                 service_name,
                 full_error,
@@ -247,7 +700,7 @@ class LLMBus(BaseBus[LLMService]):
 
         # Handle exhausted retries
         if retry_count >= max_retries:
-            logger.warning(f"Exhausted {max_retries} retries on {service_name}")
+            logger.warning(f"Exhausted {max_retries} attempt(s) on {service_name}")
             return "break", False, rate_limit_retry_count, rate_limit_start_time
 
         # General error - log and continue
@@ -305,8 +758,14 @@ class LLMBus(BaseBus[LLMService]):
         service_last_error: Exception,
         last_was_rate_limit: bool,
         max_retries: int,
+        started_at: Optional[float] = None,
     ) -> None:
-        """Record service failure and log appropriately."""
+        """Record service failure and log appropriately.
+
+        `started_at` is the failed call's wall-clock start: calls to one
+        provider that started together are one breaker failure, not N.
+        """
+        self._last_provider_error[service_name] = service_last_error
         if last_was_rate_limit:
             logger.warning(f"LLM service {service_name} exhausted rate limit retries (NOT counting as CB failure)")
             # Set global cooldown so subsequent requests don't immediately hit rate limit again
@@ -318,11 +777,12 @@ class LLMBus(BaseBus[LLMService]):
             self._set_rate_limit_cooldown(service_name, effective_cooldown)
             return
 
-        self._record_failure(service_name)
+        self._record_failure(service_name, started_at=started_at)
 
         if service_name not in self._services_with_full_error_logged:
             logger.error(
-                f"LLM service {service_name} failed after {max_retries} retries: {service_last_error}", exc_info=True
+                f"LLM service {service_name} failed after {max_retries} attempt(s): {service_last_error}",
+                exc_info=True,
             )
             self._services_with_full_error_logged.add(service_name)
         else:
@@ -354,6 +814,11 @@ class LLMBus(BaseBus[LLMService]):
         last_was_rate_limit = False
 
         while retry_count < max_retries:
+            # Capture per-attempt start so duration_ms on the LLM_CALL event
+            # reflects THIS invocation only, not the cumulative time across
+            # retries. Without this, the second timeout reports "first +
+            # second" elapsed and tail-latency hotspot analysis breaks.
+            attempt_start_time = self._time_service.timestamp()
             try:
                 result, usage = await self._execute_llm_call(
                     selected_service,
@@ -366,6 +831,7 @@ class LLMBus(BaseBus[LLMService]):
                     task_id,
                     handler_name,
                     start_time,
+                    attempt_start_time,
                     retry_count,
                 )
                 return result, usage, None, False
@@ -376,6 +842,36 @@ class LLMBus(BaseBus[LLMService]):
 
             except Exception as e:
                 service_last_error = e
+
+                # Per-call failure broadcast — every failed LLM invocation
+                # gets its own LLM_CALL event with status != 'ok'. This is
+                # what makes the Spanish-MH-style three-consecutive-timeouts
+                # diagnosis a one-query lookup instead of a log scrape.
+                # Use attempt-local timing so each retry's reported duration
+                # is the wall-clock of that attempt only.
+                api_base = None
+                if hasattr(selected_service, "openai_config") and selected_service.openai_config:
+                    api_base = getattr(selected_service.openai_config, "base_url", None)
+                attempt_duration_ms = (self._time_service.timestamp() - attempt_start_time) * 1000
+                await _broadcast_llm_call_event(
+                    LLMCallEventContext(
+                        success=False,
+                        handler_name=handler_name,
+                        service_name=service_name,
+                        selected_service=selected_service,
+                        api_base=api_base,
+                        response_model=response_model,
+                        messages=normalized_messages,
+                        result=None,
+                        usage=None,
+                        duration_ms=attempt_duration_ms,
+                        thought_id=thought_id,
+                        task_id=task_id,
+                        retry_count=retry_count,
+                        error=e,
+                    )
+                )
+
                 retry_count += 1
 
                 action, last_was_rate_limit, rate_limit_retry_count, rate_limit_start_time = (
@@ -410,19 +906,56 @@ class LLMBus(BaseBus[LLMService]):
         task_id: Optional[str],
         handler_name: str,
         start_time: float,
+        attempt_start_time: float,
         retry_count: int,
     ) -> Tuple[BaseModel, Optional[ResourceUsage]]:
-        """Execute the actual LLM call and record metrics on success."""
-        logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
+        """Execute the actual LLM call and record metrics on success.
 
-        result, usage = await selected_service.call_llm_structured(
-            messages=normalized_messages,
-            response_model=response_model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            thought_id=thought_id,
-            task_id=task_id,
-        )
+        Acquires the per-service FIFO concurrency gate before dispatch so
+        excess callers queue rather than all racing the provider at once.
+
+        `start_time` is the request-level wall clock (used for existing
+        service-level telemetry) and `attempt_start_time` is captured once
+        per retry iteration in `_try_service` (used for the LLM_CALL
+        event's per-attempt duration_ms — without this distinction, retries
+        report cumulative time and tail-latency analysis breaks).
+        """
+        semaphore = self._get_service_semaphore(service_name)
+        # Log when we actually have to wait so saturation is visible.
+        if semaphore.locked():
+            logger.info(
+                f"[LLM-GATE] {service_name} saturated (max {self._max_in_flight_per_service} "
+                f"in-flight), {handler_name} queued"
+            )
+        async with semaphore:
+            logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
+
+            result, usage = await selected_service.call_llm_structured(
+                messages=normalized_messages,
+                response_model=response_model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                thought_id=thought_id,
+                task_id=task_id,
+            )
+
+            # Diagnostic capture: env-gated so production paths are
+            # unaffected. When CIRIS_LLM_CAPTURE_HANDLER matches the
+            # handler_name (or is "*"), append a JSONL row to
+            # CIRIS_LLM_CAPTURE_FILE with the exact wire-format messages and
+            # the parsed structured result. Used to feed live traces into
+            # the bounce harness for replay analysis.
+            self._maybe_capture_call(
+                handler_name=handler_name,
+                service_name=service_name,
+                thought_id=thought_id,
+                task_id=task_id,
+                messages=normalized_messages,
+                response_model=response_model,
+                result=result,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
 
         latency_ms = (self._time_service.timestamp() - start_time) * 1000
         self._record_success(service_name, latency_ms)
@@ -431,7 +964,32 @@ class LLMBus(BaseBus[LLMService]):
         if hasattr(selected_service, "openai_config") and selected_service.openai_config:
             api_base = getattr(selected_service.openai_config, "base_url", None)
         await self._record_resource_telemetry(service_name, handler_name, usage, latency_ms, thought_id, api_base)
-        logger.debug(f"LLM call successful via {service_name} (latency: {latency_ms:.2f}ms)")
+        logger.info(f"[LLM-TIMING] {handler_name} {thought_id or 'no-thought'}: {latency_ms:.0f}ms via {service_name}")
+
+        # Per-call broadcast — every LLM invocation is a discrete observation
+        # for the trace persistence layer (FSD/TRACE_EVENT_LOG_PERSISTENCE.md
+        # §5.2). Aggregate cost columns hide tail-latency and per-call failure
+        # patterns; LLM_CALL events restore that visibility.
+        # duration_ms uses attempt_start_time so the event reflects THIS
+        # invocation only — not the cumulative time across retries.
+        attempt_duration_ms = (self._time_service.timestamp() - attempt_start_time) * 1000
+        await _broadcast_llm_call_event(
+            LLMCallEventContext(
+                success=True,
+                handler_name=handler_name,
+                service_name=service_name,
+                selected_service=selected_service,
+                api_base=api_base,
+                response_model=response_model,
+                messages=normalized_messages,
+                result=result,
+                usage=usage,
+                duration_ms=attempt_duration_ms,
+                thought_id=thought_id,
+                task_id=task_id,
+                retry_count=retry_count,
+            )
+        )
 
         return result, usage
 
@@ -456,29 +1014,13 @@ class LLMBus(BaseBus[LLMService]):
 
         priority_groups = self._group_by_priority(services)
         last_error: Optional[Exception] = None
-        # Reduced from 3 to 1 to enable fast failover to secondary provider
-        # Each service still has internal retries, but bus moves to next priority quickly
+        # One attempt per provider, so the bus moves to the next priority
+        # quickly; the enclosing stage's per-try is the retry layer (#1186).
         max_retries_per_service = 1
 
-        for priority, service_group in sorted(priority_groups.items()):
-            selected_service = await self._select_service(service_group, priority, handler_name)
-            if not selected_service:
-                continue
-
-            service_name = f"{type(selected_service).__name__}_{id(selected_service)}"
-
-            if not self._check_circuit_breaker(service_name):
-                logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
-                continue
-
-            # Check global rate limit cooldown
-            if self._is_rate_limited(service_name):
-                logger.warning(f"Service {service_name} in rate limit cooldown, skipping")
-                continue
-
-            result = await self._try_service(
-                selected_service,
-                service_name,
+        while True:
+            outcome = await self._try_priority_groups(
+                priority_groups,
                 normalized_messages,
                 response_model,
                 max_tokens,
@@ -489,14 +1031,19 @@ class LLMBus(BaseBus[LLMService]):
                 start_time,
                 max_retries_per_service,
             )
-
-            if result[0] is not None and result[1] is not None:  # Success
-                return result[0], result[1]
-
-            # Service failed
-            if result[2] is not None:
-                last_error = result[2]
-                self._record_service_failure(service_name, result[2], result[3], max_retries_per_service)
+            if outcome.result is not None:
+                return outcome.result
+            if outcome.last_error is not None:
+                last_error = outcome.last_error
+            breaker_skipped = outcome.breaker_skipped
+            if outcome.tried_any or not breaker_skipped:
+                break
+            # Every provider for this request was skipped on an open breaker:
+            # there is no alternative to fail over to. Wait for the earliest
+            # half-open probe if the caller's deadline covers it; otherwise
+            # say so with the provider's real last error.
+            if not await self._wait_for_breaker_probe(breaker_skipped, handler_name):
+                raise self._circuit_open_error(breaker_skipped)
 
         # All services failed
         task = asyncio.create_task(
@@ -508,7 +1055,155 @@ class LLMBus(BaseBus[LLMService]):
         )
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
-        raise RuntimeError(f"All LLM services failed for {handler_name}. Last error: {last_error}")
+        # THE HIGHEST-LEVERAGE STRING IN THE LOG (CIRISAgent#1073).
+        #
+        # `last_error` embedded the full <failed_attempts> envelope, and FOUR
+        # downstream sites re-print this message verbatim — csdma, dsdma_base,
+        # dma_orchestrator and work_processor — so one un-flattened string became
+        # 217 physical lines. Collapsing it here fixes all four at once.
+        _last = " ".join(str(last_error).split())[:300]
+        raise RuntimeError(f"All LLM services failed for {handler_name}. Last error: {_last}")
+
+    def _service_side_breaker(self, service: Any) -> Optional[CircuitBreaker]:
+        """The provider's own breaker (the LLM service keeps one), when it exposes a real one."""
+        cb = getattr(service, "circuit_breaker", None)
+        return cb if isinstance(cb, CircuitBreaker) else None
+
+    def _breaker_wait_s(self, service_name: str, service: Any) -> float:
+        """Seconds until both the bus's and the provider's breaker let a probe through."""
+        waits = [0.0]
+        bus_cb = self.circuit_breakers.get(service_name)
+        if bus_cb is not None:
+            waits.append(bus_cb.seconds_until_half_open())
+        svc_cb = self._service_side_breaker(service)
+        if svc_cb is not None:
+            waits.append(svc_cb.seconds_until_half_open())
+        return max(waits)
+
+    async def _wait_for_breaker_probe(self, skipped: List[Tuple[str, Any]], handler_name: str) -> bool:
+        """Wait out the shortest breaker recovery if the caller's deadline affords it.
+
+        Returns False (no wait) when no stage set a deadline, or when the
+        deadline cannot cover the wait plus a useful attempt -- the caller
+        then gets the categorized ProviderCircuitOpenError.
+        """
+        # Never a zero-length spin: each round spends at least 0.1s of the
+        # deadline, so the loop in call_llm_structured is bounded by it.
+        wait_s = max(0.1, min(self._breaker_wait_s(name, svc) for name, svc in skipped))
+        deadline = current_call_deadline()
+        if deadline is None or not deadline.affords(wait_s + MIN_USEFUL_ATTEMPT_S):
+            return False
+        logger.warning(
+            f"Circuit breaker OPEN for every provider of {handler_name}; no alternative provider, "
+            f"waiting {wait_s:.1f}s for the recovery probe ({deadline.remaining():.1f}s left on the deadline)"
+        )
+        await asyncio.sleep(wait_s)
+        return True
+
+    def _circuit_open_error(self, skipped: List[Tuple[str, Any]]) -> ProviderCircuitOpenError:
+        """The categorized error for "every provider skipped on an open breaker"."""
+        name, service = min(skipped, key=lambda item: self._breaker_wait_s(item[0], item[1]))
+        bus_cb = self.circuit_breakers.get(name)
+        svc_cb = self._service_side_breaker(service)
+        failures = max(cb.failure_count for cb in (bus_cb, svc_cb) if cb is not None) if (bus_cb or svc_cb) else 0
+        last: Optional[BaseException] = self._last_provider_error.get(name)
+        if last is None:
+            svc_last = getattr(service, "last_error", None)
+            last = svc_last if isinstance(svc_last, BaseException) else None
+        return ProviderCircuitOpenError(name, failures, last, self._breaker_wait_s(name, service))
+
+    async def _try_priority_groups(
+        self,
+        priority_groups: dict[int, List[object]],
+        normalized_messages: List[JSONDict],
+        response_model: Type[BaseModel],
+        max_tokens: int,
+        temperature: float,
+        thought_id: Optional[str],
+        task_id: Optional[str],
+        handler_name: str,
+        start_time: float,
+        max_retries_per_service: int,
+    ) -> "_ProviderPass":
+        """One pass over the providers in priority order (failover unchanged)."""
+        last_error: Optional[Exception] = None
+        tried_any = False
+        breaker_skipped: List[Tuple[str, Any]] = []
+        for priority, service_group in sorted(priority_groups.items()):
+            # Walk through every service in this priority group before falling
+            # through to the next priority. With replica deployments (two
+            # registrations at the same priority), skipping the rate-limited
+            # one must try the sibling — previously we jumped straight to the
+            # next priority and failed the whole call even though a healthy
+            # sibling was available.
+            remaining = list(service_group)
+            tried: set[str] = set()
+            while remaining:
+                selected_service = await self._select_service(remaining, priority, handler_name)
+                if not selected_service:
+                    break
+
+                service_name = self._get_service_name(selected_service)
+                # Avoid infinite loop if _select_service returns the same one.
+                if service_name in tried:
+                    remaining = [s for s in remaining if self._get_service_name(s) != service_name]
+                    continue
+                tried.add(service_name)
+
+                svc_cb = self._service_side_breaker(selected_service)
+                if not self._check_circuit_breaker(service_name) or (svc_cb is not None and not svc_cb.is_available()):
+                    # Either breaker open: the call would send no request.
+                    # Skipping it here (instead of letting the provider raise
+                    # CircuitBreakerError) keeps a fail-fast from being
+                    # counted as one more provider failure.
+                    logger.warning(f"Circuit breaker OPEN for {service_name}, skipping")
+                    breaker_skipped.append((service_name, selected_service))
+                    remaining = [s for s in remaining if self._get_service_name(s) != service_name]
+                    continue
+
+                # Check global rate limit cooldown
+                if self._is_rate_limited(service_name):
+                    logger.warning(f"Service {service_name} in rate limit cooldown, skipping")
+                    remaining = [s for s in remaining if self._get_service_name(s) != service_name]
+                    continue
+
+                # Track pending+acquired in-flight so LEAST_LOADED can route
+                # around saturated replicas even before their semaphore has
+                # been acquired.
+                self._in_flight[service_name] += 1
+                tried_any = True
+                try:
+                    with breaker_call_scope() as call_started_at:
+                        result = await self._try_service(
+                            selected_service,
+                            service_name,
+                            normalized_messages,
+                            response_model,
+                            max_tokens,
+                            temperature,
+                            thought_id,
+                            task_id,
+                            handler_name,
+                            start_time,
+                            max_retries_per_service,
+                        )
+                finally:
+                    self._in_flight[service_name] = max(0, self._in_flight[service_name] - 1)
+
+                if result[0] is not None and result[1] is not None:  # Success
+                    return _ProviderPass(result=(result[0], result[1]))
+
+                # Service failed — record and try the next sibling in this
+                # priority group (if any) before falling through to the next
+                # priority tier.
+                if result[2] is not None:
+                    last_error = result[2]
+                    self._record_service_failure(
+                        service_name, result[2], result[3], max_retries_per_service, started_at=call_started_at
+                    )
+                remaining = [s for s in remaining if self._get_service_name(s) != service_name]
+
+        return _ProviderPass(tried_any=tried_any, breaker_skipped=breaker_skipped, last_error=last_error)
 
     # Note: This method is not in the protocol but kept for internal use
     async def _generate_structured_sync(
@@ -533,6 +1228,16 @@ class LLMBus(BaseBus[LLMService]):
             temperature=temperature,
             domain=domain,
         )
+
+    def _get_service_name(self, service: Any) -> str:
+        """Get stable service name for circuit breaker tracking.
+
+        Uses service.service_name if available (for consistent CB tracking across restarts),
+        otherwise generates from class + id (fallback for services without service_name).
+        """
+        if hasattr(service, "service_name") and service.service_name:
+            return str(service.service_name)
+        return f"{type(service).__name__}_{id(service)}"
 
     def _check_service_capabilities(self, service: Any) -> bool:
         """Check if service has required LLM capabilities."""
@@ -644,7 +1349,7 @@ class LLMBus(BaseBus[LLMService]):
             best_latency = float("inf")
 
             for service in services:
-                service_name = f"{type(service).__name__}_{id(service)}"
+                service_name = self._get_service_name(service)
                 metrics = self.service_metrics[service_name]
 
                 # New services get a chance
@@ -664,10 +1369,17 @@ class LLMBus(BaseBus[LLMService]):
             return random.choice(services)
 
         else:  # DistributionStrategy.LEAST_LOADED
-            # Select service with fewest active requests
-            # This would require tracking active requests
-            # For now, use the one with fewest total requests
-            return min(services, key=lambda s: self.service_metrics[f"{type(s).__name__}_{id(s)}"].total_requests)
+            # Pick the service with the fewest in-flight (pending + acquired)
+            # calls. Ties break on least total_requests so brand-new services
+            # get early traffic. Incremented at selection time in _try_service,
+            # decremented in its finally — see _in_flight counter.
+            return min(
+                services,
+                key=lambda s: (
+                    self._in_flight[self._get_service_name(s)],
+                    self.service_metrics[self._get_service_name(s)].total_requests,
+                ),
+            )
 
     def _check_circuit_breaker(self, service_name: str) -> bool:
         """Check if circuit breaker allows execution"""
@@ -678,6 +1390,9 @@ class LLMBus(BaseBus[LLMService]):
                 recovery_timeout=get_float(self.circuit_breaker_config, "recovery_timeout", 60.0),
                 success_threshold=get_int(self.circuit_breaker_config, "half_open_max_calls", 3),
                 timeout_duration=get_float(self.circuit_breaker_config, "timeout_duration", 30.0),
+                # Concurrent failures of one provider (parallel DMA timeouts
+                # from the same slow moment) are one breaker failure.
+                failure_coalesce_window_s=get_float(self.circuit_breaker_config, "failure_coalesce_window_s", 1.0),
             )
             self.circuit_breakers[service_name] = CircuitBreaker(name=service_name, config=config)
 
@@ -729,7 +1444,7 @@ class LLMBus(BaseBus[LLMService]):
             del self._rate_limited_until[service_name]
             logger.info(f"Rate limit cooldown cleared for {service_name} after successful call")
 
-    def _record_failure(self, service_name: str) -> None:
+    def _record_failure(self, service_name: str, started_at: Optional[float] = None) -> None:
         """Record failed call metrics"""
         metrics = self.service_metrics[service_name]
         metrics.total_requests += 1
@@ -738,7 +1453,14 @@ class LLMBus(BaseBus[LLMService]):
         metrics.consecutive_failures += 1
 
         if service_name in self.circuit_breakers:
-            self.circuit_breakers[service_name].record_failure()
+            cb = self.circuit_breakers[service_name]
+            was_closed = cb.state == CircuitState.CLOSED
+            cb.record_failure(started_at=started_at)
+            # Emit error if circuit just opened
+            if was_closed and cb.state == CircuitState.OPEN:
+                task = asyncio.create_task(error_emitter.emit_circuit_breaker_open(service_name))
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
     async def _record_resource_telemetry(
         self,
@@ -749,7 +1471,18 @@ class LLMBus(BaseBus[LLMService]):
         thought_id: Optional[str] = None,
         api_base: Optional[str] = None,
     ) -> None:
-        """Record detailed telemetry for resource usage"""
+        """Record detailed telemetry for resource usage.
+
+        The single point where a completed call's tokens are recorded: the
+        canonical ``llm.tokens.total`` metric below, and the resource monitor's
+        token budget (tokens_hour / tokens_day) -- the same number, once.
+        """
+        if self.resource_monitor is not None and usage.tokens_used > 0:
+            try:
+                await self.resource_monitor.record_tokens(usage.tokens_used)
+            except Exception as e:  # never fail an LLM call over budget bookkeeping
+                logger.warning(f"Failed to record tokens with the resource monitor: {e}")
+
         if not self.telemetry_service:
             return
 
@@ -982,7 +1715,7 @@ class LLMBus(BaseBus[LLMService]):
                 return False
 
             # Check circuit breaker state
-            service_name = f"{type(service).__name__}_{id(service)}"
+            service_name = self._get_service_name(service)
             if not self._check_circuit_breaker(service_name):
                 return False
 

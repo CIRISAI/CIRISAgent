@@ -2,7 +2,7 @@ import asyncio
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import aiofiles
 
@@ -41,14 +41,24 @@ from ciris_engine.schemas.types import JSONDict
 
 
 class CLIToolService(BaseService, ToolService):
-    """Simple ToolService providing local filesystem browsing."""
+    """Host-level ToolService: filesystem browsing, file writes, shell execution.
 
-    def __init__(self, time_service: TimeServiceProtocol) -> None:
-        # Initialize BaseService with proper arguments
+    Reachable on desktop installs only. ``CLIAdapter`` -- the CLI platform's
+    single ``ServiceType.TOOL`` provider -- borrows this service's ``write_file``,
+    ``shell_command`` and ``search_text`` implementations when
+    :func:`~ciris_engine.logic.utils.platform_detection.is_desktop` is true, and
+    borrows nothing on Android/iOS. See ``FSD/CLI_TOOLS_DESKTOP.md``.
+    """
+
+    def __init__(self, time_service: Optional[TimeServiceProtocol] = None) -> None:
+        # time_service is optional so the service can be constructed for its
+        # metadata and tool implementations alone (neither touches it). Its own
+        # execute_tool() still asserts a real time service, since that path
+        # writes correlations.
         super().__init__(time_service=time_service, service_name="CLIToolService")
         # ToolService is a Protocol, no need to call its __init__
         self._results: Dict[str, ToolExecutionResult] = {}
-        self._tools = {
+        self._tools: Dict[str, Callable[[JSONDict], Awaitable[JSONDict]]] = {
             "list_files": self._list_files,
             "read_file": self._read_file,
             "write_file": self._write_file,
@@ -248,6 +258,16 @@ class CLIToolService(BaseService, ToolService):
 
     async def get_available_tools(self) -> List[str]:
         return list(self._tools.keys())
+
+    def get_tool_callable(self, tool_name: str) -> Optional[Callable[[JSONDict], Awaitable[JSONDict]]]:
+        """Return the coroutine implementing ``tool_name``, or None if unknown.
+
+        The delegation seam for ``CLIAdapter``, which owns tool dispatch (its own
+        correlation, telemetry and ``ToolExecutionResult`` shaping) and needs only
+        the implementation. Keeps a single registered TOOL provider per adapter,
+        so no tool name is ever served by two providers.
+        """
+        return self._tools.get(tool_name)
 
     async def get_tool_result(self, correlation_id: str, timeout: float = 30.0) -> Optional[ToolExecutionResult]:
         for _ in range(int(timeout * 10)):

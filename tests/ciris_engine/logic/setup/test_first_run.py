@@ -1,6 +1,8 @@
 """Tests for first-run detection and setup wizard."""
 
 import base64
+import logging
+import os
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -22,23 +24,61 @@ class TestFirstRunDetection:
 
         assert is_first_run() is True
 
-    def test_is_first_run_with_env_var(self, monkeypatch):
-        """Test not first run when CIRIS_CONFIGURED env var set."""
+    def test_is_first_run_with_env_var_only(self, tmp_path, monkeypatch):
+        """Test first run IS detected when only CIRIS_CONFIGURED env var set.
+
+        As of 2.3.2, the env var alone is NOT sufficient - a valid .env file
+        with CIRIS_CONFIGURED=true is required. The env var is cleared if no
+        valid file exists (stale env var handling).
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setenv("CIRIS_CONFIGURED", "true")
+        # Ensure no .env files exist
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
 
         from ciris_engine.logic.setup.first_run import is_first_run
 
+        # Should be first run because no valid .env file exists
+        assert is_first_run() is True
+        # Stale env var should be cleared
+        assert os.environ.get("CIRIS_CONFIGURED") is None
+
+    def test_is_first_run_dev_mode_cwd_env_is_detected(self, tmp_path, monkeypatch):
+        """Dev-mode (git repo) cwd .env IS the config → NOT first run.
+
+        get_default_config_path() WRITES the setup wizard's .env under
+        get_ciris_home() (dev mode → cwd, since 2.9.4), so get_config_paths()
+        must READ the same location. Before this fix the two diverged
+        (write = cwd/CIRIS_HOME, read = ~/ciris), leaving desktop/dev
+        permanently "first run" — the split-home bug behind the setup hang.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        # .git → development mode → get_ciris_home() resolves to cwd
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".env").write_text("CIRIS_CONFIGURED=true")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
+
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        # cwd/.env is where setup writes in dev mode — so it is detected.
         assert is_first_run() is False
 
-    def test_is_first_run_with_cwd_env(self, tmp_path, monkeypatch):
-        """Test not first run when .env exists in current directory (development mode)."""
-        # Create .git directory to simulate development mode
-        git_dir = tmp_path / ".git"
-        git_dir.mkdir()
+    def test_is_first_run_with_config_dir_override(self, tmp_path, monkeypatch):
+        """Test not first run when CIRIS_CONFIG_DIR points to valid config.
 
-        env_file = tmp_path / ".env"
+        CIRIS_CONFIG_DIR is the explicit override for development/testing.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        config_dir = tmp_path / "custom_config"
+        config_dir.mkdir()
+        env_file = config_dir / ".env"
         env_file.write_text("CIRIS_CONFIGURED=true")
-        monkeypatch.chdir(tmp_path)
+
+        monkeypatch.setenv("CIRIS_CONFIG_DIR", str(config_dir))
         monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
 
         from ciris_engine.logic.setup.first_run import is_first_run
@@ -48,6 +88,11 @@ class TestFirstRunDetection:
     def test_is_first_run_with_user_env(self, tmp_path, monkeypatch):
         """Test not first run when .env exists in ~/ciris/."""
         monkeypatch.setenv("HOME", str(tmp_path))
+        # INSTALLED MODE MEANS NO NAMED HOME. Until get_config_paths() stopped
+        # appending ~/ciris unconditionally, a CIRIS_HOME leaked by an earlier
+        # test in the same xdist worker was invisible here; now it decides the
+        # answer, so this test says which mode it is testing.
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
         ciris_dir = tmp_path / "ciris"
         ciris_dir.mkdir()
@@ -62,6 +107,167 @@ class TestFirstRunDetection:
         from ciris_engine.logic.setup.first_run import is_first_run
 
         assert is_first_run() is False
+
+
+class TestOneAnswerThroughoutTheBoot:
+    """get_config_paths() must not change its answer mid-boot.
+
+    main.py loads the home's .env BEFORE ensure_ciris_home_env() exports
+    CIRIS_HOME, and everything else (is_first_run, env_utils) asks afterwards.
+    If the list depends on whether that export has happened, one process reads
+    two different configurations — the exact fault this module was fixed for,
+    one level up.
+    """
+
+    def test_the_system_file_does_not_vanish_once_ciris_home_is_exported(self, tmp_path, monkeypatch):
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
+
+        with patch("pathlib.Path.exists", lambda self: str(self) == "/etc/ciris" or Path.is_file(self)):
+            before = get_config_paths()
+            # what ensure_ciris_home_env() does to the environment, verbatim
+            monkeypatch.setenv("CIRIS_HOME", str(tmp_path / "ciris"))
+            after = get_config_paths()
+
+        assert before == after, "get_config_paths() answered differently before and after the CIRIS_HOME export"
+        assert Path("/etc/ciris/.env") in before
+
+    def test_a_named_home_elsewhere_never_reads_the_system_file(self, tmp_path, monkeypatch):
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        home = tmp_path / "X"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+
+        with patch("pathlib.Path.exists", lambda self: str(self) == "/etc/ciris" or Path.is_file(self)):
+            assert get_config_paths() == [home / ".env"]
+
+
+class TestTheOtherHomes:
+    """The homes that are not ~/ciris, each complete on its own.
+
+    `get_config_paths()` returns early for a managed deployment and for the two
+    app sandboxes, and those early returns are the one-home rule for the
+    platforms where the operator never gets to name a home: the manager owns
+    /app, and Android/iOS own their container. Nothing else may be read there —
+    a stray ~/ciris on a dev machine's emulator image must not reach the app.
+    """
+
+    def test_managed_reads_only_the_manager_s_file(self, monkeypatch):
+        from ciris_engine.logic.setup.first_run import get_config_paths
+        from ciris_engine.logic.utils import path_resolution
+
+        monkeypatch.setattr(path_resolution, "is_managed", lambda: True)
+        monkeypatch.setenv("CIRIS_CONFIG_DIR", "/somewhere/else")
+        monkeypatch.setenv("CIRIS_HOME", "/somewhere/other")
+
+        assert get_config_paths() == [Path("/app/.env")], "the manager owns the mount layout"
+
+    @pytest.mark.parametrize("platform_flag", ["is_android", "is_ios"])
+    def test_an_app_sandbox_reads_only_its_own(self, tmp_path, monkeypatch, platform_flag):
+        from ciris_engine.logic.setup.first_run import get_config_paths
+        from ciris_engine.logic.utils import path_resolution
+
+        sandbox = tmp_path / "sandbox"
+        monkeypatch.setattr(path_resolution, "is_managed", lambda: False)
+        monkeypatch.setattr(path_resolution, "is_android", lambda: platform_flag == "is_android")
+        monkeypatch.setattr(path_resolution, "is_ios", lambda: platform_flag == "is_ios")
+        monkeypatch.setattr(path_resolution, "get_ciris_home", lambda: sandbox)
+        monkeypatch.setenv("CIRIS_CONFIG_DIR", str(tmp_path / "elsewhere"))
+
+        assert get_config_paths() == [sandbox / ".env"]
+
+    def test_an_unusable_config_dir_is_skipped_not_fatal(self, tmp_path, monkeypatch, caplog):
+        """A bad CIRIS_CONFIG_DIR must warn and fall through to the home.
+
+        validate_path_safety refuses a system directory; the boot must continue
+        on the home's own .env rather than die on a mis-set variable.
+        """
+        from ciris_engine.logic.setup.first_run import get_config_paths
+        from ciris_engine.logic.utils import path_resolution
+
+        home = tmp_path / "X"
+        monkeypatch.setattr(path_resolution, "is_managed", lambda: False)
+        monkeypatch.setattr(path_resolution, "is_android", lambda: False)
+        monkeypatch.setattr(path_resolution, "is_ios", lambda: False)
+        monkeypatch.setattr(path_resolution, "get_ciris_home", lambda: home)
+        monkeypatch.setattr(
+            path_resolution,
+            "validate_path_safety",
+            lambda p, context="path": (_ for _ in ()).throw(ValueError(f"{context} is forbidden")),
+        )
+        monkeypatch.setenv("CIRIS_CONFIG_DIR", "/etc")
+
+        with caplog.at_level(logging.WARNING):
+            paths = get_config_paths()
+
+        assert paths == [home / ".env"], "the home must still be read"
+        assert any("CIRIS_CONFIG_DIR" in r.message for r in caplog.records), "the operator is not told"
+
+
+class TestAnUnreadableCandidateDoesNotStopTheBoot:
+    """A candidate whose existence check RAISES is skipped, not fatal.
+
+    `Path.exists()` is not total: a dead NFS mount, a permission-denied parent,
+    a name too long for the filesystem all raise OSError rather than answering
+    False. The boot loader and the env-var fallback both walk candidate paths
+    before anything is configured, so an unreadable one there would take the
+    process down before it could report why.
+    """
+
+    def test_load_boot_env_skips_a_raising_candidate(self, tmp_path, monkeypatch):
+        import ciris_engine.logic.setup.first_run as fr
+
+        good = tmp_path / "good"
+        good.mkdir()
+        (good / ".env").write_text("CIRIS_ONE_HOME_PROBE=yes\n")
+        bad = Path("/unreadable/.env")
+
+        monkeypatch.setattr(fr, "get_config_paths", lambda: [bad, good / ".env"])
+        monkeypatch.delenv("CIRIS_ONE_HOME_PROBE", raising=False)
+
+        real_exists = Path.exists
+
+        def exists(self):
+            if self == bad:
+                raise OSError(13, "Permission denied")
+            return real_exists(self)
+
+        monkeypatch.setattr(Path, "exists", exists)
+
+        assert fr.load_boot_env() == [good / ".env"]
+        assert os.environ["CIRIS_ONE_HOME_PROBE"] == "yes"
+
+    def test_the_env_fallback_skips_a_raising_candidate(self, tmp_path, monkeypatch):
+        from ciris_engine.logic.config import env_utils
+
+        good = tmp_path / "good" / ".env"
+        good.parent.mkdir()
+        good.write_text("X=1\n")
+        bad = Path("/unreadable/.env")
+
+        monkeypatch.setattr(
+            "ciris_engine.logic.setup.first_run.get_config_paths",
+            lambda: [bad, good],
+        )
+        real_exists = Path.exists
+
+        def exists(self):
+            if self == bad:
+                raise OSError(13, "Permission denied")
+            return real_exists(self)
+
+        monkeypatch.setattr(Path, "exists", exists)
+
+        assert env_utils._home_env_path() == good
 
 
 class TestMacOSPythonDetection:
@@ -236,28 +442,133 @@ class TestInteractiveDetection:
 class TestConfigPaths:
     """Tests for config path detection."""
 
-    def test_get_config_paths_priority(self, tmp_path, monkeypatch):
-        """Test config paths returned in correct priority order (development mode)."""
-        monkeypatch.setenv("HOME", str(tmp_path))
-        monkeypatch.chdir(tmp_path)
+    def test_get_config_paths_dev_mode_uses_cwd(self, tmp_path, monkeypatch):
+        """Dev mode (git repo) resolves config under cwd — the SAME location
+        get_default_config_path() writes to (both go through get_ciris_home()).
 
-        # Create .git directory to simulate development mode
-        git_dir = tmp_path / ".git"
-        git_dir.mkdir()
+        get_config_paths (READ) must not diverge from get_default_config_path
+        (WRITE); previously it hardcoded ~/ciris while the writer honored
+        CIRIS_HOME / dev-cwd.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".git").mkdir()
 
         from ciris_engine.logic.setup.first_run import get_config_paths
 
         paths = get_config_paths()
 
-        # Should be: cwd/ciris/.env, cwd/.env (compat), ~/ciris/.env, possibly /etc/ciris/.env
         assert paths[0].name == ".env"
-        assert paths[0] == tmp_path / "ciris" / ".env"  # Current directory ciris subdir
-        assert paths[1] == tmp_path / ".env"  # Backwards compatibility
+        # dev mode → cwd IS the home, and the home is the only home:
+        # ~/ciris/.env is somebody else's config, not a fallback.
+        assert paths == [tmp_path / ".env"]
 
-        assert paths[2].parts[-2:] == ("ciris", ".env")
+    def test_get_config_paths_honors_ciris_home(self, tmp_path, monkeypatch):
+        """CIRIS_HOME wins so first-run READS where setup WRITES.
+
+        Regression for the desktop/iOS setup hang: the node wrote its .env,
+        identity, and one-time claim_pin under CIRIS_HOME while first_run only
+        looked at ~/ciris — so setup could never be seen as complete.
+        """
+        home = tmp_path / "operator_home"
+        home.mkdir()
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+
+        from ciris_engine.logic.setup.first_run import get_config_paths, get_default_config_path
+
+        paths = get_config_paths()
+
+        assert paths[0] == home / ".env"
+        # The read path and the write path now agree.
+        assert get_default_config_path() == home / ".env"
+
+    def test_explicit_home_is_the_only_home(self, tmp_path, monkeypatch):
+        """CIRIS_HOME=X reads X/.env and nothing else — not ~/ciris, not /etc/ciris.
+
+        Regression for the two-homes boot: a run launched with CIRIS_HOME=X and
+        no X/.env used to fall through to ~/ciris/.env, take its CIRIS_DB_PATH /
+        CIRIS_DATA_DIR, and boot a fresh node key against an already-claimed
+        store — unclaimable (owner exists) and unowned (binding can't follow)
+        at once. Home X is home X.
+        """
+        home = tmp_path / "home_x"
+        home.mkdir()
+        user_ciris = tmp_path / "ciris"
+        user_ciris.mkdir()
+        (user_ciris / ".env").write_text(
+            'CIRIS_CONFIGURED="true"\nCIRIS_DB_PATH="%s"\n' % (user_ciris / "data" / "ciris_engine.db")
+        )
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIGURED", raising=False)
+        monkeypatch.delenv("CIRIS_FORCE_FIRST_RUN", raising=False)
+
+        from ciris_engine.logic.setup.first_run import get_config_paths, is_first_run
+
+        assert get_config_paths() == [home / ".env"]
+        # ~/ciris says "configured"; home X has no config → this IS a first run.
+        with patch("ciris_engine.logic.utils.path_resolution.is_managed", return_value=False):
+            assert is_first_run() is True
+
+    def test_load_boot_env_reads_only_the_home(self, tmp_path, monkeypatch):
+        """The boot loader takes the home's .env into os.environ and no other file."""
+        home = tmp_path / "home_x"
+        home.mkdir()
+        user_ciris = tmp_path / "ciris"
+        user_ciris.mkdir()
+        (user_ciris / ".env").write_text('CIRIS_DB_PATH="/somebody/elses/ciris_engine.db"\n')
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("CIRIS_HOME", str(home))
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.delenv("CIRIS_DB_PATH", raising=False)
+
+        from ciris_engine.logic.setup.first_run import load_boot_env
+
+        # No X/.env: nothing is loaded, and home Y's database path never enters the process.
+        assert load_boot_env() == []
+        assert "CIRIS_DB_PATH" not in os.environ
+
+        (home / ".env").write_text('CIRIS_DB_PATH="%s"\n' % (home / "data" / "ciris_engine.db"))
+        assert load_boot_env() == [home / ".env"]
+        assert os.environ["CIRIS_DB_PATH"] == str(home / "data" / "ciris_engine.db")
+
+    def test_installed_mode_keeps_the_system_file(self, tmp_path, monkeypatch):
+        """Only the implicit ~/ciris home reads /etc/ciris/.env — a system install's file."""
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        monkeypatch.chdir(work_dir)
+
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        paths = get_config_paths()
+        assert paths[0] == tmp_path / "ciris" / ".env"
+        if Path("/etc/ciris").exists():
+            assert paths[1:] == [Path("/etc/ciris/.env")]
+        else:
+            assert paths[1:] == []
 
     def test_get_config_paths_installed_mode(self, tmp_path, monkeypatch):
-        """Test config paths in installed mode (no git repo)."""
+        """Test config paths in installed mode (no git repo, no explicit home).
+
+        CIRIS_HOME must be cleared explicitly. get_config_paths() now consults
+        get_ciris_home() FIRST so the read path and the write path agree, which
+        means this test is only meaningful when no home is set — and it inherits
+        whatever a previously-run test in the same process left behind.
+
+        It passed in isolation and failed in CI shard 6 for exactly that reason:
+        the assertion `paths[0].parts[-2:] == ("ciris", ".env")` saw a leaked
+        CIRIS_HOME instead of ~/ciris. The other tests in this class all set or
+        clear it deliberately; this one did neither.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
         work_dir = tmp_path / "work"
         work_dir.mkdir()
@@ -272,7 +583,21 @@ class TestConfigPaths:
         assert paths[0].parts[-2:] == ("ciris", ".env")
 
     def test_get_default_config_path_git_repo(self, tmp_path, monkeypatch):
-        """Test default path is cwd/ciris/.env in git repo."""
+        """Test default path in git repo (dev-mode) honors CIRIS_HOME / cwd.
+
+        2.3.2 standardized this to ~/ciris/.env regardless of git repo.
+        2.9.4 reverted that for desktop/dev to honor CIRIS_HOME end-to-end
+        — see commit 4af552836. The contract is now:
+          - CIRIS_HOME env (priority 2) wins against everything below
+          - Dev mode (Path.cwd()/.git exists) → cwd
+          - Fallback → ~/ciris/
+
+        Without CIRIS_HOME set, dev mode here puts .env at cwd directly,
+        which is what the qa_runner / multi-process test harness needs to
+        keep both backend subprocesses on the same data dir across restart.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
         git_dir = tmp_path / ".git"
         git_dir.mkdir()
@@ -280,10 +605,37 @@ class TestConfigPaths:
         from ciris_engine.logic.setup.first_run import get_default_config_path
 
         path = get_default_config_path()
-        assert path == tmp_path / "ciris" / ".env"
+        # Dev mode in tmp_path (with .git): get_ciris_home() returns
+        # Path.cwd() = tmp_path, so .env lives at tmp_path/.env.
+        assert path == tmp_path / ".env"
+
+    def test_get_default_config_path_ciris_home_wins(self, tmp_path, monkeypatch):
+        """CIRIS_HOME env var (2.9.4) overrides every implicit auto-detect.
+
+        Even in a git repo (which would otherwise put .env at cwd via
+        dev-mode), an explicit CIRIS_HOME knob takes priority. This is the
+        contract the qa_runner desktop module relies on to pin every
+        backend subprocess to the same data dir across restart.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".git").mkdir()  # dev-mode would normally win
+
+        explicit_home = tmp_path / "explicit_ciris_home"
+        monkeypatch.setenv("CIRIS_HOME", str(explicit_home))
+
+        from ciris_engine.logic.setup.first_run import get_default_config_path
+
+        path = get_default_config_path()
+        assert path == explicit_home / ".env"
 
     def test_get_default_config_path_user_install(self, tmp_path, monkeypatch):
-        """Test default path is ~/ciris/.env for user install."""
+        """Test default path is ~/ciris/.env for user install.
+
+        Clears CIRIS_HOME for env-leakage isolation — post-2.9.4 a leaked
+        CIRIS_HOME (priority 2) would shadow the installed-mode fallback.
+        """
+        monkeypatch.delenv("CIRIS_HOME", raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
         work_dir = tmp_path / "some" / "other" / "dir"
         work_dir.mkdir(parents=True)
@@ -437,8 +789,9 @@ class TestSetupWizard:
             return_value=env_file,
         )
 
-        # Mock inputs: yes to overwrite, option 1 (OpenAI), skip API key
-        inputs = iter(["y", "1", ""])
+        # Mock inputs: yes to overwrite, language 1 (English), location 4 (prefer not to say),
+        # option 1 (OpenAI), skip API key
+        inputs = iter(["y", "1", "4", "1", ""])
         mocker.patch("builtins.input", side_effect=inputs)
 
         from ciris_engine.logic.setup.wizard import run_setup_wizard

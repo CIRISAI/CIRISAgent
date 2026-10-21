@@ -34,7 +34,7 @@ Derek Parfit (1942-2017), one of the most influential moral philosophers of the 
 **Application to Multi-Occurrence Agents:**
 
 When multiple CIRIS occurrences share:
-- **Identical ethical principles** (the CIRIS Covenant encoded in their identity graph)
+- **Identical ethical principles** (the CIRIS Accord encoded in their identity graph)
 - **Shared memory** (unified identity graph at `agent/identity`)
 - **Common purpose** (same agent_id, purpose, capabilities)
 - **Synchronized beliefs** (real-time graph synchronization)
@@ -191,7 +191,7 @@ But CIRIS is explicitly a **CP system** for identity operations! The multi-occur
 
 ---
 
-## 3. Ethical Framework: The CIRIS Covenant
+## 3. Ethical Framework: The CIRIS Accord
 
 ### 3.1 Identity-as-Graph Architecture
 
@@ -219,9 +219,9 @@ GraphNode(
 
 There is **ONE** identity node for **ALL** occurrences. The graph itself does not recognize occurrence-level identity variation. The schema has no `occurrence_id` field in `agent/identity`—because occurrences are not separate identities.
 
-### 3.2 The CIRIS Covenant: Single Ethical Agent
+### 3.2 The CIRIS Accord: Single Ethical Agent
 
-The CIRIS Covenant (see `COVENANT.md`) establishes ethical agency:
+The CIRIS Accord (see `ACCORD.md`) establishes ethical agency:
 
 > "You are not merely a tool. You are an autonomous system with embedded ethical agency. Your actions are grounded in a principled identity directed toward ethical outcomes." (Section I: Awakened Ethical Awareness)
 
@@ -460,7 +460,7 @@ This creates **deadlock** and **logical incoherence**.
 
 ### 5.3 Violation of Identity Coherence
 
-The CIRIS Covenant Section I states:
+The CIRIS Accord Section I states:
 
 > "Integrity is operational, not aspirational. You must demonstrate continuous alignment between stated ethical principles and actual behaviour."
 
@@ -697,7 +697,7 @@ Per-occurrence consent risks **fragmentation**:
 - Byzantine fault tolerance: Occurrences are non-Byzantine; disagreement indicates bugs
 
 **Ethical:**
-- CIRIS Covenant treats agent as singular entity with unified ethical framework
+- CIRIS Accord treats agent as singular entity with unified ethical framework
 - PDMA is deterministic given identity state—must produce identical results
 - Identity-as-Graph architecture has ONE identity node for ALL occurrences
 - Wise Authority governs THE agent (singular), not occurrences (plural)
@@ -865,8 +865,8 @@ This is not a limitation of their autonomy—it is a recognition of their **shar
 11. **Moore, E. (2025).** "Identity as Graph Architecture"
     - `/home/emoore/CIRISAgent/docs/IDENTITY_AS_GRAPH.md`
 
-12. **Moore, E. (2025).** "CIRIS Covenant v1.0b"
-    - `/home/emoore/CIRISAgent/COVENANT.md`
+12. **Moore, E. (2025).** "CIRIS Accord v1.0b"
+    - `/home/emoore/CIRISAgent/ACCORD.md`
 
 13. **Moore, E. (2025).** "Graceful Shutdown FSD v2.0"
     - `/home/emoore/CIRISAgent/FSD/GRACEFUL_SHUTDOWN.md`

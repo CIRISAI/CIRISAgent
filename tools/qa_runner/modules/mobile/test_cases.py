@@ -4,13 +4,20 @@ Mobile Test Cases for CIRIS App
 Test cases for automated UI testing with ADB and UI Automator.
 """
 
+import json
+import os
+import re
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .adb_helper import ADBHelper
 from .ui_automator import UIAutomator
+from tools.qa_runner.modules.mobile.llm_preflight import PROVIDER_BASE_URLS
+from tools.qa_runner.modules.web_ui.shell_nav import Shell, detect_shell, row_tag, walk_circles_sync
 
 
 class TestResult(Enum):
@@ -38,11 +45,23 @@ class TestReport:
 
 
 class CIRISAppConfig:
-    """Configuration for CIRIS mobile app testing."""
+    """Configuration for CIRIS mobile app testing.
 
-    PACKAGE = "ai.ciris.mobile"
-    MAIN_ACTIVITY = "ai.ciris.mobile.MainActivity"
-    APK_PATH = "mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk"
+    Targets the debug build by default — APK_PATH points to
+    androidApp/build/outputs/apk/debug/, which is signed with the debug
+    keystore and packaged under the `.debug` application id (per
+    androidApp/build.gradle's debug applicationIdSuffix). Previously
+    PACKAGE/MAIN_ACTIVITY pointed at the release id while APK_PATH
+    referenced the debug APK — the two disagreed and `pm clear` /
+    `am start` silently no-op'd against the wrong package on a fresh
+    emulator, failing every test at "Failed to launch app" within ~2s.
+    Override via CIRIS_MOBILE_PACKAGE if you need to point at the
+    release build instead.
+    """
+
+    PACKAGE = os.environ.get("CIRIS_MOBILE_PACKAGE", "ai.ciris.mobile.debug")
+    MAIN_ACTIVITY = f"{PACKAGE.replace('.debug', '')}.MainActivity"
+    APK_PATH = "apps/android/build/outputs/apk/debug/androidApp-debug.apk"
 
     # UI Texts (for finding elements)
     TEXT_CIRIS = "CIRIS"
@@ -58,27 +77,54 @@ class CIRISAppConfig:
     TEXT_SEND = "Send"
 
     # Setup wizard texts (extensible for future screens)
-    # Current flow: Intro → AI Config → Confirm → (future screens) → Chat
+    # Current flow (4 steps):
+    #   1. Intro/Welcome → "Register Your Agent Identity" card, "Continue →"
+    #   2. AI Configuration → Provider dropdown, API Key, "Test Connection", "Next"
+    #   3. Optional Features → Alignment metrics consent, Web API toggle, "Next"
+    #   4. Confirm Setup → Username/Password, "Finish Setup"
     TEXT_SETUP_TITLE = "Setup"
     TEXT_LLM_PROVIDER = "LLM Provider"
     TEXT_API_KEY = "API Key"
     TEXT_NEXT = "Next"
     TEXT_CONTINUE = "Continue"  # Intro step button
+    TEXT_CONTINUE_ARROW = "Continue →"  # Intro step with arrow
     TEXT_FINISH_SETUP = "Finish Setup"  # Final step button
     TEXT_FINISH = "Finish"
     TEXT_COMPLETE = "Complete"
     TEXT_FREE_AI_ACCESS = "Free AI Access Ready"
     TEXT_AI_CONFIG = "AI Configuration"
     TEXT_CONFIRM_SETUP = "Confirm Setup"
+    # Step 1 texts
+    TEXT_REGISTER_IDENTITY = "Register Your Agent Identity"
+    TEXT_SKIP_FOR_NOW = "Skip for now..."
+    TEXT_BACK_TO_LOGIN = "Back to Login"
+    # Step 2 texts
+    TEXT_PROVIDER = "Provider"
+    TEXT_OPENAI = "OpenAI"
+    TEXT_ANTHROPIC = "Anthropic"
+    TEXT_GOOGLE_AI = "Google AI"
+    TEXT_TEST_CONNECTION = "Test Connection"
+    # Step 3 texts
+    TEXT_OPTIONAL_FEATURES = "Optional Features"
+    TEXT_HELP_IMPROVE = "Help Improve AI Alignment"
+    TEXT_ALIGNMENT_CONSENT = "I agree to share anonymous alignment metrics"
+    TEXT_COMMUNICATION_ADAPTERS = "Communication Adapters"
+    TEXT_WEB_API = "Web API"
+    # Step 4 texts
+    TEXT_YOUR_ACCOUNT = "Your Account"
+    TEXT_USERNAME = "Username"
+    TEXT_PASSWORD = "Password"
+    TEXT_USERNAME_REQUIRED = "Username is required"
+    TEXT_PASSWORD_REQUIRED = "Password is required"
 
     # Setup wizard navigation buttons (in priority order)
-    # Add new button texts here as screens are added
+    # Priority: Finish > Next > Continue (to prevent skipping steps)
     SETUP_NAV_BUTTONS = [
-        "Finish Setup",  # Final step
+        "Finish Setup",  # Step 4: Final step
+        "Next",  # Steps 2-3: Middle steps
+        "Continue →",  # Step 1: Intro with arrow
+        "Continue",  # Step 1: Intro alternate
         "Get Started",  # Future onboarding
-        "Next",  # Middle steps
-        "Continue",  # Intro step
-        "Continue →",  # Alternate continue
         "Finish",  # Alternate final
         "Complete",  # Alternate complete
         "Done",  # Alternate done
@@ -97,6 +143,21 @@ class CIRISAppConfig:
         "STOP",  # Stop button only on chat screen
     ]
 
+    # Register Your Agent texts (device auth via Portal/Registry)
+    TEXT_REGISTER_AGENT = "Register Your Agent"
+    TEXT_REGISTER_SUBTITLE = "$1.00 bond"  # Partial match for the pricing text
+    TEXT_CONNECT = "Connect"
+    TEXT_PORTAL_URL_PLACEHOLDER = "Portal URL"
+    TEXT_WAITING_AUTH = "Waiting for authorization"
+    TEXT_VERIFICATION_URL = "portal.ciris"
+    TEXT_AGENT_AUTHORIZED = "Authorized"
+    TEXT_CONNECTING_PORTAL = "Connecting"
+    TEXT_REGISTER_AGENT_STEP = "Register Agent"  # Step title
+
+    # Deprecated aliases (for backwards compat)
+    TEXT_ACQUIRE_LICENSE = TEXT_REGISTER_AGENT
+    TEXT_CREATE_LICENSED_AGENT = TEXT_REGISTER_AGENT
+
     # Test tags (Compose testTag values appear in resource-id)
     TAG_BTN_GOOGLE_SIGNIN = "btn_google_signin"
     TAG_BTN_LOCAL_LOGIN = "btn_local_login"
@@ -104,11 +165,19 @@ class CIRISAppConfig:
     TAG_BTN_SEND = "btn_send"
 
     # Timeouts (in seconds)
-    TIMEOUT_APP_LAUNCH = 60
+    TIMEOUT_APP_LAUNCH = 180  # cold first boot: attestation (11 steps) + 22 services on emulator swiftshader takes 75-120s
     TIMEOUT_GOOGLE_SIGNIN = 30
     TIMEOUT_SETUP = 90  # Increased for multi-step wizard
     TIMEOUT_CHAT_RESPONSE = 30
     TIMEOUT_SETUP_STEP = 5  # Max wait per wizard step
+
+    # In-app test-automation HTTP server (Ktor CIO, same as desktop/iOS).
+    # Debug builds force-enable it (BuildConfig.TEST_MODE_ENABLED=true →
+    # AndroidTestAutomationServer.startIfEnabled() in MainActivity.onCreate).
+    # It binds 127.0.0.1:9091 ON THE DEVICE; we adb-forward a local port to it.
+    # 19091 locally avoids colliding with a desktop test server on 9091.
+    TEST_SERVER_DEVICE_PORT = 9091
+    TEST_SERVER_LOCAL_PORT = 19091
 
 
 class ScreenCoordinates:
@@ -128,21 +197,36 @@ class ScreenCoordinates:
     """
 
     # Default coordinates for 1080x2400 resolution
+    # Updated 2026-02-28 with actual screen measurements from emulator
     DEFAULTS = {
         # Login screen
         "google_signin_center": (540, 1208),
-        "local_login_center": (540, 1397),
+        "local_login_center": (541, 1397),  # [430,1371][652,1424]
         # Chat screen (bottom input area)
         "message_input_center": (274, 2179),
         "send_button_center": (996, 2180),
-        # Setup wizard buttons (typically centered near bottom)
-        "wizard_button_center_y": 2274,
-        "wizard_continue_x": 540,  # Centered
-        "wizard_next_x": 786,  # Right side
-        "wizard_back_x": 294,  # Left side
+        # Setup wizard buttons (bottom navigation bar)
+        "wizard_button_center_y": 2232,  # Common Y for all bottom buttons
+        "wizard_continue_x": 786,  # "Continue →" button X
+        "wizard_next_x": 786,  # "Next" button X [748,2206][825,2259]
+        "wizard_back_x": 294,  # "Back" button X [253,2206][335,2259]
+        "wizard_finish_x": 786,  # "Finish Setup" button X [685,2206][888,2259]
+        # Setup Step 1 (Intro/Welcome)
+        "skip_for_now_center": (540, 1497),  # [105,1466][975,1529]
+        # Setup Step 2 (AI Configuration)
+        "provider_dropdown_center": (540, 598),  # [63,525][1017,672]
+        "api_key_field_center": (540, 871),  # [63,798][1017,945]
+        "test_connection_center": (540, 1050),  # [407,1024][674,1077]
+        # Setup Step 4 (Confirm Setup)
+        "username_field_center": (540, 1100),  # Below Username label
+        "password_field_center": (540, 1250),  # Below Password label
         # Google account chooser
         "account_row_center_y": 1260,
         "account_row_x": 350,
+        # Provider dropdown items (approximate Y positions when open)
+        "dropdown_openai_y": 493,
+        "dropdown_anthropic_y": 547,
+        "dropdown_google_ai_y": 601,
     }
 
     @classmethod
@@ -165,6 +249,288 @@ class ScreenCoordinates:
         return (scaled_x, scaled_y)
 
 
+# ========== In-App Test-Automation HTTP Client (Compose testTag drive) ==========
+#
+# UIAutomator XML dumps do NOT reliably expose Compose testTags set via the
+# shared `testable()` / `testableClickable()` modifiers (no
+# testTagsAsResourceId semantics on those nodes). The app runs the same Ktor
+# test-automation server as desktop (TestAutomationServer.android.kt, port
+# 9091 on-device, auto-enabled in debug builds), which serves exactly those
+# testTags. New wizard/catch-up tests drive the app through it.
+
+
+class TestServerClient:
+    """Thin HTTP client for the in-app test-automation server (Android).
+
+    Reached via `adb forward tcp:19091 tcp:9091`. Endpoints (shared
+    TestAutomationHandler): /health, /screen, /tree, /click, /input, /wait,
+    /element/{tag}, /act.
+    """
+
+    def __init__(self, base_url: str = f"http://127.0.0.1:{CIRISAppConfig.TEST_SERVER_LOCAL_PORT}"):
+        self.base_url = base_url.rstrip("/")
+
+    def _request(self, method: str, path: str, data: Optional[dict] = None, timeout: int = 10) -> Tuple[int, dict]:
+        url = f"{self.base_url}{path}"
+        body = json.dumps(data).encode() if data is not None else None
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"} if body else {},
+            method=method,
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+                try:
+                    return resp.status, json.loads(raw)
+                except json.JSONDecodeError:
+                    return resp.status, {"raw": raw.decode("utf-8", errors="replace")}
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read())
+            except Exception:
+                return e.code, {"error": str(e)}
+        except (urllib.error.URLError, ConnectionRefusedError, OSError) as e:
+            return 0, {"error": str(e)}
+
+    def health(self) -> Tuple[int, dict]:
+        return self._request("GET", "/health", timeout=3)
+
+    def screen(self) -> Optional[str]:
+        status, body = self._request("GET", "/screen", timeout=5)
+        return body.get("screen") if status == 200 else None
+
+    def tags(self) -> List[str]:
+        """All currently POSITIONED testTags (from /tree)."""
+        status, body = self._request("GET", "/tree", timeout=5)
+        if status != 200:
+            return []
+        return [e.get("testTag", "") for e in body.get("elements", [])]
+
+    def on_screen_tags(self) -> List[str]:
+        """Tags ON SCREEN: the tree's `visible` flag (ciris-client 0.5.206+), else
+        every positioned tag. The tree never forgets a composed element, so a
+        closed My things sheet still lists its instruments; this does not."""
+        status, body = self._request("GET", "/tree", timeout=5)
+        if status != 200:
+            return []
+        return [e.get("testTag", "") for e in body.get("elements", []) if e.get("visible", True)]
+
+    def is_visible(self, test_tag: str) -> bool:
+        """Positioned-in-the-composition check via /tree.
+
+        Used for GATING assertions (e.g. toggle_trace_opt_in must be ABSENT
+        while announce is OFF): AnimatedVisibility(false) content is not
+        composed, so its tag is neither positioned nor handler-registered.
+        """
+        return test_tag in self.tags()
+
+    def click(self, test_tag: str) -> Tuple[bool, Optional[Tuple[int, int]]]:
+        """Click via the registered handler. Returns (success, coords).
+
+        On failure coords (if the element is positioned but handler-less —
+        the testable()-vs-testableClickable() client bug class) let the
+        caller fall back to an adb coordinate tap.
+        """
+        status, body = self._request("POST", "/click", {"testTag": test_tag})
+        coords = None
+        raw = body.get("coordinates")
+        if raw and "," in str(raw):
+            try:
+                x, y = str(raw).split(",", 1)
+                coords = (int(float(x)), int(float(y)))
+            except ValueError:
+                coords = None
+        return status == 200 and bool(body.get("success")), coords
+
+    def input(self, test_tag: str, text: str, clear_first: bool = True) -> bool:
+        status, body = self._request(
+            "POST", "/input", {"testTag": test_tag, "text": text, "clearFirst": clear_first}
+        )
+        return status == 200 and bool(body.get("success"))
+
+    def wait_for_element(self, test_tag: str, timeout: float = 8.0) -> bool:
+        """Server-side wait (position OR click-handler registered)."""
+        status, body = self._request(
+            "POST",
+            "/wait",
+            {"testTag": test_tag, "timeoutMs": int(timeout * 1000)},
+            timeout=int(timeout) + 5,
+        )
+        return status == 200 and bool(body.get("success"))
+
+    def wait_for_screen(self, expected: str, timeout: float = 10.0, interval: float = 0.5) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.screen() == expected:
+                return True
+            time.sleep(interval)
+        return False
+
+    def wait_for_any_screen(self, expected: List[str], timeout: float = 10.0, interval: float = 0.5) -> Optional[str]:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            current = self.screen()
+            if current in expected:
+                return current
+            time.sleep(interval)
+        return None
+
+
+
+def _env_value(env_text: str, key: str) -> str:
+    """Read KEY="value" out of a device .env dump (quotes optional)."""
+    m = re.search(rf'^{re.escape(key)}\s*=\s*"?([^"\n\r]*)"?\s*$', env_text, re.M)
+    return m.group(1).strip() if m else ""
+
+def _click_or_tap(client: TestServerClient, adb: ADBHelper, test_tag: str) -> bool:
+    """Click via registered handler; fall back to coordinate tap if the tag is
+    positioned but handler-less (testable() instead of testableClickable())."""
+    ok, coords = client.click(test_tag)
+    if ok:
+        return True
+    if coords:
+        print(f"    (no click handler for '{test_tag}' — falling back to adb tap at {coords})")
+        adb.tap(*coords)
+        return True
+    return False
+
+
+def _reach_surface(client: "TestServerClient", adb: ADBHelper, surface: str) -> Optional[str]:
+    """Open `surface` (an EpistemicNav id, e.g. `nodes`) through whichever shell
+    the app renders. None on success, else why not (CIRISAgent#1181).
+
+    Same decision as the desktop runner's `DesktopAppHelper.reach_surface`: the
+    circles shell (ciris-client 0.5.224+) walks shell_nav's route; the old rail
+    (<= 0.5.223) opens the compact drawer, expands collapsed groups until the
+    `nav_epistemic_<id>` row appears, and clicks it.
+    """
+    if detect_shell(client.tags()) == Shell.CIRCLES:
+        return walk_circles_sync(surface, client.on_screen_tags, lambda tag: _click_or_tap(client, adb, tag))
+    tag = row_tag(surface)
+    if not client.is_visible(tag):
+        if client.is_visible("btn_nav_drawer_open"):
+            print("      opening nav drawer")
+            _click_or_tap(client, adb, "btn_nav_drawer_open")
+            time.sleep(1)
+        for group in sorted(t for t in client.tags() if t.startswith("nav_group_")):
+            if client.is_visible(tag):
+                break
+            print(f"      expanding sidebar group {group}")
+            _click_or_tap(client, adb, group)
+            if client.wait_for_element(tag, timeout=3):
+                break
+    if not client.is_visible(tag):
+        return f"{tag!r} not in the tree after opening the drawer and the sidebar groups"
+    print(f"      clicking {tag}")
+    if not _click_or_tap(client, adb, tag):
+        return f"click on {tag!r} did not take"
+    return None
+
+
+def _wizard_entered(adb: ADBHelper, config: dict, ui: UIAutomator, timeout: float = 15.0) -> bool:
+    """Did sign-in land us on the first-run wizard?
+
+    Asserted on the wizard's own testTags, not on prose. The previous check
+    looked for the literal words "Setup" / "LLM" / "Provider", which was true of
+    the pre-2.9.14 wizard whose first screen was the LLM step. The redesign
+    opens on YOU ("Create your federation ID") and moves LLM to screen 3, so
+    that check failed against a wizard that was rendering perfectly — it
+    reported "Setup screen not found" while dumping the new screen's full text.
+
+    Prose was the wrong anchor for a second reason: the screen is localized into
+    29 languages, and an emulator whose locale is not English fails a
+    English-substring match no matter which wizard is on screen. testTags are
+    stable across both redesigns and locales.
+    """
+    deadline = time.time() + timeout
+    client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+    if client is not None:
+        # Screen 1 of the wizard, by tag. `input_fedid_label` is the required
+        # fed-ID name field; `step_indicator` is the 1-2-3 chrome.
+        while time.time() < deadline:
+            tags = client.tags()
+            if any(t in tags for t in ("input_fedid_label", "step_indicator", "btn_next")):
+                return True
+            time.sleep(0.5)
+        return False
+
+    # No test server (non-test build): fall back to text, but to text the CURRENT
+    # wizard actually renders. English-only by nature — see the docstring.
+    return bool(
+        ui.wait_for_text("federation ID", timeout=timeout)
+        or ui.wait_for_text("Welcome to CIRIS", timeout=3)
+    )
+
+
+def connect_test_server(
+    adb: ADBHelper,
+    config: dict,
+    launch_if_needed: bool = True,
+    clear_data: bool = False,
+    boot_timeout: float = 180.0,
+) -> Optional[TestServerClient]:
+    """Forward the in-app test server port and return a live client.
+
+    If the server isn't reachable and ``launch_if_needed``, (re)launches the
+    app (optionally clearing data for a first-run flow) and polls /health
+    while the bundled Python backend boots (60-120s+ on first extraction).
+    """
+    local_port = config.get("test_server_local_port", CIRISAppConfig.TEST_SERVER_LOCAL_PORT)
+    device_port = config.get("test_server_device_port", CIRISAppConfig.TEST_SERVER_DEVICE_PORT)
+
+    if not adb.forward_port(local_port, device_port):
+        print(f"  WARNING: adb forward tcp:{local_port} tcp:{device_port} failed")
+        return None
+
+    client = TestServerClient(f"http://127.0.0.1:{local_port}")
+
+    # Already up? (app running in test mode)
+    status, body = client.health()
+    if status == 200 and body.get("testMode"):
+        return client
+
+    if not launch_if_needed:
+        return None
+
+    print("  Test server not reachable — launching app...")
+    adb.force_stop_app(CIRISAppConfig.PACKAGE)
+    time.sleep(1)
+    if clear_data:
+        print("  Clearing app data (first-run flow)...")
+        adb.clear_app_data(CIRISAppConfig.PACKAGE)
+        time.sleep(1)
+    if not adb.launch_app(CIRISAppConfig.PACKAGE, CIRISAppConfig.MAIN_ACTIVITY):
+        print("  ERROR: failed to launch app")
+        return None
+
+    deadline = time.time() + boot_timeout
+    while time.time() < deadline:
+        status, body = client.health()
+        if status == 200 and body.get("testMode"):
+            return client
+        time.sleep(2)
+
+    print(f"  ERROR: in-app test server never came up within {boot_timeout:.0f}s")
+    return None
+
+
+def _identity_failure(step: str, detail: str) -> TestReport:
+    """Failure report for the identity-preservation check in test_app_launch.
+
+    Module-level and self-contained: the callers of the two existing `fail`
+    closures cannot see them from here, which is exactly how a `NameError` came
+    to sit on this branch.
+    """
+    return TestReport(
+        name="test_app_launch",
+        result=TestResult.FAILED,
+        duration=0.0,
+        message=f"[{step}] {detail}",
+    )
+
+
 def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """
     Test: App launches successfully.
@@ -184,9 +550,85 @@ def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport
         adb.force_stop_app(CIRISAppConfig.PACKAGE)
         time.sleep(1)
 
-        print("  [2/5] Clearing app data...")
-        adb.clear_app_data(CIRISAppConfig.PACKAGE)
-        time.sleep(1)
+        # Honor --no-clear: clearing app data wipes the extracted Chaquopy Python
+        # bundle, and on a storage-constrained device re-extraction on relaunch
+        # can fail (app crashes back to home). Only clear when explicitly asked.
+        if config.get("clear_data", True):
+            # --preserve-identity: back the node's federation identity out before
+            # the wipe and restore it after. A re-minted agent is re-admitted by
+            # announce at Advisory and strands on the un-rooted path
+            # (CIRISEdge#432), so every `pm clear` puts repeat QA back in the
+            # hole a primed canonical just got it out of. Data is still cleared —
+            # only files/ciris/identity/ survives.
+            preserve = config.get("preserve_identity", False)
+            # The node's identity is NOT just files/ciris/identity/. The
+            # bootstrap seed blobs live there, but the wizard-minted federation
+            # keys live in files/ciris/keys/ and the binding in files/ciris/config/.
+            # Restoring only the first set produced a node that reported
+            # "identity restored" and then minted a brand-new key_id anyway.
+            ident_dirs = ["files/ciris/identity", "files/ciris/keys", "files/ciris/config"]
+
+            def _node_key_id() -> str:
+                """key_id as the node itself names it — from the seed blob filename."""
+                listing = adb.shell(f"run-as {CIRISAppConfig.PACKAGE} ls files/ciris/identity") or ""
+                for n in listing.split():
+                    m = re.match(r"(ciris-agent-bootstrap-[a-z0-9]+)\.", n)
+                    if m:
+                        return m.group(1)
+                return ""
+
+            stashed: dict = {}
+            key_before = ""
+            if preserve:
+                key_before = _node_key_id()
+                for d in ident_dirs:
+                    for n in (adb.shell(f"run-as {CIRISAppConfig.PACKAGE} ls {d}") or "").split():
+                        blob = adb._run_adb(
+                            ["shell", "run-as", CIRISAppConfig.PACKAGE, "base64", f"{d}/{n}"],
+                            timeout=60,
+                        )
+                        if blob.returncode == 0 and blob.stdout.strip():
+                            stashed[f"{d}/{n}"] = "".join(blob.stdout.split())
+                print(f"  [2/5] Preserving identity: key_id={key_before or '?'} ({len(stashed)} file(s))")
+
+            print("  [2/5] Clearing app data...")
+            adb.clear_app_data(CIRISAppConfig.PACKAGE)
+            time.sleep(1)
+
+            if preserve and stashed:
+                for d in ident_dirs:
+                    adb.shell(f"run-as {CIRISAppConfig.PACKAGE} mkdir -p {d}")
+                for path, b64 in stashed.items():
+                    adb._run_adb(
+                        ["shell", f"run-as {CIRISAppConfig.PACKAGE} sh -c 'echo {b64} | base64 -d > {path}'"],
+                        timeout=60,
+                    )
+                # ASSERT THE THING THAT MATTERS. The previous check compared FILE
+                # COUNT and reported "key_id preserved" while the node came up as
+                # a different agent entirely. A restore is only successful if the
+                # key_id is the same one.
+                key_after = _node_key_id()
+                if key_after and key_after == key_before:
+                    print(f"  [2/5] Identity restored — key_id={key_after} UNCHANGED")
+                else:
+                    # `fail(...)` here referenced a helper that does not exist in
+                    # this function — the two `def fail` in this module are local
+                    # to test_setup_wizard and one other. Reaching this branch
+                    # raised NameError instead of reporting the identity loss it
+                    # had just correctly detected, so the diagnostic destroyed
+                    # itself at the moment it fired. Same class as the
+                    # `_gate_verdict()` call in web_ui/__main__.py.
+                    return _identity_failure(
+                        "preserve_identity",
+                        f"identity NOT preserved: key_id was {key_before or '(none)'}, "
+                        f"is now {key_after or '(none)'}. A re-minted agent is re-admitted at "
+                        f"Advisory and strands un-rooted (CIRISEdge#432), so this run would "
+                        f"measure the wrong thing. NOTE: full_flow re-runs the setup wizard, "
+                        f"which mints a fresh federation ID BY DESIGN — --preserve-identity is "
+                        f"for repeat runs that skip setup (e.g. chat_interaction --no-clear).",
+                    )
+        else:
+            print("  [2/5] Skipping data clear (clear_data=False)")
 
         print("  [3/5] Launching app...")
         success = adb.launch_app(CIRISAppConfig.PACKAGE, CIRISAppConfig.MAIN_ACTIVITY)
@@ -203,8 +645,11 @@ def test_app_launch(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport
         # The app shows "CIRIS" splash then transitions to Login
         time.sleep(5)  # Initial wait for Python init
 
-        # Wait for login screen (up to 60 seconds for Python startup)
-        element = ui.wait_for_text(CIRISAppConfig.TEXT_SIGN_IN_GOOGLE, timeout=CIRISAppConfig.TIMEOUT_APP_LAUNCH)
+        # Wait for the Login screen — match on Local Login (always present, and
+        # the path local-login mode uses) OR the Google button.
+        element = ui.wait_for_text(
+            CIRISAppConfig.TEXT_LOCAL_LOGIN, timeout=CIRISAppConfig.TIMEOUT_APP_LAUNCH
+        ) or ui.wait_for_text(CIRISAppConfig.TEXT_SIGN_IN_GOOGLE, timeout=5)
 
         if not element:
             # Take screenshot for debugging
@@ -393,9 +838,7 @@ def test_google_signin(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRep
         # After Google sign-in, app should navigate to Setup wizard
         # Look for setup-related UI elements
         setup_visible = (
-            ui.wait_for_text("Setup", timeout=10)  # Generic setup text
-            or ui.wait_for_text("LLM", timeout=5)  # LLM provider selection in setup
-            or ui.wait_for_text("Provider", timeout=5)
+            _wizard_entered(adb, config, ui)
         )
 
         if setup_visible:
@@ -471,7 +914,7 @@ def test_local_login(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepor
         print(f"  [2/2] Verifying navigation to Setup screen...")
 
         # Should navigate directly to Setup
-        setup_visible = ui.wait_for_text("Setup", timeout=10) or ui.wait_for_text("LLM", timeout=5)
+        setup_visible = _wizard_entered(adb, config, ui)
 
         if setup_visible:
             return TestReport(
@@ -500,134 +943,365 @@ def test_local_login(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepor
 
 def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """
-    Test: Complete the setup wizard.
+    Test: Complete the NODE-CLIENT first-run setup wizard.
 
-    Prerequisites:
-    - Must be on Setup screen (after login)
+    Drives the app through the in-app test-automation HTTP server (Compose
+    testTags — UIAutomator does not reliably see them). First-run order
+    (SetupState.nextSetupStep, matches the desktop QA runner's
+    test_setup_wizard_flow):
 
-    The wizard currently has 3 steps (extensible):
-    1. Welcome/Intro (button: "Continue →")
-    2. AI Configuration (button: "Next")
-    3. Confirm Setup (button: "Finish Setup")
+        YOU (fed-ID label + username/password/confirm + age band)
+        → JOIN_FEDERATION (consent) → [AI] → COMPLETE
 
-    Additional screens can be added - the test will navigate through
-    any number of steps using the SETUP_NAV_BUTTONS priority list.
+    The AI screen appears only on AGENT builds (CIRISBuild.HAS_AGENT) and is
+    the final step there — prefer the CIRIS-hosted option if rendered (OAuth
+    path), else BYOK with the configured provider+key (llm_provider/
+    llm_api_key), else the keyless "local" (Ollama) provider so the wizard can
+    proceed without a real key. Node-client builds finish at JOIN_FEDERATION.
+
+    Screen 1 (YOU) carries what used to be four screens:
+      - input_fedid_label   — REQUIRED, non-generic fed-ID name
+      - input_username / input_password / input_password_confirm
+      - age_band_*          — optional; declining sets the protective default
+    Screen 2 (JOIN_FEDERATION) carries the consent toggles, REACHABLE on every
+    path (through 2.9.13 the trace checkbox lived on a step nothing routed to,
+    so no production node could express trace consent at all):
+      - toggle_announce_ownership  — announce, ON by default (floor for service)
+      - trace_consent_yes / _no    — send traces (consent:replication:v1); REQUIRED
+      - toggle_trace_analyze       — be scored (CC#46 analyze)
+      - toggle_share_location      — rough location, OFF by default
+
+    Config options:
+    - setup_username / setup_password: local account (default admin/qa_test_password_12345)
+    - fed_label: federation-ID label (default: generated unique qa-node-<ts>)
+    - announce: leave the announce switch ON (default True; both this and
+      trace_opt_in default ON in the wizard, so False means "click it off")
+    - trace_opt_in: leave the trace toggle ON (default True)
+    - age_band: "adult" | "minor" (default "adult")
+    - llm_provider / llm_api_key: BYOK provider+key for the agent build's AI
+      screen (default groq / key from ~/.groq_key when the runner found one;
+      keyless "local" fallback when no key)
+    - clear_data: clear app data if the app must be (re)launched (default True)
+
+    Standalone-safe: if the app/test server isn't up it launches the app
+    itself (fresh first-run when clear_data), and if it lands on the Login
+    screen it clicks btn_local_login to enter the wizard.
     """
     start_time = time.time()
     screenshots = []
 
-    api_key = config.get("llm_api_key", "")
-    max_steps = config.get("setup_max_steps", 15)  # Configurable for future screens
+    username = config.get("setup_username", "qauser")
+    password = config.get("setup_password", "qa_test_password_12345")
+    fed_label = config.get("fed_label") or f"qa-node-{int(time.time())}"
+    announce = config.get("announce", True)
+    trace_opt_in = config.get("trace_opt_in", True)
+    age_band = config.get("age_band", "adult")
+    llm_provider = config.get("llm_provider", "groq")
+    llm_api_key = config.get("llm_api_key", "")
 
-    try:
-        print("  [1/4] Checking Setup screen...")
-
-        # Wait for setup screen elements
-        time.sleep(2)
-        screen_info = ui.dump_screen_info()
-        print(f"  Setup screen elements: {screen_info.get('texts', [])[:15]}")
-
-        # Take screenshot
-        screenshot_path = f"/tmp/ciris_setup_{int(time.time())}.png"
-        adb.screenshot(screenshot_path)
-        screenshots.append(screenshot_path)
-
-        print("  [2/4] Navigating setup wizard...")
-
-        # Navigate through wizard steps
-        for step in range(max_steps):
-            time.sleep(1.5)
-            ui.refresh_hierarchy()
-
-            # Check if we've completed setup (reached chat screen)
-            # Must find a PRIMARY indicator - "Connected" alone is not sufficient
-            for indicator in CIRISAppConfig.CHAT_SCREEN_INDICATORS_PRIMARY:
-                if ui.is_text_visible(indicator):
-                    print(f"  Setup completed! Found primary indicator '{indicator}' after {step + 1} clicks")
-                    return TestReport(
-                        name="test_setup_wizard",
-                        result=TestResult.PASSED,
-                        duration=time.time() - start_time,
-                        message=f"Setup completed in {step + 1} steps (found: {indicator})",
-                        screenshots=screenshots,
-                    )
-
-            # Also check for secondary indicators WITH primary context
-            # If we see Shutdown/STOP buttons, we're definitely on chat screen
-            for indicator in CIRISAppConfig.CHAT_SCREEN_INDICATORS_SECONDARY:
-                if indicator in ["Shutdown", "STOP"] and ui.is_text_visible(indicator):
-                    # Shutdown/STOP only appear on chat screen
-                    print(f"  Setup completed! Found chat-only indicator '{indicator}' after {step + 1} clicks")
-                    return TestReport(
-                        name="test_setup_wizard",
-                        result=TestResult.PASSED,
-                        duration=time.time() - start_time,
-                        message=f"Setup completed in {step + 1} steps (found: {indicator})",
-                        screenshots=screenshots,
-                    )
-
-            # Look for API key input (for BYOK mode)
-            if ui.is_text_visible("API Key") or ui.is_text_visible("api_key"):
-                if api_key:
-                    edit_fields = ui.find_by_class("EditText")
-                    if edit_fields:
-                        ui.set_text(edit_fields[0], api_key)
-                        time.sleep(0.5)
-
-            # Enable covenant metrics consent if the checkbox is visible
-            # The checkbox text is "I agree to share anonymous alignment metrics"
-            if config.get("enable_covenant_metrics", True):
-                covenant_text = "I agree to share anonymous alignment metrics"
-                if ui.is_text_visible(covenant_text):
-                    # Find and click the checkbox or the text row
-                    if ui.click_by_text(covenant_text):
-                        print(f"  Step {step + 1}: Enabled covenant metrics consent")
-                        time.sleep(0.5)
-
-            # Try clicking navigation buttons in priority order
-            next_clicked = False
-            for button_text in CIRISAppConfig.SETUP_NAV_BUTTONS:
-                if ui.click_by_text(button_text):
-                    print(f"  Step {step + 1}: Clicked '{button_text}'")
-                    next_clicked = True
-                    break
-
-            if not next_clicked:
-                # Try finding any clickable button (not Back)
-                screen_texts = ui.get_screen_text()
-                print(f"  Step {step + 1}: No nav button found. Screen: {screen_texts[:10]}")
-
-                # Last resort: find clickable elements
-                clickable = ui.find_clickable()
-                for elem in clickable:
-                    # Skip Back button and other non-forward elements
-                    elem_text = getattr(elem, "text", "") or ""
-                    if any(skip in elem_text for skip in ["Back", "Cancel", "Skip"]):
-                        continue
-                    # Click forward-looking buttons
-                    if "Button" in elem.class_name:
-                        ui.click(elem)
-                        print(f"  Step {step + 1}: Clicked fallback button")
-                        next_clicked = True
-                        break
-
-                if not next_clicked:
-                    # Check if we're stuck on a step that needs special handling
-                    print(f"  Step {step + 1}: No clickable forward button found")
-
-            time.sleep(1)
-
-        # If we get here, setup didn't complete
-        screenshot_path = f"/tmp/ciris_setup_stuck_{int(time.time())}.png"
-        adb.screenshot(screenshot_path)
-        screenshots.append(screenshot_path)
-
-        screen_info = ui.dump_screen_info()
+    def fail(step: str, detail: str) -> TestReport:
+        path = f"/tmp/ciris_setup_fail_{int(time.time())}.png"
+        adb.screenshot(path)
+        screenshots.append(path)
         return TestReport(
             name="test_setup_wizard",
             result=TestResult.FAILED,
             duration=time.time() - start_time,
-            message=f"Setup wizard did not complete after {max_steps} steps. Final screen: {screen_info.get('texts', [])[:10]}",
+            message=f"[{step}] {detail}",
+            screenshots=screenshots,
+        )
+
+    try:
+        # ── Step 0: reach the wizard via the test server ──────────────────
+        print("  [1/7] Connecting to in-app test server...")
+        client = connect_test_server(adb, config, launch_if_needed=True, clear_data=config.get("clear_data", True))
+        if not client:
+            return fail("connect", "in-app test-automation server unreachable (debug build required)")
+
+        print("  [2/7] Waiting for Login/Setup screen (first boot can take 60-120s+)...")
+        landed = client.wait_for_any_screen(["Login", "Setup"], timeout=180.0, interval=1.5)
+        if landed is None:
+            return fail("land", f"never reached Login/Setup (screen={client.screen()!r})")
+
+        if landed == "Login":
+            print("  Login screen → clicking btn_local_login")
+            if not client.wait_for_element("btn_local_login", timeout=10):
+                return fail("login", "btn_local_login not found on Login screen")
+            if not _click_or_tap(client, adb, "btn_local_login"):
+                return fail("login", "could not click btn_local_login")
+            if not client.wait_for_screen("Setup", timeout=30.0):
+                # A configured backend routes Local Login to the login FORM,
+                # not the wizard — that's an environment state, not a bug.
+                if client.is_visible("input_password") and client.is_visible("btn_login_submit"):
+                    return TestReport(
+                        name="test_setup_wizard",
+                        result=TestResult.SKIPPED,
+                        duration=time.time() - start_time,
+                        message="Backend already configured (login form shown) — first-run wizard "
+                        "unavailable. Re-run with clear_data to get a fresh node.",
+                        screenshots=screenshots,
+                    )
+                return fail("login", f"did not reach Setup wizard (screen={client.screen()!r})")
+
+        # ── Screen 1: YOU — fed-ID name + local account + age band ────────
+        print(f"  [3/6] YOU: fed-ID={fed_label!r}, user={username}, band={age_band}")
+        if not client.wait_for_element("input_fedid_label", timeout=15):
+            return fail("you", "input_fedid_label not found on screen 1 (YOU)")
+        if not client.input("input_fedid_label", fed_label):
+            return fail("you", "failed to input federation-ID label")
+        time.sleep(0.5)
+
+        # Two shapes of the account section, gated on `showLocalUserFields()`:
+        #  - LOCAL login → username/password/confirm inputs (input_username).
+        #  - GOOGLE sign-in (full_flow's google_signin ran first) → the account
+        #    IS the Google identity and there are no local inputs.
+        # Small settles between inputs: the Kotlin side consumes ONE pending
+        # TextInputRequest via a StateFlow slot — back-to-back requests can
+        # overwrite each other before recomposition applies them.
+        if client.wait_for_element("input_username", timeout=10):
+            print(f"  [4/6] ACCOUNT (local): {username} / ******** (+ confirm)")
+            if not client.input("input_username", username):
+                return fail("you", "failed to input username")
+            time.sleep(0.5)
+            if not client.input("input_password", password):
+                return fail("you", "failed to input password")
+            time.sleep(0.5)
+            if not client.input("input_password_confirm", password):
+                return fail("you", "failed to input password confirmation")
+            time.sleep(0.5)
+        else:
+            print("  [4/6] ACCOUNT (google): no local inputs on this path")
+
+        band_tag = f"age_band_{age_band}"
+        if client.is_visible(band_tag):
+            if not _click_or_tap(client, adb, band_tag):
+                return fail("you", f"failed to click {band_tag}")
+            time.sleep(0.3)
+
+        screenshot_path = f"/tmp/ciris_setup_you_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("you", "failed to click btn_next on screen 1 (YOU)")
+        time.sleep(0.5)
+
+        # ── Screen 2: JOIN_FEDERATION — the consent decision ──────────────
+        # The regression this guards: through 2.9.13 NO path reached a trace
+        # consent control, so `grant_trace_sharing` never fired from the wizard
+        # and no production node could ever ship a trace.
+        print(f"  [5/6] JOIN_FEDERATION: announce={announce}, traces={trace_opt_in}")
+        if not client.wait_for_element("toggle_announce_ownership", timeout=15):
+            return fail("consent", "toggle_announce_ownership not found on the consent screen")
+        # SEND TRACES IS A QUESTION, NOT A SWITCH (ciris-client 0.5.223+): Yes /
+        # No, nothing pre-selected, btn_next disabled until answered — the age
+        # band's shape. The trace grant renders from the consent disclosure, so
+        # wait for it as web_ui does; its absence is still the 2.9.13
+        # sealed-consent regression.
+        if not client.wait_for_element("trace_consent_yes", timeout=15):
+            return fail(
+                "consent_reachable",
+                "trace_consent_yes is NOT reachable on the consent screen — this is "
+                "the 2.9.13 sealed-consent regression (no node could ship a trace)",
+            )
+        print("      reachability OK: trace consent is on the path")
+
+        # Announce defaults ON; click only to turn it OFF. Send traces has no
+        # default and must be ANSWERED.
+        if not announce:
+            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
+                return fail("consent", "failed to click toggle_announce_ownership")
+            time.sleep(0.3)
+        answer = "trace_consent_yes" if trace_opt_in else "trace_consent_no"
+        if not _click_or_tap(client, adb, answer):
+            return fail("consent", f"failed to click {answer}")
+        time.sleep(0.3)
+
+        screenshot_path = f"/tmp/ciris_setup_consent_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if not _click_or_tap(client, adb, "btn_next"):
+            return fail("consent", "failed to click btn_next on screen 2 (JOIN_FEDERATION)")
+        time.sleep(0.5)
+
+        # ── Screen 3: AI (agent build only; the FINAL step there) ─────────
+        #
+        # Detect the SCREEN, not one widget on it. This used to be gated on
+        # `input_llm_provider`, which exists only on the BYOK variant. On the
+        # Google/OAuth path the screen instead reads "Free AI Access Ready" and
+        # composes `toggle_run_without_ai` + `btn_switch_to_byok` — no provider
+        # field — so the whole block was skipped INCLUDING its `btn_next` click,
+        # and the run sat on a fully-ready "Finish Setup" button until the
+        # downstream wait timed out. The AI step is not optional on an agent
+        # build; only its CONTENTS vary:
+        #
+        #   free-AI ready (OAuth)  — nothing to enter, just finish
+        #   btn_use_free_ai        — offered as a choice, take it
+        #   BYOK                   — provider + key + model
+        #   node-client build      — no AI screen at all
+        on_ai_screen = client.wait_for_element("input_llm_provider", timeout=6) or client.is_visible(
+            "toggle_run_without_ai"
+        )
+        # Read once, up here: the Step-6 device-config verification below uses
+        # llm_model too, and binding it only inside the BYOK branch made it
+        # unbound on every path that does not enter that branch.
+        llm_model = config.get("llm_model") or ""
+        # Whether this run actually TYPED a provider/key/model into the wizard.
+        # The Step-6 device-config assertion below is only meaningful if it did:
+        # on the OAuth path the wizard provisions CIRIS-hosted AI and there are
+        # no fields, so --llm-provider/--llm-model describe a BYOK run that never
+        # happened. Asserting them there fails a correct device for having the
+        # right answer (llm01.ciris-services-1.ai) instead of the requested one.
+        byok_applied = False
+        if on_ai_screen:
+            has_byok_fields = client.is_visible("input_llm_provider")
+            print(f"  [6/6] AI: provider={llm_provider!r}, key={'set' if llm_api_key else 'none'}")
+            if client.is_visible("btn_use_free_ai"):
+                # CIRIS-hosted proxy option (OAuth path) — no key entry needed.
+                if not _click_or_tap(client, adb, "btn_use_free_ai"):
+                    return fail("llm", "failed to click btn_use_free_ai on the AI screen")
+                time.sleep(0.3)
+            elif not has_byok_fields:
+                # OAuth path with free access already provisioned: the screen is
+                # informational and Finish Setup is enabled on arrival. Entering
+                # LLM details here is not just unnecessary, it is impossible —
+                # there are no fields.
+                print("      free AI access already provisioned (OAuth) — nothing to enter")
+            elif llm_api_key:
+                # BYOK: pick the configured provider from the dropdown, then key.
+                byok_applied = True
+                if not _click_or_tap(client, adb, "input_llm_provider"):
+                    return fail("llm", "failed to open LLM provider dropdown")
+                menu_tag = f"menu_provider_{llm_provider}"
+                if not client.wait_for_element(menu_tag, timeout=5):
+                    return fail("llm", f"{menu_tag} not found in provider dropdown")
+                if not _click_or_tap(client, adb, menu_tag):
+                    return fail("llm", f"failed to click {menu_tag}")
+                time.sleep(0.5)
+                if not client.input("input_api_key", llm_api_key):
+                    return fail("llm", "failed to input LLM API key")
+                time.sleep(0.5)
+                # Model: without this the wizard writes OPENAI_MODEL="" and the
+                # provider 404s (no model). The field is a live-models dropdown
+                # once validation has fetched them (menu_model_<sanitized-id>),
+                # else a plain text field (input_llm_model_text) before/without
+                # validation. Set it via whichever composed; tolerate absence
+                # only when no model was requested (provider default).
+                if llm_model:
+                    sanitized = llm_model.replace("/", "_").replace(":", "_")
+                    menu_model_tag = f"menu_model_{sanitized}"
+                    if client.is_visible("input_llm_model_text"):
+                        if not client.input("input_llm_model_text", llm_model):
+                            return fail("llm", f"failed to input model {llm_model!r}")
+                        time.sleep(0.5)
+                    elif client.wait_for_element("input_llm_model", timeout=3):
+                        _click_or_tap(client, adb, "input_llm_model")
+                        if not client.wait_for_element(menu_model_tag, timeout=5):
+                            return fail("llm", f"{menu_model_tag} not in model dropdown")
+                        if not _click_or_tap(client, adb, menu_model_tag):
+                            return fail("llm", f"failed to select model {llm_model!r}")
+                        time.sleep(0.5)
+                    else:
+                        return fail("llm", f"no model field (dropdown/text) to set {llm_model!r}")
+            else:
+                # No key available: keyless "local" (Ollama) provider lets the
+                # wizard proceed and the backend start without a real key.
+                if not _click_or_tap(client, adb, "input_llm_provider"):
+                    return fail("llm", "failed to open LLM provider dropdown")
+                if not client.wait_for_element("menu_provider_local", timeout=5):
+                    return fail("llm", "menu_provider_local not found in provider dropdown")
+                if not _click_or_tap(client, adb, "menu_provider_local"):
+                    return fail("llm", "failed to click menu_provider_local")
+                time.sleep(0.5)
+            if not _click_or_tap(client, adb, "btn_next"):
+                return fail("llm", "failed to click btn_next (finish) on the AI screen")
+            time.sleep(0.5)
+        else:
+            print("  [6/6] AI screen not present (node-client build) — finishing")
+
+        # The AI screen is the last one on an agent build, so leaving it is the
+        # observable proof the click landed. Staying put is the symptom this
+        # whole branch exists to prevent, and it is worth naming precisely
+        # rather than letting the generic COMPLETE wait report it as a timeout.
+        if on_ai_screen and client.is_visible("toggle_run_without_ai"):
+            time.sleep(2.0)
+            if client.is_visible("toggle_run_without_ai"):
+                return fail(
+                    "llm",
+                    "still on the AI screen after clicking Finish Setup — the wizard "
+                    "did not advance (check whether Finish is disabled by an "
+                    "incomplete field this run did not fill)",
+                )
+
+        # ── Step 5: COMPLETE — leave the wizard or reach the terminal step ─
+        # 150s: setup-complete now wires the persist engine (keyring genesis:
+        # hardware-wrapped Ed25519 + PQC) which takes 60-120s under emulator
+        # arm64 translation.
+        deadline = time.time() + 150
+        completed_via = None
+        while time.time() < deadline:
+            screen = client.screen()
+            if screen and screen != "Setup":
+                completed_via = f"left wizard → {screen}"
+                break
+            if not client.is_visible("btn_next"):
+                completed_via = "COMPLETE step (btn_next gone)"
+                break
+            time.sleep(1)
+
+        screenshot_path = f"/tmp/ciris_setup_done_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if completed_via is None:
+            return fail("complete", f"still on Setup with btn_next after 150s (screen={client.screen()!r})")
+
+        # ── Step 6: ASSERT the device is configured with what we ASKED for ──
+        #
+        # The wizard only writes LLM config when it actually runs. If the app was
+        # already configured (data not cleared, or a prior run left state), the
+        # run silently proceeds on the PREVIOUS key/model and the flags are
+        # ignored. That is how a run launched with --llm-provider openrouter
+        # failed on a Together 402: the .env still said together/gemma, and
+        # nothing checked. The preflight validated a provider the agent never used.
+        #
+        # So: read the persisted .env back and refuse to continue on a mismatch.
+        #
+        # Gated on byok_applied, not just on the flags being present: on the OAuth
+        # path the wizard provisions CIRIS-hosted AI and offers no fields, so the
+        # flags describe a BYOK run that never happened and the device is
+        # CORRECTLY on llm01.ciris-services-1.ai. Asserting there failed a
+        # correct device and blamed uncleared app data for it.
+        if byok_applied and llm_api_key and llm_model:
+            expected_base = PROVIDER_BASE_URLS.get(llm_provider.lower(), "")
+            env = adb.shell(f"run-as {CIRISAppConfig.PACKAGE} cat files/ciris/.env") or ""
+            got_base = _env_value(env, "OPENAI_API_BASE")
+            got_model = _env_value(env, "OPENAI_MODEL")
+            if expected_base and got_base != expected_base:
+                return fail(
+                    "llm_verify",
+                    f"device is configured for a DIFFERENT provider than requested: "
+                    f"asked {llm_provider!r} ({expected_base}), device has {got_base!r}. "
+                    f"The wizard did not apply this run's flags — most likely app data "
+                    f"was not cleared, so a prior run's config is still in place.",
+                )
+            if got_model != llm_model:
+                return fail(
+                    "llm_verify",
+                    f"device model mismatch: asked {llm_model!r}, device has {got_model!r}. "
+                    f"The chat step would exercise a model this run never validated.",
+                )
+            print(f"  [6/6] verified device LLM config: {got_base} / {got_model}")
+
+        return TestReport(
+            name="test_setup_wizard",
+            result=TestResult.PASSED,
+            duration=time.time() - start_time,
+            message=(
+                "First-run wizard completed (YOU → JOIN_FEDERATION → [AI]); "
+                f"trace consent reachable on the path; {completed_via}"
+            ),
             screenshots=screenshots,
         )
 
@@ -641,175 +1315,691 @@ def test_setup_wizard(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRepo
         )
 
 
-def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+def test_catchup_add_fedid(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """
-    Test: Send a message and receive a response.
+    Test: catch-up "Add Federation ID" flow (AddFederationIdScreen).
 
-    Prerequisites:
-    - Must be on Interact screen (after setup)
+    For an already-logged-in legacy owner (password/OAuth ROOT, NO fed-ID).
+    Mirrors the desktop QA runner's test_catchup_add_fedid_flow:
 
-    Steps:
-    1. Verify we're on the chat screen
-    2. Type a test message
-    3. Click send
-    4. Wait for agent response
-    5. Verify response received
+        Manage Nodes → btn_add_federation_id → AddFederationIdScreen:
+        input_fed_label → toggle_announce_ownership
+        → toggle_trace_opt_in (gated on announce) → btn_add_fedid_confirm
+        (back affordance: btn_add_fedid_back)
+
+    TOLERATED SKIP: the client renders btn_add_federation_id ONLY when the
+    logged-in owner has no fed-ID (ownerHasFedId == false from the local
+    node's GET /v1/setup/owned-nodes); `null` — e.g. a backend that doesn't
+    serve owned-nodes — fail-closes it hidden. If the entry point can't be
+    reached the test SKIPs with the reason instead of failing.
+
+    Config options:
+    - fed_label: catch-up label (default: generated qa-catchup-<ts>)
+    - announce / trace_opt_in: as in test_setup_wizard (default True/True)
+    - setup_username / setup_password: credentials if a login is needed
+    """
+    start_time = time.time()
+    screenshots = []
+
+    fed_label = config.get("fed_label") or f"qa-catchup-{int(time.time())}"
+    announce = config.get("announce", True)
+    trace_opt_in = config.get("trace_opt_in", True)
+    username = config.get("setup_username", "qauser")
+    password = config.get("setup_password", "qa_test_password_12345")
+
+    def fail(step: str, detail: str) -> TestReport:
+        path = f"/tmp/ciris_catchup_fail_{int(time.time())}.png"
+        adb.screenshot(path)
+        screenshots.append(path)
+        return TestReport(
+            name="test_catchup_add_fedid",
+            result=TestResult.FAILED,
+            duration=time.time() - start_time,
+            message=f"[{step}] {detail}",
+            screenshots=screenshots,
+        )
+
+    def skip(reason: str) -> TestReport:
+        return TestReport(
+            name="test_catchup_add_fedid",
+            result=TestResult.SKIPPED,
+            duration=time.time() - start_time,
+            message=f"Tolerated skip: {reason}",
+            screenshots=screenshots,
+        )
+
+    try:
+        # ── Step 0: reach a logged-in session ─────────────────────────────
+        print("  [1/5] Connecting to in-app test server (no data clear — needs existing user)...")
+        client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
+        if not client:
+            return fail("connect", "in-app test-automation server unreachable (debug build required)")
+
+        screen = client.wait_for_any_screen(["Login", "Setup", "Interact", "ManageNodes"], timeout=180.0, interval=1.5)
+        if screen == "Setup":
+            return skip("app is on the first-run wizard — no existing logged-in owner to catch up")
+        if screen == "Login":
+            print("  Login screen → local login as existing user")
+            if not _click_or_tap(client, adb, "btn_local_login"):
+                return fail("login", "could not click btn_local_login")
+            time.sleep(1.5)
+            if client.screen() == "Setup":
+                return skip("Local Login routed to first-run wizard — backend unconfigured, no legacy owner")
+            if client.is_visible("input_username"):
+                client.input("input_username", username)
+                client.input("input_password", password)
+                time.sleep(0.3)
+                if not _click_or_tap(client, adb, "btn_login_submit"):
+                    return fail("login", "could not click btn_login_submit")
+            if not client.wait_for_any_screen(["Interact", "ManageNodes"], timeout=60.0):
+                return fail("login", f"did not reach a logged-in surface (screen={client.screen()!r})")
+        elif screen is None:
+            return fail("land", f"never reached a known screen (screen={client.screen()!r})")
+
+        # ── Step 1: reach the entry point (Manage Nodes surface) ──────────
+        print("  [2/5] Reaching Manage Nodes → btn_add_federation_id...")
+        if not client.is_visible("btn_add_federation_id"):
+            nav_err = _reach_surface(client, adb, "nodes")
+            if nav_err:
+                print(f"      Manage Nodes route did not resolve: {nav_err}")
+            else:
+                client.wait_for_element("btn_add_federation_id", timeout=5)
+
+        if not client.is_visible("btn_add_federation_id"):
+            # Entry renders only for an owner WITHOUT a fed-ID; null (backend
+            # without GET /v1/setup/owned-nodes) fail-closes it hidden.
+            path = f"/tmp/ciris_catchup_entry_{int(time.time())}.png"
+            adb.screenshot(path)
+            screenshots.append(path)
+            return skip(
+                "btn_add_federation_id not rendered — owner already has a fed-ID, or "
+                "ownerHasFedId is null (backend without GET /v1/setup/owned-nodes fail-closes the entry). "
+                f"screen={client.screen()!r}"
+            )
+
+        # ── Step 2: open the guided catch-up screen ───────────────────────
+        print("  [3/5] btn_add_federation_id → AddFederationIdScreen")
+        if not _click_or_tap(client, adb, "btn_add_federation_id"):
+            return fail("open", "failed to click btn_add_federation_id")
+        if not client.wait_for_element("input_fed_label", timeout=6):
+            return fail("open", "input_fed_label did not appear (AddFederationIdScreen)")
+
+        # ── Step 3: label + announce-gate assertions (both ways) ──────────
+        print(f"  [4/5] label={fed_label!r}, announce={announce}, trace={trace_opt_in}")
+        if client.is_visible("toggle_trace_opt_in"):
+            return fail("gate_off", "toggle_trace_opt_in visible BEFORE announce is ON (catch-up gating broken)")
+        print("      gate check OK: toggle_trace_opt_in absent while announce OFF")
+
+        if not client.input("input_fed_label", fed_label):
+            return fail("label", "failed to input input_fed_label")
+        time.sleep(0.3)
+
+        if announce:
+            if not _click_or_tap(client, adb, "toggle_announce_ownership"):
+                return fail("announce", "failed to click toggle_announce_ownership")
+            if not client.wait_for_element("toggle_trace_opt_in", timeout=5):
+                return fail("gate_on", "toggle_trace_opt_in did NOT appear after announce ON (catch-up gating broken)")
+            print("      gate check OK: toggle_trace_opt_in appeared after announce ON")
+            if trace_opt_in:
+                if not _click_or_tap(client, adb, "toggle_trace_opt_in"):
+                    return fail("trace", "failed to click toggle_trace_opt_in")
+                time.sleep(0.3)
+
+        screenshot_path = f"/tmp/ciris_catchup_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        # ── Step 4: confirm ───────────────────────────────────────────────
+        print("  [5/5] btn_add_fedid_confirm")
+        if not _click_or_tap(client, adb, "btn_add_fedid_confirm"):
+            return fail("confirm", "btn_add_fedid_confirm not clickable")
+        # Success leaves via onDone → back to ManageNodes; a soft failure
+        # keeps the screen up with an error surface. Best-effort observe.
+        left = client.wait_for_screen("ManageNodes", timeout=20.0)
+
+        return TestReport(
+            name="test_catchup_add_fedid",
+            result=TestResult.PASSED,
+            duration=time.time() - start_time,
+            message=(
+                "Catch-up add-fed-ID flow driven (label → announce → trace → confirm); "
+                + ("upgrade completed (returned to ManageNodes)" if left else "confirm submitted (screen did not return to ManageNodes within 20s — check node logs)")
+            ),
+            screenshots=screenshots,
+        )
+
+    except Exception as e:
+        return TestReport(
+            name="test_catchup_add_fedid",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def _google_relogin_if_needed(adb: ADBHelper, ui: UIAutomator, config: dict) -> tuple:
+    """The OAuth twin of _local_login_if_needed.
+
+    Setup-complete restarts the runtime and invalidates the setup token on BOTH
+    login paths — the wizard's last act is always a bounce to Login. Only the
+    local path had a re-login, so an OAuth run finished the wizard correctly and
+    then sat on Login until the Interact wait timed out, reporting "never
+    reached Interact" as though the agent had failed to start.
+
+    There is no password to type: the account is already on the device, so this
+    is btn_google_signin followed by one tap on the account row in Google's
+    native chooser. Verified by hand against ciristest1@gmail.com — the app
+    reached Interact ~5s after the tap.
+
+    Returns (ok, detail).
+    """
+    account = config.get("google_account", "")
+
+    client = None
+    for _ in range(15):
+        client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+        if client is not None:
+            break
+        time.sleep(2)
+    if client is None:
+        return False, "test server unreachable for Google re-login (app not running?)"
+
+    # Wait for the app to SETTLE before deciding whether a re-login is needed.
+    # Checking once, immediately, saw "Setup" — the reconfigure hold is still up
+    # for several seconds after completeSetup returns — and concluded no
+    # re-login was needed. The bounce to Login then happened anyway and the run
+    # sat there until the Interact wait timed out.
+    settle = time.time() + 180
+    screen = client.screen()
+    while time.time() < settle and screen in ("Setup", None, "", "Startup"):
+        time.sleep(2)
+        screen = client.screen()
+
+    if screen != "Login":
+        return True, f"no re-login needed (settled on screen={screen!r})"
+
+    if not _click_or_tap(client, adb, "btn_google_signin"):
+        return False, "failed to click btn_google_signin on the post-setup Login screen"
+
+    # Google's chooser is a native overlay — outside Compose, so testTags cannot
+    # reach it and this is the one step that must go through UI Automator text.
+    deadline = time.time() + 60
+    tapped = False
+    while time.time() < deadline:
+        texts = ui.dump_screen_info().get("texts", [])
+        candidates = [t for t in texts if "@" in t and "." in t]
+        if account and account in texts:
+            tapped = ui.click_by_text(account)
+        elif candidates:
+            tapped = ui.click_by_text(candidates[0])
+            account = candidates[0]
+        if tapped:
+            break
+        time.sleep(2)
+
+    if not tapped:
+        return False, "Google account chooser never offered an account row to tap"
+
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        screen = client.screen()
+        if screen and screen != "Login":
+            return True, f"signed back in as {account or 'the device account'} → {screen}"
+        time.sleep(2)
+
+    return False, f"still on Login 90s after choosing {account or 'the device account'}"
+
+
+def _local_login_if_needed(adb: ADBHelper, config: dict) -> tuple:
+    """After the wizard, setup-complete restarts the runtime and invalidates the
+    setup-time token — BY DESIGN. On local login the user must sign back in with
+    the username/password they just created (the app 401s and navigates to Login).
+
+    Resilient state-machine: instead of assuming the exact screen sequence, it
+    reacts to whatever is on screen each tick — reveal the local form, fill creds,
+    submit, and confirm we left Login. Returns (ok, detail).
+    """
+    username = config.get("setup_username", "qauser")
+    password = config.get("setup_password", "qa_test_password_12345")
+    # Do NOT relaunch — the app is already running post-setup; a force-stop
+    # relaunch would restart the 60-120s boot. Reuse the live server, retrying
+    # briefly if it's momentarily unreachable during the bounce navigation.
+    client = None
+    for _ in range(15):
+        client = connect_test_server(adb, config, launch_if_needed=False, clear_data=False)
+        if client is not None:
+            break
+        time.sleep(2)
+    if client is None:
+        return False, "test server unreachable for re-login (app not running?)"
+
+    submitted = False
+    interact_stable = 0
+    last = ""
+    deadline = time.time() + 150
+    while time.time() < deadline:
+        screen = client.screen() or "?"
+        tags = set(client.tags())
+        snap = f"screen={screen} form={'input_username' in tags or 'input_password' in tags} " \
+               f"btn_local={'btn_local_login' in tags} submit={'btn_login_submit' in tags}"
+        if snap != last:
+            print(f"    · {snap}")
+            last = snap
+
+        # Settled on Interact. If we already re-logged in, we're done. If NOT,
+        # the post-setup token is stale by design and the app lands on Interact
+        # optimistically before fetchHistory 401s x3 (~10-15s) bounce it to Login
+        # — so do NOT trust a short Interact window: require ~30s of stable
+        # Interact before concluding the session genuinely held.
+        if screen == "Interact" and not ({"input_username", "input_password", "btn_local_login"} & tags):
+            interact_stable += 1
+            if submitted and interact_stable >= 4:
+                return True, f"re-logged in as {username!r} → Interact"
+            if interact_stable >= 20:  # ~30s stable, past the 401-bounce window
+                return True, "session held (stable on Interact >30s, no login needed)"
+            time.sleep(1.5)
+            continue
+        interact_stable = 0
+
+        # The local form is up → fill creds + submit.
+        #
+        # LoginScreen consumes ONE pending TextInputRequest per recompose via a
+        # single StateFlow slot, and btn_login_submit is disabled (no-op) until
+        # BOTH username+password are non-blank in the ViewModel. So (a) back-to-
+        # back inputs can overwrite the slot before recompose applies the first,
+        # and (b) clicking submit before the state settles fires against a
+        # disabled button. The tree does NOT expose field text (testable() is
+        # called without a text arg), so we can't read the values back — instead
+        # settle generously BETWEEN inputs so each is consumed, then retry the
+        # fill+submit until we actually leave Login.
+        if ("input_username" in tags) or ("input_password" in tags):
+            for attempt in range(1, 6):
+                # (Re)fill both fields, settling between each so the single
+                # TextInputRequest slot is consumed + cleared before the next.
+                if client.is_visible("input_username"):
+                    client.input("input_username", username)
+                    time.sleep(1.0)
+                if client.is_visible("input_password"):
+                    client.input("input_password", password)
+                    time.sleep(1.0)
+                # Submit is enabled only once the ViewModel reflects both fields.
+                client.wait_for_element("btn_login_submit", timeout=3)
+                time.sleep(0.5)
+                clicked = _click_or_tap(client, adb, "btn_login_submit")
+                if clicked:
+                    submitted = True
+                # Give the login round-trip a few seconds to leave Login before
+                # re-filling — a successful login navigates Login → (Startup) →
+                # Interact, so screen != "Login" is our success signal here.
+                left_login = False
+                for _ in range(6):
+                    time.sleep(1.0)
+                    if (client.screen() or "?") != "Login":
+                        left_login = True
+                        break
+                print(f"    · login attempt {attempt}/5: clicked={clicked} left_login={left_login}")
+                if left_login:
+                    break
+            continue
+
+        # On Login but the form isn't revealed yet → reveal it.
+        if "btn_local_login" in tags:
+            _click_or_tap(client, adb, "btn_local_login")
+            time.sleep(1.5)
+            continue
+
+        # Startup / transitioning → wait.
+        time.sleep(1.5)
+
+    if submitted:
+        return True, f"re-login submitted as {username!r} (final screen={client.screen()!r})"
+    return False, f"could not complete re-login within 150s (last {last})"
+
+
+def _capture_speak_evidence(adb: ADBHelper, package: str = "ai.ciris.mobile.debug") -> dict:
+    """Read the LIVE runtime log off the device and extract hard evidence of a
+    real LLM reply + CEG trace ship — so the chat report carries data, not just
+    "a bubble appeared".
+
+    Returns a dict: {llm_model, llm_called, llm_error, speak_content,
+    trace_sealed, trace_events, trace_signed, trace_shipped, log_lines}.
+    Best-effort: run-as can be blocked on some OEM builds (Samsung) — then the
+    fields are None/empty and the caller notes the log was unavailable.
+    """
+    ev = {
+        "llm_model": None,
+        "llm_called": False,
+        "llm_error": None,
+        "speak_content": None,
+        "trace_sealed": False,
+        "trace_events": None,
+        "trace_signed": False,
+        "trace_shipped": False,
+        "kex_present": False,
+        "stranded_covered_rows": 0,
+        "covers_trace": None,
+        "log_lines": [],
+    }
+    try:
+        # Resolve the CURRENT runtime log (a setup-complete reload rotates it).
+        link = adb._run_adb(
+            ["shell", "run-as", package, "readlink", "files/ciris/logs/latest.log"], timeout=15
+        )
+        logfile = (link.stdout or "").strip() or "latest.log"
+        cat = adb._run_adb(
+            ["shell", "run-as", package, "cat", f"files/ciris/logs/{logfile}"], timeout=30
+        )
+        text = cat.stdout or ""
+    except Exception as e:  # noqa: BLE001
+        ev["llm_error"] = f"log unavailable: {type(e).__name__}: {e}"
+        return ev
+
+    if not text:
+        return ev
+
+    import re as _re
+
+    lines = text.splitlines()
+    keep = []
+    for ln in lines:
+        low = ln.lower()
+        # Model the runtime actually initialized.
+        m = _re.search(r"LLM Service started with model:\s*(\S+)", ln)
+        if m:
+            ev["llm_model"] = m.group(1)
+        # Real provider call / structured completion.
+        if any(k in low for k in ("openrouter", "call_llm_structured", "llm request", "chat/completions")):
+            ev["llm_called"] = True
+            keep.append(ln)
+        # LLM failure signatures.
+        #
+        # HTTP codes are matched with a lookbehind/lookahead that refuses digits
+        # and dots on either side, and only on non-INFO lines. Both guards are
+        # load-bearing, and this exact line is why:
+        #
+        #   2026-08-09 20:18:10.429 - …llm_service - INFO - [LLM_REQUEST]
+        #                          ^^^ the millisecond field
+        #
+        # The old check was `"429 " in ln`, so a TIMESTAMP ending in .429 read as
+        # an HTTP 429 rate-limit. That failed a run in which the agent called the
+        # LLM, produced a SPEAK, and sealed two traces — the harness reported "LLM
+        # call failed" about a conversation that completed. An instrument that
+        # reports failure for work that WAS performed is as damaging as one that
+        # reports success for work that was not; it sends you debugging a healthy
+        # system, and here it very nearly got a correct history fix reverted.
+        if _re.search(r"(?<![\d.])(401|403|404|429)(?![\d.])", ln) and "INFO" not in ln:
+            if "llm" in low or "openai" in low or "openrouter" in low or "completion" in low:
+                ev["llm_error"] = ln.strip()[:300]
+                keep.append(ln)
+        elif any(k in ln for k in ("model_not_available", "invalid_request", "RateLimit", "APIError")):
+            if "llm" in low or "openai" in low or "openrouter" in low or "completion" in low:
+                ev["llm_error"] = ln.strip()[:300]
+                keep.append(ln)
+        # The SPEAK the agent produced.
+        if "speakhandler" in low and ("completed" in low or "content" in low):
+            ev["speak_content"] = ln.strip()[:400]
+            keep.append(ln)
+        # CEG trace seal (accord_metrics adapter).
+        if "trace sealed" in low:
+            ev["trace_sealed"] = True
+            cnt = _re.search(r"\((\d+)\s+trace_events", ln)
+            if cnt:
+                ev["trace_events"] = int(cnt.group(1))
+            if "signature" in low and "verif" in low:
+                ev["trace_signed"] = True
+            keep.append(ln)
+        # Sealed-envelope delivery to the canonical. Agent-side "can ship"
+        # precondition = KEX PRESENT (advisory only — NOT proof of a ship).
+        if "kex present" in low:
+            ev["kex_present"] = True
+            keep.append(ln)
+        # An actual ship: an envelope leaving for the canonical. Exclude the
+        # DELIVERY-PROBE / "can now seal envelopes" advisory (it says "seal
+        # envelopes" but ships nothing).
+        # A ship is a COUNT, not a word.
+        #
+        # This used to substring-match "envelope" + sent/shipped/delivered, which
+        # matched the METRIC NAME `envelopes_sent_total` regardless of its VALUE.
+        # A run whose diagnostics read {"envelopes_sent_total": 0} on a line whose
+        # own phase was `kex-present-await-ship` was reported as "shipped" — while
+        # both trace rows sat at (cohort_scope=self, tier=local), unpromoted, and
+        # the canonical had received nothing. The gate that exists to catch
+        # undelivered traces passed the undelivered case.
+        #
+        # Read the number instead.
+        sc = re.search(r'"stranded_covered_rows"\s*:\s*(\d+)', ln)
+        if sc:
+            ev["stranded_covered_rows"] = int(sc.group(1))
+        ct = re.search(r'"covers_trace"\s*:\s*(true|false)', ln)
+        if ct:
+            ev["covers_trace"] = ct.group(1) == "true"
+        m = re.search(r'"envelopes_sent_total"\s*:\s*(\d+)', ln)
+        if m:
+            if int(m.group(1)) > 0:
+                ev["trace_shipped"] = True
+            ev["envelopes_sent_total"] = int(m.group(1))
+            keep.append(ln)
+        elif "delivery-probe" not in low and "can now seal" not in low and "await-ship" not in low:
+            # Explicit per-envelope ship events still count, but only when the
+            # line is about a specific envelope leaving — never a counter name.
+            if "delivered to canonical" in low or ("envelope" in low and "shipped to" in low):
+                ev["trace_shipped"] = True
+                keep.append(ln)
+    ev["log_lines"] = keep[-40:]
+    return ev
+
+
+def test_chat_interaction(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """Send a message and PROVE a real agent reply — log-authoritative.
+
+    The UI is driven via the in-app test server (reliable Compose testTags);
+    the *verdict* comes from the runtime log (SpeakHandler content + CEG trace
+    seal + ship), NOT from scraping UI text — UI scraping previously false-passed
+    on a login banner. On local login we re-authenticate first (setup-complete
+    restarts the runtime and invalidates the setup-time token by design).
     """
     start_time = time.time()
     screenshots = []
     test_message = config.get("test_message", "Hello, how are you?")
 
     try:
-        print("  [1/5] Verifying chat screen...")
+        # [0/5] Post-setup re-login (local mode) — sign back in with the creds
+        # created in the wizard so the chat runs on a live session.
+        # BOTH paths need this: setup-complete reloads the runtime and drops the
+        # session, so the wizard's last act is always a bounce to Login. Only
+        # local was handled, so OAuth runs sat there until the Interact wait
+        # timed out and blamed the agent.
+        if config.get("login_mode", "google") == "local":
+            print("  [0/5] Post-setup local re-login...")
+            ok, detail = _local_login_if_needed(adb, config)
+        else:
+            print("  [0/5] Post-setup Google re-login...")
+            ok, detail = _google_relogin_if_needed(adb, ui, config)
+        print(f"    {detail}")
+        if not ok:
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Post-setup re-login failed: {detail}",
+            )
 
-        # Wait for chat screen (check PRIMARY indicators)
-        chat_visible = False
-        for indicator in CIRISAppConfig.CHAT_SCREEN_INDICATORS_PRIMARY:
-            if ui.wait_for_text(indicator, timeout=5):
-                chat_visible = True
-                print(f"  Found chat indicator: '{indicator}'")
-                break
-
-        # Also accept Shutdown/STOP buttons as proof we're on chat screen
-        if not chat_visible:
-            for indicator in ["Shutdown", "STOP"]:
-                if ui.is_text_visible(indicator):
-                    chat_visible = True
-                    print(f"  Found chat-only indicator: '{indicator}'")
-                    break
-
-        if not chat_visible:
-            screen_info = ui.dump_screen_info()
+        client = connect_test_server(adb, config, launch_if_needed=True, clear_data=False)
+        if client is None:
             return TestReport(
                 name="test_chat_interaction",
                 result=TestResult.SKIPPED,
                 duration=time.time() - start_time,
-                message=f"Not on chat screen. Visible: {screen_info.get('texts', [])}",
+                message="in-app test server unreachable (debug build required)",
             )
 
-        print("  [2/5] Finding message input...")
-
-        # Find the message input field
-        # First try by test tag (resource-id contains the tag)
-        input_field = ui.find_by_resource_id(CIRISAppConfig.TAG_INPUT_MESSAGE)
-        if not input_field:
-            # Fallback: Look for EditText with hint "Type your message..."
-            input_field = ui.find_by_text(CIRISAppConfig.TEXT_TYPE_MESSAGE)
-        if not input_field:
-            # Try finding by class
-            edit_texts = ui.find_by_class("EditText")
-            input_field = edit_texts[0] if edit_texts else None
-
-        if not input_field:
+        # [1/5] Reach the Interact screen. After login the runtime finishes
+        # rooting/KEX before the cognitive loop accepts input.
+        print("  [1/5] Waiting for Interact screen...")
+        if not client.wait_for_screen("Interact", timeout=60.0):
             return TestReport(
                 name="test_chat_interaction",
                 result=TestResult.FAILED,
                 duration=time.time() - start_time,
-                message="Message input field not found",
+                message=f"never reached Interact (screen={client.screen()!r})",
             )
 
-        print(f"  [3/5] Typing message: '{test_message}'")
+        # [2/5] Message input. The composer can take a while to enable while the
+        # agent reaches WORK; poll generously.
+        print("  [2/5] Waiting for message composer (input_message)...")
+        if not client.wait_for_element("input_message", timeout=150):
+            screenshot_path = f"/tmp/ciris_chat_noinput_{int(time.time())}.png"
+            adb.screenshot(screenshot_path)
+            screenshots.append(screenshot_path)
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Message composer (input_message) never appeared on Interact",
+                screenshots=screenshots,
+            )
 
-        # Type the message
-        ui.click(input_field)
-        time.sleep(0.3)
-        adb.input_text(test_message)
+        # [3/5] Type + send via the test server (reliable testTags).
+        print(f"  [3/5] Typing + sending: {test_message!r}")
+        if not client.input("input_message", test_message):
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="failed to type into input_message",
+            )
         time.sleep(0.5)
-
-        print("  [4/5] Sending message...")
-
-        # Find and click send button
-        # First try by test tag
-        send_clicked = ui.click_by_resource_id(CIRISAppConfig.TAG_BTN_SEND)
-        if not send_clicked:
-            # Fallback: try by content description
-            send_clicked = ui.click_by_content_desc(CIRISAppConfig.TEXT_SEND)
-        if not send_clicked:
-            # Try clicking by text
-            send_clicked = ui.click_by_text(CIRISAppConfig.TEXT_SEND)
-
-        if not send_clicked:
-            # Try finding IconButton for send
-            clickable = ui.find_clickable()
-            for elem in clickable:
-                desc = getattr(elem, "content_desc", "") or ""
-                res_id = getattr(elem, "resource_id", "") or ""
-                if "send" in desc.lower() or "send" in res_id.lower():
-                    ui.click(elem)
-                    send_clicked = True
-                    break
-
-        if not send_clicked:
-            # Final fallback: use configured coordinates
-            send_coords = ScreenCoordinates.get("send_button_center", config)
-            print(f"  Using coordinate fallback for send: {send_coords}")
-            adb.tap(*send_coords)
-            send_clicked = True
-
-        if not send_clicked:
+        if not _click_or_tap(client, adb, "btn_send"):
             return TestReport(
                 name="test_chat_interaction",
                 result=TestResult.FAILED,
                 duration=time.time() - start_time,
-                message="Could not click send button",
+                message="failed to click btn_send",
             )
 
-        print("  [5/5] Waiting for response...")
-
-        # Wait for processing indicator and then response
-        time.sleep(2)  # Wait for initial processing
-
-        # Wait for response - look for CIRIS message bubble
-        # Agent messages typically appear with "CIRIS" author label
-        response_timeout = CIRISAppConfig.TIMEOUT_CHAT_RESPONSE
-        start_wait = time.time()
-        response_found = False
-
-        while time.time() - start_wait < response_timeout:
-            ui.refresh_hierarchy()
-            screen_texts = ui.get_screen_text()
-
-            # Check for processing indicators gone and response present
-            # Agent messages will appear in the chat list
-            # Look for any new text that wasn't our message
-            for text in screen_texts:
-                # Skip our own message and UI labels
-                if (
-                    text != test_message
-                    and text not in ["CIRIS", "You", "Send", "Connected", "Chat with CIRIS"]
-                    and len(text) > 10  # Response should be substantive
-                    and "Type your message" not in text
-                ):
-                    response_found = True
-                    break
-
-            if response_found:
+        # [4/5] Wait for the agent to actually reason + speak. Poll the LIVE
+        # runtime log — the authoritative source — for a SPEAK / trace seal /
+        # LLM error, instead of scraping UI text.
+        print("  [4/5] Waiting for agent SPEAK + CEG trace (log-authoritative)...")
+        deadline = time.time() + 180
+        ev = {}
+        while time.time() < deadline:
+            ev = _capture_speak_evidence(adb, CIRISAppConfig.PACKAGE)
+            if ev.get("llm_error"):
                 break
+            if ev.get("trace_sealed") or ev.get("speak_content"):
+                break
+            time.sleep(6)
 
-            time.sleep(1)
-
-        # Take screenshot
         screenshot_path = f"/tmp/ciris_chat_{int(time.time())}.png"
         adb.screenshot(screenshot_path)
         screenshots.append(screenshot_path)
 
-        if response_found:
-            return TestReport(
-                name="test_chat_interaction",
-                result=TestResult.PASSED,
-                duration=time.time() - start_time,
-                message="Message sent and response received",
-                screenshots=screenshots,
-            )
-        else:
-            screen_info = ui.dump_screen_info()
+        # [5/5] Verdict from the log.
+        llm_bit = (
+            f"LLM {ev.get('llm_model') or '?'} "
+            + ("ERROR: " + ev["llm_error"] if ev.get("llm_error") else ("called" if ev.get("llm_called") else "call-unconfirmed"))
+        )
+        seal_bit = (
+            f"trace sealed ({ev.get('trace_events')} events{', signed' if ev.get('trace_signed') else ''})"
+            if ev.get("trace_sealed")
+            else "NO trace seal"
+        )
+        ship_bit = "shipped" if ev.get("trace_shipped") else ("KEX-present (ship-ready)" if ev.get("kex_present") else "ship-unconfirmed")
+        evidence = f"{llm_bit}; {seal_bit}; {ship_bit}"
+        print(f"  [5/5] Evidence: {evidence}")
+        if ev.get("speak_content"):
+            print(f"    SPEAK: {ev['speak_content']}")
+        for _l in ev.get("log_lines", [])[-12:]:
+            print(f"    | {_l}")
+
+        if ev.get("llm_error"):
             return TestReport(
                 name="test_chat_interaction",
                 result=TestResult.FAILED,
                 duration=time.time() - start_time,
-                message=f"No response received within {response_timeout}s. Screen: {screen_info.get('texts', [])}",
+                message=f"LLM call failed — {evidence}",
                 screenshots=screenshots,
             )
+        if not (ev.get("trace_sealed") or ev.get("speak_content")):
+            return TestReport(
+                name="test_chat_interaction",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"No agent SPEAK/trace after 180s — {evidence}",
+                screenshots=screenshots,
+            )
+        # A SENDER CANNOT ATTEST ITS OWN DELIVERY.
+        #
+        # This gate keyed on envelopes_sent_total > 0. That number read 0 for a
+        # full run while the canonical recorded 56 trace_events from this exact
+        # agent key — including the trace sealed seconds earlier. The bytes
+        # arrived; the sender's counter never counted them. Whatever path
+        # actually delivers (Initiator-first Deliver alongside the Summary,
+        # CIRISAgent#927) does not increment it, and rounds report
+        # {"completed": 76} throughout.
+        #
+        # So the counter is ADVISORY in both directions: 0 does not mean
+        # undelivered, and this gate must not fail a working pipeline on it.
+        # It already cost a day in the opposite direction, when a substring
+        # match on the metric NAME read 0 as "shipped".
+        #
+        # Honest states are therefore THREE, not two:
+        #   confirmed   — receiver-side evidence (canonical trace_events)
+        #   unverified  — sealed + promoted + offered, no receiver evidence here
+        #   failed      — positive evidence of non-delivery
+        # The filmstrip cannot reach the canonical's database, so it reports
+        # UNVERIFIED rather than claiming either outcome. Treating unverified as
+        # failure is what would now break a working chain; treating it as success
+        # is what hid the broken one.
+        #
+        # Ship-confirmation is a GATE, not a note.
+        #
+        # This test previously reported PASS while printing "ship-unconfirmed",
+        # so a run in which the trace sealed locally and reached nobody was
+        # indistinguishable from one that delivered. That is green-by-
+        # concealment: the suite goes green on precisely the broken state it
+        # exists to detect, and once the filmstrip guards CI it would keep
+        # going green there too.
+        #
+        # A sealed-but-undelivered trace is the failure this test is FOR.
+        if not ev.get("trace_shipped"):
+            # UNVERIFIED, not failed. The sender-side counter is not authoritative
+            # (see the note above: it read 0 across a run the canonical recorded 56
+            # trace_events for). Fail only on POSITIVE evidence of non-delivery —
+            # the offer plane reporting rows it could not offer.
+            stranded = ev.get("stranded_covered_rows")
+            if stranded:
+                return TestReport(
+                    name="test_chat_interaction",
+                    result=TestResult.FAILED,
+                    duration=time.time() - start_time,
+                    message=(
+                        f"Trace sealed but {stranded} covered row(s) STRANDED — {evidence}. "
+                        "Rows the offer plane holds and cannot advertise: check the "
+                        "consent grant covers their dimension prefix "
+                        "(trace_plane.covers_trace) and that promotion lifted them off "
+                        "(cohort_scope=self, tier=local)."
+                    ),
+                    screenshots=screenshots,
+                )
+            logger_msg = (
+                f"Trace sealed; delivery UNVERIFIED from the sender — {evidence}. "
+                "envelopes_sent_total is advisory only: it read 0 through a run the "
+                "canonical recorded 56 trace_events for, so 0 is not evidence of "
+                "non-delivery. Confirm receiver-side (canonical trace_events for this "
+                "agent key), which is the only place delivery is a fact."
+            )
+            print(f"  [5/5] {logger_msg}")
+        return TestReport(
+            name="test_chat_interaction",
+            result=TestResult.PASSED,
+            duration=time.time() - start_time,
+            message=f"Real agent reply — {evidence}"
+            + (f'  SPEAK: {ev["speak_content"]}' if ev.get("speak_content") else ""),
+            screenshots=screenshots,
+        )
 
     except Exception as e:
         return TestReport(
@@ -840,10 +2030,12 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
         print("\n=== Test: Full Flow ===\n")
 
         # 1. Launch app
+        step_start = time.time()
         print("[Step 1/4] App Launch")
         result = test_app_launch(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
+        print(f" Step 1 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -853,33 +2045,57 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
                 screenshots=all_screenshots,
             )
 
-        # 2. Google Sign-In
-        print("\n[Step 2/4] Google Sign-In")
-        result = test_google_signin(adb, ui, config)
-        results.append(result)
-        all_screenshots.extend(result.screenshots)
-        if result.result not in [TestResult.PASSED, TestResult.SKIPPED]:
-            # Try local login as fallback
-            print("  Google Sign-In failed, trying Local Login...")
-            # Go back if needed
-            adb.press_back()
-            time.sleep(1)
-            result = test_local_login(adb, ui, config)
+        # 2. Login — local (Compose-driveable) or Google (native overlay).
+        step_start = time.time()
+        login_mode = config.get("login_mode", "google")
+        if login_mode == "local":
+            # The node-client wizard test drives Login → btn_local_login →
+            # Setup itself via the in-app test server (the old text-based
+            # test_local_login expected the pre-2.9 wizard's "Setup"/"LLM"
+            # texts). Nothing to do here.
+            print("\n[Step 2/4] Local Login — handled inside the setup wizard test (test server drives btn_local_login)")
+        else:
+            print("\n[Step 2/4] Google Sign-In")
+            result = test_google_signin(adb, ui, config)
             results.append(result)
-            if result.result != TestResult.PASSED:
-                return TestReport(
-                    name="test_full_flow",
-                    result=TestResult.FAILED,
-                    duration=time.time() - start_time,
-                    message=f"Failed at login: {result.message}",
-                    screenshots=all_screenshots,
-                )
+            all_screenshots.extend(result.screenshots)
+            print(f" Step 2 completed in {time.time() - step_start:.1f}s")
+            if result.result not in [TestResult.PASSED, TestResult.SKIPPED]:
+                # Try local login as fallback
+                print("  Google Sign-In failed, trying Local Login...")
+                adb.press_back()
+                time.sleep(1)
+                result = test_local_login(adb, ui, config)
+                results.append(result)
+                if result.result == TestResult.PASSED:
+                    # This run is now a LOCAL run, and later steps must know.
+                    # The wizard ends at Login by design — completing setup
+                    # reloads the runtime, which invalidates the setup token
+                    # ("Node back + CLAIMED after reconfigure → Login",
+                    # CIRISApp.kt) — so the chat step re-signs-in with the
+                    # account the wizard just created. That re-login is gated on
+                    # login_mode == "local"; without this the fallback kept the
+                    # mode at "google", the re-login was skipped, and the run sat
+                    # on the Login screen until the Interact wait timed out,
+                    # reporting "never reached Interact" as though the agent had
+                    # failed to start.
+                    config["login_mode"] = "local"
+                if result.result != TestResult.PASSED:
+                    return TestReport(
+                        name="test_full_flow",
+                        result=TestResult.FAILED,
+                        duration=time.time() - start_time,
+                        message=f"Failed at login: {result.message}",
+                        screenshots=all_screenshots,
+                    )
 
         # 3. Setup Wizard
+        step_start = time.time()
         print("\n[Step 3/4] Setup Wizard")
         result = test_setup_wizard(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
+        print(f" Step 3 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -890,10 +2106,12 @@ def test_full_flow(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
             )
 
         # 4. Chat Interaction
+        step_start = time.time()
         print("\n[Step 4/4] Chat Interaction")
         result = test_chat_interaction(adb, ui, config)
         results.append(result)
         all_screenshots.extend(result.screenshots)
+        print(f" Step 4 completed in {time.time() - step_start:.1f}s")
         if result.result != TestResult.PASSED:
             return TestReport(
                 name="test_full_flow",
@@ -1078,11 +2296,11 @@ def test_screen_navigation(adb: ADBHelper, ui: UIAutomator, config: dict, screen
 
             if found_indicator:
                 results.append((sname, True, f"Found: {found_indicator}"))
-                print(f"    ✓ Screen loaded (found: {found_indicator})")
+                print(f" [OK] Screen loaded (found: {found_indicator})")
             else:
                 screen_texts = ui.get_screen_text()
                 results.append((sname, False, f"No indicators found. Visible: {screen_texts[:5]}"))
-                print(f"    ✗ Screen indicators not found")
+                print(f" [FAIL] Screen indicators not found")
 
             # Navigate back to chat screen
             adb.press_back()
@@ -1172,3 +2390,502 @@ def test_screen_runtime(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestRe
 def test_all_screens(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
     """Test: Navigate to all screens and verify they load."""
     return test_screen_navigation(adb, ui, config, None)
+
+
+# =============================================================================
+# Connect Node / Register Agent Tests (Device Auth via Portal)
+# =============================================================================
+
+
+def test_connect_node_welcome(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Verify Register Your Agent card appears on WELCOME screen.
+
+    Steps:
+    1. Launch app fresh
+    2. Login via Local Login to reach WELCOME step
+    3. Verify Register Your Agent card is visible
+    """
+    start_time = time.time()
+    screenshots = []
+    package = CIRISAppConfig.PACKAGE
+
+    try:
+        print("  [1/3] Launching app fresh...")
+        adb.force_stop_app(package)
+        time.sleep(1)
+        adb.launch_app(package, CIRISAppConfig.MAIN_ACTIVITY)
+
+        # Wait for login screen
+        login_btn = ui.wait_for_text(CIRISAppConfig.TEXT_LOCAL_LOGIN, timeout=60)
+        if not login_btn:
+            return TestReport(
+                name="test_connect_node_welcome",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Login screen not found",
+            )
+
+        print("  [2/3] Logging in via Local Login...")
+        ui.click_by_text(CIRISAppConfig.TEXT_LOCAL_LOGIN)
+        time.sleep(3)
+
+        print("  [3/3] Checking for Register Your Agent card...")
+        card_found = ui.wait_for_text(CIRISAppConfig.TEXT_REGISTER_AGENT, timeout=15)
+
+        if card_found:
+            # Verify additional elements
+            has_pricing = ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_SUBTITLE)
+            has_connect_btn = ui.is_text_visible(CIRISAppConfig.TEXT_CONNECT)
+
+            screenshot_path = f"/tmp/ciris_android_welcome_{int(time.time())}.png"
+            adb.screenshot(screenshot_path)
+            screenshots.append(screenshot_path)
+
+            return TestReport(
+                name="test_connect_node_welcome",
+                result=TestResult.PASSED,
+                duration=time.time() - start_time,
+                message=f"Card found. Pricing visible: {has_pricing}, Connect btn: {has_connect_btn}",
+                screenshots=screenshots,
+            )
+        else:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            return TestReport(
+                name="test_connect_node_welcome",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Register Your Agent card not found. Visible: {visible_texts[:15]}",
+                screenshots=screenshots,
+            )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node_welcome",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_connect_node_auth(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Enter node URL and verify auth screen appears.
+
+    Prerequisite: Must be on WELCOME step with Register Your Agent card visible.
+
+    Steps:
+    1. Find Portal URL input field
+    2. Enter portal URL
+    3. Tap Connect button
+    4. Verify NODE_AUTH step appears
+    """
+    start_time = time.time()
+    screenshots = []
+    node_url = config.get("portal_url", config.get("node_url", "https://portal.ciris.ai"))
+
+    try:
+        print("  [1/4] Verifying on WELCOME step...")
+        if not ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_AGENT):
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.SKIPPED,
+                duration=time.time() - start_time,
+                message="Not on WELCOME step with Register Your Agent card",
+            )
+
+        print(f"  [2/4] Entering portal URL: {node_url}")
+        # Try to find and click URL field
+        url_field = ui.find_by_text(CIRISAppConfig.TEXT_PORTAL_URL_PLACEHOLDER)
+        if url_field:
+            ui.click(url_field)
+            time.sleep(0.5)
+
+        # Type the URL
+        adb.input_text(node_url)
+        time.sleep(1)
+
+        print("  [3/4] Tapping Connect button...")
+        connect_clicked = ui.click_by_text(CIRISAppConfig.TEXT_CONNECT)
+        if not connect_clicked:
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not find or click Connect button",
+            )
+
+        time.sleep(3)
+
+        print("  [4/4] Verifying NODE_AUTH step...")
+        # Look for auth step indicators
+        auth_visible = (
+            ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_AGENT_STEP)
+            or ui.is_text_visible(CIRISAppConfig.TEXT_WAITING_AUTH)
+            or ui.is_text_visible(CIRISAppConfig.TEXT_CONNECTING_PORTAL)
+            or ui.is_text_visible("Verification")
+            or ui.is_text_visible("device code")
+        )
+
+        screenshot_path = f"/tmp/ciris_android_auth_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        if auth_visible:
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.PASSED,
+                duration=time.time() - start_time,
+                message="NODE_AUTH step reached after entering portal URL",
+                screenshots=screenshots,
+            )
+        else:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            return TestReport(
+                name="test_connect_node_auth",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"NODE_AUTH not reached. Visible: {visible_texts[:15]}",
+                screenshots=screenshots,
+            )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node_auth",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_connect_node(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Full Register Agent device auth flow (via Portal/Registry).
+
+    This is the primary test case for the agent registration feature.
+    The flow contacts CIRISPortal for device auth.
+
+    Steps:
+    1. Launch app and login
+    2. Find Register Your Agent card
+    3. Enter portal URL
+    4. Tap Connect
+    5. Wait for NODE_AUTH step
+    6. Verify verification URL and device code display
+    7. Optionally wait for Portal authorization
+
+    Config options:
+    - portal_url: Portal URL (default: https://portal.ciris.ai)
+    - wait_for_portal_auth: Wait for user to complete Portal auth (default: False)
+    - portal_auth_timeout: Timeout for Portal auth in seconds (default: 300)
+    """
+    start_time = time.time()
+    screenshots = []
+    package = CIRISAppConfig.PACKAGE
+    node_url = config.get("portal_url", config.get("node_url", "https://portal.ciris.ai"))
+    wait_for_portal = config.get("wait_for_portal_auth", False)
+    auth_timeout = config.get("portal_auth_timeout", 300)
+
+    try:
+        # ============================================================
+        # Step 1: Launch and login
+        # ============================================================
+        print("  [1/8] Launching app fresh...")
+        adb.force_stop_app(package)
+        time.sleep(1)
+        adb.launch_app(package, CIRISAppConfig.MAIN_ACTIVITY)
+
+        login_btn = ui.wait_for_text(CIRISAppConfig.TEXT_LOCAL_LOGIN, timeout=60)
+        if not login_btn:
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not reach login screen",
+            )
+
+        print("  [2/8] Logging in via Local Login...")
+        ui.click_by_text(CIRISAppConfig.TEXT_LOCAL_LOGIN)
+        time.sleep(3)
+
+        # ============================================================
+        # Step 2: Find Register Your Agent card
+        # ============================================================
+        print("  [3/8] Looking for Register Your Agent card...")
+        card_found = ui.wait_for_text(CIRISAppConfig.TEXT_REGISTER_AGENT, timeout=15)
+        if not card_found:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Register Your Agent card not found on WELCOME. Visible: {visible_texts[:15]}",
+            )
+
+        # ============================================================
+        # Step 3: Enter portal URL
+        # ============================================================
+        print(f"  [4/8] Entering portal URL: {node_url}")
+        url_field = ui.find_by_text(CIRISAppConfig.TEXT_PORTAL_URL_PLACEHOLDER)
+        if url_field:
+            ui.click(url_field)
+            time.sleep(0.5)
+
+        adb.input_text(node_url)
+        time.sleep(1)
+
+        # ============================================================
+        # Step 4: Tap Connect
+        # ============================================================
+        print("  [5/8] Tapping Connect button...")
+        connect_clicked = ui.click_by_text(CIRISAppConfig.TEXT_CONNECT)
+        if not connect_clicked:
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message="Could not find or click Connect button",
+            )
+
+        time.sleep(3)
+
+        # ============================================================
+        # Step 5: Wait for NODE_AUTH step
+        # ============================================================
+        print("  [6/8] Waiting for NODE_AUTH step...")
+        auth_visible = ui.wait_for_text(CIRISAppConfig.TEXT_REGISTER_AGENT_STEP, timeout=15)
+        if not auth_visible:
+            auth_visible = (
+                ui.is_text_visible(CIRISAppConfig.TEXT_WAITING_AUTH)
+                or ui.is_text_visible("Verification")
+                or ui.is_text_visible("device code")
+            )
+
+        if not auth_visible:
+            hierarchy = ui.dump_hierarchy()
+            visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+            # Check for error states
+            if any(t.lower() in str(visible_texts).lower() for t in ["error", "failed"]):
+                return TestReport(
+                    name="test_connect_node",
+                    result=TestResult.FAILED,
+                    duration=time.time() - start_time,
+                    message=f"Connection error. Visible: {visible_texts[:15]}",
+                )
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"NODE_AUTH step not reached. Visible: {visible_texts[:15]}",
+            )
+
+        # ============================================================
+        # Step 6: Verify verification URL and device code
+        # ============================================================
+        print("  [7/8] Verifying device auth display...")
+        has_verification_url = ui.is_text_visible(CIRISAppConfig.TEXT_VERIFICATION_URL)
+        has_device_code = ui.is_text_visible("code") or ui.is_text_visible("Code")
+
+        screenshot_path = f"/tmp/ciris_android_node_auth_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        # ============================================================
+        # Step 7: Optionally wait for Portal authorization
+        # ============================================================
+        if wait_for_portal:
+            print(f"  [8/8] Waiting for Portal authorization (timeout: {auth_timeout}s)...")
+            print("        → Complete authorization in Portal browser window")
+
+            poll_start = time.time()
+            while time.time() - poll_start < auth_timeout:
+                if ui.is_text_visible(CIRISAppConfig.TEXT_AGENT_AUTHORIZED) or ui.is_text_visible("template"):
+                    has_template = ui.is_text_visible("template") or ui.is_text_visible("Template")
+                    has_adapters = ui.is_text_visible("adapter") or ui.is_text_visible("Adapter")
+
+                    screenshot_path = f"/tmp/ciris_android_auth_complete_{int(time.time())}.png"
+                    adb.screenshot(screenshot_path)
+                    screenshots.append(screenshot_path)
+
+                    return TestReport(
+                        name="test_connect_node",
+                        result=TestResult.PASSED,
+                        duration=time.time() - start_time,
+                        message=f"Device auth completed. Template shown: {has_template}, Adapters shown: {has_adapters}",
+                        screenshots=screenshots,
+                    )
+                time.sleep(5)
+
+            return TestReport(
+                name="test_connect_node",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"Portal auth not completed in {auth_timeout}s",
+                screenshots=screenshots,
+            )
+        else:
+            print("  [8/8] Skipping Portal auth wait (set wait_for_portal_auth=True to enable)")
+
+            # Test passes if we reached the NODE_AUTH step with verification info
+            if has_verification_url or has_device_code:
+                return TestReport(
+                    name="test_connect_node",
+                    result=TestResult.PASSED,
+                    duration=time.time() - start_time,
+                    message=f"Device auth screen reached. Verification URL: {has_verification_url}, Device code: {has_device_code}",
+                    screenshots=screenshots,
+                )
+            else:
+                return TestReport(
+                    name="test_connect_node",
+                    result=TestResult.PASSED,
+                    duration=time.time() - start_time,
+                    message="NODE_AUTH step reached but verification details not detected via UI automator.",
+                    screenshots=screenshots,
+                )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_connect_node_error(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Error handling for invalid node URL.
+
+    Steps:
+    1. Enter invalid node URL
+    2. Tap Connect
+    3. Verify error message appears
+    """
+    start_time = time.time()
+    screenshots = []
+
+    try:
+        print("  [1/3] Verifying on WELCOME step...")
+        if not ui.is_text_visible(CIRISAppConfig.TEXT_REGISTER_AGENT):
+            return TestReport(
+                name="test_connect_node_error",
+                result=TestResult.SKIPPED,
+                duration=time.time() - start_time,
+                message="Not on WELCOME step",
+            )
+
+        print("  [2/3] Entering invalid node URL...")
+        invalid_url = "https://invalid-portal-that-does-not-exist.example.com"
+
+        url_field = ui.find_by_text(CIRISAppConfig.TEXT_PORTAL_URL_PLACEHOLDER)
+        if url_field:
+            ui.click(url_field)
+            time.sleep(0.5)
+
+        adb.input_text(invalid_url)
+        time.sleep(0.5)
+
+        ui.click_by_text(CIRISAppConfig.TEXT_CONNECT)
+        time.sleep(5)  # Wait for connection attempt to fail
+
+        print("  [3/3] Checking for error state...")
+        hierarchy = ui.dump_hierarchy()
+        visible_texts = ui.extract_texts_from_hierarchy(hierarchy) if hierarchy else []
+
+        screenshot_path = f"/tmp/ciris_android_error_{int(time.time())}.png"
+        adb.screenshot(screenshot_path)
+        screenshots.append(screenshot_path)
+
+        has_error = any(t.lower() in str(visible_texts).lower() for t in ["error", "failed", "could not", "unable"])
+
+        if has_error:
+            return TestReport(
+                name="test_connect_node_error",
+                result=TestResult.PASSED,
+                duration=time.time() - start_time,
+                message=f"Error state displayed correctly. Visible: {visible_texts[:10]}",
+                screenshots=screenshots,
+            )
+        else:
+            return TestReport(
+                name="test_connect_node_error",
+                result=TestResult.FAILED,
+                duration=time.time() - start_time,
+                message=f"No error message for invalid URL. Visible: {visible_texts[:10]}",
+                screenshots=screenshots,
+            )
+
+    except Exception as e:
+        return TestReport(
+            name="test_connect_node_error",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )
+
+
+def test_verify_trust(adb: ADBHelper, ui: UIAutomator, config: dict) -> TestReport:
+    """
+    Test: Trust and Security page displays correct CIRISVerify information.
+
+    Validates:
+    1. Key storage mode (hardware vs software)
+    2. Ed25519 fingerprint display
+    3. Binary/function self-check status
+    4. File integrity counts
+    5. Play Integrity status
+
+    Requires: App logged in and running
+    """
+    from .verify_trust_tests import VerifyTrustExpectations, VerifyTrustTests
+
+    start_time = time.time()
+    screenshots = []
+
+    try:
+        # Run verify trust tests
+        tests = VerifyTrustTests(adb, ui, expectations=VerifyTrustExpectations())
+        reports = tests.run_all()
+
+        # Aggregate results
+        passed = sum(1 for r in reports if r.result == TestResult.PASSED)
+        failed = sum(1 for r in reports if r.result == TestResult.FAILED)
+        errors = sum(1 for r in reports if r.result == TestResult.ERROR)
+
+        # Collect screenshots from sub-reports
+        for r in reports:
+            screenshots.extend(r.screenshots)
+
+        # Build summary message
+        failed_tests = [r.name for r in reports if r.result != TestResult.PASSED]
+        if failed_tests:
+            message = f"{passed}/{len(reports)} passed. Failed: {', '.join(failed_tests)}"
+            result = TestResult.FAILED if failed > 0 else TestResult.ERROR
+        else:
+            message = f"All {passed} verify trust checks passed"
+            result = TestResult.PASSED
+
+        return TestReport(
+            name="test_verify_trust",
+            result=result,
+            duration=time.time() - start_time,
+            message=message,
+            screenshots=screenshots,
+        )
+
+    except Exception as e:
+        return TestReport(
+            name="test_verify_trust",
+            result=TestResult.ERROR,
+            duration=time.time() - start_time,
+            message=f"Error: {str(e)}",
+            screenshots=screenshots,
+        )

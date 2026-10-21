@@ -13,6 +13,7 @@ a sample:list_items tool marked for context enrichment.
 """
 
 import json
+import os
 import threading
 import time
 import traceback
@@ -42,9 +43,14 @@ class ContextEnrichmentTests:
         self.loaded_adapter_id: Optional[str] = None
 
         # Base URL for direct API calls
-        self._base_url = getattr(client, "_base_url", "http://localhost:8080")
-        if hasattr(client, "_transport") and hasattr(client._transport, "_base_url"):
-            self._base_url = client._transport._base_url
+        # CIRISClient exposes the base URL as `base_url` (and Transport.base_url)
+        # — NOT `_base_url`. getattr(client, "_base_url", …) always missed and
+        # fell back to a hardcoded :8080, so under --parallel-backends the
+        # postgres leg's raw adapter requests hit the sqlite server → 401.
+        self._base_url = getattr(client, "base_url", None) or "http://localhost:8080"
+        _tr = getattr(client, "_transport", None)
+        if _tr is not None and getattr(_tr, "base_url", None):
+            self._base_url = _tr.base_url
 
     def _get_auth_headers(self) -> Dict[str, str]:
         """Get authentication headers from client."""
@@ -233,7 +239,14 @@ class ContextEnrichmentTests:
         4. Validates that system_snapshot contains context_enrichment_results
         """
         token = self._get_token()
-        timeout = 60  # seconds
+        # 120s baseline; the postgres backend is meaningfully slower than
+        # in-process SQLite, and under the --parallel-backends matrix two
+        # agent stacks share the runner — the snapshot_and_context SSE event
+        # legitimately takes >60s there. The parent qa_runner sets
+        # CIRIS_QA_PARALLEL_BACKENDS=1 on subprocess spawn (see
+        # runner.py:_run_parallel_backends); when present we double the
+        # window because both stacks compete for one CI runner's CPU.
+        timeout = 240 if os.environ.get("CIRIS_QA_PARALLEL_BACKENDS") == "1" else 120  # seconds
 
         # Track captured data
         snapshot_captured: Dict[str, Any] = {}
@@ -251,11 +264,26 @@ class ContextEnrichmentTests:
             try:
                 headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
 
+                # requests `timeout=N` on a streaming GET is read-between-bytes,
+                # not total — `(connect_timeout, read_timeout)` lets us keep a
+                # tight connect budget while allowing long gaps between real
+                # events. The `/v1/system/runtime/reasoning-stream` endpoint
+                # sends a `keepalive` SSE every 30s when idle (see
+                # `routes/system_extensions.py:_process_stream_event`); a flat
+                # `timeout=5` raises `ReadTimeout` BEFORE that keepalive lands
+                # whenever real events stop firing for >5s, which is normal in
+                # the parallel-backends matrix once the queue backs up behind
+                # follow-up thoughts from prior modules. The monitor thread
+                # then exits silently and the main loop times out at 240s
+                # waiting for an event that can never arrive. Allow up to 60s
+                # between bytes — twice the server's keepalive cadence — so
+                # the stream survives any idle gap shorter than two missed
+                # keepalives.
                 response = requests.get(
                     f"{self._base_url}/v1/system/runtime/reasoning-stream",
                     headers=headers,
                     stream=True,
-                    timeout=5,
+                    timeout=(5, 60),
                 )
 
                 if response.status_code != 200:

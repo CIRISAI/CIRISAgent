@@ -13,6 +13,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from ciris_engine.logic.adapters.api.dependencies.auth import require_observer
 from ciris_engine.logic.adapters.api.routes import agent
 from ciris_engine.logic.adapters.api.routes.agent import (
     MessageRejectionReason,
@@ -153,7 +154,7 @@ class TestMessageEndpointSuccess:
     ):
         """Test successful message submission that creates a new task."""
         # Override auth dependency
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
 
         # Mock on_message to return success result
         app.state.on_message.return_value = mock_message_handling_result_success
@@ -187,7 +188,7 @@ class TestMessageEndpointSuccess:
         self, app, auth_context_admin, mock_message_handling_result_updated
     ):
         """Test message submission that updates an existing task."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_updated
 
         client = TestClient(app)
@@ -210,7 +211,7 @@ class TestMessageEndpointRejections:
     @pytest.mark.asyncio
     async def test_message_rejected_no_permission(self, app, auth_context_observer_no_permission):
         """Test message rejected due to missing SEND_MESSAGES permission."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_observer_no_permission)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_observer_no_permission)
 
         client = TestClient(app)
         response = client.post(
@@ -226,7 +227,7 @@ class TestMessageEndpointRejections:
     @pytest.mark.asyncio
     async def test_message_rejected_filtered_out(self, app, auth_context_admin, mock_message_handling_result_filtered):
         """Test message rejected by adaptive filter."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_filtered
 
         client = TestClient(app)
@@ -246,7 +247,7 @@ class TestMessageEndpointRejections:
     @pytest.mark.asyncio
     async def test_message_rejected_credit_denied(self, app, auth_context_admin):
         """Test message rejected due to insufficient credits."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
 
         # Mock on_message to raise CreditDenied
         app.state.on_message.side_effect = CreditDenied("Insufficient credits for API usage")
@@ -268,7 +269,7 @@ class TestMessageEndpointRejections:
     @pytest.mark.asyncio
     async def test_message_rejected_credit_check_failed(self, app, auth_context_admin):
         """Test message rejected due to credit provider failure."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
 
         # Mock on_message to raise CreditCheckFailed
         app.state.on_message.side_effect = CreditCheckFailed("Credit provider timeout")
@@ -290,7 +291,7 @@ class TestMessageEndpointRejections:
     @pytest.mark.asyncio
     async def test_message_rejected_processor_paused(self, app, auth_context_admin):
         """Test message rejected when agent processor is paused."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
 
         # Mark processor as paused
         app.state.runtime.agent_processor._is_paused = True
@@ -318,7 +319,7 @@ class TestMessageEndpointCreditEnforcement:
         self, app, auth_context_admin, mock_message_handling_result_success
     ):
         """Test that credit metadata is attached to messages when provider is configured."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success
 
         # Add credit provider to resource monitor
@@ -344,7 +345,7 @@ class TestMessageEndpointValidation:
     @pytest.mark.asyncio
     async def test_message_missing_required_field(self, app, auth_context_admin):
         """Test request rejected when message field is missing."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
 
         client = TestClient(app)
         response = client.post(
@@ -357,7 +358,7 @@ class TestMessageEndpointValidation:
     @pytest.mark.asyncio
     async def test_message_with_context(self, app, auth_context_admin, mock_message_handling_result_success):
         """Test message submission with optional context."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success
 
         client = TestClient(app)
@@ -383,7 +384,7 @@ class TestMessageEndpointConsentHandling:
     @pytest.mark.asyncio
     async def test_consent_checked_for_new_user(self, app, auth_context_admin, mock_message_handling_result_success):
         """Test that consent is checked when user submits a message."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success
 
         # Mock consent service to indicate existing consent
@@ -409,7 +410,7 @@ class TestMessageEndpointResponseSchema:
         self, app, auth_context_admin, mock_message_handling_result_success
     ):
         """Test that response contains all required fields."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success
 
         client = TestClient(app)
@@ -438,7 +439,7 @@ class TestMessageEndpointResponseSchema:
     @pytest.mark.asyncio
     async def test_response_schema_types_correct(self, app, auth_context_admin, mock_message_handling_result_success):
         """Test that response field types are correct."""
-        app.dependency_overrides[agent.require_observer] = create_auth_dependency(auth_context_admin)
+        app.dependency_overrides[require_observer] = create_auth_dependency(auth_context_admin)
         app.state.on_message.return_value = mock_message_handling_result_success
 
         client = TestClient(app)

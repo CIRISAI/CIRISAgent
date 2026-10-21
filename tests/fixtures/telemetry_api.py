@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from ciris_engine.schemas.services.resources_core import ResourceBudget
+
 
 @pytest.fixture
 def mock_api_telemetry_service():
@@ -316,13 +318,8 @@ def mock_api_resource_monitor():
 
     mock.snapshot = Snapshot()
 
-    # Budget with concrete float values (not Mock to avoid serialization issues)
-    class Budget:
-        max_memory_mb = 2048.0
-        max_cpu_percent = 100.0
-        max_disk_bytes = 100000000000
-
-    mock.budget = Budget()
+    # The real budget shape: the telemetry view reports the monitor's own limits
+    mock.budget = ResourceBudget()
 
     # Get metrics - concrete dict with float values
     mock.get_metrics = Mock(

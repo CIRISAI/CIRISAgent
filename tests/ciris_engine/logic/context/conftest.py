@@ -77,25 +77,45 @@ def mock_resource_monitor():
 
 @pytest.fixture
 def mock_service_registry():
-    """Create a proper service registry mock."""
-    registry = Mock()
-    registry.get_provider_info.return_value = {"handlers": {}, "global_services": {}}
-    registry.get_services_by_type.return_value = []
+    """Create a proper service registry mock.
+
+    Delegates to centralized MockServiceRegistry, which mirrors the
+    production registry surface: typed-only lookups via
+    `get_services_by_type` with the attestation-aware auth service
+    pre-registered under ServiceType.WISE_AUTHORITY. Required for the
+    strict attestation gate added in 2.7.1. The only override is
+    `get_provider_info` (system-snapshot helper consumes it) — note we
+    do NOT override `get_services_by_type` because that would erase
+    the auth service registration.
+    """
+    from tests.fixtures.mocks import MockServiceRegistry
+
+    registry = MockServiceRegistry()
+    registry.get_provider_info = Mock(return_value={"handlers": {}, "global_services": {}})
     return registry
 
 
 @pytest.fixture
 def mock_runtime():
-    """Create a proper runtime mock."""
-    runtime = Mock()
+    """Create a proper runtime mock.
+
+    Delegates to the centralized MockRuntime (tests/fixtures/mocks.py)
+    which carries the ciris_verify adapter required by the strict
+    attestation gate added in 2.7.1. The shape augmentations below
+    (adapter_manager._adapters, service_registry._services, etc.) are
+    surface that the system-snapshot helpers consume — kept for parity
+    with the previous local fixture.
+    """
+    from tests.fixtures.mocks import MockRuntime
+
+    runtime = MockRuntime(include_logging_mocks=False, include_time_service=False)
     runtime.current_shutdown_context = None
 
-    # Mock adapter manager
     runtime.adapter_manager = Mock()
     runtime.adapter_manager._adapters = {}
 
-    # Mock service registry and bus manager
     runtime.service_registry = Mock()
+    runtime.service_registry._services = {}
     runtime.service_registry.get_services_by_type.return_value = []
     runtime.bus_manager = Mock()
 
@@ -360,6 +380,8 @@ def mock_enrichment_tool_service(mock_enrichment_tool_info, mock_tool_execution_
 @pytest.fixture
 def mock_runtime_with_enrichment(mock_enrichment_tool_service):
     """Create a runtime mock with tool service that has enrichment tools."""
+    from ciris_engine.schemas.runtime.enums import ServiceType
+
     runtime = Mock()
     runtime.current_shutdown_context = None
 
@@ -367,8 +389,15 @@ def mock_runtime_with_enrichment(mock_enrichment_tool_service):
     runtime.adapter_manager = Mock()
     runtime.adapter_manager._adapters = {}
 
-    # Mock service registry with tool services
+    # Create provider wrapper with instance and metadata
+    provider = Mock()
+    provider.instance = mock_enrichment_tool_service
+    provider.metadata = {"adapter": "test"}
+
+    # Mock service registry with _services dict containing tool providers
     runtime.service_registry = Mock()
+    runtime.service_registry._services = {ServiceType.TOOL: [provider]}
+    # Keep get_services_by_type for backward compatibility with some tests
     runtime.service_registry.get_services_by_type.return_value = [mock_enrichment_tool_service]
     runtime.bus_manager = Mock()
 

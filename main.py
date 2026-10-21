@@ -1,27 +1,104 @@
 #!/usr/bin/env python3
-# Load environment variables from .env if present
-# Load from all standard config paths in priority order
+# Skip early FFI verification to avoid tokio runtime hang during Python import lock
+# Binary self-verification still runs when get_license_status() is called
+import os
+
+os.environ.setdefault("CIRIS_SKIP_EARLY_VERIFY", "1")
+
+# Must run before any print() / logger output that might hit the console,
+# otherwise Windows cp1252 stdio crashes on the status glyphs used at startup.
+from ciris_engine.logic.utils import win_console as _win_console  # noqa: E402
+
+_win_console.setup()
+
+# Load the home's .env, if there is one, before anything reads a path.
+#
+# ONE HOME. `first_run.get_config_paths()` is the single list of files this
+# process may read (managed /app → CIRIS_CONFIG_DIR → CIRIS_HOME → app sandbox
+# → dev cwd → ~/ciris). This block used to keep its own list that ended with
+# `~/ciris/.env` and `/etc/ciris/.env` whatever the home was, so a run launched
+# with CIRIS_HOME=X and no X/.env booted on X's keys but on ~/ciris's database.
+# The real environment still wins over the file (override=False).
+from ciris_engine.logic.setup.first_run import load_boot_env
+
+_loaded_env_files = load_boot_env()
+
+# =============================================================================
+# CRITICAL: Set CIRIS_HOME environment variable BEFORE any ciris_engine imports
+# This must happen early because CIRISVerify (verifier_singleton) requires it.
+# Supports: Linux, macOS, Windows, WSL, Android, iOS, Docker/managed deployments
+# =============================================================================
+from ciris_engine.logic.utils.path_resolution import (
+    ensure_ciris_home_env,
+    is_android,
+    is_development_mode,
+    is_ios,
+    is_managed,
+)
+
+_ciris_home = ensure_ciris_home_env()
+
+# =============================================================================
+# Early startup environment logging (printed to STDOUT for visibility)
+# =============================================================================
+import sys as _sys
+
+_platform_flags = []
+if is_android():
+    _platform_flags.append("Android")
+if is_ios():
+    _platform_flags.append("iOS")
+if is_managed():
+    _platform_flags.append("Managed")
+if is_development_mode():
+    _platform_flags.append("Development")
+if not _platform_flags:
+    _platform_flags.append("Installed")
+
+_supervisor_token = "detected" if os.environ.get("SUPERVISOR_TOKEN") else "not found"
+_ha_addon = "yes" if os.environ.get("SUPERVISOR_TOKEN") else "no"
+
+print(f"[CIRIS STARTUP] Platform: {', '.join(_platform_flags)}")
+print(f"[CIRIS STARTUP] OS: {_sys.platform}")
+print(f"[CIRIS STARTUP] CIRIS_HOME: {_ciris_home}")
+print(f"[CIRIS STARTUP] HA Addon Mode: {_ha_addon} (SUPERVISOR_TOKEN: {_supervisor_token})")
+
+# THE VERSION AND THE PATHS, ON THE CONSOLE, EVERY BOOT.
+#
+# Every Windows report this cycle began with a screenshot that did not say which
+# version it was, and answering "is the fix even in this build?" cost a round
+# trip each time. It is one line and it removes that question permanently.
+#
+# The .env line matters just as much: the Windows failures were ALL about a path
+# read from that file, and the console never said which file, whether it was
+# found, or what came out of it. A user could not tell a missing config from a
+# corrupted one, and neither could we from their paste.
 try:
-    from pathlib import Path
+    from ciris_engine.constants import CIRIS_VERSION as _v
 
-    from dotenv import load_dotenv
+    print(f"[CIRIS STARTUP] Version: {_v}")
+    del _v
+except Exception:  # pragma: no cover - never let a banner stop a boot
+    pass
 
-    # Priority order: ./ciris/.env, ./env (highest), ~/ciris/.env, /etc/ciris/.env (lowest)
-    # Note: ~/.ciris/ is for keys/secrets only, NOT config!
-    config_paths = [
-        Path.cwd() / "ciris" / ".env",
-        Path.cwd() / ".env",
-        Path.home() / "ciris" / ".env",
-        Path("/etc/ciris/.env"),
-    ]
+try:
+    from pathlib import Path as _P
 
-    for config_path in config_paths:
-        if config_path.exists():
-            load_dotenv(config_path, override=False)  # Don't override already-set vars
+    _env = _P(_ciris_home) / ".env"
+    if _loaded_env_files:
+        for _f in _loaded_env_files:
+            print(f"[CIRIS STARTUP] Config: {_f} ({_f.stat().st_size} bytes)")
+        del _f
+    else:
+        print(f"[CIRIS STARTUP] Config: {_env} — NOT FOUND (first run will create it)")
+    del _env, _P, _loaded_env_files
+except Exception:  # pragma: no cover
+    pass
 
-except ImportError:
-    pass  # dotenv is optional; skip if not installed
+del _platform_flags, _supervisor_token, _ha_addon, _sys
+
 import asyncio
+import atexit
 import json
 import logging
 import os
@@ -43,29 +120,64 @@ from ciris_engine.schemas.runtime.models import Thought
 
 logger = logging.getLogger(__name__)
 
+# Track if we've logged a proper shutdown reason
+_shutdown_reason_logged = {"value": False}
+
+
+def _atexit_handler() -> None:
+    """Log when Python exits - helps diagnose unexpected shutdowns."""
+    if not _shutdown_reason_logged["value"]:
+        # Only log if we haven't already logged a shutdown reason
+        # This catches cases where the process exits without going through signal handlers
+        logger.critical(f"[ATEXIT] Python interpreter exiting (PID={os.getpid()}) - no shutdown signal logged")
+        logger.critical("[ATEXIT] This may indicate: SIGKILL, parent process death, or clean exit without signal")
+    else:
+        logger.info(f"[ATEXIT] Python interpreter exiting normally (PID={os.getpid()})")
+
+
+atexit.register(_atexit_handler)
+
 
 def setup_signal_handlers(runtime: CIRISRuntime) -> None:
     """Setup signal handlers for graceful shutdown."""
     shutdown_initiated = {"value": False}  # Use dict to allow modification in nested function
 
+    # Map signal numbers to names for better logging. SIGHUP/SIGQUIT are
+    # POSIX-only — Windows Python's signal module doesn't define them, so
+    # guard every non-portable signal behind hasattr.
+    signal_names: dict[int, str] = {
+        int(signal.SIGTERM): "SIGTERM",
+        int(signal.SIGINT): "SIGINT",
+    }
+    for name in ("SIGHUP", "SIGQUIT"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            signal_names[int(sig)] = name
+
     def signal_handler(signum: int, frame: Any) -> None:
+        sig_name = signal_names.get(signum, f"signal {signum}")
+        _shutdown_reason_logged["value"] = True  # Mark that we logged a shutdown reason
         if shutdown_initiated["value"]:
-            logger.warning(f"Signal {signum} received again, forcing immediate exit")
+            logger.critical(f"[SIGNAL] {sig_name} received again (PID={os.getpid()}), forcing immediate exit")
             # Don't call sys.exit() in async context - just raise to let Python handle it
             raise KeyboardInterrupt("Forced shutdown")
 
         shutdown_initiated["value"] = True
-        logger.info(f"Received signal {signum}, requesting graceful shutdown...")
+        logger.critical(f"[SIGNAL] {sig_name} received (PID={os.getpid()}), requesting graceful shutdown...")
 
         try:
-            runtime.request_shutdown(f"Signal {signum}")
+            runtime.request_shutdown(f"Signal {sig_name}")
         except Exception as e:
-            logger.error(f"Error during shutdown request: {e}")
+            logger.critical(f"[SIGNAL] Error during shutdown request: {e}")
             # Don't call sys.exit() in async context - raise instead
             raise KeyboardInterrupt("Shutdown error") from e
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+    for name in ("SIGHUP", "SIGQUIT"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            signal.signal(sig, signal_handler)
 
 
 def setup_global_exception_handler() -> None:
@@ -185,9 +297,18 @@ def _show_configuration_required_message() -> None:
     click.echo("  OPENAI_API_BASE=http://localhost:11434", err=True)
     click.echo("  OPENAI_MODEL=llama3", err=True)
     click.echo("", err=True)
+    # NAME THE FILE THIS PROCESS ACTUALLY READS. This used to print
+    # `~/.ciris/.env` and `./.env` — the first is the keys/secrets directory
+    # (never config), the second stopped being read when the cwd stopped being
+    # a home. An operator who followed either got a file the agent ignores.
     click.echo("Or mount a .env file at:", err=True)
-    click.echo("  ~/.ciris/.env", err=True)
-    click.echo("  ./.env", err=True)
+    try:
+        from ciris_engine.logic.setup.first_run import get_config_paths
+
+        for _p in get_config_paths():
+            click.echo(f"  {_p}", err=True)
+    except Exception:  # pragma: no cover - a banner must never stop the exit
+        click.echo("  <CIRIS_HOME>/.env", err=True)
     click.echo("=" * 70, err=True)
     sys.exit(1)
 
@@ -236,17 +357,18 @@ def _show_api_key_required_message() -> None:
     click.echo("=" * 70, err=True)
     click.echo("LLM API KEY REQUIRED", err=True)
     click.echo("=" * 70, err=True)
-    click.echo("No OPENAI_API_KEY found in environment.", err=True)
+    click.echo("No LLM API key found in environment.", err=True)
+    click.echo("", err=True)
+    click.echo("Supported keys:", err=True)
+    click.echo("  - OPENAI_API_KEY (OpenAI, OpenRouter, local LLMs)", err=True)
+    click.echo("  - ANTHROPIC_API_KEY (Claude)", err=True)
+    click.echo("  - GOOGLE_API_KEY (Gemini)", err=True)
+    click.echo("  - GROQ_API_KEY, TOGETHER_API_KEY", err=True)
     click.echo("", err=True)
     click.echo("Options:", err=True)
-    click.echo("  1. Set OPENAI_API_KEY environment variable", err=True)
+    click.echo("  1. Set one of the above environment variables", err=True)
     click.echo("  2. Add to .env file", err=True)
     click.echo("  3. Use --mock-llm flag for testing only", err=True)
-    click.echo("", err=True)
-    click.echo("For local LLM:", err=True)
-    click.echo("  export OPENAI_API_KEY=local", err=True)
-    click.echo("  export OPENAI_API_BASE=http://localhost:11434", err=True)
-    click.echo("  export OPENAI_MODEL=llama3", err=True)
     click.echo("=" * 70, err=True)
     sys.exit(1)
 
@@ -299,7 +421,8 @@ def _categorize_adapters(
     adapter_types: list[str], adapter_map: dict[str, Any]
 ) -> tuple[list[str], list[tuple[str, Any]]]:
     """Categorize adapters into built-in and modular services."""
-    builtin_adapters = ["cli", "api", "discord"]
+    # ciris_verify is always loaded at bootstrap — treat it as built-in
+    builtin_adapters = ["cli", "api", "discord", "ciris_verify"]
     final_adapter_types = []
     adapters_to_load = []
 
@@ -345,7 +468,9 @@ async def _load_app_config(config_file_path: Optional[str], template: str) -> An
         raise SystemExit(1)
 
     cli_overrides: dict[str, Any] = {}
-    if template and template != "default":
+    if template:
+        # Always set CLI override when --template is provided
+        # This ensures CLI takes priority over environment variables
         cli_overrides["default_template"] = template
 
     return await load_config(config_file_path, cli_overrides)
@@ -511,9 +636,26 @@ def _handle_final_exit() -> None:
     """Handle final exit logic for main function."""
     import time
 
+    _shutdown_reason_logged["value"] = True  # Mark normal exit
     sys.stdout.flush()
     sys.stderr.flush()
-    logger.info("CIRIS agent exiting cleanly")
+    logger.info(f"[EXIT] CIRIS agent exiting cleanly (PID={os.getpid()})")
+    # The wizard just recorded "Run without AI" (CIRISAgent#1149): the brain is
+    # done for good. Become the node in place -- same pid, so `ciris-agent`
+    # keeps waiting on one process -- and let the client reconnect to :4243.
+    from ciris_engine import node_only
+
+    _node_only = node_only.node_only_config()
+    if _node_only is not None:
+        logger.info(
+            "[EXIT] Run without AI: replacing this process with the ciris-server node (see [RUN-WITHOUT-AI] lines)"
+        )
+        for _h in logging.getLogger().handlers:
+            _h.flush()
+        if not node_only.exec_into_node(_node_only):
+            logger.error(
+                "[EXIT] Run without AI: exec failed; exiting normally -- start `ciris-agent` again to boot the node"
+            )
 
     if "--adapter" in sys.argv and "api" in sys.argv and "--timeout" in sys.argv:
         logger.debug("EXITING NOW VIA os._exit(0) AT API mode subprocess tests")
@@ -643,6 +785,16 @@ def main(
     num_rounds: Optional[int],
 ) -> None:
     """Unified CIRIS agent entry point."""
+    # "Run without AI" (CIRISAgent#1149): with the flag recorded by the wizard,
+    # this process is a ciris-server node and nothing else. Decided before any
+    # logging or runtime import; CIRIS_RUN_WITHOUT_AI=false in the environment
+    # overrides the file for one run.
+    from ciris_engine import node_only
+
+    _node_only = node_only.node_only_config()
+    if _node_only is not None:
+        node_only.run_headless(_node_only)
+
     # Setup basic console logging first (without file logging)
     # File logging will be set up later once TimeService is available
     setup_basic_logging(
@@ -651,6 +803,9 @@ def main(
         console_output=True,
         enable_incident_capture=False,  # Will be enabled later with TimeService
     )
+
+    # Log startup with PID for debugging unexpected shutdowns
+    logger.info(f"[STARTUP] CIRIS agent starting (PID={os.getpid()}, PPID={os.getppid()})")
 
     async def _async_main() -> None:
         nonlocal mock_llm
@@ -661,6 +816,12 @@ def main(
         # Check for CIRIS_MOCK_LLM environment variable
         if not mock_llm and _check_mock_llm_env():
             mock_llm = True
+        if mock_llm:
+            # CIRISAgent#1244: latch BEFORE the runtime (and the edge) initializes,
+            # so remote trace export is refused from the very first boot step.
+            from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+            mark_mock_llm_active("main:--mock-llm")
 
         # Check macOS Python installation
         _check_python_installation()
@@ -677,9 +838,19 @@ def main(
         # Handle first-run setup
         _handle_first_run(first_run, adapter_types_list, is_cli_mode)
 
-        # Check for API key
-        api_key = get_env_var("OPENAI_API_KEY")
-        if not mock_llm and not api_key and not first_run:
+        # Check for API key (any supported provider, with CIRIS_ prefix support)
+        has_api_key = any(
+            [
+                get_env_var("CIRIS_OPENAI_API_KEY") or get_env_var("OPENAI_API_KEY"),
+                get_env_var("CIRIS_ANTHROPIC_API_KEY") or get_env_var("ANTHROPIC_API_KEY"),
+                get_env_var("CIRIS_GOOGLE_API_KEY") or get_env_var("GOOGLE_API_KEY"),
+                get_env_var("CIRIS_LLM_API_KEY"),
+                get_env_var("OPENROUTER_API_KEY"),
+                get_env_var("GROQ_API_KEY"),
+                get_env_var("TOGETHER_API_KEY"),
+            ]
+        )
+        if not mock_llm and not has_api_key and not first_run:
             _show_api_key_required_message()
 
         # Validate adapter tokens
@@ -702,12 +873,14 @@ def main(
             _handle_config_load_error(e)
             return  # Unreachable but makes type checker happy
 
-        # Build modules to load
+        # Build modules to load and add modular adapters to selected_adapter_types
         modules_to_load = ["mock_llm"] if mock_llm else []
         if mock_llm:
             logger.info("Mock LLM module will be loaded")
         for adapter_type, manifest in adapters_to_load:
             modules_to_load.append(f"modular:{manifest.module.name}")
+            # Add modular adapter to adapter_types so runtime loads it
+            selected_adapter_types.append(adapter_type)
             logger.info(f"Modular service '{manifest.module.name}' added to modules to load")
 
         # Configure adapters
@@ -730,7 +903,7 @@ def main(
             discord_bot_token=discord_bot_token,
             modules=modules_to_load,
             identity_update=identity_update,
-            template_name=template if template != "default" else None,
+            template_name=template,  # Always pass template so CLI takes priority over env vars
         )
         await runtime.initialize()
         setup_signal_handlers(runtime)
@@ -777,13 +950,16 @@ def main(
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
-        logger.info("Interrupted by user, exiting...")
+        _shutdown_reason_logged["value"] = True
+        logger.info(f"[EXIT] Interrupted by user (PID={os.getpid()}), exiting...")
         logger.debug("EXITING NOW VIA sys.exit(0) AT KeyboardInterrupt in main")
         sys.exit(0)
     except SystemExit:
+        _shutdown_reason_logged["value"] = True
         raise  # Re-raise SystemExit to exit with the correct code
     except Exception as e:
-        logger.error(f"Fatal error in main: {e}", exc_info=True)
+        _shutdown_reason_logged["value"] = True
+        logger.error(f"[EXIT] Fatal error in main (PID={os.getpid()}): {e}", exc_info=True)
         logger.debug("EXITING NOW VIA sys.exit(1) AT Fatal error in main")
         sys.exit(1)
 

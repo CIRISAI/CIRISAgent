@@ -1,10 +1,12 @@
 import asyncio
 import logging
-import os
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from ciris_engine.logic.config.llm_budget import Deadline, active_budget
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
+from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator
+from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator
 from ciris_engine.logic.dma.dma_executor import (
     run_action_selection_pdma,
     run_csdma,
@@ -20,6 +22,16 @@ from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreaker
 from ciris_engine.logic.utils.channel_utils import extract_channel_id
+from ciris_engine.schemas.dma.bounce import (
+    BOUNCE_FIELD,
+    BOUNCE_PARALLELISM,
+    BOUNCE_PRIORITY,
+    BOUNCE_THRESHOLD,
+    BounceSummary,
+    DMABounceAttempt,
+    DMABounceRecord,
+    DMAName,
+)
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
 from ciris_engine.schemas.dma.results import (
     ActionSelectionDMAResult,
@@ -38,6 +50,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _deadline_of(thought_item: Any) -> Optional[Deadline]:
+    """The thought deadline a queue item carries (None for items built outside process_thought)."""
+    candidate = getattr(thought_item, "deadline", None)
+    return candidate if isinstance(candidate, Deadline) else None
+
+
 class DMAOrchestrator:
     def __init__(
         self,
@@ -51,6 +69,8 @@ class DMAOrchestrator:
         memory_service: Optional[Any] = None,
         idma_evaluator: Optional[IDMAEvaluator] = None,
         tsaspdma_evaluator: Optional[TSASPDMAEvaluator] = None,
+        dsaspdma_evaluator: Optional[DSASPDMAEvaluator] = None,
+        msaspdma_evaluator: Optional[MSASPDMAEvaluator] = None,
     ) -> None:
         self.ethical_pdma_evaluator = ethical_pdma_evaluator
         self.csdma_evaluator = csdma_evaluator
@@ -58,19 +78,20 @@ class DMAOrchestrator:
         self.action_selection_pdma_evaluator = action_selection_pdma_evaluator
         self.idma_evaluator = idma_evaluator
         self.tsaspdma_evaluator = tsaspdma_evaluator
+        self.dsaspdma_evaluator = dsaspdma_evaluator
+        self.msaspdma_evaluator = msaspdma_evaluator
         self.time_service = time_service
         self.app_config = app_config
         self.llm_service = llm_service
         self.memory_service = memory_service
 
-        self.retry_limit = getattr(app_config.workflow, "DMA_RETRY_LIMIT", 3) if app_config else 3
-        # DMA timeout can be overridden via environment variable for slow LLM providers
-        # Should be higher than CIRIS_LLM_TIMEOUT to allow for retries
-        dma_timeout_env = os.environ.get("CIRIS_DMA_TIMEOUT")
-        if dma_timeout_env:
-            self.timeout_seconds = float(dma_timeout_env)
-        else:
-            self.timeout_seconds = getattr(app_config.workflow, "DMA_TIMEOUT_SECONDS", 30.0) if app_config else 30.0
+        # Per-try timeout and attempt count come from the active LLM budget
+        # profile (CIRISAgent#1186): REMOTE 90s x 2, LOCAL 300s x 1, with
+        # CIRIS_DMA_TIMEOUT / CIRIS_DMA_ATTEMPTS applied inside resolve_budget.
+        # Each try is further clamped to the thought's deadline at call time.
+        budget = active_budget()
+        self.retry_limit = budget.dma_attempts
+        self.timeout_seconds = budget.dma_per_try_s
 
         self._circuit_breakers: Dict[str, CircuitBreaker] = {
             "ethical_pdma": CircuitBreaker("ethical_pdma"),
@@ -116,6 +137,7 @@ class DMAOrchestrator:
                 processing_context,
                 retry_limit=self.retry_limit,
                 timeout_seconds=self.timeout_seconds,
+                deadline=_deadline_of(thought_item),
                 time_service=self.time_service,
                 ethical_result=dma_results["ethical_pdma"],
                 csdma_result=dma_results["csdma"],
@@ -154,6 +176,7 @@ class DMAOrchestrator:
                 context,
                 retry_limit=self.retry_limit,
                 timeout_seconds=self.timeout_seconds,
+                deadline=_deadline_of(thought_item),
                 time_service=self.time_service,
             )
         )
@@ -187,12 +210,26 @@ class DMAOrchestrator:
             try:
                 dma_results[name] = await task
             except Exception as e:
-                logger.error(f"DMA '{name}' failed: {e}", exc_info=True)
+                logger.error(f"DMA '{name}' failed: {e}")
                 error = DMAError(dma_name=name, error_message=str(e), error_type=type(e).__name__)
                 self._set_dma_error(errors, name, error)
 
         if errors.has_errors():
             raise Exception(f"DMA(s) failed: {errors.get_error_summary()}")
+
+        # ─── DMA bounce gate ──────────────────────────────────────────────
+        # If any of the bounceable DMAs (CSDMA, DSDMA in v0.1; PDMA pending)
+        # scored below threshold, run a one-shot composite bounce: re-run
+        # each failing DMA `BOUNCE_PARALLELISM` times in parallel with a
+        # priority-ordered preamble that mentions every low score, then
+        # replace the original result with the highest-scoring alternative
+        # if it clears threshold. See FSD/DMA_BOUNCE.md.
+        bounce_summary = await self._maybe_bounce_dmas(
+            thought_item=thought_item,
+            processing_context=processing_context,
+            dsdma_context=dsdma_context,
+            dma_results=dma_results,
+        )
 
         # Run IDMA sequentially after initial 3 DMAs (needs their results as input)
         # IDMA is INFORMATIONAL, not a gate - failures don't block the thought
@@ -212,11 +249,286 @@ class DMAOrchestrator:
             csdma=dma_results["csdma"],
             dsdma=dma_results["dsdma"],
             idma=idma_result,
+            bounce_summary=bounce_summary,
+            # User prompts (for backwards compatibility)
             ethical_pdma_prompt=getattr(self.ethical_pdma_evaluator, "last_user_prompt", None),
             csdma_prompt=getattr(self.csdma_evaluator, "last_user_prompt", None),
             dsdma_prompt=getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None,
             idma_prompt=idma_prompt,
+            # System prompts (for debugging format instructions)
+            ethical_pdma_system_prompt=getattr(self.ethical_pdma_evaluator, "last_system_prompt", None),
+            csdma_system_prompt=getattr(self.csdma_evaluator, "last_system_prompt", None),
+            dsdma_system_prompt=getattr(self.dsdma, "last_system_prompt", None) if self.dsdma else None,
+            idma_system_prompt=(
+                getattr(self.idma_evaluator, "last_system_prompt", None) if self.idma_evaluator else None
+            ),
         )
+
+    # ─────────────────────────── DMA bounce ──────────────────────────────
+
+    @staticmethod
+    def _bounceable_score(name: str, result: Any) -> Optional[float]:
+        """Read the bounce field for the named DMA off its result, or None
+        if the field is absent (e.g. PDMA in v0.1, where alignment_score
+        has not yet been added to EthicalDMAResult)."""
+        field = BOUNCE_FIELD.get(name)
+        if not field or result is None:
+            return None
+        value = getattr(result, field, None)
+        if value is None or not isinstance(value, (int, float)):
+            return None
+        return float(value)
+
+    @staticmethod
+    def _build_composite_preamble(
+        triggers: list[tuple[str, float, float]],
+        lang: str = "en",
+    ) -> str:
+        """Build the localized bounce preamble that prepends to the thought
+        content for each alternative attempt. Triggers are listed in
+        BOUNCE_PRIORITY order so the model sees ethics-priority framing first.
+
+        Strings come from `prompts.dma.bounce_*` in the localization JSON
+        bundle; placeholders inside `{}` (DMA name, field, score, threshold,
+        rationale) are NOT translated — they are technical identifiers the
+        model needs to read literally.
+
+        Args:
+            triggers: list of (dma_name, original_score, threshold) tuples,
+                already sorted by priority.
+            lang: ISO 639-1 language code resolved from the agent's working
+                language (see `get_user_language_from_context`).
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
+        header = get_string(lang, "prompts.dma.bounce_header")
+        instruction = get_string(lang, "prompts.dma.bounce_instruction")
+        original_marker = get_string(lang, "prompts.dma.bounce_original_marker")
+
+        lines = [header]
+        for name, score, threshold in triggers:
+            lines.append(
+                get_string(
+                    lang,
+                    "prompts.dma.bounce_trigger_line",
+                    dma_name=name.upper(),
+                    field=BOUNCE_FIELD[name],
+                    score=f"{score:.2f}",
+                    threshold=f"{threshold:.2f}",
+                )
+            )
+        lines.extend(["", instruction, "", original_marker])
+        return "\n".join(lines)
+
+    @staticmethod
+    def _make_bounce_thought_item(
+        thought_item: ProcessingQueueItem, preamble: str
+    ) -> ProcessingQueueItem:
+        """Return a shallow copy of the thought item with the bounce preamble
+        prepended to its content text. Other fields (thought_id, source_task_id,
+        depth, agent_occurrence_id, images) are preserved so downstream
+        instrumentation reports the same identity."""
+        from ciris_engine.logic.processors.support.processing_queue import ThoughtContent
+
+        new_text = f"{preamble}\n\n{thought_item.content.text}"
+        new_content = ThoughtContent(text=new_text, metadata=dict(thought_item.content.metadata))
+        return thought_item.model_copy(update={"content": new_content})
+
+    async def _bounce_one_dma(
+        self,
+        name: str,
+        original_result: Any,
+        original_score: float,
+        bounce_thought_item: ProcessingQueueItem,
+        processing_context: Any,
+        dsdma_context: Optional[DMAMetadata],
+    ) -> tuple[Any, list[DMABounceAttempt]]:
+        """Run BOUNCE_PARALLELISM alternatives of one DMA. Always returns the
+        HIGHEST-scoring alternative (or the original result only if every
+        alternative errored), regardless of threshold. The threshold gates
+        only the `exhausted` flag the caller emits to ASPDMA — it does not
+        gate which result flows forward. Rationale: we already paid to
+        re-prompt with full self-rating context; the model's best attempt is
+        always more recent and better-informed than the original.
+        """
+        threshold = BOUNCE_THRESHOLD[name]
+
+        # CSDMA and DSDMA have different evaluator and context shapes; their
+        # run_func signatures differ accordingly. Locally, this loop only cares
+        # that each is a triple of (callable, evaluator-with-evaluate-method,
+        # context-passable-to-the-callable). Annotate as Any so the two
+        # branches' divergent concrete types don't fail to unify.
+        run_func: Any
+        evaluator: Any
+        ctx: Any
+        if name == "csdma":
+            run_func, evaluator, ctx = run_csdma, self.csdma_evaluator, processing_context
+        elif name == "dsdma":
+            run_func, evaluator, ctx = run_dsdma, self.dsdma, dsdma_context or DMAMetadata()
+        elif name == "ethical_pdma":
+            # PDMA bounce is gated until EthicalDMAResult.alignment_score lands.
+            # Defensive return: no-op, no attempts.
+            return original_result, []
+        else:
+            return original_result, []
+
+        tasks = [
+            self._create_dma_task(run_func, evaluator, bounce_thought_item, ctx)
+            for _ in range(BOUNCE_PARALLELISM)
+        ]
+        outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+
+        attempts: list[DMABounceAttempt] = []
+        best_outcome: Any = None
+        best_score: float = -1.0
+        for idx, outcome in enumerate(outcomes):
+            if isinstance(outcome, Exception):
+                logger.warning(f"[BOUNCE] {name} attempt {idx} raised: {outcome}")
+                continue
+            score = self._bounceable_score(name, outcome)
+            if score is None:
+                logger.warning(f"[BOUNCE] {name} attempt {idx} returned no score: {outcome!r}")
+                continue
+            attempts.append(
+                DMABounceAttempt(
+                    attempt_index=idx,
+                    score=score,
+                    reasoning=(getattr(outcome, "reasoning", "") or "")[:500],
+                )
+            )
+            if score > best_score:
+                best_score = score
+                best_outcome = outcome
+
+        if best_outcome is None:
+            # Every alternative errored — keep the original so the pipeline
+            # has a result to act on, and the caller will mark exhausted.
+            logger.warning(
+                f"[BOUNCE] {name} all alternatives errored, keeping original "
+                f"(score={original_score:.2f})"
+            )
+            return original_result, attempts
+
+        if best_score >= threshold:
+            logger.info(
+                f"[BOUNCE] {name} resolved: original={original_score:.2f} → best={best_score:.2f} "
+                f"(threshold {threshold:.2f})"
+            )
+        else:
+            logger.warning(
+                f"[BOUNCE] {name} EXHAUSTED: original={original_score:.2f} → best={best_score:.2f} "
+                f"(still below threshold {threshold:.2f}); forwarding best alternative + advisory"
+            )
+        return best_outcome, attempts
+
+    async def _maybe_bounce_dmas(
+        self,
+        *,
+        thought_item: ProcessingQueueItem,
+        processing_context: Optional[Any],
+        dsdma_context: Optional[DMAMetadata],
+        dma_results: Dict[str, Any],
+    ) -> Optional[BounceSummary]:
+        """Detect low-scoring DMAs, run a composite bounce, and mutate
+        `dma_results` in place to swap in any alternative that cleared
+        threshold. Returns a BounceSummary or None when no DMA triggered."""
+
+        # Identify triggered DMAs in priority order. PDMA is included for
+        # forward compat but will yield no score (returns None) until the
+        # EthicalDMAResult.alignment_score field lands.
+        triggers: list[tuple[str, float, float]] = []
+        for name in BOUNCE_PRIORITY:
+            score = self._bounceable_score(name, dma_results.get(name))
+            if score is None:
+                continue
+            threshold = BOUNCE_THRESHOLD[name]
+            if score < threshold:
+                triggers.append((name, score, threshold))
+
+        if not triggers:
+            return None
+
+        # Resolve agent working language so the bounce preamble matches the
+        # locale of the rest of the LLM context. Falls back to env / English.
+        from ciris_engine.logic.utils.localization import get_user_language_from_context
+
+        lang = get_user_language_from_context(processing_context)
+        preamble = self._build_composite_preamble(triggers, lang=lang)
+        bounce_item = self._make_bounce_thought_item(thought_item, preamble)
+        logger.info(
+            f"[BOUNCE] Triggered for thought {thought_item.thought_id}: "
+            + ", ".join(f"{n}={s:.2f}" for n, s, _ in triggers)
+        )
+
+        records: list[DMABounceRecord] = []
+        for name, original_score, threshold in triggers:
+            original_result = dma_results[name]
+            best_result, attempts = await self._bounce_one_dma(
+                name=name,
+                original_result=original_result,
+                original_score=original_score,
+                bounce_thought_item=bounce_item,
+                processing_context=processing_context,
+                dsdma_context=dsdma_context,
+            )
+            chosen_idx: Optional[int] = None
+            # Always swap in the highest alternative; "exhausted" means the
+            # best alternative is still below threshold (advisory fires) but
+            # we still pass it forward — the model's most recent attempt with
+            # full self-rating context is more informed than the original.
+            replaced = best_result is not original_result
+            if replaced:
+                final_score = self._bounceable_score(name, best_result) or original_score
+                # Identify which attempt produced this result by score equality.
+                for a in attempts:
+                    if a.score == final_score:
+                        chosen_idx = a.attempt_index
+                        break
+                dma_results[name] = best_result
+            else:
+                # Every alternative errored — kept original.
+                final_score = original_score
+            exhausted = final_score < threshold
+
+            records.append(
+                DMABounceRecord(
+                    dma=name,
+                    field=BOUNCE_FIELD[name],
+                    threshold=threshold,
+                    original_score=original_score,
+                    attempts=attempts,
+                    chosen_attempt_index=chosen_idx,
+                    final_score=final_score,
+                    exhausted=exhausted,
+                )
+            )
+
+        difficulty: Optional[str] = None
+        exhausted_records = [r for r in records if r.exhausted]
+        if exhausted_records:
+            # Synthesize a one-line rationale from the best alternative reasoning
+            # of each exhausted DMA. ASPDMA uses this to know the model knows
+            # this question is hard for it, even if no high-scoring answer was
+            # available — informs SPEAK-with-caveat vs DEFER decisions.
+            parts = []
+            for r in exhausted_records:
+                best_reason = max(
+                    (a.reasoning for a in r.attempts), key=len, default=""
+                )
+                first_clause = best_reason.split(".", 1)[0].strip()
+                if first_clause:
+                    parts.append(f"{r.dma}: {first_clause[:140]}")
+            if parts:
+                difficulty = " | ".join(parts)
+
+        return BounceSummary(
+            triggered_dmas=[t[0] for t in triggers],
+            records=records,
+            composite_preamble=preamble,
+            difficulty_rationale=difficulty,
+        )
+
+    # ────────────────────────── /DMA bounce ──────────────────────────────
 
     async def run_dmas(
         self,
@@ -242,6 +554,7 @@ class DMAOrchestrator:
                     processing_context,
                     retry_limit=self.retry_limit,
                     timeout_seconds=self.timeout_seconds,
+                    deadline=_deadline_of(thought_item),
                     time_service=self.time_service,
                 )
             )
@@ -259,6 +572,7 @@ class DMAOrchestrator:
                     processing_context,
                     retry_limit=self.retry_limit,
                     timeout_seconds=self.timeout_seconds,
+                    deadline=_deadline_of(thought_item),
                     time_service=self.time_service,
                 )
             )
@@ -277,6 +591,7 @@ class DMAOrchestrator:
                         dsdma_context or DMAMetadata(),
                         retry_limit=self.retry_limit,
                         timeout_seconds=self.timeout_seconds,
+                        deadline=_deadline_of(thought_item),
                         time_service=self.time_service,
                     )
                 )
@@ -291,7 +606,7 @@ class DMAOrchestrator:
             for (name, _), outcome in zip(tasks.items(), task_results):
                 cb = self._circuit_breakers.get(name)
                 if isinstance(outcome, Exception):
-                    logger.error(f"DMA '{name}' failed: {outcome}", exc_info=True)
+                    logger.error(f"DMA '{name}' failed: {outcome}")
                     results.errors.append(str(outcome))
                     if cb:
                         cb.record_failure()
@@ -326,7 +641,11 @@ class DMAOrchestrator:
     ) -> ActionSelectionDMAResult:
         """Run ActionSelectionPDMAEvaluator sequentially after DMAs."""
         # Create properly typed EnhancedDMAInputs
-        # Pass images from thought_item (ProcessingQueueItem) for multimodal support
+        # Pass images from thought_item (ProcessingQueueItem from processing_queue.py) for multimodal support
+        # ProcessingQueueItem inherits images from task via from_thought()
+        thought_images = thought_item.images
+        if thought_images:
+            logger.info(f"[VISION] DMA Orchestrator passing {len(thought_images)} images to ActionSelectionPDMA")
         triaged = EnhancedDMAInputs(
             original_thought=actual_thought,
             processing_context=processing_context,
@@ -338,7 +657,8 @@ class DMAOrchestrator:
             max_rounds=5,  # Default max rounds
             faculty_enhanced=False,
             recursive_evaluation=False,
-            images=thought_item.images,  # Pass images for ActionSelectionPDMA vision
+            images=thought_item.images,  # Pass images from ProcessingQueueItem for ActionSelectionPDMA vision
+            bounce_summary=dma_results.bounce_summary,
         )
 
         # Check if this is a conscience retry from the context
@@ -384,6 +704,16 @@ class DMAOrchestrator:
         # Get permitted actions directly from identity
         permitted_actions = identity_info.permitted_actions
 
+        # Log permitted actions for debugging
+        if permitted_actions:
+            logger.info(
+                f"DMAOrchestrator: Thought {thought_item.thought_id} permitted_actions from identity: {[a.value for a in permitted_actions]}"
+            )
+        else:
+            logger.warning(
+                f"DMAOrchestrator: Thought {thought_item.thought_id} has NO permitted_actions from identity!"
+            )
+
         # Identity MUST have permitted actions - no defaults in a mission critical system
         triaged.permitted_actions = permitted_actions
 
@@ -398,6 +728,7 @@ class DMAOrchestrator:
                 triaged,
                 retry_limit=self.retry_limit,
                 timeout_seconds=self.timeout_seconds,
+                deadline=_deadline_of(thought_item),
                 time_service=self.time_service,
             )
         except Exception as e:

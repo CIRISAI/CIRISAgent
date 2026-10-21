@@ -145,14 +145,3 @@ class JWTValidationResult(BaseModel):
     error: Optional[str] = Field(None, description="Error message if invalid")
     error_type: Optional[str] = Field(None, description="Type of validation error")
 
-    def get_wa_id(self) -> Optional[str]:
-        """Get WA ID from validated token."""
-        if self.valid and self.token:
-            return self.token.claims.get_wa_id()
-        return None
-
-    def get_role(self) -> Optional[WARole]:
-        """Get role from validated token."""
-        if self.valid and self.token:
-            return self.token.claims.role
-        return None

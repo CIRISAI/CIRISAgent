@@ -1,0 +1,177 @@
+"""CIRISVerify Python bindings.
+
+Hardware-rooted license verification for the CIRIS ecosystem.
+Provides cryptographic proof of license status to prevent capability spoofing.
+
+Usage:
+    from ciris_adapters.ciris_verify.ffi_bindings import CIRISVerify, LicenseStatus
+
+    verifier = CIRISVerify()
+    status = verifier.get_license_status(challenge_nonce=os.urandom(32))
+
+    if status.allows_licensed_operation():
+        # Professional capabilities available
+        pass
+    else:
+        # Community mode only
+        disclosure = status.mandatory_disclosure
+        print(disclosure.text)
+
+Logging:
+    # Enable internal logging via callback
+    verifier.set_log_callback(lambda lvl, target, msg: print(f"[{lvl}] {msg}"))
+
+    # Or integrate with Python logging
+    from ciris_adapters.ciris_verify.ffi_bindings import setup_logging
+    setup_logging(verifier, level="DEBUG")
+"""
+
+import logging as _logging
+
+# jcs_canonicalize IS re-exported (unlike verify_tree below): it binds the
+# substrate's ciris_verify_jcs_canonicalize through ciris_server.verify_ffi_path(),
+# so it carries no standalone-wheel dependency. This is the import the 2.9.29
+# ciris-verify pin removal (#917) rewired the producer call sites onto.
+from ._jcs import jcs_canonicalize
+from .client import CIRISVerify, MockCIRISVerify
+from .exceptions import (
+    AttestationInProgressError,
+    BinaryNotFoundError,
+    BinaryTamperedError,
+    CIRISVerifyError,
+    CommunicationError,
+    TimeoutError,
+    VerificationFailedError,
+)
+
+# verify_tree() and DEFAULT_REGISTRY_URL are NOT re-exported through this
+# vendored ffi_bindings layer — it carries CIRISAgent-local FFI-loader
+# patches (commit 03f5e958d) that the upstream client.py doesn't have.
+# Consumers needing the runtime tree verifier import directly:
+#     from ciris_engine.logic.services.infrastructure.authentication\
+#             .attestation.tree_verify import verify_tree, TreeVerifyRequest
+# which ctypes-binds ciris_verify_tree through ciris_server.verify_ffi_path()
+# (the 2.9.7 DRY purge) — no standalone ciris-verify wheel involved.
+# This file is in `update_ciris_verify.py::AGENT_MANAGED` to prevent
+# upstream `__init__.py` from re-introducing the broken import on each
+# `ciris-verify` bump (Codex P0 on PR #741, fix tracked in fe14c6c94).
+from .types import (
+    BinaryIntegrityStatus,
+    CapabilityCheckResult,
+    DisclosureSeverity,
+    FailedFile,
+    FailedFileKind,
+    FileCheckStatus,
+    FileIntegrityResult,
+    HardwareInfo,
+    HardwareLimitation,
+    HardwareType,
+    KeyringScope,
+    LicenseDetails,
+    LicenseStatus,
+    LicenseStatusResponse,
+    LicenseTier,
+    MandatoryDisclosure,
+    PythonIntegrityResult,
+    PythonModuleHashes,
+    SecurityAdvisory,
+    StorageDescriptor,
+    StorageKind,
+    TreeVerifyRequest,
+    TreeVerifyResult,
+    ValidationStatus,
+)
+
+
+def setup_logging(verifier: CIRISVerify, level: str = "INFO", logger_name: str = "ciris_verify"):
+    """Configure CIRISVerify to forward internal logs to Python logging.
+
+    Args:
+        verifier: CIRISVerify instance to configure.
+        level: Minimum log level: "ERROR", "WARN", "INFO", "DEBUG", "TRACE".
+        logger_name: Python logger name to use.
+
+    Example:
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
+
+        verifier = CIRISVerify()
+        setup_logging(verifier, level="DEBUG")
+
+        # Now CIRISVerify internal logs appear in Python logging
+        status = verifier.get_license_status(...)
+    """
+    logger = _logging.getLogger(logger_name)
+
+    # Map Rust levels to Python logging levels
+    level_map = {
+        1: _logging.ERROR,  # ERROR
+        2: _logging.WARNING,  # WARN
+        3: _logging.INFO,  # INFO
+        4: _logging.DEBUG,  # DEBUG
+        5: _logging.DEBUG,  # TRACE (Python has no TRACE, use DEBUG)
+    }
+
+    # Map level string to Rust level int
+    rust_level_map = {
+        "ERROR": 1,
+        "WARN": 2,
+        "WARNING": 2,
+        "INFO": 3,
+        "DEBUG": 4,
+        "TRACE": 5,
+    }
+    rust_level = rust_level_map.get(level.upper(), 3)
+
+    def log_callback(lvl: int, target: str, message: str):
+        py_level = level_map.get(lvl, _logging.DEBUG)
+        logger.log(py_level, "[%s] %s", target, message)
+
+    verifier.set_log_callback(log_callback, level=rust_level)
+
+
+def get_library_version() -> str:
+    """Get the CIRISVerify library version string."""
+    return __version__
+
+
+__version__ = "10.3.0"
+__all__ = [
+    "CIRISVerify",
+    "MockCIRISVerify",
+    "jcs_canonicalize",  # substrate-bound (#917)
+    # verify_tree / DEFAULT_REGISTRY_URL not re-exported — see comment above.
+    "TreeVerifyRequest",
+    "TreeVerifyResult",
+    "FailedFile",
+    "FailedFileKind",
+    "get_library_version",
+    "setup_logging",
+    "LicenseStatus",
+    "LicenseTier",
+    "LicenseDetails",
+    "MandatoryDisclosure",
+    "DisclosureSeverity",
+    "LicenseStatusResponse",
+    "CapabilityCheckResult",
+    "FileIntegrityResult",
+    "FileCheckStatus",
+    "BinaryIntegrityStatus",
+    "HardwareType",
+    "ValidationStatus",
+    "PythonModuleHashes",
+    "PythonIntegrityResult",
+    "SecurityAdvisory",
+    "HardwareLimitation",
+    "HardwareInfo",
+    "StorageDescriptor",
+    "StorageKind",
+    "KeyringScope",
+    "CIRISVerifyError",
+    "BinaryNotFoundError",
+    "BinaryTamperedError",
+    "VerificationFailedError",
+    "TimeoutError",
+    "CommunicationError",
+    "AttestationInProgressError",
+]

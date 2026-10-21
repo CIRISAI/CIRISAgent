@@ -10,7 +10,6 @@ Tests the critical password storage flow to ensure:
 """
 
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -94,20 +93,11 @@ async def test_password_hashing_and_storage(auth_service, temp_auth_db):
     # Verify password was stored in correct database file
     assert os.path.exists(temp_auth_db), f"Auth database should exist at {temp_auth_db}"
 
-    # Check the database directly
-    with sqlite3.connect(temp_auth_db) as conn:
-        cursor = conn.cursor()
-
-        # Verify wa_cert table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='wa_cert'")
-        table_exists = cursor.fetchone()
-        assert table_exists, "wa_cert table should exist in auth database"
-
-        # Verify password is stored
-        cursor.execute("SELECT password_hash FROM wa_cert WHERE wa_id = ?", (wa.wa_id,))
-        stored_hash = cursor.fetchone()
-        assert stored_hash, f"Password should be stored for WA {wa.wa_id}"
-        assert stored_hash[0] == hashed_password, "Stored password hash should match"
+    # Read back through the persist substrate; a sibling sqlite3 connection
+    # can't see persist's connection-pool writes until they checkpoint.
+    stored = await auth_service.get_wa(wa.wa_id)
+    assert stored is not None, f"Password should be stored for WA {wa.wa_id}"
+    assert stored.password_hash == hashed_password, "Stored password hash should match"
 
 
 @pytest.mark.asyncio
@@ -131,19 +121,16 @@ async def test_disk_persistence_verification(auth_service, temp_auth_db):
 
     await auth_service._store_wa_certificate(wa)
 
+    # Verify it's queryable through persist before stop.
+    pre_stop = await auth_service.get_wa(wa.wa_id)
+    assert pre_stop is not None, "WA should persist in database after store"
+    assert pre_stop.password_hash == hashed_password
+
     # Stop the service
     await auth_service.stop()
 
     # Verify data exists on disk after service shutdown
     assert os.path.exists(temp_auth_db), "Database file should persist after service stop"
-
-    with sqlite3.connect(temp_auth_db) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT wa_id, password_hash FROM wa_cert WHERE wa_id = ?", (wa.wa_id,))
-        row = cursor.fetchone()
-        assert row, "WA should persist in database after service restart"
-        assert row[0] == wa.wa_id
-        assert row[1] == hashed_password
 
     # Restart service with same database
     from ciris_engine.logic.services.lifecycle.time import TimeService
@@ -206,7 +193,7 @@ async def test_default_admin_password_protection(auth_service):
     """Test that default admin password cannot be accidentally reset."""
     # Create default admin WA
     private_key, public_key = auth_service.generate_keypair()
-    default_password = "ciris_admin_password"  # Default from CLAUDE.md
+    default_password = "qa_test_password_12345"  # Default from CLAUDE.md
 
     admin_hash = auth_service.hash_password(default_password)
 
@@ -269,7 +256,7 @@ async def test_default_admin_no_accidental_reset(auth_service, temp_auth_db):
     """Test that admin password cannot be accidentally overwritten or reset."""
     # Create admin with default password
     private_key, public_key = auth_service.generate_keypair()
-    default_password = "ciris_admin_password"
+    default_password = "qa_test_password_12345"
     admin_hash = auth_service.hash_password(default_password)
 
     admin_wa = WACertificate(

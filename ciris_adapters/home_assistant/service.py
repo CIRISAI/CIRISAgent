@@ -15,11 +15,17 @@ Designed for CIRISHome hardware: Jetson + HA Yellow + Voice PE
 import asyncio
 import logging
 import os
+import socket
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from urllib.parse import urlparse
 
 import aiohttp
 
+# Type for generic async request handler
+T = TypeVar("T")
+
+from ciris_engine.logic.utils.halt_latch import hold_tick, read_halt_latch
 from ciris_engine.schemas.services.core import ServiceCapabilities
 
 from .schemas import (
@@ -38,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # Optional imports for camera functionality
 try:
-    import cv2
+    import cv2  # noqa: F401
     import numpy as np
 
     OPENCV_AVAILABLE = True
@@ -58,6 +64,10 @@ class HAIntegrationService:
     - Camera frame extraction for vision processing
 
     SAFE DOMAIN: Home automation only. Medical capabilities are blocked.
+
+    Supervisor Mode:
+    When running as an HA addon, SUPERVISOR_TOKEN is automatically available
+    and the API is accessed via http://supervisor/core/api. No OAuth needed.
     """
 
     PROHIBITED_CAPABILITIES = {
@@ -80,12 +90,30 @@ class HAIntegrationService:
         "activity": HAEventType.CAMERA_ACTIVITY,
     }
 
+    # Supervisor API endpoint (when running as HA addon)
+    SUPERVISOR_API_URL = "http://supervisor/core/api"
+
+    @staticmethod
+    def is_supervisor_mode() -> bool:
+        """Check if running inside Home Assistant as an addon.
+
+        When running as an HA addon, the SUPERVISOR_TOKEN env var is
+        automatically injected by the HA Supervisor.
+        """
+        return bool(os.getenv("SUPERVISOR_TOKEN"))
+
     def __init__(self) -> None:
         """Initialize the Home Assistant integration service."""
         # HA configuration - NOTE: Token is fetched dynamically via property
         # to support OAuth flows where token is set after adapter initialization
         self._ha_url: Optional[str] = None
         self._ha_token: Optional[str] = None
+
+        # Check for supervisor mode (running as HA addon)
+        self._supervisor_mode = self.is_supervisor_mode()
+        if self._supervisor_mode:
+            logger.info("[HA] Running in SUPERVISOR MODE (HA addon)")
+            logger.info(f"[HA] Using Supervisor API: {self.SUPERVISOR_API_URL}")
 
         # Camera configuration
         self.go2rtc_url = os.getenv("GO2RTC_SERVER_URL", "http://127.0.0.1:8554")
@@ -94,20 +122,40 @@ class HAIntegrationService:
 
         # State
         self._entity_cache: Dict[str, HADeviceState] = {}
-        self._cache_timestamp: Optional[datetime] = None
+        self._entity_list_cache: List[HADeviceState] = []  # Full list cache for get_all_entities
+        self._cache_timestamp: Optional[datetime] = None  # Per-entity cache timestamp
+        self._list_cache_timestamp: Optional[datetime] = None  # Full list cache timestamp
         self._cache_ttl = 30  # seconds
         self._detection_tasks: Dict[str, asyncio.Task[None]] = {}
         self._event_history: List[DetectionEvent] = []
         self._initialized = False
+        self._init_failures = 0
+        self._max_init_retries = 2  # Stop retrying after 2 failures
+
+        # Token refresh management
+        self._token_refresh_lock = asyncio.Lock()
+        self._last_token_refresh: Optional[datetime] = None
+        self._token_refresh_min_interval = 30  # seconds between refresh attempts
+
+        # Re-authentication tracking - set when refresh token is revoked/invalid
+        self._needs_reauth = False
+        self._reauth_reason: Optional[str] = None
 
         logger.info(f"HAIntegrationService initialized for {self.ha_url}")
         logger.info(f"Configured {len(self.camera_urls)} cameras via go2rtc")
 
     @property
     def ha_url(self) -> str:
-        """Get HA URL - fetched dynamically from env or cached value."""
+        """Get HA URL - fetched dynamically from env or cached value.
+
+        In supervisor mode (HA addon), uses http://supervisor/core/api.
+        Otherwise uses HOME_ASSISTANT_URL env var or default.
+        """
         if self._ha_url:
             return self._ha_url
+        # Supervisor mode: use internal Supervisor API
+        if self._supervisor_mode:
+            return self.SUPERVISOR_API_URL.rstrip("/")
         return os.getenv("HOME_ASSISTANT_URL", "http://homeassistant.local:8123").rstrip("/")
 
     @ha_url.setter
@@ -119,11 +167,21 @@ class HAIntegrationService:
     def ha_token(self) -> Optional[str]:
         """Get HA token - fetched dynamically from env or cached value.
 
+        In supervisor mode, uses SUPERVISOR_TOKEN (auto-injected by HA).
+        Otherwise uses HOME_ASSISTANT_TOKEN from OAuth flow.
+
         This is critical for OAuth flows where the token is set via environment
         variable AFTER the service is initialized.
         """
         if self._ha_token:
             return self._ha_token
+        # Supervisor mode: use SUPERVISOR_TOKEN (auto-injected by HA)
+        if self._supervisor_mode:
+            token = os.getenv("SUPERVISOR_TOKEN")
+            if token:
+                logger.debug("[HA TOKEN] Using SUPERVISOR_TOKEN (addon mode)")
+            return token
+        # Normal mode: use OAuth token
         token = os.getenv("HOME_ASSISTANT_TOKEN")
         if token:
             logger.debug(
@@ -141,6 +199,60 @@ class HAIntegrationService:
             logger.info(
                 f"[HA TOKEN] Token set explicitly: {value[:20]}..." if len(value) > 20 else "[HA TOKEN] Token set"
             )
+
+    @property
+    def ma_enabled(self) -> bool:
+        """Check if Music Assistant integration is available.
+
+        MA is accessed through HA services (music_assistant.* domain).
+        Returns True as MA availability is checked at runtime.
+        """
+        return True
+
+    @property
+    def needs_reauth(self) -> bool:
+        """Check if re-authentication is required.
+
+        This is set when the refresh token is revoked/expired and a new OAuth
+        flow is needed. The mobile app should show this on the adapters page.
+
+        In supervisor mode (HA addon), authentication is automatic via
+        SUPERVISOR_TOKEN, so re-auth is never required.
+
+        Also returns True if no token is configured at all.
+        """
+        # Supervisor mode: auth is automatic, never needs re-auth
+        if self._supervisor_mode:
+            logger.debug("[HA_NEEDS_REAUTH] Supervisor mode - auth is automatic")
+            return False
+        # If explicitly flagged for reauth (e.g., token expired during operation)
+        if self._needs_reauth:
+            logger.info("[HA_NEEDS_REAUTH] _needs_reauth=True, returning True")
+            return True
+        # Also need reauth if no token configured
+        has_token = bool(self.ha_token)
+        logger.info(f"[HA_NEEDS_REAUTH] _needs_reauth=False, ha_token exists={has_token}")
+        if not self.ha_token:
+            logger.info("[HA_NEEDS_REAUTH] No token, returning True")
+            return True
+        logger.info("[HA_NEEDS_REAUTH] Has token, returning False")
+        return False
+
+    @property
+    def reauth_reason(self) -> Optional[str]:
+        """Get the reason re-authentication is required."""
+        if self._reauth_reason:
+            return self._reauth_reason
+        # Provide default reason if no token
+        if not self.ha_token:
+            return "No Home Assistant token configured. Please authenticate."
+        return None
+
+    def clear_reauth_flag(self) -> None:
+        """Clear the re-auth flag after successful re-authentication."""
+        self._needs_reauth = False
+        self._reauth_reason = None
+        logger.info("[HA] Re-auth flag cleared after successful authentication")
 
     def _parse_camera_urls(self) -> Dict[str, str]:
         """Parse camera URLs from environment variable."""
@@ -187,31 +299,100 @@ class HAIntegrationService:
             },
         )
 
+    async def _check_host_reachable(self, timeout_seconds: float = 1.0) -> bool:
+        """Quick check if the HA host is reachable via TCP socket.
+
+        This is much faster than a full HTTP request when the host is unreachable.
+        Returns True if we can establish a TCP connection, False otherwise.
+        """
+        try:
+            parsed = urlparse(self.ha_url)
+            host = parsed.hostname or "localhost"
+            port = parsed.port or (443 if parsed.scheme == "https" else 8123)
+
+            # Run socket connect in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+
+            def try_connect() -> bool:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout_seconds)
+                try:
+                    sock.connect((host, port))
+                    sock.close()
+                    return True
+                except (socket.timeout, socket.error, OSError):
+                    return False
+                finally:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
+            reachable = await loop.run_in_executor(None, try_connect)
+            if not reachable:
+                logger.debug(f"[HA] Host {host}:{port} not reachable (timeout={timeout_seconds}s)")
+            return reachable
+        except Exception as e:
+            logger.debug(f"[HA] Reachability check failed: {e}")
+            return False
+
     async def initialize(self) -> bool:
-        """Initialize the service and verify connectivity."""
+        """Initialize the service and verify connectivity.
+
+        Uses a quick reachability check before attempting HTTP connection
+        to fail fast when HA server is unreachable.
+        """
         if self._initialized:
             return True
 
         if not self.ha_token:
             logger.warning("Cannot initialize - no HA token configured")
+            self._needs_reauth = True
+            self._reauth_reason = "No Home Assistant token configured. Please authenticate."
+            return False
+
+        # Quick reachability check (1 second timeout) - fail fast if host unreachable
+        if not await self._check_host_reachable(timeout_seconds=1.0):
+            logger.warning(f"[HA] Host unreachable: {self.ha_url} - skipping initialization")
             return False
 
         try:
-            # Test HA connection
+            # Test HA connection with reduced timeout (3 seconds instead of 10)
             headers = self._get_headers()
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self.ha_url}/api/",
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10),
+                    timeout=aiohttp.ClientTimeout(total=3),
                 ) as response:
                     if response.status == 200:
                         self._initialized = True
                         logger.info("Home Assistant connection verified")
                         return True
+                    elif response.status == 401:
+                        logger.warning("HA connection returned 401 - token expired, attempting refresh")
+                        if await self._try_refresh_token():
+                            # Retry with refreshed token
+                            async with aiohttp.ClientSession() as retry_session:
+                                async with retry_session.get(
+                                    f"{self.ha_url}/api/",
+                                    headers=self._get_headers(),
+                                    timeout=aiohttp.ClientTimeout(total=3),
+                                ) as retry_response:
+                                    if retry_response.status == 200:
+                                        self._initialized = True
+                                        logger.info("Home Assistant connection verified after token refresh")
+                                        return True
+                                    logger.error(f"HA connection failed after refresh: status {retry_response.status}")
+                        else:
+                            logger.error("HA token refresh failed during initialization")
+                        return False
                     else:
                         logger.error(f"HA connection failed with status {response.status}")
                         return False
+        except asyncio.TimeoutError:
+            logger.warning(f"[HA] Connection timeout (3s) to {self.ha_url}")
+            return False
         except Exception as e:
             logger.error(f"Failed to initialize HA integration: {e}")
             return False
@@ -220,15 +401,60 @@ class HAIntegrationService:
         """Get HTTP headers for HA API calls."""
         return {"Authorization": f"Bearer {self.ha_token}", "Content-Type": "application/json"}
 
+    # ========== Entity Resolution ==========
+
+    async def resolve_entity_by_name(self, name_or_id: str) -> Optional[str]:
+        """Resolve an entity by friendly name or entity_id.
+
+        If name_or_id contains a dot and exists as entity_id, returns it directly.
+        Otherwise, searches all entities for a matching friendly_name.
+
+        Returns:
+            The resolved entity_id, or None if not found.
+        """
+        # If it looks like an entity_id and exists, use it directly
+        if "." in name_or_id:
+            state = await self.get_device_state(name_or_id)
+            if state and state.state not in ("unavailable", "unknown"):
+                return name_or_id
+
+        # Search by friendly name (case-insensitive)
+        entities = await self.get_all_entities()
+        name_lower = name_or_id.lower().strip()
+
+        # Try exact match first
+        for entity in entities:
+            if entity.friendly_name and entity.friendly_name.lower() == name_lower:
+                logger.info(f"[HA RESOLVE] Resolved friendly name '{name_or_id}' -> '{entity.entity_id}'")
+                return entity.entity_id
+
+        # Try partial match (friendly name contains the search term)
+        for entity in entities:
+            if entity.friendly_name and name_lower in entity.friendly_name.lower():
+                logger.info(
+                    f"[HA RESOLVE] Partial match '{name_or_id}' -> '{entity.entity_id}' (name: {entity.friendly_name})"
+                )
+                return entity.entity_id
+
+        # Try if entity_id contains the search term (e.g., "bedroom" -> "light.bedroom_lamp")
+        for entity in entities:
+            if name_lower in entity.entity_id.lower():
+                logger.info(f"[HA RESOLVE] Entity ID contains '{name_or_id}' -> '{entity.entity_id}'")
+                return entity.entity_id
+
+        logger.warning(f"[HA RESOLVE] Could not resolve '{name_or_id}' to any entity")
+        return None
+
     # ========== Device Control ==========
 
-    async def get_device_state(self, entity_id: str) -> Optional[HADeviceState]:
+    async def get_device_state(self, entity_id: str, _retry: bool = True) -> Optional[HADeviceState]:
         """Get the current state of a Home Assistant entity."""
         if not self.ha_token:
             return None
+        await self._ensure_initialized()
 
-        # Check cache first
-        if entity_id in self._entity_cache:
+        # Check cache first (skip cache if we're in a retry after token refresh)
+        if _retry and entity_id in self._entity_cache:
             cached = self._entity_cache[entity_id]
             if self._cache_timestamp:
                 age = (datetime.now(timezone.utc) - self._cache_timestamp).total_seconds()
@@ -264,6 +490,11 @@ class HAIntegrationService:
                         self._entity_cache[entity_id] = state
                         self._cache_timestamp = datetime.now(timezone.utc)
                         return state
+                    elif response.status == 401 and _retry:
+                        logger.warning(f"[HA] get_device_state: 401 for {entity_id} - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self.get_device_state(entity_id, _retry=False)
+                        logger.error("[HA] get_device_state: Token refresh failed")
                     else:
                         logger.warning(f"Failed to get state for {entity_id}: status {response.status}")
         except Exception as e:
@@ -271,7 +502,9 @@ class HAIntegrationService:
 
         return None
 
-    async def control_device(self, entity_id: str, action: str, **kwargs: Any) -> HAAutomationResult:
+    async def control_device(
+        self, entity_id: str, action: str, _retry: bool = True, **kwargs: Any
+    ) -> HAAutomationResult:
         """Control a Home Assistant device."""
         logger.info("=" * 60)
         logger.info("[HA DEVICE CONTROL] Starting device control request")
@@ -279,6 +512,9 @@ class HAIntegrationService:
         logger.info(f"  action: {action}")
         logger.info(f"  kwargs: {kwargs}")
         logger.info(f"  ha_url: {self.ha_url}")
+
+        # Ensure initialized (lazy init if token appeared after startup)
+        await self._ensure_initialized()
 
         token = self.ha_token
         if not token:
@@ -336,22 +572,74 @@ class HAIntegrationService:
                         else f"[HA DEVICE CONTROL] Response body: {response_text}"
                     )
 
-                    success = status == 200
+                    # HA returns 200 even for non-existent entities!
+                    # Check if response body contains any state changes
+                    # Empty array [] means the entity wasn't found/controlled
+                    response_data = None
+                    try:
+                        import json
+
+                        response_data = json.loads(response_text) if response_text else []
+                    except json.JSONDecodeError:
+                        response_data = []
+
+                    # Success only if HTTP 200 AND entity was actually affected
+                    success = status == 200 and (isinstance(response_data, list) and len(response_data) > 0)
+
                     if not success:
-                        logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
+                        if status == 200 and (not response_data or len(response_data) == 0):
+                            # HA returned success but no entities were affected
+                            # This can mean: entity doesn't exist, entity doesn't support action,
+                            # or action had no effect (e.g., media_play with nothing paused)
+                            if action in ("media_play", "media_pause", "media_stop"):
+                                logger.error(
+                                    f"[HA DEVICE CONTROL] FAILED! Action '{action}' had no effect on '{entity_id}'. "
+                                    f"For media_play: ensure something is paused/queued. "
+                                    f"To play new music, use Music Assistant tools (ma_search, ma_play)."
+                                )
+                            else:
+                                logger.error(
+                                    f"[HA DEVICE CONTROL] FAILED! Action '{action}' had no effect on '{entity_id}' "
+                                    f"(entity may not exist or doesn't support this action)"
+                                )
+                        else:
+                            logger.error(f"[HA DEVICE CONTROL] FAILED! Status {status}")
                         if status == 401:
-                            logger.error("[HA DEVICE CONTROL] 401 Unauthorized - Token may be expired or invalid")
+                            logger.error("[HA DEVICE CONTROL] 401 Unauthorized - Token expired, attempting refresh")
+                            if _retry and await self._try_refresh_token():
+                                logger.info("[HA DEVICE CONTROL] Token refreshed, retrying...")
+                                return await self.control_device(entity_id, action, _retry=False, **kwargs)
+                            logger.error("[HA DEVICE CONTROL] Token refresh failed or retry exhausted")
                         elif status == 403:
                             logger.error("[HA DEVICE CONTROL] 403 Forbidden - Token lacks required permissions")
                         elif status == 404:
                             logger.error(f"[HA DEVICE CONTROL] 404 Not Found - Service {service} not found")
+
+                    # Build appropriate error message
+                    error_msg = None
+                    if not success:
+                        if status == 200 and (not response_data or len(response_data) == 0):
+                            # More specific error based on action type
+                            if action in ("media_play", "media_pause", "media_stop"):
+                                error_msg = (
+                                    f"Action '{action}' had no effect on '{entity_id}'. "
+                                    f"media_play resumes paused content; to play NEW music, use Music Assistant tools (ma_search, ma_play)."
+                                )
+                            else:
+                                error_msg = (
+                                    f"Action '{action}' had no effect on '{entity_id}'. "
+                                    f"Entity may not exist or doesn't support this action. "
+                                    f"Use ha_list_entities to verify entity availability."
+                                )
+                        else:
+                            error_msg = f"Status {status}: {response_text[:200]}"
 
                     logger.info("=" * 60)
                     return HAAutomationResult(
                         entity_id=entity_id,
                         action=action,
                         success=success,
-                        error=None if success else f"Status {status}: {response_text[:200]}",
+                        error=error_msg,
                     )
         except Exception as e:
             logger.error(f"[HA DEVICE CONTROL] Exception: {e}")
@@ -372,7 +660,7 @@ class HAIntegrationService:
 
     # ========== Notifications ==========
 
-    async def send_notification(self, notification: HANotification) -> bool:
+    async def send_notification(self, notification: HANotification, _retry: bool = True) -> bool:
         """Send a notification via Home Assistant."""
         if not self.ha_token:
             return False
@@ -396,17 +684,167 @@ class HAIntegrationService:
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as response:
-                    return response.status == 200
+                    if response.status == 200:
+                        return True
+                    elif response.status == 401 and _retry:
+                        logger.warning("[HA] send_notification: 401 - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self.send_notification(notification, _retry=False)
+                    return False
         except Exception as e:
             logger.error(f"Error sending notification: {e}")
             return False
 
+    # ========== Token Refresh ==========
+
+    async def _try_refresh_token(self, force: bool = False) -> bool:
+        """Attempt to refresh the HA access token using the refresh token.
+
+        Uses a lock to prevent concurrent refresh attempts and respects a minimum
+        interval between refreshes to avoid hammering the auth endpoint.
+
+        Home Assistant OAuth2 token refresh requires:
+        - POST to /auth/token
+        - Content-Type: application/x-www-form-urlencoded
+        - Payload: client_id, grant_type=refresh_token, refresh_token
+
+        Args:
+            force: If True, skip the minimum interval check
+
+        Returns:
+            True if refresh succeeded, False otherwise
+        """
+        # Use lock to prevent concurrent refresh attempts
+        async with self._token_refresh_lock:
+            # Check if we refreshed recently (unless forced)
+            if not force and self._last_token_refresh:
+                elapsed = (datetime.now(timezone.utc) - self._last_token_refresh).total_seconds()
+                if elapsed < self._token_refresh_min_interval:
+                    logger.debug(f"[HA] Token refresh skipped - refreshed {elapsed:.1f}s ago")
+                    return True  # Assume recent refresh is still valid
+
+            refresh_token = os.getenv("HOME_ASSISTANT_REFRESH_TOKEN")
+            client_id = os.getenv("HOME_ASSISTANT_CLIENT_ID")
+
+            if not refresh_token:
+                logger.warning("[HA] Token refresh: No refresh_token available")
+                return False
+            if not client_id:
+                logger.warning("[HA] Token refresh: No client_id available")
+                return False
+
+            try:
+                logger.info("[HA] Attempting token refresh...")
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{self.ha_url}/auth/token",
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": refresh_token,
+                            "client_id": client_id,
+                        },
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as response:
+                        if response.status == 200:
+                            token_data = await response.json()
+                            new_access_token = token_data.get("access_token")
+                            new_refresh_token = token_data.get("refresh_token")
+
+                            if new_access_token:
+                                # Update environment variable and cached token
+                                os.environ["HOME_ASSISTANT_TOKEN"] = new_access_token
+                                self._ha_token = new_access_token
+                                self._last_token_refresh = datetime.now(timezone.utc)
+
+                                # Handle refresh token rotation (some OAuth servers rotate on each use)
+                                if new_refresh_token and new_refresh_token != refresh_token:
+                                    os.environ["HOME_ASSISTANT_REFRESH_TOKEN"] = new_refresh_token
+                                    logger.info("[HA] Refresh token rotated and updated")
+                                    # Try to persist to .env file for next restart
+                                    self._persist_token_to_env("HOME_ASSISTANT_REFRESH_TOKEN", new_refresh_token)
+
+                                logger.info("[HA] Token refreshed successfully!")
+                                return True
+                            logger.error("[HA] Token refresh response missing access_token")
+                        elif response.status == 400:
+                            body = await response.text()
+                            logger.error(f"[HA] Token refresh failed (invalid grant): {body[:200]}")
+                            # Refresh token may be revoked - clear it to prevent retry loops
+                            if "invalid_grant" in body.lower():
+                                logger.warning("[HA] Refresh token appears revoked - re-authentication required")
+                                self._needs_reauth = True
+                                self._reauth_reason = "Refresh token revoked or expired. Please re-authenticate."
+                        else:
+                            body = await response.text()
+                            logger.error(f"[HA] Token refresh failed: HTTP {response.status} - {body[:200]}")
+            except Exception as e:
+                logger.error(f"[HA] Token refresh exception: {e}")
+            return False
+
+    def _persist_token_to_env(self, key: str, value: str) -> None:
+        """Attempt to persist a token to the .env file for next restart.
+
+        This is a best-effort operation - failure is logged but not fatal.
+        """
+        try:
+            from ciris_engine.logic.utils.path_resolution import get_env_file_path
+
+            env_path = get_env_file_path()
+            if env_path and env_path.exists():
+                content = env_path.read_text()
+                lines = content.split("\n")
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.startswith(f"{key}="):
+                        lines[i] = f"{key}={value}"
+                        updated = True
+                        break
+                if not updated:
+                    lines.append(f"{key}={value}")
+                env_path.write_text("\n".join(lines))
+                logger.debug(f"[HA] Persisted {key} to .env file")
+        except Exception as e:
+            logger.debug(f"[HA] Could not persist {key} to .env: {e}")
+
     # ========== Sensor Data ==========
 
-    async def get_all_entities(self) -> List[HADeviceState]:
-        """Get all Home Assistant entities."""
+    async def _ensure_initialized(self) -> bool:
+        """Lazy initialization - retry if token has become available since startup."""
+        if self._initialized:
+            return True
+        if self._init_failures >= self._max_init_retries:
+            return False
+        if self.ha_token:
+            logger.info("[HA] Token now available, attempting lazy initialization...")
+            result = await self.initialize()
+            if not result:
+                self._init_failures += 1
+                if self._init_failures >= self._max_init_retries:
+                    logger.warning(
+                        f"[HA] Initialization failed {self._init_failures} times, giving up. "
+                        "Will not retry until adapter restart."
+                    )
+            return result
+        return False
+
+    async def get_all_entities(self, _retry: bool = True) -> List[HADeviceState]:
+        """Get all Home Assistant entities. Returns cached results if fresh."""
         if not self.ha_token:
+            # Set re-auth flag when called without token (e.g., during context enrichment)
+            self._needs_reauth = True
+            self._reauth_reason = "No Home Assistant token configured. Please authenticate."
             return []
+
+        # Return cached results if still fresh (uses list-specific timestamp)
+        if self._list_cache_timestamp and self._entity_list_cache:
+            age = (datetime.now(timezone.utc) - self._list_cache_timestamp).total_seconds()
+            if age < self._cache_ttl:
+                return self._entity_list_cache
+
+        # Ensure we're initialized (respects max retry limit)
+        if not await self._ensure_initialized():
+            return self._entity_list_cache  # Return stale cache if available, else empty
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -419,26 +857,472 @@ class HAIntegrationService:
                         entities = await response.json()
                         result = []
                         for entity in entities:
+                            attrs = entity.get("attributes", {})
                             state = HADeviceState(
                                 entity_id=entity.get("entity_id", ""),
                                 state=entity.get("state", "unknown"),
-                                friendly_name=entity.get("attributes", {}).get("friendly_name", ""),
-                                attributes=entity.get("attributes", {}),
+                                friendly_name=attrs.get("friendly_name", ""),
+                                attributes=attrs,
                                 domain=entity.get("entity_id", "").split(".")[0],
                             )
                             result.append(state)
                             self._entity_cache[state.entity_id] = state
-                        self._cache_timestamp = datetime.now(timezone.utc)
+                        now = datetime.now(timezone.utc)
+                        self._cache_timestamp = now
+                        self._list_cache_timestamp = now
+                        self._entity_list_cache = result
+                        logger.info(f"[HA] get_all_entities: Retrieved {len(result)} entities")
                         return result
+                    elif response.status == 401 and _retry:
+                        logger.warning("[HA] get_all_entities: 401 - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self.get_all_entities(_retry=False)
+                        logger.error("[HA] get_all_entities: Token refresh failed")
+                    else:
+                        body = await response.text()
+                        logger.error(f"[HA] get_all_entities: HTTP {response.status} - {body[:200]}")
         except Exception as e:
-            logger.error(f"Error getting entities: {e}")
+            logger.error(f"[HA] get_all_entities: Exception - {e}")
 
-        return []
+        return self._entity_list_cache  # Return stale cache on failure
 
     async def get_sensors_by_domain(self, domain: str) -> List[HADeviceState]:
         """Get all entities in a specific domain (sensor, light, switch, etc.)."""
         entities = await self.get_all_entities()
         return [e for e in entities if e.domain == domain]
+
+    # ========== Music Assistant Functionality ==========
+    # These methods use HA service calls to interact with Music Assistant.
+    # MA must be installed as an HA integration (music_assistant.* services).
+
+    async def _get_ma_config_entry_id(self, _retry: bool = True) -> Optional[str]:
+        """Get the Music Assistant config entry ID from Home Assistant."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.ha_url}/api/config/config_entries/entry",
+                    headers=self._get_headers(),
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status == 200:
+                        entries = await response.json()
+                        for entry in entries:
+                            if entry.get("domain") == "music_assistant":
+                                entry_id: str | None = entry.get("entry_id")
+                                logger.info(f"[MA] Found config_entry_id: {entry_id}")
+                                return entry_id
+                    elif response.status == 401 and _retry:
+                        logger.warning("[MA] _get_ma_config_entry_id: 401 - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self._get_ma_config_entry_id(_retry=False)
+                    logger.warning("[MA] Could not find music_assistant config entry")
+                    return None
+        except Exception as e:
+            logger.error(f"[MA] Error getting config entry: {e}")
+            return None
+
+    async def ma_search(
+        self,
+        query: str,
+        media_types: Optional[List[str]] = None,
+        limit: int = 10,
+        _retry: bool = True,
+    ) -> Dict[str, Any]:
+        """Search Music Assistant library via HA service call.
+
+        Uses music_assistant.search service through HA API.
+
+        Args:
+            query: Search query string
+            media_types: Optional list of types to search (artist, album, track, playlist, radio)
+            limit: Maximum results per type (default 10)
+
+        Returns:
+            Dict with search results
+        """
+        try:
+            # Get MA config entry ID (required for search)
+            config_entry_id = await self._get_ma_config_entry_id()
+
+            # Use HA service call for MA search
+            # Service: music_assistant.search
+            service_data: Dict[str, Any] = {
+                "name": query,
+                "limit": limit,
+            }
+            if config_entry_id:
+                service_data["config_entry_id"] = config_entry_id
+            if media_types:
+                service_data["media_type"] = media_types
+
+            logger.info(f"[MA] Search request: {service_data}")
+
+            async with aiohttp.ClientSession() as session:
+                # Use ?return_response to get search results back
+                async with session.post(
+                    f"{self.ha_url}/api/services/music_assistant/search?return_response",
+                    json=service_data,
+                    headers={
+                        "Authorization": f"Bearer {self.ha_token}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    response_body = await response.text()
+                    logger.info(f"[MA] Search response: HTTP {response.status}, body: {response_body[:500]}")
+
+                    if response.status == 200:
+                        # Try to parse as JSON
+                        try:
+                            data = await response.json() if response_body else []
+                        except Exception:
+                            data = []
+
+                        # HA service calls often return `[]` on success
+                        # The actual results may be delivered via events
+                        if not data or data == []:
+                            logger.info(f"[MA] Search '{query}': service accepted (async results via events)")
+                            return {
+                                "success": True,
+                                "query": query,
+                                "results": [],
+                                "note": "Search request accepted. Results may be async via events.",
+                            }
+
+                        logger.info(f"[MA] Search '{query}' via HA: got {len(data)} results")
+                        return {"success": True, "query": query, "results": data}
+                    elif response.status == 401 and _retry:
+                        logger.warning("[MA] ma_search: 401 - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self.ma_search(query, media_types, limit, _retry=False)
+                        return {"success": False, "error": "Token refresh failed"}
+                    elif response.status == 404:
+                        return {
+                            "success": False,
+                            "error": "Music Assistant integration not found in Home Assistant",
+                        }
+                    else:
+                        logger.error(f"[MA] Search failed: HTTP {response.status} - {response_body[:200]}")
+                        return {
+                            "success": False,
+                            "error": f"MA search failed: HTTP {response.status}",
+                        }
+        except Exception as e:
+            logger.error(f"[MA] Search exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_play(
+        self,
+        media_id: str,
+        player_id: Optional[str] = None,
+        media_type: str = "track",
+        enqueue: str = "play",
+        _retry: bool = True,
+    ) -> Dict[str, Any]:
+        """Play media on Music Assistant via HA service call.
+
+        Uses music_assistant.play_media service through HA API.
+
+        Args:
+            media_id: Media name, URI, or ID to play
+            player_id: Target player entity ID (e.g., media_player.mass_living_room)
+            media_type: Type of media (track, album, artist, playlist)
+            enqueue: Queue behavior - play, next, add, replace
+
+        Returns:
+            Dict with play result including verification status
+        """
+        try:
+            # Build service data - config_entry_id is NOT required and causes 400 if invalid
+            service_data: Dict[str, Any] = {
+                "media_id": media_id,
+                "media_type": media_type,
+                "enqueue": enqueue,
+            }
+            if player_id:
+                service_data["entity_id"] = player_id
+
+            logger.info(f"[MA] Play request: {service_data}")
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.ha_url}/api/services/music_assistant/play_media",
+                    json=service_data,
+                    headers={
+                        "Authorization": f"Bearer {self.ha_token}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    response_body = await response.text()
+                    logger.info(f"[MA] Play response: HTTP {response.status}, body: {response_body[:500]}")
+
+                    if response.status == 401 and _retry:
+                        logger.warning("[MA] ma_play: 401 - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self.ma_play(media_id, player_id, media_type, enqueue, _retry=False)
+                        return {"success": False, "error": "Token refresh failed"}
+                    elif response.status == 404:
+                        return {
+                            "success": False,
+                            "error": "Music Assistant integration not found in Home Assistant",
+                        }
+                    elif response.status != 200:
+                        logger.error(f"[MA] Play failed: HTTP {response.status} - {response_body[:200]}")
+                        return {
+                            "success": False,
+                            "error": f"MA play failed: HTTP {response.status}",
+                            "details": response_body[:200],
+                        }
+
+                    # HTTP 200 received - but we need to verify playback actually started
+                    # HA returns 200 for any valid service call even if media wasn't found
+
+                    # Verify playback if we have a player_id - poll for state change
+                    if player_id:
+                        # Get initial state before play command took effect
+                        # We need this to detect media_title changes for HA 2025.7.0 idle bug
+                        initial_state = await self.get_device_state(player_id)
+                        initial_media_title = ""
+                        if initial_state:
+                            initial_media_title = initial_state.attributes.get("media_title", "")
+
+                        # Poll for up to 5 seconds for playback to start
+                        max_wait = 5.0
+                        check_interval = 0.5
+                        elapsed = 0.0
+
+                        while elapsed < max_wait:
+                            await asyncio.sleep(check_interval)
+                            elapsed += check_interval
+
+                            player_state = await self.get_device_state(player_id)
+                            if not player_state:
+                                continue
+
+                            current_state = player_state.state
+                            media_title = player_state.attributes.get("media_title", "")
+                            media_artist = player_state.attributes.get("media_artist", "")
+
+                            # Accept "playing" or "buffering" as success indicators
+                            if current_state in ("playing", "buffering"):
+                                logger.info(
+                                    f"[MA] Player state after {elapsed:.1f}s: {current_state}, "
+                                    f"title='{media_title}', artist='{media_artist}'"
+                                )
+                                return {
+                                    "success": True,
+                                    "media_id": media_id,
+                                    "player": player_id,
+                                    "verified": True,
+                                    "now_playing": {
+                                        "title": media_title,
+                                        "artist": media_artist,
+                                    },
+                                }
+
+                            # Handle HA 2025.7.0 bug: state stays "idle" but media_title changes
+                            # If media_title changed and we have a title, consider it a success
+                            if current_state == "idle" and media_title and media_title != initial_media_title:
+                                logger.info(
+                                    f"[MA] Detected HA 2025.7.0 idle bug: state=idle but media changed. "
+                                    f"title='{media_title}', artist='{media_artist}' (was '{initial_media_title}')"
+                                )
+                                return {
+                                    "success": True,
+                                    "media_id": media_id,
+                                    "player": player_id,
+                                    "verified": True,
+                                    "now_playing": {
+                                        "title": media_title,
+                                        "artist": media_artist,
+                                    },
+                                    "note": "HA 2025.7.0 idle state bug detected - media_title changed indicating playback",
+                                }
+
+                        # Timeout - get final state for error message
+                        player_state = await self.get_device_state(player_id)
+                        if player_state:
+                            current_state = player_state.state
+                            media_title = player_state.attributes.get("media_title", "")
+                            logger.warning(
+                                f"[MA] Player state after {max_wait}s timeout: {current_state}, title='{media_title}'"
+                            )
+                            # Player exists but not playing after timeout
+                            return {
+                                "success": False,
+                                "error": f"Playback did not start within {max_wait}s. Player state: {current_state}",
+                                "player": player_id,
+                                "suggestion": (
+                                    "The track may not exist in Music Assistant, or the player "
+                                    "may not be available. Try ma_search first to verify the track exists, "
+                                    "and ma_players to list available players."
+                                ),
+                            }
+                        else:
+                            return {
+                                "success": False,
+                                "error": f"Could not verify player state for '{player_id}'",
+                                "suggestion": "The player entity may not exist. Use ma_players to list available players.",
+                            }
+
+                    # No player_id specified - can't verify, return cautious response
+                    return {
+                        "success": True,
+                        "media_id": media_id,
+                        "verified": False,
+                        "warning": "No player specified - could not verify playback started",
+                    }
+
+        except Exception as e:
+            logger.error(f"[MA] Play exception: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def ma_get_players(self) -> Dict[str, Any]:
+        """Get all Music Assistant players via HA entity query.
+
+        Finds all media_player entities that belong to Music Assistant.
+
+        Returns:
+            Dict with player list and states
+        """
+        try:
+            # Get all media_player entities and filter for MA players
+            entities = await self.get_all_entities()
+            ma_players = [
+                {
+                    "entity_id": e.entity_id,
+                    "name": e.friendly_name,
+                    "state": e.state,
+                    "attributes": e.attributes,
+                }
+                for e in entities
+                if e.domain == "media_player"
+                and (
+                    e.entity_id.startswith("media_player.mass_")
+                    or e.attributes.get("mass_player_id")
+                    or e.attributes.get("mass_player_type")  # MA-managed player
+                    or e.attributes.get("app_id") == "music_assistant"  # Currently using MA
+                    or "music_assistant" in str(e.attributes.get("friendly_name", "")).lower()
+                )
+            ]
+
+            if not ma_players:
+                # Fall back to all media players if no MA-specific ones found
+                logger.warning("[MA] No Music Assistant players found, returning all media players")
+                ma_players = [
+                    {
+                        "entity_id": e.entity_id,
+                        "name": e.friendly_name,
+                        "state": e.state,
+                    }
+                    for e in entities
+                    if e.domain == "media_player"
+                ]
+
+            logger.info(f"[MA] Get players: found {len(ma_players)} (MA-controlled)")
+            return {"success": True, "players": ma_players}
+        except Exception as e:
+            logger.error(f"[MA] Get players exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_get_queue(self, player_id: str) -> Dict[str, Any]:
+        """Get the queue for a Music Assistant player.
+
+        Queries player attributes for queue info.
+
+        Args:
+            player_id: Player entity ID
+
+        Returns:
+            Dict with queue info from player attributes
+        """
+        try:
+            state = await self.get_device_state(player_id)
+            if not state:
+                return {"error": f"Player not found: {player_id}"}
+
+            # Extract queue info from player attributes
+            attrs = state.attributes
+            queue_info = {
+                "player_id": player_id,
+                "state": state.state,
+                "current_track": attrs.get("media_title"),
+                "current_artist": attrs.get("media_artist"),
+                "current_album": attrs.get("media_album_name"),
+                "queue_position": attrs.get("queue_position"),
+                "queue_size": attrs.get("queue_size"),
+                "shuffle": attrs.get("shuffle"),
+                "repeat": attrs.get("repeat"),
+            }
+
+            logger.info(
+                f"[MA] Get queue for {player_id}: position {queue_info.get('queue_position')}/{queue_info.get('queue_size')}"
+            )
+            return {"success": True, "queue": queue_info}
+        except Exception as e:
+            logger.error(f"[MA] Get queue exception: {e}")
+            return {"error": str(e)}
+
+    async def ma_browse(self, media_type: str = "artists", limit: int = 25, _retry: bool = True) -> Dict[str, Any]:
+        """Browse Music Assistant library via HA service call.
+
+        Uses music_assistant.get_library service.
+
+        Args:
+            media_type: Category to browse (artists, albums, tracks, playlists)
+            limit: Maximum results
+
+        Returns:
+            Dict with browsable items
+        """
+        try:
+            # Get MA config entry ID (may be required)
+            config_entry_id = await self._get_ma_config_entry_id()
+
+            service_data: Dict[str, Any] = {
+                "media_type": media_type,
+                "limit": limit,
+            }
+            if config_entry_id:
+                service_data["config_entry_id"] = config_entry_id
+
+            logger.info(f"[MA] Browse request: {service_data}")
+
+            async with aiohttp.ClientSession() as session:
+                # Note: ?return_response required for HA 2024.3+ to get response data
+                async with session.post(
+                    f"{self.ha_url}/api/services/music_assistant/get_library?return_response",
+                    json=service_data,
+                    headers={
+                        "Authorization": f"Bearer {self.ha_token}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as response:
+                    response_body = await response.text()
+                    logger.info(f"[MA] Browse response: HTTP {response.status}, body: {response_body[:500]}")
+
+                    if response.status == 200:
+                        try:
+                            data = await response.json() if response_body else []
+                        except Exception:
+                            data = []
+                        logger.info(f"[MA] Browse '{media_type}' via HA: success")
+                        return {"success": True, "media_type": media_type, "items": data}
+                    elif response.status == 401 and _retry:
+                        logger.warning("[MA] ma_browse: 401 - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self.ma_browse(media_type, limit, _retry=False)
+                        return {"success": False, "error": "Token refresh failed"}
+                    elif response.status == 404:
+                        return {"success": False, "error": "Music Assistant integration not found in Home Assistant"}
+                    else:
+                        logger.error(f"[MA] Browse failed: HTTP {response.status} - {response_body[:200]}")
+                        return {"success": False, "error": f"MA browse failed: HTTP {response.status}"}
+        except Exception as e:
+            logger.error(f"[MA] Browse exception: {e}")
+            return {"error": str(e)}
 
     # ========== Camera Functionality ==========
 
@@ -663,57 +1547,67 @@ class HAIntegrationService:
         last_event_time: Dict[str, datetime] = {}
         cooldown_seconds = 10
 
-        while True:
-            try:
-                cap = cv2.VideoCapture(url)
-                if not cap.isOpened():
-                    await asyncio.sleep(5)
+        try:
+            while True:
+                # CC 4.2.1.1: the loop fires Home Assistant events on its own
+                # schedule, outside the act gate, so it holds itself under a halt.
+                # The baseline frame is dropped so motion is not measured across it.
+                if (await read_halt_latch()).halted:
+                    previous_frame = None
+                    await hold_tick()
                     continue
+                try:
+                    cap = cv2.VideoCapture(url)
+                    if not cap.isOpened():
+                        await asyncio.sleep(5)
+                        continue
 
-                ret, frame = cap.read()
-                cap.release()
+                    ret, frame = cap.read()
+                    cap.release()
 
-                if not ret:
+                    if not ret:
+                        await asyncio.sleep(5)
+                        continue
+
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                    # Motion detection
+                    if previous_frame is not None:
+                        diff = cv2.absdiff(previous_frame, gray)
+                        _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+                        changed_pixels = int(np.count_nonzero(thresh))
+                        total_pixels = int(thresh.shape[0] * thresh.shape[1])
+                        change_pct = float(changed_pixels) / float(total_pixels)
+
+                        if change_pct > 0.02:  # 2% threshold
+                            now = datetime.now(timezone.utc)
+                            last_motion = last_event_time.get("motion", datetime.min.replace(tzinfo=timezone.utc))
+                            if (now - last_motion).total_seconds() > cooldown_seconds:
+                                event = DetectionEvent(
+                                    event_type=EventType.MOTION,
+                                    camera_name=camera_name,
+                                    confidence=min(change_pct * 10, 1.0),
+                                    timestamp=now,
+                                    zones=[],
+                                    description=f"Motion detected ({change_pct:.1%} change)",
+                                    ha_event_type=HAEventType.CAMERA_MOTION,
+                                )
+                                self._event_history.append(event)
+                                await self._send_ha_event(event)
+                                last_event_time["motion"] = now
+
+                    previous_frame = gray.copy()
+                    await asyncio.sleep(3)
+
+                except asyncio.CancelledError:
+                    raise  # Re-raise to exit loop cleanly
+                except Exception as e:
+                    logger.error(f"Detection loop error for {camera_name}: {e}")
                     await asyncio.sleep(5)
-                    continue
+        except asyncio.CancelledError:
+            logger.debug(f"Detection loop cancelled for {camera_name}")
 
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-                # Motion detection
-                if previous_frame is not None:
-                    diff = cv2.absdiff(previous_frame, gray)
-                    _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
-                    changed_pixels = int(np.count_nonzero(thresh))
-                    total_pixels = int(thresh.shape[0] * thresh.shape[1])
-                    change_pct = float(changed_pixels) / float(total_pixels)
-
-                    if change_pct > 0.02:  # 2% threshold
-                        now = datetime.now(timezone.utc)
-                        last_motion = last_event_time.get("motion", datetime.min.replace(tzinfo=timezone.utc))
-                        if (now - last_motion).total_seconds() > cooldown_seconds:
-                            event = DetectionEvent(
-                                event_type=EventType.MOTION,
-                                camera_name=camera_name,
-                                confidence=min(change_pct * 10, 1.0),
-                                timestamp=now,
-                                zones=[],
-                                description=f"Motion detected ({change_pct:.1%} change)",
-                                ha_event_type=HAEventType.CAMERA_MOTION,
-                            )
-                            self._event_history.append(event)
-                            await self._send_ha_event(event)
-                            last_event_time["motion"] = now
-
-                previous_frame = gray.copy()
-                await asyncio.sleep(3)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Detection loop error for {camera_name}: {e}")
-                await asyncio.sleep(5)
-
-    async def _send_ha_event(self, event: DetectionEvent) -> bool:
+    async def _send_ha_event(self, event: DetectionEvent, _retry: bool = True) -> bool:
         """Send detection event to Home Assistant."""
         if not self.ha_token:
             return False
@@ -734,7 +1628,13 @@ class HAIntegrationService:
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=10),
                 ) as response:
-                    return response.status == 200
+                    if response.status == 200:
+                        return True
+                    elif response.status == 401 and _retry:
+                        logger.warning("[HA] _send_ha_event: 401 - attempting token refresh")
+                        if await self._try_refresh_token():
+                            return await self._send_ha_event(event, _retry=False)
+                    return False
         except Exception as e:
             logger.error(f"Failed to send HA event: {e}")
             return False
@@ -748,4 +1648,5 @@ class HAIntegrationService:
         for camera_name in list(self._detection_tasks.keys()):
             await self.stop_event_detection(camera_name)
         self._entity_cache.clear()
+        self._entity_list_cache.clear()
         logger.info("HAIntegrationService cleaned up")

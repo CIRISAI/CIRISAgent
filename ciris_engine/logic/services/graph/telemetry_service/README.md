@@ -41,7 +41,7 @@ The service monitors 37+ real services across 7 categories:
 - **Adapters** (3): `api`, `discord`, `cli` (each can spawn multiple instances)
 - **Components** (2): `service_registry`, `agent_processor`
 - **Registry Services**: Dynamic services registered at runtime
-- **Covenant Metrics**: Computed ethical/governance metrics
+- **Accord Metrics**: Computed ethical/governance metrics
 
 ## Key Features
 
@@ -70,13 +70,13 @@ print(f"{aggregated.services_online}/{aggregated.services_total} services health
 - Carbon footprint and energy consumption
 - Model-specific resource attribution
 
-### Covenant Metrics
+### Accord Metrics
 Computes ethical governance metrics:
 - Wise Authority deferrals and ethical decisions
 - Adaptive Filter interventions
 - Transparency scores
 - Self-observation insights
-- Covenant compliance rates
+- Accord compliance rates
 
 ## Schemas
 
@@ -166,7 +166,7 @@ async def get_service_status() -> TelemetryServiceStatus
 
 ## Grace-Based Consolidation
 
-The service implements grace-based memory consolidation following covenant principles:
+The service implements grace-based memory consolidation following accord principles:
 
 ### Grace Policies
 ```python

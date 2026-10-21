@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from ciris_engine.logic.adapters.api.dependencies.auth import require_admin, require_observer
 from ciris_engine.logic.adapters.api.routes.telemetry import router
 from ciris_engine.schemas.services.graph.telemetry import MetricRecord
+from ciris_engine.schemas.services.resources_core import ResourceBudget
 
 
 def override_auth():
@@ -161,11 +162,7 @@ def app_with_detailed_services():
     snapshot.timestamp = datetime.now(timezone.utc).isoformat()
     snapshot.warnings = []
     resource_monitor.snapshot = snapshot
-    resource_monitor.budget = MagicMock(
-        max_memory_mb=2048.0,
-        max_cpu_percent=100.0,
-        max_disk_bytes=100000000000,
-    )
+    resource_monitor.budget = ResourceBudget()  # the real shape: limits come from the monitor's budget
     app.state.resource_monitor = resource_monitor
 
     # Visibility service with detailed task history and reasoning traces

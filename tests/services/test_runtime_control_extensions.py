@@ -79,9 +79,9 @@ class TestProcessorQueueStatus:
         # Execute
         result = await runtime_control_service.get_processor_queue_status()
 
-        # Verify
+        # Verify - returns "agent" as default processor name when unavailable
         assert isinstance(result, ProcessorQueueStatus)
-        assert result.processor_name == "unknown"
+        assert result.processor_name == "agent"
         assert result.queue_size == 0
 
     @pytest.mark.asyncio

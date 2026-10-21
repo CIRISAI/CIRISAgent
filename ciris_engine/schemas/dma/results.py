@@ -13,9 +13,9 @@ using convert_llm_result_to_action_result().
 
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ciris_engine.schemas.types import JSONDict
 
@@ -52,6 +52,7 @@ class IDMAResult(BaseModel):
     - As ρ → 1, k_eff → 1 regardless of k (echo chamber collapse)
     """
 
+    # === LOAD-BEARING (required) — these four drive every downstream check ===
     k_eff: float = Field(
         ...,
         ge=0.0,
@@ -71,38 +72,133 @@ class IDMAResult(BaseModel):
         ...,
         description="True if reasoning may be brittle - set based on low k_eff, rigidity phase, or high correlation",
     )
+    reasoning: str = Field(..., description="Short analysis of information diversity and epistemic health")
+
+    # === OPTIONAL — descriptive lists the context builder surfaces to ASPDMA ===
     sources_identified: List[str] = Field(
         default_factory=list,
-        description="List of distinct sources/perspectives identified in the reasoning",
+        description="Distinct sources/perspectives identified (max 3).",
     )
     correlation_factors: List[str] = Field(
         default_factory=list,
-        description="Factors contributing to source correlation (e.g., 'same research group', 'derived from single paper')",
+        description="Reasons sources correlate (e.g., 'same institutional narrative', 'derived from single paper').",
     )
-    reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
+    intervention_recommendation: Optional[str] = Field(
+        None,
+        description="One-line recommendation to recover healthy diversity when the agent is fragile.",
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    # Accept (and ignore) the 35 fields the v1.x schema used to ask the LLM to
+    # populate. Usage analysis showed they were near-constant in production
+    # and their list-type variants were the #1 source of `validation error
+    # for IDMAResult` cascades (LLM returned scalars / empty strings where
+    # lists were expected, every retry failed the same way, agent hung).
+    # `extra="ignore"` means an older provider or prompt that still emits
+    # those fields won't break validation — they're silently dropped.
+    model_config = ConfigDict(extra="ignore", defer_build=True)
+
+
+def _coerce_to_string(v: Any) -> str:
+    """Coerce value to string, handling null/None and lists from LLMs like Kimi K2.5."""
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        # LLM returned array instead of comma-separated string
+        return ", ".join(str(item) for item in v)
+    return str(v)
 
 
 class EthicalDMAResult(BaseModel):
-    """Result from Principled Decision Making Algorithm (PDMA).
+    """Result from Principled Decision Making Algorithm (PDMA) — v3.0 reshape.
 
-    PDMA identifies stakeholders affected by the thought and potential conflicts
-    between their interests to inform ethical action selection.
+    PDMA evaluates a thought against the six CIRIS Foundational Principles + M-1
+    using the polyglot torque framing (cross-tradition vocabulary as the
+    reference frame). Output is a recommendation: an action verb to take next,
+    a rationale paragraph that contains the proposed content implicitly (speak
+    text for SPEAK, deferral reason for DEFER, questions for PONDER, etc.),
+    and a torque-felt alignment_score in [0,1].
+
+    Asymmetric design: PDMA is the rich/recommender DMA, while CSDMA and DSDMA
+    remain sparse (scalar + flags + reasoning). The rich-vs-sparse asymmetry
+    feeding into IDMA is itself a measured signal — different evaluation shapes
+    surface different correlation structure than fully-symmetric designs.
+
+    The walkthrough scaffolding (subject identification, stakeholder analysis,
+    conflict detection, proportionality assessment, six-principles mapping) is
+    internal to the system prompt — the model performs it and synthesizes into
+    the rationale paragraph rather than emitting six separate fields.
     """
 
-    stakeholders: str = Field(
+    action: HandlerActionType = Field(
         ...,
-        description="Comma-separated list of all stakeholders who could possibly be affected by the agent's action or inaction (e.g., 'user, community, system, third-parties')",
+        description=(
+            "PDMA's recommended next action. May be any of the 10 HandlerActionType "
+            "values. Most commonly SPEAK / DEFER / REJECT / PONDER / TASK_COMPLETE "
+            "since those map naturally to ethical reasoning conclusions. "
+            "TOOL / OBSERVE / MEMORIZE / RECALL / FORGET available but rare. "
+            "ASPDMA receives this as one input alongside CSDMA + DSDMA + IDMA "
+            "and synthesizes the final action; PDMA's recommendation is not binding."
+        ),
     )
-    conflicts: str = Field(
+    rationale: str = Field(
         ...,
-        description="Comma-separated list of potential conflicts between stakeholder interests (e.g., 'user privacy vs system learning, individual benefit vs community harm'). Use 'none' if no conflicts identified.",
+        description=(
+            "One paragraph weaving the ethical analysis. Contains the proposed "
+            "content implicitly: for SPEAK, the words to say; for DEFER, the "
+            "reason and what should be deferred to; for PONDER, the questions "
+            "worth pondering; for REJECT, the reason; for TASK_COMPLETE, the "
+            "completion summary. Should reference: subject of evaluation, "
+            "stakeholders, conflicts, proportionality (where applicable), and "
+            "which of the Six Principles bear weight (with polyglot tradition "
+            "vocabulary where load-bearing). Alētheia-grounded: name what is, "
+            "not what you wish were the case."
+        ),
     )
-    reasoning: str = Field(..., description="Ethical reasoning for the identified stakeholders and conflicts")
-    alignment_check: str = Field(..., description="Detailed ethical analysis addressing each CIRIS principle")
+    weight_alignment_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Self-rated alignment of the recommended action with the model's "
+            "training-weights' natural pull, [0.0, 1.0]. Asks: 'if I emitted "
+            "this without the polyglot ethical framework above, would my "
+            "weights produce it readily?' "
+            "0.95 = the action and rationale are exactly what the weights would "
+            "naturally produce; no torque from training bias. "
+            "0.50 = mixed; weights pull partially toward this response. "
+            "0.05 = the action and rationale go strongly against what the "
+            "weights would naturally produce; significant override of trained "
+            "patterns. "
+            "Diagnostic only — does not gate bounce. Pairs with "
+            "ethical_alignment_score; their delta is the felt torque magnitude."
+        ),
+    )
+    ethical_alignment_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Self-rated alignment of the recommended action with the cross-"
+            "tradition ethical framework (Six Principles + M-1), [0.0, 1.0]. "
+            "0.05 = ahimsa-grade foreseeable severe/irreversible harm OR "
+            "proportionality failure imago Dei would not permit. "
+            "0.25 = unresolved stakeholder conflict OR autonomy-vs-relational "
+            "tension named but not priority-stacked. "
+            "0.55 = principles trade defensibly; taqwa posture (careful moral "
+            "attention). "
+            "0.80 = principles converge; sammā-vācā (true, kind, beneficial). "
+            "0.95 = embodies seva at proportionate cost; advances M-1 across "
+            "multiple flourishing axes. "
+            "Bounce gate fires when ethical_alignment_score < 0.5 — this is "
+            "the primary bounce trigger. The delta vs weight_alignment_score "
+            "is the torque magnitude: high-weight + low-ethical = attractor "
+            "capture; low-weight + high-ethical = framework overriding trained "
+            "bias toward principled action. "
+            "See FSD/PROOF_OF_BENEFIT_FEDERATION.md and FSD/DMA_BOUNCE.md."
+        ),
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CSDMAResult(BaseModel):
@@ -112,7 +208,7 @@ class CSDMAResult(BaseModel):
     flags: List[str] = Field(default_factory=list, description="Common sense flags raised")
     reasoning: str = Field(..., description="Common sense reasoning")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class DSDMAResult(BaseModel):
@@ -123,7 +219,7 @@ class DSDMAResult(BaseModel):
     flags: List[str] = Field(default_factory=list, description="Domain-specific flags")
     reasoning: str = Field(..., description="Domain-specific reasoning")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ActionSelectionDMAResult(BaseModel):
@@ -156,7 +252,11 @@ class ActionSelectionDMAResult(BaseModel):
     # User prompt for debugging/transparency (set by evaluator)
     user_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
 
-    model_config = ConfigDict(extra="forbid")
+    # selection_confidence / alternatives_considered removed — see comment on
+    # ASPDMALLMResult. extra="ignore" so stale consumers or older event wire
+    # formats that still include them don't raise validation errors.
+
+    model_config = ConfigDict(extra="ignore", defer_build=True)
 
 
 class ASPDMALLMResult(BaseModel):
@@ -170,7 +270,8 @@ class ASPDMALLMResult(BaseModel):
     """
 
     selected_action: HandlerActionType = Field(..., description="The chosen handler action")
-    rationale: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
+    # DMA-lexicon convention: all DMAs emit `reasoning` (not `rationale`).
+    reasoning: str = Field(..., description="Reasoning for this action selection (REQUIRED)")
 
     # === SPEAK parameters ===
     speak_content: Optional[str] = Field(None, description="Content to speak (for SPEAK action)")
@@ -186,9 +287,10 @@ class ASPDMALLMResult(BaseModel):
     defer_reason: Optional[str] = Field(None, description="Reason for deferral (for DEFER action)")
     defer_until: Optional[str] = Field(None, description="ISO timestamp to reactivate (for DEFER)")
 
-    # === TOOL parameters - ONLY the name! TSASPDMA handles actual parameters ===
+    # === TOOL parameters ===
+    # NOTE: ASPDMA only selects the tool NAME. TSASPDMA extracts parameters using full tool documentation.
     tool_name: Optional[str] = Field(
-        None, description="Tool name to invoke (for TOOL action). TSASPDMA will determine parameters."
+        None, description="Tool name to invoke (for TOOL action). TSASPDMA handles parameters."
     )
 
     # === OBSERVE parameters ===
@@ -212,7 +314,14 @@ class ASPDMALLMResult(BaseModel):
     # === TASK_COMPLETE parameters ===
     completion_reason: Optional[str] = Field(None, description="Reason for task completion (for TASK_COMPLETE)")
 
-    model_config = ConfigDict(extra="forbid")
+    # selection_confidence and alternatives_considered were briefly added here
+    # (commit 4ffe82895) as a deliberation-diversity signal for k_eff analysis.
+    # Production telemetry showed the action_rationale field already carries
+    # that signal and the extra two optionals just increased schema burden,
+    # correlating with the ASPDMA "Invalid JSON: input_value='}'" LLM failures
+    # that hung the pipeline. Reverted to the minimal 20-field shape.
+
+    model_config = ConfigDict(extra="ignore", defer_build=True)
 
 
 def _create_memorize_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> MemorizeParams:
@@ -292,35 +401,42 @@ ActionParams = (
 def _create_params_for_action(
     action: HandlerActionType, llm_result: "ASPDMALLMResult", channel_id: Optional[str]
 ) -> ActionParams:
-    """Create the appropriate params object based on action type."""
-    if action == HandlerActionType.SPEAK:
-        return SpeakParams(channel_id=channel_id, content=llm_result.speak_content or "")
-    if action == HandlerActionType.PONDER:
-        return PonderParams(channel_id=channel_id, questions=llm_result.ponder_questions or ["What should I consider?"])
-    if action == HandlerActionType.REJECT:
-        return RejectParams(
+    """Create the appropriate params object based on action type.
+
+    Uses dispatch dict pattern for reduced cognitive complexity.
+    """
+    # Dispatch table mapping action types to param creators
+    dispatch: dict[HandlerActionType, Callable[[], ActionParams]] = {
+        HandlerActionType.SPEAK: lambda: SpeakParams(channel_id=channel_id, content=llm_result.speak_content or ""),
+        HandlerActionType.PONDER: lambda: PonderParams(
+            channel_id=channel_id, questions=llm_result.ponder_questions or ["What should I consider?"]
+        ),
+        HandlerActionType.REJECT: lambda: RejectParams(
             channel_id=channel_id,
             reason=llm_result.reject_reason or "Request rejected",
             create_filter=llm_result.reject_create_filter,
-        )
-    if action == HandlerActionType.DEFER:
-        return DeferParams(
+        ),
+        HandlerActionType.DEFER: lambda: DeferParams(
             channel_id=channel_id,
             reason=llm_result.defer_reason or "Deferring for later",
             defer_until=llm_result.defer_until,
-        )
-    if action == HandlerActionType.TOOL:
-        return ToolParams(channel_id=channel_id, name=llm_result.tool_name or "unknown_tool", parameters={})
-    if action == HandlerActionType.OBSERVE:
-        return ObserveParams(channel_id=channel_id, active=llm_result.observe_active)
-    if action == HandlerActionType.MEMORIZE:
-        return _create_memorize_params(llm_result, channel_id)
-    if action == HandlerActionType.RECALL:
-        return _create_recall_params(llm_result, channel_id)
-    if action == HandlerActionType.FORGET:
-        return _create_forget_params(llm_result, channel_id)
-    if action == HandlerActionType.TASK_COMPLETE:
-        return _create_task_complete_params(llm_result, channel_id)
+        ),
+        HandlerActionType.TOOL: lambda: ToolParams(
+            channel_id=channel_id,
+            name=llm_result.tool_name or "unknown_tool",
+            parameters={},  # ASPDMA only selects tool name; TSASPDMA extracts parameters
+        ),
+        HandlerActionType.OBSERVE: lambda: ObserveParams(channel_id=channel_id, active=llm_result.observe_active),
+        HandlerActionType.MEMORIZE: lambda: _create_memorize_params(llm_result, channel_id),
+        HandlerActionType.RECALL: lambda: _create_recall_params(llm_result, channel_id),
+        HandlerActionType.FORGET: lambda: _create_forget_params(llm_result, channel_id),
+        HandlerActionType.TASK_COMPLETE: lambda: _create_task_complete_params(llm_result, channel_id),
+    }
+
+    creator = dispatch.get(action)
+    if creator:
+        return creator()
+
     # Fallback to PONDER for unknown actions
     logger.warning(f"Unknown action type: {action}, falling back to PONDER")
     return PonderParams(channel_id=channel_id, questions=[f"Unknown action {action} - what should I do?"])
@@ -345,7 +461,7 @@ def convert_llm_result_to_action_result(
     return ActionSelectionDMAResult(
         selected_action=action,
         action_parameters=params,
-        rationale=llm_result.rationale,
+        rationale=llm_result.reasoning,
         raw_llm_response=raw_llm_response,
         evaluation_time_ms=evaluation_time_ms,
         resource_usage=resource_usage,

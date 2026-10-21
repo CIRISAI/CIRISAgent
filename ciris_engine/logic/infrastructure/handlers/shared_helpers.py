@@ -256,30 +256,57 @@ def get_node_attributes_dict(node: GraphNode) -> Dict[str, Any]:
     return {}
 
 
-def check_managed_attributes(node: GraphNode) -> Optional[str]:
-    """Check if node tries to modify managed attributes.
+def check_managed_attributes(node: GraphNode, existing: Optional[GraphNode] = None) -> Optional[str]:
+    """Check if node tries to MODIFY managed attributes.
+
+    Modification, not presence. The distinction is the whole point:
+
+    Recall-modify-write-back is the natural way to add a fact about a user, and
+    the node that comes back from a recall already carries every managed
+    attribute the system has set on it — `last_seen`, `oauth_email`,
+    `trust_level`, and the rest. A presence check therefore refuses the write
+    because of fields the agent never touched and only carried along, so adding
+    one new fact to a user node was structurally impossible.
+
+    Observed live: the agent was told "my favorite color is chartreuse", replied
+    "Noted: your favorite color is chartreuse", and its MEMORIZE was blocked. One
+    turn later it answered "I do not have that information stored yet" — truthful
+    and caused entirely by this guard.
+
+    So: compare against what is stored. An unchanged managed attribute passes; a
+    changed one is refused, which is the rule the guard was written to enforce.
+    With no stored node to compare against, presence is still refused — there the
+    agent really is authoring a managed attribute from nothing.
 
     Args:
-        node: Graph node to check
+        node: Graph node the agent wants to write
+        existing: the currently-stored node, when available
 
     Returns:
-        Error message if managed attribute found, None otherwise
+        Error message if a managed attribute is being modified, None otherwise
     """
     if not is_user_node(node):
         return None
 
     attrs_to_check = get_node_attributes_dict(node)
+    stored = get_node_attributes_dict(existing) if existing is not None else None
 
     for attr_name, rationale in MANAGED_USER_ATTRIBUTES.items():
-        if attr_name in attrs_to_check:
-            return (
-                f"MEMORIZE BLOCKED: Attempt to modify managed user attribute '{attr_name}'. "
-                f"\n\nRationale: {rationale}"
-                f"\n\nAttempted operation: Set '{attr_name}' to '{attrs_to_check[attr_name]}' for user node '{node.id}'."
-                f"\n\nGuidance: If this information needs correction, please use DEFER action to request "
-                f"Wise Authority assistance. They can help determine the proper way to update this information "
-                f"through the appropriate system channels."
-            )
+        if attr_name not in attrs_to_check:
+            continue
+        incoming = attrs_to_check[attr_name]
+        if stored is not None and attr_name in stored and stored[attr_name] == incoming:
+            continue  # carried through unchanged — not a modification
+        was = f"'{stored[attr_name]}'" if stored is not None and attr_name in stored else "unset"
+        return (
+            f"MEMORIZE BLOCKED: Attempt to modify managed user attribute '{attr_name}'. "
+            f"\n\nRationale: {rationale}"
+            f"\n\nAttempted operation: Set '{attr_name}' to '{incoming}' (currently {was}) "
+            f"for user node '{node.id}'."
+            f"\n\nGuidance: If this information needs correction, please use DEFER action to request "
+            f"Wise Authority assistance. They can help determine the proper way to update this information "
+            f"through the appropriate system channels."
+        )
 
     return None
 
@@ -566,21 +593,152 @@ def extract_audit_parameters(
         params["error"] = str(error)
         params["error_type"] = type(error).__name__
 
-    # Extract tool-specific info for TOOL actions
-    if action_type == HandlerActionType.TOOL:
-        _extract_tool_audit_params(action_params, params)
+    # Extract action-specific parameters for audit
+    extractors = {
+        HandlerActionType.TOOL: _extract_tool_audit_params,
+        HandlerActionType.PONDER: _extract_ponder_audit_params,
+        HandlerActionType.SPEAK: _extract_speak_audit_params,
+        HandlerActionType.OBSERVE: _extract_observe_audit_params,
+        HandlerActionType.MEMORIZE: _extract_memorize_audit_params,
+        HandlerActionType.RECALL: _extract_recall_audit_params,
+        HandlerActionType.FORGET: _extract_forget_audit_params,
+        HandlerActionType.REJECT: _extract_reject_audit_params,
+        HandlerActionType.DEFER: _extract_defer_audit_params,
+        HandlerActionType.TASK_COMPLETE: _extract_task_complete_audit_params,
+    }
+
+    extractor = extractors.get(action_type)
+    if extractor:
+        extractor(action_params, params)
 
     return params
 
 
 def _extract_tool_audit_params(action_params: Any, params: Dict[str, str]) -> None:
-    """Extract tool-specific parameters for audit."""
+    """Extract tool-specific parameters for audit.
+
+    Extracts:
+    - tool_name: Name of the tool (e.g., "ha_device_control")
+    - tool_parameters: JSON-serialized parameters dict
+    - tool_adapter: Adapter prefix if detectable (e.g., "home_assistant")
+    """
     from ciris_engine.schemas.actions.parameters import ToolParams
 
     if hasattr(action_params, "name"):
         if isinstance(action_params, ToolParams):
-            params["tool_name"] = action_params.name
+            tool_name = action_params.name
+            params["tool_name"] = tool_name
             params["tool_parameters"] = json.dumps(action_params.parameters)
+
+            # Extract adapter name from tool name prefix (e.g., "ha_" -> "home_assistant")
+            adapter_prefixes = {
+                "ha_": "home_assistant",
+                "web_": "web",
+                "file_": "file_system",
+                "secrets_": "secrets",
+                "consent_": "consent",
+            }
+            for prefix, adapter in adapter_prefixes.items():
+                if tool_name.startswith(prefix):
+                    params["tool_adapter"] = adapter
+                    break
         else:
             # Fallback for dict-like params
             params["tool_name"] = str(getattr(action_params, "name", "unknown"))
+
+
+def _extract_ponder_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract ponder questions for audit."""
+    if hasattr(action_params, "questions"):
+        questions = action_params.questions
+        if questions:
+            params["ponder_questions"] = json.dumps(questions)
+            params["question_count"] = str(len(questions))
+
+
+def _extract_speak_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract speak content for audit (truncated for privacy)."""
+    if hasattr(action_params, "content"):
+        content = action_params.content or ""
+        # Truncate long content but show length
+        if len(content) > 200:
+            params["content_preview"] = content[:200] + "..."
+            params["content_length"] = str(len(content))
+        else:
+            params["content"] = content
+
+
+def _extract_observe_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract observe parameters for audit."""
+    if hasattr(action_params, "channel_id") and action_params.channel_id:
+        params["observe_channel"] = action_params.channel_id
+    if hasattr(action_params, "active"):
+        params["observe_active"] = str(action_params.active)
+    if hasattr(action_params, "context") and action_params.context:
+        params["observe_context"] = json.dumps(action_params.context)
+
+
+def _extract_memorize_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract memorize node info for audit."""
+    if hasattr(action_params, "node"):
+        node = action_params.node
+        if hasattr(node, "id"):
+            params["node_id"] = node.id
+        if hasattr(node, "type"):
+            params["node_type"] = str(node.type.value if hasattr(node.type, "value") else node.type)
+        if hasattr(node, "scope"):
+            params["node_scope"] = str(node.scope.value if hasattr(node.scope, "value") else node.scope)
+
+
+def _extract_recall_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract recall query info for audit."""
+    if hasattr(action_params, "query") and action_params.query:
+        params["recall_query"] = action_params.query
+    if hasattr(action_params, "node_id") and action_params.node_id:
+        params["recall_node_id"] = action_params.node_id
+    if hasattr(action_params, "node_type") and action_params.node_type:
+        params["recall_node_type"] = str(action_params.node_type)
+    if hasattr(action_params, "scope") and action_params.scope:
+        params["recall_scope"] = str(action_params.scope)
+    if hasattr(action_params, "limit") and action_params.limit:
+        params["recall_limit"] = str(action_params.limit)
+
+
+def _extract_forget_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract forget node and reason for audit."""
+    if hasattr(action_params, "node"):
+        node = action_params.node
+        if hasattr(node, "id"):
+            params["forget_node_id"] = node.id
+        if hasattr(node, "type"):
+            params["forget_node_type"] = str(node.type.value if hasattr(node.type, "value") else node.type)
+    if hasattr(action_params, "reason") and action_params.reason:
+        params["forget_reason"] = action_params.reason
+
+
+def _extract_reject_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract reject reason and filter info for audit."""
+    if hasattr(action_params, "reason") and action_params.reason:
+        params["reject_reason"] = action_params.reason
+    if hasattr(action_params, "create_filter") and action_params.create_filter:
+        params["creates_filter"] = "true"
+        if hasattr(action_params, "filter_pattern") and action_params.filter_pattern:
+            params["filter_pattern"] = action_params.filter_pattern
+        if hasattr(action_params, "filter_type") and action_params.filter_type:
+            params["filter_type"] = action_params.filter_type
+
+
+def _extract_defer_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract defer reason and context for audit."""
+    if hasattr(action_params, "reason") and action_params.reason:
+        params["defer_reason"] = action_params.reason
+    if hasattr(action_params, "context") and action_params.context:
+        params["defer_context"] = json.dumps(action_params.context)
+    if hasattr(action_params, "defer_until") and action_params.defer_until:
+        params["defer_until"] = action_params.defer_until
+
+
+def _extract_task_complete_audit_params(action_params: Any, params: Dict[str, str]) -> None:
+    """Extract task completion reason for audit."""
+    if hasattr(action_params, "completion_reason") and action_params.completion_reason:
+        params["completion_reason"] = action_params.completion_reason

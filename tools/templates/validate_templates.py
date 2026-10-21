@@ -100,11 +100,11 @@ def main():
 
         if success:
             if "NEEDS" in message:
-                print(f"  ⚠️  {message}")
+                print(f" [WARN] {message}")
             else:
-                print(f"  ✅ {message}")
+                print(f" [OK] {message}")
         else:
-            print(f"  ❌ {message}")
+            print(f" [FAIL] {message}")
             all_valid = False
 
     # Summary
@@ -121,7 +121,7 @@ def main():
     needs_signing = [name for name, success, msg in results if success and "NEEDS" in msg]
     if needs_signing:
         print(f"\nTemplates needing signatures: {', '.join(needs_signing)}")
-        print("Run: python tools/templates/generate_manifest.py")
+        print("Run: CIRIS_ROOT_WA_KEY=<key> python tools/dev/regen_template_manifest.py")
 
     invalid = [name for name, success, _ in results if not success]
     if invalid:

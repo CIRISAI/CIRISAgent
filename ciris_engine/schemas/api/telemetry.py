@@ -5,13 +5,15 @@ Telemetry API response schemas - fully typed replacements for Dict[str, Any].
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from ciris_engine.schemas.types import JSONDict
 
 
 class MetricTags(BaseModel):
     """Standard metric tags."""
+
+    model_config = ConfigDict(defer_build=True)
 
     service: Optional[str] = Field(None, description="Source service")
     operation: Optional[str] = Field(None, description="Operation name")
@@ -23,6 +25,8 @@ class MetricTags(BaseModel):
 class ServiceMetricValue(BaseModel):
     """Metric value broken down by service."""
 
+    model_config = ConfigDict(defer_build=True)
+
     service_name: str = Field(..., description="Service name")
     value: float = Field(..., description="Metric value")
     percentage: Optional[float] = Field(None, description="Percentage of total")
@@ -30,6 +34,8 @@ class ServiceMetricValue(BaseModel):
 
 class APIResponseThoughtStep(BaseModel):
     """Individual thought step in API reasoning response."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step: int = Field(..., description="Step number")
     content: str = Field(..., description="Thought content")
@@ -46,6 +52,8 @@ ThoughtStep = APIResponseThoughtStep
 class LogContext(BaseModel):
     """Structured log context."""
 
+    model_config = ConfigDict(defer_build=True)
+
     trace_id: Optional[str] = Field(None, description="Trace ID for correlation")
     correlation_id: Optional[str] = Field(None, description="Correlation ID")
     user_id: Optional[str] = Field(None, description="User ID if applicable")
@@ -57,6 +65,8 @@ class LogContext(BaseModel):
 class QueryFilter(BaseModel):
     """Structured query filter."""
 
+    model_config = ConfigDict(defer_build=True)
+
     field: str = Field(..., description="Field to filter on")
     operator: str = Field("eq", description="Filter operator (eq, gt, lt, contains, etc)")
     value: str = Field(..., description="Filter value")
@@ -64,6 +74,8 @@ class QueryFilter(BaseModel):
 
 class TelemetryQueryFilters(BaseModel):
     """Telemetry query filters."""
+
+    model_config = ConfigDict(defer_build=True)
 
     metric_names: Optional[List[str]] = Field(None, description="Metrics to query")
     metrics: Optional[List[str]] = Field(None, description="Metrics to query (alias)")
@@ -79,6 +91,8 @@ class TelemetryQueryFilters(BaseModel):
 class QueryResult(BaseModel):
     """Individual query result."""
 
+    model_config = ConfigDict(defer_build=True)
+
     id: str = Field(..., description="Result ID")
     type: str = Field(..., description="Result type")
     timestamp: datetime = Field(..., description="Result timestamp")
@@ -87,6 +101,8 @@ class QueryResult(BaseModel):
 
 class TimeSyncStatus(BaseModel):
     """Time synchronization status."""
+
+    model_config = ConfigDict(defer_build=True)
 
     synchronized: bool = Field(..., description="Whether time is synchronized")
     drift_ms: float = Field(..., description="Time drift in milliseconds")
@@ -100,6 +116,8 @@ class TimeSyncStatus(BaseModel):
 
 class ServiceMetrics(BaseModel):
     """Service-specific metrics."""
+
+    model_config = ConfigDict(defer_build=True)
 
     uptime_seconds: Optional[float] = Field(None, description="Service uptime")
     requests_handled: Optional[int] = Field(None, description="Total requests")

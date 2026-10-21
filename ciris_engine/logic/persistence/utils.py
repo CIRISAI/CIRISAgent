@@ -1,12 +1,30 @@
 import json
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import FinalAction, Task, TaskContext, TaskOutcome, Thought, ThoughtContext
+from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 
 logger = logging.getLogger(__name__)
+
+
+def _decode_task_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
+    """Decode a persisted task-scoped authorization envelope (CIRISAgent#938).
+
+    Failure resolves to ``None`` — absence of an envelope is a denial to a
+    future tool gate, never "unconstrained".
+    """
+    if raw is None:
+        return None
+    try:
+        return TaskEnvelope.model_validate(raw)
+    except Exception as exc:
+        logger.warning(
+            "Failed to decode task envelope for task %s; treating as no envelope (deny): %s", task_id, exc
+        )
+        return None
 
 
 def map_row_to_task(row: Any) -> Task:
@@ -29,7 +47,22 @@ def map_row_to_task(row: Any) -> Task:
                     correlation_id=ctx_data.get("correlation_id", str(uuid.uuid4())),
                     parent_task_id=ctx_data.get("parent_task_id"),
                     agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
+                    # Persisted preferred_language must round-trip — see same
+                    # fix in map_row_to_thought below for the production
+                    # impact (every conscience falling through to env-default
+                    # locale regardless of the user's actual language).
+                    preferred_language=ctx_data.get("preferred_language"),
+                    # Task-scoped authorization envelope (CIRISAgent#938). A
+                    # decode failure resolves to None, the fail-closed
+                    # direction: absence is denial, never "unconstrained".
+                    envelope=_decode_task_envelope(ctx_data.get("envelope"), row_dict.get("task_id")),
                 )
+                # Mirror onto the Task's top-level field — Task is the record
+                # of truth for preferred_language. The schema field defaults
+                # to None so we must explicitly set it from context_json on
+                # load (no DB column for it; persistence keeps it in
+                # context_json only).
+                row_dict["preferred_language"] = ctx_data.get("preferred_language")
             else:
                 # Provide required fields for TaskContext
                 row_dict["context"] = TaskContext(
@@ -143,7 +176,18 @@ def map_row_to_thought(row: Any) -> Thought:
                         parent_thought_id=ctx_data.get("parent_thought_id"),
                         correlation_id=correlation_id,
                         agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
+                        # Critical: persisted preferred_language must round-trip
+                        # so the localization helper finds it on the loaded
+                        # thought. Dropping this here was the root cause of
+                        # every conscience falling through to env-default
+                        # CIRIS_PREFERRED_LANGUAGE regardless of the user's
+                        # actual locale.
+                        preferred_language=ctx_data.get("preferred_language"),
                     )
+                    # Mirror onto the Thought's top-level field — Task is the
+                    # record of truth, Thought inherits at creation, persistence
+                    # keeps it in context_json only (no DB column).
+                    row_dict["preferred_language"] = ctx_data.get("preferred_language")
                 else:
                     # Missing required fields, set to None
                     row_dict["context"] = None
@@ -170,10 +214,12 @@ def map_row_to_thought(row: Any) -> Thought:
         try:
             action_json = row_dict["final_action_json"]
             action_data = action_json if isinstance(action_json, dict) else json.loads(action_json)
-            # Only set final_action if it's a non-empty dict with required fields
-            if isinstance(action_data, dict) and action_data:
+            # Only set final_action if it's a valid FinalAction dict (has required keys)
+            # Error objects like {"error": "..."} should be skipped silently
+            if isinstance(action_data, dict) and "action_type" in action_data:
                 row_dict["final_action"] = FinalAction.model_validate(action_data)
             else:
+                # Not a FinalAction format (e.g., error object) - skip silently
                 row_dict["final_action"] = None
         except Exception:
             logger.warning(f"Failed to decode final_action_json for thought {row_dict.get('thought_id')}")

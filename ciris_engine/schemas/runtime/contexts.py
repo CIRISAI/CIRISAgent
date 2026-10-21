@@ -55,7 +55,7 @@ class DispatchContext(BaseModel):
     span_id: Optional[str] = Field(None, description="Span ID for tracing")
     trace_id: Optional[str] = Field(None, description="Trace ID for distributed tracing")
 
-    model_config = ConfigDict(extra="forbid")  # Strict - no extra fields allowed
+    model_config = ConfigDict(extra="forbid", defer_build=True)  # Strict - no extra fields allowed
 
 
 __all__ = ["DispatchContext"]

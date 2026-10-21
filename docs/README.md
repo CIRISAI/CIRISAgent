@@ -23,7 +23,7 @@ Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and 
 - [Memory System](IDENTITY_AS_GRAPH.md) - Memory management and cognitive recursion
 - [Thought Model](DMA_CREATION_GUIDE.md) - Deep reasoning system (DMAs, ASPDMA)
 - [Mock LLM](MOCK_LLM.md) - Development and testing with mock LLM providers
-- [Type Safety Progress](TYPE_SAFETY_PROGRESS.md) - Dict[str, Any] cleanup progress
+- [2.0 Beta Features](CIRIS_2.0_BETA_FEATURES.md) - Complete feature list with QA coverage
 - [Dream State Tasks](DREAM_STATE_TASKS.md) - Agent cognitive states and behaviors
 
 ### Three-Legged Stool Architecture
@@ -55,6 +55,7 @@ Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and 
 ## Technical Specifications
 - [Authentication System](../FSD/AUTHENTICATION.md) - OAuth, JWT, and WA certificates
 - [Graceful Shutdown](../FSD/GRACEFUL_SHUTDOWN.md) - Clean termination procedures
+- [Retirement Standard](../FSD/RETIREMENT_STANDARD.md) - The `retirement_record` workflow for ending an agent for everyone it runs for (CC 7.5.5, `CLM-humane-ending`, #1250); design, not shipped
 - [Environment Variables](../config/environment_variables.md) - Configuration reference
 
 ## Quick Links

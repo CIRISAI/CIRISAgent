@@ -47,7 +47,7 @@ class SummaryAttributes(BaseModel):
         default=None, description="Participant data - flexible for migration"
     )
 
-    model_config = ConfigDict(extra="allow")  # NOQA - Migration flexibility pattern
+    model_config = ConfigDict(extra="allow", defer_build=True)  # NOQA - Migration flexibility pattern
 
 
 class CompressionResult(BaseModel):
@@ -82,7 +82,7 @@ class EdgeAttributes(BaseModel):
         default_factory=dict, description="Edge metadata - typed values only"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class NodeReference(BaseModel):

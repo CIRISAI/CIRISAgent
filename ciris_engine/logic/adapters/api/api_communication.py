@@ -5,7 +5,7 @@ Communication service for API adapter.
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.governance.communication import CommunicationServiceProtocol
@@ -103,36 +103,151 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         )
         return True
 
-    async def _handle_api_interaction_response(self, channel_id: str, content: str) -> None:
-        """Handle API interaction response storage if applicable."""
-        if not (channel_id and channel_id.startswith("api_")):
-            logger.debug(f"[API_INTERACTION] Skipping non-API channel: {channel_id}")
-            return
+    @staticmethod
+    def _speaking_task_id() -> Optional[str]:
+        """The task whose SPEAK is being delivered, if this call is inside one.
+
+        SPEAK reaches `send_message` through `send_message_sync`, called
+        inline by the handler, so the reasoning scope the ActionDispatcher
+        sets around the handler (CIRISAgent#938) is still the current context
+        here. Its task_id is the speaking task. When the scope carries only a
+        thought id, the thought names its source task.
+        """
+        from ciris_engine.logic.infrastructure.authorization.reasoning_scope import current_reasoning_scope
+
+        scope = current_reasoning_scope()
+        if scope is None:
+            return None
+        if scope.task_id:
+            return scope.task_id
+        if not scope.thought_id:
+            return None
+        try:
+            import os
+
+            from ciris_engine.logic import persistence
+
+            thought = persistence.get_thought_by_id(scope.thought_id, os.environ.get("AGENT_OCCURRENCE_ID", "default"))
+            source_task_id = getattr(thought, "source_task_id", None) if thought is not None else None
+            return str(source_task_id) if source_task_id else None
+        except Exception as exc:  # noqa: BLE001 — correlation is best-effort
+            logger.debug("[API_INTERACTION] could not resolve task for thought %s: %s", scope.thought_id, exc)
+            return None
+
+    def _claim_waiting_message_id(
+        self, channel_id: str, queue: List[str], speaking_task_id: Optional[str]
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        """Pick (and remove) the waiting request this SPEAK answers, or None.
+
+        Returns (message_id, owning task_id) so interact() can name the task.
+
+        A reply goes to a request its own task owns — never to whichever
+        request happens to be next on the channel. FIFO matching delivered a
+        timed-out task's late SPEAK to the user's NEXT question, which then
+        showed the previous question's answer.
+
+        - Speaking task known: the oldest queued message_id that task owns
+          (with task-append one task can own several). None of them waiting
+          means the reply is late — its request timed out and left the queue,
+          or it was an async submission already answered. It reaches no live
+          request; it is already in channel history via the speak correlation.
+        - Speaking task unknown (a SPEAK from outside the reasoning loop):
+          plain FIFO, the old behaviour. Timed-out requests have already been
+          removed from the queue by interact()'s cleanup, so FIFO here only
+          ever sees requests that are still waiting.
+        """
+        task_map = getattr(getattr(self, "_app_state", None), "message_task_map", None)
+        if not isinstance(task_map, dict):
+            task_map = {}
+
+        if speaking_task_id is None:
+            message_id = queue.pop(0)
+            owner = task_map.pop(message_id, None)
+            return message_id, owner if isinstance(owner, str) else None
+
+        for index, candidate in enumerate(queue):
+            if task_map.get(candidate) == speaking_task_id:
+                del queue[index]
+                task_map.pop(candidate, None)
+                return candidate, speaking_task_id
 
         logger.info(
-            f"[API_INTERACTION] Processing channel_id={channel_id}, content_len={len(content)}, content_preview={content[:100] if content else 'EMPTY'}"
+            "[API_INTERACTION] SPEAK from task %s on channel %s has no waiting request of its own "
+            "(timed out or async); not delivering it to another request. Waiting: %s",
+            speaking_task_id,
+            channel_id,
+            [(mid, task_map.get(mid)) for mid in queue],
         )
+        return None
+
+    async def _handle_api_interaction_response(self, channel_id: str, content: str) -> None:
+        """Handle API interaction response storage if applicable.
+
+        Fires whenever there's a pending interact() waiter for the channel,
+        regardless of the channel prefix. The previous `api_` prefix check
+        silently dropped responses for submissions that used a custom
+        channel_id (e.g. model_eval's per-question channels like
+        'model_eval_en_01'), leaving the client blocked until its HTTP
+        timeout. message_channel_map is populated on every incoming message
+        so its presence is the real signal that a waiter exists.
+        """
+        if not channel_id:
+            return
+
         try:
             if not hasattr(self, "_app_state"):
                 logger.warning("[API_INTERACTION] No _app_state attribute found")
                 return
 
             message_channel_map = getattr(self._app_state, "message_channel_map", {})
-            logger.debug(f"[API_INTERACTION] message_channel_map keys: {list(message_channel_map.keys())}")
-            message_id = message_channel_map.get(channel_id)
-            if not message_id:
-                logger.warning(f"[API_INTERACTION] No message_id found for channel {channel_id}")
+            queue = message_channel_map.get(channel_id)
+            if not queue:
+                # No waiter for THIS channel. Could be benign (an
+                # autonomous SPEAK on a channel nobody is waiting on)
+                # or a real bug (the agent emitted on the wrong
+                # channel and the interact() request will time out
+                # at the server's correlation window).
+                #
+                # Bumped from DEBUG to INFO + include the set of
+                # channels that DO have waiters: when an [INTERACT_
+                # TIMEOUT] later fires, that log line tells us
+                # whether this SPEAK was misrouted (waiters exist
+                # elsewhere) vs. truly orphaned (no waiters at all).
+                pending = {k: len(v) for k, v in message_channel_map.items() if v}
+                logger.info(
+                    "[API_INTERACTION] SPEAK on channel %s but no pending "
+                    "interact() waiter on that channel. Active waiters: %s",
+                    channel_id,
+                    pending or "<none>",
+                )
                 return
+
+            claimed = self._claim_waiting_message_id(channel_id, queue, self._speaking_task_id())
+            if claimed is None:
+                return
+            message_id, owning_task_id = claimed
+
+            logger.info(
+                f"[API_INTERACTION] Processing channel_id={channel_id}, content_len={len(content)}, "
+                f"content_preview={content[:100] if content else 'EMPTY'}"
+            )
 
             from ciris_engine.logic.adapters.api.routes.agent import store_message_response
 
             logger.info(f"[API_INTERACTION] About to store: message_id={message_id}, content='{content}'")
-            await store_message_response(message_id, content)
+            await store_message_response(message_id, content, task_id=owning_task_id)
             logger.info(f"Stored interact response for message {message_id} in channel {channel_id}")
-            # Clean up the mapping
-            del message_channel_map[channel_id]
         except Exception as e:
-            logger.debug(f"Could not store interact response: {e}")
+            # Was DEBUG — a real exception here means a queued
+            # interact() request will NEVER get its response. Bump
+            # to WARNING with traceback so incident-log scans pick
+            # it up alongside the eventual [INTERACT_TIMEOUT].
+            logger.warning(
+                "[API_INTERACTION] Could not store interact response on channel %s: %s",
+                channel_id,
+                e,
+                exc_info=True,
+            )
 
     def _track_response_time(self, start_time: datetime) -> None:
         """Track response time metrics."""

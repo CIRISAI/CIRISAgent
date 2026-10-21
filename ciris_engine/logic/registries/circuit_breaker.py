@@ -8,15 +8,55 @@ disabling failing services to prevent cascading failures.
 import logging
 import threading
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 logger = logging.getLogger(__name__)
+
+#: Wall-clock start of the call in flight in this task (see breaker_call_scope).
+_CALL_STARTED_AT: ContextVar[Optional[float]] = ContextVar("ciris_breaker_call_started_at", default=None)
+
+
+@contextmanager
+def breaker_call_scope(started_at: Optional[float] = None) -> Iterator[float]:
+    """Mark when a guarded call started, for every breaker that records its failure.
+
+    The LLM bus opens one per provider attempt; the provider's own breaker,
+    recording the same failure underneath, reads it too.
+    """
+    begun = time.time() if started_at is None else started_at
+    token = _CALL_STARTED_AT.set(begun)
+    try:
+        yield begun
+    finally:
+        _CALL_STARTED_AT.reset(token)
 
 
 class CircuitBreakerError(Exception):
     """Exception raised when circuit breaker is open and service is unavailable"""
+
+
+class ProviderCircuitOpenError(CircuitBreakerError, RuntimeError):
+    """Every provider for a request was skipped because its breaker is open.
+
+    Carries the provider, how many failures opened it, the last REAL error it
+    returned (the skip itself is not an error from the provider), and how long
+    until it lets a probe through -- so the log line names the actual outage
+    instead of "Last error: None".
+    """
+
+    def __init__(self, provider: str, failures: int, last_error: Optional[BaseException], retry_in_s: float) -> None:
+        self.provider = provider
+        self.failures = failures
+        self.last_error = last_error
+        self.retry_in_s = retry_in_s
+        last = " ".join(str(last_error).split())[:200] if last_error is not None else "unknown"
+        super().__init__(
+            f"circuit breaker open for {provider} ({failures} failures, last: {last}, retry in {retry_in_s:.0f}s)"
+        )
 
 
 class CircuitState(Enum):
@@ -33,6 +73,14 @@ class CircuitBreakerConfig:
     recovery_timeout: float = 10.0  # Reduced from 60s for faster mobile recovery
     success_threshold: int = 3
     timeout_duration: float = 30.0
+    # Failed calls that STARTED within this many seconds of the last counted
+    # failure's call, and were already in flight when it was recorded, are
+    # one provider event, not N. Parallel DMAs that time out together are one
+    # slow episode of one provider; counting them separately let one slow
+    # thought trip the breaker. Sequential failures always count. Needs the
+    # call's start (record_failure(started_at=...) or breaker_call_scope);
+    # 0 disables coalescing (the historical behaviour).
+    failure_coalesce_window_s: float = 0.0
 
 
 class CircuitBreaker:
@@ -53,6 +101,9 @@ class CircuitBreaker:
         self.failure_count = 0
         self.success_count = 0
         self.last_failure_time: Optional[float] = None
+        # Start time of the call whose failure was last counted (None when the
+        # caller did not say); see CircuitBreakerConfig.failure_coalesce_window_s.
+        self._counted_call_started_at: Optional[float] = None
 
         # Additional metrics tracking
         self.total_calls = 0
@@ -108,23 +159,58 @@ class CircuitBreaker:
             # Reset failure count on success
             self.failure_count = 0
 
-    def record_failure(self) -> None:
-        """Record a failed operation"""
+    def seconds_until_half_open(self) -> float:
+        """How long until an OPEN breaker lets a probe through (0 when it already would)."""
+        if self.state != CircuitState.OPEN or self.last_failure_time is None:
+            return 0.0
+        return max(0.0, self.config.recovery_timeout - (time.time() - self.last_failure_time))
+
+    def _same_episode(self, started_at: Optional[float]) -> bool:
+        """Was this failed call concurrent with the call whose failure was last counted?
+
+        Concurrent means: it started within the coalesce window of that call's
+        start, AND before that failure was recorded (it was already in flight
+        when the provider failed). A call made after a failure -- a retry, the
+        next thought -- is new evidence and always counts.
+        """
+        window = self.config.failure_coalesce_window_s
+        if window <= 0 or self.state != CircuitState.CLOSED or self.failure_count == 0:
+            return False
+        if started_at is None or self._counted_call_started_at is None or self.last_failure_time is None:
+            return False
+        return started_at <= self.last_failure_time and abs(started_at - self._counted_call_started_at) <= window
+
+    def record_failure(self, started_at: Optional[float] = None) -> bool:
+        """Record a failed operation. Returns False when it was coalesced into the last counted one.
+
+        `started_at` is the failed call's start (``time.time()``). When the
+        caller does not pass it, the enclosing `breaker_call_scope` supplies
+        it, so a provider's own breaker coalesces the same calls its caller's
+        does. Calls that started together are one provider event.
+        """
         self.total_calls += 1
         self.total_failures += 1
+        now = time.time()
+        if started_at is None:
+            started_at = _CALL_STARTED_AT.get()
+        if self._same_episode(started_at):
+            logger.debug(f"Circuit breaker '{self.name}': concurrent failure coalesced into the last counted one")
+            return False
         self.consecutive_failures += 1
 
         # Only update failure_count and last_failure_time when NOT already OPEN
         # This prevents resetting the recovery timer while the circuit breaker is open
         if self.state != CircuitState.OPEN:
             self.failure_count += 1
-            self.last_failure_time = time.time()
+            self.last_failure_time = now
+            self._counted_call_started_at = started_at
 
         if self.state == CircuitState.CLOSED:
             if self.failure_count >= self.config.failure_threshold:
                 self._transition_to_open()
         elif self.state == CircuitState.HALF_OPEN:
             self._transition_to_open()
+        return True
 
     def force_open(self, custom_timeout: Optional[float] = None, reason: str = "forced") -> None:
         """Force the circuit breaker open immediately, bypassing failure threshold.

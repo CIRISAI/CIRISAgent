@@ -139,6 +139,7 @@ class CIRISHostedToolsAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("CIRIS Hosted Tools adapter lifecycle cancelled")
+            raise
         finally:
             await self.stop()
 

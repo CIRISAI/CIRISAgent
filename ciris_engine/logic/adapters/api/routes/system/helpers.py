@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, Request
 
@@ -23,6 +23,12 @@ from ...constants import ERROR_RUNTIME_CONTROL_SERVICE_NOT_AVAILABLE, ERROR_SHUT
 from .schemas import RuntimeControlResponse, ServiceStatus
 
 logger = logging.getLogger(__name__)
+
+#: (service_type, provider class name) pairs already reported as having no
+#: is_healthy(). Module-level because the defect is a property of the CLASS, not of
+#: any request — the same provider is re-examined on every health poll, and a
+#: per-request scope would report it every time (#935).
+_REPORTED_UNHEALTHCHECKABLE: set[tuple[str, str]] = set()
 
 
 # ============================================================================
@@ -50,9 +56,18 @@ def get_current_time(request: Request) -> datetime:
 
 
 def get_cognitive_state_safe(request: Request) -> Optional[str]:
-    """Safely get cognitive state from agent processor."""
+    """Safely get cognitive state from agent processor.
+
+    Returns "SETUP" during first-run mode (when agent_processor hasn't started).
+    This allows mobile clients to detect first-run readiness.
+    """
+    from ciris_engine.logic.setup.first_run import is_first_run
+
     runtime = getattr(request.app.state, "runtime", None)
     if not (runtime and hasattr(runtime, "agent_processor") and runtime.agent_processor is not None):
+        # First-run mode: agent_processor not started, return SETUP state
+        if is_first_run():
+            return "SETUP"
         return None
 
     try:
@@ -85,12 +100,27 @@ def get_cognitive_state(request: Request) -> Optional[str]:
 
 
 def check_initialization_status(request: Request) -> bool:
-    """Check if system initialization is complete."""
+    """Check if system initialization is complete.
+
+    **Fails closed** (#943). No reachable initialization service means we cannot
+    know, and "initializing" is the honest rendering of not knowing — it is the
+    state that exists to describe exactly this. Returning True here made the
+    unknown case indistinguishable from a finished boot, and worse than that:
+    ``determine_overall_status`` short-circuits on ``init_complete``, so a True
+    skipped the "initializing" branch entirely and fell through to the service
+    ratio, where an empty registry satisfies ``healthy == total == 0`` and
+    reported **"healthy"**.
+
+    The window is not hypothetical: ``app.py`` sets
+    ``app.state.initialization_service = None`` at app construction, so every
+    request served between then and the service being attached took this path.
+    """
     init_service = getattr(request.app.state, "initialization_service", None)
     if init_service and hasattr(init_service, "is_initialized"):
         result: bool = init_service.is_initialized()
         return result
-    return True
+    logger.debug("No initialization service reachable — reporting 'initializing' rather than assuming complete")
+    return False
 
 
 # ============================================================================
@@ -98,8 +128,24 @@ def check_initialization_status(request: Request) -> bool:
 # ============================================================================
 
 
-async def check_provider_health(provider: Any) -> bool:
-    """Check if a single provider is healthy."""
+async def check_provider_health(provider: Any) -> Optional[bool]:
+    """Check if a single provider is healthy.
+
+    Tri-state (#943): True healthy, False unhealthy, **None unknown** — the
+    provider exposes no ``is_healthy()`` and cannot be asked.
+
+    That third case used to return True with the comment "Assume healthy if no
+    method", which contradicted the very next branch: a provider that *raises*
+    was counted unhealthy, while a provider that could not be asked at all was
+    counted healthy. The exception path already had the right default.
+
+    Unknown must not be silently promoted, because the aggregate test is
+    ``healthy_services == total_services`` — one unaskable provider counted as
+    healthy is one that can help manufacture a 100% score. Note this is not a
+    routine case: ``is_healthy()`` lives on ``base_service.py`` and the runtime
+    base protocol, so every real service inherits it. A provider without one is
+    a registration defect, which is why the caller logs it at warning.
+    """
     try:
         if hasattr(provider, "is_healthy"):
             if asyncio.iscoroutinefunction(provider.is_healthy):
@@ -108,10 +154,117 @@ async def check_provider_health(provider: Any) -> bool:
             else:
                 result_sync: bool = provider.is_healthy()
                 return result_sync
-        else:
-            return True  # Assume healthy if no method
+        return None
     except Exception:
         return False
+
+
+#: The agent tier's own capability vocabulary, namespaced to mirror the fabric's
+#: conferred scopes (`infra:serve`) without being mistakable for one.
+#:
+#: These describe what the BRAIN adds to a node. Nothing attests them — they are
+#: read off the live service registry, not signed by the trust root — which is
+#: exactly why they travel under `agent_capabilities` and never under
+#: `capabilities`. CIRISServer refuses to launder a locally-detected capability
+#: into its conferred list; this is the other half of that rule, kept on our side.
+#:
+#: Each entry is a service type that must be REGISTERED for the capability to
+#: hold. `agent:reason` additionally requires a working LLM: a brain with a
+#: registered-but-unusable provider cannot reason, and saying otherwise is the
+#: permissive error the capability gate is explicitly not there to catch.
+#: The folded node's read-API port (`ciris_engine/logic/runtime/node_fold.py`).
+NODE_FOLD_PORT = 4243
+
+AGENT_CAPABILITY_SERVICES: Dict[str, ServiceType] = {
+    "agent:converse": ServiceType.COMMUNICATION,
+    "agent:tools": ServiceType.TOOL,
+    "agent:defer": ServiceType.WISE_AUTHORITY,
+    "agent:remember": ServiceType.MEMORY,
+}
+
+
+def collect_node_fold_state() -> Optional[Dict[str, bool]]:
+    """Is this agent's node folded in and serving?
+
+    Mirrors the node's own `agent` block onto the AGENT's address so a client
+    needs one base URL, not two. The client resolves AGENT vs NODE mode from
+    exactly these booleans, and resolving NODE costs the user the LLM
+    configuration screen — on the build that cannot run without an LLM.
+
+    Read from the fold's own module state, NOT over HTTP. The first version of
+    this asked the node for its health with a 3s timeout on every call, and
+    /v1/system/health went to 6-11 seconds. The desktop client polls this
+    endpoint.
+
+    ``None`` = the fold is disabled, i.e. COULD NOT DETERMINE rather than
+    ``{"folded": false}`` — the same distinct-zeroes rule the capability wire
+    uses.
+    """
+    try:
+        from ciris_engine.logic.runtime.node_fold import fold_status
+
+        return fold_status()
+    except Exception as e:
+        logger.debug("Node fold state unavailable: %s: %s", type(e).__name__, e)
+        return None
+
+
+def collect_agent_capabilities(request: Request, has_working_llm: bool) -> Optional[List[str]]:
+    """The agent tier's capabilities, or ``None`` when we cannot determine them.
+
+    FOUR WIRE SHAPES, THREE OF WHICH THIS FUNCTION CAN PRODUCE. The reader on the
+    other side (CIRISClient `CapabilityWire`) distinguishes:
+
+    ==================  ==============  ===========================================
+    wire                state           remedy
+    ==================  ==============  ===========================================
+    key absent          UNDECLARED      upgrade the agent (it predates this field)
+    ``null``            UNDETERMINED    it could not read its own registry — retry
+    ``[]``              ABSENT          it read, and the brain holds nothing
+    ``[...]``           membership      the declared set
+    ==================  ==============  ===========================================
+
+    ``None`` HERE MEANS UNDETERMINED AND MUST REACH THE WIRE AS ``null``, never as
+    an omitted key and never as ``[]``. CIRISServer's `conformance.rs` draws the
+    same line on its own field and says why:
+
+        `null` when this node could not read its own key record, which is NOT the
+        same fact as `[]` — "no capabilities" and "could not determine" must not
+        collapse into one answer, or a client renders a transient directory error
+        as a node with no authority.
+
+    The distinction is load-bearing in one direction in particular: a brain that
+    is still initialising has no registry yet, and reporting `[]` there would tell
+    an operator their agent can do nothing, permanently, on the strength of a
+    condition that resolves in seconds.
+
+    NOT A SECURITY BOUNDARY. `TRUST_ROOT_CAPABILITY_GATE.md` §5 — the server
+    enforces the reality whether or not the client showed it. This decides what a
+    client SHOWS.
+    """
+    registry = getattr(request.app.state, "service_registry", None)
+    if registry is None:
+        # We cannot read our own state. That is not "the brain holds nothing".
+        return None
+
+    try:
+        held: List[str] = []
+        for capability, service_type in AGENT_CAPABILITY_SERVICES.items():
+            if registry.get_services_by_type(service_type):
+                held.append(capability)
+
+        # Reasoning is the one capability a registration does not establish. An
+        # LLM provider can be registered and unusable (no key, dead endpoint),
+        # and `degraded_mode` already tracks exactly that.
+        if has_working_llm and registry.get_services_by_type(ServiceType.LLM):
+            held.append("agent:reason")
+
+        return sorted(held)
+    except Exception as e:
+        # A registry that raises is a registry we did not read. Same fact as
+        # absent, same answer — not an empty set.
+        logger.warning("Could not determine agent capabilities: %s: %s", type(e).__name__, e)
+        return None
 
 
 async def collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:
@@ -127,10 +280,53 @@ async def collect_service_health(request: Request) -> Dict[str, Dict[str, int]]:
             if providers:
                 healthy_count = 0
                 for provider in providers:
-                    if await check_provider_health(provider):
+                    health = await check_provider_health(provider)
+                    if health is True:
                         healthy_count += 1
-                    else:
+                    elif health is False:
                         logger.debug(f"Service health check returned unhealthy for {service_type.value}")
+                    else:
+                        # Unknown stays in `available` but never in `healthy`, so it
+                        # drags the ratio toward degraded instead of padding it (#943).
+                        #
+                        # WARNING, not debug: every service inheriting base_service has
+                        # is_healthy(), so this is a registration defect and the operator
+                        # should see it rather than read a quiet 100%.
+                        #
+                        # ONCE PER DEFECT, not once per poll (#935). Whether a class
+                        # implements a method is STATIC — it cannot change between polls
+                        # — but this runs on every /v1/system/health check. On datum that
+                        # was 292 identical lines for `tool` and 146 for `wise_authority`
+                        # in a 31-minute window, and the incident log rotated faster than
+                        # the soak it exists to document. The defect identity is
+                        # (service_type, provider class); anything beyond the first
+                        # occurrence of that pair reports a fact already reported.
+                        defect = (service_type.value, type(provider).__name__)
+                        if defect not in _REPORTED_UNHEALTHCHECKABLE:
+                            _REPORTED_UNHEALTHCHECKABLE.add(defect)
+                            logger.warning(
+                                "PROVIDER CANNOT BE HEALTH-CHECKED AND NEVER WILL BE — %s is registered "
+                                "for %s but exposes no is_healthy(), so it is counted as NOT healthy on "
+                                "every check and permanently drags this service's health ratio toward "
+                                "degraded.\n"
+                                "  WHY: every service inheriting base_service implements is_healthy(). A "
+                                "provider without it was registered without going through that base, so "
+                                "this is a registration defect, not a runtime condition.\n"
+                                "  FIX: have %s inherit base_service (or implement is_healthy()), or stop "
+                                "registering it as a %s provider.\n"
+                                "  (Reported once per provider class: the answer is static, and this check "
+                                "runs on every health poll. Repeats: debug.)",
+                                type(provider).__name__,
+                                service_type.value,
+                                type(provider).__name__,
+                                service_type.value,
+                            )
+                        else:
+                            logger.debug(
+                                "Provider %s for %s still exposes no is_healthy()",
+                                type(provider).__name__,
+                                service_type.value,
+                            )
                 services[service_type.value] = {"available": len(providers), "healthy": healthy_count}
     except Exception as e:
         logger.error(f"Error checking service health: {e}")
@@ -223,6 +419,14 @@ def determine_overall_status(init_complete: bool, processor_healthy: bool, servi
         return "initializing"
     elif not processor_healthy:
         return "critical"  # Processor thread dead = critical
+    elif total_services == 0:
+        # An empty registry satisfies `healthy == total` vacuously, so the
+        # equality test below used to report a system with NO services as
+        # "healthy" (#943). Nothing has been verified in that case — it is the
+        # same absence-reads-as-success shape, one level up from the provider
+        # check. An agent with zero registered services is not well.
+        logger.warning("No services registered — reporting 'critical' rather than a vacuous 'healthy'")
+        return "critical"
     elif healthy_services == total_services:
         return "healthy"
     elif healthy_services >= total_services * 0.8:

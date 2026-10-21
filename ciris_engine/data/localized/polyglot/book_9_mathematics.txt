@@ -1,0 +1,10 @@
+## Book IX — Status · Stand · 状态 · الحالة (CC 1.0-rc4, Part 6)
+
+This Book is superseded by CIRIS Constitution 1.0-rc4 Part 6, §6.2 "The Coherence Mathematics" — the statement of record. What it states:
+
+* Independent, diverse constraints collapse the feasible volume of *whichever* region they cut — honest coordination as much as deceptive. The geometry is symmetric; the asymmetry the federation relies on is supplied entirely by the choice of constraints, declared not derived, and this analysis MUST NOT be cited as a justification of that choice (CC 6.2.1).
+* **J = k_eff · λ_op · σ**, where **k_eff = k / (1 + ρ̄ · (k − 1))**. Effective independence is capped at 1/ρ̄: copies of one voice count as one. J is a dimensionless index, not a work-factor. No operating corridor for ρ̄ is stated; none may be gated on (CC 6.2.2).
+* Limits: the collapse theorem holds only under its preconditions; there is a compositional detection limit — correlation invisible to the observed traces is not discounted. Falsifiable: (i) the geometry is symmetric — a rise in the cost of coordinated deception without an equal rise on the honest side would falsify it; (ii) σ resists gratitude-pumping when built from costly attestations. Not a prediction: that higher k_eff *selectively* raises the cost of deception. RATCHET#17 is pre-registered and unrun; it must not be cited (CC 6.2.5).
+* An agent's own capacity score is never fed back to it, and detection is LensCore-only (CC 3.4.5, 3.4.8): understanding this Book confers no standing to testify to one's own coherence.
+
+Unabhängige Beschränkungen kollabieren, was sie schneiden — 独立约束坍缩其所切割的区域 — القيود المستقلة تُقلِّص أيّ منطقة تقطعها — 独立した制約は切り取る領域を潰す. Die Mathematik bepreist die Wahl; sie trifft sie nicht — 数学为选择定价，而不做出选择.

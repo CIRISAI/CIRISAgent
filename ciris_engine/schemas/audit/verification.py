@@ -7,13 +7,15 @@ These replace all Dict[str, Any] usage in verifier.py.
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.audit.hash_chain import HashChainAuditEntry
 
 
 class ChainVerificationResult(BaseModel):
     """Result of hash chain verification."""
+
+    model_config = ConfigDict(defer_build=True)
 
     valid: bool = Field(..., description="Whether chain is valid")
     entries_checked: int = Field(0, description="Number of entries checked")
@@ -24,6 +26,8 @@ class ChainVerificationResult(BaseModel):
 class SignatureVerificationResult(BaseModel):
     """Result of signature verification."""
 
+    model_config = ConfigDict(defer_build=True)
+
     valid: bool = Field(..., description="Whether all signatures are valid")
     entries_signed: int = Field(0, description="Number of signed entries")
     entries_verified: int = Field(0, description="Number of verified signatures")
@@ -33,6 +37,8 @@ class SignatureVerificationResult(BaseModel):
 
 class CompleteVerificationResult(BaseModel):
     """Result of complete audit chain verification."""
+
+    model_config = ConfigDict(defer_build=True)
 
     valid: bool = Field(..., description="Overall validity")
     entries_verified: int = Field(0, description="Total entries verified")
@@ -49,6 +55,8 @@ class CompleteVerificationResult(BaseModel):
 class EntryVerificationResult(BaseModel):
     """Result of single entry verification."""
 
+    model_config = ConfigDict(defer_build=True)
+
     valid: bool = Field(..., description="Whether entry is valid")
     entry_id: int = Field(..., description="Entry ID")
     hash_valid: bool = Field(..., description="Whether hash is valid")
@@ -60,6 +68,8 @@ class EntryVerificationResult(BaseModel):
 
 class RangeVerificationResult(BaseModel):
     """Result of range verification."""
+
+    model_config = ConfigDict(defer_build=True)
 
     valid: bool = Field(..., description="Whether range is valid")
     start_id: int = Field(..., description="Start entry ID")
@@ -74,6 +84,8 @@ class RangeVerificationResult(BaseModel):
 class SigningKeyInfo(BaseModel):
     """Information about an audit signing key."""
 
+    model_config = ConfigDict(defer_build=True)
+
     key_id: Optional[str] = Field(None, description="Key identifier")
     algorithm: Optional[str] = Field(None, description="Signing algorithm")
     key_size: Optional[int] = Field(None, description="Key size in bits")
@@ -85,6 +97,8 @@ class SigningKeyInfo(BaseModel):
 
 class ChainSummary(BaseModel):
     """Summary of audit chain state."""
+
+    model_config = ConfigDict(defer_build=True)
 
     total_entries: int = Field(0, description="Total number of entries")
     signed_entries: int = Field(0, description="Number of signed entries")
@@ -100,6 +114,8 @@ class ChainSummary(BaseModel):
 class VerificationReport(BaseModel):
     """Comprehensive verification report."""
 
+    model_config = ConfigDict(defer_build=True)
+
     timestamp: datetime = Field(..., description="Report generation timestamp")
     verification_result: CompleteVerificationResult = Field(..., description="Verification results")
     chain_summary: ChainSummary = Field(..., description="Chain summary")
@@ -112,6 +128,8 @@ class VerificationReport(BaseModel):
 class RootAnchorVerificationResult(BaseModel):
     """Result of root anchor verification."""
 
+    model_config = ConfigDict(defer_build=True)
+
     valid: bool = Field(..., description="Whether all root anchors are valid")
     verified_count: int = Field(0, description="Number of verified anchors")
     total_count: int = Field(0, description="Total number of anchors")
@@ -121,6 +139,8 @@ class RootAnchorVerificationResult(BaseModel):
 
 class RefutationProof(BaseModel):
     """Proof for refuting disputed content claims."""
+
+    model_config = ConfigDict(defer_build=True)
 
     timestamp: str = Field(..., description="When proof was created (ISO format)")
     stored_hash: str = Field(..., description="Hash we have stored")

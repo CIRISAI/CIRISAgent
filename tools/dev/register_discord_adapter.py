@@ -8,6 +8,7 @@ This script:
 3. Registers a Discord adapter with the bot token and channel IDs
 """
 
+from typing import Optional
 import os
 import sys
 from pathlib import Path
@@ -45,12 +46,19 @@ def load_env_file(env_path: str = ".env") -> Dict[str, str]:
 
 
 def register_discord_adapter(
-    api_url: str = "http://localhost:8080", username: str = "admin", password: str = "ciris_admin_password"
+    api_url: str = "http://localhost:8080", username: str = "admin", password: Optional[str] = None
 ) -> None:
     """Register Discord adapter via CIRIS API."""
 
     # Load environment variables
     env_vars = load_env_file()
+
+    # Get password from environment or parameter
+    if password is None:
+        password = os.environ.get("CIRIS_API_PASSWORD")
+        if not password:
+            print("Error: CIRIS_API_PASSWORD not set. Use the password from setup wizard.")
+            sys.exit(1)
 
     # Check required Discord variables
     required_vars = ["DISCORD_BOT_TOKEN"]
@@ -100,7 +108,7 @@ def register_discord_adapter(
         sys.exit(1)
 
     token = login_response.json()["access_token"]
-    print(f"   ✓ Login successful. Token: {token[:20]}...")
+    print(f" [OK] Login successful. Token: {token[:20]}...")
     print()
 
     # Step 2: Check if Discord adapter already exists
@@ -114,7 +122,7 @@ def register_discord_adapter(
         discord_adapters = [a for a in adapters if a["adapter_type"] == "discord"]
 
         if discord_adapters:
-            print(f"   ⚠ Found {len(discord_adapters)} existing Discord adapter(s):")
+            print(f" [WARN] Found {len(discord_adapters)} existing Discord adapter(s):")
             for adapter in discord_adapters:
                 print(f"     - {adapter['adapter_id']} (running: {adapter['is_running']})")
 
@@ -148,12 +156,12 @@ def register_discord_adapter(
 
     if register_response.status_code == 200:
         result = register_response.json()["data"]
-        print("   ✓ Discord adapter registered successfully!")
+        print(" [OK] Discord adapter registered successfully!")
         print(f"     Adapter ID: {result['adapter_id']}")
         print(f"     Type: {result['adapter_type']}")
         print(f"     Message: {result['message']}")
     else:
-        print(f"   ✗ Registration failed with status {register_response.status_code}")
+        print(f" [FAIL] Registration failed with status {register_response.status_code}")
         print(f"     Response: {register_response.text}")
         sys.exit(1)
     print()
@@ -174,14 +182,14 @@ def register_discord_adapter(
         our_adapter = next((a for a in adapters if a["adapter_id"] == adapter_id), None)
 
         if our_adapter:
-            print("   ✓ Adapter found in system")
+            print(" [OK] Adapter found in system")
             print(f"     Running: {our_adapter['is_running']}")
             print(f"     Services: {', '.join(our_adapter['services_registered'])}")
             print(f"     Tools: {len(our_adapter.get('tools', []))} available")
         else:
-            print(f"   ⚠ Adapter {adapter_id} not found in adapter list")
+            print(f" [WARN] Adapter {adapter_id} not found in adapter list")
 
-    print("\n✅ Discord adapter registration complete!")
+    print("\n[OK] Discord adapter registration complete!")
     print("   The bot should now be online in Discord.")
     print("   Check the logs for connection status: docker logs ciris")
 
@@ -190,7 +198,7 @@ if __name__ == "__main__":
     # Parse command line arguments
     api_url = os.environ.get("CIRIS_API_URL", "http://localhost:8080")
     username = os.environ.get("CIRIS_API_USER", "admin")
-    password = os.environ.get("CIRIS_API_PASSWORD", "ciris_admin_password")
+    password = os.environ.get("CIRIS_API_PASSWORD")  # Required - from setup wizard
 
     if len(sys.argv) > 1:
         api_url = sys.argv[1]
@@ -211,5 +219,5 @@ if __name__ == "__main__":
         print("\n\nAborted by user.")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[FAIL] Error: {e}")
         sys.exit(1)

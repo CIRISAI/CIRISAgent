@@ -18,15 +18,26 @@ from typing import Any, Dict, List, Optional, cast
 from urllib.parse import quote, urljoin
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ciris_engine.config.ciris_services import get_billing_url
-from ciris_engine.schemas.api.auth import AuthContext
 
-from ..dependencies.auth import require_observer
+from ._common import RESPONSES_TOOL_BALANCE, RESPONSES_TOOL_BALANCE_ALL, RESPONSES_TOOL_PURCHASE, AuthObserverDep
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging."""
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
 
 router = APIRouter(prefix="/api/tools", tags=["tools"])
 
@@ -164,19 +175,27 @@ def _get_billing_url() -> str:
 
 
 def _get_google_id_token(request: Request) -> Optional[str]:
-    """Get Google ID token from request headers or environment."""
+    """Get the OAuth ID token for a tool request.
+
+    A header wins — the caller is naming the identity this request is for.
+    Otherwise the shared selector decides, exactly as billing, the LLM services
+    and the hosted-tools adapter do. Reading the variable names directly here
+    meant the balance, check and purchase endpoints kept forwarding the expired
+    setup token after a client had refreshed under a different name: tools
+    stayed broken while the rest of the agent had already recovered.
+    """
     # Try header first (set by Android)
     token = request.headers.get("X-Google-ID-Token")
     if token:
         return token
 
-    # Try environment (set after login)
-    token = os.environ.get("CIRIS_BILLING_GOOGLE_ID_TOKEN")
-    if token:
-        return token
+    from ciris_engine.logic.utils.token_handshake import read_proxy_token
 
-    token = os.environ.get("GOOGLE_ID_TOKEN")
-    return token
+    selected, _var = read_proxy_token()
+    if selected:
+        return selected
+
+    return os.environ.get("GOOGLE_ID_TOKEN")
 
 
 async def _make_billing_request(
@@ -220,11 +239,11 @@ async def _make_billing_request(
 # Endpoints
 
 
-@router.get("/balance/{tool_name}", response_model=ToolBalanceResponse)
+@router.get("/balance/{tool_name}", responses=RESPONSES_TOOL_BALANCE)
 async def get_tool_balance(
     tool_name: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> ToolBalanceResponse:
     """
     Get balance for a specific tool.
@@ -285,10 +304,10 @@ async def get_tool_balance(
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
-@router.get("/balance", response_model=AllToolBalancesResponse)
+@router.get("/balance", responses=RESPONSES_TOOL_BALANCE_ALL)
 async def get_all_tool_balances(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> AllToolBalancesResponse:
     """
     Get balance for all tools.
@@ -354,11 +373,11 @@ async def get_all_tool_balances(
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
-@router.get("/check/{tool_name}", response_model=ToolCreditCheckResponse)
+@router.get("/check/{tool_name}", responses=RESPONSES_TOOL_BALANCE)
 async def check_tool_credit(
     tool_name: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> ToolCreditCheckResponse:
     """
     Quick credit check for a tool.
@@ -419,10 +438,10 @@ async def check_tool_credit(
         raise HTTPException(status_code=503, detail=ERR_BILLING_UNAVAILABLE)
 
 
-@router.get("/available", response_model=AvailableToolsResponse)
+@router.get("/available")
 async def get_available_tools(
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> AvailableToolsResponse:
     """
     Get list of available tools for this platform.
@@ -473,11 +492,11 @@ async def get_available_tools(
     )
 
 
-@router.post("/purchase", response_model=ToolPurchaseResponse)
+@router.post("/purchase", responses=RESPONSES_TOOL_PURCHASE)
 async def verify_tool_purchase(
     purchase: ToolPurchaseRequest,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: AuthObserverDep,
 ) -> ToolPurchaseResponse:
     """
     Verify and process a Google Play tool credit purchase.
@@ -489,8 +508,10 @@ async def verify_tool_purchase(
     # Validate tool name to prevent path injection
     _validate_tool_name(purchase.tool_name)
     logger.info(
-        f"[TOOL_PURCHASE] Verifying purchase for {purchase.tool_name}, "
-        f"product={purchase.product_id}, user={auth.user_id}"
+        "[TOOL_PURCHASE] Verifying purchase for tool=%s, product=%s, user=%s",
+        _sanitize_for_log(purchase.tool_name),
+        _sanitize_for_log(purchase.product_id),
+        _sanitize_for_log(auth.user_id),
     )
 
     google_token = _get_google_id_token(request)

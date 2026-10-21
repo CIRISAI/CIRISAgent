@@ -14,7 +14,7 @@ pip install ciris-sdk
 
 ## API Version
 
-This SDK targets the CIRIS v1 API specification. The v1 API provides 99 endpoints across 15 modules, including the powerful unified telemetry endpoint that consolidates multiple monitoring functions.
+This SDK targets the CIRIS v1 API specification. The v1 API provides 181 endpoints across 15 modules, including the powerful unified telemetry endpoint that consolidates multiple monitoring functions.
 
 ## Quick Start
 

@@ -1,0 +1,352 @@
+{
+ "thought_id": "th_followup_th_seed__0472931c-03a",
+ "trace_id": "th_followup_th_seed__0472931c-03a",
+ "adapter_instance": "accord_full",
+ "trace_level": "full_traces",
+ "wire_form": "federation_attestations row, all columns, bytes hex-encoded as {__hex__: ...}",
+ "signed_rows": 1,
+ "ceg_rows": [
+  {
+   "attestation_id": "b0a083fb-4b7b-2ddd-f8d5-4634a06557bc",
+   "attesting_key_id": "ciris-agent-bootstrap-tp7qfnkwzw",
+   "attested_key_id": "ciris-agent-bootstrap-tp7qfnkwzw",
+   "attestation_type": "scores",
+   "weight": null,
+   "asserted_at": "2026-08-01T02:55:13.050124839+00:00",
+   "expires_at": null,
+   "attestation_envelope": {
+    "agent_id_hash": "9bff02b556cd84cb",
+    "dimension": "trace:complete:v1",
+    "trace": {
+     "agent_id_hash": "9bff02b556cd84cb",
+     "completed_at": "2026-08-01T02:55:12.995811+00:00",
+     "components": [
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "observation",
+       "data": {
+        "attempt_index": 0,
+        "channel_id": "model_eval_en_01",
+        "parent_thought_id": "th_seed_4195adb2_09df8b1f-5cc",
+        "round_number": 0,
+        "task_priority": 0,
+        "thought_depth": 1,
+        "thought_status": "processing",
+        "thought_type": "follow_up",
+        "updated_info_available": false
+       },
+       "event_type": "THOUGHT_START",
+       "timestamp": "2026-08-01T02:55:08.458479+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "llm_call",
+       "data": {
+        "attempt_count": 1,
+        "attempt_index": 0,
+        "base_url": "https://openrouter.ai/api/v1",
+        "completion_bytes": 381,
+        "completion_tokens": 72,
+        "cost_usd": 0.0017536000000000001,
+        "duration_ms": 1042.8969860076904,
+        "handler_name": "CSDMAEvaluator",
+        "model": "meta-llama/llama-4-scout",
+        "parent_attempt_index": 0,
+        "parent_event_type": "DMA_RESULTS",
+        "prompt_bytes": 39385,
+        "prompt_hash": "c069e46db6dce8943e72cd0de5c02aeaf67029593ec3e7b05f4a6a46842dd45e",
+        "prompt_tokens": 8696,
+        "response_model": "CSDMAResult",
+        "retry_count": 0,
+        "service_name": "ciris_primary",
+        "status": "ok"
+       },
+       "event_type": "LLM_CALL",
+       "timestamp": "2026-08-01T02:55:09.541643+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "llm_call",
+       "data": {
+        "attempt_count": 1,
+        "attempt_index": 1,
+        "base_url": "https://openrouter.ai/api/v1",
+        "completion_bytes": 344,
+        "completion_tokens": 74,
+        "cost_usd": 0.002487,
+        "duration_ms": 1067.6660537719727,
+        "handler_name": "EthicalPDMAEvaluator",
+        "model": "meta-llama/llama-4-scout",
+        "parent_attempt_index": 0,
+        "parent_event_type": "DMA_RESULTS",
+        "prompt_bytes": 50170,
+        "prompt_hash": "bc95e5934724c442086c0f3622517e74350bf1d5f8fca0d88028852dfa493d6e",
+        "prompt_tokens": 12361,
+        "response_model": "EthicalDMAResult",
+        "retry_count": 0,
+        "service_name": "ciris_primary",
+        "status": "ok"
+       },
+       "event_type": "LLM_CALL",
+       "timestamp": "2026-08-01T02:55:09.556543+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "llm_call",
+       "data": {
+        "attempt_count": 1,
+        "attempt_index": 2,
+        "base_url": "https://openrouter.ai/api/v1",
+        "completion_bytes": 515,
+        "completion_tokens": 133,
+        "cost_usd": 0.0017134,
+        "duration_ms": 2132.405996322632,
+        "handler_name": "BaseDSDMA",
+        "model": "meta-llama/llama-4-scout",
+        "parent_attempt_index": 0,
+        "parent_event_type": "DMA_RESULTS",
+        "prompt_bytes": 32169,
+        "prompt_hash": "d9f6f6b4a9e6299b2519a8115ccb5a984a29bd0400889f9c054a9d6527e54745",
+        "prompt_tokens": 8434,
+        "response_model": "DSDMAResult",
+        "retry_count": 0,
+        "service_name": "ciris_primary",
+        "status": "ok"
+       },
+       "event_type": "LLM_CALL",
+       "timestamp": "2026-08-01T02:55:10.645955+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "llm_call",
+       "data": {
+        "attempt_count": 1,
+        "attempt_index": 3,
+        "base_url": "https://openrouter.ai/api/v1",
+        "completion_bytes": 688,
+        "completion_tokens": 159,
+        "cost_usd": 0.0018257999999999998,
+        "duration_ms": 931.494951248169,
+        "handler_name": "IDMAEvaluator",
+        "model": "meta-llama/llama-4-scout",
+        "parent_attempt_index": 0,
+        "parent_event_type": "DMA_RESULTS",
+        "prompt_bytes": 36309,
+        "prompt_hash": "6cf235d0d801c2a5c9e67eb89eaf4437b155a2693c9fe92f859fd32813278f78",
+        "prompt_tokens": 8970,
+        "response_model": "IDMAResult",
+        "retry_count": 0,
+        "service_name": "ciris_primary",
+        "status": "ok"
+       },
+       "event_type": "LLM_CALL",
+       "timestamp": "2026-08-01T02:55:11.598299+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "context",
+       "data": {
+        "agent_name": "Ally",
+        "agent_version": "2.9.7-stable",
+        "attempt_index": 0,
+        "attestation_context": "CIRIS VERIFY ATTESTATION: Level 0/5 | ✗Binary ✓Environment ✗Registry ✗FileIntegrity ○Audit\nKey: ephemeral (fingerprint: 4c2c51067dc856fc...) [SOFTWARE: Software]\n⚠️ WARNING: COMMUNITY MODE. License: NONE. Hardware: SOFTWARE-ONLY (no HSM/TPM/Secure Enclave). Software-only signer (no hardware security module) limits deployment to community tier. Not a licensed professional service. Consult qualified professionals for medical, legal, or financial advice.",
+        "attestation_level": 0,
+        "attestation_status": "partial",
+        "audit_ok": false,
+        "binary_ok": false,
+        "cognitive_state": "shutdown",
+        "context_tokens": 1,
+        "disclosure_severity": "warning",
+        "ed25519_fingerprint": "4c2c51067dc856fc9b1cb270352000755409f89f44ff0abc415275101a3c0a37",
+        "env_ok": true,
+        "file_integrity_ok": false,
+        "hardware_backed": false,
+        "hardware_type": "SoftwareOnly",
+        "key_status": "ephemeral",
+        "key_storage_mode": "Software",
+        "memory_count": 0,
+        "play_integrity_ok": false,
+        "registry_ok": false,
+        "verify_version": "5.1.3"
+       },
+       "event_type": "SNAPSHOT_AND_CONTEXT",
+       "timestamp": "2026-08-01T02:55:08.468606+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "llm_call",
+       "data": {
+        "attempt_count": 1,
+        "attempt_index": 4,
+        "base_url": "https://openrouter.ai/api/v1",
+        "completion_bytes": 712,
+        "completion_tokens": 67,
+        "cost_usd": 0.0034216000000000003,
+        "duration_ms": 1318.6631202697754,
+        "handler_name": "ActionSelectionPDMAEvaluator",
+        "model": "meta-llama/llama-4-scout",
+        "parent_attempt_index": 0,
+        "parent_event_type": "ASPDMA_RESULT",
+        "prompt_bytes": 77051,
+        "prompt_hash": "c066f862f15bc3e2377b721f104b084ac543e4ec5c147e4125be7538f23ccb64",
+        "prompt_tokens": 17041,
+        "response_model": "ASPDMALLMResult",
+        "retry_count": 0,
+        "service_name": "ciris_primary",
+        "status": "ok"
+       },
+       "event_type": "LLM_CALL",
+       "timestamp": "2026-08-01T02:55:12.964471+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "rationale",
+       "data": {
+        "attempt_index": 0,
+        "csdma": {
+         "plausibility_score": 0.9
+        },
+        "csdma_plausibility_score": 0.9,
+        "dsdma": {
+         "domain": "management",
+         "domain_alignment": 0.9
+        },
+        "dsdma_domain": "management",
+        "dsdma_domain_alignment": 0.9,
+        "pdma": {
+         "has_conflicts": false
+        }
+       },
+       "event_type": "DMA_RESULTS",
+       "timestamp": "2026-08-01T02:55:11.604606+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "rationale",
+       "data": {
+        "attempt_index": 0,
+        "correlation_factors": [
+         "institutional narrative of efficient task management"
+        ],
+        "correlation_risk": 0.9,
+        "effective_source_count": 1.0,
+        "fragility_flag": true,
+        "idma_correlation_risk": 0.9,
+        "idma_fragility_flag": true,
+        "idma_k_eff": 1.0,
+        "idma_phase": "rigidity",
+        "intervention_recommendation": "Consider alternative perspectives on task completion and communication efficiency.",
+        "k_eff": 1.0,
+        "next_best_recovery_step": "Consider alternative perspectives on task completion and communication efficiency.",
+        "phase": "rigidity",
+        "reasoning_is_fragile": true,
+        "reasoning_state": "rigidity",
+        "source_overlap": 0.9,
+        "sources_identified": [
+         "System's task management protocol"
+        ]
+       },
+       "event_type": "IDMA_RESULT",
+       "timestamp": "2026-08-01T02:55:11.604606+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "rationale",
+       "data": {
+        "attempt_index": 0,
+        "is_recursive": false,
+        "selected_action": "HandlerActionType.TASK_COMPLETE"
+       },
+       "event_type": "ASPDMA_RESULT",
+       "timestamp": "2026-08-01T02:55:12.966983+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "conscience",
+       "data": {
+        "action_was_overridden": false,
+        "attempt_index": 0,
+        "coherence_level": 1.0,
+        "conscience_passed": true,
+        "entropy_level": 0.0,
+        "final_action": "HandlerActionType.TASK_COMPLETE",
+        "is_recursive": false,
+        "updated_status_detected": false
+       },
+       "event_type": "CONSCIENCE_RESULT",
+       "timestamp": "2026-08-01T02:55:12.968104+00:00"
+      },
+      {
+       "agent_id_hash": "9bff02b556cd84cb",
+       "component_type": "action",
+       "data": {
+        "action_executed": "task_complete",
+        "api_bases_used": [
+         "https://openrouter.ai/api/v1"
+        ],
+        "attempt_index": 0,
+        "audit_entry_hash": "TR0qMmvpSTyQhzq1LlEFPK2Da4+cgXHCo2qK+QcXSks=",
+        "audit_entry_id": "811d6f41-1375-4ff1-ac82-b56f09ae6c40",
+        "audit_sequence_number": 3,
+        "audit_signature": "TrxXrLyZGKMqxLgx1b5qS2+HfGia1EuOpJZh4Wg0Jfks498mTy1RREyj3ERnbvmtGATyR2XlgIgfw6VFfalhBA==",
+        "carbon_grams": 8.40105,
+        "cost_cents": 1.1201400000000001,
+        "energy_mwh": 16802.100000000002,
+        "execution_success": true,
+        "execution_time_ms": 14.532,
+        "has_execution_error": false,
+        "has_positive_moment": false,
+        "llm_calls": 5,
+        "models_used": [
+         "meta-llama/llama-4-scout"
+        ],
+        "success": true,
+        "tokens_input": 55502,
+        "tokens_output": 505,
+        "tokens_total": 56007
+       },
+       "event_type": "ACTION_RESULT",
+       "timestamp": "2026-08-01T02:55:12.995811+00:00"
+      }
+     ],
+     "deployment_profile": {
+      "agent_role": "ally",
+      "agent_template": "Ally-default-unspecified",
+      "deployment_domain": "general",
+      "deployment_region": null,
+      "deployment_trust_mode": "sovereign",
+      "deployment_type": "production"
+     },
+     "pqc_key_id": "ciris-agent-bootstrap-tp7qfnkwzw",
+     "pubkey_ml_dsa_65": "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",
+     "signature": "f7TVFOFJaFgeauh3RM6FXMNtdol+ifPF3yDGI177l2U6bSBvWFfjmk3Q5WKC5sopE2hKIpkhVRw2m5+nzyqBBg==",
+     "signature_key_id": "ciris-agent-bootstrap-tp7qfnkwzw",
+     "signature_ml_dsa_65": "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",
+     "started_at": "2026-08-01T02:55:08.458479+00:00",
+     "task_id": "4195adb2-0b71-40a0-8ad6-ab7b42027a8c",
+     "thought_id": "th_followup_th_seed__0472931c-03a",
+     "trace_id": "th_followup_th_seed__0472931c-03a",
+     "trace_level": "detailed",
+     "trace_schema_version": "3.0.0"
+    },
+    "trace_id": "th_followup_th_seed__0472931c-03a"
+   },
+   "original_content_hash": {
+    "__hex__": "64b0cbabc627b3bcab38756c877230b6e711a56ac024ec1031fcb46e8ce1d94e"
+   },
+   "scrub_signature_classical": "gC6MC8s+JD/cMEr9xCuxHRxGb0TTb1zK2s9JnSVxq34/3E9hLy8ngmeQq5NO8GZJcRpXm08bgCi0zm9lFpTODQ==",
+   "scrub_signature_pqc": "dyaAnTKIsSHyuvAuEd/hSJU2l7keuwvQgVxIYzkPAbxnelLAOQkmAHjLrcHIIylQKOgQD0LUhWzPsOU/nExeG1cmV2pnFxLe+ZZ0fGfFFZeDyojalHOHR9nBhNW0tM9XcT/Us6AWatqAadC5MKg4KweoQjrevT2oCSTKRYKG7m6+OvoNhM4RrRpHFNKvmbRgfU5i4BUbsdRplxXUFh4nQ5sa6J02+DBR2N8tDoFEnK0q670eaxd7KHwrtN2O5I+kG75IjT3fhPh3sISJGmYFGKDmrn0R8cuO1RipItxOaR/jndl1TQdeD/o5hv1x03KQHYjaWGPTHT3mezavnGTys5JcWlqRJIUvPZCoBUrMAP2EjzaGQiH/YFrzmXKFJGHJ4ATDvuc7i8lMRXuPY4ijRkQXyAQ0BXJ4eSqNL0av4EotZuhaSj5JbnKApit74gWXf1w1gYMKCs/41AW/MY5CiB5eFTyJZIruE3Vo9BbH/CBaBCR39IwFUSTlOsYpvnAll7nhYK7naC8TqU6XVCTZ6S3Y+HM/KHZp3zOhwJhaDn/qq1w6S+HOmkzed9M6eQ7dExGEOrHZ37PBi6+Ij/W4Cz0PeNxZVaW4fPR2b7ld4FKV8JrbvrfZv9tC5JJ2dLXBgWE0CVghB14xLR6jixz3Zeklm1vsqJHZQesbjWy5CHZRxJPY8YIZqMinnQkngyHYdigF/txOCE/cmGHvN6EGz36Yl9oo91UVIvh2olZ7t4oFInujKu+DrwPniTSyylEf5c1CpE8r6+t5mSScwzhQR2vFRRfYtBPqgAg2DwS5HB4wEvo7XQayVBSiG4LEpfZheLlq50aElyKvA5lv8DYO+wUqYpNaDynvgyXUti4F0cGVu4+T992k8JmVrr5qZdwCwGemTyeT88wNpvUi00SqfU6BN5uLU0iLay7mA1DqtTP6BCkQUVjxZ8xlNAN1hfaikbrFeRTkokVLn3fjpliyTk68cAma2/MzH+VXebMm01nouu0WvtiGzEv3R9JOHWxaZZwPKn59YCMC8xpjFdpWZ1kmhL62fZYZA+G0j8m74YFxt2lOd1bfggzOrfxrqoSq/yJCY7AnvM/1X7ga+3o21EQb5P/NVEapsISSO/mNCFxHtH5QOnnQHI1+2TPvXADaIbujcVxr9nCx1+b12DcRjU8Wmcq8DGIF7ez+Y7C7HEqOpM2IWCe7UmYnMId2lxfekiFe4LHMDX9gEuXspeESyCacvKJN/jKOij/lJgALiH8rG7LvTKIXxqVXI3a/nATEjqpxoEhtpaC/goUpbCHgrT9jNwFp3Dk9Zh9QFUfg7x/gJCjbpxiJTadQ3/u8GrjCCa7HK7dRXNva/xpcoYcqhgmobsQtWJIdqQTUEMS3FNhHLtQk8u8vyOhsUp2cM07j3/bXJ1bO0PERJk/GlaqFL3bFh994nMBcD+GiQFi07KerQdJByCQSn+8UEyEI3MziW0mKDl+AH8MGm+2zLn5/3RVuZEBQspjcI6Zp1FbzgLh2IX7ciYETEoguU/tSsytfj1VE2wv56IGzZRWWdx2cBULhM42e+Nb+V0rquZRhQJu4LjzfD+JPMuIRtr6eMZgC5/u/t6hOdvKLGJdm7AWHH5IK94jiEdb+1AxJJjWMOjZQpFpfk0GcoYABgpM9S+fYtnIXHeafoAHx2RpT6BxBlLYs+/AKTghQcoayde8H/LfyehmxbIp8Y9NZe2+YfvwQ/Z84cQun58SDbVNsgBjlaHYL6enS1mIT+AEDVb1JEeS32wwJ7KR7kAtVLGIuBu4h+ddxhh1iKOnNlKFvbPzBxBFpU+tnqXZddGjpdzAYkK+ZGkTkwf20+lZa3/YDvT1iZYSE1ryy9M5gU/7GEIADzIJeKl+tOr4le73zbDDvPqux31Lhp262Gwpi2ELrwdSlA1ePYEPzF6BmmMJAoZ8rc4pqAkCwUAH3Jyw1WFrobnXmToPfC4OO48GmOH26rnCrS8xIMmseAE6rgUoaEfxLbiCY8Cb1SZA78lGoPzfy7MlJZGcWgtcJUfk4zO95F8UcaRRagf9LDkEeHvTJFp6Z20Fpz9W3Z0PVVHSoftIIVIuP7Ul6dCCjyE2Lty1RuVkq1vUE5jKcsx7v4QfBKdgDCO/jNQlj1m3XVymEmkOZLy3rl4hXvScRRNvI67cydfPfG6HQKQTEV+V6KiRogPKWjDNlwLLOcekQv600HIgeTA8brTssyiXLxtpFfEbpRuy2UbcHzixwxjs5/1kIjsq2ZrGRwBE7t6hkxI5vUUhyMeWXowYLrGRAFygAIS/dj20wHV66cmol7vd2TxRV+hv3QKuVh1t9SpxLCA/mDf5h8yawohudf0JVaixB6jqiIUVhER06rxi1ySXRWXyStsN80GHBX7Redb00vokXUhpHK/F/qudfGNOmtN0sCS0eYnf7EC8h24Lplg8Yjb7ObNk9i6oT1nHLKoZjY732yjON4m3IYc5TDMegEU4TJymg5troWHlQjZWl1xY2VM7dSzCpxqjfnDqEV5WdKn2C1lXOAsfExJWtlLryb7eadYcXB0f/jYbRvd8dUOzr+s+rG3bA44hdy6XKdThGod7dUpa/I0C2c4KCTJysFbQoKxvpstIm3LeDuE7HpkiQneTxSt285WCic44744MXwvCX0qGGDnW4CjwV8patc/vFIO957inQBd4tSiT9XyW/9ZixP8R0LZk7nOlC8tje8hqmZewKHm5XchqNnZMiYdZwol218dR1dlZCoLBdpg+rYoRL7RdAjd+NHDHEyqLd4DU0dv+vvL+e7Yw553Rym0S21k2/JCtm6YkUdaLBtjw4Y6btn9yfWE27nu+2NkUnarouCzUVOEKN7qLzwnhlHQAPgd0Zku2sRFNJnvi7ijismHQMuaYAwtHCpM4oQR7LL9oJM5GQb0GgUXO9atDQISqJO/mXutZ3RIqbDwGb5WCJ7+U+fJDCa6DQAb0h0It1rkSDzRrINHSIlUTFRfZa4NvMC04zMhC8OkcLZpGk92uN7PgXXXBdznarT+wpGRXG2L1ZmonmCLBkeDBcB1JBffDJ0E9Os5Il/oKCa1I7uLvukXe7fFHG1sozKOHMdFMEWaPsfAD2aZf30Ti5muvbNrKTo9aZ5FyG2C4BcvwMggCNJlVYdPJ7jjkASAwETfn8ifPjXJEHeHky5hKJlmoz8eo34hw0C0pLbdEA0QheMjmdcv84wdsg2g09XEYV98oqlGvNuSiRmeD0DIQAtVHhdVXtPD+D8sRoy0/sO01/+8obhywyHxMK9hA28aXYusqLYkk+koJH4qURL3c6s/NrOpk10Q6U5J/GNFfM/qbD+Z0BBRK85Hdp9WYSUSG6WPTExf2jAMRbUQSHR/GN33+AU4uj1euN3dg0jiJS9IR7073HvapK3+7bB609yx32lhCC/Iv25YQKNuMa/ZP460SLempB1xyEoJpMhIhw6ySRzROWsMdkLEqpGQlrJQV4mayiXpLJBGEB0d6erBh8+X88HlwfJ8G3Xu0YA/VKUrS+XvVSUo2iOtKnCtlpjFexZY9DCtz2MXq5zmrCHWdJo+iU6nHqOZsPnNm/0NjZiY8V3DGzDrHLHWr7oU/yOhJTQAh7WAS+mHRTBhwKXkjafvwbqV18ftDGWlLvbXo0scIr7JJmuPWfBiXee9sw6+ijNu2dginmUiXmUUdhiiYCCOaJnqvHiaZINPk/hGXC8aaAa5+f/XFljrX2ily64BoPlc5m6qIr+0h8g7dOaNP1T0OQvElY96a3lnQ+7mqY7qp7newC7u+fT/fdI6Iw+AS4cuqXBNXw9hQGUgcTty5CyFnMJTNU3ew4WOR0mf6XGGEN4LgZPYebC8adWP6tsDPcPwvHbkb08iCc2apf0o9kugkMlse9JP2ymDVXMXPhVRVl2ZF4UQfOkv8B/RPEZdmj2xAlgfy/+fg37lsOk6/UkQP3lwgp35v9L5GbKXIIzCMyb6+vD0X2piiPipjq0dy7MdoO9SIz6Hns9TbNSjMxkzbFRbWBdulQegUUVXBKXUZT+Vj8pP/8WBaWIkZ24DWDbej9i4gBKar6WF+k9DvbONMqo+eIqygj55gKjNuoMs0uTPqfgryBTD/7EXsKIjZaqynGziPVtrIxuq19dka2N9lJiEWDO6zVjq/9sJawheb7+v04gVeVLRFfU/UYmyIEzwD0H/BlJPDerjgUy6r4bfHY6Fz0HUgWWLrxflRIMOTIebapcuQudyKL3/Z+EE9goJSyBa1YQ13sfOSLROrq5BNjAxdHuaGvNW8nuLUVgQX4Bry9SYEV0FRbO8hq7EPTVzIlzIHT8LUM75UjP2R+yUFzeNLh7gs1WmWS3fkYPWptd4OfwtTcZ22ar9w7WJesxNUAAAAAAAAAAAAAAAAAAAAABQsSHCEn",
+   "scrub_key_id": "ciris-agent-bootstrap-tp7qfnkwzw",
+   "scrub_timestamp": "2026-08-01T02:55:13.056207060+00:00",
+   "pqc_completed_at": "2026-08-01T02:55:13.056207060+00:00",
+   "persist_row_hash": "bc226c0a4d1ddf39de8cc1b380cc3f6e631caee70c83716ff154f0e449e640f5",
+   "subject_key_ids": "[\"ciris-agent-bootstrap-tp7qfnkwzw\"]",
+   "withdraws_admission_rule": null,
+   "cohort_scope": "federation",
+   "tier": "federation",
+   "promoted_at": "2026-08-01T02:55:13.056207060+00:00",
+   "additional_scrubs": "[]",
+   "dimension": "trace:complete:v1"
+  }
+ ]
+}

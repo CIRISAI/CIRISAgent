@@ -12,7 +12,6 @@ from pathlib import Path
 # Add project root to path (tools/database/ciris_db_tools/ -> project root)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from .audit_verifier import AuditVerifierWrapper
 from .consolidation_monitor import ConsolidationMonitor
 from .graph_analyzer import GraphAnalyzer
 from .status_reporter import DBStatusReporter
@@ -30,8 +29,6 @@ Commands:
   status          Overall database status
   tsdb            TSDB consolidation analysis
   tsdb-age        TSDB node age analysis
-  audit           Audit trail status
-  verify          Audit trail verification
   orphaned        Find orphaned nodes
   connectivity    Graph connectivity analysis
   consolidation   Consolidation health report
@@ -43,7 +40,6 @@ Examples:
   %(prog)s status                    # Full status report
   %(prog)s tsdb                      # TSDB consolidation status
   %(prog)s orphaned                  # Find nodes without edges
-  %(prog)s verify --sample 1000      # Verify sample of audit entries
   %(prog)s consolidation             # Check consolidation health
   %(prog)s comprehensive             # Complete analysis with critical issues
         """,
@@ -55,8 +51,6 @@ Examples:
             "status",
             "tsdb",
             "tsdb-age",
-            "audit",
-            "verify",
             "orphaned",
             "connectivity",
             "consolidation",
@@ -68,8 +62,6 @@ Examples:
     )
 
     parser.add_argument("--db-path", help="Path to main database (default: auto-detect)")
-
-    parser.add_argument("--sample", type=int, help="Sample size for verification (verify command only)")
 
     parser.add_argument("--limit", type=int, default=100, help="Limit for orphaned nodes display (default: 100)")
 
@@ -113,14 +105,6 @@ Examples:
                 for rec in age_analysis["recommendations"]:
                     print(f"  [{rec['severity']}] {rec['issue']}")
                     print(f"    → {rec['action']}")
-
-        elif args.command == "audit":
-            verifier = AuditVerifierWrapper(args.db_path)
-            verifier.print_audit_report()
-
-        elif args.command == "verify":
-            verifier = AuditVerifierWrapper(args.db_path)
-            verifier.print_verification_report(args.sample)
 
         elif args.command == "orphaned":
             analyzer = GraphAnalyzer(args.db_path)

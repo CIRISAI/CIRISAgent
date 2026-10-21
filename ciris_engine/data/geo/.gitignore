@@ -1,0 +1,6 @@
+# Source data files (downloaded at build time)
+# The cities.db is committed to the repo so pip install users have it
+cities15000.txt
+cities15000.zip
+admin1CodesASCII.txt
+countryInfo.txt

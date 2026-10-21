@@ -360,6 +360,46 @@ class TestWakeupProcessorNonBlocking:
         assert result["wakeup_complete"] is False
         assert "error" in result
 
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.get_identity_for_context")
+    @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
+    @pytest.mark.asyncio
+    async def test_process_wakeup_non_blocking_missing_step_fails_loudly(
+        self, mock_persistence, mock_identity, wakeup_processor, wakeup_task_sequence, caplog
+    ):
+        """#934: a step task whose DB row has VANISHED can never complete.
+
+        Treating it as in-progress left the processor spinning empty rounds
+        forever while docker/manager reported healthy (~933k rounds over 55
+        days in production). It must fail the sequence with an ERROR that
+        names the broken step instead."""
+        import logging
+
+        wakeup_processor.wakeup_tasks = wakeup_task_sequence
+
+        # First step's row is GONE from the DB; the rest are active.
+        def get_task_mock(task_id, occurrence_id="default"):
+            if task_id == wakeup_task_sequence[1].task_id:
+                return None
+            active_task = Mock()
+            active_task.status = TaskStatus.ACTIVE
+            active_task.task_id = task_id
+            return active_task
+
+        mock_persistence.get_task_by_id.side_effect = get_task_mock
+        mock_persistence.get_thoughts_by_task_id.return_value = []
+        mock_persistence.update_task = Mock()
+
+        with caplog.at_level(logging.ERROR, logger="ciris_engine.logic.processors.states.wakeup_processor"):
+            result = await wakeup_processor._process_wakeup(round_number=1, non_blocking=True)
+
+        assert result["status"] == "failed"
+        assert result["wakeup_complete"] is False
+        assert "error" in result
+
+        # The ERROR names the broken step (task_id + its missing status).
+        errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+        assert any(wakeup_task_sequence[1].task_id in msg and "missing" in msg for msg in errors)
+
 
 class TestWakeupProcessorProcess:
     """Test the main process() method."""
@@ -1254,7 +1294,7 @@ class TestWakeupProcessorTaskMarking:
         wakeup_processor._mark_task_failed("task_123", "Test failure", "occurrence_1")
 
         mock_persistence.update_task_status.assert_called_once_with(
-            "task_123", TaskStatus.FAILED, "occurrence_1", wakeup_processor.time_service
+            "task_123", TaskStatus.FAILED, "occurrence_1"
         )
 
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
@@ -1267,7 +1307,7 @@ class TestWakeupProcessorTaskMarking:
 
         root_task = wakeup_task_sequence[0]
         mock_persistence.update_task_status.assert_called_once_with(
-            root_task.task_id, TaskStatus.COMPLETED, root_task.agent_occurrence_id, wakeup_processor.time_service
+            root_task.task_id, TaskStatus.COMPLETED, root_task.agent_occurrence_id
         )
 
     @patch("ciris_engine.logic.processors.states.wakeup_processor.persistence")
@@ -1280,7 +1320,7 @@ class TestWakeupProcessorTaskMarking:
 
         root_task = wakeup_task_sequence[0]
         mock_persistence.update_task_status.assert_called_once_with(
-            root_task.task_id, TaskStatus.FAILED, root_task.agent_occurrence_id, wakeup_processor.time_service
+            root_task.task_id, TaskStatus.FAILED, root_task.agent_occurrence_id
         )
 
 

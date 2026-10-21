@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: PyYAML
+Version: 6.0.3
+Summary: YAML parser and emitter for Python (pure Python, no C extension)
+Requires-Python: >=3.8

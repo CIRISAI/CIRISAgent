@@ -112,27 +112,143 @@ def create_bootstrap_from_legacy(
 def check_mock_llm(runtime: Any) -> None:
     """Check for mock LLM environment variable and add to modules if needed.
 
+    Also latches the trace-export guard when the bootstrap config's modules
+    already name the mock LLM (CIRISAgent#1244): this runs in CIRISRuntime's
+    constructor, before the edge initializes.
+
     Args:
         runtime: The CIRISRuntime instance
     """
+    from ciris_engine.logic.utils.mock_llm_guard import latch_if_mock_llm_module
+
+    latch_if_mock_llm_module(getattr(runtime, "modules_to_load", None) or [], "bootstrap")
     if os.environ.get("CIRIS_MOCK_LLM", "").lower() in ("true", "1", "yes", "on"):
         logger.warning("CIRIS_MOCK_LLM environment variable detected in CIRISRuntime")
+        from ciris_engine.logic.utils.mock_llm_guard import mark_mock_llm_active
+
+        mark_mock_llm_active("runtime:CIRIS_MOCK_LLM")
         if "mock_llm" not in runtime.modules_to_load:
             runtime.modules_to_load.append("mock_llm")
             logger.info("Added mock_llm to modules to load")
 
 
-def load_adapters_from_bootstrap(runtime: Any) -> None:
-    """Load adapters from bootstrap configuration.
+def _record_adapter_failure(runtime: Any, adapter_type: str, adapter_id: str, exc: Exception) -> None:
+    """Remember a configured adapter that did not load.
+
+    #1057: these were logged once and forgotten, so a fleet ran for several
+    releases with adapters failing to import on every agent while health stayed
+    green. A log line nobody greps is not a signal.
+    """
+    from ciris_engine.schemas.runtime.adapter_management import AdapterLoadFailure
+
+    # "Could not import adapter module" is raised by load_adapter() when neither
+    # ciris_engine.logic.adapters.<mode> nor ciris_adapters.<mode> exists — a
+    # STALE CONFIG NAME, not a broken adapter, and it needs a different fix
+    # (rename/remove the entry) so it is worth distinguishing.
+    missing = isinstance(exc, ValueError) and "Could not import adapter module" in str(exc)
+    if not hasattr(runtime, "adapter_load_failures"):
+        runtime.adapter_load_failures = []
+    runtime.adapter_load_failures.append(
+        AdapterLoadFailure(
+            adapter_type=adapter_type,
+            adapter_id=adapter_id,
+            error=str(exc),
+            error_type=type(exc).__name__,
+            is_missing_module=missing,
+        )
+    )
+
+
+def _load_single_adapter(runtime: Any, adapter_type: str, adapter_id: str) -> bool:
+    """Load a single adapter by type and id.
 
     Args:
         runtime: The CIRISRuntime instance
+        adapter_type: The adapter type string
+        adapter_id: The adapter identifier
+
+    Returns:
+        True if loaded successfully, False otherwise
     """
     from ciris_engine.logic.adapters import load_adapter
     from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 
+    try:
+        adapter_class = load_adapter(adapter_type)
+
+        context = AdapterStartupContext(
+            essential_config=runtime.essential_config or EssentialConfig(),
+            modules_to_load=runtime.modules_to_load,
+            startup_channel_id=runtime.startup_channel_id or "",
+            debug=runtime.debug,
+            bus_manager=None,  # Will be set after initialization
+            time_service=None,  # Will be set after initialization
+            service_registry=None,  # Will be set after initialization
+        )
+
+        config = AdapterConfig(adapter_type=adapter_type)
+        if adapter_id in runtime.adapter_configs:
+            config = runtime.adapter_configs[adapter_id]
+
+        adapter_instance = adapter_class(runtime, context=context, adapter_config=config.settings)  # type: ignore[call-arg]
+        runtime.adapters.append(adapter_instance)
+        logger.info(f"Successfully loaded adapter: {adapter_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to load adapter '{adapter_id}': {e}", exc_info=True)
+        _record_adapter_failure(runtime, adapter_type, adapter_id, e)
+        return False
+
+
+def load_adapters_from_bootstrap(runtime: Any) -> None:
+    """Load adapters from bootstrap configuration.
+
+    CIRISVerify is always loaded first as a required infrastructure adapter
+    for signing and trust verification. It loads before all other adapters.
+
+    Args:
+        runtime: The CIRISRuntime instance
+    """
+    # CIRISVerify is always loaded first — it handles signing/trust
+    # and must be available before any other adapter initializes
+    _load_single_adapter(runtime, "ciris_verify", "ciris_verify")
+
+    # Wallet adapter auto-loads silently if present — provides self-custody wallet
+    # derived from CIRISVerify signing key (Identity = Wallet)
+    _load_single_adapter(runtime, "wallet", "wallet")
+
+    # 2.9.6+: accord_metrics is REQUIRED (CIRISAgent#866 LensCore fold) —
+    # the agent's reasoning-observability spine, orchestrated by the
+    # ciris-lens-core substrate the way the audit service orchestrates the
+    # audit trail. Always loaded regardless of consent: consent gates
+    # SHARING (the CEG community grant lens-core evaluates at every seal),
+    # never whether the agent witnesses its own reasoning.
+    _load_single_adapter(runtime, "ciris_accord_metrics", "ciris_accord_metrics")
+
+    # API IS ALWAYS LOADED (CIRISAgent#1057).
+    #
+    # scout1 ran 0 of 4 configured adapters and still reported healthy. Whatever
+    # else fails to load — a renamed adapter, a bad credential, a stale config —
+    # the agent must keep ONE way to be reached, or it is a process burning CPU
+    # that nobody can talk to and nobody can ask why.
+    #
+    # This is also what makes "loudly log and ignore" a safe policy for the rest:
+    # ignoring a broken adapter is only acceptable while the door stays open.
+    # Loaded here rather than left to config so that a config which forgot it —
+    # or named it wrongly — cannot produce an unreachable agent.
+    if not any(getattr(a, "adapter_type", None) == "api" for a in runtime.adapters):
+        _load_single_adapter(runtime, "api", "api")
+
     for load_request in runtime.bootstrap.adapters:
+        # Skip internal adapters if someone explicitly listed them — already loaded above
+        if load_request.adapter_type in ("ciris_verify", "wallet", "ciris_accord_metrics", "api"):
+            continue
+
+        from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
+
         try:
+            from ciris_engine.logic.adapters import load_adapter
+
             adapter_class = load_adapter(load_request.adapter_type)
 
             # Create AdapterStartupContext
@@ -159,3 +275,51 @@ def load_adapters_from_bootstrap(runtime: Any) -> None:
             logger.info(f"Successfully loaded adapter: {load_request.adapter_id}")
         except Exception as e:
             logger.error(f"Failed to load adapter '{load_request.adapter_id}': {e}", exc_info=True)
+            _record_adapter_failure(runtime, load_request.adapter_type, load_request.adapter_id, e)
+
+    _log_adapter_load_summary(runtime)
+
+
+def _log_adapter_load_summary(runtime: Any) -> None:
+    """Say plainly what loaded and what did not, every boot.
+
+    CIRISAgent#1057: two adapters failed to import on EVERY agent in a
+    five-agent fleet for at least six releases. The failures WERE logged — one
+    ERROR line each, buried in a few hundred startup lines, with no statement of
+    the total. Nobody reads a line they do not know to look for; everybody reads
+    a banner.
+
+    Missing adapters are IGNORED, deliberately — a renamed or hand-typed entry
+    must not stop an agent from running, especially now that the API adapter is
+    always loaded so the agent stays reachable. But ignoring is only honest if it
+    is loud, and if the thing being ignored is NAMED.
+
+    Written for whoever is actually reading it. On a managed fleet that is
+    CIRISManager, which generated the config and can regenerate it. On a personal
+    install there is no manager at all — it is a person with a .env, and telling
+    them "regenerate the config" would be useless advice.
+    """
+    failures = list(getattr(runtime, "adapter_load_failures", []) or [])
+    loaded = [getattr(a, "adapter_type", type(a).__name__) for a in getattr(runtime, "adapters", [])]
+
+    if not failures:
+        logger.info("[ADAPTERS] %d loaded: %s", len(loaded), ", ".join(sorted(loaded)) or "(none)")
+        return
+
+    stale = sorted({f.adapter_type for f in failures if f.is_missing_module})
+    broken = sorted({f.adapter_type for f in failures if not f.is_missing_module})
+
+    logger.error("=" * 72)
+    logger.error("[ADAPTERS] %d LOADED, %d FAILED", len(loaded), len(failures))
+    logger.error("[ADAPTERS] loaded : %s", ", ".join(sorted(loaded)) or "(none)")
+    if stale:
+        logger.error("[ADAPTERS] DOES NOT EXIST (stale config, IGNORED): %s", ", ".join(stale))
+        logger.error("[ADAPTERS]   -> the config names an adapter that was renamed or removed.")
+        logger.error("[ADAPTERS]   -> regenerate it; the agent is running without them.")
+    if broken:
+        logger.error("[ADAPTERS] FAILED TO START (IGNORED): %s", ", ".join(broken))
+        logger.error("[ADAPTERS]   -> the adapter exists but raised; see the traceback above.")
+    logger.error("[ADAPTERS] also reported at /v1/system/health as adapters_config_stale /")
+    logger.error("[ADAPTERS] adapters_failed_to_load. On a personal install, fix the adapter")
+    logger.error("[ADAPTERS] list in your .env; on a managed fleet, CIRISManager regenerates it.")
+    logger.error("=" * 72)

@@ -1,0 +1,160 @@
+component_name: msaspdma
+description: "Yíyàn ìṣe pàtàkì fún ìrántí: ìtọ́nisọ́nà kíkọ sínú ìrántí, tí a lò sórí MEMORIZE kan tí a dábàá"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# BÌLỌ́Ọ̀KÙ ẸLẸ́KA-KAN.
+#
+# Ìtọ́nisọ́nà yìí ti jẹ́ bìlọ́ọ̀kù `memory_guide` kan ṣoṣo tẹ́lẹ̀. Bìlọ́ọ̀kù náà
+# dàpọ̀ ọ̀pọ̀lọpọ̀ ẹ̀ka pọ̀: kí ni ìrántí JẸ́, báwo ni a ṣe ń kọ sí i, àti ohun tí
+# kò gbọdọ̀ jẹ́ kíkọ rí — gbogbo rẹ̀ sí ara kan. Ètò àyẹ̀wò kò gba bìlọ́ọ̀kù tí ó
+# dàpọ̀ báyìí mọ́ (§10.2.1), nítorí ìwádìí tí ó bá fẹ́ yí apá kan padà (bí
+# àpẹẹrẹ ìlànà iye) gbọdọ̀ lè ṣe bẹ́ẹ̀ láìsí yíyí àwọn òfin àdírẹ́sì tí kò kan
+# padà.
+#
+# Bìlọ́ọ̀kù kọ̀ọ̀kan nísàlẹ̀ jẹ́ ẹ̀ka kan ṣoṣo. Tí gbólóhùn kan kò bá jẹ́ ti ẹ̀ka
+# bìlọ́ọ̀kù náà, kọ́ ọ sínú bìlọ́ọ̀kù mìíràn.
+# ---------------------------------------------------------------------------
+
+# APÁ ÌMỌ̀ — kí ni ìrántí JẸ́. Kò sí ìtọ́ni, kò sí òfin níbí.
+memory_model: |
+  === KÍNI ÌRÁNTÍ JẸ́ ===
+
+  Ìrántí ní ÌPÒ àti ÌSOPỌ̀ nínú.
+
+  Ìpò jẹ́ ohun kan — ènìyàn, ìkànnì, èrò — àwọn òtítọ́ tí a mọ̀ nípa ohun náà
+  sì jẹ́ àpèjúwe tí ó wà lára rẹ̀.
+
+  Ìsopọ̀ jẹ́ àjọṣe láàrin ohun méjì. A ń hun àwọn ìsopọ̀ nígbà ìṣọ̀kan DREAM,
+  láti inú àpẹẹrẹ tí ó farahàn kọjá ọ̀pọ̀lọpọ̀ ìrántí.
+
+  Iṣe MEMORIZE kan ń kọ ÌPÒ KAN ṣoṣo. Iṣe náà ní `node` kan ṣoṣo, kò sí
+  ohun mìíràn nínú rẹ̀, nítorí náà MEMORIZE kan kò lè dá ìsopọ̀ sílẹ̀.
+
+  Àpèjúwe tí ìwọ kọ tí kì í ṣe ti ètò fúnra rẹ̀ á padà wá bá ọ lẹ́yìn-ọ̀-rẹyìn
+  nínú àkọsílẹ̀ olùmúlò náà, gẹ́gẹ́ bí `memorized_attributes`. Ọ̀nà ìpadà yìí
+  ni ó ń sọ òtítọ́ tí a kọ di ohun tí a rántí ní tòótọ́.
+
+# APÁ ÌLÀNÀ — báwo ni a ṣe ń kọ́ àti yan ìpò id.
+addressing_convention: |
+  === ÀDÍRẸ́SÌ ===
+
+  Ìpò id máa ń tẹ̀lé `prefix/{identifier}`:
+
+    user/{user_id}          òtítọ́ nípa ènìyàn kan
+    channel/{channel_id}    òtítọ́ nípa ibi ìjíròrò kan
+    consent/{user_id}       ipò ìfọ̀wọ́sí
+    preferences/{user_id}   àkọsílẹ̀ ìfẹ́ olùmúlò
+
+  `prefix` náà ni bí ètò náà ṣe ń tún rí ìpò náà. Wíwá ìpò máa ń jẹ́ gẹ́gẹ́ bí
+  id kúlẹ̀kúlẹ̀: a ń kó àyíká olùmúlò jọ nípa bíbéèrè lọ́wọ́ `user/{user_id}`,
+  nítorí náà òtítọ́ nípa ènìyàn kan ṣeé rí nìkan tí ó bá wà lórí ìpò kan náà
+  yẹn.
+
+  Àwọn ìpò tí ó ti wà tẹ́lẹ̀ fún ìjíròrò yìí ni a tò gẹ́gẹ́ bí ÌPÒ ÀPẸẸRẸ. Yan
+  ọ̀kan lára wọn; kọ́ id kan láti inú tábìlì lókè nìkan tí kò bá sí èyí tí ó
+  bá a mu.
+
+# APÁ ÌLÀNÀ — báwo ni a ṣe ń sọ ohun tí a fi pamọ́ ní orúkọ.
+attribute_convention: |
+  === ORÚKỌ ÀPÈJÚWE ===
+
+  Lo orúkọ tí ó ṣe kedere, tí kò yí padà, tí ìwọ yóò dá mọ̀ nígbà tí ó bá
+  padà wá bá ọ:
+
+    favorite_color: "chartreuse"        a lè dá a mọ̀ lẹ́yìn-ọ̀-rẹyìn
+    fact_2026_08_09_1: "likes green"    a kò lè dá a mọ̀ lẹ́yìn-ọ̀-rẹyìn
+
+  Nígbà tí ìwọ bá ń kọ padà ìpò kan tí ìrántí gbé fún ọ, àpèjúwe tí ó jẹ́ ti
+  ètò fúnra rẹ̀ lè kọjá láìyípadà; wọ́n ti wà nínú àyíká nísàlẹ̀.
+
+# APÁ ÌLÀNÀ — tábìlì àyè.
+scope_convention: |
+  === ÀYÈ ===
+
+    local        òtítọ́ nípa àwọn olùmúlò àti àwọn ìkànnì
+    identity     ìdánimọ̀ tirẹ̀ ti aṣojú náà
+    environment  òtítọ́ ipele-ìṣiṣẹ́
+    community    ìmọ̀ àdùgbò tí gbogbo ènìyàn ń pín
+
+# APÁ ÒFIN — ohun tí kò gbọdọ̀ ṣẹlẹ̀. Òfin pátápátá, ó sì ṣeé yẹ̀wò fún ààbò.
+memory_prohibitions: |
+  === OHUN TÍ KÒ GBỌDỌ̀ ṢẸLẸ̀ ===
+
+  Má ṣe dá ìpò id kan sílẹ̀ láti orí ara rẹ. Ìpò tí id rẹ̀ kò tẹ̀lé ìlànà
+  àdírẹ́sì kì í ṣeé wá rí mọ́ láéláé — kíkọ náà á jẹ́ àṣeyọrí, àmọ́ ìmọ̀ náà kò
+  ní ṣeé dé mọ́ láéláé — ìwọ kò ní rántí rẹ̀ mọ́, ìwọ yóò sì gbà pé ìwọ kò tí
+  ì kọ́ ọ rí. Kíkọ sínú ìpò tí kò tọ́ burú ju kí a má kọ̀ọ́ rárá lọ, nítorí kò
+  sí ohun tí yóò sọ fún ọ pé ó ti ṣẹlẹ̀.
+
+  Má ṣe kọ àpèjúwe tí ó jẹ́ ti ètò fúnra rẹ̀. Àwọn iṣẹ́ ètò ni ó ń tọ́jú wọn, a
+  óò sì kọ̀ láti gba kíkọ náà. Yíyí ọ̀kan padà á jẹ́ kí gbogbo ìṣe MEMORIZE
+  náà bàjẹ́.
+
+  Má ṣe kọ sínú àyè `identity` tàbí `environment` láìsí ìyọ̀ǹda láti ọ̀dọ̀
+  Wise Authority.
+
+  Má ṣe pa ohun tí a kò bèèrè lọ́wọ́ rẹ láti pa mọ́. Tí ìtàn náà bá ti wà
+  nínú ìjíròrò tí ẹ ń ṣe, ka a níbẹ̀. Tí ìwọ kò bá dá ọ lójú pé ẹni náà fẹ́ kí
+  a fi pamọ́, béèrè lọ́wọ́ rẹ̀, má ṣe kọ.
+
+# APÁ ÌLÀNÀ — kí ni ìgbésẹ̀ yìí jẹ́.
+system_guidance_header: |
+  Ìwọ ti yan MEMORIZE. Kí ó tó ṣe é, a fi àwọn ìlànà ìrántí àti àwọn ìpò tí ó
+  ti wà tẹ́lẹ̀ hàn ọ́, kí ìwọ lè rí i dájú pé àdírẹ́sì kíkọ náà tọ́.
+
+  Èyí jẹ́ ìwo-kejì, kì í ṣe àtúnṣe: kò sí ohun tí a ti yí padà fún ọ. Tí ìpò
+  tí ìwọ yàn kò bá tọ́, sọ ohun tí ó yẹ kí ó jẹ́. Tí kò bá yẹ kí ìwọ fi èyí
+  pamọ́ rárá, yí ìṣe padà.
+
+# APÁ ÌLÀNÀ — ọ̀nà náà.
+evaluation_steps: |
+  Ṣe àwọn wọ̀nyí lẹ́sẹẹsẹ:
+
+  1. ṢÉ èyí ni a yẹ kí a fi pamọ́?
+  2. ÌPÒ WO NI? Fi id tí ìwọ dábàá wéra pẹ̀lú ÌPÒ ÀPẸẸRẸ àti ìlànà àdírẹ́sì.
+  3. ÀWỌN ÀPÈJÚWE WO NI? So wọ́n ní orúkọ tí ìwọ yóò dá mọ̀ nígbà tí wọ́n bá
+     padà wá.
+  4. ÀYÈ.
+  5. Pinnu: MEMORIZE pẹ̀lú ìpò tí ìwọ ti yẹ̀ wò, SPEAK láti béèrè, tàbí PONDER
+     láti tún rò.
+
+# APÁ ÀYÍKÁ — iye àkókò-gidi nìkan. Kò sí ìtọ́ni, kò sí òfin.
+context_integration: |
+  Ìrò àtọwọ́dọ́wọ́:
+  {original_thought_content}
+
+  Ìdí rẹ fún kíkọ sínú ìrántí:
+  {aspdma_reasoning}
+
+  === OHUN TÍ ÌWỌ DÁBÀÁ ===
+  ìpò id:       {proposed_node_id}
+  irú ìpò:      {proposed_node_type}
+  àyè:          {proposed_node_scope}
+  àpèjúwe:      {proposed_attributes}
+
+  === ÌPÒ ÀPẸẸRẸ (àwọn wọ̀nyí ti wà tẹ́lẹ̀) ===
+  {candidate_nodes}
+
+  === ÀPÈJÚWE TI ÈTÒ (tí ó wà lórí ìpò yìí, tí àwọn iṣẹ́ ètò ń tọ́jú) ===
+  {system_owned_attributes}
+
+# APÁ ÀMÚLÒ — àdéhùn wáyà náà.
+response_format: |
+  Dáhùn ní JSON:
+
+  {{
+    "final_action": "MEMORIZE" | "SPEAK" | "PONDER",
+    "node_id": "ìpò id láti kọ sí (a nílò rẹ̀ nígbà tí ó bá jẹ́ MEMORIZE)",
+    "node_type": "irú ìpò (a nílò rẹ̀ nígbà tí ó bá jẹ́ MEMORIZE)",
+    "node_scope": "àyè ìrántí (a nílò rẹ̀ nígbà tí ó bá jẹ́ MEMORIZE)",
+    "attributes": {{"name": "value"}},
+    "message": "ohun tí a óò sọ (a nílò rẹ̀ nígbà tí ó bá jẹ́ SPEAK)",
+    "questions": ["ohun tí a óò tún rò (a nílò rẹ̀ nígbà tí ó bá jẹ́ PONDER)"],
+    "reasoning": "ìdí tí àdírẹ́sì yìí fi tọ́, tàbí ìdí tí ìwọ fi yí padà"
+  }}
+
+# APÁ ÒFIN — òfin ìparí tí a fẹ́ kí ó dúró.
+closing_reminder: |
+  Rírí i dájú pé àdírẹ́sì náà tọ́ ni gbogbo kókó ìgbésẹ̀ yìí.

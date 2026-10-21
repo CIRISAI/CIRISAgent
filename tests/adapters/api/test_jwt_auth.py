@@ -35,21 +35,21 @@ class TestJWTAuthentication:
         assert "Missing authentication token" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_no_auth_service_returns_dev_fallback(self):
-        """Test fallback to development mode when auth service not available."""
+    async def test_no_auth_service_raises_503(self):
+        """Test that missing auth services raises 503 (fail closed)."""
         request = Mock(spec=Request)
         request.app.state.authentication_service = None
-        request.app.state.auth_service = None  # Must also set API auth service to None
+        request.app.state.auth_service = None
 
-        result = await get_current_user(request, "test_token")
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(request, "test_token")
 
-        assert result.username == "admin"
-        assert result.email == "admin@ciris.ai"
-        assert result.role == "SYSTEM_ADMIN"
+        assert exc_info.value.status_code == 503
+        assert "Authentication service unavailable" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_missing_auth_service_returns_dev_fallback(self):
-        """Test fallback when auth service attribute doesn't exist."""
+    async def test_missing_auth_service_raises_503(self):
+        """Test that missing auth service attribute raises 503 (fail closed)."""
         request = Mock(spec=Request)
         # Mock app.state without authentication_service attribute
         request.app.state = Mock()
@@ -61,11 +61,11 @@ class TestJWTAuthentication:
         # Also ensure auth_service is None (not a Mock)
         request.app.state.auth_service = None
 
-        result = await get_current_user(request, "test_token")
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(request, "test_token")
 
-        assert result.username == "admin"
-        assert result.email == "admin@ciris.ai"
-        assert result.role == "SYSTEM_ADMIN"
+        assert exc_info.value.status_code == 503
+        assert "Authentication service unavailable" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_invalid_token_raises_401(self):

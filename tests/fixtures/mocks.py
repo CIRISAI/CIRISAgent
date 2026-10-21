@@ -160,12 +160,35 @@ class MockRuntime:
         self._shutdown_event.set = MagicMock()
         self._shutdown_reason = None
 
-        # Add adapter-related attributes
-        self.adapters = []
+        # Add adapter-related attributes.
+        #
+        # NOTE: ciris_verify is a hard runtime dependency in 2.7.1 — anything
+        # that calls `prefetch_batch_context()` / `build_system_snapshot_with_batch()`
+        # raises if the adapter isn't loaded. Bake a stand-in into every
+        # MockRuntime so the strict attestation gate clears by default.
+        # Tests that want to exercise the missing-adapter failure path
+        # should construct their own runtime mock with `adapters=[]`.
+        self.adapters = [self._build_ciris_verify_adapter_mock()]
         self._adapter_tasks = []
         self.startup_channel_id = ""
         self.adapter_configs = {}
         self.modules_to_load = ["mock_llm"]
+
+        # Surface the structured collaborators that thought-context builders
+        # walk: `adapter_manager._adapters` (a dict keyed by adapter id) and
+        # `service_registry._services` (a dict keyed by ServiceType). These
+        # are mutable plain dicts so tests can seed them with discord/api/
+        # tool-service mocks without having to rebuild the runtime — see
+        # tests/test_system_snapshot.py for the canonical usage pattern.
+        # Both are MagicMock instances so the per-attribute assignments
+        # used by tests (e.g. `service_registry.get_services_by_type =
+        # Mock(...)`) just work.
+        self.adapter_manager = MagicMock()
+        self.adapter_manager._adapters = {}
+        self.service_registry = MagicMock()
+        self.service_registry._services = {}
+        self.service_registry.get_services_by_type = MagicMock(return_value=[])
+        self.bus_manager = MagicMock()
 
         # Add pipeline controller mock with H3ERE step point data
         self.pipeline_controller = self._create_pipeline_controller()
@@ -194,6 +217,25 @@ class MockRuntime:
         # Add time service mock if requested
         if include_time_service:
             self._setup_time_service_mock()
+
+    @staticmethod
+    def _build_ciris_verify_adapter_mock():
+        """Build a stand-in for the ciris_verify adapter.
+
+        `prefetch_batch_context()` walks `runtime.adapters` looking for an
+        adapter whose `adapter_type` (or class name) contains "ciris_verify";
+        if none found it raises. This mock satisfies that loop and also
+        exposes `get_mandatory_disclosure()` returning a simple disclosure
+        object so the disclosure-text branch of the build runs cleanly.
+        """
+        adapter = MagicMock()
+        adapter.adapter_type = "ciris_verify"
+        disclosure = MagicMock()
+        disclosure.text = "TEST: ciris_verify adapter mocked via MockRuntime"
+        disclosure.severity = MagicMock()
+        disclosure.severity.value = "info"
+        adapter.get_mandatory_disclosure = AsyncMock(return_value=disclosure)
+        return adapter
 
     def _setup_logging_mocks(self):
         """Set up logging-related mocks for efficient testing."""
@@ -291,10 +333,36 @@ class MockSecretsService:
 
 
 class MockServiceRegistry:
-    """Mock service registry."""
+    """Mock service registry that mirrors the production surface.
+
+    Production `ciris_engine.logic.registries.base.ServiceRegistry` exposes
+    typed lookups (`get_services_by_type`) — there is no
+    `get_authentication()` shortcut. This mock follows the same shape so a
+    test passing it to `prefetch_batch_context()` exercises the same code
+    path production runs; if a future change to the production lookup
+    silently regresses the test surface, every test that relies on this
+    mock fails together rather than passing while production crashes.
+
+    The attestation-aware auth service is registered under
+    `ServiceType.WISE_AUTHORITY` (matching the real
+    `AuthenticationService.get_service_type()` return value) so the strict
+    attestation gate added in 2.7.1 clears by default. Tests that want to
+    exercise the failure path can mutate the returned auth service's
+    `await_attestation_ready` / `get_cached_attestation` mocks directly.
+    """
 
     def __init__(self):
         self.services = {}
+        self._auth_service = self._build_attestation_auth_service()
+        # Production-like typed lookup. Default returns empty list; the
+        # WISE_AUTHORITY entry returns the attestation-aware auth service.
+        from ciris_engine.schemas.runtime.enums import ServiceType
+
+        self._services_by_type: Dict[Any, list] = {ServiceType.WISE_AUTHORITY: [self._auth_service]}
+        # Surface system-snapshot helpers as MagicMocks for direct override.
+        self.get_provider_info = MagicMock(return_value={"handlers": {}, "global_services": {}})
+        self.get_circuit_breaker_states = MagicMock(return_value={})
+        self._services: Dict[Any, Any] = {}
 
     def get_all(self) -> dict:
         """Return all registered services."""
@@ -303,6 +371,41 @@ class MockServiceRegistry:
     def register(self, service_id: str, service: Any):
         """Register a service."""
         self.services[service_id] = service
+
+    def get_services_by_type(self, service_type) -> list:
+        """Mirror of `ServiceRegistry.get_services_by_type` — the only
+        path the production registry exposes for finding services."""
+        return list(self._services_by_type.get(service_type, []))
+
+    @staticmethod
+    def _build_attestation_auth_service():
+        """Build the in-memory attestation-aware auth service.
+
+        Implements the surface `prefetch_batch_context()` walks:
+        `await_attestation_ready()` resolves immediately and
+        `get_cached_attestation()` returns a fully-passing
+        AttestationResult. This is what makes the strict gate added
+        in 2.7.1 a no-op for the typical "happy path" unit test.
+        """
+        from ciris_engine.schemas.services.attestation import AttestationResult
+
+        result = AttestationResult(
+            loaded=True,
+            key_status="ephemeral",
+            attestation_status="verified",
+            binary_ok=True,
+            env_ok=True,
+            file_integrity_ok=True,
+            registry_ok=True,
+            audit_ok=True,
+            max_level=4,
+            cached_at=datetime.now(timezone.utc),
+            cache_ttl_seconds=3600,
+        )
+        auth = MagicMock()
+        auth.await_attestation_ready = AsyncMock(return_value=None)
+        auth.get_cached_attestation = MagicMock(return_value=result)
+        return auth
 
 
 class MockPersistence:

@@ -9,15 +9,18 @@ from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Constants for field descriptions
+_DESC_TOTAL_TOKENS = "Total tokens used"
+
 
 class TokenUsageStats(BaseModel):
     """Token usage statistics from LLM API."""
 
     prompt_tokens: int = Field(0, description="Number of tokens in the prompt")
     completion_tokens: int = Field(0, description="Number of tokens in the completion")
-    total_tokens: int = Field(0, description="Total tokens used")
+    total_tokens: int = Field(0, description=_DESC_TOTAL_TOKENS)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class CircuitBreakerStats(BaseModel):
@@ -44,7 +47,7 @@ class LLMHealthResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if unhealthy")
     last_check: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(protected_namespaces=(), defer_build=True)
 
 
 class LLMResponse(BaseModel):
@@ -55,7 +58,7 @@ class LLMResponse(BaseModel):
     usage: TokenUsageStats = Field(default_factory=TokenUsageStats, description="Token usage stats")
     finish_reason: Optional[str] = Field(None, description="Why generation stopped")
 
-    model_config = ConfigDict(protected_namespaces=())
+    model_config = ConfigDict(protected_namespaces=(), defer_build=True)
 
 
 class ExtractedJSONData(BaseModel):
@@ -67,7 +70,7 @@ class ExtractedJSONData(BaseModel):
     result: Optional[str] = Field(None, description="Result value")
     status: Optional[str] = Field(None, description="Status indicator")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class JSONExtractionResult(BaseModel):
@@ -84,7 +87,7 @@ class LLMCallMetadata(BaseModel):
 
     prompt_tokens: int = Field(0, description="Number of tokens in prompt")
     completion_tokens: int = Field(0, description="Number of tokens in completion")
-    total_tokens: int = Field(0, description="Total tokens used")
+    total_tokens: int = Field(0, description=_DESC_TOTAL_TOKENS)
     model: str = Field(..., description="Model used")
     temperature: float = Field(..., description="Temperature setting")
     max_tokens: int = Field(..., description="Max tokens setting")
@@ -98,7 +101,7 @@ class TextContentBlock(BaseModel):
     type: Literal["text"] = "text"
     text: str = Field(..., description="Text content")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ImageURLDetail(BaseModel):
@@ -109,7 +112,7 @@ class ImageURLDetail(BaseModel):
         default="auto", description="Image detail level for vision processing"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ImageContentBlock(BaseModel):
@@ -118,7 +121,7 @@ class ImageContentBlock(BaseModel):
     type: Literal["image_url"] = "image_url"
     image_url: ImageURLDetail = Field(..., description="Image URL details")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 # Union type for content blocks in multimodal messages
@@ -173,7 +176,7 @@ class CachedResponseData(BaseModel):
     model: str = Field(..., description="Model used")
     finish_reason: Optional[str] = Field(None, description="Finish reason")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", defer_build=True)
 
 
 class CachedLLMResponse(BaseModel):
@@ -185,3 +188,97 @@ class CachedLLMResponse(BaseModel):
     cached_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: LLMCallMetadata = Field(..., description="Call metadata")
     expires_at: Optional[datetime] = Field(None, description="When cache entry expires")
+
+
+class RetryState(BaseModel):
+    """State tracking for LLM request retries."""
+
+    count: int = Field(0, description="Current retry count")
+    previous_error: Optional[str] = Field(None, description="Error message from previous attempt")
+    original_request_id: Optional[str] = Field(None, description="Request ID from first attempt")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class LLMRequestMetadata(BaseModel):
+    """Metadata for LLM proxy requests (used with CIRIS proxy)."""
+
+    interaction_id: str = Field(..., description="Unique interaction ID for billing/tracing")
+    retry_count: Optional[int] = Field(None, description="Current retry count if retrying")
+    previous_error: Optional[str] = Field(None, description="Error from previous attempt")
+    original_request_id: Optional[str] = Field(None, description="Original request ID for retry correlation")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class EndpointStats(BaseModel):
+    """Statistics for an LLM endpoint."""
+
+    total_calls: int = Field(0, description="Total number of calls made")
+    successful_calls: int = Field(0, description="Number of successful calls")
+    failed_calls: int = Field(0, description="Number of failed calls")
+    total_tokens: int = Field(0, description=_DESC_TOTAL_TOKENS)
+    total_cost_usd: float = Field(0.0, description="Total cost in USD")
+    avg_latency_ms: float = Field(0.0, description="Average latency in milliseconds")
+    last_call_at: Optional[datetime] = Field(None, description="Timestamp of last call")
+    circuit_breaker_state: Optional[str] = Field(None, description="Current circuit breaker state")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class LLMErrorContext(BaseModel):
+    """Context information for LLM service error handling and logging."""
+
+    model: str = Field(..., description="LLM model name")
+    provider: str = Field(..., description="Provider name (openai, anthropic, etc.)")
+    response_model: str = Field(..., description="Expected response model class name")
+    circuit_breaker_state: str = Field(..., description="Circuit breaker state when error occurred")
+    consecutive_failures: int = Field(0, description="Number of consecutive failures")
+    thought_id: Optional[str] = Field(None, description="Thought ID if available")
+    task_id: Optional[str] = Field(None, description="Task ID if available")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class OpenRouterProviderConfig(BaseModel):
+    """Configuration for OpenRouter provider routing preferences.
+
+    ``data_collection`` is the zero-data-retention control, and it is the field
+    whose ABSENCE caused the incident this was added for. OpenRouter routes a
+    request onward to third-party providers, and whether those providers may
+    retain or train on the payload is decided per request by this preference.
+
+    Before this field existed the agent sent no data policy at all, so the only
+    place retention could be constrained was the user's OpenRouter ACCOUNT
+    settings — out of band, invisible to the client, and unverifiable by it.
+    When those settings filtered every endpoint for a model, OpenRouter answered
+    404 "No endpoints available matching your guardrail restrictions and data
+    policy", which the product then reported as a network problem.
+
+    A retention guarantee the client never transmits is not a guarantee. It is
+    an assumption about someone else's configuration.
+    """
+
+    order: List[str] = Field(default_factory=list, description="Preferred provider order")
+    ignore: List[str] = Field(default_factory=list, description="Providers to skip")
+    data_collection: Optional[Literal["deny", "allow"]] = Field(
+        default=None,
+        description=(
+            "'deny' routes only to providers that do not retain or train on request data. "
+            "None omits the preference entirely, deferring to the account's own policy."
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class MultiEndpointStatus(BaseModel):
+    """Status of multi-endpoint configuration for failover."""
+
+    endpoints: List[str] = Field(default_factory=list, description="List of endpoint URLs")
+    current_index: int = Field(0, description="Index of currently active endpoint")
+    current_endpoint: Optional[str] = Field(None, description="Currently active endpoint URL")
+    failure_counts: Dict[str, int] = Field(default_factory=dict, description="Failure count per endpoint")
+    total_endpoints: int = Field(0, description="Total number of configured endpoints")
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)

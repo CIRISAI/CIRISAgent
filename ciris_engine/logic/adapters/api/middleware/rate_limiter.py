@@ -141,6 +141,8 @@ class RateLimitMiddleware:
             "/redoc",
             "/emergency/shutdown",  # Emergency endpoints bypass rate limiting
             "/v1/system/health",  # Health checks should not be rate limited
+            "/v1/system/adapters",  # Adapter listing for mobile app
+            "/v1/setup/adapter-types",  # Adapter type listing for add adapter dialog
         }
         # Static file extensions that should be exempt from rate limiting
         self.exempt_extensions = {
@@ -272,6 +274,13 @@ class RateLimitMiddleware:
 
         if not allowed:
             retry_after = self.limiter.get_retry_after(client_id)
+            logger.warning(
+                "Rate limit exceeded for %s on %s %s (retry_after=%ds)",
+                client_id,
+                request.method,
+                request.url.path,
+                retry_after,
+            )
             return JSONResponse(
                 status_code=429,
                 content={

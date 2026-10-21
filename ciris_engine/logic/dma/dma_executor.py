@@ -1,9 +1,8 @@
 import asyncio
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Union
 
 # Python 3.10 compatibility: asyncio.timeout was added in Python 3.11
 if sys.version_info >= (3, 11):
@@ -39,6 +38,14 @@ else:
 
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.config.llm_budget import (
+    MIN_USEFUL_ATTEMPT_S,
+    Deadline,
+    active_budget,
+    attempt_timeout,
+    llm_call_deadline,
+)
+from ciris_engine.logic.conscience.transport import categorize_conscience_error, is_transient_transport_failure
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
@@ -63,9 +70,11 @@ from ciris_engine.schemas.types import JSONDict
 
 from .action_selection_pdma import ActionSelectionPDMAEvaluator
 from .csdma import CSDMAEvaluator
+from .dsaspdma import DSASPDMAEvaluator
 from .dsdma_base import BaseDSDMA
 from .exceptions import DMAFailure
 from .idma import IDMAEvaluator
+from .msaspdma import MSASPDMAEvaluator
 from .pdma import EthicalPDMAEvaluator
 from .tsaspdma import TSASPDMAEvaluator
 
@@ -75,45 +84,129 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DMA_RETRY_LIMIT = 3
-# DMA timeout must be long enough to allow LLM failover between providers
-# With 20s LLM timeout × 2 retries × 2 providers = 80s, so 90s gives buffer
-DMA_TIMEOUT_SECONDS = float(os.environ.get("CIRIS_DMA_TIMEOUT", "90.0"))
+
+#: The shortest DMA attempt worth starting against a thought deadline. A DMA
+#: is one structured LLM call (observed 2-14s on hosted providers), so a try
+#: with less than ~10s left is mostly a request we will cancel. When the
+#: per-try itself is shorter (tests, an operator override) the per-try is the
+#: floor instead.
+
+
+#: Answered-but-unusable model output. A schema-invalid reply is stochastic
+#: noise, not a property of the request, so a re-draw (same deadline, same
+#: attempt cap) often succeeds. Not #895's grammar work: just another draw.
+_SCHEMA_REDRAW_CATEGORIES = frozenset({"VALIDATION_ERROR"})
+
+
+def _is_schema_redraw(exc: BaseException, category: str) -> bool:
+    """Is this a schema-validation failure of the model's reply (worth a re-draw)?
+
+    The categorizer checks model-not-available and context overflow first, so
+    a 404 or an over-long prompt never lands here. An exception it could not
+    name is still a re-draw when its type says the reply failed validation.
+    """
+    if category in _SCHEMA_REDRAW_CATEGORIES:
+        return True
+    if category != "UNKNOWN":
+        return False
+    from pydantic import ValidationError
+
+    return isinstance(exc, ValidationError) or type(exc).__name__ == "InstructorRetryException"
 
 
 async def run_dma_with_retries(
     run_fn: Callable[..., Awaitable[Any]],
     *args: Any,
-    retry_limit: int = DMA_RETRY_LIMIT,
-    timeout_seconds: float = DMA_TIMEOUT_SECONDS,
+    retry_limit: Optional[int] = None,
+    timeout_seconds: Optional[float] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    deadline: Optional[Deadline] = None,
     **kwargs: Any,
 ) -> Any:
-    """Run a DMA function with retry logic."""
+    """Run a DMA function with retry logic.
+
+    `retry_limit` (attempts) and `timeout_seconds` (per try) default to the
+    active LLM budget profile, read at call time (CIRISAgent#1186;
+    CIRIS_DMA_TIMEOUT / CIRIS_DMA_ATTEMPTS still override through it). With a
+    thought `deadline`, each try is clamped to what is left of it and no try
+    starts once the remainder is below a useful attempt.
+
+    Attempts follow the deadline: with one, a thought keeps trying while the
+    deadline still affords a useful attempt, up to the profile's
+    `dma_attempt_cap` (never fewer than `retry_limit`). Without one, exactly
+    `retry_limit` attempts, as before.
+
+    ONE retry policy for every DMA: a timeout, connection error or 5xx is an
+    independent draw and gets another attempt, and so does schema-invalid
+    model output (stochastic noise: a re-draw often parses). Anything else
+    (auth, model not available, context overflow, an unfunded account, rate
+    limit, an open breaker, an unrecognised error) fails fast -- a fresh
+    request would fail the same way. Either way an exhausted DMA raises
+    DMAFailure: nothing here ever fails open.
+    """
+    budget = active_budget()
+    if retry_limit is None:
+        retry_limit = budget.dma_attempts
+    if timeout_seconds is None:
+        timeout_seconds = budget.dma_per_try_s
+    max_attempts = max(retry_limit, budget.dma_attempt_cap) if deadline is not None else retry_limit
     attempt = 0
     last_error: Optional[Exception] = None
-    while attempt < retry_limit:
+    while attempt < max_attempts:
+        this_try_s = attempt_timeout(timeout_seconds, deadline)
+        if this_try_s is None:
+            remaining = deadline.remaining() if deadline is not None else 0.0
+            if attempt >= retry_limit and last_error is not None:
+                # A deadline-bought extra attempt that no longer fits: the
+                # failure to report is the real one we already have.
+                break
+            logger.error(
+                "DMA %s: thought deadline has %.1fs left, too little for attempt %s/%s -- giving up",
+                run_fn.__name__,
+                remaining,
+                attempt + 1,
+                max_attempts,
+            )
+            last_error = TimeoutError(
+                f"thought deadline exhausted ({remaining:.1f}s left) before attempt {attempt + 1}/{max_attempts}"
+                + (f"; last error: {last_error}" if last_error is not None else "")
+            )
+            break
         try:
-            async with _async_timeout(timeout_seconds):
+            async with _async_timeout(this_try_s):
                 # Pass time_service if the function expects it
                 if time_service and "time_service" not in kwargs:
                     kwargs["time_service"] = time_service
-                return await run_fn(*args, **kwargs)
+                # The bus reads this to decide whether waiting out an open
+                # breaker's recovery fits inside this attempt.
+                with llm_call_deadline(this_try_s):
+                    return await run_fn(*args, **kwargs)
         except TimeoutError as e:
             last_error = e
             attempt += 1
-            logger.error("DMA %s timed out after %.1f seconds on attempt %s", run_fn.__name__, timeout_seconds, attempt)
+            logger.error("DMA %s timed out after %.1f seconds on attempt %s", run_fn.__name__, this_try_s, attempt)
         except Exception as e:  # noqa: BLE001
             last_error = e
             attempt += 1
+            category = categorize_conscience_error(e)
+            retryable = is_transient_transport_failure(e, category) or _is_schema_redraw(e, category)
+            # Ensure we never log empty error messages
+            error_msg = str(e).replace("\n", " ").strip()
+            if not error_msg:
+                error_msg = f"<{type(e).__name__} with no message>"
+            if not retryable:
+                logger.warning(
+                    "DMA %s attempt %s failed (%s, not retried): %s",
+                    run_fn.__name__,
+                    attempt,
+                    category,
+                    error_msg[:200],
+                )
+                break
             # Only log full details on first failure
             if attempt == 1:
-                # Ensure we never log empty error messages
-                error_msg = str(e).replace("\n", " ").strip()
-                if not error_msg:
-                    error_msg = f"<{type(e).__name__} with no message>"
-                logger.warning("DMA %s attempt %s failed: %s", run_fn.__name__, attempt, error_msg[:200])
-            elif attempt == retry_limit:
+                logger.warning("DMA %s attempt %s failed (%s): %s", run_fn.__name__, attempt, category, error_msg[:200])
+            elif attempt == max_attempts:
                 logger.warning(
                     "DMA %s final attempt %s failed (same error repeated %s times)",
                     run_fn.__name__,
@@ -122,7 +215,7 @@ async def run_dma_with_retries(
                 )
 
             # Add small delay between retries to reduce log spam
-            if attempt < retry_limit:
+            if attempt < max_attempts:
                 await asyncio.sleep(0.1)  # 100ms delay
 
     thought_arg = next(
@@ -131,13 +224,26 @@ async def run_dma_with_retries(
     )
 
     if thought_arg is not None and last_error is not None and time_service is not None:
-        escalate_dma_failure(thought_arg, run_fn.__name__, last_error, retry_limit, time_service)
+        escalate_dma_failure(thought_arg, run_fn.__name__, last_error, attempt, time_service)
 
     # Ensure DMAFailure has meaningful error context
     last_error_msg = str(last_error).strip() if last_error else "unknown error"
     if not last_error_msg:
         last_error_msg = f"<{type(last_error).__name__} with no message>"
-    raise DMAFailure(f"{run_fn.__name__} failed after {retry_limit} attempts: {last_error_msg}")
+
+    # Emit error to UI (fire and forget - don't block on emission)
+    from ciris_engine.logic.utils import error_emitter
+
+    task = asyncio.create_task(
+        error_emitter.emit_dma_failure(
+            dma_name=run_fn.__name__,
+            error_summary=last_error_msg[:80],
+        )
+    )
+    # Register task to prevent garbage collection warnings
+    task.add_done_callback(lambda t: None)
+
+    raise DMAFailure(f"{run_fn.__name__} failed after {attempt} attempts: {last_error_msg}")
 
 
 async def run_pdma(
@@ -227,7 +333,7 @@ async def run_pdma(
                 correlation_id=correlation.correlation_id,
                 response_data={
                     "success": "true",
-                    "result_summary": f"Ethical evaluation completed: stakeholders={result.stakeholders}, conflicts={result.conflicts}",
+                    "result_summary": f"Ethical evaluation completed: action={result.action.value}, weight_alignment={result.weight_alignment_score:.2f}, ethical_alignment={result.ethical_alignment_score:.2f}",
                     "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
                     "response_timestamp": end_time.isoformat(),
                 },
@@ -707,20 +813,225 @@ async def run_action_selection_pdma(
         raise
 
 
+async def run_dsaspdma(
+    evaluator: DSASPDMAEvaluator,
+    aspdma_result: ActionSelectionDMAResult,
+    original_thought: ProcessingQueueItem,
+    context: Optional[Any] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run the Deferral-Specific Action Selection PDMA (DSASPDMA)."""
+
+    if not time_service:
+        raise RuntimeError("TimeService is required for DMA execution")
+    start_time = time_service.now()
+
+    trace_id = f"task_{original_thought.source_task_id or 'unknown'}_{original_thought.thought_id}"
+    span_id = f"dsaspdma_{original_thought.thought_id}"
+    parent_span_id = f"action_selection_pdma_{original_thought.thought_id}"
+
+    trace_context = TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name="run_dsaspdma",
+        span_kind="internal",
+        baggage={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "dma_type": "dsaspdma",
+        },
+    )
+
+    correlation = ServiceCorrelation(
+        correlation_id=f"trace_{span_id}_{start_time.timestamp()}",
+        correlation_type=CorrelationType.TRACE_SPAN,
+        service_type="dma",
+        handler_name="DSASPDMAEvaluator",
+        action_type="evaluate_deferral_action",
+        created_at=start_time,
+        updated_at=start_time,
+        timestamp=start_time,
+        trace_context=trace_context,
+        tags={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "component_type": "dma",
+            "dma_type": "dsaspdma",
+            "trace_depth": "4",
+        },
+        request_data=None,
+        response_data=None,
+        status=ServiceCorrelationStatus.PENDING,
+        metric_data=None,
+        log_data=None,
+        retention_policy="raw",
+        ttl_seconds=None,
+        parent_correlation_id=None,
+    )
+
+    persistence.add_correlation(correlation, time_service)
+
+    try:
+        result = await evaluator.evaluate_deferral_action(
+            aspdma_result=aspdma_result,
+            original_thought=original_thought,
+            context=context,
+        )
+
+        end_time = time_service.now()
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "true",
+                "result_summary": f"DSASPDMA completed: action={result.selected_action}",
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.COMPLETED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
+        return result
+
+    except Exception as e:
+        end_time = time_service.now()
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "false",
+                "error_message": str(e),
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.FAILED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
+        raise
+
+
+async def run_msaspdma(
+    evaluator: MSASPDMAEvaluator,
+    aspdma_result: ActionSelectionDMAResult,
+    original_thought: ProcessingQueueItem,
+    context: Optional[Any] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run the Memorize-Specific Action Selection PDMA (MSASPDMA)."""
+
+    if not time_service:
+        raise RuntimeError("TimeService is required for DMA execution")
+    start_time = time_service.now()
+
+    trace_id = f"task_{original_thought.source_task_id or 'unknown'}_{original_thought.thought_id}"
+    span_id = f"msaspdma_{original_thought.thought_id}"
+    parent_span_id = f"action_selection_pdma_{original_thought.thought_id}"
+
+    trace_context = TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name="run_msaspdma",
+        span_kind="internal",
+        baggage={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "dma_type": "msaspdma",
+        },
+    )
+
+    correlation = ServiceCorrelation(
+        correlation_id=f"trace_{span_id}_{start_time.timestamp()}",
+        correlation_type=CorrelationType.TRACE_SPAN,
+        service_type="dma",
+        handler_name="MSASPDMAEvaluator",
+        action_type="evaluate_memorize_action",
+        created_at=start_time,
+        updated_at=start_time,
+        timestamp=start_time,
+        trace_context=trace_context,
+        tags={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "component_type": "dma",
+            "dma_type": "msaspdma",
+            "trace_depth": "4",
+        },
+        request_data=None,
+        response_data=None,
+        status=ServiceCorrelationStatus.PENDING,
+        metric_data=None,
+        log_data=None,
+        retention_policy="raw",
+        ttl_seconds=None,
+        parent_correlation_id=None,
+    )
+
+    persistence.add_correlation(correlation, time_service)
+
+    try:
+        result = await evaluator.evaluate_memorize_action(
+            aspdma_result=aspdma_result,
+            original_thought=original_thought,
+            context=context,
+        )
+
+        end_time = time_service.now()
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "true",
+                "result_summary": f"MSASPDMA completed: action={result.selected_action}",
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.COMPLETED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
+        return result
+
+    except Exception as e:
+        end_time = time_service.now()
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "false",
+                "error_message": str(e),
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.FAILED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
+        raise
+
+
 async def run_tsaspdma(
     evaluator: TSASPDMAEvaluator,
     tool_name: str,
     tool_info: "ToolInfo",
-    aspdma_rationale: str,
+    aspdma_reasoning: str,
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    context_enrichment: Optional[Dict[str, Any]] = None,
 ) -> ActionSelectionDMAResult:
     """Run the Tool-Specific Action Selection PDMA (TSASPDMA).
 
     TSASPDMA is invoked AFTER ASPDMA selects a TOOL action.
     It reasons about and infers appropriate parameters from context
     using the tool's schema and documentation.
+
+    Args:
+        context_enrichment: Pre-run tool results (e.g., ha_list_entities)
+                           containing available resources for parameter selection.
 
     Can return:
     - TOOL: Proceed with execution (parameters inferred from context)
@@ -786,9 +1097,10 @@ async def run_tsaspdma(
         result = await evaluator.evaluate_tool_action(
             tool_name=tool_name,
             tool_info=tool_info,
-            aspdma_rationale=aspdma_rationale,
+            aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
             context=context,
+            context_enrichment=context_enrichment,
         )
 
         # Update correlation with success
@@ -827,4 +1139,128 @@ async def run_tsaspdma(
                 tags=None,
             )
             persistence.update_correlation(update_req, time_service)
+        raise
+
+
+async def run_tsaspdma_correction(
+    evaluator: TSASPDMAEvaluator,
+    requested_tool_name: str,
+    available_tools: List["ToolInfo"],
+    aspdma_reasoning: str,
+    original_thought: ProcessingQueueItem,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run TSASPDMA in correction mode when ASPDMA selected a non-existent tool.
+
+    CORRECTION MODE: ASPDMA hallucinated a tool name that doesn't exist.
+    TSASPDMA reviews available tools and either:
+    - Corrects to the right tool (returns TOOL with corrected tool_name)
+    - Asks for clarification (returns SPEAK)
+    - Reconsiders approach (returns PONDER)
+    """
+    if not time_service:
+        raise RuntimeError("TimeService is required for DMA execution")
+    start_time = time_service.now()
+
+    # Create trace for TSASPDMA correction execution
+    trace_id = f"task_{original_thought.source_task_id or 'unknown'}_{original_thought.thought_id}"
+    span_id = f"tsaspdma_correction_{original_thought.thought_id}_{requested_tool_name}"
+    parent_span_id = f"action_selection_pdma_{original_thought.thought_id}"
+
+    trace_context = TraceContext(
+        trace_id=trace_id,
+        span_id=span_id,
+        parent_span_id=parent_span_id,
+        span_name="run_tsaspdma_correction",
+        span_kind="internal",
+        baggage={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "dma_type": "tsaspdma_correction",
+            "requested_tool": requested_tool_name,
+            "available_tools_count": str(len(available_tools)),
+        },
+    )
+
+    correlation = ServiceCorrelation(
+        correlation_id=f"trace_{span_id}_{start_time.timestamp()}",
+        correlation_type=CorrelationType.TRACE_SPAN,
+        service_type="dma",
+        handler_name="TSASPDMAEvaluator",
+        action_type="evaluate_tool_correction",
+        created_at=start_time,
+        updated_at=start_time,
+        timestamp=start_time,
+        trace_context=trace_context,
+        tags={
+            "thought_id": original_thought.thought_id,
+            "task_id": original_thought.source_task_id or "",
+            "component_type": "dma",
+            "dma_type": "tsaspdma_correction",
+            "requested_tool": requested_tool_name,
+            "trace_depth": "4",
+        },
+        request_data=None,
+        response_data=None,
+        status=ServiceCorrelationStatus.PENDING,
+        metric_data=None,
+        log_data=None,
+        retention_policy="raw",
+        ttl_seconds=None,
+        parent_correlation_id=None,
+    )
+
+    # Add correlation
+    persistence.add_correlation(correlation, time_service)
+
+    try:
+        result = await evaluator.evaluate_tool_correction(
+            requested_tool_name=requested_tool_name,
+            available_tools=available_tools,
+            aspdma_reasoning=aspdma_reasoning,
+            original_thought=original_thought,
+            context=None,
+        )
+
+        # Update correlation with success
+        end_time = time_service.now()
+        corrected_tool = None
+        if result.selected_action == HandlerActionType.TOOL:
+            from ciris_engine.schemas.actions.parameters import ToolParams
+
+            if isinstance(result.action_parameters, ToolParams):
+                corrected_tool = result.action_parameters.name
+
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "true",
+                "result_summary": f"TSASPDMA correction: action={result.selected_action}, corrected_to={corrected_tool}",
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.COMPLETED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
+
+        return result
+
+    except Exception as e:
+        # Update correlation with failure
+        end_time = time_service.now()
+        update_req = CorrelationUpdateRequest(
+            correlation_id=correlation.correlation_id,
+            response_data={
+                "success": "false",
+                "error_message": str(e),
+                "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
+                "response_timestamp": end_time.isoformat(),
+            },
+            status=ServiceCorrelationStatus.FAILED,
+            metric_value=None,
+            tags=None,
+        )
+        persistence.update_correlation(update_req, time_service)
         raise

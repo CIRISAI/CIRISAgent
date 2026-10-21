@@ -221,22 +221,40 @@ class TestCreateLLMTokenHandler:
         return runtime
 
     @pytest.mark.asyncio
-    async def test_handler_calls_update_llm_services(self, runtime):
-        """Handler calls update_llm_services_token with new token."""
+    async def test_handler_pushes_the_refreshed_PROXY_token(self, runtime):
+        """The token this handler distributes is the OAuth ID token.
+
+        It used to read OPENAI_API_KEY, and this test pinned that. But the
+        handler only ever touches CIRIS-proxy services — everything else
+        returns early inside `update_service_token_if_ciris_proxy` — and those
+        authenticate with the ID token, not with a provider API key. Reading
+        OPENAI_API_KEY meant the hosted-proxy case (where it is empty) bailed
+        out and refreshed nothing, while a BYOK leftover in that variable
+        would be pushed over a perfectly good proxy token.
+        """
         handler = runtime._create_llm_token_handler()
 
-        with patch.dict(os.environ, {"OPENAI_API_KEY": "new-api-key"}):
+        with patch.dict(os.environ, {"CIRIS_BILLING_GOOGLE_ID_TOKEN": "fresh-id-token"}, clear=True):
             with patch("ciris_engine.logic.runtime.billing_helpers.update_llm_services_token") as mock_update:
                 await handler("token_refreshed", "llm")
-                mock_update.assert_called_once_with(runtime, "new-api-key")
+                mock_update.assert_called_once_with(runtime, "fresh-id-token")
+
+    @pytest.mark.asyncio
+    async def test_handler_ignores_an_unrelated_OPENAI_API_KEY(self, runtime):
+        """A BYOK key left in the environment is not a proxy credential."""
+        handler = runtime._create_llm_token_handler()
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-someone-elses-key"}, clear=True):
+            with patch("ciris_engine.logic.runtime.billing_helpers.update_llm_services_token") as mock_update:
+                await handler("token_refreshed", "llm")
+                mock_update.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_handler_skips_when_no_token(self, runtime):
-        """Handler does nothing when no OPENAI_API_KEY."""
+        """Handler does nothing when no proxy token is present."""
         handler = runtime._create_llm_token_handler()
 
         with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("OPENAI_API_KEY", None)
             await handler("token_refreshed", "llm")
 
         runtime._update_llm_services_token.assert_not_called()

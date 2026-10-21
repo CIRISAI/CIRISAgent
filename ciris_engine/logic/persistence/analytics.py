@@ -11,13 +11,32 @@ from ciris_engine.schemas.runtime.models import Task, Thought
 
 
 def get_pending_thoughts_for_active_tasks(occurrence_id: str = "default", limit: Optional[int] = None) -> List[Thought]:
-    """Return all thoughts pending or processing for ACTIVE tasks."""
+    """Return all thoughts pending or processing for ACTIVE tasks.
+
+    The PENDING and PROCESSING sets are fetched in two separate queries.
+    A thought whose status flips PENDING→PROCESSING in the window
+    between those two queries lands in BOTH result sets — so the union
+    must be deduplicated by thought_id. Without the dedup the processor's
+    `populate_queue` appends the same thought twice and it runs through
+    ASPDMA twice (duplicate aspdma_result, no clean action_result).
+
+    The race window is sub-millisecond on SQLite (in-process) but wide
+    enough on the Postgres backend (per-query network round-trip) to hit
+    reliably under the QA streaming load — CIRISAgent#763 follow-up.
+    """
     active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, occurrence_id)
     active_task_ids = {t.task_id for t in active_tasks}
     pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING, occurrence_id)
     processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING, occurrence_id)
-    all_thoughts = pending_thoughts + processing_thoughts
-    filtered = [th for th in all_thoughts if th.source_task_id in active_task_ids]
+
+    seen_ids: set[str] = set()
+    filtered: List[Thought] = []
+    for th in pending_thoughts + processing_thoughts:
+        if th.thought_id in seen_ids:
+            continue
+        seen_ids.add(th.thought_id)
+        if th.source_task_id in active_task_ids:
+            filtered.append(th)
     if limit is not None:
         return filtered[:limit]
     return filtered

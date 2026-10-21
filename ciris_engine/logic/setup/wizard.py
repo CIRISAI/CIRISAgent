@@ -55,7 +55,7 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
         print()
         api_key = input("Enter your OpenAI API key (or press Enter to skip): ").strip()
         if not api_key:
-            print("⚠️  No API key provided. You'll need to add it to .env later.")
+            print("[WARN] No API key provided. You'll need to add it to .env later.")
             api_key = "your_openai_api_key_here"
         return ("openai", api_key, "", "")
 
@@ -95,21 +95,49 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
 
         base_url = input("Enter API base URL: ").strip()
         if not base_url:
-            print("❌ Base URL required for custom providers")
+            print("[FAIL] Base URL required for custom providers")
             sys.exit(1)
 
         model = input("Enter model name: ").strip()
         if not model:
-            print("❌ Model name required")
+            print("[FAIL] Model name required")
             sys.exit(1)
 
         api_key = input("Enter API key: ").strip()
         if not api_key:
-            print("❌ API key required for commercial providers")
+            print("[FAIL] API key required for commercial providers")
             sys.exit(1)
 
         return ("other", api_key, base_url, model)
 
+
+
+from ciris_engine.logic.utils.env_file import env_path_value
+
+
+def _env_quoted(value: str) -> str:
+    """Escape a value for a DOUBLE-QUOTED `.env` line.
+
+    python-dotenv applies POSIX escape processing inside double quotes, so a
+    Windows path is silently rewritten on read. This is not theoretical — it
+    took down a real install:
+
+        CIRIS_HOME: C:\\Users\\franc\\ciris          <- written correctly
+        OSError: [WinError 123] … 'C:\\Users\\x0cranc\\ciris\\data'
+
+    `\\f` + `ranc` became a FORM FEED. The agent then tried to mkdir a path
+    containing a control character and died before reaching the first service.
+
+    It hits any Windows user whose path has a backslash followed by one of
+    `a b f n r t v 0-7 x u U N` — franc, frank, nancy, nate, tom, tim, rachel,
+    rob, bob, ben, alice, adam, victor. That is a large share of Windows home
+    directories, and the failure is total: the agent cannot start at all.
+
+    Escaping backslashes (and any embedded quote) makes the value survive the
+    round-trip. Verified against dotenv both ways, since the whole defect is
+    that writing and reading disagreed about escapes.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 def create_env_file(
     llm_provider: str,
@@ -135,9 +163,34 @@ def create_env_file(
         Path where the .env file was saved
     """
     from ciris_engine.logic.setup.first_run import get_default_config_path
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_ios
 
     # Get safe path from environment-aware path resolution (not user input)
     save_path = get_default_config_path()
+
+    # Get the correct data directory for this platform
+    # On Android/iOS, this will be the app's files directory (absolute path)
+    # On desktop, this will be ~/ciris (which gets expanded by the OS)
+    if is_android() or is_ios():
+        # Use absolute path for mobile - tilde doesn't expand
+        # Must match ios_main.py / android_main.py CIRIS_DATA_DIR setting
+        data_dir = _env_quoted(env_path_value(get_ciris_home()))
+    else:
+        # Desktop: honor CIRIS_HOME via get_data_dir() instead of
+        # hardcoding ~/ciris/data. Previously this was literal
+        # `Path.home() / "ciris" / "data"`, which baked
+        # CIRIS_DB_PATH=~/ciris/data/... into the wizard-generated
+        # .env regardless of CIRIS_HOME. A multi-process test harness
+        # (qa_runner desktop module) pinning CIRIS_HOME=<project_root>
+        # would see runtime paths honor that, but the SAME wizard
+        # would write a .env that overrode it on the next run —
+        # splitting auth WAs across two SQLite databases and leaving
+        # setup_required=true forever. Rust FFI treats "~" as literal
+        # so we still want an absolute expanded path; get_data_dir()
+        # gives that, anchored at get_ciris_home().
+        from ciris_engine.logic.utils.path_resolution import get_data_dir
+
+        data_dir = _env_quoted(env_path_value(get_data_dir()))
 
     # Log what we received for debugging
     logger.info(f"[create_env_file] Received llm_provider='{llm_provider}', llm_base_url='{llm_base_url}'")
@@ -157,17 +210,52 @@ def create_env_file(
 
 """
 
+    # THE DECLARED PROVIDER ID MUST SURVIVE SETUP (#1186).
+    #
+    # It used to be written only for google/anthropic; for local,
+    # local_inference, groq, ... it lived only in the comment above, so the
+    # runtime had to guess from the URL whether the model was on the desk or
+    # in a datacenter — and a local server behind a tunnel or on a hostname
+    # got a cloud time budget. LLM_PROVIDER is the variable the settings
+    # screen rewrites (routes/setup/config.py), so writing the same name here
+    # keeps a later settings change from being shadowed.
+    #
+    # It must not change which client is built. The SDK selector
+    # (_detect_provider_from_env) maps groq/together/openrouter/
+    # openai_compatible to OPENAI_COMPATIBLE — what OPENAI_API_BASE already
+    # selects on this branch — and lets ids it does not know (local,
+    # local_inference, mobile_local, ...) fall through to key-based detection.
+    # google/anthropic write their own line; "openai" is left out because it
+    # would flip an openai + custom-base setup from OPENAI_COMPATIBLE to OPENAI,
+    # and it is remote by URL anyway.
+    provider_id = llm_provider.strip()
+    provider_declaration = (
+        f'LLM_PROVIDER="{_env_quoted(provider_id)}"\n'
+        if provider_id and provider_id not in ("openai", "google", "anthropic")
+        else ""
+    )
+
     if llm_provider == "openai":
         content += f"""# OpenAI Configuration
 OPENAI_API_KEY="{llm_api_key}"
-
-# Optional: Use a different OpenAI model
-# OPENAI_MODEL="gpt-4"
-
+"""
+        # Write custom base URL if provided (for OpenAI-compatible providers like OpenRouter)
+        if llm_base_url:
+            content += f'OPENAI_API_BASE="{llm_base_url}"\n'
+        else:
+            content += """
 # Optional: Use OpenAI-compatible endpoint
 # OPENAI_API_BASE="https://api.openai.com/v1"
-
 """
+        # Write model if provided
+        if llm_model:
+            content += f'OPENAI_MODEL="{llm_model}"\n'
+        else:
+            content += """
+# Optional: Use a different OpenAI model
+# OPENAI_MODEL="gpt-4"
+"""
+        content += "\n"
     elif llm_provider == "google":
         content += f"""# Google (Gemini) Configuration
 GOOGLE_API_KEY="{llm_api_key}"
@@ -189,7 +277,7 @@ LLM_PROVIDER="anthropic"
 OPENAI_API_KEY="{llm_api_key}"
 OPENAI_API_BASE="{llm_base_url}"
 OPENAI_MODEL="{llm_model}"
-
+{provider_declaration}
 """
         # If using CIRIS LLM proxy, also set billing token and instructor mode
         if "ciris.ai" in llm_base_url.lower() or "ciris-services" in llm_base_url.lower():
@@ -241,15 +329,28 @@ CIRIS_AGENT_PORT={agent_port}
 CIRIS_API_PORT={agent_port}
 NEXT_PUBLIC_API_BASE_URL="http://localhost:{agent_port}"
 
-# Database Paths (using ~/ciris as base directory)
-CIRIS_DB_PATH="~/ciris/data/ciris_engine.db"
-CIRIS_DATA_DIR="~/ciris/data"
-SECRETS_DB_PATH="~/ciris/data/secrets.db"
-AUDIT_LOG_PATH="~/ciris/data/audit_logs.jsonl"
+# Database Paths
+CIRIS_DB_PATH="{data_dir}/ciris_engine.db"
+CIRIS_DATA_DIR="{data_dir}"
+SECRETS_DB_PATH="{data_dir}/secrets.db"
+AUDIT_LOG_PATH="{data_dir}/audit_logs.jsonl"
 
 # Mark as configured
 CIRIS_CONFIGURED="true"
+"""
 
+    # Add Android-specific platform capabilities
+    if is_android():
+        content += """
+# ============================================================================
+# Android Platform Capabilities
+# ============================================================================
+
+# Enable Google Play Services integration (Play Integrity, etc.)
+GOOGLE_PLAY_SERVICES_AVAILABLE="true"
+"""
+
+    content += """
 # ============================================================================
 # Optional: Discord Integration
 # ============================================================================
@@ -280,10 +381,91 @@ CIRIS_CONFIGURED="true"
     # Write file with restricted permissions (owner read/write only)
     # Path is from get_default_config_path() - constructed from known-safe bases
     save_path.parent.mkdir(parents=True, exist_ok=True)
+    # lgtm[py/clear-text-storage-of-sensitive-information]
+    # codeql[py/clear-text-storage-of-sensitive-information]
+    # The agent's `.env` file is the only place these credentials can live:
+    # the CIRIS process needs to read them at startup, and the file is the
+    # conventional persistence surface on every supported platform. The
+    # chmod(0o600) immediately below restricts it to the owner. Encrypting
+    # the blob would just push the problem to storing the decryption key.
     save_path.write_text(content, encoding="utf-8")
     save_path.chmod(0o600)  # rw------- (owner only)
 
     return save_path
+
+
+def prompt_language_and_location() -> tuple[str, Optional[str], Optional[str], Optional[str]]:
+    """Interactively prompt for language and location preferences.
+
+    Users choose their own level of location granularity.
+
+    Returns:
+        Tuple of (language_code, country, region, city) - any location part may be None
+    """
+    print("\n" + "=" * 70)
+    print("LANGUAGE & LOCATION")
+    print("=" * 70)
+    print()
+    print("Help CIRIS respond in your preferred language and understand your context.")
+    print()
+
+    # Language selection
+    languages = [
+        ("en", "English"),
+        ("am", "Amharic (አማርኛ)"),
+        ("ar", "Arabic (العربية)"),
+        ("de", "German (Deutsch)"),
+        ("es", "Spanish (Español)"),
+        ("fr", "French (Français)"),
+        ("hi", "Hindi (हिन्दी)"),
+        ("it", "Italian (Italiano)"),
+        ("ja", "Japanese (日本語)"),
+        ("ko", "Korean (한국어)"),
+        ("pt", "Portuguese (Português)"),
+        ("ru", "Russian (Русский)"),
+        ("sw", "Swahili (Kiswahili)"),
+        ("tr", "Turkish (Türkçe)"),
+        ("zh", "Chinese (中文)"),
+    ]
+    print("Preferred language:")
+    for i, (code, name) in enumerate(languages, 1):
+        print(f"  {i:2d}) {name}")
+    print(f"  {len(languages) + 1:2d}) Other (enter ISO 639-1 code)")
+    print()
+
+    choice = input(f"Select language [1-{len(languages) + 1}] (default: 1 - English): ").strip() or "1"
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(languages):
+            language = languages[idx][0]
+            print(f"  Selected: {languages[idx][1]}")
+        else:
+            language = input("Enter ISO 639-1 language code (e.g., 'nl', 'vi'): ").strip().lower() or "en"
+    except ValueError:
+        language = "en"
+
+    # Location - user chooses granularity
+    print()
+    print("Location (optional - share as much or as little as you like):")
+    print("  1) Country only")
+    print("  2) Country + Region/State")
+    print("  3) Country + Region + City")
+    print("  4) Prefer not to say")
+    print()
+
+    loc_choice = input("Select [1-4] (default: 4): ").strip() or "4"
+    country: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
+
+    if loc_choice in ("1", "2", "3"):
+        country = input("Country (e.g., Ethiopia, US, Japan): ").strip() or None
+        if loc_choice in ("2", "3") and country:
+            region = input("Region/State (e.g., Amhara, California, Tokyo): ").strip() or None
+            if loc_choice == "3" and region:
+                city = input("City (e.g., Addis Ababa, San Francisco): ").strip() or None
+
+    return (language, country, region, city)
 
 
 def run_setup_wizard() -> Path:
@@ -307,11 +489,14 @@ def run_setup_wizard() -> Path:
 
     # Check if config already exists
     if config_path.exists():
-        print(f"⚠️  Configuration already exists at: {config_path}")
+        print(f"[WARN] Configuration already exists at: {config_path}")
         overwrite = input("Overwrite? [y/N] ").strip().lower()
         if overwrite not in ("y", "yes"):
             print("Setup cancelled. Using existing configuration.")
             return config_path
+
+    # Get language and location preferences
+    language, country, region, city = prompt_language_and_location()
 
     # Get LLM configuration
     llm_provider, llm_api_key, llm_base_url, llm_model = prompt_llm_configuration()
@@ -326,28 +511,38 @@ def run_setup_wizard() -> Path:
         llm_model=llm_model,
     )
 
+    # Append language/location preferences to .env
+    with open(save_path, "a") as f:
+        f.write("\n# User Preferences (from setup wizard)\n")
+        f.write(f'CIRIS_PREFERRED_LANGUAGE="{language}"\n')
+        if country:
+            location_parts = [country]
+            if region:
+                location_parts.append(region)
+            if city:
+                location_parts.append(city)
+            f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
+
     print()
     print("=" * 70)
-    print("✅ SETUP COMPLETE")
+    print("[OK] SETUP COMPLETE")
     print("=" * 70)
     print()
     print(f"Configuration saved to: {save_path}")
     print()
 
     if llm_api_key in ("your_openai_api_key_here", ""):
-        print("⚠️  Remember to add your LLM API key to the .env file!")
+        print("[WARN] Remember to add your LLM API key to the .env file!")
         print()
 
     print("Starting CIRIS Agent...")
     print()
     print("Once started, you can access:")
-    print("  🌐 Web Interface: http://localhost:8080")
-    print("  📡 API Endpoint:  http://localhost:8080/v1/")
-    print("  📚 API Docs:      http://localhost:8080/docs")
+    print(" Web Interface: http://localhost:8080")
+    print(" API Endpoint: http://localhost:8080/v1/")
+    print(" API Docs: http://localhost:8080/docs")
     print()
-    print("Default credentials:")
-    print("  Username: admin")
-    print("  Password: ciris_admin_password")
+    print("Log in with the credentials you set during setup.")
     print()
 
     return save_path

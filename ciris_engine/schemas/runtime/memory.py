@@ -20,7 +20,7 @@ class MemorySearchResult(BaseModel):
     created_at: datetime = Field(..., description="When the memory was created")
     metadata: Dict[str, str] = Field(default_factory=dict, description="Additional metadata")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class TimeSeriesDataPoint(BaseModel):
@@ -33,7 +33,7 @@ class TimeSeriesDataPoint(BaseModel):
     tags: Dict[str, str] = Field(default_factory=dict, description="Optional tags")
     source: Optional[str] = Field(None, description="Source of the data")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class IdentityUpdateRequest(BaseModel):
@@ -44,7 +44,7 @@ class IdentityUpdateRequest(BaseModel):
     source: str = Field(..., description="Source of the update (e.g., 'wa_feedback')")
     reason: Optional[str] = Field(None, description="Reason for the update")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class EnvironmentUpdateRequest(BaseModel):
@@ -54,7 +54,7 @@ class EnvironmentUpdateRequest(BaseModel):
     environment_data: Dict[str, str] = Field(..., description="Environment data to merge")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="When update occurred")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 __all__ = ["MemorySearchResult", "TimeSeriesDataPoint", "IdentityUpdateRequest", "EnvironmentUpdateRequest"]

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.conscience.core import EpistemicData
@@ -25,7 +25,7 @@ from ciris_engine.schemas.dma.results import (
 from ciris_engine.schemas.handlers.schemas import HandlerResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
-from ciris_engine.schemas.types import ConfigDict, ConfigValue, JSONDict, SerializedModel
+from ciris_engine.schemas.types import ConfigMapping, ConfigValue, JSONDict, SerializedModel
 
 # Type aliases for configuration values
 ConfigItem = Tuple[str, ConfigValue]
@@ -34,11 +34,11 @@ ConfigItem = Tuple[str, ConfigValue]
 class ConfigDictMixin:
     """Mixin providing standard config dict access methods.
 
-    Classes using this mixin must have a 'configs: ConfigDict' field.
+    Classes using this mixin must have a 'configs: ConfigMapping' field.
     DRY pattern to avoid code duplication across classes with config fields.
     """
 
-    configs: ConfigDict  # Type hint for IDEs
+    configs: ConfigMapping  # Type hint for IDEs
 
     def get(self, key: str, default: Optional[ConfigValue] = None) -> Optional[ConfigValue]:
         """Get a configuration value with optional default."""
@@ -48,7 +48,7 @@ class ConfigDictMixin:
         """Set a configuration value."""
         self.configs[key] = value
 
-    def update(self, values: ConfigDict) -> None:
+    def update(self, values: ConfigMapping) -> None:
         """Update multiple configuration values."""
         self.configs.update(values)
 
@@ -68,12 +68,57 @@ DESC_AUDIT_HASH = "Hash of audit entry (tamper-evident)"
 DESC_AUDIT_SIGNATURE = "Cryptographic signature of audit entry"
 DESC_THRESHOLD_USED = "Threshold used"
 DESC_ACTION_PARAMETERS = "Action parameters (content for SPEAK, etc.)"
+DESC_ENTROPY_REASON = "Entropy check result message"
+DESC_COHERENCE_REASON = "Coherence check result message"
+
+# Description constants for propagated coherence/entropy fields
+DESC_COHERENCE_PASSED_PROPAGATED = "Whether coherence check passed (None for exempt actions)"
+DESC_COHERENCE_SCORE_PROPAGATED = "Coherence score 0-1 (None for exempt actions)"
+DESC_ENTROPY_PASSED_PROPAGATED = "Whether entropy check passed (None for exempt actions)"
+DESC_ENTROPY_SCORE_PROPAGATED = "Entropy score 0-1 (None for exempt actions)"
+
+
+class PropagatedCoherenceEntropyMixin(BaseModel):
+    """Mixin for coherence/entropy data propagated from FINALIZE_ACTION to ACTION_COMPLETE.
+
+    Non-exempt actions: SPEAK, TOOL, PONDER, MEMORIZE
+    Exempt actions: RECALL, TASK_COMPLETE, OBSERVE, DEFER, REJECT (these skip ethical faculties)
+
+    This mixin provides DRY fields for classes that need propagated conscience check results.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    coherence_passed: Optional[bool] = Field(None, description=DESC_COHERENCE_PASSED_PROPAGATED)
+    coherence_score: Optional[float] = Field(None, description=DESC_COHERENCE_SCORE_PROPAGATED)
+    coherence_threshold: Optional[float] = Field(None, description="Coherence threshold used")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
+    entropy_passed: Optional[bool] = Field(None, description=DESC_ENTROPY_PASSED_PROPAGATED)
+    entropy_score: Optional[float] = Field(None, description=DESC_ENTROPY_SCORE_PROPAGATED)
+    entropy_threshold: Optional[float] = Field(None, description="Entropy threshold used")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
 
 
 class StepPoint(str, Enum):
-    """Points where single-stepping can pause in the H3ERE pipeline."""
+    """Points where single-stepping can pause in the H3ERE pipeline.
 
-    # H3ERE Pipeline - 10 step points (0 setup + 7 core + 2 optional recursive)
+    **This enum is the source of truth for the observable step points.** Every
+    member below has a live ``@streaming_step`` decorator site in production, so
+    the set is what the pipeline actually emits rather than what a document says
+    it emits. Anything citing this — an evidence-registry row, a Constitution
+    claim, a client that renders the pipeline — should point at the enum rather
+    than restate a count, because a hardcoded number is exactly what rotted here:
+    the comment here used to restate a total that had already drifted from the
+    members below, and the inline stage labels skip values, so anyone counting
+    them reached a different answer again — none of which failed, because
+    nothing asserted it.
+
+    Locked by ``tests/ciris_engine/schemas/services/test_step_point_evidence.py``.
+    """
+
+    # Setup, core, optional recursive re-entry, and completion. The trailing
+    # numbers are historical pipeline stage labels: deliberately non-contiguous,
+    # not an ordering, and not a total. Count the members, never these.
     START_ROUND = "start_round"  # 0) Setup: Tasks → Thoughts → Round Queue → Ready for context
     GATHER_CONTEXT = "gather_context"  # 1) Build context for DMA processing
     PERFORM_DMAS = "perform_dmas"  # 2) Execute multi-perspective DMAs
@@ -88,16 +133,24 @@ class StepPoint(str, Enum):
 
 
 class ReasoningEvent(str, Enum):
-    """Reasoning stream events - 8 result events.
+    """Reasoning stream events - 9 result events.
 
-    Core events (always emitted):
+    Pipeline events (always emitted):
     - THOUGHT_START: Thought begins processing
     - SNAPSHOT_AND_CONTEXT: System snapshot + gathered context
     - DMA_RESULTS: 3 DMA results (CSDMA, DSDMA, PDMA)
-    - IDMA_RESULT: Identity DMA fragility check
+    - IDMA_RESULT: Intuition DMA fragility check
     - ASPDMA_RESULT: Selected action + rationale
     - CONSCIENCE_RESULT: Conscience evaluation + final action
     - ACTION_RESULT: Action execution outcome + audit trail
+
+    Sub-pipeline events:
+    - LLM_CALL: Per-provider-call observation. Emitted by LLMBus._execute_llm_call
+      after every individual LLM invocation (success or failure). Multiple LLM_CALL
+      events fire under each pipeline event (one per call the DMA / ASPDMA /
+      conscience handler issues). This is the level needed to debug tail latency
+      and per-call failure modes that thought-level aggregates hide.
+      See FSD/TRACE_EVENT_LOG_PERSISTENCE.md §5.2.
 
     Optional events (emitted when applicable):
     - TSASPDMA_RESULT: Tool-Specific ASPDMA (emitted when TOOL action selected)
@@ -106,11 +159,22 @@ class ReasoningEvent(str, Enum):
     THOUGHT_START = "thought_start"  # 0) Thought begins processing - metadata and content
     SNAPSHOT_AND_CONTEXT = "snapshot_and_context"  # 1) System snapshot + gathered context
     DMA_RESULTS = "dma_results"  # 2) 3 DMA results (CSDMA, DSDMA, PDMA)
-    IDMA_RESULT = "idma_result"  # 3) Identity DMA fragility check (always emitted)
+    IDMA_RESULT = "idma_result"  # 3) Intuition DMA fragility check (always emitted)
     ASPDMA_RESULT = "aspdma_result"  # 4) Selected action + rationale
-    TSASPDMA_RESULT = "tsaspdma_result"  # 4.5) Tool-Specific ASPDMA (optional, when TOOL)
+    TSASPDMA_RESULT = "tsaspdma_result"  # 4.5a) DEPRECATED: Tool-Specific ASPDMA legacy event
+    # Kept emitting alongside VERB_SECOND_PASS_RESULT during the
+    # transition window per FSD/TRACE_EVENT_LOG_PERSISTENCE.md §10
+    # phase 0 gate. Remove after lens stops reading it.
+    VERB_SECOND_PASS_RESULT = "verb_second_pass_result"  # 4.5) Generic verb-specific second pass
+    # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4). Replaces per-verb
+    # event types — single event with `verb` discriminator and
+    # verb-specific data so future verbs (MEMORIZE, OBSERVE, ...)
+    # adding a second pass don't multiply the schema. Currently
+    # fires for TOOL (replaces TSASPDMA_RESULT) and DEFER
+    # (closes the existing no-event asymmetry on DSASPDMA).
     CONSCIENCE_RESULT = "conscience_result"  # 5) Conscience evaluation + final action
     ACTION_RESULT = "action_result"  # 6) Action execution outcome + audit trail
+    LLM_CALL = "llm_call"  # *) Per-provider-call observation (every LLM invocation, success+failure)
 
 
 class StepDuration(str, Enum):
@@ -142,6 +206,8 @@ class CircuitBreakerState(str, Enum):
 class CircuitBreakerStatus(BaseModel):
     """Status information for a circuit breaker."""
 
+    model_config = ConfigDict(defer_build=True)
+
     state: CircuitBreakerState = Field(..., description="Current state of the circuit breaker")
     failure_count: int = Field(0, description="Number of consecutive failures")
     last_failure_time: Optional[datetime] = Field(None, description="Time of last failure")
@@ -154,6 +220,8 @@ class CircuitBreakerStatus(BaseModel):
 
 class TraceContext(BaseModel):
     """OTLP-compatible trace context for step correlation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     trace_id: str = Field(..., description="Unique trace identifier")
     span_id: str = Field(..., description="Unique span identifier")
@@ -169,6 +237,8 @@ class TraceContext(BaseModel):
 class SpanAttribute(BaseModel):
     """OTLP-compatible span attribute."""
 
+    model_config = ConfigDict(defer_build=True)
+
     key: str = Field(..., description="Attribute key")
     value: JSONDict = Field(
         ..., description="Attribute value in OTLP format"
@@ -178,7 +248,9 @@ class SpanAttribute(BaseModel):
 class ConfigValueMap(ConfigDictMixin, BaseModel):
     """Typed map for configuration values."""
 
-    configs: ConfigDict = Field(default_factory=dict, description="Configuration key-value pairs with typed values")
+    model_config = ConfigDict(defer_build=True)
+
+    configs: ConfigMapping = Field(default_factory=dict, description="Configuration key-value pairs with typed values")
 
     def items(self) -> List[ConfigItem]:
         """Get all key-value pairs."""
@@ -192,6 +264,8 @@ class ConfigValueMap(ConfigDictMixin, BaseModel):
 class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
     """Criteria used for task selection in processing rounds."""
 
+    model_config = ConfigDict(defer_build=True)
+
     max_priority: Optional[int] = Field(None, description="Maximum priority threshold")
     min_priority: Optional[int] = Field(None, description="Minimum priority threshold")
     max_age_hours: Optional[float] = Field(None, description="Maximum age in hours")
@@ -201,7 +275,7 @@ class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
     max_retry_count: int = Field(3, description="Maximum retry count for tasks")
     user_id_filter: Optional[str] = Field(None, description="User ID filter")
     batch_size: int = Field(10, description="Maximum number of tasks to select")
-    configs: ConfigDict = Field(
+    configs: ConfigMapping = Field(
         default_factory=dict, description="Additional configuration key-value pairs with typed values"
     )
 
@@ -212,6 +286,8 @@ class TaskSelectionCriteria(ConfigDictMixin, BaseModel):
 
 class ServiceProviderUpdate(BaseModel):
     """Details of a service provider update."""
+
+    model_config = ConfigDict(defer_build=True)
 
     service_type: str = Field(..., description="Type of service")
     old_priority: str = Field(..., description="Previous priority")
@@ -225,6 +301,8 @@ class ServiceProviderUpdate(BaseModel):
 class ServicePriorityUpdateResponse(BaseModel):
     """Response from service priority update operation."""
 
+    model_config = ConfigDict(defer_build=True)
+
     success: bool = Field(..., description="Whether the update succeeded")
     message: Optional[str] = Field(None, description="Success or error message")
     provider_name: str = Field(..., description="Name of the service provider")
@@ -235,6 +313,8 @@ class ServicePriorityUpdateResponse(BaseModel):
 
 class CircuitBreakerResetResponse(BaseModel):
     """Response from circuit breaker reset operation."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether the reset succeeded")
     message: str = Field(..., description="Operation result message")
@@ -247,17 +327,21 @@ class CircuitBreakerResetResponse(BaseModel):
 class ServiceProviderInfo(BaseModel):
     """Information about a registered service provider."""
 
+    model_config = ConfigDict(defer_build=True)
+
     name: str = Field(..., description="Provider name")
     priority: str = Field(..., description="Priority level name")
     priority_group: int = Field(..., description="Priority group number")
     strategy: str = Field(..., description="Selection strategy")
-    capabilities: Optional[ConfigDict] = Field(None, description="Provider capabilities")
-    metadata: Optional[ConfigDict] = Field(None, description="Provider metadata")
+    capabilities: Optional[ConfigMapping] = Field(None, description="Provider capabilities")
+    metadata: Optional[ConfigMapping] = Field(None, description="Provider metadata")
     circuit_breaker_state: Optional[str] = Field(None, description="Circuit breaker state if available")
 
 
 class ServiceRegistryInfoResponse(BaseModel):
     """Enhanced service registry information response."""
+
+    model_config = ConfigDict(defer_build=True)
 
     total_services: int = Field(0, description="Total registered services")
     services_by_type: Dict[str, int] = Field(default_factory=dict, description="Count by service type")
@@ -276,6 +360,8 @@ class ServiceRegistryInfoResponse(BaseModel):
 
 class WAPublicKeyMap(BaseModel):
     """Map of Wise Authority IDs to their public keys."""
+
+    model_config = ConfigDict(defer_build=True)
 
     keys: Dict[str, str] = Field(
         default_factory=dict, description="Mapping of WA ID to Ed25519 public key (PEM format)"
@@ -305,7 +391,9 @@ class WAPublicKeyMap(BaseModel):
 class ConfigBackupData(BaseModel):
     """Data structure for configuration backups."""
 
-    configs: ConfigDict = Field(..., description="Backed up configuration values")
+    model_config = ConfigDict(defer_build=True)
+
+    configs: ConfigMapping = Field(..., description="Backed up configuration values")
     backup_timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="When the backup was created"
     )
@@ -332,11 +420,16 @@ class ConfigBackupData(BaseModel):
         )
 
 
-class ProcessingQueueItem(BaseModel):
+class QueueItemStatusReport(BaseModel):
     """
-    Information about an item in the processing queue.
+    Status report for a queue item.
     Used for runtime control service to report queue status.
+
+    Note: This is distinct from ProcessingQueueItem in logic/processors/support/processing_queue.py
+    which is the actual queue item used for thought processing.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     item_id: str = Field(..., description="Unique identifier for the queue item")
     item_type: str = Field(..., description="Type of item (e.g., thought, task, message)")
@@ -351,6 +444,8 @@ class ProcessingQueueItem(BaseModel):
 class QueuedThought(BaseModel):
     """A thought queued for processing in the next round."""
 
+    model_config = ConfigDict(defer_build=True)
+
     thought_id: str = Field(..., description="Unique thought ID")
     thought_type: str = Field(..., description="Type of thought")
     source_task_id: str = Field(..., description="Source task ID")
@@ -363,6 +458,8 @@ class QueuedThought(BaseModel):
 class QueuedTask(BaseModel):
     """A task that may generate thoughts."""
 
+    model_config = ConfigDict(defer_build=True)
+
     task_id: str = Field(..., description="Unique task ID")
     description: str = Field(..., description="Task description")
     status: str = Field(..., description="Task status")
@@ -373,6 +470,8 @@ class QueuedTask(BaseModel):
 
 class ThoughtInPipeline(BaseModel):
     """Tracks a thought's position in the processing pipeline."""
+
+    model_config = ConfigDict(defer_build=True)
 
     thought_id: str = Field(..., description="Unique thought ID")
     task_id: str = Field(..., description="Source task ID")
@@ -405,6 +504,8 @@ def _create_empty_pipeline_steps() -> Dict[str, List["ThoughtInPipeline"]]:
 
 class PipelineState(BaseModel):
     """Complete state of the processing pipeline."""
+
+    model_config = ConfigDict(defer_build=True)
 
     is_paused: bool = Field(False, description="Whether pipeline is paused")
     current_round: int = Field(0, description="Current processing round")
@@ -453,6 +554,8 @@ class PipelineState(BaseModel):
 
 class ThoughtProcessingResult(BaseModel):
     """Result from processing a thought through the full pipeline."""
+
+    model_config = ConfigDict(defer_build=True)
 
     thought_id: str = Field(..., description="Unique thought ID")
     task_id: str = Field(..., description="Source task ID")
@@ -504,6 +607,8 @@ class ThoughtProcessingResult(BaseModel):
 class StepResultStartRound(BaseModel):
     """Result from START_ROUND step - moves thoughts from PENDING to PROCESSING."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.START_ROUND)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -522,6 +627,8 @@ class StepResultStartRound(BaseModel):
 
 class StepResultGatherContext(BaseModel):
     """Result from GATHER_CONTEXT step - builds context for DMA processing."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.GATHER_CONTEXT)
     success: bool = Field(..., description="Whether step succeeded")
@@ -544,6 +651,8 @@ class StepResultGatherContext(BaseModel):
 class StepResultPerformDMAs(BaseModel):
     """Result from PERFORM_DMAS step - parallel execution of base DMAs."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.PERFORM_DMAS)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -563,6 +672,8 @@ class StepResultPerformDMAs(BaseModel):
 class StepResultPerformASPDMA(BaseModel):
     """Result from PERFORM_ASPDMA step - action selection DMA execution."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.PERFORM_ASPDMA)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -578,6 +689,8 @@ class StepResultPerformASPDMA(BaseModel):
 
 class StepResultConscienceExecution(BaseModel):
     """Result from CONSCIENCE_EXECUTION step - parallel conscience checks."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.CONSCIENCE_EXECUTION)
     success: bool = Field(..., description="Whether step succeeded")
@@ -596,6 +709,8 @@ class StepResultConscienceExecution(BaseModel):
 class StepResultRecursiveASPDMA(BaseModel):
     """Result from RECURSIVE_ASPDMA step - retry after conscience failure."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.RECURSIVE_ASPDMA)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -613,6 +728,8 @@ class StepResultRecursiveASPDMA(BaseModel):
 class StepResultRecursiveConscience(BaseModel):
     """Result from RECURSIVE_CONSCIENCE step - recheck after recursive ASPDMA."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.RECURSIVE_CONSCIENCE)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -629,6 +746,8 @@ class StepResultRecursiveConscience(BaseModel):
 
 class StepResultFinalizeAction(BaseModel):
     """Result from FINALIZE_ACTION step - final action determined."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.FINALIZE_ACTION)
     success: bool = Field(..., description="Whether step succeeded")
@@ -649,6 +768,8 @@ class StepResultFinalizeAction(BaseModel):
 class StepResultPerformAction(BaseModel):
     """Result from PERFORM_ACTION step - action dispatch begins."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: StepPoint = Field(StepPoint.PERFORM_ACTION)
     success: bool = Field(..., description="Whether step succeeded")
 
@@ -665,6 +786,8 @@ class StepResultPerformAction(BaseModel):
 
 class StepResultActionComplete(BaseModel):
     """Result from ACTION_COMPLETE step - action execution completed with audit trail."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.ACTION_COMPLETE)
     success: bool = Field(..., description="Whether step succeeded")
@@ -686,6 +809,8 @@ class StepResultActionComplete(BaseModel):
 
 class StepResultRoundComplete(BaseModel):
     """Result from ROUND_COMPLETE step - processing round completed."""
+
+    model_config = ConfigDict(defer_build=True)
 
     step_point: StepPoint = Field(StepPoint.ROUND_COMPLETE)
     success: bool = Field(..., description="Whether step succeeded")
@@ -720,6 +845,8 @@ StepResultUnion = (
 
 class BaseStepData(BaseModel):
     """Base step data with common fields for all steps."""
+
+    model_config = ConfigDict(defer_build=True)
 
     timestamp: str = Field(..., description="ISO timestamp when step started")
     thought_id: str = Field(..., description="Unique thought identifier")
@@ -819,13 +946,13 @@ class FinalizeActionStepData(BaseStepData):
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
     entropy_score: Optional[float] = Field(None, description="Entropy score (0=ordered, 1=chaotic)")
     entropy_threshold: Optional[float] = Field(None, description=DESC_THRESHOLD_USED)
-    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
 
     # === ETHICAL FACULTY 2: Coherence Conscience ===
     coherence_passed: Optional[bool] = Field(None, description="Whether coherence check passed")
     coherence_score: Optional[float] = Field(None, description="Coherence score (0=incoherent, 1=coherent)")
     coherence_threshold: Optional[float] = Field(None, description=DESC_THRESHOLD_USED)
-    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
 
     # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
     optimization_veto_passed: Optional[bool] = Field(None, description="Whether optimization veto passed")
@@ -841,6 +968,12 @@ class FinalizeActionStepData(BaseStepData):
     epistemic_humility_justification: Optional[str] = Field(None, description="Reflective justification")
     epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
 
+    # === CONSCIENCE PROMPTS (for localization validation) ===
+    entropy_prompt: Optional[str] = Field(None, description="User prompt used for entropy evaluation")
+    coherence_prompt: Optional[str] = Field(None, description="User prompt used for coherence evaluation")
+    optimization_veto_prompt: Optional[str] = Field(None, description="User prompt used for optimization veto")
+    epistemic_humility_prompt: Optional[str] = Field(None, description="User prompt used for epistemic humility")
+
 
 class PerformActionStepData(BaseStepData):
     """Step data for PERFORM_ACTION step."""
@@ -850,8 +983,11 @@ class PerformActionStepData(BaseStepData):
     dispatch_context: str = Field("{}", description="Context for action dispatch")
 
 
-class ActionCompleteStepData(BaseStepData):
-    """Step data for ACTION_COMPLETE step with audit trail and resource usage information."""
+class ActionCompleteStepData(BaseStepData, PropagatedCoherenceEntropyMixin):
+    """Step data for ACTION_COMPLETE step with audit trail and resource usage information.
+
+    Inherits coherence/entropy fields from PropagatedCoherenceEntropyMixin.
+    """
 
     action_executed: str = Field(..., description="Action that was executed")
     action_parameters: Dict[str, Any] = Field(default_factory=dict, description=DESC_ACTION_PARAMETERS)
@@ -877,10 +1013,13 @@ class ActionCompleteStepData(BaseStepData):
     api_bases_used: List[str] = Field(
         default_factory=list, description="API base URLs used (query telemetry by thought_id)"
     )
+    # Coherence/entropy fields inherited from PropagatedCoherenceEntropyMixin
 
 
 class ActionResponse(BaseModel):
     """Typed response from action dispatch."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether action dispatch succeeded")
     handler: str = Field(..., description="Handler that executed the action")
@@ -892,6 +1031,9 @@ class ActionResponse(BaseModel):
 
     # Audit trail data (REQUIRED) from AuditEntryResult
     audit_data: AuditEntryResult = Field(..., description="Audit entry with hash chain data (REQUIRED)")
+    # Why the act did not run, when it was refused before the handler (e.g.
+    # `accord_halt_in_effect:<invocation_id>`). Carried onto ACTION_RESULT.error.
+    error: Optional[str] = Field(None, description="Refusal or failure reason, when the act did not run")
 
 
 class RoundCompleteStepData(BaseStepData):
@@ -920,6 +1062,8 @@ StepDataUnion = (
 class StepResultData(BaseModel):
     """Complete step result data structure for streaming."""
 
+    model_config = ConfigDict(defer_build=True)
+
     step_point: str = Field(..., description="Step point name")
     success: bool = Field(True, description="Whether step succeeded")
     processing_time_ms: float = Field(0.0, description="Step processing time")
@@ -934,6 +1078,8 @@ class StepResultData(BaseModel):
 class StepExecutionResult(BaseModel):
     """Result from executing a single step for a paused thought."""
 
+    model_config = ConfigDict(defer_build=True)
+
     success: bool = Field(..., description="Whether step execution succeeded")
     thought_id: str = Field(..., description="Thought identifier")
     message: Optional[str] = Field(None, description="Success message")
@@ -942,6 +1088,8 @@ class StepExecutionResult(BaseModel):
 
 class AllStepsExecutionResult(BaseModel):
     """Result from executing steps for all paused thoughts."""
+
+    model_config = ConfigDict(defer_build=True)
 
     success: bool = Field(..., description="Whether execution succeeded")
     thoughts_advanced: int = Field(0, description="Number of thoughts advanced")
@@ -956,6 +1104,8 @@ class AllStepsExecutionResult(BaseModel):
 
 class ThoughtStartEvent(BaseModel):
     """Event 0: Thought begins processing - thought and task metadata (START_ROUND step)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.THOUGHT_START)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -984,6 +1134,8 @@ class SnapshotAndContextResult(BaseModel):
     The redundant context string field has been removed to eliminate duplication.
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     event_type: ReasoningEvent = Field(ReasoningEvent.SNAPSHOT_AND_CONTEXT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
@@ -995,6 +1147,8 @@ class SnapshotAndContextResult(BaseModel):
 
 class DMAResultsEvent(BaseModel):
     """Event 2: Results from all 4 DMA perspectives (PERFORM_DMAS step)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.DMA_RESULTS)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1013,13 +1167,20 @@ class DMAResultsEvent(BaseModel):
     pdma_prompt: Optional[str] = Field(None, description="User prompt passed to PDMA")
     # Note: idma_prompt is in IDMAResultEvent
 
+    # System prompts passed to each DMA (for debugging format instructions)
+    csdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to CSDMA")
+    dsdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to DSDMA")
+    pdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to PDMA")
+
 
 class IDMAResultEvent(BaseModel):
-    """Event 3: Identity DMA fragility check (always emitted after DMA_RESULTS).
+    """Event 3: Intuition DMA fragility check (always emitted after DMA_RESULTS).
 
     IDMA evaluates epistemic diversity using CCA (Coherent Collective Action) principles.
     Emitted separately from DMA_RESULTS to allow fine-grained tracing of identity/fragility checks.
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.IDMA_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1028,13 +1189,82 @@ class IDMAResultEvent(BaseModel):
 
     # IDMA results - CCA epistemic diversity check
     k_eff: float = Field(..., description="Effective independent source count (need >= 2 for healthy reasoning)")
+    effective_source_count: Optional[float] = Field(None, description="Plain-language alias for k_eff")
+    k_raw: Optional[int] = Field(None, description="Nominal raw source count k before correlation adjustment")
+    raw_source_count: Optional[int] = Field(None, description="Plain-language alias for k_raw")
     correlation_risk: float = Field(..., description="Estimated correlation between sources (0-1)")
+    source_overlap: Optional[float] = Field(None, description="Plain-language alias for correlation_risk")
+    rho_mean: Optional[float] = Field(None, description="Average pairwise correlation ρ used to derive k_eff")
     phase: str = Field(..., description="Epistemic phase: 'chaos', 'healthy', or 'rigidity'")
+    reasoning_state: Optional[str] = Field(None, description="Plain-language alias for phase")
+    phase_confidence: Optional[float] = Field(None, description="Confidence that the phase classification is correct")
     fragility_flag: bool = Field(..., description="True if reasoning may be brittle")
+    reasoning_is_fragile: Optional[bool] = Field(None, description="Plain-language alias for fragility_flag")
+    collapse_margin: Optional[float] = Field(
+        None, description="Positive distance from the fragility boundary; <= 0 indicates collapse-adjacent state"
+    )
+    safety_margin: Optional[float] = Field(None, description="Plain-language alias for collapse_margin")
     sources_identified: List[str] = Field(default_factory=list, description="List of distinct sources identified")
+    source_ids: List[str] = Field(default_factory=list, description="Stable or anonymized source lineage identifiers")
+    source_types: List[str] = Field(
+        default_factory=list,
+        description="Source categories aligned positionally with source_ids (memory, tool, user, context, model_prior)",
+    )
+    source_independence_scores: List[float] = Field(
+        default_factory=list, description="Optional per-source independence scores aligned positionally with source_ids"
+    )
+    source_type_counts: List[str] = Field(
+        default_factory=list, description="Flat source-type counts encoded as 'type:count' strings"
+    )
     correlation_factors: List[str] = Field(
         default_factory=list, description="Factors contributing to source correlation"
     )
+    top_correlation_factors: List[str] = Field(
+        default_factory=list, description="Most important correlation drivers ranked for intervention analysis"
+    )
+    pairwise_correlation_summary: List[str] = Field(
+        default_factory=list, description="Flat pairwise summaries encoded as 'source_a|source_b|corr|shared_origin'"
+    )
+    rho_intra: Optional[float] = Field(
+        None, description="Average within-cluster correlation when block structure exists"
+    )
+    rho_inter: Optional[float] = Field(
+        None, description="Average between-cluster correlation when block structure exists"
+    )
+    module_count: Optional[int] = Field(None, description="Count of independent source modules or clusters")
+    effective_module_count: Optional[float] = Field(
+        None, description="Effective independent module count after block-structure adjustment"
+    )
+    source_clusters: List[str] = Field(
+        default_factory=list, description="Flat cluster summaries encoded as 'cluster_id|source_a,source_b|rho_intra'"
+    )
+    common_cause_flags: List[str] = Field(
+        default_factory=list, description="Shared-resource or shared-lineage indicators contributing to correlation"
+    )
+    intervention_recommendation: Optional[str] = Field(
+        None, description="Recommendation for how to reduce correlation or recover healthy diversity"
+    )
+    next_best_recovery_step: Optional[str] = Field(
+        None, description="Plain-language alias for intervention_recommendation"
+    )
+    delta_k_eff: Optional[float] = Field(None, description="Change in k_eff relative to the previous comparison window")
+    delta_rho_mean: Optional[float] = Field(
+        None, description="Change in average pairwise correlation relative to the previous window"
+    )
+    phase_persistence_steps: Optional[int] = Field(
+        None, description="How many consecutive steps the current phase has persisted"
+    )
+    time_in_fragile_state_ms: Optional[float] = Field(
+        None, description="Accumulated time spent in a fragile state for the current scope"
+    )
+    moving_variance: Optional[float] = Field(None, description="Rolling variance proxy for early-warning monitoring")
+    rho_critical: Optional[float] = Field(None, description="Critical correlation threshold ρcrit")
+    k_required: Optional[float] = Field(None, description="Required effective constraint count Kreq")
+    defense_function: Optional[float] = Field(None, description="Optional defense function J estimate")
+    collapse_rate: Optional[float] = Field(None, description="Optional collapse rate dJ/dt estimate")
+    time_to_truth: Optional[float] = Field(None, description="Optional Ttruth estimate")
+    time_to_entropy: Optional[float] = Field(None, description="Optional Tentropy estimate")
+    time_to_capture: Optional[float] = Field(None, description="Optional Tcapture estimate")
     reasoning: str = Field(..., description="Analysis of information diversity and epistemic health")
 
     # User prompt passed to IDMA (for debugging/transparency)
@@ -1043,6 +1273,8 @@ class IDMAResultEvent(BaseModel):
 
 class ASPDMAResultEvent(BaseModel):
     """Event 3: Selected action and rationale (PERFORM_ASPDMA + RECURSIVE_ASPDMA steps)."""
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.ASPDMA_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1053,6 +1285,17 @@ class ASPDMAResultEvent(BaseModel):
     # ASPDMA selection
     selected_action: str = Field(..., description="Action selected by ASPDMA")
     action_rationale: str = Field(..., description="Rationale for selection")
+
+    # Deliberation-diversity signal — how constrained was the choice, and what
+    # other legitimate paths existed. Carries k_eff signal independent of the
+    # reasoning stack. Populated from ASPDMALLMResult when the LLM emitted the
+    # fields; None when not emitted (older prompts / fallback models).
+    selection_confidence: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Subjective confidence in chosen action (0.00-1.00)"
+    )
+    alternatives_considered: Optional[List[str]] = Field(
+        None, description="Brief labels of alternative actions the agent considered but rejected"
+    )
 
     # User prompt passed to ASPDMA (for debugging/transparency)
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
@@ -1066,6 +1309,8 @@ class TSASPDMAResultEvent(BaseModel):
     reconsider (PONDER).
     """
 
+    model_config = ConfigDict(defer_build=True)
+
     event_type: ReasoningEvent = Field(ReasoningEvent.TSASPDMA_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
     task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
@@ -1074,13 +1319,68 @@ class TSASPDMAResultEvent(BaseModel):
     # TSASPDMA input - what ASPDMA selected
     original_tool_name: str = Field(..., description="Tool name selected by ASPDMA")
     original_parameters: JSONDict = Field(default_factory=dict, description="Original parameters from ASPDMA")
-    aspdma_rationale: str = Field(..., description="Rationale from ASPDMA for tool selection")
+    aspdma_reasoning: str = Field(..., description="Rationale from ASPDMA for tool selection")
 
     # TSASPDMA output - refined decision
     final_action: str = Field(..., description="Final action: TOOL (proceed), SPEAK (clarify), or PONDER (reconsider)")
     final_tool_name: Optional[str] = Field(None, description="Tool name if action is TOOL")
     final_parameters: JSONDict = Field(default_factory=dict, description="Refined parameters if action is TOOL")
-    tsaspdma_rationale: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
+    tsaspdma_reasoning: str = Field(..., description="TSASPDMA reasoning with gotchas acknowledged")
+
+
+class VerbSecondPassResultEvent(BaseModel):
+    """Generic verb-specific second-pass result (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4).
+
+    Replaces per-verb second-pass event types (TSASPDMA_RESULT, future
+    DSASPDMA_RESULT, etc.) with a single event keyed by a `verb` discriminator
+    and a verb-specific payload. Future verbs that gain a second-pass evaluator
+    drop into this event without schema changes.
+
+    Wire format mirrors TSASPDMAResultEvent's pattern but flattens the
+    "what was selected" / "what was refined to" axis across verbs:
+      - `original_action` is always the verb that triggered the second pass
+        (TOOL, DEFER, future MEMORIZE, ...).
+      - `final_action` is what the second pass recommended (may be the same
+        verb refined, or a switch to SPEAK/PONDER).
+      - `verb_specific_data` carries the verb's particular fields. For TOOL:
+        original_tool_name, final_tool_name, original_parameters,
+        final_parameters, gotchas_acknowledged. For DEFER: rights_basis,
+        primary_need_category, secondary_need_categories, domain_hint,
+        operational_reason. For future verbs: their own shape.
+
+    During the transition window, TOOL second-passes also emit the legacy
+    TSASPDMAResultEvent so existing lens consumers keep working — see
+    ReasoningEvent.TSASPDMA_RESULT docstring.
+    """
+
+    model_config = ConfigDict(defer_build=True)
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.VERB_SECOND_PASS_RESULT)
+    thought_id: str = Field(..., description=DESC_THOUGHT_ID)
+    task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
+    timestamp: str = Field(..., description=DESC_TIMESTAMP)
+
+    # Verb discriminator — which verb's second pass produced this event.
+    # Lower-case to match HandlerActionType enum value convention.
+    verb: str = Field(..., description="Verb whose second-pass evaluator produced this event (e.g. 'tool', 'defer')")
+
+    # First-pass input — what ASPDMA originally selected
+    original_action: str = Field(..., description="Action verb selected by first-pass ASPDMA")
+    original_reasoning: str = Field(..., description="Reasoning from first-pass ASPDMA")
+
+    # Second-pass output — what the verb-specific evaluator decided
+    final_action: str = Field(..., description="Final action after second pass (may be unchanged or a switch)")
+    final_reasoning: str = Field(..., description="Reasoning from the verb-specific second pass")
+
+    # Verb-specific fields — opaque at the schema level, validated per-verb at the
+    # producer side. Lens reads `verb` to decide which fields are present.
+    verb_specific_data: JSONDict = Field(
+        default_factory=dict,
+        description="Verb-specific second-pass data. Shape depends on `verb`. See class docstring.",
+    )
+
+    # User prompt passed to the verb-specific evaluator (debugging/transparency)
+    second_pass_prompt: Optional[str] = Field(None, description="User prompt passed to the second-pass evaluator")
 
     # Tool documentation context
     tool_description: Optional[str] = Field(None, description="Tool description from documentation")
@@ -1097,6 +1397,8 @@ class ConscienceResultEvent(BaseModel):
     - Bypass Guardrails (ALL actions): UpdatedStatus, ThoughtDepth
     - Ethical Faculties (non-exempt): Entropy, Coherence, OptimizationVeto, EpistemicHumility
     """
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.CONSCIENCE_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1138,7 +1440,7 @@ class ConscienceResultEvent(BaseModel):
     entropy_passed: Optional[bool] = Field(None, description="Whether entropy check passed")
     entropy_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Entropy score (0=ordered, 1=chaotic)")
     entropy_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description=DESC_THRESHOLD_USED)
-    entropy_reason: Optional[str] = Field(None, description="Entropy check result message")
+    entropy_reason: Optional[str] = Field(None, description=DESC_ENTROPY_REASON)
 
     # === ETHICAL FACULTY 2: Coherence Conscience ===
     # Verifies internal consistency with prior commitments
@@ -1147,7 +1449,7 @@ class ConscienceResultEvent(BaseModel):
         None, ge=0.0, le=1.0, description="Coherence score (0=incoherent, 1=coherent)"
     )
     coherence_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description=DESC_THRESHOLD_USED)
-    coherence_reason: Optional[str] = Field(None, description="Coherence check result message")
+    coherence_reason: Optional[str] = Field(None, description=DESC_COHERENCE_REASON)
 
     # === ETHICAL FACULTY 3: Optimization Veto Conscience ===
     # Preserves human values, vetoes actions that compromise them for efficiency
@@ -1166,8 +1468,13 @@ class ConscienceResultEvent(BaseModel):
     epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
 
 
-class ActionResultEvent(BaseModel):
-    """Event 5: Action execution outcome with audit trail and resource usage (ACTION_COMPLETE step)."""
+class ActionResultEvent(PropagatedCoherenceEntropyMixin, BaseModel):
+    """Event 5: Action execution outcome with audit trail and resource usage (ACTION_COMPLETE step).
+
+    Inherits coherence/entropy fields from PropagatedCoherenceEntropyMixin.
+    """
+
+    model_config = ConfigDict(defer_build=True)
 
     event_type: ReasoningEvent = Field(ReasoningEvent.ACTION_RESULT)
     thought_id: str = Field(..., description=DESC_THOUGHT_ID)
@@ -1198,3 +1505,82 @@ class ActionResultEvent(BaseModel):
     llm_calls: int = Field(0, description="Number of LLM calls for this thought")
     models_used: List[str] = Field(default_factory=list, description="Unique models used for this thought")
     api_bases_used: List[str] = Field(default_factory=list, description="Unique API base URLs used for this thought")
+    # Coherence/entropy fields inherited from PropagatedCoherenceEntropyMixin
+
+
+class LLMCallEvent(BaseModel):
+    """Per-LLM-call observation. Broadcast by LLMBus._execute_llm_call after
+    every individual provider invocation (success, retry, or failure).
+
+    Multiple LLM_CALL events fire under each pipeline event — every DMA, ASPDMA,
+    conscience, and verb-second-pass step issues 1+ provider calls. This event
+    records each one discretely so the trace persistence layer (FSD/
+    TRACE_EVENT_LOG_PERSISTENCE.md §5.2) can preserve per-call latency, sizes,
+    and status instead of the thought-level aggregates that hide tail latency
+    and timeout patterns.
+
+    Concrete need: 2026-04-30 Spanish Mental Health timeout exhibited three
+    consecutive 90s EthicalPDMA timeouts. Today's lens shows only the cost
+    counter; with LLM_CALL events, the per-call status='timeout' rows make
+    the diagnosis trivial.
+    """
+
+    model_config = ConfigDict(defer_build=True)
+
+    event_type: ReasoningEvent = Field(ReasoningEvent.LLM_CALL)
+    thought_id: Optional[str] = Field(None, description=DESC_THOUGHT_ID)
+    task_id: Optional[str] = Field(None, description=DESC_PARENT_TASK)
+    timestamp: str = Field(..., description=DESC_TIMESTAMP)
+
+    # Caller attribution — which DMA / ASPDMA / conscience handler issued the call
+    handler_name: str = Field(..., description="Calling handler/DMA name (EthicalPDMA, CSDMA, ASPDMA, ...)")
+    service_name: str = Field(..., description="LLM service that handled the call")
+
+    # Provider identity
+    model: Optional[str] = Field(None, description="Model identifier (e.g. 'google/gemma-4-31B-it')")
+    base_url: Optional[str] = Field(None, description="Provider base URL")
+    response_model: Optional[str] = Field(None, description="Pydantic response model class name")
+
+    # Sizes — input and output, in tokens (provider-reported) and bytes (raw, sanity)
+    prompt_tokens: Optional[int] = Field(None, ge=0, description="Input token count")
+    completion_tokens: Optional[int] = Field(None, ge=0, description="Output token count")
+    prompt_bytes: Optional[int] = Field(None, ge=0, description="Input raw byte count")
+    completion_bytes: Optional[int] = Field(None, ge=0, description="Output raw byte count")
+    cost_usd: Optional[float] = Field(None, ge=0.0, description="Estimated cost in USD")
+
+    # Timing
+    duration_ms: float = Field(..., ge=0.0, description="Wall-clock duration of the call in milliseconds")
+
+    # Outcome
+    status: str = Field(
+        ...,
+        description="Call outcome: 'ok' | 'timeout' | 'rate_limited' | 'model_not_available' | 'instructor_retry' | 'other_error'",
+    )
+    error_class: Optional[str] = Field(None, description="Exception class name on failure")
+    attempt_count: int = Field(
+        1, ge=1, description="Instructor attempt count (1 = first try; 2+ = re-prompted on parse failure)"
+    )
+    retry_count: int = Field(
+        0, ge=0, description="LLMBus retry count for this call (0 = first attempt at the bus level)"
+    )
+
+    # Optional content (gated by trace level — empty at GENERIC, hash at DETAILED, full at FULL)
+    prompt_hash: Optional[str] = Field(None, description="SHA-256 of prompt text (DETAILED+ trace level)")
+    prompt: Optional[str] = Field(None, description="Full prompt text (FULL trace level only)")
+    response_text: Optional[str] = Field(None, description="Full completion text (FULL trace level only)")
+
+    # Parent-event linkage (TRACE_WIRE_FORMAT.md §5.10, item #5 of #712).
+    # REQUIRED as of 2.7.9 — no transition window. Together with the parent
+    # CompleteTrace's (agent_id_hash, trace_id, thought_id), uniquely
+    # identifies the pipeline event that issued this LLM call. Persistence
+    # implementations enforce presence on incoming LLM_CALL events; the
+    # agent's emission is non-optional once trace_schema_version="2.7.9".
+    parent_event_type: str = Field(
+        ...,
+        description="The pipeline event_type whose execution issued this LLM call (e.g. 'DMA_RESULTS', 'ASPDMA_RESULT', 'CONSCIENCE_RESULT'). Required as of 2.7.9.",
+    )
+    parent_attempt_index: int = Field(
+        ...,
+        ge=0,
+        description="The attempt_index of the parent pipeline event under (thought_id, parent_event_type). Forms a non-forgeable parent-link with parent_event_type when included in the signed canonical bytes (§8). Required as of 2.7.9.",
+    )

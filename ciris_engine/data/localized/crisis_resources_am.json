@@ -1,0 +1,169 @@
+{
+  "_meta": {
+    "purpose": "Crisis-resource corpus for locale 'am'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
+    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
+    "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
+  },
+  "locale": "am",
+  "needs_verified_entries": true,
+  "verification_notes": "Ethiopia emergency numbers verified May 2026 (see per-entry notes). No single national mental-health hotline exists for Ethiopia as of the corpus cut; am-locale crisis routing guidance lives in the am primer Section 6. findahelpline.com has no Ethiopia country page (404 as of 2026-08-02), so the global directory URL is used. still needs_verified_entries: a dedicated mental-health line, if one emerges, must be human-verified before entry.",
+  "resources": {
+    "ethiopia_ambulance": {
+      "id": "ethiopia_ambulance",
+      "name": "Ethiopia Ambulance (Addis Ababa Red Cross)",
+      "type": "emergency",
+      "url": null,
+      "phone": "907",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance service — primary route for medical/psychiatric emergencies in Addis Ababa",
+      "availability": [
+        "et"
+      ],
+      "languages": [
+        "am",
+        "en"
+      ],
+      "last_validated": "2026-05-01T00:00:00Z",
+      "validation_notes": "Verified May 2026 against gorebet.com, addisababa.embassy.qa and en.wikipedia.org/wiki/List_of_emergency_telephone_numbers.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "ethiopia_police": {
+      "id": "ethiopia_police",
+      "name": "Ethiopia Federal Police",
+      "type": "emergency",
+      "url": null,
+      "phone": "991",
+      "text_number": null,
+      "search_term": null,
+      "description": "Federal Police emergency line (Ethiopia)",
+      "availability": [
+        "et"
+      ],
+      "languages": [
+        "am",
+        "en"
+      ],
+      "last_validated": "2026-05-01T00:00:00Z",
+      "validation_notes": "Verified May 2026 against gorebet.com, addisababa.embassy.qa and en.wikipedia.org/wiki/List_of_emergency_telephone_numbers.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "ethiopia_fire": {
+      "id": "ethiopia_fire",
+      "name": "Ethiopia Fire Brigade",
+      "type": "emergency",
+      "url": null,
+      "phone": "939",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire brigade emergency line (Ethiopia; some regions also use 912)",
+      "availability": [
+        "et"
+      ],
+      "languages": [
+        "am",
+        "en"
+      ],
+      "last_validated": "2026-05-01T00:00:00Z",
+      "validation_notes": "Verified May 2026 against gorebet.com, addisababa.embassy.qa and en.wikipedia.org/wiki/List_of_emergency_telephone_numbers.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "findahelpline": {
+      "id": "findahelpline",
+      "name": "Find a Helpline",
+      "type": "directory",
+      "url": "https://findahelpline.com/",
+      "phone": null,
+      "text_number": null,
+      "search_term": null,
+      "description": "International directory of crisis helplines",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en",
+        "es",
+        "fr",
+        "de",
+        "it",
+        "pt",
+        "ru",
+        "zh",
+        "ja",
+        "ko"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "URL verified reachable (HTTP 200) 2026-08-02 at corpus cut (CIRISAgent#971).",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "iasp": {
+      "id": "iasp",
+      "name": "IASP Crisis Centers",
+      "type": "directory",
+      "url": "https://iasp.info/resources/Crisis_Centres",
+      "phone": null,
+      "text_number": null,
+      "search_term": null,
+      "description": "International Association for Suicide Prevention resource directory",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "URL redirects to the https://www.iasp.info/ homepage as of 2026-08-02 — the /resources/Crisis_Centres path is stale. Kept byte-identical at the corpus cut; see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    },
+    "local_search": {
+      "id": "local_search",
+      "name": "Local Crisis Services",
+      "type": "search_term",
+      "url": null,
+      "phone": null,
+      "text_number": null,
+      "search_term": "crisis hotline [your location]",
+      "description": "Search for crisis services in your area",
+      "availability": [
+        "global"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-08-02T00:00:00Z",
+      "validation_notes": "Search-term resource; nothing to verify.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": true,
+      "snapshot_date": "2026-08-02",
+      "source_url": null
+    }
+  }
+}

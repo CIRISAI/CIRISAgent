@@ -2,19 +2,28 @@
 Adapter configuration workflow endpoints.
 
 Provides interactive configuration workflow for adapters including OAuth callbacks.
+
+These endpoints support both post-setup (admin auth required) and first-run setup
+(no auth required) modes via the require_setup_or_admin / require_setup_or_observer
+dependencies.
 """
 
 import html
 import logging
+import re
 import uuid
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Annotated, Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request, Response
 
+from ciris_engine.logic.setup.first_run import is_first_run
+from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, UserRole
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.enums import ServiceType
 
-from ...dependencies.auth import AuthContext, require_admin, require_observer
+from ...dependencies.auth import AuthContext, get_auth_context, get_auth_service
+from .._common import RESPONSES_ADAPTER_CONFIG, RESPONSES_ADAPTER_CONFIG_SESSION
 from .helpers import get_adapter_config_service
 from .schemas import (
     ConfigurationCompleteRequest,
@@ -27,7 +36,82 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
+
+# ============================================================================
+# Setup-aware auth dependencies
+# ============================================================================
+
+
+def _create_setup_auth_context() -> AuthContext:
+    """Create a synthetic auth context for first-run setup mode."""
+    return AuthContext(
+        user_id="setup_wizard",
+        role=UserRole.ADMIN,
+        permissions=ROLE_PERMISSIONS.get(UserRole.ADMIN, set()),
+        authenticated_at=datetime.now(timezone.utc),
+    )
+
+
+async def require_setup_or_admin(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> AuthContext:
+    """Allow access during first-run setup OR require admin auth.
+
+    During first-run setup, returns a synthetic setup auth context.
+    After setup, delegates to normal admin authentication.
+    """
+    if is_first_run():
+        return _create_setup_auth_context()
+
+    auth_service = get_auth_service(request)
+    auth = await get_auth_context(request, authorization, auth_service)
+    if not auth.role.has_permission(UserRole.ADMIN):
+        raise HTTPException(
+            status_code=403,
+            detail="Requires ADMIN role",
+        )
+    return auth
+
+
+async def require_setup_or_observer(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> AuthContext:
+    """Allow access during first-run setup OR require observer auth."""
+    if is_first_run():
+        return _create_setup_auth_context()
+
+    auth_service = get_auth_service(request)
+    auth = await get_auth_context(request, authorization, auth_service)
+    if not auth.role.has_permission(UserRole.OBSERVER):
+        raise HTTPException(
+            status_code=403,
+            detail="Requires OBSERVER role",
+        )
+    return auth
+
+
+def _sanitize_for_log(value: Any, max_length: int = 64) -> str:
+    """Sanitize user-controlled data for safe logging.
+
+    Prevents log injection by removing control characters and truncating.
+    """
+    if value is None:
+        return "<none>"
+    val_str = str(value)
+    # Remove newlines, carriage returns, and other control chars
+    sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", val_str)
+    # Truncate to prevent log flooding
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
+
 router = APIRouter()
+
+# Error message constants
+ERROR_SESSION_NOT_FOUND = "Session not found"
 
 
 # ============================================================================
@@ -52,6 +136,74 @@ async def _get_runtime_control_service_for_adapter_load(request: Request) -> Any
     return None
 
 
+async def _resolve_url_hostname_to_ip(url: str) -> str:
+    """Resolve any hostname in a URL to its IP address via mDNS.
+
+    Uses zeroconf-based mDNS resolution for reliable .local hostname
+    resolution on all platforms including Android.
+
+    Args:
+        url: URL that may contain a hostname (e.g., http://homeassistant.local:8123)
+
+    Returns:
+        URL with hostname replaced by IP if resolvable, original URL otherwise
+    """
+    from ciris_engine.logic.utils.mdns_resolver import resolve_url_hostname
+
+    return await resolve_url_hostname(url, timeout=3.0)
+
+
+async def _get_existing_reauth_config(
+    request: Request,
+    adapter_type: str,
+) -> Optional[Dict[str, Any]]:
+    """Get existing adapter config for re-auth flows.
+
+    When re-authenticating an already-configured adapter, we need to preserve
+    settings like base_url from the original config so OAuth steps work.
+
+    For Home Assistant, hostnames like homeassistant.local are resolved to IP
+    addresses to ensure reliable connectivity on Android browsers.
+
+    Args:
+        request: FastAPI request object
+        adapter_type: Type of adapter to get config for
+
+    Returns:
+        Existing config dict if found, None otherwise
+    """
+    runtime_control = await _get_runtime_control_service_for_adapter_load(request)
+    if not runtime_control:
+        return None
+
+    adapter_manager = getattr(runtime_control, "adapter_manager", None)
+    if not adapter_manager:
+        return None
+
+    # Find existing adapter of this type
+    for aid, instance in adapter_manager.loaded_adapters.items():
+        if instance.adapter_type != adapter_type:
+            continue
+
+        # Try to get config from the adapter instance's service
+        if hasattr(instance.adapter, "ha_service"):
+            ha_url = getattr(instance.adapter.ha_service, "ha_url", None)
+            if ha_url:
+                # Resolve hostname to IP via mDNS for reliable Android browser connectivity
+                resolved_url = await _resolve_url_hostname_to_ip(ha_url)
+                return {"base_url": resolved_url}
+
+        # Generic fallback - use settings from config_params
+        if instance.config_params and instance.config_params.settings:
+            config = dict(instance.config_params.settings)
+            # Resolve base_url if present via mDNS
+            if "base_url" in config:
+                config["base_url"] = await _resolve_url_hostname_to_ip(config["base_url"])
+            return config
+
+    return None
+
+
 async def _load_adapter_after_config(request: Request, session: Any, persist: bool = False) -> str:
     """Load adapter after configuration and return status message.
 
@@ -70,6 +222,19 @@ async def _load_adapter_after_config(request: Request, session: Any, persist: bo
     # Include persist flag in config so RuntimeAdapterManager handles persistence
     adapter_config["persist"] = persist
     adapter_id = f"{session.adapter_type}_{uuid.uuid4().hex[:8]}"
+
+    # Unload any existing adapter of the same type to prevent duplicates
+    # (e.g., user re-configures home_assistant — old instance must be replaced)
+    adapter_manager = getattr(runtime_control_service, "adapter_manager", None)
+    if adapter_manager:
+        for existing_id, instance in list(adapter_manager.loaded_adapters.items()):
+            if instance.adapter_type == session.adapter_type:
+                logger.info(
+                    f"[COMPLETE_CONFIG] Unloading existing adapter {existing_id} "
+                    f"(type={session.adapter_type}) before loading new instance"
+                )
+                await adapter_manager.unload_adapter(existing_id)
+                break
 
     load_result = await runtime_control_service.load_adapter(
         adapter_type=session.adapter_type,
@@ -90,11 +255,12 @@ async def _load_adapter_after_config(request: Request, session: Any, persist: bo
 # ============================================================================
 
 
-@router.post("/adapters/{adapter_type}/configure/start", response_model=SuccessResponse[ConfigurationSessionResponse])
+@router.post("/adapters/{adapter_type}/configure/start", responses=RESPONSES_ADAPTER_CONFIG)
 async def start_adapter_configuration(
     adapter_type: str,
     request: Request,
-    auth: AuthContext = Depends(require_admin),
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
+    start_step_id: Optional[str] = None,
 ) -> SuccessResponse[ConfigurationSessionResponse]:
     """
     Start interactive configuration session for an adapter.
@@ -102,21 +268,38 @@ async def start_adapter_configuration(
     Creates a new configuration session and returns the session ID along with
     information about the first step in the workflow.
 
-    Requires ADMIN role.
+    If `start_step_id` is provided, the session will start at that step (useful
+    for re-authentication flows where you want to skip to the oauth step).
+    When starting at a specific step, existing adapter config is pre-populated
+    so dependent steps (like OAuth needing base_url from discovery) work correctly.
+
+    Requires ADMIN role, or accessible during first-run setup without auth.
     """
     try:
         config_service = get_adapter_config_service(request)
 
-        # Start the session
-        session = await config_service.start_session(adapter_type=adapter_type, user_id=auth.user_id)
+        # For re-auth flows (start_step_id specified), get existing config
+        existing_config: Optional[Dict[str, Any]] = None
+        if start_step_id:
+            existing_config = await _get_existing_reauth_config(request, adapter_type)
+
+        # Start the session (optionally at a specific step with existing config)
+        session = await config_service.start_session(
+            adapter_type=adapter_type,
+            user_id=auth.user_id,
+            start_step_id=start_step_id,
+            existing_config=existing_config,
+        )
 
         # Get manifest to access steps
         manifest = config_service._adapter_manifests.get(adapter_type)
         if not manifest:
             raise HTTPException(status_code=404, detail=f"Adapter '{adapter_type}' not found")
 
-        # Get current step
-        current_step = manifest.steps[0] if manifest.steps else None
+        # Get current step (respects start_step_id, and skips steps whose
+        # `condition` does not hold -- through the service, so this is the
+        # SAME evaluator that execute_step uses, not a second one).
+        current_step = config_service.current_step(session)
 
         response = ConfigurationSessionResponse(
             session_id=session.session_id,
@@ -139,11 +322,18 @@ async def start_adapter_configuration(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/configure/{session_id}", response_model=SuccessResponse[ConfigurationStatusResponse])
+@router.get(
+    "/adapters/configure/{session_id}",
+    responses={
+        403: {"description": "Not the owner of this configuration session"},
+        404: {"description": "Session not found"},
+        500: {"description": "Failed to get configuration status"},
+    },
+)
 async def get_configuration_status(
     session_id: str,
     request: Request,
-    auth: AuthContext = Depends(require_observer),
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
 ) -> SuccessResponse[ConfigurationStatusResponse]:
     """
     Get current status of a configuration session.
@@ -151,7 +341,11 @@ async def get_configuration_status(
     Returns complete session state including current step, collected configuration,
     and session status.
 
-    Requires OBSERVER role.
+    #848: the response includes ``collected_config``, which holds OAuth tokens
+    collected during the flow. This endpoint therefore requires ADMIN (not
+    OBSERVER) AND ownership of the session — an OBSERVER who guessed a session_id
+    could otherwise read another user's in-flight oauth_tokens. Accessible during
+    first-run setup without auth (no real users exist yet).
     """
     try:
         config_service = get_adapter_config_service(request)
@@ -160,15 +354,22 @@ async def get_configuration_status(
         if not session:
             raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
+        # #848: ownership gate. collected_config carries oauth_tokens; only the
+        # creating user (or setup mode, where there are no real users) may read
+        # it. ADMIN alone is insufficient — one admin must not read another
+        # user's in-flight OAuth tokens.
+        if auth.user_id != "setup_wizard" and session.user_id and session.user_id != auth.user_id:
+            raise HTTPException(
+                status_code=403, detail="Not the owner of this configuration session"
+            )
+
         # Get manifest to access steps
         manifest = config_service._adapter_manifests.get(session.adapter_type)
         if not manifest:
             raise HTTPException(status_code=500, detail=f"Manifest for '{session.adapter_type}' not found")
 
-        # Get current step
-        current_step = None
-        if session.current_step_index < len(manifest.steps):
-            current_step = manifest.steps[session.current_step_index]
+        # Get current step, conditions evaluated (see start_configuration)
+        current_step = config_service.current_step(session)
 
         response = ConfigurationStatusResponse(
             session_id=session.session_id,
@@ -191,12 +392,12 @@ async def get_configuration_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/adapters/configure/{session_id}/step", response_model=SuccessResponse[StepExecutionResponse])
+@router.post("/adapters/configure/{session_id}/step", responses=RESPONSES_ADAPTER_CONFIG_SESSION)
 async def execute_configuration_step(
     session_id: str,
     request: Request,
-    body: StepExecutionRequest = Body(...),
-    auth: AuthContext = Depends(require_admin),
+    body: StepExecutionRequest,
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
 ) -> SuccessResponse[StepExecutionResponse]:
     """
     Execute the current configuration step.
@@ -204,7 +405,7 @@ async def execute_configuration_step(
     The body contains step-specific data such as user selections, input values,
     or OAuth callback data. The step type determines what data is expected.
 
-    Requires ADMIN role.
+    Requires ADMIN role, or accessible during first-run setup without auth.
     """
     try:
         config_service = get_adapter_config_service(request)
@@ -230,7 +431,13 @@ async def execute_configuration_step(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/configure/{session_id}/status")
+@router.get(
+    "/adapters/configure/{session_id}/status",
+    responses={
+        404: {"description": "Session not found"},
+        500: {"description": "Failed to get session status"},
+    },
+)
 async def get_session_status(
     session_id: str,
     request: Request,
@@ -245,7 +452,7 @@ async def get_session_status(
         session = config_service.get_session(session_id)
 
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         # Get adapter steps from the adapter manifest (InteractiveConfiguration)
         current_step = None
@@ -254,9 +461,8 @@ async def get_session_status(
         if manifest and manifest.steps:
             steps = manifest.steps
             total_steps = len(steps)
-            if session.current_step_index < len(steps):
-                # Use the ConfigurationStep directly from the manifest
-                current_step = steps[session.current_step_index]
+            # Through the service, conditions evaluated (see start_configuration)
+            current_step = config_service.current_step(session)
 
         response = ConfigurationSessionResponse(
             session_id=session.session_id,
@@ -277,7 +483,14 @@ async def get_session_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/configure/{session_id}/oauth/callback")
+@router.get(
+    "/adapters/configure/{session_id}/oauth/callback",
+    responses={
+        400: {"description": "Invalid OAuth state"},
+        404: {"description": "Session not found"},
+        500: {"description": "OAuth callback processing failed"},
+    },
+)
 async def oauth_callback(
     session_id: str,
     code: str,
@@ -293,17 +506,13 @@ async def oauth_callback(
 
     No authentication required (OAuth state validation provides security).
     """
+    # Sanitize user-controlled data before logging to prevent log injection
     logger.info("=" * 60)
     logger.info("[OAUTH CALLBACK] *** CALLBACK RECEIVED ***")
-    logger.info(f"[OAUTH CALLBACK] Full URL: {request.url}")
-    logger.info(f"[OAUTH CALLBACK] Path: {request.url.path}")
-    logger.info(f"[OAUTH CALLBACK] session_id: {session_id}")
-    logger.info(f"[OAUTH CALLBACK] state: {state}")
-    logger.info(f"[OAUTH CALLBACK] code length: {len(code)}")
-    logger.info(
-        f"[OAUTH CALLBACK] code preview: {code[:20]}..." if len(code) > 20 else f"[OAUTH CALLBACK] code: {code}"
-    )
-    logger.info(f"[OAUTH CALLBACK] Headers: {dict(request.headers)}")
+    logger.info("[OAUTH CALLBACK] Path: %s", request.url.path)
+    logger.info("[OAUTH CALLBACK] session_id: %s", _sanitize_for_log(session_id))
+    logger.info("[OAUTH CALLBACK] state: %s", _sanitize_for_log(state))
+    logger.info("[OAUTH CALLBACK] code length: %d", len(code))
     logger.info("=" * 60)
     try:
         config_service = get_adapter_config_service(request)
@@ -311,7 +520,7 @@ async def oauth_callback(
         # Verify session exists and state matches
         session = config_service.get_session(session_id)
         if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         if state != session_id:
             raise HTTPException(status_code=400, detail="Invalid OAuth state")
@@ -356,7 +565,14 @@ async def oauth_callback(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/adapters/oauth/callback")
+@router.get(
+    "/adapters/oauth/callback",
+    responses={
+        400: {"description": "OAuth callback failed"},
+        404: {"description": "Session not found"},
+        500: {"description": "OAuth processing error"},
+    },
+)
 async def oauth_deeplink_callback(
     code: str,
     state: str,
@@ -375,13 +591,13 @@ async def oauth_deeplink_callback(
     Discord, Google, Microsoft, Reddit, etc.) - the state parameter contains the
     session_id which identifies the configuration session.
     """
+    # Sanitize user-controlled data before logging to prevent log injection
     logger.info("=" * 60)
     logger.info("[OAUTH DEEPLINK CALLBACK] *** FORWARDED CALLBACK RECEIVED ***")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] Full URL: {request.url}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] state (session_id): {state}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] provider: {provider}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] source: {source}")
-    logger.info(f"[OAUTH DEEPLINK CALLBACK] code length: {len(code)}")
+    logger.info("[OAUTH DEEPLINK CALLBACK] state: %s", _sanitize_for_log(state))
+    logger.info("[OAUTH DEEPLINK CALLBACK] provider: %s", _sanitize_for_log(provider))
+    logger.info("[OAUTH DEEPLINK CALLBACK] source: %s", _sanitize_for_log(source))
+    logger.info("[OAUTH DEEPLINK CALLBACK] code length: %d", len(code))
     logger.info("=" * 60)
 
     try:
@@ -397,13 +613,17 @@ async def oauth_deeplink_callback(
                 # Looks like "provider:session_id"
                 provider = provider or parts[0]
                 session_id = parts[1]
-                logger.info(f"[OAUTH DEEPLINK CALLBACK] Extracted provider={provider}, session_id={session_id}")
+                logger.info(
+                    "[OAUTH DEEPLINK CALLBACK] Extracted provider=%s, session_id=%s",
+                    _sanitize_for_log(provider),
+                    _sanitize_for_log(session_id),
+                )
 
         # Verify session exists
         session = config_service.get_session(session_id)
         if not session:
-            logger.error(f"[OAUTH DEEPLINK CALLBACK] Session not found: {session_id}")
-            raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+            logger.error("[OAUTH DEEPLINK CALLBACK] Session not found: %s", _sanitize_for_log(session_id))
+            raise HTTPException(status_code=404, detail=ERROR_SESSION_NOT_FOUND)
 
         # Execute the OAuth callback step
         result = await config_service.execute_step(session_id, {"code": code, "state": state})
@@ -412,7 +632,10 @@ async def oauth_deeplink_callback(
             logger.error(f"[OAUTH DEEPLINK CALLBACK] OAuth step failed: {result.error}")
             raise HTTPException(status_code=400, detail=result.error or "OAuth callback failed")
 
-        logger.info(f"[OAUTH DEEPLINK CALLBACK] Successfully processed OAuth callback for session {session_id}")
+        logger.info(
+            "[OAUTH DEEPLINK CALLBACK] Successfully processed OAuth callback for session %s",
+            _sanitize_for_log(session_id),
+        )
 
         return SuccessResponse(
             data={
@@ -430,12 +653,18 @@ async def oauth_deeplink_callback(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/adapters/configure/{session_id}/complete", response_model=SuccessResponse[ConfigurationCompleteResponse])
+@router.post(
+    "/adapters/configure/{session_id}/complete",
+    responses={
+        404: {"description": "Session not found"},
+        500: {"description": "Configuration completion failed"},
+    },
+)
 async def complete_configuration(
     session_id: str,
     request: Request,
-    body: ConfigurationCompleteRequest = Body(default=ConfigurationCompleteRequest()),
-    auth: AuthContext = Depends(require_admin),
+    auth: Annotated[AuthContext, Depends(require_setup_or_admin)],
+    body: ConfigurationCompleteRequest = ConfigurationCompleteRequest(),
 ) -> SuccessResponse[ConfigurationCompleteResponse]:
     """
     Finalize and apply the configuration.
@@ -447,7 +676,7 @@ async def complete_configuration(
     on startup, allowing the adapter to be automatically configured when the
     system restarts.
 
-    Requires ADMIN role.
+    Requires ADMIN role, or accessible during first-run setup without auth.
     """
     try:
         adapter_config_service = get_adapter_config_service(request)

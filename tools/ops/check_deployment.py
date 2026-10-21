@@ -53,26 +53,26 @@ def check_ci_status():
 
 
 def main():
-    print("🔍 Checking deployment status for agents.ciris.ai...")
+    print(" Checking deployment status for agents.ciris.ai...")
     print("=" * 60)
 
     # Check latest commit
     latest_commit = get_latest_commit()
-    print(f"📦 Latest upstream commit: {latest_commit}")
+    print(f" Latest upstream commit: {latest_commit}")
 
     # Check CI/CD status
     ci_status, ci_conclusion, ci_commit = check_ci_status()
-    print(f"🔧 CI/CD Status: {ci_status} ({ci_conclusion}) for commit {ci_commit}")
+    print(f" CI/CD Status: {ci_status} ({ci_conclusion}) for commit {ci_commit}")
 
     # Check if GUI has the fix
     has_fix, message = check_gui_version()
-    print(f"🌐 Production GUI: {message}")
+    print(f" Production GUI: {message}")
 
     print("=" * 60)
 
     # Determine overall status
     if has_fix:
-        print("✅ 🎉 agents.ciris.ai has the new SDK! Go test good buddy! 🎉")
+        print("[OK] agents.ciris.ai has the new SDK! Go test good buddy! ")
         print("\nWhat to test:")
         print("  1. Regular login with username/password")
         print("  2. OAuth login with Google")
@@ -83,14 +83,14 @@ def main():
         print(f"   Current status: {ci_status}")
         print("   ETA: 10-15 minutes from start")
     elif ci_conclusion == "success" and not has_fix:
-        print("🚀 CI/CD completed! Images are being deployed...")
+        print(" CI/CD completed! Images are being deployed...")
         print("   CIRISManager is restarting containers")
         print("   ETA: 2-5 minutes")
     else:
         print("⏰ Not yet, please keep waiting...")
         print("   CI/CD needs to complete first")
 
-    print("\n💡 Run this tool again in a minute to check status!")
+    print("\n Run this tool again in a minute to check status!")
 
 
 if __name__ == "__main__":

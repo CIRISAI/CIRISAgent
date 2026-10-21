@@ -9,7 +9,27 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
+
+
+def serialize_datetime_iso(dt: datetime | None) -> str | None:
+    """Serialize datetime to ISO-8601 with Z suffix for UTC.
+
+    Ensures kotlinx.datetime.Instant can parse the timestamp.
+    Handles both timezone-aware and naive datetimes (assumes UTC for naive).
+    """
+    if dt is None:
+        return None
+    # If naive datetime, assume UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    # Format with Z suffix for UTC
+    iso = dt.isoformat()
+    # Replace +00:00 with Z for cleaner output
+    if iso.endswith("+00:00"):
+        iso = iso[:-6] + "Z"
+    return iso
+
 
 from ciris_engine.schemas.consent.core import ConsentStream
 from ciris_engine.schemas.services.graph.attributes import AnyNodeAttributes
@@ -97,7 +117,11 @@ class GraphNodeAttributes(BaseModel):
     content: str | None = Field(None, description="Optional content for the node")
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_dt(self, dt: datetime) -> str | None:
+        return serialize_datetime_iso(dt)
 
 
 class GraphNode(BaseModel):
@@ -120,7 +144,11 @@ class GraphNode(BaseModel):
         None, description="Expiry time for TEMPORARY consent nodes (auto-set to 14 days for TEMPORARY)"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+    @field_serializer("updated_at", "expires_at")
+    def serialize_dt(self, dt: datetime | None) -> str | None:
+        return serialize_datetime_iso(dt)
 
 
 class GraphEdgeAttributes(BaseModel):
@@ -129,7 +157,11 @@ class GraphEdgeAttributes(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     context: str | None = Field(None, description="Context of the relationship")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+    @field_serializer("created_at")
+    def serialize_dt(self, dt: datetime) -> str | None:
+        return serialize_datetime_iso(dt)
 
 
 class GraphEdge(BaseModel):
@@ -144,7 +176,7 @@ class GraphEdge(BaseModel):
         default_factory=lambda: GraphEdgeAttributes(created_at=datetime.now(timezone.utc), context=None)
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class ConnectedNodeInfo(BaseModel):

@@ -282,44 +282,6 @@ class PartnershipManager:
 
         return pending_list
 
-    def get_partnership_metrics(self) -> Dict[str, object]:
-        """
-        Get partnership metrics.
-
-        Returns:
-            Dictionary with partnership statistics
-        """
-        total_requests = self._partnership_requests
-        approval_rate = 0.0
-        rejection_rate = 0.0
-        deferral_rate = 0.0
-
-        if total_requests > 0:
-            approval_rate = (self._partnership_approvals / total_requests) * 100.0
-            rejection_rate = (self._partnership_rejections / total_requests) * 100.0
-            deferral_rate = (self._partnership_deferrals / total_requests) * 100.0
-
-        # Calculate average approval time (from pending list)
-        pending_list = self.list_pending_partnerships()
-        avg_pending_hours = 0.0
-        if pending_list:
-            total_hours = sum(
-                float(p["age_hours"]) if isinstance(p["age_hours"], (int, float)) else 0.0 for p in pending_list
-            )
-            avg_pending_hours = total_hours / len(pending_list)
-
-        return {
-            "total_requests": total_requests,
-            "total_approvals": self._partnership_approvals,
-            "total_rejections": self._partnership_rejections,
-            "total_deferrals": self._partnership_deferrals,
-            "pending_count": len(self._pending_partnerships),
-            "approval_rate_percent": approval_rate,
-            "rejection_rate_percent": rejection_rate,
-            "deferral_rate_percent": deferral_rate,
-            "avg_pending_hours": avg_pending_hours,
-        }
-
     def get_pending_count(self) -> int:
         """Get count of pending partnerships."""
         return len(self._pending_partnerships)

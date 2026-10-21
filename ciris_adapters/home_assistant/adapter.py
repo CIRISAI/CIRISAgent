@@ -19,10 +19,28 @@ from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, Runti
 from ciris_engine.schemas.runtime.enums import ServiceType
 
 from .communication_service import HACommunicationService
+from .ingress_auth import get_ha_ingress_auth_provider
 from .service import HAIntegrationService
 from .tool_service import HAToolService
 
 logger = logging.getLogger(__name__)
+
+
+def _register_ingress_auth_if_supervisor_mode() -> None:
+    """Register HA ingress auth provider if running in HA Supervisor mode.
+
+    This allows users authenticated via HA's web UI to automatically
+    authenticate with CIRIS without separate login.
+    """
+    provider = get_ha_ingress_auth_provider()
+    if provider:
+        try:
+            from ciris_engine.logic.adapters.api.dependencies.auth import register_ingress_auth_provider
+
+            register_ingress_auth_provider(provider, priority=100)
+            logger.info("[HA_ADAPTER] Registered HA ingress auth provider (Supervisor mode)")
+        except ImportError:
+            logger.debug("[HA_ADAPTER] API dependencies not available, skipping ingress auth registration")
 
 
 class HomeAssistantAdapter(Service):
@@ -53,6 +71,7 @@ class HomeAssistantAdapter(Service):
         # Track adapter state
         self._running = False
         self._lifecycle_task: Optional[asyncio.Task[None]] = None
+        self._init_task: Optional[asyncio.Task[None]] = None
 
         logger.info(f"Home Assistant adapter initialized for {self.ha_service.ha_url}")
 
@@ -103,13 +122,18 @@ class HomeAssistantAdapter(Service):
         return registrations
 
     async def start(self) -> None:
-        """Start the Home Assistant adapter."""
+        """Start the Home Assistant adapter.
+
+        NOTE: Adapter startup is non-blocking. HA connection is initialized
+        in the background to avoid delaying agent startup when HA is unreachable.
+        """
         logger.info("Starting Home Assistant adapter")
 
-        # Initialize underlying HA service
-        await self.ha_service.initialize()
+        # Register ingress auth provider if in HA Supervisor mode
+        # This allows HA-authenticated users to access CIRIS without separate login
+        _register_ingress_auth_if_supervisor_mode()
 
-        # Start tool service
+        # Start tool service (will lazy-init HA connection on first use)
         await self.tool_service.start()
         logger.info("HAToolService started")
 
@@ -120,17 +144,59 @@ class HomeAssistantAdapter(Service):
         self._running = True
         logger.info("Home Assistant adapter started")
 
+        # Initialize HA connection in background - don't block startup
+        # Store reference to prevent garbage collection
+        self._init_task = asyncio.create_task(self._background_initialize())
+
+    async def _background_initialize(self) -> None:
+        """Initialize HA connection in background without blocking startup."""
+        try:
+            initialized = await self.ha_service.initialize()
+            if initialized:
+                logger.info("[HA BACKGROUND] Connection established successfully")
+                # Run entity discovery in background
+                try:
+                    entities = await self.ha_service.get_all_entities()
+                    domains: dict[str, int] = {}
+                    for e in entities:
+                        domains[e.domain] = domains.get(e.domain, 0) + 1
+                    logger.warning(
+                        f"[HA DISCOVERY] Found {len(entities)} entities across {len(domains)} domains: "
+                        + ", ".join(f"{d}={c}" for d, c in sorted(domains.items(), key=lambda x: -x[1])[:15])
+                    )
+                    # Notify tool service that HA is now initialized so it can detect Music Assistant
+                    # This is critical - without this, MA tools won't appear if tool discovery
+                    # happened before HA finished loading entities
+                    await self.tool_service.notify_ha_initialized()
+                except Exception as e:
+                    logger.warning(f"[HA DISCOVERY] Entity discovery failed: {e}")
+            else:
+                logger.warning("[HA BACKGROUND] Connection not established - will retry on first use")
+        except Exception as e:
+            logger.warning(f"[HA BACKGROUND] Initialization failed: {e} - will retry on first use")
+
     async def stop(self) -> None:
         """Stop the Home Assistant adapter."""
         logger.info("Stopping Home Assistant adapter")
         self._running = False
+
+        # Unregister ingress auth provider
+        provider = get_ha_ingress_auth_provider()
+        if provider:
+            try:
+                from ciris_engine.logic.adapters.api.dependencies.auth import unregister_ingress_auth_provider
+
+                unregister_ingress_auth_provider(provider)
+                logger.info("[HA_ADAPTER] Unregistered HA ingress auth provider")
+            except ImportError:
+                pass
 
         if self._lifecycle_task and not self._lifecycle_task.done():
             self._lifecycle_task.cancel()
             try:
                 await self._lifecycle_task
             except asyncio.CancelledError:
-                pass
+                pass  # Expected - we initiated the cancellation
 
         # Stop communication service
         await self.communication_service.stop()
@@ -155,6 +221,7 @@ class HomeAssistantAdapter(Service):
             await agent_task
         except asyncio.CancelledError:
             logger.info("Home Assistant adapter lifecycle cancelled")
+            raise  # Re-raise to propagate cancellation
         finally:
             await self.stop()
 
@@ -170,14 +237,28 @@ class HomeAssistantAdapter(Service):
         )
 
     def get_status(self) -> RuntimeAdapterStatus:
-        """Get adapter status."""
-        return RuntimeAdapterStatus(
+        """Get adapter status including re-auth requirements."""
+        needs_reauth = False
+        reauth_reason = None
+
+        # Check if HA service needs re-authentication
+        logger.info(f"[HA_ADAPTER_STATUS] ha_service exists={self.ha_service is not None}")
+        if self.ha_service:
+            needs_reauth = self.ha_service.needs_reauth
+            reauth_reason = self.ha_service.reauth_reason
+            logger.info(f"[HA_ADAPTER_STATUS] needs_reauth={needs_reauth}, reauth_reason={reauth_reason}")
+
+        status = RuntimeAdapterStatus(
             adapter_id="home_assistant",
             adapter_type="home_assistant",
             is_running=self._running,
             loaded_at=None,
             error=None,
+            needs_reauth=needs_reauth,
+            reauth_reason=reauth_reason,
         )
+        logger.info(f"[HA_ADAPTER_STATUS] Returning status: needs_reauth={status.needs_reauth}")
+        return status
 
     async def get_active_channels(self) -> List[Dict[str, Any]]:
         """Get active communication channels from HA communication service."""

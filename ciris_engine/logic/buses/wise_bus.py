@@ -6,13 +6,21 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
+from ciris_engine.logic.utils.halt_latch import bus_backstop
 from ciris_engine.logic.utils.jsondict_helpers import get_int, get_str
 from ciris_engine.protocols.services import WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
+from ciris_engine.schemas.runtime.accord_halt import BusBackstopCall
 from ciris_engine.schemas.runtime.enums import ServiceType
-from ciris_engine.schemas.services.authority_core import GuidanceRequest, GuidanceResponse
+from ciris_engine.schemas.services.agent_credits import DomainCategory, DomainDeferralRequired
+from ciris_engine.schemas.services.authority_core import GuidanceOrigin, GuidanceRequest, GuidanceResponse
 from ciris_engine.schemas.services.context import DeferralContext, GuidanceContext
+from ciris_engine.schemas.services.deferral_taxonomy import (
+    DeferralOperationalReason,
+    get_need_category_for_domain,
+    get_rights_basis_for_need_category,
+)
 from ciris_engine.schemas.types import JSONDict
 
 from .base_bus import BaseBus, BusMessage
@@ -28,6 +36,13 @@ if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
 logger = logging.getLogger(__name__)
+
+# Stewardship-tier cache freshness (D07 / CIRISAgent#810). The tier gates
+# community-moderation capability checks; caching it forever meant a privilege
+# escalation/revocation didn't take effect until process restart. A short TTL
+# re-resolves per-action-ish (config lookup is cheap; memory search only on
+# config miss) while bounding the privilege-lag window to this many seconds.
+_AGENT_TIER_TTL_SECONDS = 60.0
 
 
 class WiseBus(BaseBus[WiseAuthorityService]):
@@ -52,7 +67,8 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         super().__init__(service_type=ServiceType.WISE_AUTHORITY, service_registry=service_registry)
         self._time_service = time_service
         self._start_time = time_service.now() if time_service else None
-        self._agent_tier: Optional[int] = None  # Cached agent tier
+        self._agent_tier: Optional[int] = None  # Cached agent tier (TTL-bounded, see _AGENT_TIER_TTL_SECONDS)
+        self._agent_tier_fetched_at: Optional[Any] = None  # datetime of last tier resolve
 
         # Metrics tracking
         self._requests_count = 0
@@ -114,54 +130,111 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         Returns:
             Agent tier level (1-5), defaults to 1 if not found
+
+        The resolved tier is cached for _AGENT_TIER_TTL_SECONDS so a privilege
+        escalation/revocation propagates without a process restart (D07 /
+        CIRISAgent#810) while keeping the per-call cost near zero on the hot path.
         """
+        now = self._time_service.now() if self._time_service else None
+
+        # Serve from cache while still fresh. If we have no clock, fall back to
+        # the original cache-forever behaviour rather than re-resolving every call.
         if self._agent_tier is not None:
-            return self._agent_tier
+            if now is None or self._agent_tier_fetched_at is None:
+                return self._agent_tier
+            try:
+                age = (now - self._agent_tier_fetched_at).total_seconds()
+                fresh = age < _AGENT_TIER_TTL_SECONDS
+            except (TypeError, AttributeError):
+                # Non-datetime clock (e.g. a mocked time service): treat the
+                # cache as expired and re-resolve — the conservative direction
+                # for the D07 escalation/revocation-propagation guarantee.
+                fresh = False
+            if fresh:
+                return self._agent_tier
 
-        # Try to get tier from config service
+        # Resolve: config service first (cheap), then memory/identity on miss.
         tier = await self._get_tier_from_config()
-        if tier:
-            self._agent_tier = tier
-            logger.info(f"Agent tier detected from config: {self._agent_tier}")
-            return self._agent_tier
+        source = "config"
+        if not tier:
+            tier = await self._get_tier_from_memory()
+            source = "memory/identity"
+        resolved = int(tier) if tier else 1
+        if not tier:
+            source = "default"
 
-        # Try to get tier from memory/identity
-        tier = await self._get_tier_from_memory()
-        if tier:
-            self._agent_tier = tier
-            logger.info(f"Agent identified as Tier {self._agent_tier} (stewardship)")
-            return self._agent_tier
-
-        # Default to tier 1 (standard agent)
-        self._agent_tier = 1
-        logger.info(f"Using default agent tier: {self._agent_tier}")
-        return self._agent_tier
+        # Log only on change to avoid per-TTL log spam.
+        if resolved != self._agent_tier:
+            logger.info(f"Agent tier resolved to {resolved} (source={source})")
+        self._agent_tier = resolved
+        self._agent_tier_fetched_at = now
+        return resolved
 
     async def send_deferral(self, context: DeferralContext, handler_name: str) -> bool:
-        """Send a deferral to ALL wise authority services (broadcast)"""
-        # Get ALL services with send_deferral capability
-        # Since we want to broadcast to all WA services, we need to get them all
+        """Send a deferral to wise authority services that support the domain.
+
+        If context.domain_hint is set (for domain-specific deferrals like MEDICAL,
+        FINANCIAL, etc.), only services that advertise support for that domain
+        will receive the deferral. This prevents unnecessary broadcasting and
+        ensures only qualified handlers receive domain-specific requests.
+
+        If no domain_hint is set, broadcasts to all services with send_deferral
+        capability (legacy behavior for human deferrals).
+        """
         from ciris_engine.schemas.runtime.enums import ServiceType
 
         all_wa_services = self.service_registry.get_services_by_type(ServiceType.WISE_AUTHORITY)
         logger.info(f"Found {len(all_wa_services)} total WiseAuthority services")
 
-        # Filter for services with send_deferral capability
+        # Extract domain_hint for filtering
+        domain_hint = context.domain_hint
+
+        # Filter for services with send_deferral capability AND matching domain
         services = []
         for service in all_wa_services:
             logger.debug(f"Checking service {service.__class__.__name__} for send_deferral capability")
             # Check if service has get_capabilities method
             if hasattr(service, "get_capabilities"):
                 caps = service.get_capabilities()
-                logger.debug(f"Service {service.__class__.__name__} has capabilities: {caps.actions}")
-                if "send_deferral" in caps.actions:
-                    services.append(service)
-                    logger.info(f"Adding service {service.__class__.__name__} to deferral broadcast list")
+                # get_capabilities() returns a ServiceCapabilities (with an
+                # `.actions` list) for most services, but some WA providers
+                # return a bare list of action strings. Accessing .actions
+                # on the latter raised "'list' object has no attribute
+                # 'actions'" and aborted every deferral. Handle both shapes.
+                cap_actions = caps if isinstance(caps, list) else getattr(caps, "actions", [])
+                logger.debug(f"Service {service.__class__.__name__} has capabilities: {cap_actions}")
+                if "send_deferral" not in cap_actions:
+                    continue
+
+                # Check domain support if domain_hint is specified
+                # Services must explicitly declare supported domains to handle domain-specific deferrals
+                if domain_hint:
+                    supported_domains = getattr(caps, "supported_domains", [])
+                    supported_domain_values = {
+                        domain.value if isinstance(domain, DomainCategory) else str(domain)
+                        for domain in supported_domains
+                    }
+                    # Reject services with empty supported_domains OR without the required domain
+                    if not supported_domains or domain_hint.value not in supported_domain_values:
+                        logger.debug(
+                            f"Skipping service {service.__class__.__name__}: "
+                            f"domain '{domain_hint.value}' not in supported_domains {supported_domain_values}"
+                        )
+                        continue
+
+                services.append(service)
+                logger.info(f"Adding service {service.__class__.__name__} to deferral broadcast list")
             else:
                 logger.warning(f"Service {service.__class__.__name__} has no get_capabilities method")
 
         if not services:
-            logger.info(f"No wise authority service available for {handler_name}")
+            if domain_hint:
+                logger.warning(
+                    f"No wise authority service supports domain '{domain_hint.value}' for {handler_name}. "
+                    f"Ensure a service advertising this domain is registered (e.g., CIRISNode)."
+                )
+            else:
+                logger.info(f"No wise authority service available for {handler_name}")
             return False
 
         # Track if any service successfully received the deferral
@@ -198,12 +271,26 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
                 defer_until = self._time_service.now() + timedelta(hours=1)
 
+            request_context = dict(context.metadata)
+            if context.domain_hint is not None:
+                request_context["domain_hint"] = context.domain_hint.value
+            if context.reason_code is not None:
+                request_context["reason_code"] = context.reason_code.value
+            if context.needs_category is not None:
+                request_context["needs_category"] = context.needs_category.value
+            if context.secondary_needs_categories:
+                request_context["secondary_needs_categories"] = ",".join(
+                    category.value for category in context.secondary_needs_categories
+                )
+            if context.rights_basis:
+                request_context["rights_basis"] = ",".join(context.rights_basis)
+
             deferral_request = DeferralRequest(
                 task_id=context.task_id,
                 thought_id=context.thought_id,
                 reason=context.reason,
                 defer_until=defer_until,
-                context=context.metadata,  # Map metadata to context
+                context=request_context,
             )
 
             # Broadcast to ALL registered WA services
@@ -229,6 +316,10 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
     async def fetch_guidance(self, context: GuidanceContext, handler_name: str) -> Optional[str]:
         """Fetch guidance from wise authority"""
+        # CC 4.2.1.1 backstop: asking a human for guidance is a send; the
+        # reasoning loop makes none under a halt. (Deferrals are the exempt write.)
+        if await bus_backstop(BusBackstopCall.WISE_FETCH_GUIDANCE) is not None:
+            return None
         service = await self.get_service(handler_name=handler_name, required_capabilities=["fetch_guidance"])
 
         if not service:
@@ -258,25 +349,34 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         return await self.send_deferral(context, handler_name)
 
-    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> None:
+    def _validate_capability(self, capability: Optional[str], agent_tier: int = 1) -> Optional[DomainDeferralRequired]:
         """
         Validate capability against prohibited domains with tier-based access.
+
+        For REQUIRES_SEPARATE_MODULE capabilities (MEDICAL, FINANCIAL, etc.),
+        returns a DomainDeferralRequired signal instead of raising. The caller
+        auto-constructs a DeferralContext with domain_hint and routes through
+        CIRISNode to a qualified licensed agent.
 
         Args:
             capability: The capability to validate
             agent_tier: Agent tier level (1-5, with 4-5 having stewardship)
 
+        Returns:
+            DomainDeferralRequired if the capability needs domain-specific routing,
+            None if the capability is allowed.
+
         Raises:
-            ValueError: If capability is prohibited for the agent's tier
+            ValueError: If capability is NEVER_ALLOWED or TIER_RESTRICTED
         """
         if not capability:
-            return
+            return None
 
         # Get the category of this capability
         category = get_capability_category(capability)
         if not category:
             # Not a prohibited capability
-            return
+            return None
 
         # Check if it's a community moderation capability
         if category.startswith("COMMUNITY_"):
@@ -288,17 +388,29 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     f"This capability is reserved for agents with stewardship responsibilities."
                 )
             # Tier 4-5 can use community moderation
-            return
+            return None
 
         # Get the severity of this prohibition
         severity = get_prohibition_severity(category)
 
         if severity == ProhibitionSeverity.REQUIRES_SEPARATE_MODULE:
-            # These require separate licensed systems
-            raise ValueError(
-                f"PROHIBITED: {category} capabilities blocked. "
-                f"Capability '{capability}' requires separate licensed system. "
-                f"Implementation must be in isolated repository with proper liability controls."
+            # Route to licensed handler via CIRISNode instead of raising
+            try:
+                domain = DomainCategory(category)
+            except ValueError:
+                domain = DomainCategory.MEDICAL  # Safe fallback
+
+            logger.info(
+                f"Domain deferral required: {category} capability '{capability}' "
+                f"will be routed to licensed handler via CIRISNode"
+            )
+            return DomainDeferralRequired(
+                category=domain,
+                capability=capability,
+                reason=(
+                    f"{category} capability '{capability}' requires licensed domain handler. "
+                    f"Routing to qualified agent via CIRISNode."
+                ),
             )
         elif severity == ProhibitionSeverity.NEVER_ALLOWED:
             # These are absolutely prohibited
@@ -308,6 +420,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 f"This capability cannot be implemented in any CIRIS system."
             )
         # TIER_RESTRICTED already handled above for community moderation
+        return None
 
     async def _get_matching_services(self, request: GuidanceRequest) -> List[Any]:
         """Get services matching the request capability."""
@@ -399,6 +512,17 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             ValueError: If capability is prohibited for the agent's tier
             RuntimeError: If no WiseAuthority service is available
         """
+        # CC 4.2.1.1 backstop: no guidance request goes out for the reasoning
+        # loop under a halt. Answered as an unsigned machine notice.
+        halt = await bus_backstop(BusBackstopCall.WISE_REQUEST_GUIDANCE)
+        if halt is not None:
+            return GuidanceResponse(
+                reasoning=halt.refusal_reason(),
+                wa_id="accord_halt",
+                signature="",
+                origin=GuidanceOrigin.ACCORD_HALT,
+            )
+
         # Track request count
         self._requests_count += 1
 
@@ -408,7 +532,38 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         # CRITICAL: Validate capability against comprehensive prohibitions
         if hasattr(request, "capability"):
-            self._validate_capability(request.capability, agent_tier)
+            deferral_signal = self._validate_capability(request.capability, agent_tier)
+            if deferral_signal is not None:
+                # Route to licensed domain handler via CIRISNode auto-deferral
+                needs_category = get_need_category_for_domain(deferral_signal.category)
+                deferral_context = DeferralContext(
+                    thought_id=f"domain_deferral_{id(request)}",
+                    task_id=f"domain_task_{id(request)}",
+                    reason=deferral_signal.reason,
+                    domain_hint=deferral_signal.category,
+                    reason_code=DeferralOperationalReason.LICENSED_DOMAIN_REQUIRED,
+                    needs_category=needs_category,
+                    rights_basis=get_rights_basis_for_need_category(needs_category),
+                    metadata={
+                        "domain_category": deferral_signal.category.value,
+                        "capability": deferral_signal.capability,
+                        "domain_hint": deferral_signal.category.value,
+                    },
+                )
+                success = await self.send_deferral(deferral_context, "domain_auto_deferral")
+                return GuidanceResponse(
+                    reasoning=deferral_signal.reason,
+                    wa_id="wisebus_domain_deferral",
+                    # A routing notice, not a WA decision: unsigned, and typed as such
+                    # (#967). Empty is what is_unverifiable_legacy_signature reads as
+                    # "unsigned"; a constant label would read as a forged signature.
+                    signature="",
+                    origin=GuidanceOrigin.DOMAIN_AUTO_DEFERRAL,
+                    custom_guidance=(
+                        f"This request requires a licensed {deferral_signal.category.value} handler. "
+                        f"{'Deferral sent to CIRISNode for routing.' if success else 'No WA service available for routing.'}"
+                    ),
+                )
 
         # Get matching services
         services = await self._get_matching_services(request)

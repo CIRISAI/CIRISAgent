@@ -2,23 +2,155 @@
 Authentication dependencies for FastAPI routes.
 
 Provides role-based access control through dependency injection.
+
+Supports:
+- Bearer token authentication (API keys, service tokens, username:password)
+- Ingress authentication via registered providers (e.g., HA Supervisor, CIRISMedical)
 """
 
+import logging
+import re
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
+from ciris_engine.protocols.services.infrastructure.ingress_auth import IngressAuthProviderProtocol, IngressUser
 from ciris_engine.schemas.api.auth import ROLE_PERMISSIONS, APIKeyInfo, AuthContext, UserInfo, UserRole
 
 from ..services.auth_service import APIAuthService
 
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Ingress Auth Provider Registry
+# =============================================================================
+# Adapters can register themselves as ingress auth providers to handle
+# authentication via their proxy systems (e.g., HA Supervisor, medical proxies).
+#
+# Design: Chain of Responsibility Pattern (Sequential with Short-Circuit)
+# ---------
+# Providers are checked in priority order (highest first). The first provider
+# that can_handle_request() AND successfully authenticate_request() wins.
+# If no ingress provider handles the request, we fall back to Bearer auth.
+#
+# Why Sequential (not Parallel):
+# 1. Authentication should be deterministic - same request, same provider handles it
+# 2. First match wins avoids ambiguity when multiple providers could handle
+# 3. Short-circuit on success improves performance
+# 4. Order matters for security - more trusted providers should be checked first
+#
+# References:
+# - Chain of Responsibility: https://refactoring.guru/design-patterns/chain-of-responsibility
+# - Auth Middleware Pattern: https://medium.com/@mehar.chand.cloud/chain-of-responsibility-design-pattern-use-case-authentication-and-authorization-middleware-a96f17a9ebe3
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class RegisteredProvider:
+    """Wrapper for registered ingress auth providers with priority."""
+
+    provider: IngressAuthProviderProtocol
+    priority: int = 100  # Higher priority = checked first (default: 100)
+
+
+_ingress_auth_providers: List[RegisteredProvider] = []
+
+
+def register_ingress_auth_provider(
+    provider: IngressAuthProviderProtocol,
+    priority: int = 100,
+) -> None:
+    """Register an ingress auth provider with priority.
+
+    Adapters call this when they provide ingress authentication.
+    Providers are checked in priority order (highest first).
+
+    Args:
+        provider: The ingress auth provider to register
+        priority: Check order priority (higher = checked first). Defaults:
+            - home_assistant: 100 (standard priority)
+            - ciris_medical: 200 (higher priority in medical environments)
+            - enterprise_sso: 50 (lower priority, fallback)
+
+    Example:
+        ```python
+        # Register HA provider with standard priority
+        register_ingress_auth_provider(ha_provider, priority=100)
+
+        # Register medical provider with higher priority
+        register_ingress_auth_provider(medical_provider, priority=200)
+        ```
+    """
+    # Check if already registered (by provider identity)
+    for registered in _ingress_auth_providers:
+        if registered.provider is provider:
+            logger.debug(f"[AUTH] Provider {provider.provider_name} already registered, skipping")
+            return
+
+    _ingress_auth_providers.append(RegisteredProvider(provider=provider, priority=priority))
+    # Sort by priority (highest first) for Chain of Responsibility order
+    _ingress_auth_providers.sort(key=lambda r: r.priority, reverse=True)
+    logger.info(f"[AUTH] Registered ingress auth provider: {provider.provider_name} (priority: {priority})")
+
+
+def unregister_ingress_auth_provider(provider: IngressAuthProviderProtocol) -> None:
+    """Unregister an ingress auth provider.
+
+    Args:
+        provider: The provider to unregister
+    """
+    for i, registered in enumerate(_ingress_auth_providers):
+        if registered.provider is provider:
+            _ingress_auth_providers.pop(i)
+            logger.info(f"[AUTH] Unregistered ingress auth provider: {provider.provider_name}")
+            return
+
+
+def clear_ingress_auth_providers() -> None:
+    """Clear all registered ingress auth providers (for testing)."""
+    _ingress_auth_providers.clear()
+    logger.debug("[AUTH] Cleared all ingress auth providers")
+
+
+def get_ingress_auth_providers() -> List[IngressAuthProviderProtocol]:
+    """Get all registered ingress auth providers (in priority order)."""
+    return [r.provider for r in _ingress_auth_providers]
+
+
+def has_ingress_auth_providers() -> bool:
+    """Check if any ingress auth providers are registered."""
+    return len(_ingress_auth_providers) > 0
+
+
+def should_skip_setup_wizard_user_step() -> bool:
+    """Check if any registered provider wants to skip setup wizard user step."""
+    return any(r.provider.skip_setup_wizard_user_step() for r in _ingress_auth_providers)
+
+
+def get_active_ingress_provider_names() -> List[str]:
+    """Get names of all active ingress auth providers (for status/debugging)."""
+    return [r.provider.provider_name for r in _ingress_auth_providers]
+
+
 __all__ = [
+    # Auth context and service
     "AuthContext",
     "get_auth_service",
+    # Role requirements
     "require_admin",
     "require_observer",
     "require_authenticated",
+    # Ingress auth provider registry
+    "register_ingress_auth_provider",
+    "unregister_ingress_auth_provider",
+    "clear_ingress_auth_providers",
+    "get_ingress_auth_providers",
+    "has_ingress_auth_providers",
+    "should_skip_setup_wizard_user_step",
+    "get_active_ingress_provider_names",
 ]
 
 
@@ -53,8 +185,23 @@ def _extract_bearer_token(authorization: Optional[str]) -> str:
 
 def _handle_service_token_auth(request: Request, auth_service: APIAuthService, service_token: str) -> AuthContext:
     """Handle service token authentication."""
+    import hashlib
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     service_user = auth_service.validate_service_token(service_token)
     if not service_user:
+        # Audit failed service token authentication (security monitoring)
+        token_hash = hashlib.sha256(service_token.encode("utf-8")).hexdigest()[:16] + "..."
+        client_ip = request.client.host if request.client else "unknown"
+        # Sanitize user-agent to prevent log injection attacks
+        raw_user_agent = request.headers.get("user-agent", "unknown")
+        sanitized_user_agent = raw_user_agent.replace("\n", "").replace("\r", "")[:200]
+        logger.warning(
+            f"[AUTH SECURITY] Failed service token authentication: token_hash={token_hash}, client_ip={client_ip}, "
+            f"user_agent={sanitized_user_agent}"
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service token")
 
     # Service token authentication successful
@@ -116,10 +263,191 @@ def _build_permissions_set(key_info: Any, user: Any) -> Set[Any]:
     return permissions
 
 
+#: Prefix of a session token minted by the SUBSTRATE (`issue_session_token` in
+#: ciris-server `auth/session.rs`) — `sess:<wa_id>:<mac>`. Every node login
+#: mechanism mints this one shape: password, Google/Apple native id_token, and the
+#: OAuth callback all funnel through that single function.
+SUBSTRATE_SESSION_PREFIX = "sess:"
+
+#: Grammar of a node-minted session token: ``sess:<wa_id>:<mac>``. Used ONLY to
+#: report whether a rejected token was structurally plausible — never to accept
+#: one. Authentication is the substrate's call; this must not become a second,
+#: weaker opinion about validity.
+_SESSION_TOKEN_RE = re.compile(r"sess:wa-\d{4}-\d{2}-\d{2}-[A-Za-z0-9]{6}:[A-Za-z0-9_\-=]+")
+
+
+def _describe_token_family(token: str) -> str:
+    """Name the token's minter, for logs only. Never a decision input.
+
+    The brain and the node mint DISJOINT token families and neither verifies the
+    other's, which is measurable:
+
+        node   `sess:wa-…`             -> :4243 200, :8080 401
+        python `ciris_system_admin_…`  -> :4243 401, :8080 200
+
+    Before this, presenting a substrate token to a brain route produced a bare
+    "Invalid API key" — indistinguishable from a typo'd credential, which is how
+    the /v1/auth cutover cost a day. A rejection should say WHICH minter issued
+    the thing it could not verify.
+    """
+    if token.startswith(SUBSTRATE_SESSION_PREFIX):
+        return "substrate-session"
+    if token.startswith("service:"):
+        return "service-token"
+    if token.startswith("ciris_"):
+        return "brain-issued"
+    return "unrecognized"
+
+
+def _identity_unavailable_detail() -> str:
+    """The 503's reason, when the Edge runtime is the thing that is down (#1101).
+
+    An outage is not a rejection, so the status stays 503; but "unavailable"
+    with no cause is what let an Edge-init failure hide behind a green health
+    for a whole E2E. The Edge module remembers why it did not come up.
+    """
+    try:
+        from ciris_engine.logic.runtime import edge_runtime
+
+        if not edge_runtime.is_available():
+            why = edge_runtime.get_init_error()
+            if edge_runtime._edge_disabled():
+                return "Identity verification unavailable: edge runtime disabled by environment"
+            return "Identity verification unavailable: edge runtime not initialized" + (f" ({why})" if why else "")
+    except Exception:  # noqa: BLE001 — the detail must never be the failure
+        pass
+    return "Identity verification unavailable"
+
+
+def resolve_substrate_session(token: str) -> Dict[str, Any]:
+    """Ask the substrate who this `sess:` token is. Shared by BOTH auth surfaces.
+
+    There are two authenticators in this adapter — `dependencies/auth.py`
+    (AuthContext) and `api/auth.py` (TokenData) — reached by different route
+    families. They existed before the substrate did, and when only the first
+    learned to verify node-issued tokens, `/v1/partnership`, `/v1/dsar`,
+    `/v1/my_data` and `/v1/connectors` answered 401 "Invalid or expired token"
+    for a token the rest of the API accepted. Caught by Staged QA, not by me.
+
+    So the VERIFICATION lives here once and both callers use it. Two adapters onto
+    one resolver is fine; two resolvers is how they drift.
+
+    Raises HTTPException(503) when the substrate could not judge, and (401) on an
+    explicit rejection — never conflating "I could not look" with "forged".
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        resolved = ciris_server.resolve_bearer(token)
+    except ImportError:
+        logger.exception("auth: substrate session token presented but ciris_server is not importable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Identity verification unavailable",
+        ) from None
+    except Exception as exc:  # noqa: BLE001 — an outage is NOT a rejection
+        logger.exception(
+            "auth: substrate COULD NOT judge this token (%s). Answering 503, not 401 — "
+            "the credential may be perfectly valid and we simply could not check it.",
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_identity_unavailable_detail(),
+        ) from None
+
+    if resolved is None:
+        # Log the token's SHAPE, never a slice of it.
+        #
+        # This used to log `token.split(":")[1]`, reasoning that a wa_id is not a
+        # secret. The wa_id is not — but that expression does not extract a wa_id,
+        # it extracts whatever the caller put between the first two colons. Anyone
+        # may send `sess:<anything>:x` unauthenticated and have it written verbatim
+        # into our warning log, and on a malformed token that slice can land on
+        # credential material instead (py/clear-text-logging-sensitive-data). A
+        # REJECTED token is precisely the input least entitled to that trust.
+        #
+        # `well_formed` is a bool from a fullmatch against the token grammar and
+        # `segments` an int, so neither can carry caller bytes — and together they
+        # still separate the diagnoses that matter: junk arriving at the endpoint
+        # (well_formed=False) from real tokens being refused (well_formed=True).
+        # When the subject itself is needed, the node has it: it made the judgement.
+        well_formed = bool(_SESSION_TOKEN_RE.fullmatch(token))
+        logger.warning(
+            "auth: substrate JUDGED this session token invalid "
+            "(well_formed=%s, segments=%d). This is a verdict, not an outage — "
+            "the substrate looked and said no; it logs the subject.",
+            well_formed,
+            token.count(":") + 1,
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
+    return dict(resolved)
+
+
+def _handle_substrate_session_auth(
+    _request: Request, _auth_service: APIAuthService, token: str
+) -> AuthContext:
+    """Verify a node-minted `sess:` token by asking the SUBSTRATE, not ourselves.
+
+    This is the binding that lets the brain stop having an opinion about identity.
+    `ciris_server.resolve_bearer` is the same verification the node's own doors
+    use, so a token minted by ANY node login mechanism — password, Google or Apple
+    native id_token, the OAuth callback, anything added later — opens brain routes
+    without a second implementation here. Upstream funnels all of them through one
+    `issue_session_token`, so there is exactly one thing to verify.
+
+    THE CONTRACT, which must not be softened:
+
+        None      -> the substrate JUDGED the token and it is invalid  -> 401
+        exception -> the substrate COULD NOT judge it                  -> 503
+
+    `except Exception: return None` would turn a store outage into a silent
+    fleet-wide lockout whose logs read exactly like everyone presenting bad
+    tokens at once. The upstream messages say so in words ("the token was NOT
+    judged; do not treat this as a rejection") precisely because that collapse is
+    the tempting one to write.
+    """
+    resolved = resolve_substrate_session(token)
+
+    wa_id = resolved["wa_id"]
+    role = UserRole(resolved["role"]) if resolved.get("role") else UserRole.OBSERVER
+    # `actor` is distinct from `wa_id` on a delegated grant: the caller wields the
+    # owner's authority while the ACT is attributable to the delegate. Logging the
+    # wa_id alone would record the owner as having done what a delegate did.
+    actor = resolved.get("actor")
+    logger.debug(
+        "auth: substrate resolved session wa_id=%s role=%s actor=%s", wa_id, role.value, actor
+    )
+    return AuthContext(
+        user_id=wa_id,
+        role=role,
+        permissions=set(ROLE_PERMISSIONS.get(role, set())),
+        api_key_id=None,
+        authenticated_at=datetime.now(timezone.utc),
+    )
+
+
 def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key: str) -> AuthContext:
     """Handle regular API key authentication."""
     key_info = auth_service.validate_api_key(api_key)
     if not key_info:
+        family = _describe_token_family(api_key)
+        if family == "substrate-session":
+            # THE CUTOVER EDGE. The caller authenticated against the node and is
+            # holding a perfectly valid `sess:` token; the brain simply has no way
+            # to verify it, because ciris_server exposes no bearer-resolution
+            # binding to Python (checked: its Python surface has no resolve/verify
+            # token export). This is the one line that tells an operator the
+            # difference between "bad credential" and "right credential, wrong
+            # verifier" — see CIRISAgent#1028 / the substrate ask.
+            logger.warning(
+                "auth: rejected a SUBSTRATE-minted session token on a brain route — "
+                "the credential may be entirely valid; the brain cannot verify it. "
+                "Until the substrate exposes bearer resolution to Python, node-issued "
+                "tokens do not open brain doors."
+            )
+        else:
+            logger.info("auth: rejected bearer token (family=%s)", family)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     # Get user to check for custom permissions
@@ -142,13 +470,191 @@ def _handle_api_key_auth(request: Request, auth_service: APIAuthService, api_key
     return context
 
 
+async def _handle_ingress_auth(
+    request: Request, auth_service: APIAuthService, ingress_user: IngressUser
+) -> AuthContext:
+    """Handle ingress authentication from a registered provider.
+
+    Creates or retrieves the CIRIS user corresponding to the ingress user,
+    then builds an AuthContext.
+    """
+    from ciris_engine.schemas.runtime.api import APIRole
+
+    # Build a unique user ID from provider and external ID
+    user_id = f"{ingress_user.provider}:{ingress_user.external_id}"
+
+    # Check if user already exists
+    existing_user = auth_service.get_user(user_id)
+
+    if existing_user:
+        # User exists - use their existing role
+        role = existing_user.api_role
+        user_role = UserRole[role.value] if hasattr(role, "value") else UserRole.OBSERVER
+        # SECURITY: Log provider only, not full external_id
+        logger.debug(f"[INGRESS_AUTH] Found existing user ({ingress_user.provider}), role: {user_role}")
+    else:
+        # New user - create them
+        # Check if this is the FIRST user in the system - they should be SYSTEM_ADMIN
+        # This is more reliable than the provider's suggested_role flag which can be
+        # consumed by non-user-creating requests (health checks, etc.)
+        existing_users = await auth_service.list_users()
+        is_first_user = len(existing_users) == 0
+
+        if is_first_user:
+            # First user in the system gets SYSTEM_ADMIN
+            user_role = UserRole.SYSTEM_ADMIN
+            # SECURITY: Log provider only
+            logger.info(f"[INGRESS_AUTH] First user in system - granting SYSTEM_ADMIN ({ingress_user.provider})")
+        elif ingress_user.suggested_role:
+            user_role = ingress_user.suggested_role
+        else:
+            user_role = UserRole.OBSERVER
+
+        # Map UserRole to APIRole for user creation
+        api_role_map = {
+            UserRole.OBSERVER: APIRole.OBSERVER,
+            UserRole.ADMIN: APIRole.ADMIN,
+            UserRole.SYSTEM_ADMIN: APIRole.SYSTEM_ADMIN,
+        }
+        api_role = api_role_map.get(user_role, APIRole.OBSERVER)
+
+        # Create the user
+        username = ingress_user.display_name or ingress_user.username or ingress_user.external_id
+        # SECURITY: Log provider only, not full external_id
+        logger.info(
+            f"[INGRESS_AUTH] Creating new user from ingress: {username} ({ingress_user.provider}), role: {user_role}"
+        )
+
+        # Use a placeholder password - ingress users don't use passwords
+        import secrets
+
+        placeholder_password = secrets.token_urlsafe(32)
+
+        new_user = await auth_service.create_user(
+            username=username,
+            password=placeholder_password,
+            api_role=api_role,
+        )
+
+        if new_user:
+            logger.info(f"[INGRESS_AUTH] Created user: {new_user.wa_id}")
+            # CRITICAL: Also store user under provider:external_id key for future lookups
+            # The user was stored under wa_id by create_user, but ingress lookups use provider:external_id
+            auth_service._users[user_id] = new_user
+            # SECURITY: Don't log full user_id which contains external_id
+            logger.info(f"[INGRESS_AUTH] Stored user under ingress key ({ingress_user.provider})")
+
+            # Link OAuth identity to WA certificate so it persists across restarts
+            try:
+                await auth_service.link_user_oauth(
+                    wa_id=new_user.wa_id,
+                    provider=ingress_user.provider,
+                    external_id=ingress_user.external_id,
+                    account_name=username,
+                    metadata={"ingress_auth": "true"},
+                    primary=True,
+                )
+                logger.info(f"[INGRESS_AUTH] Linked ingress identity to WA: {new_user.wa_id}")
+            except Exception as link_err:
+                # Non-fatal - user can still authenticate this session
+                logger.warning(f"[INGRESS_AUTH] Failed to link ingress identity: {link_err}")
+        else:
+            # User might already exist with a different key
+            logger.warning(f"[INGRESS_AUTH] Could not create user {username}, checking alternate keys")
+            existing_user = auth_service.get_user(user_id)
+            if existing_user:
+                user_role = UserRole[existing_user.api_role.value]
+
+    # Build permissions
+    permissions = set(ROLE_PERMISSIONS.get(user_role, set()))
+
+    # Create auth context
+    context = AuthContext(
+        user_id=user_id,
+        role=user_role,
+        permissions=permissions,
+        api_key_id=None,
+        authenticated_at=ingress_user.authenticated_at or datetime.now(timezone.utc),
+    )
+    context.request = request
+
+    return context
+
+
+async def _try_ingress_auth(request: Request, auth_service: APIAuthService) -> Optional[AuthContext]:
+    """Try to authenticate via registered ingress auth providers.
+
+    Uses Chain of Responsibility pattern:
+    - Providers are checked in priority order (highest first)
+    - First provider that can_handle_request() attempts authentication
+    - If authenticate_request() succeeds, return the context
+    - If it fails, continue to next provider (allows fallback)
+
+    Returns AuthContext if an ingress provider handled the request,
+    None if no provider could handle it.
+    """
+    for registered in _ingress_auth_providers:
+        provider = registered.provider
+        try:
+            if provider.can_handle_request(request):
+                logger.debug(
+                    f"[AUTH] Ingress provider {provider.provider_name} "
+                    f"(priority: {registered.priority}) handling request"
+                )
+                ingress_user = await provider.authenticate_request(request)
+                if ingress_user:
+                    return await _handle_ingress_auth(request, auth_service, ingress_user)
+                else:
+                    # Provider claimed to handle but returned None - log and try next
+                    logger.warning(
+                        f"[AUTH] Ingress provider {provider.provider_name} "
+                        "can_handle_request=True but authenticate_request returned None"
+                    )
+        except Exception as e:
+            # Don't let one provider's failure break the chain
+            logger.error(f"[AUTH] Ingress provider {provider.provider_name} error: {e}")
+            continue
+
+    return None
+
+
 async def get_auth_context(  # NOSONAR - FastAPI requires async for dependency injection
     request: Request,
     authorization: Optional[str] = Header(None),
     auth_service: APIAuthService = Depends(get_auth_service),
 ) -> AuthContext:
-    """Extract and validate authentication from request."""
+    """Extract and validate authentication from request.
+
+    Checks authentication sources in order:
+    1. Registered ingress auth providers (e.g., HA Supervisor, CIRISMedical)
+    2. Bearer token (API key, service token, username:password)
+    """
+    # First, try ingress auth providers (e.g., HA Supervisor headers)
+    if _ingress_auth_providers:
+        ingress_context = await _try_ingress_auth(request, auth_service)
+        if ingress_context:
+            return ingress_context
+
+    # Fall back to bearer token authentication
     api_key = _extract_bearer_token(authorization)
+
+    # A SUBSTRATE-minted session token, checked BEFORE anything else parses it.
+    #
+    # `sess:<wa_id>:<mac>` contains colons, so without this it falls into the
+    # `username:password` branch below and is rejected as "Invalid username or
+    # password" — a substrate token, shaped like a credential pair, reported as a
+    # bad credential. The caller may be perfectly authenticated: they logged in
+    # against the node and hold a valid token the brain simply cannot verify,
+    # because ciris_server exposes no bearer-resolution binding to Python.
+    #
+    # Measured, both directions:
+    #     node   `sess:wa-…`            -> :4243 200   :8080 401
+    #     python `ciris_system_admin_…` -> :4243 401   :8080 200
+    #
+    # Disjoint families, neither verifying the other's. This says so out loud
+    # rather than making the next person bisect it. See CIRISAgent#1028.
+    if api_key.startswith(SUBSTRATE_SESSION_PREFIX):
+        return _handle_substrate_session_auth(request, auth_service, api_key)
 
     # Check if this is a service token
     if api_key.startswith("service:"):
@@ -168,7 +674,19 @@ async def optional_auth(
     authorization: Optional[str] = Header(None),
     auth_service: APIAuthService = Depends(get_auth_service),
 ) -> Optional[AuthContext]:
-    """Optional authentication - returns None if no auth provided."""
+    """Optional authentication - returns None if no auth provided.
+
+    Checks in order:
+    1. Ingress auth providers (always checked - they use headers, not Bearer)
+    2. Bearer token if provided
+    """
+    # First, try ingress auth providers (they don't require Authorization header)
+    if _ingress_auth_providers:
+        ingress_context = await _try_ingress_auth(request, auth_service)
+        if ingress_context:
+            return ingress_context
+
+    # No ingress auth, check Bearer token
     if not authorization:
         return None
 

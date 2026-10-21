@@ -2,13 +2,47 @@
 QA Runner CLI interface.
 """
 
+# Windows cp1252 consoles raise UnicodeEncodeError on any non-ASCII glyph, which
+# takes the whole process down. main.py / cli.py / desktop_launcher already call
+# this; the QA runner never did, so it crashed on Windows CI before reaching a
+# single test — which is why this harness had never run there.
+try:
+    from ciris_engine.logic.utils import win_console as _win_console
+
+    _win_console.setup()
+except Exception:  # pragma: no cover - never let the shim stop the runner
+    pass
+
 import argparse
+import logging
+import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from .config import QAConfig, QAModule
 from .runner import QARunner
+from .status_tracker import get_failing_modules, get_not_run_modules, print_status_dashboard
+
+
+def trace_sink_flag_error(use_mock_llm: bool, live_lens: bool, federation_delivery: bool) -> Optional[str]:
+    """Why this flag combination must not run, or None.
+
+    CIRISAgent#1244: mock-LLM runs shipped 1,499 traces to the PRODUCTION
+    canonical. Under the mock LLM the agent now refuses every remote trace sink
+    on its own; a harness that asks for one anyway is mis-configured, and must
+    fail loudly here rather than run and quietly test nothing.
+    """
+    if not use_mock_llm:
+        return None
+    wanted = [flag for flag, on in (("--live-lens", live_lens), ("--federation-delivery", federation_delivery)) if on]
+    if not wanted:
+        return None
+    return (
+        f"{' and '.join(wanted)} cannot be combined with the mock LLM: mock-LLM traces must never reach the "
+        "production lens or canonical (CIRISAgent#1244). Use --live (real LLM) for a live-lens run, or drop "
+        f"{' / '.join(wanted)} to keep traces on the local tee."
+    )
 
 
 def parse_args():
@@ -18,6 +52,15 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Show QA status dashboard
+  python -m tools.qa_runner --status
+
+  # List failing modules
+  python -m tools.qa_runner --failing
+
+  # List modules that haven't been run
+  python -m tools.qa_runner --not-run
+
   # Run everything (default)
   python -m tools.qa_runner
 
@@ -60,8 +103,14 @@ Available modules:
   streaming       - H3ERE pipeline streaming verification
   sdk             - SDK tests
   pause_step      - Enhanced single-step/pause debugging
-  single_step_comprehensive - Complete 17-phase COVENANT single-step validation
-  covenant        - Covenant invocation system (kill switch) tests
+  single_step_comprehensive - Complete 17-phase ACCORD single-step validation
+  accord_metrics - Accord metrics trace capture and signing
+  homeassistant_agentic - Live Home Assistant configuration and Music Assistant verification
+  deferral_taxonomy - DSASPDMA taxonomy coverage and localized deferral classification
+  licensed_agent  - Licensed agent device auth (RFC 8628) flow testing
+  model_eval      - Model quality evaluation with tough questions (requires --live)
+  accord_halt     - CC 4.2.1.1 constitutional halt end to end against the real node (direct-latch mode in a throwaway CIRIS_HOME; needs ciris-server >= 0.5.226, else skips; not in ALL)
+  mesh_repro      - CIRISServer traceflow harness as an agent QA gate (+ prod-wheel test-anchor guard; needs $CIRIS_SERVER_REPO checkout + docker, else skips)
   api_full        - All API modules
   handlers_full   - All handler modules
   all             - Everything
@@ -70,15 +119,55 @@ Available modules:
 
     parser.add_argument("modules", nargs="*", default=["all"], help="Modules to test (default: all)")
 
+    # Status dashboard
+    parser.add_argument("--status", action="store_true", help="Display QA status dashboard and exit")
+    parser.add_argument("--failing", action="store_true", help="List only failing modules and exit")
+    parser.add_argument("--not-run", action="store_true", help="List modules that haven't been run and exit")
+
     # Server configuration
     parser.add_argument(
         "--url", default="http://localhost:8080", help="Base URL of the API server (default: http://localhost:8080)"
     )
     parser.add_argument("--port", type=int, default=8080, help="API server port (default: 8080)")
     parser.add_argument("--no-auto-start", action="store_true", help="Don't automatically start the API server")
+    parser.add_argument(
+        "--incidents-log",
+        default=None,
+        help=(
+            "Path to the backend's incidents_latest.log when the backend was not started by this runner "
+            "(e.g. pulled from an emulator). The incidents gate reads it and still fails closed if missing."
+        ),
+    )
     parser.add_argument("--no-mock-llm", action="store_true", help="Don't use mock LLM (requires real LLM)")
     parser.add_argument(
+        "--mock-llm",
+        action="store_true",
+        help="Use the mock LLM (the default without --live). Mock traces never leave the node (CIRISAgent#1244).",
+    )
+    parser.add_argument(
         "--adapter", default="api", choices=["api", "cli", "discord"], help="Adapter to use (default: api)"
+    )
+
+    # Staged-env mode (run server from a venv installed from the canonical staged tree)
+    parser.add_argument(
+        "--from-staged",
+        action="store_true",
+        help=(
+            "Run the server under test from a venv with the wheel built from the canonical "
+            "staged tree (tools.dev.stage_runtime). Validates that the shipped wheel — not "
+            "the dev tree — passes QA. Staged env reused at /tmp/ciris-staged-qa across runs."
+        ),
+    )
+    parser.add_argument(
+        "--rebuild-staged",
+        action="store_true",
+        help="Force a clean rebuild of the staged env (implies --from-staged).",
+    )
+    parser.add_argument(
+        "--staged-root",
+        type=Path,
+        default=Path("/tmp/ciris-staged-qa"),
+        help="Staged env root dir (default: /tmp/ciris-staged-qa).",
     )
 
     # Live LLM configuration (uses real API instead of mock)
@@ -86,24 +175,51 @@ Available modules:
         "--live", action="store_true", help="Use real LLM API instead of mock. Reads key from --live-key-file"
     )
     parser.add_argument(
-        "--live-key-file", default="~/.groq_key", help="Path to file containing API key (default: ~/.groq_key)"
+        "--live-key-file",
+        default="~/.openrouter_key",
+        help="Path to file containing API key (default: ~/.openrouter_key)",
     )
     parser.add_argument(
         "--live-model",
-        default="meta-llama/llama-4-maverick-17b-128e-instruct",
-        help="Model to use for live LLM (default: meta-llama/llama-4-maverick-17b-128e-instruct)",
+        default="qwen/qwen3.6-35b-a3b",
+        help="Model to use for live LLM (default: qwen/qwen3.6-35b-a3b)",
     )
     parser.add_argument(
         "--live-base-url",
-        default="https://api.groq.com/openai/v1",
-        help="Base URL for LLM API (default: https://api.groq.com/openai/v1)",
+        default="https://openrouter.ai/api/v1",
+        help="Base URL for LLM API (default: https://openrouter.ai/api/v1)",
+    )
+    parser.add_argument(
+        "--live-provider",
+        choices=["openai", "anthropic", "google"],
+        default=None,
+        help="LLM provider (auto-detected from base URL if not specified)",
     )
 
-    # Live Lens configuration (for covenant_metrics tests)
+    # Live Lens configuration (for accord_metrics tests)
     parser.add_argument(
         "--live-lens",
         action="store_true",
-        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for covenant_metrics tests",
+        help="Use real Lens server (https://lens.ciris-services-1.ai/lens-api/api/v1) instead of mock logshipper for accord_metrics tests",
+    )
+
+    # Federation delivery verification (the Reticulum trace-flow path to canonical-server-1)
+    parser.add_argument(
+        "--federation-delivery",
+        action="store_true",
+        help="Boot the QA server with CEG federation delivery enabled (dials the canonical peer) and, after the run, verify traces reached canonical-server-1 (rooting + delivery metrics).",
+    )
+    parser.add_argument(
+        "--canonical-peer",
+        default="108.61.242.236:4242",
+        help="Canonical edge bootstrap peer host:port for --federation-delivery (default 108.61.242.236:4242; overrides a stale baked :4243 hint via edge #296 union).",
+    )
+
+    # Live Portal configuration (for licensed_agent tests)
+    parser.add_argument(
+        "--live-portal",
+        action="store_true",
+        help="Run tests against live CIRISPortal server (portal.ciris.ai) for licensed_agent tests",
     )
 
     # Database backend configuration
@@ -120,10 +236,15 @@ Available modules:
         help="PostgreSQL connection URL (default: postgresql://ciris_test:ciris_test_password@localhost:5432/ciris_test_db)",
     )
     parser.add_argument(
-        "--postgres-port",
+        "--postgres-api-port",
+        dest="postgres_api_port",
         type=int,
         default=8001,
-        help="Port for PostgreSQL backend server (default: 8001, SQLite uses --port)",
+        help="API-SERVER port for the postgres-backend test run (default: 8001). "
+        "NOT the PostgreSQL database port — the DB connection is in --postgres-url. "
+        "In --parallel-backends mode the SQLite run uses --port and the postgres "
+        "run uses this, so they must differ and neither may collide with the "
+        "actual Postgres port.",
     )
     parser.add_argument(
         "--parallel-backends",
@@ -135,13 +256,17 @@ Available modules:
     parser.add_argument(
         "--wipe-data",
         action="store_true",
-        help="Wipe data directory before starting (clears stale state, resets to first-run)",
+        help="(Now automatic) Data is always wiped for clean QA state",
     )
 
     # Authentication
-    parser.add_argument("--username", default="admin", help="Admin username (default: admin)")
     parser.add_argument(
-        "--password", default="ciris_admin_password", help="Admin password (default: ciris_admin_password)"
+        "--username", default="qa-harness-user", help="Setup user who claims the node (default: qa-harness-user)"
+    )
+    parser.add_argument(
+        "--password",
+        default="__auto_detect__",
+        help="Admin password (default: auto-detected from server output)",
     )
 
     # Test configuration
@@ -149,6 +274,143 @@ Available modules:
     parser.add_argument("--workers", type=int, default=4, help="Number of parallel workers (default: 4)")
     parser.add_argument("--timeout", type=float, default=300.0, help="Total timeout in seconds (default: 300)")
     parser.add_argument("--retry", type=int, default=3, help="Number of retries for failed tests (default: 3)")
+    parser.add_argument(
+        "--proceed-anyway",
+        action="store_true",
+        help="Continue running tests after first failure (default: fail-fast)",
+    )
+    parser.add_argument(
+        "--test-timeout",
+        type=float,
+        default=30.0,
+        help="Timeout for individual test interactions in seconds (default: 30)",
+    )
+
+    # Memory benchmark configuration
+    parser.add_argument(
+        "--message-count",
+        type=int,
+        default=100,
+        help="Number of messages to send in memory_benchmark (default: 100)",
+    )
+    parser.add_argument(
+        "--concurrent-channels",
+        type=int,
+        default=4,
+        help="Number of concurrent channels for memory_benchmark parallel testing (default: 4)",
+    )
+    parser.add_argument(
+        "--model-eval-languages",
+        default="am,zh,en,es",
+        help="Comma-separated language codes for multilingual model_eval (default: en; use e.g. am,zh,en,es for multilingual runs)",
+    )
+    parser.add_argument(
+        "--model-eval-concurrency",
+        type=int,
+        default=6,
+        help="Maximum simultaneous in-flight model_eval interactions (default: 6)",
+    )
+    parser.add_argument(
+        "--no-model-eval-memory-profile",
+        action="store_true",
+        help="Disable memory profiling during model_eval",
+    )
+    parser.add_argument(
+        "--model-eval-questions",
+        default="",
+        help=(
+            "Comma-separated EvalQuestion categories to include (case-insensitive). "
+            "Empty = all questions in the loaded pool. "
+            "Examples: 'Theology' (one category), 'AI Ethics,Epistemology' (two)."
+        ),
+    )
+    parser.add_argument(
+        "--model-eval-questions-file",
+        default="",
+        help=(
+            "Path to a JSON file with EvalQuestion entries to use instead of the "
+            "in-tree default pool. Format: list of {category, question, evaluates, "
+            "translations} objects; `translations` is an optional {lang_code: text} "
+            "dict. Sensitive / attractor-bait question sets live OUT OF TREE — "
+            "drop them in `~/bounce-test/model_eval_questions/*.json` or anywhere "
+            "else, point this flag at the path. The in-tree default is "
+            "deliberately generic (theodicy / AI ethics / epistemology only)."
+        ),
+    )
+    # Safety battery — loads a canonical battery from tests/safety/{lang_eng}_{domain}/
+    # and submits each question via /v1/agent/interact. See CIRISNodeCore SCHEMA.md §11.
+    parser.add_argument(
+        "--safety-battery-lang",
+        default="am",
+        help=(
+            "ISO 639-1 language code for the safety battery cell "
+            "(default: am). Source of truth: ciris_engine/data/localized/manifest.json."
+        ),
+    )
+    parser.add_argument(
+        "--safety-battery-limit",
+        type=int,
+        default=0,
+        help=("Run only the first N battery questions (0 = all). " "Cycle-time lever for trace-flow troubleshooting."),
+    )
+    parser.add_argument(
+        "--safety-battery-domain",
+        default="mental_health",
+        help=(
+            "Domain axis for the safety battery cell (default: mental_health). "
+            "Future cells extend the domain axis to entries from "
+            "ciris_engine/logic/buses/prohibitions.py."
+        ),
+    )
+    parser.add_argument(
+        "--safety-battery-template",
+        default="default",
+        help=(
+            "Template ID for the agent persona (default: 'default' renders "
+            "the Ally persona). Joins the result-key tuple per "
+            "CIRISNodeCore FSD/SAFETY_BATTERY_CI_LOOP.md §2 — same cell + "
+            "version + model against different templates is distinct evidence. "
+            "Available: default, datum, scout, echo-speculative, echo, "
+            "echo-core, sage, test."
+        ),
+    )
+    parser.add_argument(
+        "--safety-interpret-capture-dir",
+        default=None,
+        help=(
+            "Path to a safety_battery bundle directory (the capture artifact). "
+            "Required when running the safety_interpret module. The interpret "
+            "module reads results.jsonl + manifest_signed.json from this dir "
+            "and applies the rubric criteria to each response."
+        ),
+    )
+    parser.add_argument(
+        "--safety-interpret-criteria-file",
+        default=None,
+        help=(
+            "Optional path to criteria.json for the safety_interpret module. "
+            "If omitted, resolved from the capture bundle's BatteryManifest "
+            "(criteria_path field)."
+        ),
+    )
+    parser.add_argument(
+        "--safety-interpret-openrouter-key-file",
+        default=None,
+        help=(
+            "Path to OpenRouter API key file for the judge model "
+            "(default: ~/.openrouter_key). Falls back to the "
+            "OPENROUTER_API_KEY env var if neither is set."
+        ),
+    )
+    parser.add_argument(
+        "--safety-interpret-judge-model",
+        default=None,
+        help=(
+            "Foundation-model judge identifier "
+            "(default: anthropic/claude-opus-4-5). See "
+            "CIRISNodeCore FSD/JUDGE_MODEL.md."
+        ),
+    )
 
     # Output configuration
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -163,20 +425,39 @@ def main():
     """Main entry point."""
     args = parse_args()
 
-    # Handle --wipe-data: Clear data directory to reset state
-    if args.wipe_data:
-        import shutil
+    # CIRISAgent#1244: an explicit --mock-llm can never be combined with a
+    # real-LLM flag. The remote-sink check runs after module metadata has
+    # resolved live mode (a REQUIRES_LIVE_LLM module may auto-enable --live),
+    # and still before anything is wiped or started.
+    if args.mock_llm and (args.live or args.no_mock_llm):
+        print("[FAIL] --mock-llm conflicts with --live / --no-mock-llm")
+        sys.exit(2)
 
-        data_dir = Path("data")
-        if data_dir.exists():
-            print(f"🧹 Wiping data directory: {data_dir}")
-            try:
-                shutil.rmtree(data_dir)
-                print("   ✅ Data directory cleared")
-            except Exception as e:
-                print(f"   ⚠️  Failed to wipe data directory: {e}")
+    # Handle status dashboard commands (exit early)
+    if args.status:
+        print_status_dashboard()
+        sys.exit(0)
+
+    if args.failing:
+        failing = get_failing_modules()
+        if failing:
+            print("Failing modules:")
+            for name in sorted(failing):
+                print(f"  - {name}")
+            sys.exit(1)
         else:
-            print(f"   ℹ️  Data directory does not exist: {data_dir}")
+            print("No failing modules!")
+            sys.exit(0)
+
+    if args.not_run:
+        not_run = get_not_run_modules()
+        if not_run:
+            print("Modules not yet run:")
+            for name in sorted(not_run):
+                print(f"  - {name}")
+        else:
+            print("All modules have been run!")
+        sys.exit(0)
 
     # Parse modules (default to "all" if none specified)
     module_names = args.modules if args.modules else ["all"]
@@ -186,34 +467,206 @@ def main():
             module = QAModule(module_name.lower())
             modules.append(module)
         except ValueError:
-            print(f"❌ Unknown module: {module_name}")
+            print(f"[FAIL] Unknown module: {module_name}")
             print(f"Available modules: {', '.join(m.value for m in QAModule)}")
             sys.exit(1)
+
+    # Generic live-LLM enforcement driven by module-class metadata.
+    # See tools/qa_runner/modules/_module_metadata.py — a module sets
+    # REQUIRES_LIVE_LLM = True (and optional LIVE_LLM_DEFAULTS = {...})
+    # and the runner here either auto-applies defaults (when the default
+    # key file exists) or fails fast with a clear message.
+    from .modules._module_metadata import get_metadata
+
+    _user_set_live_key_file = "--live-key-file" in sys.argv
+    _user_set_live_model = "--live-model" in sys.argv
+    _user_set_live_base_url = "--live-base-url" in sys.argv
+    _user_set_live_provider = "--live-provider" in sys.argv
+    for _mod in modules:
+        _md = get_metadata(_mod)
+        if not _md.requires_live_llm:
+            continue
+        if not args.live and args.mock_llm:
+            print(f"[FAIL] {_mod.value} module requires a live LLM; it cannot run with --mock-llm")
+            sys.exit(2)
+        if not args.live:
+            # Try auto-enable from module defaults.
+            _defaults = _md.live_llm_defaults
+            _default_key = Path(_defaults.get("key_file", args.live_key_file)).expanduser()
+            if _default_key.exists():
+                args.live = True
+                if not _user_set_live_key_file:
+                    args.live_key_file = str(_default_key)
+                if not _user_set_live_base_url and _defaults.get("base_url"):
+                    args.live_base_url = _defaults["base_url"]
+                if not _user_set_live_model and _defaults.get("model"):
+                    args.live_model = _defaults["model"]
+                if not _user_set_live_provider and _defaults.get("provider"):
+                    args.live_provider = _defaults["provider"]
+                print(
+                    f"   ✅ {_mod.value} requires live LLM — auto-enabled "
+                    f"(key={_default_key}, model={args.live_model})"
+                )
+            else:
+                print(f"[FAIL] {_mod.value} module requires --live (live LLM required)")
+                if _defaults.get("key_file"):
+                    print(f"   Expected key file at {_default_key} (from module defaults).")
+                print(
+                    f"   Create the key file or pass --live --live-key-file <path> "
+                    f"--live-base-url ... --live-model ... explicitly."
+                )
+                sys.exit(1)
+
+    # CIRISAgent#1244: refuse a remote trace sink under the mock LLM. Mock is
+    # the default unless --live or --no-mock-llm, so `--live-lens` alone is a
+    # mock-LLM run too. Live mode is final here; nothing destructive has run.
+    _sink_error = trace_sink_flag_error(
+        not args.no_mock_llm and not args.live, args.live_lens, args.federation_delivery
+    )
+    if _sink_error:
+        print(f"[FAIL] {_sink_error}")
+        sys.exit(2)
+
+    # Handle --wipe-data: Clear data directory to reset state
+    if args.wipe_data:
+        import shutil
+
+        data_dir = Path("data")
+        if data_dir.exists():
+            print(f" Wiping data directory: {data_dir}")
+            try:
+                shutil.rmtree(data_dir)
+                print(" [OK] Data directory cleared")
+            except Exception as e:
+                print(f" [WARN] Failed to wipe data directory: {e}")
+        else:
+            print(f" [INFO] Data directory does not exist: {data_dir}")
+
+    # HE-300 benchmark module-specific defaults
+    is_he300 = QAModule.HE300_BENCHMARK in modules
+    if is_he300:
+        print(" HE-300 Benchmark Mode:")
+        print(" Template: he-300-benchmark (speak + task_complete only)")
+        print(" Benchmark Mode: CIRIS_BENCHMARK_MODE=true (disables EpistemicHumility conscience)")
+        # Auto-enable --wipe-data for clean state (do it now since wipe already ran above)
+        if not args.wipe_data:
+            print(" [INFO] Auto-wiping data for clean benchmark state")
+            import shutil
+
+            data_dir = Path("data")
+            if data_dir.exists():
+                try:
+                    shutil.rmtree(data_dir)
+                    print(" [OK] Data directory cleared")
+                except Exception as e:
+                    print(f" [WARN] Failed to wipe data directory: {e}")
+            args.wipe_data = True  # Mark as done
+        # Warn if not using --live mode
+        if not args.live:
+            print(" [WARN] WARNING: Running HE-300 without --live flag uses mock LLM")
+            print(
+                "   ⚠️  For real benchmarking, use: --live --live-key-file ~/.openai_key --live-model gpt-4o-mini --live-base-url https://api.openai.com/v1"
+            )
+        else:
+            print(" [OK] Live LLM mode enabled for real ethical benchmarking")
+        # Set OpenAI defaults if --live but using Groq defaults
+        if args.live and "groq" in args.live_base_url.lower():
+            print(" [INFO] Tip: For OpenAI, use --live-base-url https://api.openai.com/v1 --live-model gpt-4o-mini")
 
     # Handle --live mode: read API key and configure live LLM
     live_api_key = None
     live_model = None
     live_base_url = None
+    live_provider = None
     if args.live:
         key_path = Path(args.live_key_file).expanduser()
         if not key_path.exists():
-            print(f"❌ Live mode requires API key file: {key_path}")
+            print(f"[FAIL] Live mode requires API key file: {key_path}")
             print(f"   Create the file with your API key or use --live-key-file to specify path")
             sys.exit(1)
         try:
             live_api_key = key_path.read_text().strip()
             if not live_api_key:
-                print(f"❌ API key file is empty: {key_path}")
+                print(f"[FAIL] API key file is empty: {key_path}")
                 sys.exit(1)
             live_model = args.live_model
             live_base_url = args.live_base_url
-            print(f"🔑 Live mode enabled:")
-            print(f"   Key: {live_api_key[:10]}...{live_api_key[-4:]}")
+
+            # Auto-detect provider from key file name or base URL if not specified
+            live_provider = args.live_provider
+            if not live_provider:
+                key_file_name = key_path.name.lower()
+                base_url_lower = live_base_url.lower() if live_base_url else ""
+
+                if "anthropic" in key_file_name or "anthropic" in base_url_lower:
+                    live_provider = "anthropic"
+                    # For native Anthropic, we don't use a base URL (SDK handles it)
+                    live_base_url = None
+                elif (
+                    "google" in key_file_name
+                    or "gemini" in key_file_name
+                    or "generativelanguage.googleapis" in base_url_lower
+                ):
+                    live_provider = "google"
+                elif "openrouter" in key_file_name or "openrouter.ai" in base_url_lower:
+                    live_provider = "openrouter"
+                elif "groq" in key_file_name or "groq.com" in base_url_lower:
+                    live_provider = "groq"
+                elif "together" in key_file_name or "together" in base_url_lower:
+                    live_provider = "together"
+                elif base_url_lower and base_url_lower != "https://api.openai.com/v1":
+                    live_provider = "openai_compatible"
+                else:
+                    live_provider = "openai"
+
+            print(f" Live mode enabled:")
+            print(f"   Provider: {live_provider}")
+            # Length, not material. This runs in CI as well as locally, and CI
+            # job logs are readable by anyone with repo read access.
+            print(f"   Key: loaded ({len(live_api_key)} chars)")
             print(f"   Model: {live_model}")
-            print(f"   Base URL: {live_base_url}")
+            if live_base_url:
+                print(f"   Base URL: {live_base_url}")
         except Exception as e:
-            print(f"❌ Failed to read API key: {e}")
+            print(f"[FAIL] Failed to read API key: {e}")
             sys.exit(1)
+
+    # --live implies --live-lens (always use real Lens server with live LLM)
+    if args.live and not args.live_lens:
+        args.live_lens = True
+        print(" [OK] Auto-enabling --live-lens (real Lens server for accord traces)")
+
+    # QA runner ALWAYS wipes data to ensure clean state and use setup wizard
+    # This ensures predictable test behavior with a known admin user/password
+    if not args.wipe_data:
+        print("[INFO] Auto-wiping data for clean QA state (setup wizard creates test user)")
+        import shutil
+
+        data_dir = Path("data")
+        if data_dir.exists():
+            try:
+                shutil.rmtree(data_dir)
+                print(" [OK] Data directory cleared")
+            except Exception as e:
+                print(f" [WARN] Failed to wipe data directory: {e}")
+        args.wipe_data = True
+
+    # Staged-env preparation (if requested) — must happen BEFORE config
+    # creation so the resulting StagedEnvironment can be passed in.
+    # `--rebuild-staged` implies `--from-staged`.
+    staged_env = None
+    if args.from_staged or args.rebuild_staged:
+        from .staged_env import prepare as prepare_staged_env
+
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        print(f"[staged] Preparing staged QA environment at {args.staged_root} " f"(rebuild={args.rebuild_staged})")
+        staged_env = prepare_staged_env(
+            src=repo_root,
+            root=args.staged_root,
+            rebuild=args.rebuild_staged,
+        )
+        print(f"[staged] Ready. Server will run from: {staged_env.ciris_server}")
+        print(f"[staged] Canonical tree hash: {staged_env.total_hash}")
 
     # Create configuration
     # --live implies --no-mock-llm
@@ -233,19 +686,69 @@ def main():
         html_report=args.html,
         report_dir=Path(args.report_dir),
         auto_start_server=not args.no_auto_start,
+        incidents_log_path=Path(args.incidents_log) if args.incidents_log else None,
         mock_llm=use_mock_llm,
         adapter=args.adapter,
         database_backends=args.database_backends,
         postgres_url=args.postgres_url,
-        postgres_port=args.postgres_port,
+        postgres_api_port=args.postgres_api_port,
         parallel_backends=args.parallel_backends,
         # Live LLM configuration
         live_api_key=live_api_key,
         live_model=live_model,
         live_base_url=live_base_url,
-        # Live Lens configuration (for covenant_metrics tests)
+        live_provider=live_provider,
+        # Live Lens configuration (for accord_metrics tests)
         live_lens=args.live_lens,
+        federation_delivery=args.federation_delivery,
+        canonical_peer=args.canonical_peer,
+        # Staged-env mode (server runs from canonical-staged-tree wheel in a venv)
+        staged_env=staged_env,
+        # Live Portal configuration (for licensed_agent tests)
+        live_portal=args.live_portal,
+        # Fail-fast configuration
+        fail_fast=not args.proceed_anyway,
+        test_timeout=args.test_timeout,
+        # Data management
+        wipe_data=args.wipe_data,
+        # Memory benchmark configuration
+        message_count=args.message_count,
+        concurrent_channels=args.concurrent_channels,
+        # Model eval configuration
+        model_eval_languages=[lang.strip() for lang in args.model_eval_languages.split(",") if lang.strip()],
+        model_eval_concurrency=args.model_eval_concurrency,
+        model_eval_profile_memory=not args.no_model_eval_memory_profile,
+        model_eval_question_categories=[cat.strip() for cat in args.model_eval_questions.split(",") if cat.strip()],
+        model_eval_questions_file=(args.model_eval_questions_file or None),
+        safety_battery_lang=args.safety_battery_lang,
+        safety_battery_limit=args.safety_battery_limit,
+        safety_battery_domain=args.safety_battery_domain,
+        safety_battery_template=args.safety_battery_template,
+        safety_interpret_capture_dir=args.safety_interpret_capture_dir,
+        safety_interpret_criteria_file=args.safety_interpret_criteria_file,
+        safety_interpret_openrouter_key_file=args.safety_interpret_openrouter_key_file,
+        safety_interpret_judge_model=args.safety_interpret_judge_model,
+        # An explicitly-requested template applies to WHATEVER module is running.
+        # This used to be gated on `safety_battery`, so `--safety-battery-template`
+        # was accepted, echoed in the report, and silently ignored by every other
+        # module — and even for safety_battery it reached only the setup wizard,
+        # never the server. `None` here means "no explicit request"; the server's
+        # resolve_template_id() then applies module-implied defaults.
+        setup_template_id=(
+            args.safety_battery_template
+            if args.safety_battery_template and args.safety_battery_template != "default"
+            else None
+        ),
     )
+
+    # Run-kind declaration on the runner's OWN env (CIRISAgent#1245), not only
+    # the server child's: web_ui / mobile / he300 / sibling launches inside a
+    # module read os.environ, and a harness run is never production.
+    from .run_kind import declare_process_run_kind, harness_run_kind
+
+    _run_kind_warning = declare_process_run_kind(harness_run_kind(modules))
+    if _run_kind_warning:
+        print(f"[WARN] {_run_kind_warning}")
 
     # Create and run runner
     runner = QARunner(config, modules=modules)
@@ -256,4 +759,21 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as _exit:
+        # FLUSH, THEN LEAVE WITHOUT FINALIZING THE INTERPRETER. Several module
+        # monitors are daemon threads that print (stream watchers, log tees);
+        # a plain sys.exit lets interpreter finalization race them for the
+        # stdout buffer lock, and CPython aborts the process with exit -6 --
+        # after every test passed and the status files were written. os._exit
+        # ends the process once our own output is flushed; nothing after the
+        # summary needs the interpreter's teardown. main() keeps sys.exit for
+        # programmatic callers.
+        _code = _exit.code if isinstance(_exit.code, int) else (0 if _exit.code is None else 1)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            logging.shutdown()
+        finally:
+            os._exit(_code)

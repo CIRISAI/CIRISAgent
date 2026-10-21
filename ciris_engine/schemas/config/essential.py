@@ -10,6 +10,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.runtime.agent_mode import AgentMode
+
 
 def _get_default_main_db() -> Path:
     """Get default main database path using central path resolution."""
@@ -35,9 +37,18 @@ def _get_default_audit_db() -> Path:
 class DatabaseConfig(BaseModel):
     """Core database paths configuration."""
 
-    main_db: Path = Field(default_factory=_get_default_main_db, description="Main SQLite database for persistence")
-    secrets_db: Path = Field(default_factory=_get_default_secrets_db, description="Encrypted secrets storage database")
-    audit_db: Path = Field(default_factory=_get_default_audit_db, description="Audit trail database with signatures")
+    main_db: Path = Field(
+        default_factory=_get_default_main_db,
+        description="Main SQLite database for persistence",
+    )
+    secrets_db: Path = Field(
+        default_factory=_get_default_secrets_db,
+        description="Encrypted secrets storage database",
+    )
+    audit_db: Path = Field(
+        default_factory=_get_default_audit_db,
+        description="Audit trail database with signatures",
+    )
     database_url: Optional[str] = Field(
         None,
         description="Database connection string. If set, overrides main_db path. "
@@ -45,7 +56,7 @@ class DatabaseConfig(BaseModel):
         "Defaults to SQLite at main_db path for backward compatibility.",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class ServiceEndpointsConfig(BaseModel):
@@ -53,10 +64,14 @@ class ServiceEndpointsConfig(BaseModel):
 
     llm_endpoint: str = Field("https://api.openai.com/v1", description="LLM API endpoint URL")
     llm_model: str = Field("gpt-4o-mini", description="LLM model identifier")
-    llm_timeout: int = Field(30, description="LLM request timeout in seconds")
+    llm_timeout: int = Field(
+        30,
+        description="DEPRECATED: not read. The LLM HTTP timeout comes from the LLM budget profile "
+        "(ciris_engine/logic/config/llm_budget.py; override with CIRIS_LLM_TIMEOUT). #1186",
+    )
     llm_max_retries: int = Field(3, description="Maximum LLM retry attempts")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class SecurityConfig(BaseModel):
@@ -64,14 +79,31 @@ class SecurityConfig(BaseModel):
 
     audit_retention_days: int = Field(90, description="Days to retain audit logs")
     secrets_encryption_key_env: str = Field(
-        "CIRIS_MASTER_KEY", description="Environment variable containing master encryption key"
+        "CIRIS_MASTER_KEY",
+        description="Environment variable containing master encryption key",
     )
     secrets_key_path: Path = Field(Path(".ciris_keys"), description="Directory containing secrets master key")
-    audit_key_path: Path = Field(Path("audit_keys"), description="Directory containing audit signing keys")
+    secrets_key_storage_mode: str = Field(
+        "auto",
+        description="Key storage mode: 'software' (file-based), 'hardware' (CIRISVerify), 'auto' (hardware if available)",
+    )
     enable_signed_audit: bool = Field(True, description="Enable cryptographic signing of audit entries")
-    max_thought_depth: int = Field(7, description="Maximum thought chain depth before auto-defer")
+    max_thought_depth: int = Field(
+        5,
+        description=(
+            "Maximum thought chain depth before auto-defer. Reduced from 7 to 5 in 2.7.1 "
+            "based on signed-trace analysis from CIRISLens against 2.7.0-stable: successful "
+            "resolutions (SPEAK + TASK_COMPLETE) cap at depth 5, depth 6 chains spoke "
+            "without completing (anomalous), and depth 7 chains all DEFERred anyway. "
+            "Setting the ceiling at 5 means the agent DEFERs ~30% sooner on the genuinely "
+            "hard cases and the d=6 'spoke without closing' anomaly disappears. See "
+            "FSD/DMA_BOUNCE.md for the bounce gate that lands in the same release. The "
+            "schema still accepts thoughts with depth up to 7 so in-flight chains from "
+            "earlier agent versions can drain cleanly during the rollout window."
+        ),
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class OperationalLimitsConfig(BaseModel):
@@ -79,13 +111,36 @@ class OperationalLimitsConfig(BaseModel):
 
     max_active_tasks: int = Field(10, description="Maximum concurrent active tasks")
     max_active_thoughts: int = Field(50, description="Maximum thoughts in processing queue")
+    thought_batch_size: int = Field(
+        3,
+        description=(
+            "Maximum thoughts processed in parallel per batch in the main "
+            "processor loop. Each thought fans out to ~4 conscience LLM "
+            "calls running concurrently, so a batch of N thoughts triggers "
+            "~4N parallel LLM calls in burst. Sized to 3 (=12 concurrent "
+            "LLM calls) so rate-limited backends like Together gemma stay "
+            "within per-account throughput; bump up only if your backend "
+            "can absorb 4N parallel structured-output calls without "
+            "queueing past the conscience timeout."
+        ),
+    )
     round_delay_seconds: float = Field(5.0, description="Delay between processing rounds")
     mock_llm_round_delay: float = Field(0.1, description="Reduced delay for mock LLM testing")
-    dma_retry_limit: int = Field(3, description="Maximum DMA evaluation retries")
-    dma_timeout_seconds: float = Field(30.0, description="DMA evaluation timeout")
-    conscience_retry_limit: int = Field(2, description="Maximum conscience evaluation retries")
+    # DEPRECATED, read by nothing (CIRISAgent#1186). Kept only so existing
+    # config files (config/essential.yaml sets all three) and
+    # CIRIS_LIMITS_* env vars still load under extra="forbid". DMA and
+    # conscience timeouts/attempts come from the LLM budget profile
+    # (ciris_engine/logic/config/llm_budget.py): set CIRIS_DMA_TIMEOUT,
+    # CIRIS_DMA_ATTEMPTS, CIRIS_CONSCIENCE_TIMEOUT, CIRIS_CONSCIENCE_ATTEMPTS.
+    dma_retry_limit: int = Field(3, description="DEPRECATED, unused: use CIRIS_DMA_ATTEMPTS (LLM budget profile)")
+    dma_timeout_seconds: float = Field(
+        30.0, description="DEPRECATED, unused: use CIRIS_DMA_TIMEOUT (LLM budget profile)"
+    )
+    conscience_retry_limit: int = Field(
+        2, description="DEPRECATED, unused: use CIRIS_CONSCIENCE_ATTEMPTS (LLM budget profile)"
+    )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class TelemetryConfig(BaseModel):
@@ -95,17 +150,23 @@ class TelemetryConfig(BaseModel):
     export_interval_seconds: int = Field(60, description="Telemetry export interval")
     retention_hours: int = Field(24, description="Telemetry data retention period")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class WorkflowConfig(BaseModel):
     """Workflow configuration for agent processing."""
 
     max_rounds: int = Field(10, description="Maximum rounds of processing before automatic pause")
-    round_timeout_seconds: float = Field(300.0, description="Timeout for each processing round")
+    round_timeout_seconds: float = Field(
+        300.0,
+        description=(
+            "DEPRECATED, applied nowhere. One thought's time is bounded by the LLM budget "
+            "profile's thought_budget_s (CIRIS_THOUGHT_BUDGET), CIRISAgent#1186"
+        ),
+    )
     enable_auto_defer: bool = Field(True, description="Automatically defer when hitting limits")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class GraphConfig(BaseModel):
@@ -123,7 +184,7 @@ class GraphConfig(BaseModel):
     tsdb_raw_retention_hours: int = Field(24, description="How long to keep raw TSDB data before basic consolidation")
     consolidation_timezone: str = Field("UTC", description="Timezone for consolidation scheduling (default: UTC)")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class AdaptersConfig(BaseModel):
@@ -134,19 +195,23 @@ class AdaptersConfig(BaseModel):
         description="Enable auto-discovery and loading of eligible adapters at startup",
     )
     discovery_paths: list[str] = Field(
-        default_factory=lambda: ["ciris_adapters", "~/.ciris/adapters", ".ciris/adapters"],
+        default_factory=lambda: [
+            "ciris_adapters",
+            "~/.ciris/adapters",
+            ".ciris/adapters",
+        ],
         description="Paths to scan for adapter manifests (in priority order)",
     )
     disabled_adapters: list[str] = Field(
         default_factory=lambda: [
             "sample_adapter",  # Example adapter, not for production use
-            "ciris_covenant_metrics",  # Requires explicit opt-in
+            "ciris_accord_metrics",  # Requires explicit opt-in
             "external_data_sql",  # Database adapter requires explicit configuration
         ],
         description="List of adapter names to exclude from auto-loading",
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
 
 class EssentialConfig(BaseModel):
@@ -175,8 +240,16 @@ class EssentialConfig(BaseModel):
         "default",
         description="Unique ID for this runtime occurrence (enables multiple instances against same database)",
     )
+    agent_mode: AgentMode = Field(
+        default=AgentMode.PROXY,
+        description=(
+            "Global runtime mode for this occurrence: CLIENT (egress-only), "
+            "PROXY (bidirectional, default), or SERVER (always-on listener, "
+            "requires >= 256 GiB free disk). Visible to all 22 core services."
+        ),
+    )
 
-    model_config = ConfigDict(extra="forbid")  # No ambiguity allowed in mission-critical config
+    model_config = ConfigDict(defer_build=True, extra="forbid")  # No ambiguity allowed in mission-critical config
 
     def load_env_vars(self) -> None:
         """Load configuration from environment variables if present."""
@@ -197,6 +270,22 @@ class EssentialConfig(BaseModel):
         if env_template:
             self.default_template = env_template
 
+        # Load agent mode from environment. Accepts case-insensitive values
+        # ("client", "PROXY", "Server"). Invalid values fall through and the
+        # default (PROXY) is preserved so a typo does not flip a node into
+        # SERVER mode silently.
+        env_agent_mode = os.getenv("AGENT_MODE")
+        if env_agent_mode:
+            try:
+                self.agent_mode = AgentMode(env_agent_mode.lower())
+            except ValueError:
+                # Invalid AGENT_MODE env value (typo or unknown enum) — keep
+                # the default (PROXY) so a misconfigured env var can't
+                # silently flip a node into SERVER mode. Logging would
+                # require an import that's overweight for a startup hot path
+                # this hits even when AGENT_MODE is correctly set.
+                pass
+
 
 class CIRISNodeConfig(BaseModel):
     """Configuration for CIRISNode integration."""
@@ -204,7 +293,7 @@ class CIRISNodeConfig(BaseModel):
     base_url: Optional[str] = Field(None, description="CIRISNode base URL")
     enabled: bool = Field(False, description="Whether CIRISNode integration is enabled")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(defer_build=True, extra="forbid")
 
     def load_env_vars(self) -> None:
         """Load configuration from environment variables if present."""

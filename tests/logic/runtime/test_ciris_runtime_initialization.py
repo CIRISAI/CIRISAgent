@@ -307,6 +307,10 @@ class TestAgentProcessorCreation:
         mock_bus_manager.start = AsyncMock()  # Must be AsyncMock
         runtime.service_initializer = Mock()
         runtime.service_initializer.bus_manager = mock_bus_manager
+        # 2.9.1 attestation gate: auth_service must expose an awaitable
+        # await_attestation_ready or the gate raises TypeError.
+        runtime.service_initializer.auth_service = Mock()
+        runtime.service_initializer.auth_service.await_attestation_ready = AsyncMock(return_value=None)
 
         # Mock wait for critical services
         runtime._wait_for_critical_services = AsyncMock()
@@ -330,6 +334,10 @@ class TestAgentProcessorCreation:
         # No bus manager
         runtime.service_initializer = Mock()
         runtime.service_initializer.bus_manager = None
+        # 2.9.1 attestation gate (see sibling test) — give the gate an
+        # awaitable so it can pass through cleanly.
+        runtime.service_initializer.auth_service = Mock()
+        runtime.service_initializer.auth_service.await_attestation_ready = AsyncMock(return_value=None)
 
         # Mock wait for critical services
         runtime._wait_for_critical_services = AsyncMock()

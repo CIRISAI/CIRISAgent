@@ -9,7 +9,8 @@ fi
 # Set defaults
 API_URL="${CIRIS_API_URL:-http://localhost:8080}"
 API_USER="${CIRIS_API_USER:-admin}"
-API_PASSWORD="${CIRIS_API_PASSWORD:-ciris_admin_password}"
+# Password must be set via CIRIS_API_PASSWORD or use the one from setup wizard
+API_PASSWORD="${CIRIS_API_PASSWORD:?Error: CIRIS_API_PASSWORD not set. Use the password from setup wizard.}"
 
 # Check if required variables are set
 if [ -z "$DISCORD_BOT_TOKEN" ]; then

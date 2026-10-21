@@ -1,5 +1,6 @@
+import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -20,8 +21,11 @@ from ciris_engine.logic.persistence import (
     get_thoughts_older_than,
 )
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
+from ciris_engine.logic.utils.halt_latch import read_halt_latch, refuse_agent_send_under_halt, run_when_first_unhalted
+from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 from ciris_engine.protocols.services.infrastructure.database_maintenance import DatabaseMaintenanceServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
 
 logger = logging.getLogger(__name__)
@@ -42,7 +46,12 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         bus_manager: Optional[Any] = None,
     ) -> None:
         # Initialize BaseScheduledService with hourly maintenance interval
-        super().__init__(time_service=time_service, run_interval_seconds=3600)  # Run every hour
+        # Use 60s first_run_delay to ensure adapters are registered before notifications
+        super().__init__(
+            time_service=time_service,
+            run_interval_seconds=3600,  # Run every hour
+            first_run_delay_seconds=60.0,  # Wait 60s before first run to avoid startup race conditions
+        )
         self.time_service = time_service
         self.archive_dir = Path(archive_dir_path)
         self.archive_older_than_hours = archive_older_than_hours
@@ -72,6 +81,25 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # Increment vacuum operations counter for periodic maintenance
         self._vacuum_runs += 1
 
+        # 2.9.0 Lane D D2: delegate generic DB maintenance (vacuum +
+        # archive of expired telemetry/incident/federation_keys/secrets
+        # rows) to persist's typed umbrella. The agent-specific
+        # cleanups below (stale wakeup tasks, orphaned active tasks)
+        # stay in this service — they're business logic over agent
+        # tables, not generic DB ops.
+        await self._invoke_persist_maintenance()
+
+        # CC 4.2.1.1: under a standing constitutional halt the agent's tasks and
+        # thoughts are frozen, not stale. Both sweeps below are age-based (5
+        # minutes) and would complete or delete every held task — and the stale
+        # notice they send is the agent speaking. Skip them; they run again on
+        # the next cycle after the halt ends.
+        halt = await read_halt_latch()
+        if halt.halted:
+            logger.info(f"Stale-task sweeps skipped: tasks are held by a constitutional halt ({halt.refusal_reason()})")
+            logger.info("Periodic maintenance tasks completed.")
+            return
+
         # Clean up stale wakeup/shutdown tasks from dead occurrences
         # This is critical for multi-occurrence deployments where an occurrence
         # may die mid-wakeup, leaving shared tasks in ACTIVE state forever
@@ -81,6 +109,41 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         await self._cleanup_old_active_tasks()
 
         logger.info("Periodic maintenance tasks completed.")
+
+    async def _invoke_persist_maintenance(self) -> None:
+        """Call engine.maintain() — persist's umbrella for vacuum +
+        archive-expired across telemetry, incidents, federation_keys,
+        secrets_access_log. Idempotent + non-blocking; logs the stats
+        payload at INFO so the maintenance window is observable.
+
+        Graceful skip if persist engine isn't wired yet (e.g., early
+        boot or test fixtures that bypass initialize_database).
+        """
+        from ciris_engine.logic.persistence import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
+            logger.debug("persist engine not wired; skipping engine.maintain()")
+            return
+
+        try:
+            import json as _json
+
+            # engine.maintain() returns a JSON string with vacuum +
+            # archive stats per module.
+            blob = engine.maintain()
+            stats = _json.loads(blob) if isinstance(blob, str) else blob
+            logger.info(
+                "persist.maintain() complete: vacuum_ms=%s archive_total=%s elapsed_ms=%s",
+                stats.get("vacuum", {}).get("elapsed_ms"),
+                stats.get("archive", {}).get("total_removed"),
+                stats.get("elapsed_ms"),
+            )
+        except Exception as exc:
+            logger.warning(
+                "persist.maintain() failed (non-fatal — agent cleanup still runs): %s",
+                exc,
+            )
 
     async def _on_stop(self) -> None:
         """Stop hook for cleanup."""
@@ -119,6 +182,11 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Starting database cleanup")
         self.archive_dir.mkdir(parents=True, exist_ok=True)
 
+        # --- Reclaim thoughts left PROCESSING by a dead process (#1018) ---
+        # FIRST, deliberately: every later step reads thought status, and a
+        # stranded PROCESSING row is what makes the rest of them wrong.
+        await self._reclaim_orphaned_processing_thoughts()
+
         # --- Clean up thoughts with invalid/malformed context ---
         await self._cleanup_invalid_thoughts()
 
@@ -131,11 +199,14 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         # --- Clean up adapter configs without persist=True ---
         await self._cleanup_non_persistent_adapters()
 
+        # --- Check for legacy covenant_metrics config (renamed to accord_metrics in 2.0.2) ---
+        await self._check_legacy_covenant_config()
+
         # --- Clean up stale wakeup tasks from interrupted startups ---
         await self._cleanup_stale_wakeup_tasks()
 
         # --- Clean up old active tasks from previous runs ---
-        await self._cleanup_old_active_tasks()
+        await self._sweep_old_active_tasks_at_startup()
 
         # --- Clean up duplicate temporal edges (v1.5.6 PostgreSQL bug) ---
         await self._cleanup_duplicate_temporal_edges()
@@ -144,7 +215,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         orphaned_tasks_deleted_count = 0
         orphaned_thoughts_deleted_count = 0
 
-        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE, db_path=self.db_path)
+        active_tasks = get_tasks_by_status(TaskStatus.ACTIVE)
         task_ids_to_delete: List[Any] = []
 
         for task in active_tasks:
@@ -170,7 +241,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             elif task.parent_task_id:
                 # CRITICAL: Pass task's own occurrence_id to find parent in same namespace
                 # This prevents shared tasks from being marked as orphans in multi-occurrence setups
-                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id, db_path=self.db_path)
+                parent_task = get_task_by_id(task.parent_task_id, task.agent_occurrence_id)
                 if not parent_task or parent_task.status not in [TaskStatus.ACTIVE, TaskStatus.COMPLETED]:
                     is_orphan = True
             elif task.parent_task_id is None:
@@ -184,19 +255,19 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                 task_ids_to_delete.append(task.task_id)
 
         if task_ids_to_delete:
-            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete, db_path=self.db_path)
+            orphaned_tasks_deleted_count = delete_tasks_by_ids(task_ids_to_delete)
             logger.info(
                 f"Deleted {orphaned_tasks_deleted_count} orphaned active tasks (and their thoughts via cascade)."
             )
 
-        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING, db_path=self.db_path)
-        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING, db_path=self.db_path)
+        pending_thoughts = get_thoughts_by_status(ThoughtStatus.PENDING)
+        processing_thoughts = get_thoughts_by_status(ThoughtStatus.PROCESSING)
         all_potentially_orphaned_thoughts = pending_thoughts + processing_thoughts
         thought_ids_to_delete_orphan: List[Any] = []
 
         for thought in all_potentially_orphaned_thoughts:
             # CRITICAL: Pass thought's own occurrence_id to find task in same namespace
-            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id, db_path=self.db_path)
+            source_task = get_task_by_id(thought.source_task_id, thought.agent_occurrence_id)
             if not source_task or source_task.status != TaskStatus.ACTIVE:
                 logger.info(
                     f"Orphaned thought found: {thought.thought_id} (Task: {thought.source_task_id} not found or not active). Marking for deletion."
@@ -205,7 +276,7 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         if thought_ids_to_delete_orphan:
             unique_thought_ids_to_delete = list(set(thought_ids_to_delete_orphan))
-            count = delete_thoughts_by_ids(unique_thought_ids_to_delete, db_path=self.db_path)
+            count = delete_thoughts_by_ids(unique_thought_ids_to_delete)
             orphaned_thoughts_deleted_count += count
             logger.info(f"Deleted {count} additional orphaned active/processing thoughts.")
 
@@ -229,21 +300,19 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info("Task archival skipped - tasks are now managed by TSDB consolidator")
         task_ids_actually_archived_and_deleted: set[str] = set()
 
-        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp, db_path=self.db_path)
+        thoughts_to_archive = get_thoughts_older_than(older_than_timestamp)
         if thoughts_to_archive:
             thought_archive_file = self.archive_dir / f"archive_thoughts_{archive_timestamp_str}.jsonl"
             thought_ids_to_delete_for_archive: List[Any] = []
 
-            async with aiofiles.open(thought_archive_file, "w") as f:
+            async with aiofiles.open(thought_archive_file, "w", encoding="utf-8") as f:
                 for thought in thoughts_to_archive:
                     # Archive all thoughts older than threshold
                     await f.write(thought.model_dump_json() + "\n")
                     thought_ids_to_delete_for_archive.append(thought.thought_id)
 
             if thought_ids_to_delete_for_archive:
-                archived_thoughts_count = delete_thoughts_by_ids(
-                    thought_ids_to_delete_for_archive, db_path=self.db_path
-                )
+                archived_thoughts_count = delete_thoughts_by_ids(thought_ids_to_delete_for_archive)
                 logger.info(
                     f"Archived and deleted {archived_thoughts_count} thoughts older than {self.archive_older_than_hours} hours to {thought_archive_file}."
                 )
@@ -255,62 +324,124 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         logger.info(f"Archival: {archived_tasks_count} tasks, {archived_thoughts_count} thoughts archived and removed.")
         logger.info("Database cleanup completed")
 
-    async def _cleanup_invalid_thoughts(self) -> None:
-        """Clean up thoughts with invalid or malformed context."""
-        from ciris_engine.logic.persistence import get_db_connection
-        from ciris_engine.logic.persistence.db.dialect import get_adapter
+    async def _reclaim_orphaned_processing_thoughts(self) -> None:
+        """Fail thoughts this occurrence left PROCESSING when it died (#1018).
 
-        logger.info("Cleaning up thoughts with invalid context...")
+        A process that is starting up cannot have anything genuinely in flight,
+        so every ``PROCESSING`` row owned by THIS occurrence is by definition
+        orphaned. Nothing reclaimed them before, and the consequence compounds:
 
-        # Get adapter to detect database type
-        adapter = get_adapter()
+          * The parent task stays ``ACTIVE`` forever.
+          * ``get_tasks_needing_recovery_thought`` only recovers tasks with NO
+            pending/processing thoughts — so the stuck row *suppresses the very
+            recovery that would fix it*. A permanently-stuck thought is
+            indistinguishable from a healthy in-flight one, and the longer it
+            sits the healthier it looks.
 
-        # Different SQL for PostgreSQL (JSONB) vs SQLite (TEXT)
-        if adapter.is_postgresql():
-            # PostgreSQL: Cast JSONB to text for LIKE operations
-            sql = """
-                SELECT thought_id, context_json
-                FROM thoughts
-                WHERE context_json::text = '{}'
-                   OR context_json IS NULL
-                   OR context_json::text NOT LIKE '%task_id%'
-                   OR context_json::text NOT LIKE '%correlation_id%'
-            """
-        else:
-            # SQLite: context_json is TEXT, use LIKE directly
-            sql = """
-                SELECT thought_id, context_json
-                FROM thoughts
-                WHERE context_json = '{}'
-                   OR context_json IS NULL
-                   OR context_json NOT LIKE '%task_id%'
-                   OR context_json NOT LIKE '%correlation_id%'
-            """
+        Of the shutdown seed thoughts in the reporting database, exactly one had
+        ever reached ``completed``; every interrupted shutdown since January left
+        a permanent artifact.
 
-        invalid_thought_ids = []
+        FAILED, not PENDING. The thought died at an unknown point with unknown
+        side effects already committed, so re-running it can duplicate them — and
+        for a ``SHUTDOWN_SHARED_*`` seed that means re-executing a shutdown the
+        operator asked for days ago. Failing states the outcome plainly and, by
+        clearing the pending/processing set, restores the task's eligibility for
+        the normal recovery path.
+
+        SCOPED TO THIS OCCURRENCE. Another occurrence's ``PROCESSING`` rows may be
+        genuinely in flight right now; reclaiming those would abort live work on
+        a peer. This is the one claim a booting process can make safely, and it
+        makes it only about itself.
+        """
+        from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_status, update_thought_status
+        from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+        from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
         try:
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(sql)
-                rows = cursor.fetchall()
+            occurrence_id = get_current_occurrence_id()
+            stranded = get_thoughts_by_status(ThoughtStatus.PROCESSING, occurrence_id)
+            if not stranded:
+                logger.info("Orphan reclaim: no PROCESSING thoughts held by occurrence %r at startup.", occurrence_id)
+                return
 
-                for row in rows:
-                    invalid_thought_ids.append(row["thought_id"])
+            reclaimed = 0
+            for thought in stranded:
+                try:
+                    if update_thought_status(thought.thought_id, ThoughtStatus.FAILED, occurrence_id):
+                        reclaimed += 1
+                        logger.warning(
+                            "Orphan reclaim: thought %s (task %s) was left PROCESSING by a dead process "
+                            "-> FAILED. It cannot have been in flight: this process is still starting.",
+                            thought.thought_id,
+                            thought.source_task_id,
+                        )
+                except Exception as e:  # noqa: BLE001 - one bad row must not block boot
+                    logger.error("Orphan reclaim: could not fail thought %s: %s", thought.thought_id, e)
 
-                if invalid_thought_ids:
-                    # Delete these invalid thoughts
-                    placeholders = ",".join("?" * len(invalid_thought_ids))
-                    delete_sql = f"DELETE FROM thoughts WHERE thought_id IN ({placeholders})"  # nosec B608 - placeholders are '?' strings, not user input
-                    cursor.execute(delete_sql, invalid_thought_ids)
-                    conn.commit()
+            # Loud, with the denominator. "0 reclaimed" over 7 stranded rows is a
+            # different fact from "0 stranded", and the two must not read alike.
+            logger.warning(
+                "Orphan reclaim: %d/%d stranded PROCESSING thoughts failed for occurrence %r. "
+                "Their tasks are now eligible for recovery again.",
+                reclaimed,
+                len(stranded),
+                occurrence_id,
+            )
+        except Exception as e:  # noqa: BLE001 - diagnostics must never block startup
+            logger.error("Orphan reclaim failed (non-fatal, startup continues): %s", e)
 
-                    logger.info(f"Deleted {len(invalid_thought_ids)} thoughts with invalid context")
-                else:
-                    logger.info("No thoughts with invalid context found")
+    async def _cleanup_invalid_thoughts(self) -> None:
+        """Clean up thoughts with invalid or malformed context.
 
+        A thought is "invalid" when its persisted context can't be
+        materialized into a ThoughtContext — an empty/NULL context, or one
+        missing `task_id`/`correlation_id`. This is the same criteria the
+        pre-2.9.0 raw-SQL pass used; `_persist_row_to_thought` yields
+        `context is None` for exactly those rows.
+
+        Deletion routes through persist's `thought_delete` (available since
+        persist v1.5.20; the CIRISPersist#60 that once blocked this landed
+        2026-05) via `delete_thoughts_by_ids`, which removes each thought
+        leaves-first to satisfy the `parent_thought_id` self-FK.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.persistence.models.thoughts import _list_with_filter, delete_thoughts_by_ids
+
+        if get_persist_engine() is None:
+            logger.debug("persist engine not wired; skipping _cleanup_invalid_thoughts")
+            return
+
+        logger.info("Cleaning up thoughts with invalid context...")
+        try:
+            all_thoughts = _list_with_filter({})
         except Exception as e:
-            logger.error(f"Failed to clean up invalid thoughts: {e}", exc_info=True)
+            logger.error(
+                f"Failed to enumerate thoughts for invalid-context cleanup: {e}",
+                exc_info=True,
+            )
+            return
+
+        # A thought is invalid when its context can't be materialized —
+        # `_persist_row_to_thought` leaves `context is None` for exactly the
+        # empty/NULL/missing-task_id/missing-correlation_id rows the legacy
+        # SQL targeted. delete_thoughts_by_ids removes each leaves-first.
+        invalid_ids = [t.thought_id for t in all_thoughts if t.context is None]
+
+        total = 0
+        if invalid_ids:
+            try:
+                total = delete_thoughts_by_ids(invalid_ids)
+            except Exception as e:
+                logger.error(
+                    f"Failed to delete invalid thoughts: {e}",
+                    exc_info=True,
+                )
+
+        if total:
+            logger.info(f"Deleted {total} thought(s) with invalid context")
+        else:
+            logger.info("No thoughts with invalid context found")
 
     # Config patterns that should be cleaned up on startup (unless preserved)
     _ADAPTER_CONFIG_PREFIX = "adapter."
@@ -445,8 +576,24 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
     async def _delete_duplicate_adapters_in_group(
         self, group_key: tuple[str, str, str], adapter_ids: List[str], adapter_instances: Dict[str, Dict[str, Any]]
     ) -> int:
-        """Delete all but the newest adapter in a duplicate group. Returns count deleted."""
+        """Delete all but the newest adapter in a duplicate group. Returns count deleted.
+
+        IMPORTANT: Multi-occurrence safety - only processes groups belonging to the current occurrence.
+        """
         if len(adapter_ids) <= 1:
+            return 0
+
+        # MULTI-OCCURRENCE SAFETY: Only process groups belonging to the current occurrence
+        from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+        adapter_type, occurrence_id, _ = group_key
+        current_occurrence_id = get_current_occurrence_id()
+
+        if occurrence_id != current_occurrence_id:
+            logger.debug(
+                f"Skipping dedupe for adapter group (type={adapter_type}, occurrence={occurrence_id}) - "
+                f"belongs to different occurrence than current ({current_occurrence_id})"
+            )
             return 0
 
         adapter_ids_sorted = sorted(
@@ -455,10 +602,10 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             reverse=True,
         )
         to_delete = adapter_ids_sorted[1:]
-        adapter_type, occurrence_id, _ = group_key
 
         for adapter_id in to_delete:
-            await self._delete_adapter_config_entries(adapter_id)
+            # skip_occurrence_check=True since we already verified the group belongs to current occurrence
+            await self._delete_adapter_config_entries(adapter_id, skip_occurrence_check=True)
             logger.info(
                 f"Deleted duplicate adapter config: {adapter_id} (type={adapter_type}, occurrence={occurrence_id})"
             )
@@ -559,6 +706,29 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         except Exception as e:
             logger.error(f"Error cleaning up non-persistent adapters: {e}", exc_info=True)
 
+    async def _check_legacy_covenant_config(self) -> None:
+        """Check for legacy ciris_covenant_metrics config and log migration warning.
+
+        In CIRIS 2.0.2, ciris_covenant_metrics was renamed to ciris_accord_metrics.
+        This method detects old config entries and warns users to reconfigure.
+        """
+        if not self.config_service:
+            return
+
+        try:
+            # Check for any config with the old adapter name
+            old_configs = await self.config_service.list_configs(prefix="adapter.ciris_covenant_metrics.")
+            if old_configs:
+                logger.warning("=" * 70)
+                logger.warning("[WARN] LEGACY CONFIG DETECTED: ciris_covenant_metrics")
+                logger.warning("   This adapter was renamed to ciris_accord_metrics in CIRIS 2.0.2")
+                logger.warning("   Please reconfigure the adapter through the setup wizard or update")
+                logger.warning("   your .env file to use CIRIS_ACCORD_METRICS_* environment variables.")
+                logger.warning(f"   Found {len(old_configs)} legacy config entries.")
+                logger.warning("=" * 70)
+        except Exception as e:
+            logger.debug(f"Error checking legacy covenant config: {e}")
+
     # Ordered list of ConfigValue typed field names to check
     _CONFIG_VALUE_FIELDS: tuple[str, ...] = (
         "string_value",
@@ -597,10 +767,39 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         found, typed_value = self._extract_typed_value(val)
         return typed_value if found else val
 
-    async def _delete_adapter_config_entries(self, adapter_id: str) -> None:
-        """Delete all config entries for an adapter instance."""
+    async def _delete_adapter_config_entries(self, adapter_id: str, skip_occurrence_check: bool = False) -> None:
+        """Delete all config entries for an adapter instance.
+
+        IMPORTANT: Multi-occurrence safety - only deletes configs belonging to the current occurrence
+        unless skip_occurrence_check is True (used when we've already verified ownership).
+        This prevents cross-contamination in shared database deployments.
+
+        Args:
+            adapter_id: The adapter ID to delete configs for
+            skip_occurrence_check: If True, skip occurrence validation (caller already verified)
+        """
         if not self.config_service:
             return
+
+        # MULTI-OCCURRENCE SAFETY: Check occurrence ownership before deletion
+        if not skip_occurrence_check:
+            from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+            current_occurrence_id = get_current_occurrence_id()
+
+            # Get the adapter's occurrence_id from the graph
+            occurrence_key = f"adapter.{adapter_id}.occurrence_id"
+            occurrence_node = await self.config_service.get_config(occurrence_key)
+            saved_occurrence_id = self._extract_config_value(occurrence_node)
+
+            # If there's a saved occurrence_id and it doesn't match current, refuse to delete
+            if saved_occurrence_id is not None and saved_occurrence_id != current_occurrence_id:
+                logger.warning(
+                    f"MULTI-OCCURRENCE SAFETY: Refusing to delete adapter config for {adapter_id} - "
+                    f"adapter belongs to occurrence '{saved_occurrence_id}', current is '{current_occurrence_id}'. "
+                    f"This prevents cross-contamination in shared database deployments."
+                )
+                return
 
         keys_to_delete = [
             f"adapter.{adapter_id}.type",
@@ -633,24 +832,51 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             # Get current time
             current_time = self.time_service.now()
 
-            # Get all active tasks from all occurrences by querying the database directly
-            # We need to check ALL occurrences for old active tasks
-            from ciris_engine.logic.persistence import get_db_connection
+            # Routed through persist substrate (CIRISAgent#763). Persist's
+            # task_list filter is equality-only, so iterate PENDING and
+            # ACTIVE separately across the known occurrence set. Production
+            # runs `default` and `__shared__` plus occasionally
+            # `occurrence-<id>` for multi-occurrence deployments — we list
+            # the full union via persist's task_list with each status
+            # filter, then aggregate.
+            from ciris_engine.logic.persistence.models.graph import get_persist_engine
+            from ciris_engine.logic.persistence.models.tasks import _persist_row_to_task
 
-            # Check both PENDING and ACTIVE tasks - PENDING tasks that are old
-            # indicate messages that were received but never processed
-            stale_tasks = []
-            with get_db_connection(db_path=self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT * FROM tasks WHERE status IN (?, ?)",
-                    (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value),
-                )
-                rows = cursor.fetchall()
-                from ciris_engine.logic.persistence.utils import map_row_to_task
+            engine = get_persist_engine()
+            if engine is None:
+                logger.warning("persist engine not initialized — skipping old-active-task cleanup")
+                return
 
-                for row in rows:
-                    stale_tasks.append(map_row_to_task(row))
+            stale_tasks: List[Any] = []
+            seen_task_ids: set[str] = set()
+
+            for status_val in (TaskStatus.PENDING.value, TaskStatus.ACTIVE.value):
+                # task_list with cursor-pagination over ALL occurrences:
+                # leave occurrence filter unset to scan globally.
+                last_ts = "9999-12-31T23:59:59Z"
+                last_id = ""
+                while True:
+                    cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+                    raw = engine.task_list(json.dumps({"status": status_val}), cursor_json, 200)
+                    parsed = json.loads(raw) if isinstance(raw, str) else raw
+                    items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+                    if not items:
+                        break
+                    for row in items:
+                        if not isinstance(row, dict):
+                            continue
+                        tid = str(row.get("task_id", ""))
+                        if tid in seen_task_ids:
+                            continue
+                        seen_task_ids.add(tid)
+                        try:
+                            stale_tasks.append(_persist_row_to_task(row))
+                        except Exception as inner_e:
+                            logger.warning("Failed to materialize task %s during cleanup: %s", tid, inner_e)
+                        last_ts = str(row.get("created_at", last_ts))
+                        last_id = tid
+                    if len(items) < 200:
+                        break
 
             old_task_ids = []
 
@@ -672,11 +898,17 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
                 # Check task age
                 if isinstance(task.created_at, str):
-                    from datetime import datetime
-
                     task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
                 else:
                     task_created = task.created_at
+
+                # "From a previous run" means created before this process
+                # started. The hourly periodic pass reuses this cleanup, and
+                # the age test alone completed tasks THIS run was still
+                # working on, then told their channel the agent had
+                # restarted (#1264).
+                if isinstance(self._start_time, datetime) and task_created >= self._start_time:
+                    continue
 
                 task_age = current_time - task_created
                 # Mark tasks older than 5 minutes as completed
@@ -697,9 +929,9 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
                             task.task_id,
                             TaskStatus.COMPLETED,
                             task.agent_occurrence_id,
-                            self.time_service,
-                            db_path=self.db_path,
                         )
+                        # Create audit entry for auto-completion
+                        await self._audit_task_auto_complete(task)
                         # Send notification to the channel that the task was auto-completed
                         await self._notify_stale_task_completed(task)
                 logger.info(f"Marked {len(old_task_ids)} old active tasks as completed")
@@ -708,6 +940,30 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
 
         except Exception as e:
             logger.error(f"Failed to clean up old active tasks: {e}", exc_info=True)
+
+    async def _sweep_old_active_tasks_at_startup(self) -> None:
+        """The startup old-task sweep, deferred while the halt latch cannot be read clear.
+
+        CC 4.2.1.1: after a restart under a standing halt these "old" tasks are
+        the held ones, waiting to re-deliberate. The node is usually not
+        answering yet when startup cleanup runs, so read the latch: with no halt
+        standing the sweep runs now, as it always did; otherwise it waits for
+        the first reading that finds none, and is skipped if a halt was seen on
+        the way. The stale WAKEUP/shutdown sweep is not deferred — it must run
+        before a fresh wakeup (#1069) and touches only ceremony tasks.
+        """
+        if not (await read_halt_latch()).halted:
+            await self._cleanup_old_active_tasks()
+            return
+        run_when_first_unhalted(self._deferred_old_task_sweep)
+        logger.info("Old-task sweep deferred until the constitutional-halt latch reads clear")
+
+    async def _deferred_old_task_sweep(self, halt_seen: bool) -> None:
+        """The startup old-task sweep, run once the latch first reads clear."""
+        if halt_seen:
+            logger.info("Old-task sweep skipped: those tasks were held by a constitutional halt, not abandoned")
+            return
+        await self._cleanup_old_active_tasks()
 
     async def _notify_stale_task_completed(self, task: Any) -> None:
         """Send a notification to the channel that a stale task was auto-completed due to restart."""
@@ -724,19 +980,124 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         if channel_id.startswith("__") or channel_id == "system":
             return
 
+        # Check if communication service is available (prevents race condition during startup)
+        if not self.bus_manager.communication.has_service_for_channel(channel_id):
+            logger.debug(
+                f"No communication service available for channel {channel_id} - "
+                "skipping stale task notification (adapter may not be initialized yet)"
+            )
+            return
+
+        # CC 4.2.1.1: the notice is the agent speaking, from a maintenance loop.
+        if await refuse_agent_send_under_halt(AgentSendSurface.STALE_TASK_NOTICE, channel_id):
+            return
+
         try:
-            msg = (
-                "I was restarted while processing your request. "
-                "The previous task was auto-completed. Please resend your message if you still need a response."
-            )
-            await self.bus_manager.communication.send_message_sync(
-                channel_id=channel_id,
-                content=msg,
-                handler_name="DatabaseMaintenanceService",
-            )
+            from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+
+            lang = get_preferred_language()
+            msg = get_string(lang, "agent.restarted_stale_task")
+            # Sent under the stale task's scope: the API adapter delivers a
+            # message only to a request its own task owns. Unscoped, it went
+            # FIFO to whatever request was waiting on the channel, and a
+            # live question was answered with "I was restarted" (#1264).
+            with reasoning_scope(task_id=task.task_id, thought_id=None, phase="stale_task_notice"):
+                await self.bus_manager.communication.send_message_sync(
+                    channel_id=channel_id,
+                    content=msg,
+                    handler_name="DatabaseMaintenanceService",
+                )
             logger.info(f"Sent stale task notification to channel {channel_id}")
         except Exception as e:
             logger.warning(f"Failed to send stale task notification to {channel_id}: {e}")
+
+    async def _audit_task_auto_complete(self, task: Any) -> None:
+        """Create an audit entry for a task that was auto-completed by maintenance service.
+
+        This creates a proper audit trail entry indicating the task was automatically
+        completed due to being stale (older than 5 minutes from a previous run),
+        rather than being completed by the TASK_COMPLETE handler.
+        """
+        if not self.bus_manager:
+            logger.debug("No bus_manager available - skipping auto-complete audit")
+            return
+
+        if not hasattr(self.bus_manager, "audit_service") or not self.bus_manager.audit_service:
+            logger.warning("No audit_service available - skipping auto-complete audit")
+            return
+
+        try:
+            # Calculate task age for the audit record
+            current_time = self.time_service.now()
+            if isinstance(task.created_at, str):
+                from datetime import datetime
+
+                task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
+            else:
+                task_created = task.created_at
+            task_age_seconds = (current_time - task_created).total_seconds()
+
+            # Create audit event with all relevant task details
+            await self.bus_manager.audit_service.log_event(
+                event_type="handler_action_task_complete",
+                event_data={
+                    "handler_name": "DatabaseMaintenanceService",
+                    "task_id": task.task_id,
+                    "thought_id": None,  # No thought associated with auto-complete
+                    "action": "task_complete",
+                    "outcome": "auto_completed",
+                    "completion_reason": "maintenance_auto_complete",
+                    "auto_complete_reason": f"Task was stale (age: {task_age_seconds:.0f}s, threshold: 300s)",
+                    "task_age_seconds": task_age_seconds,
+                    "channel_id": getattr(task, "channel_id", None),
+                    "agent_occurrence_id": getattr(task, "agent_occurrence_id", "default"),
+                    "wa_authorized": False,  # Not authorized by WA, done by maintenance
+                },
+            )
+            logger.debug(f"Created audit entry for auto-completed task {task.task_id}")
+        except Exception as e:
+            logger.warning(f"Failed to create audit entry for auto-completed task {task.task_id}: {e}")
+
+    def _is_wakeup_or_shutdown_task(self, task_id: str) -> bool:
+        """Check if a task ID matches wakeup or shutdown patterns."""
+        prefixes = (
+            "WAKEUP_",
+            "VERIFY_IDENTITY_",
+            "VALIDATE_INTEGRITY_",
+            "EVALUATE_RESILIENCE_",
+            "ACCEPT_INCOMPLETENESS_",
+            "EXPRESS_GRATITUDE_",
+            "shutdown_",
+            "SHUTDOWN_",
+        )
+        return any(task_id.startswith(prefix) for prefix in prefixes)
+
+    def _get_task_age_seconds(self, task: Any, current_time: Any) -> float:
+        """Get task age in seconds, handling string timestamps."""
+        if isinstance(task.created_at, str):
+            from datetime import datetime
+
+            task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
+        else:
+            task_created = task.created_at
+        return float((current_time - task_created).total_seconds())
+
+    def _collect_stale_items_from_task(
+        self, task: Any, stale_task_ids: List[str], stale_thought_ids: List[str]
+    ) -> None:
+        """Collect stale thought IDs and task IDs from an old task."""
+        thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id)
+        for thought in thoughts:
+            if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
+                logger.info(
+                    f"Found stale wakeup thought from old task {task.task_id}: "
+                    f"{thought.thought_id} (status: {thought.status})"
+                )
+                stale_thought_ids.append(thought.thought_id)
+
+        if task.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]:
+            logger.info(f"Found stale {task.status} wakeup task from previous run: {task.task_id}")
+            stale_task_ids.append(task.task_id)
 
     async def _cleanup_stale_wakeup_tasks(self) -> None:
         """
@@ -747,72 +1108,58 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         """
         try:
             logger.info("Checking for stale wakeup and shutdown tasks from previous runs")
-
-            # Get current time for comparison
             current_time = self.time_service.now()
 
             # Get all wakeup and shutdown related tasks from __shared__ occurrence
-            # Wakeup tasks are always in the shared namespace
-            all_tasks = get_all_tasks("__shared__", db_path=self.db_path)
-            stale_tasks = []
-            for task in all_tasks:
-                if not hasattr(task, "task_id"):
-                    continue
-                # Check for wakeup and shutdown tasks by ID pattern
-                if (
-                    task.task_id.startswith("WAKEUP_")
-                    or task.task_id.startswith("VERIFY_IDENTITY_")
-                    or task.task_id.startswith("VALIDATE_INTEGRITY_")
-                    or task.task_id.startswith("EVALUATE_RESILIENCE_")
-                    or task.task_id.startswith("ACCEPT_INCOMPLETENESS_")
-                    or task.task_id.startswith("EXPRESS_GRATITUDE_")
-                    or task.task_id.startswith("shutdown_")
-                    or task.task_id.startswith("SHUTDOWN_")  # Also match uppercase SHUTDOWN_ tasks
-                ):
-                    stale_tasks.append(task)
+            all_tasks = get_all_tasks("__shared__")
+            stale_tasks = [
+                task
+                for task in all_tasks
+                if hasattr(task, "task_id") and self._is_wakeup_or_shutdown_task(task.task_id)
+            ]
 
-            # Clean up thoughts and interfering tasks from old wakeup runs
-            stale_task_ids = []  # For PENDING/ACTIVE tasks that would interfere
-            stale_thought_ids = []
+            stale_task_ids: List[str] = []
+            stale_thought_ids: List[str] = []
 
             for task in stale_tasks:
-                # Check if this task is from a previous run (more than 5 minutes old)
-                # Convert string timestamp to datetime if needed
-                if isinstance(task.created_at, str):
-                    from datetime import datetime
+                if self._get_task_age_seconds(task, current_time) > 300:  # 5 minutes
+                    self._collect_stale_items_from_task(task, stale_task_ids, stale_thought_ids)
 
-                    task_created = datetime.fromisoformat(task.created_at.replace("Z", UTC_TIMEZONE_SUFFIX))
-                else:
-                    task_created = task.created_at
-
-                task_age = current_time - task_created
-                is_old_task = task_age.total_seconds() > 300  # 5 minutes
-
-                if is_old_task:
-                    # For old tasks, clean up any pending/processing thoughts
-                    # CRITICAL: Pass task's occurrence_id to fetch thoughts in same namespace
-                    thoughts = get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id, db_path=self.db_path)
-                    for thought in thoughts:
-                        if thought.status in [ThoughtStatus.PENDING, ThoughtStatus.PROCESSING]:
-                            logger.info(
-                                f"Found stale wakeup thought from old task {task.task_id}: {thought.thought_id} (status: {thought.status})"
-                            )
-                            stale_thought_ids.append(thought.thought_id)
-
-                    # Delete old PENDING or ACTIVE tasks as they would interfere
-                    if task.status in [TaskStatus.PENDING, TaskStatus.ACTIVE]:
-                        logger.info(f"Found stale {task.status} wakeup task from previous run: {task.task_id}")
-                        stale_task_ids.append(task.task_id)
-
-            # Delete stale thoughts first
             if stale_thought_ids:
-                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids, db_path=self.db_path)
+                deleted_thoughts = delete_thoughts_by_ids(stale_thought_ids)
                 logger.info(f"Deleted {deleted_thoughts} stale wakeup thoughts from previous runs")
 
-            # Then delete stale active tasks (only ACTIVE ones from interrupted startups)
             if stale_task_ids:
-                deleted_tasks = delete_tasks_by_ids(stale_task_ids, db_path=self.db_path)
-                logger.info(f"Deleted {deleted_tasks} stale active wakeup tasks from interrupted startups")
+                # CLEAR THE TASK'S OWN CHILDREN FIRST (CIRISAgent#1070).
+                #
+                # The delete was failing on `FOREIGN KEY constraint failed`
+                # every boot, because the collected `stale_thought_ids` are the
+                # thoughts this scan judged stale — not necessarily EVERY thought
+                # holding a reference to the task. Any one it missed pins the
+                # task, and the stale WAKEUP task then survives forever, which is
+                # the state #1069's spinning agents boot into.
+                #
+                # Asking for the task's thoughts by task id removes the guesswork.
+                for task_id in stale_task_ids:
+                    child_ids = [th.thought_id for th in get_thoughts_by_task_id(task_id)]
+                    if child_ids:
+                        freed = delete_thoughts_by_ids(child_ids)
+                        logger.info(
+                            "Deleted %d child thought(s) still referencing stale wakeup task %s",
+                            freed,
+                            task_id,
+                        )
+
+                deleted_tasks = delete_tasks_by_ids(stale_task_ids)
+                if deleted_tasks:
+                    logger.info(f"Deleted {deleted_tasks} stale active wakeup task(s) from interrupted startups")
+                else:
+                    logger.error(
+                        "Could NOT delete %d stale active wakeup task(s): %s — they remain ACTIVE and "
+                        "a fresh wakeup will find them again on the next boot",
+                        len(stale_task_ids),
+                        stale_task_ids,
+                    )
 
             if not stale_task_ids and not stale_thought_ids:
                 logger.info("No stale wakeup tasks or thoughts found")
@@ -821,111 +1168,22 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
             logger.error(f"Failed to clean up stale wakeup tasks: {e}", exc_info=True)
 
     async def _cleanup_duplicate_temporal_edges(self) -> None:
+        """No-op shim — the v1.5.5 Postgres dedupe cleanup is no longer
+        needed on 2.9.0 deployments.
+
+        The original code targeted a placeholder-bug in persist v1.5.5
+        edge_manager that produced duplicate TEMPORAL_NEXT/PREV edges on
+        Postgres. CIRISAgent 2.9.0 pins persist >=1.6.0 which has the bug
+        fixed for many minor versions. Any deployment that needed this
+        cleanup ran it long ago when persist was on a 1.5.x line.
+
+        The raw SQL (GROUP BY HAVING + per-source iteration + DELETE IN)
+        was the last remaining `get_db_connection` consumer in
+        database_maintenance. Removing it eliminates that touchpoint.
+        Future dedupe runs (if needed) should ship as a one-off
+        `tools/ops/` script, not runtime maintenance.
         """
-        Clean up duplicate temporal edges created by v1.5.5 PostgreSQL bug.
-
-        Bug: edge_manager.py used hardcoded ? placeholders instead of adapter.placeholder(),
-        causing DELETE and INSERT to fail on PostgreSQL, creating duplicate TEMPORAL_NEXT
-        and TEMPORAL_PREV edges.
-
-        This cleanup:
-        1. Finds summaries with multiple TEMPORAL_NEXT/PREV edges
-        2. Keeps only the most recent edge for each relationship type
-        3. Deletes older duplicates
-
-        Safe to run multiple times - idempotent.
-        """
-        try:
-            from ciris_engine.logic.persistence.db.core import get_db_connection
-            from ciris_engine.logic.persistence.db.dialect import get_adapter
-
-            logger.info("Checking for duplicate temporal edges from v1.5.5 PostgreSQL bug")
-
-            with get_db_connection(db_path=self.db_path) as conn:
-                # CRITICAL: Get adapter AFTER opening connection to ensure dialect is initialized
-                # for the correct database backend (PostgreSQL vs SQLite)
-                adapter = get_adapter()
-                ph = adapter.placeholder()
-                cursor = conn.cursor()
-
-                # Find summaries with duplicate temporal edges
-                cursor.execute(
-                    f"""
-                    SELECT source_node_id, relationship, COUNT(*) as edge_count
-                    FROM graph_edges
-                    WHERE relationship IN ('TEMPORAL_NEXT', 'TEMPORAL_PREV')
-                    GROUP BY source_node_id, relationship
-                    HAVING COUNT(*) > 1
-                    ORDER BY edge_count DESC
-                """
-                )
-
-                duplicates = cursor.fetchall()
-
-                if not duplicates:
-                    logger.info("No duplicate temporal edges found")
-                    return
-
-                total_duplicates_deleted = 0
-                logger.info(f"Found {len(duplicates)} summaries with duplicate temporal edges")
-
-                for row in duplicates:
-                    if adapter.is_postgresql():
-                        source_id, relationship, count = row["source_node_id"], row["relationship"], row["edge_count"]
-                    else:
-                        source_id, relationship, count = row[0], row[1], row[2]
-
-                    logger.info(f"  {source_id} has {count} duplicate {relationship} edges")
-
-                    # Get all edges for this source + relationship, ordered by created_at DESC
-                    cursor.execute(
-                        f"""
-                        SELECT edge_id, created_at
-                        FROM graph_edges
-                        WHERE source_node_id = {ph}
-                          AND relationship = {ph}
-                        ORDER BY created_at DESC
-                    """,
-                        (source_id, relationship),
-                    )
-
-                    edges = cursor.fetchall()
-
-                    if len(edges) <= 1:
-                        continue  # No duplicates to clean
-
-                    # Keep the first (most recent), delete the rest
-                    edges_to_delete = []
-                    for i, edge_row in enumerate(edges):
-                        if i == 0:
-                            continue  # Keep first edge
-                        if adapter.is_postgresql():
-                            edges_to_delete.append(edge_row["edge_id"])
-                        else:
-                            edges_to_delete.append(edge_row[0])
-
-                    if edges_to_delete:
-                        # Delete duplicate edges
-                        placeholders = ",".join([ph] * len(edges_to_delete))
-                        cursor.execute(
-                            f"""
-                            DELETE FROM graph_edges
-                            WHERE edge_id IN ({placeholders})
-                        """,
-                            edges_to_delete,
-                        )
-
-                        deleted = cursor.rowcount
-                        total_duplicates_deleted += deleted
-                        logger.info(f"    Deleted {deleted} duplicate {relationship} edges from {source_id}")
-
-                conn.commit()
-
-                if total_duplicates_deleted > 0:
-                    logger.info(f"✓ Cleaned up {total_duplicates_deleted} duplicate temporal edges from PostgreSQL bug")
-
-        except Exception as e:
-            logger.error(f"Failed to clean up duplicate temporal edges: {e}", exc_info=True)
+        logger.debug("_cleanup_duplicate_temporal_edges: no-op on 2.9.0 (v1.5.5 dedupe shim)")
 
     def get_capabilities(self) -> "ServiceCapabilities":
         """Get service capabilities."""
@@ -1032,54 +1290,3 @@ class DatabaseMaintenanceService(BaseScheduledService, DatabaseMaintenanceServic
         )
 
         return metrics
-
-    async def migrate_audit_key_to_ed25519(self, backup: bool = True) -> Dict[str, Any]:
-        """Migrate audit signing key from RSA-2048 to Ed25519.
-
-        This is a one-time migration operation that:
-        1. Creates a backup of the current state
-        2. Generates or uses unified Ed25519 key
-        3. Re-signs the entire audit chain
-        4. Verifies chain integrity
-        5. Archives the old RSA key
-
-        Args:
-            backup: Create backup before migration (recommended)
-
-        Returns:
-            Dict with migration result details
-        """
-        from ciris_engine.logic.audit import migrate_audit_key_to_ed25519
-
-        logger.info("=" * 70)
-        logger.info("🔐 AUDIT KEY MIGRATION REQUESTED")
-        logger.info("=" * 70)
-
-        # Determine key path (default is audit_keys/)
-        key_path = "audit_keys"
-        if hasattr(self, "key_path"):
-            key_path = str(self.key_path)
-
-        # Get database path
-        db_path = self.db_path
-        if not db_path:
-            from ciris_engine.logic.persistence import get_sqlite_db_full_path
-
-            db_path = get_sqlite_db_full_path()
-
-        result = await migrate_audit_key_to_ed25519(
-            db_path=str(db_path),
-            key_path=key_path,
-            time_service=self.time_service,
-            backup=backup,
-        )
-
-        return {
-            "success": result.success,
-            "message": result.message,
-            "entries_migrated": result.entries_migrated,
-            "old_key_id": result.old_key_id,
-            "new_key_id": result.new_key_id,
-            "backup_path": result.backup_path,
-            "errors": result.errors,
-        }

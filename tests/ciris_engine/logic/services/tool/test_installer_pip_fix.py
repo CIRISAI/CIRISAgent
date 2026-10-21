@@ -26,8 +26,7 @@ class TestPipDetection:
 
         # Mock shutil.which to return None (binary missing)
         # Mock subprocess.run to succeed (module present)
-        with patch("shutil.which", return_value=None), \
-             patch("subprocess.run") as mock_run:
+        with patch("shutil.which", return_value=None), patch("subprocess.run") as mock_run:
 
             mock_run.return_value.returncode = 0
 
@@ -44,8 +43,9 @@ class TestPipDetection:
 
         # Mock shutil.which to return None
         # Mock subprocess.run to raise CalledProcessError (module missing/failing)
-        with patch("shutil.which", return_value=None), \
-             patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, ["cmd"])):
+        with patch("shutil.which", return_value=None), patch(
+            "subprocess.run", side_effect=subprocess.CalledProcessError(1, ["cmd"])
+        ):
 
             assert installer._has_package_manager("pip") is False
 
@@ -54,8 +54,7 @@ class TestPipDetection:
         installer = ToolInstaller()
 
         # Test brew (should rely on shutil.which)
-        with patch("shutil.which", return_value="/usr/bin/brew") as mock_which, \
-             patch("subprocess.run") as mock_run:
+        with patch("shutil.which", return_value="/usr/bin/brew") as mock_which, patch("subprocess.run") as mock_run:
 
             assert installer._has_package_manager("brew") is True
             mock_which.assert_called_with("brew")

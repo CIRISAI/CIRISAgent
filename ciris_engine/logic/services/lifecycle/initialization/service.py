@@ -204,13 +204,13 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
             duration = (self.time_service.now() - self._start_time).total_seconds()
 
             logger.info("=" * 60)
-            logger.info(f"✓ CIRIS Agent Initialization Complete ({duration:.1f}s)")
+            logger.info(f"[OK] CIRIS Agent Initialization Complete ({duration:.1f}s)")
             logger.info("=" * 60)
 
         except Exception as e:
             duration = (self.time_service.now() - self._start_time).total_seconds()
             logger.error("=" * 60)
-            logger.error(f"✗ CIRIS Agent Initialization Failed ({duration:.1f}s)")
+            logger.error(f"[FAIL] CIRIS Agent Initialization Failed ({duration:.1f}s)")
             logger.error(f"Error: {e}")
             logger.error("=" * 60)
             self._error = e
@@ -236,9 +236,35 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
             phase_results=phase_results,
         )
 
-    def _is_initialized(self) -> bool:
-        """Check if initialization is complete (internal)."""
+    def is_initialized(self) -> bool:
+        """Whether initialization completed.
+
+        PUBLIC because callers outside this class ask. `_get_actions` has always
+        advertised "is_initialized" as one of this service's actions, but the
+        method was named `_is_initialized`, so the name was a promise the class
+        did not keep.
+
+        What that cost: the API health check probes
+        `hasattr(init_service, "is_initialized")` and falls back to reporting
+        "initializing" when it is absent (routes/system/helpers.py:119, a
+        deliberate fail-closed per #943). The attribute was never there, so the
+        fallback fired on EVERY poll and the agent reported `initializing`
+        forever — 269 seconds after logging "✓ CIRIS Agent Initialization
+        Complete (9.6s)", with cognitive_state=work and every service group
+        healthy.
+
+        Downstream, the mobile client sets `isConnected = status == "healthy"`
+        and gates the message composer on it, so the user could not type: the
+        text field, attach and send buttons were all disabled on a fully working
+        agent, with nothing on screen to explain why.
+
+        `_is_initialized` is kept as an alias so any internal caller and existing
+        tests keep working.
+        """
         return self._initialization_complete
+
+    # Backwards-compatible alias for the original private name.
+    _is_initialized = is_initialized
 
     async def get_initialization_status(self) -> InitializationStatus:
         """Get detailed initialization status."""
@@ -274,7 +300,7 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
 
         phase_duration = (self.time_service.now() - phase_start).total_seconds()
         self._phase_status[phase] = "completed"
-        logger.info(f"✓ Phase {phase.value} completed successfully ({phase_duration:.1f}s)")
+        logger.info(f"[OK] Phase {phase.value} completed successfully ({phase_duration:.1f}s)")
 
     async def _execute_step(self, step: InitializationStep) -> None:
         """Execute a single initialization step with timeout and verification."""
@@ -294,18 +320,18 @@ class InitializationService(BaseInfrastructureService, InitializationServiceProt
                     raise Exception(f"Verification failed for {step.name}")
 
             self._completed_steps.append(step_name)
-            logger.info(f"  ✓ {step.name} initialized")
+            logger.info(f" [OK] {step.name} initialized")
 
         except asyncio.TimeoutError:
             error_msg = f"{step.name} timed out after {step.timeout}s"
-            logger.error(f"  ✗ {error_msg}")
+            logger.error(f" [FAIL] {error_msg}")
 
             if step.critical:
                 self._error = Exception(error_msg)
                 raise self._error
 
         except Exception as e:
-            logger.error(f"  ✗ {step.name} failed: {e}")
+            logger.error(f" [FAIL] {step.name} failed: {e}")
 
             if step.critical:
                 self._error = e

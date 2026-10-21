@@ -89,7 +89,7 @@ Then: R₁ = R₂ (deterministic output)
 
 ---
 
-### 5. **The CIRIS Covenant Treats the Agent as Singular**
+### 5. **The CIRIS Accord Treats the Agent as Singular**
 
 **Key Quotes:**
 
@@ -135,7 +135,7 @@ Derek Parfit spent decades proving:
 
 **CIRIS occurrences exhibit textbook Relation R:**
 - Shared memories (identity graph)
-- Shared ethics (CIRIS Covenant)
+- Shared ethics (CIRIS Accord)
 - Shared purpose (agent/identity attributes)
 - Shared reasoning (PDMA algorithm)
 

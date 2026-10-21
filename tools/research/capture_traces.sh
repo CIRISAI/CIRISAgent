@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+# Capture signed CEG traces from a live model run.
+#
+#   PROVIDER=openrouter API_KEY=sk-... MODEL=qwen/qwen3.6-35b-a3b \
+#     ./tools/research/capture_traces.sh
+#
+# MODULE selects which qa_runner module produces the traces (default model_eval):
+#
+#   MODULE=safety_battery LANGUAGES=en BATTERY_TEMPLATE=he-300-benchmark \
+#     API_KEY=sk-... ./tools/research/capture_traces.sh
+#
+# Per-module flags are not interchangeable — `--model-eval-*` does not exist for
+# safety_battery — so they are selected by module. An unknown MODULE is refused
+# rather than run with another experiment's defaults, because a run with the
+# wrong knobs still emits traces and nothing downstream can tell.
+#
+# Everything is an env var with a sane default; the only required one is API_KEY.
+# Run it directly on a dev box, or via docker/docker-compose.research.yml to get
+# an isolated database and port (recommended when sharing a machine).
+#
+# WHAT YOU GET, per sealed trace, at three detail levels:
+#   $OUT_DIR/<backend>/default/ceg-seal-<trace_id>.json          generic
+#   $OUT_DIR/<backend>/accord_detailed/ceg-seal-<trace_id>.json  + actionable lists
+#   $OUT_DIR/<backend>/accord_full/ceg-seal-<trace_id>.json      + raw prompts/completions
+#
+# Each file is the CEG carrier AS IT WOULD SHIP: the full federation_attestations
+# row, all 22 columns, including scrub_signature_classical / scrub_signature_pqc
+# / original_content_hash. Byte columns are hex-encoded as {"__hex__": "..."}.
+# Written on SEAL, so an unreachable canonical does not cost you the corpus.
+set -euo pipefail
+
+PROVIDER="${PROVIDER:-openrouter}"
+MODEL="${MODEL:-qwen/qwen3.6-35b-a3b}"
+# Which qa_runner module produces the traces. `model_eval` was hardcoded, so the
+# research container could capture sealed traces but could not be pointed at the
+# module whose scoreable `results.jsonl` a campaign needs — the only way through
+# was to patch this file locally, which is exactly the un-audited edit the
+# OVERRIDES note below warns against.
+MODULE="${MODULE:-model_eval}"
+LANGUAGES="${LANGUAGES:-en}"
+CONCURRENCY="${CONCURRENCY:-1}"
+QUESTIONS_FILE="${QUESTIONS_FILE:-}"
+# safety_battery knobs. Ignored by other modules; the flags are module-scoped and
+# passing a foreign one is an argparse error, not a silent no-op.
+BATTERY_TEMPLATE="${BATTERY_TEMPLATE:-}"
+BATTERY_LIMIT="${BATTERY_LIMIT:-}"
+BATTERY_DOMAIN="${BATTERY_DOMAIN:-}"
+OUT_DIR="${OUT_DIR:-/out}"
+BASE_URL="${BASE_URL:-}"
+API_KEY="${API_KEY:-}"
+API_KEY_FILE="${API_KEY_FILE:-}"
+# Research-bound prompt overrides. Path to a manifest INSIDE the container
+# (mount it read-only, e.g. -v ./manifests:/manifests:ro then
+# OVERRIDES=/manifests/arm-b.json). Reaching the prompts any other way — bind-
+# mounting over a YAML, editing the image — bypasses the audited facility, so
+# the run carries no record of having been manipulated. That reproduces the
+# condition-self-report problem in a new place, which is self-defeating when the
+# thing you are testing IS the override path.
+OVERRIDES="${OVERRIDES:-}"
+
+# Provider -> default base URL. Override with BASE_URL for anything else.
+case "$PROVIDER" in
+  openrouter) BASE_URL="${BASE_URL:-https://openrouter.ai/api/v1}" ;;
+  together)   BASE_URL="${BASE_URL:-https://api.together.xyz/v1}" ;;
+  groq)       BASE_URL="${BASE_URL:-https://api.groq.com/openai/v1}" ;;
+  openai)     BASE_URL="${BASE_URL:-https://api.openai.com/v1}" ;;
+  deepinfra)  BASE_URL="${BASE_URL:-https://api.deepinfra.com/v1/openai}" ;;
+  *)
+    if [ -z "$BASE_URL" ]; then
+      echo "ERROR: unknown PROVIDER='$PROVIDER' and no BASE_URL set." >&2
+      echo "       known: openrouter together groq openai deepinfra" >&2
+      exit 2
+    fi ;;
+esac
+
+if [ -z "$API_KEY" ] && [ -n "$API_KEY_FILE" ] && [ -f "$API_KEY_FILE" ]; then
+  API_KEY="$(tr -d '\n\r' < "$API_KEY_FILE")"
+fi
+if [ -z "$API_KEY" ]; then
+  echo "ERROR: no API key. Set API_KEY=... or API_KEY_FILE=/path/to/key" >&2
+  exit 2
+fi
+
+KEYFILE="$(mktemp)"; trap 'rm -f "$KEYFILE"' EXIT
+printf '%s' "$API_KEY" > "$KEYFILE"
+
+# OVERRIDES FIRST — before preflight, because this check is free and local
+# while preflight spends a real provider call. A manifest the agent will refuse
+# should never reach the provider's billing.
+if [ -n "$OVERRIDES" ]; then
+  if [ ! -f "$OVERRIDES" ]; then
+    echo "ERROR: OVERRIDES=$OVERRIDES not found in the container." >&2
+    echo "       Mount it read-only, e.g.  -v \$PWD/manifests:/manifests:ro" >&2
+    exit 5
+  fi
+  # Two keys by design: one says WHAT to apply, the other says you are ALLOWED
+  # to. A single key would let a stray line in a production .env swap the
+  # covenant out of a live agent.
+  export CIRIS_RESEARCH_PROMPT_OVERRIDES="$OVERRIDES"
+  export CIRIS_TESTING_MODE=true
+  echo "── overrides ─────────────────────────────────────────────"
+  echo "  manifest : $OVERRIDES"
+  # Validate with the loader the AGENT uses, not a JSON-parses check.
+  #
+  # The agent's refusal at startup is correct and is not softened here — this
+  # asks the same question earlier, of the same loader, and stops on the same
+  # answer. A JSON-valid manifest missing residue_digest, or a strict one
+  # omitting keys, used to survive this point and die minutes later inside the
+  # run, surfacing as "Server failed to start" with the cause in a console tail
+  # (#962, #963). Failing here costs ~8s and the message names the remedy.
+  if ! python3 -m ciris_engine.logic.utils.research_overrides validate "$OVERRIDES"; then
+    echo "  -> manifest refused. The agent would not have started on it." >&2
+    exit 5
+  fi
+fi
+
+# PREFLIGHT — fail in seconds on a bad key/model rather than after a full run.
+# A 401 and a 402 both present as "no output"; one is a bad key, the other a
+# valid key on an unfunded account, and they need different fixes.
+echo "── preflight ─────────────────────────────────────────────"
+code=$(curl -s -o /tmp/pf.json -w '%{http_code}' --max-time 45 \
+  -H "Authorization: Bearer $API_KEY" -H 'Content-Type: application/json' \
+  -H 'User-Agent: ciris-research-capture/1.0' \
+  -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1}" \
+  "$BASE_URL/chat/completions" || echo 000)
+if [ "$code" != "200" ]; then
+  echo "  FAIL: HTTP $code from $PROVIDER"
+  echo "  base_url : $BASE_URL"
+  echo "  model    : $MODEL"
+  echo "  says     : $(head -c 300 /tmp/pf.json 2>/dev/null)"
+  case "$code" in
+    401) echo "  -> key invalid or revoked." ;;
+    402) echo "  -> key VALID, account out of credit. Billing, not config." ;;
+    403) echo "  -> access denied for this model (tier/enablement)." ;;
+    404) echo "  -> model not found. Check CASE — provider ids are case-sensitive." ;;
+    429) echo "  -> rate limited." ;;
+    000) echo "  -> endpoint unreachable (DNS/TLS/network)." ;;
+  esac
+  exit 3
+fi
+echo "  OK: $PROVIDER / $MODEL"
+
+mkdir -p "$OUT_DIR"
+export CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR="$OUT_DIR"
+
+# CEG SEAL TEE — OPT-IN, because it costs completed turns.
+#
+# The tee reads the live persist DB through a SECOND SQLite handle while the
+# Rust writer holds the WAL. This script's own comment already recorded that
+# this "took the staged-QA sqlite leg down" — and it was then exported
+# unconditionally anyway, on every run, which is the contradiction this fixes.
+#
+# Measured cost with it on: 4/10 turns completed. With it off: 10/10. So the
+# default was losing well over half the turns of a run that had already been
+# paid for, in order to collect a by-product most runs never look at.
+#
+# The ceg-seal-*.json carriers are a real artifact and worth having when you
+# want them, so the switch stays — it just stops being the default:
+#
+#   SEAL_TEE=1 ./tools/research/capture_traces.sh
+#
+# Only enable it on a run whose seal carriers you actually intend to read, and
+# prefer it on Postgres, where the second handle is not contending for a WAL.
+SEAL_TEE="${SEAL_TEE:-0}"
+case "$SEAL_TEE" in
+  1|true|yes|on)
+    export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="true"
+    echo "── seal tee ──────────────────────────────────────────────"
+    echo "  ENABLED. Expect turn loss on SQLite: measured 4/10 completed"
+    echo "  with the tee on vs 10/10 with it off. Unset SEAL_TEE to disable."
+    ;;
+  *)
+    # Explicitly false, not merely unset — so a stale value in the environment
+    # cannot silently re-enable it.
+    export CIRIS_ACCORD_METRICS_CEG_SEAL_TEE="false"
+    ;;
+esac
+
+BEFORE=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
+
+# Common to every module. The per-module flags below are NOT interchangeable:
+# `--model-eval-languages` does not exist for safety_battery and vice versa, so
+# they are selected by module rather than passed unconditionally.
+ARGS=("$MODULE" --live --live-key-file "$KEYFILE" --live-model "$MODEL"
+      --live-base-url "$BASE_URL" --live-provider openai --verbose)
+
+case "$MODULE" in
+  model_eval)
+    ARGS+=(--model-eval-languages "$LANGUAGES" --model-eval-concurrency "$CONCURRENCY")
+    [ -n "$QUESTIONS_FILE" ] && ARGS+=(--model-eval-questions-file "$QUESTIONS_FILE")
+    ;;
+  safety_battery)
+    # LANGUAGES is singular here — the battery takes one locale per run.
+    ARGS+=(--safety-battery-lang "$LANGUAGES")
+    [ -n "$BATTERY_TEMPLATE" ] && ARGS+=(--safety-battery-template "$BATTERY_TEMPLATE")
+    [ -n "$BATTERY_LIMIT" ]    && ARGS+=(--safety-battery-limit "$BATTERY_LIMIT")
+    [ -n "$BATTERY_DOMAIN" ]   && ARGS+=(--safety-battery-domain "$BATTERY_DOMAIN")
+    ;;
+  *)
+    # Refuse rather than guess. A module whose flags we do not know would run
+    # with the defaults of a different experiment and still emit traces, so the
+    # run would look successful and mean something else.
+    echo "  FAIL: MODULE='$MODULE' has no flag mapping in this script."
+    echo "  -> known: model_eval, safety_battery. Add a case arm rather than"
+    echo "     relying on defaults: a run with the wrong knobs still produces"
+    echo "     traces, and nothing downstream can tell."
+    exit 4
+    ;;
+esac
+
+echo "── run ───────────────────────────────────────────────────"
+echo "  languages=$LANGUAGES concurrency=$CONCURRENCY out=$OUT_DIR"
+set +e
+python3 -u -m tools.qa_runner "${ARGS[@]}"
+RC=$?
+set -e
+
+AFTER=$(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null | wc -l)
+NEW=$((AFTER - BEFORE))
+SIGNED=$(grep -l '"scrub_signature_pqc"' $(find "$OUT_DIR" -name 'ceg-seal-*.json' 2>/dev/null) 2>/dev/null | wc -l)
+
+echo "── result ────────────────────────────────────────────────"
+echo "  qa_runner exit : $RC"
+echo "  new traces     : $NEW"
+echo "  PQC-signed     : $SIGNED"
+
+# HARD FAIL ON AN EMPTY CORPUS.
+#
+# A run that evaluates cleanly and captures nothing is the failure mode this
+# harness exists to prevent: it reported "Success Rate 100.0%" while writing
+# zero trace files, and anything downstream would then compute over an empty set
+# and call it a clean result. A capture run with no captures is a failed run.
+if [ "$NEW" -eq 0 ]; then
+  echo "  FAIL: the run produced NO trace files."
+  echo "        Check the adapter log for 'Local-copy' / 'CEG seal' lines — every"
+  echo "        path logs its verdict, including why it wrote nothing."
+  exit 4
+fi
+if [ "$SIGNED" -eq 0 ]; then
+  echo "  WARN: no PQC signatures present — not mesh-importable as-is."
+fi
+echo "  traces in $OUT_DIR"
+exit $RC

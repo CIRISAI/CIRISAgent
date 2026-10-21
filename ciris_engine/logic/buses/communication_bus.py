@@ -13,9 +13,11 @@ if TYPE_CHECKING:
     from ciris_engine.logic.registries.base import ServiceRegistry
 
 from ciris_engine.logic.registries.base import Priority
+from ciris_engine.logic.utils.halt_latch import bus_backstop
 from ciris_engine.protocols.services import CommunicationService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.infrastructure.base import BusMetrics
+from ciris_engine.schemas.runtime.accord_halt import BusBackstopCall
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
 
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Channel prefix constants for adapter routing
 REDDIT_CHANNEL_PREFIX = "reddit:"
+EDGE_CHANNEL_PREFIX = "edge:"
 
 
 @dataclass
@@ -113,6 +116,42 @@ class CommunicationBus(BaseBus[CommunicationService]):
         logger.warning("No communication adapter has a home channel configured")
         return None
 
+    def has_service_for_channel(self, channel_id: str) -> bool:
+        """Check if there's a communication service available for a given channel.
+
+        This is useful for checking if communication is possible before attempting
+        to send messages, preventing errors during startup when adapters may not
+        be fully registered yet.
+
+        Args:
+            channel_id: The channel ID to check
+
+        Returns:
+            True if a service is available for this channel, False otherwise
+        """
+        all_services = self.service_registry.get_services_by_type(ServiceType.COMMUNICATION)
+        if not all_services:
+            return False
+
+        # Check if any service matches the channel prefix
+        if channel_id.startswith("discord_"):
+            return any("Discord" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith("api_") or channel_id.startswith("ws:"):
+            return any("API" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith("cli_"):
+            return any("CLI" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith(REDDIT_CHANNEL_PREFIX):
+            return any("Reddit" in type(svc).__name__ for svc in all_services)
+        elif channel_id.startswith(EDGE_CHANNEL_PREFIX):
+            return any("Edge" in type(svc).__name__ for svc in all_services)
+
+        # Fallback: check if any service has send_message capability
+        for svc in all_services:
+            if hasattr(svc, "send_message"):
+                return True
+
+        return False
+
     async def send_message(
         self, channel_id: Optional[str], content: str, handler_name: str, metadata: Optional[JSONDict] = None
     ) -> bool:
@@ -121,6 +160,9 @@ class CommunicationBus(BaseBus[CommunicationService]):
 
         This is async and returns immediately after queuing.
         """
+        # CC 4.2.1.1 backstop: the reasoning loop does not speak under a halt.
+        if await bus_backstop(BusBackstopCall.COMMUNICATION_SEND, channel_id) is not None:
+            return False
         message = SendMessageRequest(
             id=str(uuid.uuid4()),
             handler_name=handler_name,
@@ -146,6 +188,9 @@ class CommunicationBus(BaseBus[CommunicationService]):
         Routes based on channel_id prefix for cross-adapter communication.
         If channel_id is None, uses the highest priority adapter's home channel.
         """
+        # CC 4.2.1.1 backstop: the reasoning loop does not speak under a halt.
+        if await bus_backstop(BusBackstopCall.COMMUNICATION_SEND_SYNC, channel_id) is not None:
+            return False
         service = None
         resolved_channel_id = channel_id
 

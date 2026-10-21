@@ -21,7 +21,7 @@ class PromptTemplate(BaseModel):
     # Template metadata
     version: str = Field("1.0", description="Template version")
     category: str = Field("general", description="Template category")
-    requires_covenant: bool = Field(False, description="Whether COVENANT_TEXT should be prepended")
+    requires_accord: bool = Field(False, description="Whether ACCORD_TEXT should be prepended")
 
     # Variable requirements
     required_variables: List[str] = Field(default_factory=list, description="Required template variables")
@@ -31,7 +31,7 @@ class PromptTemplate(BaseModel):
     usage_context: Optional[str] = Field(None, description="When to use this template")
     example_output: Optional[str] = Field(None, description="Example of filled template")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PromptCollection(BaseModel):
@@ -64,11 +64,36 @@ class PromptCollection(BaseModel):
     action_params_speak_csdma_guidance: Optional[str] = Field(None, description="SPEAK action guidance")
     action_params_ponder_guidance: Optional[str] = Field(None, description="PONDER action guidance")
     action_params_observe_guidance: Optional[str] = Field(None, description="OBSERVE action guidance")
-    rationale_csdma_guidance: Optional[str] = Field(None, description="Rationale guidance")
+    # The DEFER policy — the action-tier outcome doctrine, routed out of the
+    # inline Python literal by #974 step 0 (FSD/RESEARCH_PROMPT_OVERRIDES.md §11).
+    action_params_defer_guidance: Optional[str] = Field(None, description="DEFER action policy/guidance")
+    reasoning_csdma_guidance: Optional[str] = Field(None, description="Reasoning guidance for CSDMA-flagged ambiguity")
 
     # Special case prompts
     final_ponder_advisory: Optional[str] = Field(None, description="Final ponder advisory template")
     closing_reminder: Optional[str] = Field(None, description="Closing reminder text")
+
+    # #993 / #995 P1-6 — live YAML fields that were absent from the schema, so
+    # the loader parked them in `custom_prompts` and R1 rejected any manifest
+    # naming them as "does not reach any LLM prompt". All four reach a model.
+    tool_selection_guidance: Optional[str] = Field(None, description="Tool-selection guard for the TOOL action")
+    csdma_ambiguity_alignment_example: Optional[str] = Field(None, description="CSDMA ambiguity alignment example")
+    taxonomy_text: Optional[str] = Field(None, description="Rights/needs deferral taxonomy (DSASPDMA)")
+
+    # MSASPDMA's graph-writing guide, split by epistemic class (#1027). Declared
+    # so the compose gate's key space — which IS this schema — can address them:
+    # a block that is not a field is never counted as an override key, and a
+    # regime could vary it while the gate still reported GATE: PASS.
+    #
+    # Declaring these was impossible until `get_prompt` stopped letting a
+    # declared-but-unset field shadow `custom_prompts` (same commit): adding the
+    # fields used to blank all five blocks silently.
+    memory_model: Optional[str] = Field(None, description="What the graph is: nodes, edges, DREAM (MSASPDMA)")
+    addressing_convention: Optional[str] = Field(None, description="Node id conventions (MSASPDMA)")
+    attribute_convention: Optional[str] = Field(None, description="Attribute naming (MSASPDMA)")
+    scope_convention: Optional[str] = Field(None, description="Graph scope table (MSASPDMA)")
+    memory_prohibitions: Optional[str] = Field(None, description="What must not be written (MSASPDMA)")
+    tool_correction_section: Optional[str] = Field(None, description="Tool correction-mode guidance (TSASPDMA)")
 
     # Context integration
     context_integration: Optional[str] = Field(None, description="Context integration template")
@@ -80,7 +105,8 @@ class PromptCollection(BaseModel):
     custom_prompts: Dict[str, str] = Field(default_factory=dict, description="Additional custom prompts")
 
     # Metadata flags
-    uses_covenant_header: bool = Field(False, description="Whether to use COVENANT_TEXT")
+    # Accord mode: 'full' (default), 'compressed' (for testing/benchmarking), or 'none'
+    accord_mode: str = Field("full", description="Accord mode: 'full', 'compressed', or 'none'")
     supports_agent_modes: bool = Field(True, description="Whether agent-specific prompts are supported")
 
     def get_prompt(self, key: str, agent_name: Optional[str] = None) -> Optional[str]:
@@ -91,9 +117,22 @@ class PromptCollection(BaseModel):
             if agent_key in self.agent_variations:
                 return self.agent_variations[agent_key]
 
-        # Try direct attribute
-        if hasattr(self, key):
-            return getattr(self, key)  # type: ignore[no-any-return]  # Dynamic attribute lookup
+        # Try direct attribute — but only if it actually HOLDS something.
+        #
+        # `hasattr` is True for every declared field, including one the loader
+        # never populated, so an unset field returned its None default and the
+        # `custom_prompts` fallback below was never reached. That makes
+        # declaring a field for a YAML key actively destructive: the key loads
+        # into custom_prompts and works, and the moment someone adds a matching
+        # field the block silently becomes empty. Observed while adding the
+        # MSASPDMA blocks — declaring the fields blanked five working prompt
+        # sections, with no error, because "declared" outranked "present".
+        #
+        # A field that holds a value still wins, which is what the ordering is
+        # for; a field that holds nothing is not an answer.
+        value = getattr(self, key, None)
+        if value is not None:
+            return value  # type: ignore[no-any-return]  # Dynamic attribute lookup
 
         # Try custom prompts
         if key in self.custom_prompts:
@@ -123,7 +162,7 @@ class PromptCollection(BaseModel):
 
         return result
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PromptVariable(BaseModel):
@@ -142,7 +181,7 @@ class PromptVariable(BaseModel):
     allowed_values: Optional[List[Any]] = Field(None, description="Allowed values (enum)")
     pattern: Optional[str] = Field(None, description="Regex pattern for validation")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
 class PromptMetadata(BaseModel):
@@ -169,4 +208,4 @@ class PromptMetadata(BaseModel):
     usage_count: int = Field(0, description="How many times loaded")
     last_used: Optional[str] = Field(None, description="ISO timestamp of last use")
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", defer_build=True)

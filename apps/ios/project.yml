@@ -1,0 +1,239 @@
+name: iosApp
+options:
+  bundleIdPrefix: ai.ciris
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+  groupSortPosition: top
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: "${DEVELOPMENT_TEAM}"
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.9"
+
+configs:
+  Debug:
+    SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+  Release:
+    SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+        excludes:
+          - "**/.DS_Store"
+      # Resources bundled as zip to avoid code signing issues with 5000+ files
+      - path: Resources.zip
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.ciris.mobile
+        INFOPLIST_FILE: iosApp/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: YES
+        CODE_SIGN_ENTITLEMENTS: iosApp/iosApp.entitlements
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/Frameworks"
+        SWIFT_OBJC_BRIDGING_HEADER: iosApp/iosApp-Bridging-Header.h
+        CLANG_ENABLE_MODULES: YES
+      configs:
+        Debug:
+          FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/../shared/build/bin/iosArm64/debugFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64
+            - $(PROJECT_DIR)/Frameworks
+          FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/debugFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64-simulator
+            - $(PROJECT_DIR)/Frameworks
+          HEADER_SEARCH_PATHS[sdk=iphoneos*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64/CIRISVerify.framework/Headers
+          HEADER_SEARCH_PATHS[sdk=iphonesimulator*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/Headers
+        Release:
+          FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/../shared/build/bin/iosArm64/releaseFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64
+            - $(PROJECT_DIR)/Frameworks
+          FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/../shared/build/bin/iosSimulatorArm64/releaseFramework
+            # Published client (CIRISClient ships shared.xcframework; see
+            # apps/settings.gradle.kts — there is no :shared module here any more).
+            # Listed AFTER the gradle path so a source checkout still wins.
+            - $(PROJECT_DIR)/Frameworks/shared.xcframework/ios-arm64-simulator
+            - $(PROJECT_DIR)/Frameworks
+          HEADER_SEARCH_PATHS[sdk=iphoneos*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64/CIRISVerify.framework/Headers
+          HEADER_SEARCH_PATHS[sdk=iphonesimulator*]:
+            - $(inherited)
+            - $(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers
+            - $(PROJECT_DIR)/Frameworks/CIRISVerify.xcframework/ios-arm64-simulator/CIRISVerify.framework/Headers
+    dependencies:
+      - framework: Frameworks/Python.xcframework
+        embed: true
+      - framework: Frameworks/CIRISVerify.xcframework
+        embed: true
+      - sdk: AuthenticationServices.framework
+      - sdk: Security.framework
+      - sdk: DeviceCheck.framework
+    preBuildScripts:
+      - name: Sync Python Source into Resources.zip
+        script: |
+          # Always rebuild Resources.zip from latest repo source before build.
+          # Without this, Xcode uses a stale committed zip missing recent fixes.
+          CIRIS_ROOT="${PROJECT_DIR}/../.."
+          RESOURCES_DIR="${PROJECT_DIR}/Resources"
+          if [ -d "$RESOURCES_DIR" ] && [ -d "$CIRIS_ROOT/ciris_engine" ]; then
+            echo "Syncing ciris_engine + ciris_adapters into Resources..."
+            EXCLUDES="--exclude=__pycache__ --exclude=.pytest_cache --exclude=*.pyc --exclude=*.pyo --exclude=gui_static --exclude=desktop_app --exclude=android_gui_static --exclude=README* --exclude=*.md --exclude=examples/ --exclude=tests/ --exclude=adapters/discord"
+            rsync -a --delete $EXCLUDES \
+                "$CIRIS_ROOT/ciris_engine/" "$RESOURCES_DIR/app/ciris_engine/"
+            rsync -a --delete $EXCLUDES \
+                "$CIRIS_ROOT/ciris_adapters/" "$RESOURCES_DIR/app/ciris_adapters/"
+            find "$RESOURCES_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+            find "$RESOURCES_DIR" \( -name "README*" -o -name "*.md" \) -delete 2>/dev/null || true
+            find "$RESOURCES_DIR/app" -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
+            cd "$RESOURCES_DIR"
+            rm -f "$PROJECT_DIR/Resources.zip"
+            zip -q -r "$PROJECT_DIR/Resources.zip" .
+            cd "$PROJECT_DIR"
+            echo "Resources.zip rebuilt from latest source"
+          else
+            echo "WARNING: Could not sync source — using existing Resources.zip"
+          fi
+        basedOnDependencyAnalysis: false
+      - name: Link KMP Shared Framework
+        script: |
+          # Link the correct shared.framework based on configuration and SDK
+          SHARED_FRAMEWORK_DIR="${PROJECT_DIR}/../shared/build/bin"
+
+          echo "DEBUG: SDKROOT=$SDKROOT"
+          echo "DEBUG: PLATFORM_NAME=$PLATFORM_NAME"
+          echo "DEBUG: EFFECTIVE_PLATFORM_NAME=$EFFECTIVE_PLATFORM_NAME"
+          echo "DEBUG: CONFIGURATION=$CONFIGURATION"
+
+          # Determine architecture (device vs simulator)
+          # Use PLATFORM_NAME which is more reliable for archive builds
+          if [ "$PLATFORM_NAME" = "iphoneos" ] || [[ "$SDKROOT" == *"iphoneos"* ]]; then
+            ARCH="iosArm64"
+          else
+            ARCH="iosSimulatorArm64"
+          fi
+
+          # Determine build type
+          if [ "$CONFIGURATION" = "Release" ]; then
+            BUILD_TYPE="releaseFramework"
+          else
+            BUILD_TYPE="debugFramework"
+          fi
+
+          echo "DEBUG: Selected ARCH=$ARCH BUILD_TYPE=$BUILD_TYPE"
+
+          FRAMEWORK_PATH="${SHARED_FRAMEWORK_DIR}/${ARCH}/${BUILD_TYPE}/shared.framework"
+
+          # FALL BACK TO THE PUBLISHED xcframework.
+          #
+          # apps/settings.gradle.kts says it plainly: "The shared Kotlin/Compose
+          # client is NOT built here any more... there is no :shared module" — it
+          # ships as ciris-client-<v>.xcframework.zip, which unpacks to
+          # Frameworks/shared.xcframework. This script and SHARED_FRAMEWORK_DIR
+          # were never updated for that move, so they still point at
+          # apps/shared/build/bin, a directory this repo does not contain. Any
+          # machine without a leftover source checkout fails here.
+          #
+          # Gradle output is still preferred, so a developer building from source
+          # is unaffected; the published slice is used only when it is absent.
+          if [ ! -d "$FRAMEWORK_PATH" ]; then
+            if [ "$ARCH" = "iosArm64" ]; then SLICE="ios-arm64"; else SLICE="ios-arm64-simulator"; fi
+            PUBLISHED="${PROJECT_DIR}/Frameworks/shared.xcframework/${SLICE}/shared.framework"
+            if [ -d "$PUBLISHED" ]; then
+              echo "Using published shared.framework ($SLICE) — no gradle build present"
+              FRAMEWORK_PATH="$PUBLISHED"
+            else
+              echo "error: shared.framework not found at $FRAMEWORK_PATH"
+              echo "       and no published slice at $PUBLISHED"
+              echo "Either build it (cd client && ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64)"
+              echo "or fetch it (python3 tools/fetch_client_artifacts.py --platform ios)"
+              exit 1
+            fi
+          fi
+
+          # Check if static (.a) or dynamic (.dylib) framework
+          if file "${FRAMEWORK_PATH}/shared" | grep -q "ar archive"; then
+            # STATIC: do NOT copy anywhere xcode will auto-embed.
+            # The linker finds it via FRAMEWORK_SEARCH_PATHS in project.yml
+            # pointing directly to the gradle build output directory.
+            # Remove any stale copy from Frameworks/ in case a previous
+            # dynamic build left one there.
+            rm -rf "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework"
+            rm -rf "${BUILT_PRODUCTS_DIR}/shared.framework"
+            echo "STATIC shared.framework — linked via FRAMEWORK_SEARCH_PATHS (not embedded)"
+          else
+            # Dynamic: embed in Frameworks/ for runtime loading
+            DEST_PATH="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework"
+            rm -rf "$DEST_PATH"
+            cp -R "$FRAMEWORK_PATH" "$DEST_PATH"
+            PLIST="${DEST_PATH}/Info.plist"
+            if [ -f "$PLIST" ]; then
+              /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 15.0" "$PLIST" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ai.ciris.mobile.shared" "$PLIST" 2>/dev/null || true
+            fi
+            echo "Embedded DYNAMIC shared.framework in Frameworks/"
+          fi
+        basedOnDependencyAnalysis: false
+    postCompileScripts:
+      - name: Embed Python Native Modules
+        script: "${PROJECT_DIR}/scripts/embed_native_frameworks.sh"
+        basedOnDependencyAnalysis: false
+      - name: Remove Static shared.framework from Frameworks
+        script: |
+          # Xcode's Embed Frameworks phase copies shared.framework into
+          # Frameworks/ even though it's a static archive (.a). iOS rejects
+          # static archives in Frameworks/ at install time. Remove it.
+          SHARED_FW="${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework/shared"
+          if [ -f "$SHARED_FW" ] && file "$SHARED_FW" | grep -q "ar archive"; then
+            echo "Removing static shared.framework from Frameworks/ (iOS rejects static archives here)"
+            rm -rf "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}/shared.framework"
+          fi
+        basedOnDependencyAnalysis: false
+
+schemes:
+  iosApp:
+    build:
+      targets:
+        iosApp: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

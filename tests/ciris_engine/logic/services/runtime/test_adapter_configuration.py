@@ -312,7 +312,8 @@ class TestAdapterConfigurationService:
         assert result.step_id == "discover"
         assert "discovered_items" in result.data
         assert len(result.data["discovered_items"]) == 1
-        assert result.next_step_index == 1
+        # Discovery stays on current step - user must select an item to advance
+        assert result.next_step_index is None
 
     @pytest.mark.asyncio
     async def test_execute_step_discovery_empty(self) -> None:
@@ -568,8 +569,8 @@ class TestAdapterConfigurationService:
         assert session.collected_config["timeout"] == 30
 
     @pytest.mark.asyncio
-    async def test_execute_step_input_empty(self) -> None:
-        """Test input step returns awaiting_input when no data provided."""
+    async def test_execute_step_input_no_submission(self) -> None:
+        """Test input step returns awaiting_input when no submission (None)."""
         input_config = InteractiveConfiguration(
             required=True,
             workflow_type="wizard",
@@ -591,10 +592,41 @@ class TestAdapterConfigurationService:
         )
 
         session = await self.service.start_session("test_input", "user_123")
-        result = await self.service.execute_step(session.session_id, {})
+        # None means no submission yet - should return awaiting_input
+        result = await self.service.execute_step(session.session_id, None)
 
         assert result.success is True
         assert result.data.get("awaiting_input") is True
+
+    @pytest.mark.asyncio
+    async def test_execute_step_input_empty_submission_advances(self) -> None:
+        """Test input step advances when empty dict submitted (form with no required fields)."""
+        input_config = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="settings",
+                    step_type="input",
+                    title="Settings",
+                    description="Enter settings",
+                ),
+            ],
+            completion_method="apply_config",
+        )
+
+        self.service.register_adapter_config(
+            adapter_type="test_input",
+            interactive_config=input_config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_input", "user_123")
+        # Empty dict means form was submitted with no values - should advance
+        result = await self.service.execute_step(session.session_id, {})
+
+        assert result.success is True
+        assert result.next_step_index == 1
 
     @pytest.mark.asyncio
     async def test_execute_step_confirm(self) -> None:
@@ -872,8 +904,8 @@ class TestConfigurationSessionStatusEndpoint:
         assert config.steps[1].step_type == "oauth"
 
     @pytest.mark.asyncio
-    async def test_session_status_after_oauth_step(self) -> None:
-        """Test session tracks step progression correctly after OAuth."""
+    async def test_session_status_after_discovery_step(self) -> None:
+        """Test session stays on discovery step until user selects an item."""
         self.service.register_adapter_config(
             adapter_type="homeassistant",
             interactive_config=self.test_config,
@@ -884,12 +916,22 @@ class TestConfigurationSessionStatusEndpoint:
         session = await self.service.start_session("homeassistant", "user_123")
         assert session.current_step_index == 0
 
-        # Execute discovery step
+        # Execute discovery step - returns items but doesn't advance
         self.mock_adapter.discover_results = [{"id": "ha_1", "label": "Home Assistant", "description": "192.168.1.50"}]
         result = await self.service.execute_step(session.session_id, {})
         assert result.success is True
+        assert "discovered_items" in result.data
 
-        # Session should advance
+        # Session should stay on step 0 - user must select an item to advance
+        updated_session = self.service.get_session(session.session_id)
+        assert updated_session is not None
+        assert updated_session.current_step_index == 0
+
+        # Now simulate user selecting a discovered item
+        result = await self.service.execute_step(session.session_id, {"selected_url": "http://192.168.1.50:8123"})
+        assert result.success is True
+
+        # Now session should advance to step 1
         updated_session = self.service.get_session(session.session_id)
         assert updated_session is not None
         assert updated_session.current_step_index == 1
@@ -1110,3 +1152,517 @@ class TestPersistedConfigMethods:
         result = await self.service.remove_persisted_config("homeassistant", mock_config_service)
 
         assert result is False
+
+
+class MockDeviceAuthAdapter:
+    """Mock adapter implementing device auth flow for testing."""
+
+    def __init__(self) -> None:
+        self.device_auth_response: Dict[str, Any] = {
+            "device_code": "test_device_code_123",
+            "user_code": "ABCD-1234",
+            "verification_uri_complete": "https://portal.example.com/device?code=ABCD-1234",
+            "expires_in": 900,
+            "interval": 5,
+        }
+        self.poll_response: Dict[str, Any] = {"status": "pending"}
+        self.discover_results: List[Dict[str, Any]] = []
+        self.validation_result: Tuple[bool, Optional[str]] = (True, None)
+        self.apply_result: bool = True
+
+    async def discover(self, discovery_type: str) -> List[Dict[str, Any]]:
+        """Return mock discovery results."""
+        return self.discover_results
+
+    async def get_oauth_url(
+        self,
+        base_url: str,
+        state: str,
+        code_challenge: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return device auth initiation data (dict instead of URL string)."""
+        return self.device_auth_response
+
+    async def handle_oauth_callback(
+        self,
+        code: str,
+        state: str,
+        base_url: str,
+        code_verifier: Optional[str] = None,
+        callback_base_url: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return device auth poll response."""
+        return self.poll_response
+
+    async def get_config_options(self, step_id: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Return mock config options."""
+        return []
+
+    async def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+        """Return mock validation result."""
+        return self.validation_result
+
+    async def apply_config(self, config: Dict[str, Any]) -> bool:
+        """Return mock apply result."""
+        return self.apply_result
+
+
+class TestDeviceAuthStep:
+    """Tests for device_auth step type (RFC 8628)."""
+
+    def setup_method(self) -> None:
+        """Set up test fixtures."""
+        self.service = AdapterConfigurationService()
+        self.mock_adapter = MockDeviceAuthAdapter()
+
+    def _create_device_auth_config(self) -> InteractiveConfiguration:
+        """Create test config with device_auth step."""
+        return InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="device_auth",
+                    step_type="device_auth",
+                    title="Authorize Device",
+                    description="Complete device authorization",
+                ),
+            ],
+            completion_method="apply_config",
+        )
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_initiation(self) -> None:
+        """Test device_auth step initiates authorization and returns user code."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+
+        result = await self.service.execute_step(session.session_id, {})
+
+        assert result.success is True
+        assert result.awaiting_callback is True
+        assert "user_code" in result.data
+        assert result.data["user_code"] == "ABCD-1234"
+        assert "verification_uri" in result.data
+        assert result.data["verification_uri"] == "https://portal.example.com/device?code=ABCD-1234"
+        assert "expires_in" in result.data
+        assert "interval" in result.data
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_no_portal_url(self) -> None:
+        """Test device_auth step fails without portal_url."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        # Don't set portal_url
+
+        result = await self.service.execute_step(session.session_id, {})
+
+        assert result.success is False
+        assert "portal_url" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_poll_pending(self) -> None:
+        """Test device_auth polling returns pending status."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+        session.collected_config["device_code"] = "test_device_code_123"
+
+        # Poll with pending response
+        self.mock_adapter.poll_response = {"status": "pending"}
+        result = await self.service.execute_step(session.session_id, {"poll": True})
+
+        assert result.success is True
+        assert result.awaiting_callback is True
+        assert result.data.get("status") == "pending"
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_poll_complete(self) -> None:
+        """Test device_auth polling completes and advances step."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+        session.collected_config["device_code"] = "test_device_code_123"
+
+        # Poll with complete response
+        self.mock_adapter.poll_response = {
+            "status": "complete",
+            "signing_key_b64": "dGVzdF9zaWduaW5nX2tleQ==",
+            "key_id": "agent-abc123",
+            "org_id": "org_456",
+            "provisioned_template": "test_template",
+        }
+        result = await self.service.execute_step(session.session_id, {"poll": True})
+
+        assert result.success is True
+        assert result.data.get("status") == "complete"
+        assert result.next_step_index == 1
+        assert "device_auth_result" in session.collected_config
+        assert session.status == SessionStatus.ACTIVE
+
+    @pytest.mark.asyncio
+    async def test_device_auth_step_poll_error(self) -> None:
+        """Test device_auth polling handles error response."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+        session.collected_config["device_code"] = "test_device_code_123"
+
+        # Poll with error response
+        self.mock_adapter.poll_response = {
+            "status": "error",
+            "error": "access_denied",
+        }
+        result = await self.service.execute_step(session.session_id, {"poll": True})
+
+        assert result.success is False
+        assert "access_denied" in result.error
+
+    @pytest.mark.asyncio
+    async def test_device_auth_stores_device_code(self) -> None:
+        """Test device_auth step stores device_code in session."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+        session.collected_config["portal_url"] = "https://portal.example.com"
+
+        await self.service.execute_step(session.session_id, {})
+
+        assert session.collected_config.get("device_code") == "test_device_code_123"
+        assert session.collected_config.get("user_code") == "ABCD-1234"
+
+    @pytest.mark.asyncio
+    async def test_device_auth_stores_portal_url_from_step_data(self) -> None:
+        """Test device_auth step stores portal_url from step_data."""
+        config = self._create_device_auth_config()
+        self.service.register_adapter_config(
+            adapter_type="test_device_auth",
+            interactive_config=config,
+            adapter_instance=self.mock_adapter,
+        )
+
+        session = await self.service.start_session("test_device_auth", "user_123")
+
+        await self.service.execute_step(
+            session.session_id,
+            {"portal_url": "https://custom.portal.example.com"},
+        )
+
+        assert session.collected_config.get("portal_url") == "https://custom.portal.example.com"
+
+
+class TestDeviceAuthConfigSchema:
+    """Tests for AdapterDeviceAuthConfig schema."""
+
+    def test_device_auth_config_creation(self) -> None:
+        """Test AdapterDeviceAuthConfig schema creation."""
+        from ciris_engine.schemas.runtime.manifest import AdapterDeviceAuthConfig
+
+        config = AdapterDeviceAuthConfig(
+            provider_name="CIRISPortal",
+            device_authorize_path="/api/device/authorize",
+            device_token_path="/api/device/token",
+            poll_interval=5,
+            expires_in=900,
+        )
+
+        assert config.provider_name == "CIRISPortal"
+        assert config.device_authorize_path == "/api/device/authorize"
+        assert config.device_token_path == "/api/device/token"
+        assert config.poll_interval == 5
+        assert config.expires_in == 900
+
+    def test_device_auth_config_defaults(self) -> None:
+        """Test AdapterDeviceAuthConfig default values."""
+        from ciris_engine.schemas.runtime.manifest import AdapterDeviceAuthConfig
+
+        config = AdapterDeviceAuthConfig(provider_name="TestProvider")
+
+        assert config.device_authorize_path == "/api/device/authorize"
+        assert config.device_token_path == "/api/device/token"
+        assert config.poll_interval == 5
+        assert config.expires_in == 900
+
+    def test_configuration_step_device_auth_type(self) -> None:
+        """Test ConfigurationStep accepts device_auth step type."""
+        step = ConfigurationStep(
+            step_id="device_auth_step",
+            step_type="device_auth",
+            title="Authorize Device",
+            description="Complete device authorization with CIRISPortal",
+        )
+
+        assert step.step_type == "device_auth"
+
+    def test_configuration_step_device_auth_config_field(self) -> None:
+        """Test ConfigurationStep has device_auth_config field."""
+        from ciris_engine.schemas.runtime.manifest import AdapterDeviceAuthConfig
+
+        step = ConfigurationStep(
+            step_id="device_auth_step",
+            step_type="device_auth",
+            title="Authorize Device",
+            description="Complete device authorization",
+            device_auth_config=AdapterDeviceAuthConfig(
+                provider_name="CIRISPortal",
+                poll_interval=10,
+            ),
+        )
+
+        assert step.device_auth_config is not None
+        assert step.device_auth_config.provider_name == "CIRISPortal"
+        assert step.device_auth_config.poll_interval == 10
+
+
+# ── the manifest language is ENFORCED, not merely parsed ─────────────────────
+#
+# `condition`, step-level `required`, and a select step's declared field were
+# all read by the schema and acted on by nothing (CIRISClient#39). These pin
+# the behaviour that gives the keys their meaning.
+
+
+def _sql_like_config() -> InteractiveConfiguration:
+    """external_data_sql's shape: one select, two mutually exclusive input steps."""
+    return InteractiveConfiguration(
+        required=True,
+        workflow_type="wizard",
+        steps=[
+            ConfigurationStep(
+                step_id="select_dialect",
+                step_type="select",
+                title="Dialect",
+                description="",
+                options_method="get_config_options",
+                fields=[{"name": "dialect"}],
+                required=True,
+            ),
+            ConfigurationStep(
+                step_id="connection_sqlite",
+                step_type="input",
+                title="SQLite",
+                description="",
+                fields=[{"name": "database_path", "required": True}],
+                condition={"field": "dialect", "equals": "sqlite"},
+            ),
+            ConfigurationStep(
+                step_id="connection_server",
+                step_type="input",
+                title="Server",
+                description="",
+                fields=[{"name": "host", "required": True}],
+                condition={"field": "dialect", "not_equals": "sqlite"},
+            ),
+            ConfigurationStep(
+                step_id="api_keys",
+                step_type="input",
+                title="Keys",
+                description="",
+                fields=[{"name": "api_keys"}],
+                condition={"field": "dialect", "values": ["mssql", "postgres"]},
+            ),
+            ConfigurationStep(step_id="confirm", step_type="confirm", title="Confirm", description=""),
+        ],
+        completion_method="apply_config",
+    )
+
+
+class TestConditionsAreEvaluated:
+    def setup_method(self) -> None:
+        self.service = AdapterConfigurationService()
+        self.adapter = MockConfigurableAdapter()
+        self.service.register_adapter_config("sql", _sql_like_config(), self.adapter)
+
+    @pytest.mark.asyncio
+    async def test_choosing_sqlite_shows_the_sqlite_step_and_skips_the_server_step(self) -> None:
+        session = await self.service.start_session("sql", "u")
+        result = await self.service.execute_step(session.session_id, {"selection": "sqlite"})
+        assert result.success
+        step = self.service.current_step(session)
+        assert step is not None and step.step_id == "connection_sqlite"
+        assert result.next_step_index == session.current_step_index
+
+        result = await self.service.execute_step(session.session_id, {"database_path": "/x.db"})
+        assert result.success
+        # connection_server (not_equals sqlite) and api_keys (values) both fail: land on confirm
+        step = self.service.current_step(session)
+        assert step is not None and step.step_id == "confirm", step.step_id
+
+    @pytest.mark.asyncio
+    async def test_choosing_postgres_skips_sqlite_and_shows_both_server_steps(self) -> None:
+        session = await self.service.start_session("sql", "u")
+        await self.service.execute_step(session.session_id, {"selection": "postgres"})
+        assert self.service.current_step(session).step_id == "connection_server"
+        await self.service.execute_step(session.session_id, {"host": "db"})
+        assert self.service.current_step(session).step_id == "api_keys"
+
+    @pytest.mark.asyncio
+    async def test_a_select_writes_the_field_it_declares(self) -> None:
+        # THE BUG. Adapters read `dialect`; only `select_dialect` was stored, so
+        # validate_config said "dialect is required" after a completed wizard.
+        session = await self.service.start_session("sql", "u")
+        await self.service.execute_step(session.session_id, {"selection": "sqlite"})
+        assert session.collected_config["dialect"] == "sqlite"
+        assert session.collected_config["select_dialect"] == "sqlite"  # kept for old readers
+
+    def test_a_condition_on_an_uncollected_field_does_not_hold(self) -> None:
+        # Showing a step before the answer it hangs on exists is asking out of
+        # order. The lint guarantees the field is written EARLIER, so in a
+        # well-formed manifest this only happens on start_step_id jumps.
+        step = _sql_like_config().steps[1]
+        assert self.service.condition_holds(step, {}) is False
+        assert self.service.condition_holds(step, {"dialect": "sqlite"}) is True
+        assert self.service.condition_holds(step, {"dialect": "mysql"}) is False
+
+    def test_the_three_operators_and_nothing_else(self) -> None:
+        mk = lambda cond: ConfigurationStep(step_id="s", step_type="input", title="", description="", condition=cond)
+        assert self.service.condition_holds(mk({"field": "a", "not_equals": 1}), {"a": 2})
+        assert not self.service.condition_holds(mk({"field": "a", "not_equals": 1}), {"a": 1})
+        assert self.service.condition_holds(mk({"field": "a", "values": [1, 2]}), {"a": 2})
+        assert not self.service.condition_holds(mk({"field": "a", "values": []}), {"a": 2})
+        assert self.service.condition_holds(mk(None), {})
+        with pytest.raises(ValueError):
+            # A predicate with no operator must not silently show OR hide.
+            self.service.condition_holds(mk({"field": "a", "matches": "x"}), {"a": "x"})
+
+    @pytest.mark.asyncio
+    async def test_a_conditional_first_step_is_skipped_on_start(self) -> None:
+        cfg = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[
+                ConfigurationStep(
+                    step_id="reauth_only",
+                    step_type="input",
+                    title="",
+                    description="",
+                    fields=[{"name": "token"}],
+                    condition={"field": "base_url", "equals": "https://old"},
+                ),
+                ConfigurationStep(step_id="confirm", step_type="confirm", title="", description=""),
+            ],
+            completion_method="apply_config",
+        )
+        self.service.register_adapter_config("re", cfg, self.adapter)
+        fresh = await self.service.start_session("re", "u")
+        assert fresh.current_step_index == 1, "no base_url collected: the conditional step must not be shown"
+        again = await self.service.start_session("re", "u", existing_config={"base_url": "https://old"})
+        assert again.current_step_index == 0, "existing_config is folded in BEFORE conditions are evaluated"
+
+    @pytest.mark.asyncio
+    async def test_status_and_execute_agree_on_the_current_step(self) -> None:
+        # One evaluator. The status route reads through current_step(); if it
+        # read the raw index it would report connection_server while execute
+        # was about to run confirm.
+        session = await self.service.start_session("sql", "u")
+        await self.service.execute_step(session.session_id, {"selection": "sqlite"})
+        await self.service.execute_step(session.session_id, {"database_path": "/x.db"})
+        raw = _sql_like_config().steps[session.current_step_index].step_id
+        assert raw == "confirm"
+        assert self.service.current_step(session).step_id == "confirm"
+
+
+class TestRequiredIsEnforced:
+    def setup_method(self) -> None:
+        self.service = AdapterConfigurationService()
+        self.adapter = MockConfigurableAdapter()
+
+    def _one_step(self, step: ConfigurationStep) -> None:
+        cfg = InteractiveConfiguration(
+            required=True,
+            workflow_type="wizard",
+            steps=[step, ConfigurationStep(step_id="confirm", step_type="confirm", title="", description="")],
+            completion_method="apply_config",
+        )
+        self.service.register_adapter_config("t", cfg, self.adapter)
+
+    @pytest.mark.asyncio
+    async def test_a_required_input_step_refuses_an_empty_form(self) -> None:
+        # Step-level `required` was decorative: only field-level was checked, so a
+        # required step whose fields are all optional advanced on {}.
+        self._one_step(
+            ConfigurationStep(
+                step_id="ua", step_type="input", title="", description="", required=True, fields=[{"name": "user_agent"}]
+            )
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {})
+        assert not r.success and "required" in (r.error or "")
+        assert s.current_step_index == 0
+        r = await self.service.execute_step(s.session_id, {"user_agent": "CIRIS/1.0"})
+        assert r.success and s.current_step_index == 1
+
+    @pytest.mark.asyncio
+    async def test_an_optional_input_step_advances_on_an_empty_form(self) -> None:
+        self._one_step(
+            ConfigurationStep(step_id="perf", step_type="input", title="", description="", fields=[{"name": "timeout"}])
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {})
+        assert r.success and s.current_step_index == 1
+
+    @pytest.mark.asyncio
+    async def test_a_select_is_skippable_iff_it_is_not_required(self) -> None:
+        self._one_step(
+            ConfigurationStep(
+                step_id="opt", step_type="select", title="", description="", options_method="get_config_options"
+            )
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {"selection": "skip"})
+        assert r.success and s.current_step_index == 1
+
+        self._one_step(
+            ConfigurationStep(
+                step_id="req",
+                step_type="select",
+                title="",
+                description="",
+                options_method="get_config_options",
+                required=True,
+            )
+        )
+        s = await self.service.start_session("t", "u")
+        r = await self.service.execute_step(s.session_id, {"selection": "skip"})
+        # Not advanced: the service falls through to "fetch options for display".
+        assert s.current_step_index == 0

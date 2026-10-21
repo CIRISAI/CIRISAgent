@@ -6,8 +6,11 @@ extending the existing processor control capabilities with adapter lifecycle man
 """
 
 import asyncio
+import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
 
 import aiofiles
 
@@ -28,7 +31,6 @@ from ciris_engine.schemas.adapters.runtime_context import AdapterStartupContext
 from ciris_engine.schemas.infrastructure.base import ServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import (
     AdapterConfig,
-    AdapterInfo,
     AdapterMetrics,
     AdapterOperationResult,
     CommunicationAdapterInfo,
@@ -36,6 +38,7 @@ from ciris_engine.schemas.runtime.adapter_management import (
     RuntimeAdapterStatus,
 )
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.services.core.runtime import AdapterInfo, AdapterStatus
 
 logger = logging.getLogger(__name__)
 
@@ -142,19 +145,29 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         self.loaded_adapters: Dict[str, AdapterInstance] = {}
         self._adapter_counter = 0
         self._config_listener_registered = False
-
+        # Set to hold background tasks and prevent garbage collection
+        self._background_tasks: Set[asyncio.Task[Any]] = set()
         # Register for config changes after initialization
         self._register_config_listener()
 
     async def load_adapter(
-        self, adapter_type: str, adapter_id: str, config_params: Optional[AdapterConfig] = None
+        self,
+        adapter_type: str,
+        adapter_id: str,
+        config_params: Optional[AdapterConfig] = None,
+        auto_start: bool = True,
     ) -> AdapterOperationResult:
-        """Load and start a new adapter instance
+        """Load a new adapter instance, starting it unless auto_start is False.
 
         Args:
             adapter_type: Adapter type (cli, discord, api, etc.)
             adapter_id: Unique ID for the adapter
             config_params: Optional configuration parameters
+            auto_start: If True (default) start the adapter immediately. If
+                False, register it without calling adapter.start() — used by
+                the /v1/system/adapters API and the adapter_manifest QA probe,
+                which must NOT bind network ports (e.g. the a2a adapter's
+                uvicorn server) just to verify a manifest loads.
 
         Returns:
             Dict with success status and details
@@ -210,6 +223,13 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # Type ignore: adapter_class is dynamically loaded, mypy can't verify constructor signature
             adapter = adapter_class(self.runtime, context=startup_context, **adapter_kwargs)  # type: ignore[call-arg]
 
+            # Restore environment variables from saved adapter config BEFORE start().
+            # Configurable adapters (e.g. Home Assistant) store tokens/URLs in os.environ
+            # via apply_config() during the wizard, but env vars are lost on restart.
+            # Re-apply them so adapter.start() -> initialize() can find them.
+            if config_params and config_params.adapter_config:
+                self._restore_env_vars_from_config(adapter_id, config_params.adapter_config, adapter_type=adapter_type)
+
             instance = AdapterInstance(
                 adapter_id=adapter_id,
                 adapter_type=adapter_type,
@@ -218,27 +238,40 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 loaded_at=self.time_service.now(),
             )
 
-            await adapter.start()
+            if auto_start:
+                await adapter.start()
 
-            # For Discord adapters, we need to run the lifecycle to establish connection
-            if adapter_type == "discord" and hasattr(adapter, "run_lifecycle"):
-                logger.info(f"Starting lifecycle for Discord adapter {adapter_id}")
-                # Create a task that the Discord adapter will wait on
-                # This mimics the behavior when running from main.py
-                agent_task = asyncio.create_task(asyncio.Event().wait())
-                instance.lifecycle_task = agent_task
+                # For Discord adapters, we need to run the lifecycle to establish connection
+                if adapter_type == "discord" and hasattr(adapter, "run_lifecycle"):
+                    logger.info(f"Starting lifecycle for Discord adapter {adapter_id}")
+                    # Create a task that the Discord adapter will wait on
+                    # This mimics the behavior when running from main.py
+                    agent_task = asyncio.create_task(asyncio.Event().wait())
+                    instance.lifecycle_task = agent_task
 
-                # Store the lifecycle runner task
-                instance.lifecycle_runner = asyncio.create_task(
-                    adapter.run_lifecycle(agent_task), name=f"discord_lifecycle_{adapter_id}"
-                )
+                    # Store the lifecycle runner task
+                    instance.lifecycle_runner = asyncio.create_task(
+                        adapter.run_lifecycle(agent_task), name=f"discord_lifecycle_{adapter_id}"
+                    )
 
-                # Don't wait here - let it run in the background
-                logger.info(f"Discord adapter {adapter_id} lifecycle started in background")
+                    # Don't wait here - let it run in the background
+                    logger.info(f"Discord adapter {adapter_id} lifecycle started in background")
+            else:
+                logger.info(f"Adapter {adapter_id} loaded with auto_start=False — not started")
 
-            instance.is_running = True
+            instance.is_running = auto_start
 
             self._register_adapter_services(instance)
+
+            # Refresh context enrichment cache in background (non-blocking)
+            # This ensures newly loaded adapter tools are cached immediately
+            # Store task in set to prevent garbage collection (SonarCloud S5765)
+            task = asyncio.create_task(
+                self._refresh_enrichment_cache_for_adapter(instance),
+                name=f"refresh_enrichment_cache_{adapter_id}",
+            )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
             # Save adapter config to graph
             await self._save_adapter_config_to_graph(
@@ -250,7 +283,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # self.runtime.adapters.append(adapter)
             self.loaded_adapters[adapter_id] = instance
 
-            logger.info(f"Successfully loaded and started adapter {adapter_id} (adapter_manager id: {id(self)})")
+            logger.info(
+                f"Successfully loaded{' and started' if auto_start else ''} adapter {adapter_id} "
+                f"(adapter_manager id: {id(self)})"
+            )
             return AdapterOperationResult(
                 success=True,
                 adapter_id=adapter_id,
@@ -296,10 +332,25 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         Returns None if eligible, AdapterOperationResult with error if not eligible.
         """
         if adapter_id not in self.loaded_adapters:
-            logger.warning(
-                f"Adapter unload failed: '{adapter_id}' not found. "
-                f"Loaded adapters: {list(self.loaded_adapters.keys())}. "
-                f"adapter_manager id: {id(self)}"
+            # NOT an error condition. Unload is a converge-to-absent operation:
+            # if the adapter is already absent, the caller's intent is satisfied.
+            # This is DELETE semantics, and it is reached routinely — a retry, a
+            # double-unload during teardown, or two callers racing the same id.
+            #
+            # It was logged at WARNING here and re-logged at ERROR by the API
+            # route, which made ordinary teardown emit incidents: a Staged QA run
+            # with a 100% pass rate failed anyway because the incident gate
+            # counted them (2026-08-02, sqlite leg; postgres passed the same
+            # code, which is what gives the race away).
+            #
+            # `reason` lets the caller distinguish "already gone" from a genuine
+            # unload failure, so real failures keep their ERROR and this one does
+            # not. Downgraded to INFO rather than silenced — a stale adapter id
+            # is still worth seeing, just not worth failing a run over.
+            logger.info(
+                "Adapter '%s' was not loaded; nothing to unload. Loaded: %s",
+                adapter_id,
+                list(self.loaded_adapters.keys()),
             )
             return self._create_adapter_operation_result(
                 success=False,
@@ -307,6 +358,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 adapter_type="unknown",
                 message=f"Adapter with ID '{adapter_id}' not found",
                 error=f"Adapter with ID '{adapter_id}' not found",
+                details={"reason": "not_loaded"},
             )
 
         instance = self.loaded_adapters[adapter_id]
@@ -509,9 +561,20 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         Returns:
             List of adapter information dictionaries
         """
+        logger.debug(
+            "[ADAPTER_MGR_LIST] Starting list_adapters, loaded_adapters has %d entries: %s",
+            len(self.loaded_adapters),
+            list(self.loaded_adapters.keys()),
+        )
         try:
             adapters = []
             for adapter_id, instance in self.loaded_adapters.items():
+                logger.info(
+                    "[ADAPTER_MGR_LIST]   Processing %s: type=%s running=%s",
+                    adapter_id,
+                    instance.adapter_type,
+                    instance.is_running,
+                )
                 try:
                     if hasattr(instance.adapter, "is_healthy"):
                         is_healthy = await instance.adapter.is_healthy()
@@ -537,23 +600,23 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 try:
                     has_tool_service = hasattr(instance.adapter, "tool_service")
                     tool_service_value = getattr(instance.adapter, "tool_service", None) if has_tool_service else None
-                    logger.info(
+                    logger.debug(
                         f"[TOOL_DISCOVERY] Adapter {adapter_id}: has_tool_service={has_tool_service}, tool_service={type(tool_service_value).__name__ if tool_service_value else None}"
                     )
 
                     if has_tool_service and tool_service_value:
                         tool_service = tool_service_value
                         if hasattr(tool_service, "get_all_tool_info"):
-                            logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling get_all_tool_info()")
+                            logger.debug(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling get_all_tool_info()")
                             tool_infos = await tool_service.get_all_tool_info()
-                            logger.info(
+                            logger.debug(
                                 f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_infos) if tool_infos else 0} tools"
                             )
                             tools = tool_infos  # Pass ToolInfo objects directly, not just names
                         elif hasattr(tool_service, "list_tools"):
-                            logger.info(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling list_tools()")
+                            logger.debug(f"[TOOL_DISCOVERY] Adapter {adapter_id}: calling list_tools()")
                             tool_names = await tool_service.list_tools()
-                            logger.info(
+                            logger.debug(
                                 f"[TOOL_DISCOVERY] Adapter {adapter_id}: got {len(tool_names) if tool_names else 0} tool names"
                             )
                             # Convert string names to ToolInfo objects for schema compliance
@@ -576,6 +639,39 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 except Exception as e:
                     logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}", exc_info=True)
 
+                # Safely sanitize config params - don't let validation errors crash the list
+                try:
+                    sanitized_config = self._sanitize_config_params(instance.adapter_type, instance.config_params)
+                except Exception as config_err:
+                    logger.warning(f"[ADAPTER_MGR_LIST] Failed to sanitize config for {adapter_id}: {config_err}")
+                    # Create a minimal fallback config
+                    sanitized_config = AdapterConfig(adapter_type=instance.adapter_type, enabled=instance.is_running)
+
+                # Check if adapter needs re-authentication (e.g., OAuth token expired)
+                needs_reauth = False
+                reauth_reason = None
+                try:
+                    has_get_status = hasattr(instance.adapter, "get_status")
+                    logger.info(f"[ADAPTER_MGR_LIST] {adapter_id}: has_get_status={has_get_status}")
+                    if has_get_status:
+                        adapter_status = instance.adapter.get_status()
+                        logger.info(f"[ADAPTER_MGR_LIST] {adapter_id}: adapter_status type={type(adapter_status)}")
+                        needs_reauth = getattr(adapter_status, "needs_reauth", False)
+                        reauth_reason = getattr(adapter_status, "reauth_reason", None)
+                        logger.info(
+                            f"[ADAPTER_MGR_LIST] {adapter_id} get_status: needs_reauth={needs_reauth}, reason={reauth_reason}"
+                        )
+                except Exception as status_err:
+                    logger.warning(
+                        f"[ADAPTER_MGR_LIST] Failed to get status for {adapter_id}: {status_err}", exc_info=True
+                    )
+
+                # Get auth step info from manifest
+                has_auth_step, auth_step_id = self._get_auth_step_info(instance.adapter_type)
+                logger.info(
+                    f"[ADAPTER_MGR_LIST] {adapter_id}: has_auth_step={has_auth_step}, auth_step_id={auth_step_id}"
+                )
+
                 adapters.append(
                     RuntimeAdapterStatus(
                         adapter_id=adapter_id,
@@ -583,10 +679,14 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                         is_running=instance.is_running,
                         loaded_at=instance.loaded_at,
                         services_registered=instance.services_registered,
-                        config_params=self._sanitize_config_params(instance.adapter_type, instance.config_params),
+                        config_params=sanitized_config,
                         metrics=metrics,
                         last_activity=None,
                         tools=tools,
+                        needs_reauth=needs_reauth,
+                        reauth_reason=reauth_reason,
+                        has_auth_step=has_auth_step,
+                        auth_step_id=auth_step_id,
                     )
                 )
 
@@ -641,32 +741,58 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             return [{"error": f"Failed to get service registrations: {e}"}]
 
     async def _get_adapter_tools_info(self, adapter_id: str, instance: AdapterInstance) -> Optional[List[Any]]:
-        """Get tool information from adapter if available - strict typing, no fallbacks."""
+        """Get tool information from adapter if available - strict typing, no fallbacks.
+
+        Checks multiple sources for tool services:
+        1. adapter.tool_service (legacy pattern)
+        2. Service registrations with service_type=TOOL
+        """
         try:
-            if not (hasattr(instance.adapter, "tool_service") and instance.adapter.tool_service):
+            tool_services: List[Any] = []
+
+            # Check legacy tool_service attribute
+            if hasattr(instance.adapter, "tool_service") and instance.adapter.tool_service:
+                tool_services.append(instance.adapter.tool_service)
+
+            # Check service registrations for TOOL type providers
+            if hasattr(instance.adapter, "get_services_to_register"):
+                try:
+                    registrations = instance.adapter.get_services_to_register()
+                    for reg in registrations:
+                        if hasattr(reg, "service_type"):
+                            svc_type = str(getattr(reg.service_type, "value", reg.service_type)).lower()
+                            if svc_type == "tool" and hasattr(reg, "provider") and reg.provider:
+                                if reg.provider not in tool_services:
+                                    tool_services.append(reg.provider)
+                except Exception as e:
+                    logger.debug(f"Error getting service registrations for tools: {e}")
+
+            if not tool_services:
                 return None
 
-            tool_service = instance.adapter.tool_service
+            # Collect tool info from all tool services
+            all_tools: List[Any] = []
+            from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
 
-            if hasattr(tool_service, "get_all_tool_info"):
-                tool_infos = await tool_service.get_all_tool_info()
-                # Type checking: tool_infos should be List[ToolInfo]
-                return list(tool_infos) if tool_infos else None  # Pass ToolInfo objects directly
-            elif hasattr(tool_service, "list_tools"):
-                tool_names = await tool_service.list_tools()
-                # Convert string names to ToolInfo objects for schema compliance
-                from ciris_engine.schemas.adapters.tools import ToolInfo, ToolParameterSchema
-
-                return [
-                    ToolInfo(
-                        name=name,
-                        description="",
-                        parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+            for tool_service in tool_services:
+                if hasattr(tool_service, "get_all_tool_info"):
+                    tool_infos = await tool_service.get_all_tool_info()
+                    if tool_infos:
+                        all_tools.extend(tool_infos)
+                elif hasattr(tool_service, "list_tools"):
+                    tool_names = await tool_service.list_tools()
+                    all_tools.extend(
+                        [
+                            ToolInfo(
+                                name=name,
+                                description="",
+                                parameters=ToolParameterSchema(type="object", properties={}, required=[]),
+                            )
+                            for name in tool_names
+                        ]
                     )
-                    for name in tool_names
-                ]
-            else:
-                return None
+
+            return all_tools if all_tools else None
 
         except Exception as e:
             logger.warning(f"Failed to get tools for adapter {adapter_id}: {e}")
@@ -685,6 +811,43 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             errors_count=0,  # Would need to track this in real implementation
             last_error=None,
         )
+
+    def _transform_services_for_display(self, instance: AdapterInstance) -> List[str]:
+        """Transform services_registered to clean display names.
+
+        Converts internal format like 'global:tool:WeatherToolService' to
+        clean names like 'TOOL', and also includes capabilities from
+        service registrations.
+        """
+        clean_services: List[str] = []
+
+        # First, transform the registered service strings
+        for svc_str in instance.services_registered:
+            # Format: 'global:tool:WeatherToolService'
+            # Extract the service type (middle part)
+            parts = svc_str.split(":")
+            if len(parts) >= 2:
+                # parts[1] is the service type (e.g., 'tool')
+                service_type = parts[1].upper()
+                if service_type not in clean_services:
+                    clean_services.append(service_type)
+            else:
+                # Fallback: use the whole string
+                clean_services.append(svc_str.upper())
+
+        # Then, add capabilities from service registrations
+        if hasattr(instance.adapter, "get_services_to_register"):
+            try:
+                registrations = instance.adapter.get_services_to_register()
+                for reg in registrations:
+                    if hasattr(reg, "capabilities") and reg.capabilities:
+                        for cap in reg.capabilities:
+                            if cap not in clean_services:
+                                clean_services.append(cap)
+            except Exception as e:
+                logger.debug(f"Error getting capabilities for display: {e}")
+
+        return clean_services
 
     async def get_adapter_status(self, adapter_id: str) -> Optional[RuntimeAdapterStatus]:
         """Get detailed status of a specific adapter
@@ -737,7 +900,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             config_params: Raw configuration parameters
 
         Returns:
-            Sanitized configuration with sensitive fields masked
+            Sanitized configuration with sensitive fields masked.
+            Settings is merged with adapter_config for flat display in UI.
         """
         if not config_params:
             return AdapterConfig(adapter_type=adapter_type, enabled=False)
@@ -746,19 +910,85 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         sensitive_patterns = SENSITIVE_FIELDS_BY_ADAPTER_TYPE.get(adapter_type, DEFAULT_SENSITIVE_PATTERNS)
 
         # Sanitize settings dict
-        sanitized_settings = _sanitize_dict(config_params.settings, sensitive_patterns)
+        sanitized_settings = (
+            _sanitize_dict(config_params.settings, sensitive_patterns) if config_params.settings else {}
+        )
 
-        # Sanitize adapter_config if present
-        sanitized_adapter_config = None
+        # Sanitize adapter_config if present and merge into settings for flat UI display
         if config_params.adapter_config:
             sanitized_adapter_config = _sanitize_dict(config_params.adapter_config, sensitive_patterns)
+            # Merge adapter_config into settings for UI display
+            sanitized_settings = {**sanitized_settings, **sanitized_adapter_config}
+
+        # Filter out non-primitive values that violate AdapterConfig.settings schema
+        # AdapterConfig.settings only allows: str, int, float, bool, List[str], None
+        def is_primitive(v: Any) -> bool:
+            if v is None or isinstance(v, (str, int, float, bool)):
+                return True
+            if isinstance(v, list) and all(isinstance(x, str) for x in v):
+                return True
+            return False
+
+        filtered_settings = {k: v for k, v in sanitized_settings.items() if is_primitive(v)}
 
         return AdapterConfig(
             adapter_type=config_params.adapter_type,
             enabled=config_params.enabled,
-            settings=sanitized_settings,
-            adapter_config=sanitized_adapter_config,
+            settings=filtered_settings,
+            adapter_config=None,  # Flattened into settings
         )
+
+    def _get_auth_step_info(self, adapter_type: str) -> Tuple[bool, Optional[str]]:
+        """Get authentication step info from adapter's manifest.
+
+        Checks the adapter's manifest.json for interactive_config.steps to find
+        auth steps (oauth or device_auth).
+
+        Args:
+            adapter_type: Type of adapter to check
+
+        Returns:
+            Tuple of (has_auth_step, auth_step_id).
+        """
+        try:
+            # Look in ciris_adapters directory for manifest
+            # On Android, __file__ might be in Chaquopy's extracted location
+            this_file = Path(__file__)
+            adapters_dir = this_file.parent.parent.parent.parent / "ciris_adapters"
+            manifest_path = adapters_dir / adapter_type / "manifest.json"
+            # Diagnostic breadcrumbs only (path resolution on Android/Chaquopy).
+            # DEBUG level — at WARNING these landed in incidents_latest.log
+            # thousands of times per soak window (#935).
+            logger.debug(
+                f"[AUTH_STEP_INFO] {adapter_type}: __file__={this_file}, adapters_dir={adapters_dir}, manifest_path={manifest_path}"
+            )
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: manifest exists={manifest_path.exists()}")
+
+            if not manifest_path.exists():
+                logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: manifest not found, returning False")
+                return False, None
+
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest_data = json.load(f)
+
+            interactive_config = manifest_data.get("interactive_config")
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: has interactive_config={interactive_config is not None}")
+            if not interactive_config:
+                return False, None
+
+            steps = interactive_config.get("steps", [])
+            logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: found {len(steps)} steps")
+            for step in steps:
+                step_type = step.get("step_type", "")
+                if step_type in ("oauth", "device_auth"):
+                    step_id = step.get("step_id")
+                    logger.debug(f"[AUTH_STEP_INFO] {adapter_type}: found auth step type={step_type}, id={step_id}")
+                    return True, step_id
+
+            return False, None
+        except Exception as e:
+            logger.debug(f"[ADAPTER_MGR] Failed to get auth step info for {adapter_type}: {e}")
+            return False, None
 
     async def load_adapter_from_template(
         self, template_name: str, adapter_id: Optional[str] = None
@@ -782,7 +1012,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             if template_overlay_path.exists():
                 try:
-                    async with aiofiles.open(template_overlay_path, "r") as f:
+                    async with aiofiles.open(template_overlay_path, "r", encoding="utf-8") as f:
                         content = await f.read()
                         template_data = yaml.safe_load(content) or {}
 
@@ -882,6 +1112,67 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         except Exception as e:
             logger.error(f"Error registering services for adapter {instance.adapter_id}: {e}", exc_info=True)
 
+    async def _refresh_enrichment_cache_for_adapter(self, instance: AdapterInstance) -> None:
+        """Refresh context enrichment cache for a newly loaded adapter.
+
+        This runs in the background after an adapter is loaded to ensure
+        its context_enrichment tools are cached immediately, rather than
+        waiting for the first thought to trigger cache population.
+        """
+        try:
+            from ciris_engine.logic.context.system_snapshot_helpers import (
+                _collect_available_tools,
+                _collect_enrichment_tools,
+                _execute_enrichment_tool,
+                _get_tool_providers,
+                get_enrichment_cache,
+            )
+
+            # Give the adapter a moment to fully initialize
+            await asyncio.sleep(0.5)
+
+            # Collect tools from this adapter
+            available_tools = await _collect_available_tools(self.runtime)
+            if not available_tools:
+                logger.debug(f"No tools found for adapter {instance.adapter_id}")
+                return
+
+            # Find enrichment tools
+            enrichment_tools = _collect_enrichment_tools(available_tools)
+            if not enrichment_tools:
+                logger.debug(f"No context_enrichment tools in adapter {instance.adapter_id}")
+                return
+
+            # Execute enrichment tools and cache results
+            cache = get_enrichment_cache()
+            # Use _get_tool_providers to get (instance, adapter_name) tuples
+            tool_providers = _get_tool_providers(self.runtime.service_registry)
+
+            for adapter_type, tool in enrichment_tools:
+                tool_key = f"{adapter_type}:{tool.name}"
+                try:
+                    # Skip if already cached
+                    if cache.get(tool_key) is not None:
+                        continue
+
+                    _, result = await _execute_enrichment_tool(tool_providers, adapter_type, tool)
+                    if result is not None:
+                        params = tool.context_enrichment_params or {}
+                        ttl_raw = params.get("_cache_ttl")
+                        ttl = float(ttl_raw) if isinstance(ttl_raw, (int, float)) else None
+                        cache.set(tool_key, result, ttl)
+                        logger.info(f"[ENRICHMENT_CACHE] Cached {tool_key} after adapter load")
+                except Exception as e:
+                    logger.warning(f"[ENRICHMENT_CACHE] Failed to cache {tool_key}: {e}")
+
+            logger.info(
+                f"[ENRICHMENT_CACHE] Refreshed cache after loading {instance.adapter_id}, " f"stats: {cache.stats}"
+            )
+
+        except Exception as e:
+            # Non-critical - just log and continue
+            logger.warning(f"Failed to refresh enrichment cache for {instance.adapter_id}: {e}")
+
     def _unregister_adapter_services(self, instance: AdapterInstance) -> None:
         """Unregister services for an adapter instance"""
         try:
@@ -897,21 +1188,88 @@ class RuntimeAdapterManager(AdapterManagerInterface):
         except Exception as e:
             logger.error(f"Error unregistering services for adapter {instance.adapter_id}: {e}", exc_info=True)
 
-    def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
-        """Get detailed information about a specific adapter."""
+    async def get_adapter_info(self, adapter_id: str) -> Optional[AdapterInfo]:
+        """Get detailed information about a specific adapter.
+
+        Returns the full AdapterInfo with all fields populated:
+        - status: Current adapter status (running, stopped, error, etc.)
+        - started_at: When the adapter was loaded
+        - messages_processed: Total messages processed (if tracked)
+        - error_count: Total errors (if tracked)
+        - last_error: Last error message (if any)
+        - tools: List of tools provided by the adapter
+        - config_params: Sanitized adapter configuration
+        - services_registered: List of services registered by the adapter
+        """
         if adapter_id not in self.loaded_adapters:
             return None
 
         try:
             instance = self.loaded_adapters[adapter_id]
+            logger.debug(f"Getting adapter info for {adapter_id}: type={instance.adapter_type}")
 
-            return AdapterInfo(
+            # Determine adapter status
+            health_status, _ = await self._determine_adapter_health_status(instance)
+            if health_status == "healthy":
+                status = AdapterStatus.RUNNING
+            elif health_status == "active":
+                status = AdapterStatus.ACTIVE
+            elif health_status == "stopped":
+                status = AdapterStatus.STOPPED
+            else:
+                status = AdapterStatus.ERROR
+
+            # Get tools information
+            tools = await self._get_adapter_tools_info(adapter_id, instance)
+
+            # Get metrics
+            metrics = self._create_adapter_metrics(instance, health_status)
+
+            # Get config from adapter's get_config() if available (live config),
+            # otherwise fall back to static instance.config_params (load-time config)
+            config_to_use = instance.config_params
+            if hasattr(instance.adapter, "get_config"):
+                try:
+                    live_config = instance.adapter.get_config()
+                    if live_config:
+                        config_to_use = live_config
+                except Exception as e:
+                    logger.debug(f"Could not get live config for {adapter_id}: {e}")
+
+            # The adapter's live config reflects current settings/state but does
+            # NOT carry the load-time `adapter_config` blob the operator passed
+            # at load. Surface that from the manager's stored AdapterConfig —
+            # otherwise adapter status silently drops it (the wholesale
+            # live-config swap above discards it).
+            if (
+                instance.config_params
+                and instance.config_params.adapter_config
+                and isinstance(config_to_use, AdapterConfig)
+                and not config_to_use.adapter_config
+            ):
+                config_to_use = config_to_use.model_copy(
+                    update={"adapter_config": instance.config_params.adapter_config}
+                )
+
+            # Sanitize config params
+            sanitized_config = self._sanitize_config_params(instance.adapter_type, config_to_use)
+
+            # Transform services_registered to cleaner display names
+            clean_services = self._transform_services_for_display(instance)
+
+            result = AdapterInfo(
                 adapter_id=adapter_id,
                 adapter_type=instance.adapter_type,
-                config=instance.config_params,
-                load_time=instance.loaded_at.isoformat(),
-                is_running=instance.is_running,
+                status=status,
+                started_at=instance.loaded_at,
+                messages_processed=metrics.messages_processed if metrics else 0,
+                error_count=metrics.errors_count if metrics else 0,
+                last_error=metrics.last_error if metrics else None,
+                tools=tools,
+                config_params=sanitized_config,
+                services_registered=clean_services,
             )
+            return result
 
         except Exception as e:
             logger.error(f"Failed to get adapter info for {adapter_id}: {e}", exc_info=True)
@@ -951,6 +1309,207 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             warning_message=warning_message,
         )
 
+    # Default config-to-env mappings for adapters that don't provide their own.
+    # Each adapter can define a _CONFIG_TO_ENV_MAP on their configurable class,
+    # or specify 'env' fields in their manifest.json configuration section.
+    _DEFAULT_CONFIG_TO_ENV_MAP: Dict[str, str] = {
+        # Home Assistant mappings
+        "access_token": "HOME_ASSISTANT_TOKEN",
+        "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
+        "client_id": "HOME_ASSISTANT_CLIENT_ID",
+        "callback_base_url": "HOME_ASSISTANT_CLIENT_ID",  # HA OAuth uses callback URL as client_id
+        "base_url": "HOME_ASSISTANT_URL",
+    }
+
+    # Adapter-specific env mappings (adapter_type -> {config_key: env_var})
+    # These supplement default mappings for adapters with custom env vars
+    _ADAPTER_SPECIFIC_ENV_MAPS: Dict[str, Dict[str, str]] = {
+        "home_assistant": {
+            "access_token": "HOME_ASSISTANT_TOKEN",
+            "refresh_token": "HOME_ASSISTANT_REFRESH_TOKEN",
+            "client_id": "HOME_ASSISTANT_CLIENT_ID",
+            "callback_base_url": "HOME_ASSISTANT_CLIENT_ID",
+            "base_url": "HOME_ASSISTANT_URL",
+        },
+        "ciris_accord_metrics": {
+            "endpoint_url": "CIRIS_LENS_ENDPOINT",
+            "trace_level": "CIRIS_ACCORD_METRICS_TRACE_LEVEL",
+            "consent_given": "CIRIS_ACCORD_METRICS_CONSENT",
+        },
+        "weather": {
+            "api_key": "WEATHER_API_KEY",
+        },
+        "reddit": {
+            "client_id": "REDDIT_CLIENT_ID",
+            "client_secret": "REDDIT_CLIENT_SECRET",
+            "username": "REDDIT_USERNAME",
+            "password": "REDDIT_PASSWORD",
+            "user_agent": "REDDIT_USER_AGENT",
+        },
+    }
+
+    def _get_env_map_for_adapter(self, adapter_type: str) -> Dict[str, str]:
+        """Get the config-to-env mapping for a specific adapter type.
+
+        Looks up adapter-specific mappings first, then falls back to defaults.
+        """
+        if adapter_type in self._ADAPTER_SPECIFIC_ENV_MAPS:
+            return self._ADAPTER_SPECIFIC_ENV_MAPS[adapter_type]
+        return self._DEFAULT_CONFIG_TO_ENV_MAP
+
+    def _restore_env_vars_from_config(self, adapter_id: str, config: Any, adapter_type: str = "") -> None:
+        """Restore environment variables from saved adapter config.
+
+        Supports multiple sources:
+        1. Adapter-specific env mappings (if adapter_type known)
+        2. env_vars dict saved in config (redundant storage)
+        3. Default config-to-env mappings
+        4. oauth_tokens nested dict for OAuth adapters
+        """
+        if not isinstance(config, dict):
+            return
+
+        restored: list[str] = []
+
+        # First, restore from saved env_vars dict if present (redundant storage)
+        saved_env_vars = config.get("_saved_env_vars", {})
+        if isinstance(saved_env_vars, dict):
+            for env_var, value in saved_env_vars.items():
+                if value is not None:
+                    if isinstance(value, bool):
+                        os.environ[env_var] = "true" if value else "false"
+                    else:
+                        os.environ[env_var] = str(value)
+                    restored.append(env_var)
+
+        # Get the appropriate env map for this adapter
+        env_map = self._get_env_map_for_adapter(adapter_type)
+
+        # Check top-level config keys
+        for config_key, env_var in env_map.items():
+            if env_var in restored:
+                continue  # Already restored from saved env vars
+            value = config.get(config_key)
+            if value is not None:
+                if isinstance(value, bool):
+                    os.environ[env_var] = "true" if value else "false"
+                elif isinstance(value, str) and value:
+                    os.environ[env_var] = value
+                    restored.append(env_var)
+
+        # Also check nested settings dict (common pattern)
+        settings = config.get("settings", {})
+        if isinstance(settings, dict):
+            for config_key, env_var in env_map.items():
+                if env_var in restored:
+                    continue
+                value = settings.get(config_key)
+                if value is not None:
+                    if isinstance(value, bool):
+                        os.environ[env_var] = "true" if value else "false"
+                    elif isinstance(value, str) and value:
+                        os.environ[env_var] = value
+                        restored.append(env_var)
+
+        # Also check nested oauth_tokens dict
+        oauth_tokens = config.get("oauth_tokens", {})
+        if isinstance(oauth_tokens, dict):
+            for config_key, env_var in env_map.items():
+                if env_var in restored:
+                    continue
+                if env_var not in os.environ or not os.environ.get(env_var):
+                    value = oauth_tokens.get(config_key)
+                    if value and isinstance(value, str):
+                        os.environ[env_var] = value
+                        restored.append(env_var)
+
+        if restored:
+            logger.info(f"Restored env vars for adapter {adapter_id}: {restored}")
+
+        # Sync restored env vars to .env file for redundancy
+        if restored:
+            self._sync_env_vars_to_dotenv(restored)
+
+    def _sync_env_vars_to_dotenv(self, env_vars: list[str]) -> None:
+        """Sync environment variables to .env file for redundancy.
+
+        This ensures env vars survive even if graph config is lost.
+        """
+        from pathlib import Path
+
+        try:
+            # Get CIRIS home directory
+            ciris_home = os.environ.get("CIRIS_HOME")
+            if ciris_home:
+                env_path = Path(ciris_home) / ".env"
+            else:
+                env_path = Path.home() / ".ciris" / ".env"
+
+            if not env_path.exists():
+                logger.debug(f".env file not found at {env_path}, skipping sync")
+                return
+
+            # Read existing .env content
+            with open(env_path, "r") as f:
+                lines = f.readlines()
+
+            # Parse existing vars
+            existing_vars: Dict[str, int] = {}  # var_name -> line_index
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    var_name = stripped.split("=", 1)[0]
+                    existing_vars[var_name] = i
+
+            # Update or add env vars
+            modified = False
+            for env_var in env_vars:
+                value = os.environ.get(env_var, "")
+                if not value:
+                    continue
+
+                # Escape value for .env format
+                if '"' in value or "'" in value or " " in value:
+                    escaped_value = f'"{value}"'
+                else:
+                    escaped_value = value
+
+                new_line = f"{env_var}={escaped_value}\n"
+
+                if env_var in existing_vars:
+                    # Update existing line
+                    line_idx = existing_vars[env_var]
+                    if lines[line_idx].strip() != new_line.strip():
+                        lines[line_idx] = new_line
+                        modified = True
+                else:
+                    # Add new line
+                    lines.append(new_line)
+                    modified = True
+
+            if modified:
+                with open(env_path, "w") as f:
+                    f.writelines(lines)
+                logger.info(f"Synced {len(env_vars)} env vars to {env_path}")
+
+        except Exception as e:
+            logger.warning(f"Failed to sync env vars to .env: {e}")
+
+    def _capture_env_vars_for_adapter(self, adapter_type: str) -> Dict[str, str]:
+        """Capture current environment variable values for an adapter.
+
+        Returns a dict of {env_var: value} for all relevant env vars.
+        """
+        env_map = self._get_env_map_for_adapter(adapter_type)
+        captured: Dict[str, str] = {}
+
+        for config_key, env_var in env_map.items():
+            value = os.environ.get(env_var)
+            if value:
+                captured[env_var] = value
+
+        return captured
+
     async def _save_adapter_config_to_graph(
         self, adapter_id: str, adapter_type: str, config_params: AdapterConfig
     ) -> None:
@@ -961,6 +1520,8 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
         In multi-occurrence deployments, the occurrence_id is saved alongside the config
         so each occurrence can identify which adapters it loaded.
+
+        Also captures current env vars for redundant storage.
         """
         from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
 
@@ -988,6 +1549,11 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             # Get current occurrence ID for multi-occurrence support
             occurrence_id = get_current_occurrence_id()
 
+            # Capture current env vars for this adapter for redundant storage
+            captured_env_vars = self._capture_env_vars_for_adapter(adapter_type)
+            if captured_env_vars:
+                logger.debug(f"Captured env vars for {adapter_id}: {list(captured_env_vars.keys())}")
+
             # Store the full config object
             await config_service.set_config(
                 key=f"adapter.{adapter_id}.config", value=config_params, updated_by="runtime_adapter_manager"
@@ -1008,13 +1574,33 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 key=f"adapter.{adapter_id}.persist", value=True, updated_by="runtime_adapter_manager"
             )
 
-            logger.info(f"Persisted adapter config for {adapter_id} to graph (occurrence={occurrence_id})")
+            # Store captured env vars separately for redundant recovery
+            if captured_env_vars:
+                await config_service.set_config(
+                    key=f"adapter.{adapter_id}.env_vars",
+                    value=captured_env_vars,
+                    updated_by="runtime_adapter_manager",
+                )
+
+            # Also sync env vars to .env file for redundancy
+            if captured_env_vars:
+                self._sync_env_vars_to_dotenv(list(captured_env_vars.keys()))
+
+            logger.info(
+                f"Persisted adapter config for {adapter_id} to graph "
+                f"(occurrence={occurrence_id}, env_vars={len(captured_env_vars)})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to save adapter config for {adapter_id}: {e}")
 
     async def _remove_adapter_config_from_graph(self, adapter_id: str) -> None:
-        """Remove adapter configuration from graph config service."""
+        """Remove adapter configuration from graph config service.
+
+        IMPORTANT: Multi-occurrence safety - only removes configs belonging to the current occurrence.
+        This prevents cross-contamination in shared database deployments where multiple occurrences
+        share the same PostgreSQL database.
+        """
         try:
             # Get config service from runtime
             config_service = None
@@ -1023,6 +1609,30 @@ class RuntimeAdapterManager(AdapterManagerInterface):
 
             if not config_service:
                 logger.warning(f"Cannot remove adapter config for {adapter_id} - GraphConfigService not available")
+                return
+
+            # MULTI-OCCURRENCE SAFETY: Check occurrence ownership before removal
+            # This prevents one occurrence from corrupting another's adapter configs
+            from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+            current_occurrence_id = get_current_occurrence_id()
+
+            # Get the adapter's occurrence_id from the graph
+            occurrence_key = f"adapter.{adapter_id}.occurrence_id"
+            occurrence_entry = await config_service.get_config(occurrence_key)
+            saved_occurrence_id = None
+            if occurrence_entry and hasattr(occurrence_entry, "value"):
+                value = occurrence_entry.value
+                if hasattr(value, "str_value") and value.str_value:
+                    saved_occurrence_id = value.str_value
+
+            # If there's a saved occurrence_id and it doesn't match current, refuse to remove
+            if saved_occurrence_id is not None and saved_occurrence_id != current_occurrence_id:
+                logger.warning(
+                    f"MULTI-OCCURRENCE SAFETY: Refusing to remove adapter config for {adapter_id} - "
+                    f"adapter belongs to occurrence '{saved_occurrence_id}', current is '{current_occurrence_id}'. "
+                    f"This prevents cross-contamination in shared database deployments."
+                )
                 return
 
             # List all configs with adapter prefix
@@ -1035,7 +1645,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 await config_service.set_config(config_key, None, updated_by="adapter_manager")
                 logger.debug(f"Removed config key: {config_key}")
 
-            logger.info(f"Removed adapter config for {adapter_id} from graph")
+            logger.info(f"Removed adapter config for {adapter_id} from graph (occurrence={current_occurrence_id})")
 
         except Exception as e:
             logger.error(f"Failed to remove adapter config for {adapter_id}: {e}")

@@ -1,5 +1,6 @@
 """conscience components."""
 
+from .action_sequence_conscience import ActionSequenceConscience
 from .core import CoherenceConscience, EntropyConscience, EpistemicHumilityConscience, OptimizationVetoConscience
 from .interface import ConscienceInterface
 from .registry import conscienceRegistry
@@ -13,4 +14,5 @@ __all__ = [
     "OptimizationVetoConscience",
     "EpistemicHumilityConscience",
     "ThoughtDepthGuardrail",
+    "ActionSequenceConscience",
 ]

@@ -11,15 +11,23 @@ class APITestModule:
     """Test module for API endpoints."""
 
     @staticmethod
-    def get_auth_tests() -> List[QATestCase]:
-        """Get authentication test cases."""
+    def get_auth_tests(admin_username: str = "qa-harness-user", admin_password: str = "__DYNAMIC__") -> List[QATestCase]:
+        """Get authentication test cases.
+
+        Args:
+            admin_username: The admin username to use for login tests.
+                            Defaults to "qa-harness-user" (QA runner default).
+            admin_password: The admin password to use for login tests.
+                            Defaults to "__DYNAMIC__" which should be replaced
+                            by the QA runner with the actual password.
+        """
         return [
             QATestCase(
                 name="Login with valid credentials",
                 module=QAModule.AUTH,
                 endpoint="/v1/auth/login",
                 method="POST",
-                payload={"username": "admin", "password": "ciris_admin_password"},
+                payload={"username": admin_username, "password": admin_password},
                 expected_status=200,
                 requires_auth=False,
                 description="Test login with default admin credentials",
@@ -29,7 +37,7 @@ class APITestModule:
                 module=QAModule.AUTH,
                 endpoint="/v1/auth/login",
                 method="POST",
-                payload={"username": "admin", "password": "wrong_password"},
+                payload={"username": admin_username, "password": "wrong_password"},
                 expected_status=401,
                 requires_auth=False,
                 description="Test login failure with wrong password",
@@ -43,7 +51,66 @@ class APITestModule:
                 requires_auth=True,
                 description="Test getting current authenticated user",
             ),
-            # Note: No user list endpoint exists, removed this test
+            # ── The surface the node took over (CIRISServer#396) ──────────────
+            #
+            # These reach the RUST implementation through the brain's `/v1/auth/*`
+            # proxy — the path a real client takes. They replace unit tests that
+            # poked the deleted Python's internals (`_mask_email`,
+            # `_decode_google_jwt_locally`, the OAuth state/redirect validators):
+            # those functions are gone, but the BEHAVIOUR is not, and it is the
+            # behaviour that was worth guarding. A TestClient cannot cover this —
+            # there is no node behind it — so it belongs here.
+            QATestCase(
+                name="Owner hint is served unauthenticated",
+                module=QAModule.AUTH,
+                endpoint="/v1/auth/owner-hint",
+                method="GET",
+                expected_status=200,
+                requires_auth=False,
+                description="Node owner-hint reachable through the proxy (replaces test_auth_owner_hint.py)",
+            ),
+            QATestCase(
+                name="Owner hint masks the email",
+                module=QAModule.AUTH,
+                endpoint="/v1/auth/owner-hint",
+                method="GET",
+                expected_status=200,
+                requires_auth=False,
+                validation_rules={
+                    # The masking rule the deleted TestMaskEmail class covered: a
+                    # hint may name the owner, never their full address.
+                    "masked": lambda d: "@" not in str(
+                        (d.get("owner_hint") or {}).get("masked_email") or ""
+                    )
+                    or "*" in str((d.get("owner_hint") or {}).get("masked_email") or ""),
+                },
+                description="An unauthenticated hint must not leak a full address",
+            ),
+            QATestCase(
+                name="OAuth providers advertise a usable client_id",
+                module=QAModule.AUTH,
+                endpoint="/v1/auth/oauth/providers",
+                method="GET",
+                expected_status=200,
+                requires_auth=False,
+                validation_rules={
+                    # A blank client_id 307s the user to Google's error page rather
+                    # than a typed refusal — CIRISServer#387 shipped exactly that.
+                    "client_id_populated": lambda d: all(
+                        p.get("client_id") for p in (d.get("providers") or [])
+                    ),
+                },
+                description="Blank client_id sends users to Google's error page (CIRISServer#387)",
+            ),
+            QATestCase(
+                name="Session refresh returns a session",
+                module=QAModule.AUTH,
+                endpoint="/v1/auth/refresh",
+                method="POST",
+                expected_status=200,
+                requires_auth=True,
+                description="Node-issued session refresh through the proxy",
+            ),
         ]
 
     @staticmethod
@@ -324,12 +391,6 @@ class APITestModule:
             ),
             # Tools don't have individual info or execute endpoints - removed
         ]
-
-    @staticmethod
-    def get_task_tests() -> List[QATestCase]:
-        """Get task management test cases."""
-        # Tasks API doesn't exist - returning empty list
-        return []
 
     @staticmethod
     def get_guidance_tests() -> List[QATestCase]:

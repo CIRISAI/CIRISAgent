@@ -1,5 +1,7 @@
 """Configuration schema for API adapter."""
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 from ciris_engine.constants import DEFAULT_API_HOST, DEFAULT_API_PORT
@@ -23,6 +25,10 @@ class APIAdapterConfig(BaseModel):
 
     cors_enabled: bool = Field(default=True, description="Enable CORS support")
     cors_origins: list[str] = Field(default_factory=lambda: ["*"], description="Allowed CORS origins")
+    cors_allow_credentials: bool = Field(
+        default=False,
+        description="Allow credentialed CORS requests (must not be combined with wildcard origins)",
+    )
 
     max_request_size: int = Field(default=1024 * 1024, description="Maximum request size in bytes")
     request_timeout: float = Field(default=30.0, description="Request timeout in seconds")
@@ -36,7 +42,17 @@ class APIAdapterConfig(BaseModel):
     auth_enabled: bool = Field(default=True, description="Enable authentication")
 
     # Timeout configuration
-    interaction_timeout: float = Field(default=55.0, description="Timeout for agent interactions in seconds")
+    #: None means "use the LLM time budget" (#1186): the interact deadline is
+    #: `active_budget().interact_deadline_s` — 195s against a hosted model,
+    #: 900s against one on the user's own hardware. A number here is an
+    #: explicit operator choice and wins over the budget; only the
+    #: CIRIS_API_INTERACTION_TIMEOUT env var beats it. There is deliberately
+    #: no numeric default: a second default for one knob is how the two
+    #: drifted apart before (55s here vs 110s in the resolver, #1013).
+    interaction_timeout: Optional[float] = Field(
+        default=None,
+        description="Timeout for agent interactions in seconds; None uses the LLM budget's interact deadline",
+    )
 
     # Proxy configuration
     proxy_path: str = Field(
@@ -78,6 +94,20 @@ class APIAdapterConfig(BaseModel):
             except ValueError:
                 pass
 
+        # Rate limit overrides. Bursty load-test / model_eval workloads submit
+        # 20+ messages in sub-second windows and need the cap raised; a plain
+        # boolean opt-out is also useful for testing.
+        env_rate_enabled = get_env_var("CIRIS_API_RATE_LIMIT_ENABLED")
+        if env_rate_enabled is not None:
+            self.rate_limit_enabled = env_rate_enabled.lower() in ("true", "1", "yes", "on")
+
+        env_rate_per_min = get_env_var("CIRIS_API_RATE_LIMIT_PER_MINUTE")
+        if env_rate_per_min:
+            try:
+                self.rate_limit_per_minute = int(env_rate_per_min)
+            except ValueError:
+                pass
+
         env_cors_origins = get_env_var("CIRIS_API_CORS_ORIGINS")
         if env_cors_origins:
             try:
@@ -86,6 +116,10 @@ class APIAdapterConfig(BaseModel):
                 self.cors_origins = json.loads(env_cors_origins)
             except ValueError:  # JSONDecodeError inherits from ValueError
                 pass
+
+        env_cors_credentials = get_env_var("CIRIS_API_CORS_ALLOW_CREDENTIALS")
+        if env_cors_credentials is not None:
+            self.cors_allow_credentials = env_cors_credentials.lower() in ("true", "1", "yes", "on")
 
         # Check for proxy/managed mode configuration
         env_agent_id = get_env_var("CIRIS_AGENT_ID")

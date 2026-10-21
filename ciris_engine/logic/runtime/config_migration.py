@@ -66,6 +66,9 @@ async def migrate_adapter_configs_to_graph(runtime: Any) -> None:
     # Migrate cognitive state behaviors (pre-1.7 compatibility)
     await migrate_cognitive_state_behaviors_to_graph(runtime)
 
+    # Backfill founding partnerships for pre-existing ROOT users (pre-2.2.9)
+    await migrate_founding_partnerships(runtime)
+
 
 async def migrate_tickets_config_to_graph(runtime: Any) -> None:
     """Migrate tickets config to graph.
@@ -225,7 +228,7 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
 
     Pre-1.7 agents get:
     - Wakeup: enabled (full identity ceremony)
-    - Shutdown: always_consent (Covenant compliance)
+    - Shutdown: always_consent (Accord compliance)
     - Play/Dream/Solitude: DISABLED (these states didn't exist pre-1.7)
 
     After migration, StateManager retrieves config from graph, not template.
@@ -256,15 +259,147 @@ async def migrate_cognitive_state_behaviors_to_graph(runtime: Any, force_from_te
     # Try to get cognitive behaviors from template
     cognitive_behaviors = get_cognitive_behaviors_from_template(runtime)
 
-    # If no template available, use Covenant-compliant defaults (all states enabled)
-    # This applies to fresh installs without templates (e.g., QA testing, API-only mode)
+    # If no template available, use ally-style defaults (wakeup disabled for seamless UX).
+    # This applies to non_ciris templates, fresh installs without templates, QA testing, API-only mode.
+    # Templates that want full wakeup ceremony (e.g., Echo) must explicitly set wakeup.enabled=True.
     if not cognitive_behaviors:
-        from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors
+        from ciris_engine.schemas.config.cognitive_state_behaviors import CognitiveStateBehaviors, WakeupBehavior
 
-        logger.info("[COGNITIVE_MIGRATION] No template - using Covenant-compliant defaults (all states enabled)")
-        cognitive_behaviors = CognitiveStateBehaviors()
+        logger.info("[COGNITIVE_MIGRATION] No template - using ally defaults (wakeup disabled)")
+        cognitive_behaviors = CognitiveStateBehaviors(
+            wakeup=WakeupBehavior(enabled=False, rationale="No template loaded - ally-style seamless startup"),
+        )
 
     try:
         await save_cognitive_behaviors_to_graph(config_service, cognitive_behaviors)
     except Exception as e:
         logger.error(f"[COGNITIVE_MIGRATION] FAILED to migrate cognitive state behaviors to graph: {e}")
+
+
+def _attr(node: Any, key: str) -> Any:
+    attrs = node.attributes.model_dump() if hasattr(node.attributes, "model_dump") else node.attributes
+    return attrs.get(key) if isinstance(attrs, dict) else None
+
+
+async def migrate_founding_partnerships(runtime: Any) -> None:
+    """Backfill founding PARTNERED consent records for pre-existing ROOT users.
+
+    Agents upgraded from releases before 2.2.9 have ROOT Wise Authorities
+    that were created without a consent GraphNode.  This migration creates
+    PARTNERED consent for each ROOT WA that lacks one, using the same
+    _create_founding_partnership() helper used by the setup wizard.
+
+    Also rekeys a founding record stranded under ``provider:subject`` (OAuth
+    owners set up on 2.10.0-2.16.x) onto the owner's wa_id.
+
+    Skips first-run mode (new installs get the record from the setup wizard).
+    Idempotent: checks for existing consent node before creating.
+    """
+    from ciris_engine.logic.setup.first_run import is_first_run
+
+    if is_first_run():
+        logger.info("[PARTNERSHIP_MIGRATION] First-run mode: skipping (setup wizard handles this)")
+        return
+
+    if not runtime.service_initializer or not runtime.service_initializer.auth_service:
+        logger.warning("[PARTNERSHIP_MIGRATION] Cannot migrate - AuthenticationService not available")
+        return
+
+    auth_service = runtime.service_initializer.auth_service
+
+    try:
+        all_was = await auth_service.list_was(active_only=True)
+    except Exception as e:
+        logger.error(f"[PARTNERSHIP_MIGRATION] Failed to list WAs: {e}")
+        return
+
+    from ciris_engine.logic.persistence.models.graph import delete_graph_node, get_graph_node, get_nodes_by_type
+    from ciris_engine.schemas.services.authority_core import WARole
+    from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
+
+    roots: list[str] = [wa.wa_id for wa in all_was if getattr(wa, "role", None) == WARole.ROOT]
+    node_owners: set[str] = set()
+
+    # AND the node-owner roots, which `list_was()` cannot return.
+    #
+    # STEWARDSHIP AND PARTNERSHIP ARE CO-ESTABLISHED. Stewardship is over a
+    # NODE, partnership is with an AGENT, and claiming a node establishes both
+    # at the same moment by the same act. The substrate holds up its half — a
+    # claimed install carries `ownership:responsible_party:node:v1` — but the
+    # partnership half had no counterpart on that path, so it simply never
+    # happened.
+    #
+    # The cause is a filter that is correct in itself: `list_was()` ends with
+    # `if _is_brain_wa_row(r)`, excluding `wa-root-*` rows because they are
+    # substrate-owned federation identities rather than brain WACertificates
+    # (#922). An owner minted by node self-claim is therefore invisible here,
+    # `root_was` comes back empty, and a live install logs exactly this while
+    # holding a perfectly good root:
+    #
+    #     [PARTNERSHIP_MIGRATION] No ROOT WAs found - nothing to backfill
+    #
+    # That is the same filter behind the 2.9.15 setup-wizard lockout. Third
+    # consequence of one correct decision: nothing on the self-claim path does
+    # the work the brain's classic path does for a newly-minted owner.
+    #
+    # Read by ROLE from the substrate store, which persist already filters to
+    # active rows — the same primitive the setup probe uses, so the two agree
+    # about who the owner is rather than each deciding separately.
+    try:
+        from ciris_engine.logic.persistence.stores.authentication_store import _list_active_by_role
+
+        known = set(roots)
+        for row in _list_active_by_role(WARole.ROOT.value):
+            node_wa_id = str(row.get("wa_id") or "")
+            if node_wa_id and node_wa_id not in known:
+                roots.append(node_wa_id)
+                node_owners.add(node_wa_id)
+                logger.info(
+                    "[PARTNERSHIP_MIGRATION] including node-owner root %s — invisible to "
+                    "list_was() by design (#922), but stewardship and partnership are "
+                    "established together",
+                    node_wa_id,
+                )
+    except Exception as e:  # pragma: no cover - substrate unreadable
+        # Not fatal: the brain-side roots above are still worth backfilling, and
+        # asserting "no node owner" from a failed read would be the same mistake
+        # in the other direction.
+        logger.warning("[PARTNERSHIP_MIGRATION] could not read node-owner roots: %s", e)
+
+    if not roots:
+        logger.info("[PARTNERSHIP_MIGRATION] No ROOT WAs found - nothing to backfill")
+        return
+
+    # REKEY (one-shot): 2.10.0-2.16.x setup wrote a node owner's founding
+    # partnership under provider:subject, which nothing reads; their first
+    # interact then minted a TEMPORARY row at the wa_id. Such a record names its
+    # owner in `linked_wa_id`, so it is found from the graph, never derived from
+    # the owner's credential row. Node owners only: an ingress founding record
+    # is correctly keyed by its ingress id and is left alone.
+    stranded: dict[str, list[str]] = {}
+    for node in get_nodes_by_type(NodeType.CONSENT.value, GraphScope.LOCAL) if node_owners else []:
+        owner = _attr(node, "linked_wa_id")
+        if owner in node_owners and _attr(node, "founding_partnership") is True and node.id != f"consent/{owner}":
+            stranded.setdefault(owner, []).append(node.id)
+
+    backfilled = 0
+    for wa_id in roots:
+        # consent/{wa_id} is the only key: every node login resolves to the wa_id.
+        existing = get_graph_node(f"consent/{wa_id}", GraphScope.LOCAL)
+        strays = stranded.get(wa_id, [])
+        if existing is None or (strays and _attr(existing, "stream") == "temporary"):
+            try:
+                from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
+
+                _create_founding_partnership(wa_id)
+                backfilled += 1
+            except Exception as e:
+                logger.error(f"[PARTNERSHIP_MIGRATION] Failed to create partnership for {wa_id}: {e}")
+                continue
+        for stray in strays:
+            delete_graph_node(stray, GraphScope.LOCAL)
+
+    if backfilled:
+        logger.info(f"[PARTNERSHIP_MIGRATION] Backfilled founding partnerships for {backfilled} ROOT user(s)")
+    else:
+        logger.info("[PARTNERSHIP_MIGRATION] All ROOT users already have consent records")

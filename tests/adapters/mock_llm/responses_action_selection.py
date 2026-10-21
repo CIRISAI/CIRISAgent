@@ -370,7 +370,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
         # Check if this is a follow-up thought by looking at the THOUGHT_TYPE in the system message
         is_followup = False
 
-        # The first message should be the system message with covenant
+        # The first message should be the system message with accord
         messages_to_check = messages_extracted if messages_extracted else messages or []
         if messages_to_check and len(messages_to_check) > 0:
             first_msg = messages_to_check[0]

@@ -5,10 +5,13 @@ Documents can be submitted as base64 data or URLs in the interact endpoint.
 """
 
 import base64
+import ipaddress
 import logging
+import socket
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 
@@ -20,6 +23,15 @@ logger = logging.getLogger(__name__)
 # Default media types
 DEFAULT_PDF_MEDIA_TYPE = "application/pdf"
 DEFAULT_DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+# SSRF protection: blocked hosts and networks
+# SSRF guard now lives in ciris_engine/logic/utils/url_guard.py so the other
+# fetch paths can use it too (#941) — this file was its only caller. Re-exported
+# under the original name so this module's call site and tests are unchanged.
+from ciris_engine.logic.utils.url_guard import (  # noqa: E402
+    BLOCKED_HOSTS,
+    validate_url_for_ssrf,
+)
 
 
 class APIDocumentHelper:
@@ -196,18 +208,71 @@ class APIDocumentHelper:
             logger.exception(f"Error processing URL document: {e}")
             return None
 
-    async def _download_document(self, url: str) -> Optional[bytes]:
-        """Download document from URL with security limits.
+    async def _download_document(self, url: str, max_redirects: int = 3) -> Optional[bytes]:
+        """Download document from URL with SSRF protection including redirect validation.
 
         Args:
             url: URL to download from
+            max_redirects: Maximum number of redirects to follow
 
         Returns:
             Document bytes or None if download failed
         """
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT)) as response:
+            # Prevent infinite redirect loops
+            if max_redirects < 0:
+                logger.error(f"Too many redirects when downloading: {url}")
+                return None
+
+            # CRITICAL: Validate URL and get resolved IP to prevent SSRF attacks
+            is_valid, resolved_ip = validate_url_for_ssrf(url)
+            if not is_valid or not resolved_ip:
+                logger.error(f"Blocked potentially dangerous URL (SSRF protection): {url}")
+                return None
+
+            # Parse URL to construct connection with pinned IP (DNS rebinding protection)
+            parsed = urlparse(url)
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            original_host = parsed.hostname
+
+            # Construct URL with resolved IP to prevent DNS rebinding attacks
+            # The attacker's DNS could return a different IP after validation
+            # By using the validated IP directly, we ensure we connect to what we validated
+            ip_url = f"{parsed.scheme}://{resolved_ip}:{port}{parsed.path}"
+            if parsed.query:
+                ip_url += f"?{parsed.query}"
+
+            # Create connector - SSL verification uses SNI with original hostname
+            ssl_context: bool | None = False if parsed.scheme == "http" else None
+            connector = aiohttp.TCPConnector(ssl=ssl_context)  # type: ignore[arg-type]
+
+            # Headers must include original Host for virtual hosting and SSL SNI
+            headers = {"Host": original_host} if original_host else {}
+
+            async with aiohttp.ClientSession(connector=connector) as session:
+                # Disable automatic redirects to validate each redirect target
+                async with session.get(
+                    ip_url,  # Use IP-based URL instead of hostname
+                    headers=headers,  # Include original Host header
+                    allow_redirects=False,
+                    timeout=aiohttp.ClientTimeout(total=self.DOWNLOAD_TIMEOUT),
+                ) as response:
+                    # Handle redirects manually with re-validation
+                    if response.status in (301, 302, 303, 307, 308):
+                        redirect_url = response.headers.get("Location")
+                        if not redirect_url:
+                            logger.error(f"Redirect response with no Location header from: {url}")
+                            return None
+
+                        # Handle relative URLs
+                        if not redirect_url.startswith(("http://", "https://")):
+                            redirect_url = urljoin(url, redirect_url)
+
+                        # Re-validate redirect target before following
+                        logger.info(f"Following redirect from {url} to {redirect_url}")
+                        return await self._download_document(redirect_url, max_redirects - 1)
+
+                    # Check for successful response
                     if response.status != 200:
                         logger.error(f"Failed to download document (HTTP {response.status})")
                         return None

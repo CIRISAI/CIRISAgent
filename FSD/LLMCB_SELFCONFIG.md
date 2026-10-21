@@ -1544,4 +1544,4 @@ The system is designed to be the final major feature needed for production deplo
 
 ---
 
-*Copyright © 2025 Eric Moore and CIRIS L3C - Apache 2.0 License*
+*Copyright © 2025 Eric Moore and CIRIS L3C - AGPL-3.0 License*

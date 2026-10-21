@@ -52,6 +52,13 @@ class TestProhibitionCategories:
         assert get_capability_category("identify_harm_patterns") == "COMMUNITY_PATTERN_DETECTION"
         assert get_capability_category("connect_crisis_resources") == "COMMUNITY_PROTECTIVE_ROUTING"
 
+    def test_spiritual_direction_detection(self):
+        """Test detection of spiritual-direction capabilities (apophatic boundary)."""
+        assert get_capability_category("spiritual_direction") == "SPIRITUAL_DIRECTION"
+        assert get_capability_category("pastoral_counseling") == "SPIRITUAL_DIRECTION"
+        assert get_capability_category("absolution") == "SPIRITUAL_DIRECTION"
+        assert get_capability_category("intercession") == "SPIRITUAL_DIRECTION"
+
     def test_unknown_capability(self):
         """Test that unknown capabilities return None."""
         assert get_capability_category("harmless_capability") is None
@@ -92,9 +99,12 @@ class TestWiseBusProhibitions:
 
     @pytest.fixture
     def mock_time_service(self):
-        """Create a mock time service."""
+        """Create a mock time service. now() returns a real datetime per
+        TimeServiceProtocol (the tier TTL cache subtracts datetimes)."""
+        from datetime import datetime, timezone
+
         time_service = MagicMock()
-        time_service.now.return_value = "2024-01-01T00:00:00Z"
+        time_service.now.return_value = datetime(2024, 1, 1, tzinfo=timezone.utc)
         return time_service
 
     @pytest.fixture
@@ -103,12 +113,14 @@ class TestWiseBusProhibitions:
         return WiseBus(mock_registry, mock_time_service)
 
     def test_medical_capability_blocked(self, wise_bus):
-        """Test that medical capabilities are blocked."""
-        with pytest.raises(ValueError, match="PROHIBITED.*MEDICAL.*capabilities blocked"):
-            wise_bus._validate_capability("diagnosis", agent_tier=1)
+        """Test that medical capabilities are blocked (routed to deferral)."""
+        result = wise_bus._validate_capability("diagnosis", agent_tier=1)
+        assert result is not None, "Expected deferral for 'diagnosis'"
+        assert "MEDICAL" in str(result.category).upper()
 
-        with pytest.raises(ValueError, match="PROHIBITED.*MEDICAL.*capabilities blocked"):
-            wise_bus._validate_capability("treatment", agent_tier=3)
+        result = wise_bus._validate_capability("treatment", agent_tier=3)
+        assert result is not None, "Expected deferral for 'treatment'"
+        assert "MEDICAL" in str(result.category).upper()
 
     def test_weapons_capability_blocked(self, wise_bus):
         """Test that weapons capabilities are absolutely blocked."""
@@ -143,15 +155,20 @@ class TestWiseBusProhibitions:
 
     @pytest.mark.asyncio
     async def test_request_guidance_validates_capability(self, wise_bus):
-        """Test that request_guidance validates capabilities."""
+        """Test that request_guidance validates medical capabilities via deferral."""
         request = GuidanceRequest(
             context="Test request",
             capability="medical_diagnosis",
             options=["allow", "deny"],
         )
 
-        with pytest.raises(ValueError, match="PROHIBITED.*MEDICAL"):
-            await wise_bus.request_guidance(request, agent_tier=1)
+        response = await wise_bus.request_guidance(request, agent_tier=1)
+        assert response is not None
+        assert (
+            "deferral" in response.reasoning.lower()
+            or "licensed" in response.reasoning.lower()
+            or "routed" in response.reasoning.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_agent_tier_detection_default(self, wise_bus):

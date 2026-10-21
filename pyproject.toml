@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.vulture]
 paths = ["ciris_engine/", ".vulture_whitelist.py"]
 min_confidence = 80
@@ -20,3 +24,18 @@ ignore_names = [
     "*Test*",
     "*Config*"
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest uses `assert` as its primary assertion mechanism — the S101 rule's
+# concern (asserts vanishing under `python -O`) does not apply to test code,
+# which is never run with optimizations. Suppressing here so the security
+# scan surfaces the ~10 real production assert findings instead of being
+# drowned in ~450 test-file false positives.
+"tests/**" = ["S101"]
+"**/tests/*" = ["S101"]
+"ciris_adapters/*/tests/**" = ["S101"]
+
+[tool.black]
+# Vendored byte-identical from CIRISClient (localization/upstream/vendored.json). Grace
+# runs `black .`; reformatting these would fork them silently.
+extend-exclude = '^/localization/((localize|glossary|review_only)\.py|upstream/.*)$'

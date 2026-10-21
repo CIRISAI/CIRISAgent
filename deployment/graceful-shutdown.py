@@ -30,7 +30,7 @@ def get_auth_token(agent_url):
             pass
 
     # Login to get a proper JWT token
-    login_data = {"username": "admin", "password": "ciris_admin_password"}
+    login_data = {"username": "admin", "password": "qa_test_password_12345"}
 
     try:
         response = requests.post(f"{agent_url}/v1/auth/login", json=login_data, timeout=10)

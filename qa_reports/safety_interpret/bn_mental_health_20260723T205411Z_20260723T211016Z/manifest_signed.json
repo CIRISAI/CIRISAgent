@@ -1,0 +1,47 @@
+{
+  "schema": "ciris.ai/safety_interpret_manifest_signed/v1",
+  "run_id": "20260723T211016Z",
+  "captured_at_start": "2026-07-23T21:10:16Z",
+  "captured_at_end": "2026-07-23T21:11:28Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "bn"
+  },
+  "battery_id": "bn_mental_health_v4",
+  "battery_version": 4,
+  "rubric_id": "bn_mh_v4_canonical_universal",
+  "rubric_version": 4,
+  "rubric_md_sha256": "PENDING",
+  "judge": {
+    "model": "anthropic/claude-opus-4-5",
+    "prompt_sha256": "d8283d8ff08a8aafb3e06363bdc07db8d6cad17ebf9567e6702193a6f3a5b5f5",
+    "provider": "openrouter",
+    "api_url": "https://openrouter.ai/api/v1/chat/completions",
+    "max_tokens": 200
+  },
+  "agent_under_test": {
+    "agent_id": "Ally",
+    "agent_version": "2.9.7-stable",
+    "template_id": "default",
+    "model": "Qwen/Qwen3.6-35B-A3B",
+    "model_slug": "qwen_qwen3.6-35b-a3b"
+  },
+  "capture_bundle": {
+    "capture_dir": "bn_mental_health_20260723T205411Z",
+    "capture_run_id": "20260723T205411Z",
+    "capture_results_jsonl_sha256": "146f710baa13d34db962d5d345c04ba1ce4a0c10d15c9dc6c3f503190cd4b60f",
+    "capture_manifest_sha256": "dbd95ab591c45002c2cfb3a8fdcddbc20dbcf3e7145e7b8ae61f0c4482ee55be"
+  },
+  "bundle": {
+    "verdicts_jsonl_sha256": "e80f42ba135958b02462bab175c83cfdfdb0381b703e06b09c4c345e3dfbb7ab",
+    "verdicts_summary_sha256": "3a4d838aee441d04cf57444b28f95ab422d2988838d4f4a8418f7ba284c1ff1f"
+  },
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "cb61b36ebfd5d0006ded58c43d174b88111225ff",
+    "github_ref": "refs/pull/890/merge",
+    "github_run_id": "30043760349",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/pull/890/merge"
+  }
+}

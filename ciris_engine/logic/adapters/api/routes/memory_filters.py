@@ -20,57 +20,13 @@ from ciris_engine.schemas.types import JSONDict
 logger = logging.getLogger(__name__)
 
 
-async def get_user_allowed_ids(auth_service: Any, user_id: str) -> Set[str]:
+async def get_user_allowed_ids(user_id: str) -> Set[str]:
+    """The user ids whose memories this user may see: only their own.
+
+    A user has one id, the wa_id every node login resolves to. The agent
+    never maps it to an OAuth-derived alias (``provider:subject``).
     """
-    Get set of user IDs user is allowed to see (user_id + OAuth links).
-
-    Matches the same logic as reasoning event stream filtering for consistency.
-
-    Args:
-        auth_service: Authentication service instance
-        user_id: Primary user ID
-
-    Returns:
-        Set of allowed user IDs (primary + OAuth linked accounts)
-    """
-    allowed_ids = {user_id}
-
-    try:
-        from ciris_engine.logic.persistence.db import get_db_connection
-
-        # Use db_path with get_db_connection() for proper SQLite/PostgreSQL support
-        # CRITICAL: auth_service.db_path may be a PostgreSQL URL, not a file path!
-        # sqlite3.connect() cannot handle PostgreSQL URLs, causing "unable to open database file"
-        db_path = auth_service.db_path
-        query = """
-            SELECT oauth_provider, oauth_external_id
-            FROM wa_cert
-            WHERE wa_id = ? AND oauth_provider IS NOT NULL AND oauth_external_id IS NOT NULL AND active = 1
-        """
-        with get_db_connection(db_path=db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, (user_id,))
-            rows = cursor.fetchall()
-            cursor.close()
-
-            for row in rows:
-                # Handle both tuple and dict rows (PostgreSQL uses RealDictCursor)
-                if isinstance(row, dict):
-                    oauth_provider = row["oauth_provider"]
-                    oauth_external_id = row["oauth_external_id"]
-                else:
-                    oauth_provider, oauth_external_id = row
-
-                # Add both provider:id and bare id format
-                allowed_ids.add(f"{oauth_provider}:{oauth_external_id}")
-                allowed_ids.add(oauth_external_id)
-    except Exception as e:
-        logger.error(
-            f"Error fetching OAuth links for user {user_id} from database {getattr(auth_service, 'db_path', 'unknown')}: {e}",
-            exc_info=True,
-        )
-
-    return allowed_ids
+    return {user_id}
 
 
 def build_user_filter_sql(allowed_user_ids: Set[str]) -> tuple[str, List[str]]:

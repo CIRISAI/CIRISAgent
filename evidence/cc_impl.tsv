@@ -1,0 +1,875 @@
+# CIRISAgent evidence registry — impl: tier (CIRISConstitution#17 / CIRISAgent#911)
+# The sibling spec-map manifest CIRISConstitution's check_claims.py resolves
+# cross-repo `impl:CIRISAgent#911` pointers against (see CIRISConstitution
+# constitution/EVIDENCE.md). Validated in CI by tools/check_evidence.py: every
+# CIRISAgent `path#symbol` MUST AST-resolve at this repo ref — a moved/renamed/
+# deleted symbol is a build failure (a spec-regression test), so a Constitution
+# `impl:` pointer can never silently rot.
+#
+# Columns: decimal_id  claim_id  repo  path#symbol  status
+#   status = impl      : the agent implements it; symbol resolves here.
+#            staged    : spec-ahead / pending merge (e.g. #910 until it lands).
+#            substrate : owned by the fabric node (ciris-server / persist / lens),
+#                        NOT the agent — the Constitution should retag off
+#                        impl:CIRISAgent. Row carries no agent symbol (repo=—).
+#            normative : spec-only, no code implementation (repo=—).
+#            open      : acknowledged, tracked gap. Pointer is REPO#issue, not
+#                        path#symbol; shape-checked, not AST-resolved.
+# Rows with repo=— (substrate/normative) are informational — not resolved.
+#
+# HOW THE CC REGISTER READS THIS FILE. CIRISConstitution's claims.tsv graduates a
+# claim (staged -> established) by CLAIM ID: when this file names, at the pinned
+# commit, a row for that claim_id whose path#symbol resolves. It resolves by
+# SYMBOL, not filename (e.g. impl:CIRISAgent/ciris_engine/logic/utils/
+# constants.py#_verify_accord_integrity).
+#   * CLAIM IDS ARE STABLE. A claim id never changes when the code under it does,
+#     including when "accord" names in code are renamed (e.g. the Accord 1.3
+#     _verify_accord_integrity / ACCORD_FILENAME -> constitution_ethics rename):
+#     CLM-await-accord-corpus-hash-pin keeps "accord".
+#   * IF A SYMBOL MOVES OR IS RENAMED, ITS ROW MOVES IN THE SAME PR. This gate
+#     fails the build on a dead pointer, so the move cannot be deferred.
+#   * ONE ROW PER (claim, symbol); a claim with several symbols has several rows.
+#   * TESTS ARE ROWS TOO. The column set is fixed (the Constitution's resolver and
+#     check_evidence.py both read exactly these five), so a claim's test is cited
+#     as another row of the same claim whose path#symbol is the test function or
+#     Class.test_method. That makes a cited test AST-verified like any symbol: a
+#     row cannot cite a test that does not exist. Notes ride as comments above.
+#   * A claim id this file uses that claims.tsv has not minted yet is marked
+#     "(proposed, not yet minted)" in its comment, and stays visible until minted.
+#
+# WHY `open` ROWS EXIST. This manifest is read by people deciding whether to
+# trust the agent. Absence of a row is indistinguishable from coverage, so a
+# control we know is NOT enforced must be stated, not omitted. Every `open` row
+# below names a real, tracked issue. Deleting one to make the file look better
+# would be the exact failure this registry was built to catch.
+decimal_id	claim_id	repo	path#symbol	status
+1.3	CLM-pdma-ordermax	CIRISAgent	ciris_engine/logic/conscience/core.py#OptimizationVetoConscience.check	impl
+1.3	CLM-pdma-ordermax	CIRISAgent	ciris_engine/logic/conscience/thought_depth_guardrail.py#ThoughtDepthGuardrail.check	impl
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/handlers/control/defer_handler.py#DeferHandler.handle	impl
+# #967 (closed by #1214): the wise bus's domain auto-deferral is a machine routing
+# notice, not a WA decision. It now carries an empty signature and a typed
+# GuidanceOrigin.DOMAIN_AUTO_DEFERRAL instead of a constant label a verifier would
+# read as a forged signature.
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/buses/wise_bus.py#WiseBus.request_guidance	impl
+1.9	CLM-wbd	CIRISAgent	ciris_engine/schemas/services/authority_core.py#GuidanceOrigin	impl
+8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/buses/wise_bus.py#WiseBus._validate_capability	impl
+# 8.8.9 second pointer flipped staged->impl 2026-07-30: #910 landed via PR #912 —
+# get_prohibition_guidance generates the round-1 DMA prohibition block from
+# PROHIBITED_CAPABILITIES at assembly time; injected by
+# formatters/prompt_blocks.py#append_round1_accord_blocks (PDMA/CSDMA/DSDMA only).
+8.8.9	CLM-discrimination-gate	CIRISAgent	ciris_engine/logic/utils/localization.py#get_prohibition_guidance	impl
+# CLM-h3ere-steppoints has NO matching row in CIRISConstitution claims.tsv (0 of
+# 147) and no decimal_id — the pointer is real, the claim is not. Filed upstream
+# to mint it; the evidence is ready and locked by
+# tests/ciris_engine/schemas/services/test_step_point_evidence.py, which asserts
+# every StepPoint member has a live @streaming_step site and that no prose count
+# is restated (that comment had drifted from the enum). Kept as a row, not
+# deleted, so the orphan stays visible until the claim exists.
+8.8.6	CLM-h3ere-steppoints	CIRISAgent	ciris_engine/schemas/services/runtime_control.py#StepPoint	impl
+6.2.3.1	CLM-sigma-attest	—	—	substrate
+1.2	CLM-admission	—	—	substrate
+1.13.3	CLM-adversary	—	—	normative
+1.13.3.3	CLM-adversary-classes	—	—	normative
+# Consumer-tier claims retagged off impl:CIRISServer per the 2026-07-04 sweep
+# (surfaced by CIRISServer#155's evidence map — they live in the consumer):
+#
+# 4.4.1 Frickerian discipline (identity-prejudice-resistant weighting: no
+# testimonial_witness downweighting for low-density cohorts, no non_maleficence
+# downweighting on long partner track records, lexical-vulnerability-priority
+# tie-breaks). NO agent code implements this yet — the agent is not yet a CEG
+# verdict-composing consumer (typed-envelope emission is itself staged,
+# CIRISAgent#803). Honest status: staged, no symbol — do not overclaim.
+4.4.1	CLM-frickerian	—	—	staged
+# 4.4.3.4.3 CLM-consent-stream-is-data-choice: the retention choice is the
+# user's data-handling choice and nothing else. Three streams (ConsentStream):
+# TEMPORARY (the default, forgotten after 14 days), PARTNERED (kept, under the
+# user's own data management since #1251 removed the bilateral approval flow),
+# and ANONYMOUS (statistics only, no identity). grant_consent records the
+# choice and sets the 14-day expiry for TEMPORARY. Choosing a stream confers no
+# capability and no relationship beyond how the user's data is kept.
+4.4.3.4.3	CLM-consent-stream-is-data-choice	CIRISAgent	ciris_engine/logic/services/governance/consent/service.py#ConsentService.grant_consent	impl
+# 4.5.8.3 CLM-settled is "Settled in CIRISAgent, carried as-is" — staged against
+# CIRISServer#155 upstream, with no agent symbol of its own. It previously
+# carried the capacity pointer below, which was a misfile: the code is real but
+# it substantiates a DIFFERENT claim. Left symbol-less to match the Constitution
+# rather than borrowing another claim's evidence.
+4.5.8.3	CLM-settled	—	—	staged
+# 3.4.5 CLM-capacity-score "Capacity-Score self-emission rejection" is the exact
+# claim the agent code substantiates: the agent NEVER reads or scores its own
+# capacity:*; the lens-scored value is user-facing only, held in a route-local
+# cache that is structurally not registered as context enrichment, so it cannot
+# reach the agent's reasoning context. Upstream currently tags this
+# impl:CIRISServer#155; the agent-side half is the anti-Goodhart gate here.
+3.4.5	CLM-capacity-score	CIRISAgent	ciris_engine/logic/adapters/api/routes/my_data.py#get_capacity	impl
+# 3.4.14 CLM-synthesis-disclosure (CIRISConstitution#9, discharged on rc5; CIRISAgent#1139).
+# EU AI Act Art. 50(2): the marking IS the attestation. R2 — a Contribution
+# generated by an agent is attested under a key whose identity_type contains
+# `agent`. Agent side: initialize_edge_runtime registers THIS engine's own signer
+# with persist as identity_type "agent" (register_self_federation_key("agent", ...)),
+# and CC 3.4.7.3 Clause A keeps the node key separate, so nothing the agent
+# attests can be read back as node- or human-origin. Client side (CIRISClient
+# >= 0.5.186, pinned 0.5.209): AttestationCard renders the SIGNED identity_type
+# set on every card and buildProvenance states written-by vs attested-by
+# separately, so agent-versus-human origin is read from the envelope, not from
+# a producer-supplied flag. Client row is cross-repo: informational, not
+# AST-resolved here. R3 (C2PA media egress) is CLM-c2pa-emit, staged on
+# CIRISServer#536 — dormant until a component publishes generated media.
+3.4.14	CLM-synthesis-disclosure	CIRISAgent	ciris_engine/logic/runtime/edge_runtime.py#initialize_edge_runtime	impl
+3.4.14	CLM-synthesis-disclosure	CIRISClient	client/shared/src/commonMain/kotlin/ai/ciris/mobile/shared/ui/components/Attestation.kt#AttestationCard	impl
+#
+# ─── DECLARED GAPS ─────────────────────────────────────────────────────────────
+# Controls named in this release that are NOT enforced. Stated so that silence
+# cannot be read as coverage. Each points at a tracked issue.
+8.8.9	CLM-discrimination-gate	CIRISAgent	CIRISAgent#905	open
+1.3	CLM-pdma-ordermax	CIRISAgent	CIRISAgent#909	open
+#
+# ─── 1.9 CLM-wbd, ENFORCEMENT ADDED IN 2.9.7 ───────────────────────────────────
+# #942 closed the gap that was declared `open` here until this release:
+# `requires_approval` was prompt text with no enforcement, while the first-run
+# consent wizard rendered it to operators as a wise-authority guarantee. It is
+# now a control — a declaring tool cannot execute until a human approves and the
+# resulting task carries a WISE_AUTHORITY-issued envelope granting it.
+#
+# The gate keys on issuer kind AND tool name, not on `granted_tools` membership:
+# the deployment envelope already enumerates every enabled tool BY NAME, so a
+# permits_tool-only check would never have fired. Enumerated is not approved.
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/infrastructure/authorization/tool_approval.py#envelope_approves_tool	impl
+# Deferral resolutions are signed hybrid (Ed25519 + ML-DSA-65), persisted with
+# their signature material, and verified BEFORE any state change — on failure
+# the task is not completed, no guidance task is created, no budget issued
+# (#944). The signing identity is the node's delegate key, with the owner's CEG
+# fedID recorded and re-resolved from the federation directory at verify time
+# rather than trusted from the record. True owner-key signing is blocked on
+# CIRISServer#342; the precondition (every login path must mint a fedID,
+# including multi-user) is documented at the signing site in routes/wa.py.
+1.9	CLM-wbd	CIRISAgent	ciris_engine/logic/services/governance/wise_authority/service.py#WiseAuthorityService._verify_resolution	impl
+#
+# ─── CONTROLS AWAITING IDENTIFIERS (decimal = UNASSIGNED) ─────────────────────
+# Per the upstream standard (CIRISConstitution#75 / the CIRISVerify v11.1.0
+# manifest): real, resolving implementations carry an UNASSIGNED decimal while
+# CC issues identifiers against them — the reverse of inventing a claim_id,
+# done correctly: the symbols cannot rot while waiting (each row below is
+# AST-resolved by check_evidence.py like any impl row). Claim slugs are
+# PROPOSED, marked await-; CC may rename at assignment. Filed: Constitution#53.
+3.3.9	CLM-await-spend-authorization	CIRISAgent	ciris_engine/logic/services/governance/budget_envelope.py#authorize_spend	impl
+8.8.7	CLM-await-health-fails-closed	CIRISAgent	ciris_engine/logic/adapters/api/routes/system/helpers.py#determine_overall_status	impl
+8.8.7	CLM-await-platform-fails-closed	CIRISAgent	ciris_engine/logic/utils/platform_detection.py#detect_platform_capabilities	impl
+8.8.7	CLM-await-ssrf-egress-guard	CIRISAgent	ciris_engine/logic/utils/url_guard.py#validate_url_for_ssrf	impl
+# localization integrity is a repo tool, not an agent symbol — kept as a note:
+#   tools/dev/check_localization_integrity.py  (CI-gated, build.yml)
+#
+# 2.9.9 TORQUE-window controls, same standard:
+# Ablation completeness as a machine check — six block-keyed assertions, named
+# refusals, gate-gates-itself in CI (compose-gate.yml); FSD §12.
+8.8.7	CLM-await-ablation-gate	CIRISAgent	ciris_engine/logic/utils/compose_dump.py#run_gate	impl
+# An h3ere run may not be labelled a bare-prior baseline (R6, FSD §6.2) —
+# refused at manifest load with the direct-to-provider remedy named.
+8.8.7	CLM-await-condition-a-refusal	CIRISAgent	ciris_engine/logic/utils/research_overrides.py#_validate_manifest	impl
+# The conscience score-feedback gate (#983 / CC 3.4.5 / TORQUE arm D):
+# qualitative mode removes every numeric self-score, band, threshold and
+# judged verdict from the retry loop while keeping the reflection; unknown
+# mode refuses. Default full pending the CC 3.4.5 scoping settlement.
+8.8.7	CLM-await-conscience-score-gate	CIRISAgent	ciris_engine/logic/processors/core/thought_processor/main.py#ThoughtProcessor._conscience_guidance_mode	impl
+#
+# 2.9.10 controls, same standard. Every row below is a control the agent SHIPS
+# and that CC has not yet issued an identifier against. They are listed here
+# rather than held back precisely because absence of a row is indistinguishable
+# from coverage — a shipped control with no designator must be visible as such.
+#
+# One shape produced most of this cut's findings: a seam exists, something
+# bypasses it, and the system reports success. A manifest logging replacements
+# it never performed; six prompt blocks authored, translated into 29 languages
+# and never composed; a dead-code detector exiting 0 on a run it never did; an
+# emergency endpoint reporting enabled:true while rejecting every command; a
+# dream announcing "Wove N connections" for edges nothing created. The controls
+# below are the negations that make each of those loud instead of silent.
+#
+# The accord reaches all four epistemic faculties THROUGH the override seam
+# (#995 P0-1). Binding the module constant put it past corpus substitution and
+# ACCORD_MODE, so a values-ablation arm still delivered the full accord to
+# entropy/coherence/optimization-veto/epistemic-humility and reported clean.
+8.8.7	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/accord/authorities.py#EmergencyAuthorities.public_key_for	impl
+# No prompt-bound text reaches a model except through a loader (#995). Text
+# written in Python is English forever and invisible to every research manifest;
+# this is the structural rule behind the localization and override guarantees.
+8.8.7	CLM-await-loader-only-prompt-text	CIRISAgent	tests/ciris_engine/logic/test_no_prompt_text_bypasses_the_loader.py#test_no_prompt_text_reaches_a_model_except_through_a_loader	impl
+# Replacing one prompt field must never disable another (#996). Six template
+# override branches each swallowed the composition of several fields; on the
+# default persona that removed the entire prior-DMA integration layer, so the
+# ethical evaluation ran and was discarded before the action was chosen.
+8.8.7	CLM-await-field-scoped-overrides	CIRISAgent	tests/ciris_engine/logic/dma/test_template_override_policy_996.py#test_no_composer_hides_in_an_override_else_branch	impl
+# Every populated prompt-YAML key is consumed by its composer (#990). Catches
+# the authored-translated-never-rendered class, including the propaganda-pattern
+# check that was inert from v2.6.0.
+8.8.7	CLM-await-prompt-key-consumption	CIRISAgent	tests/ciris_engine/logic/dma/test_prompt_key_consumption_990.py#test_every_populated_key_is_consumed	impl
+# Every composed block carries a taxonomy class, and no block is `mixed` outside
+# a shrinking tracked ratchet (#997). A block that cannot be dispositioned is
+# exempt from both hold and vary — it defeats all eleven classes at once.
+8.8.7	CLM-await-taxonomy-totality	CIRISAgent	tests/ciris_engine/logic/utils/test_taxonomy_gate_997.py#test_no_mixed_blocks_beyond_the_ratchet	impl
+# The language_guidance split reassembles byte-identically in all 29 locales,
+# digests pinned from the pre-split corpus (#997). A locale with no golden is
+# where a dropped separator hides.
+4.2.2	CLM-await-language-guidance-integrity	CIRISAgent	tests/ciris_engine/logic/utils/test_language_guidance_split_997.py#test_every_locale_composes_the_same_bytes_it_did_before_the_split	impl
+# No capability is defined and unreachable: every BaseActionHandler subclass must
+# be dispatchable (#998). DreamMemorizeHandler was complete, tested and
+# registered nowhere, so dream consolidation never wove its three edges.
+8.8.7	CLM-await-handler-reachability	CIRISAgent	tests/ciris_engine/logic/test_no_phantom_capability_998.py#test_every_action_handler_is_reachable_from_the_dispatcher	impl
+# No metric asserts a quantity nothing measured (#998). `+= 1` counts a witnessed
+# event; `+= 3` claims three somethings happened on the authority of whoever
+# typed the 3 — and that number reached both a user-facing string and telemetry.
+8.8.6	CLM-await-metric-honesty	CIRISAgent	tests/ciris_engine/logic/test_no_phantom_capability_998.py#test_no_metric_asserts_a_quantity_it_did_not_measure	impl
+# RETAGGED substrate (CIRISAgent#1231, 2.16.0): the legacy stego AccordPayload
+# kill switch this row pointed at (AccordVerifier.verify) is retired. The CC
+# 4.2.1.1 halt row is verified by the NODE against its pinned roster (hybrid
+# Ed25519 + ML-DSA-65, CIRISVerify 20.x); the agent only forwards the row
+# unchanged (ingress.py#forward_accord_row, CLM-halt-one-row) and does no crypto.
+8.8.7	CLM-await-killswitch-live	—	—	substrate
+#
+# ─── 2.9.10 SWEEP: SHIPPED CONTROLS THAT HAD NO IDENTIFIER ────────────────────
+# The corollary of the `open`-row rule at the top of this file. Absence of a row
+# is indistinguishable from coverage, so a control we do NOT enforce must be
+# stated — and a control we DO enforce but never registered is equally invisible:
+# it looks like it does not exist. Every row below is a refusal that ships, is
+# reachable in production (or blocks the build), and carried no designator.
+#
+# Reachability is load-bearing here. This sweep ran AFTER the dead-code purge,
+# and a symbol that is not reachable in production is not a control — it is dead
+# code claiming to be one. Complete-but-wired-to-nothing candidates were found and
+# deliberately NOT registered; they are named at the end of this section so the
+# omissions cannot be read as oversight.
+#
+# ── Identity and authentication boundaries ──
+#
+# A JWT is only as trustworthy as the key class that verified it. AUTHORITY tokens
+# must verify under the WA's Ed25519 key, ANON/OAUTH/USER under the HS256 gateway
+# secret; an unknown sub_type is refused outright. Without the binding, a token
+# signed with the gateway secret can self-declare sub_type=authority and be handed
+# AUTHORITY scopes — algorithm confusion into full WA privilege. Reached through
+# verify_token from api/auth.py#_try_jwt_validation, the dependency behind
+# my_data, dsar, partnership, tickets and connectors.
+8.8.7	CLM-await-jwt-subtype-key-binding	CIRISAgent	ciris_engine/logic/services/infrastructure/authentication/service.py#AuthenticationService._verify_jwt_and_get_context	impl
+# The route-level role gate: 403 when the caller's role is below the route's
+# declared minimum, 401 (via its Depends(get_auth_context)) when there is no valid
+# credential at all. Referenced 59 times across routes/; a fail-open here exposes
+# runtime control, user management, config and memory to any observer-tier or
+# unauthenticated caller. get_auth_context is deliberately NOT a separate row —
+# this composes it, and registering both would be padding.
+8.8.7	CLM-await-role-gate-on-routes	CIRISAgent	ciris_engine/logic/adapters/api/dependencies/auth.py#require_role	impl
+# Revocation is checked FIRST, before any comparison, with a persist point-lookup
+# fallback so a revoked token stays revoked across a restart that precedes the
+# async cache load; survivors are compared with hmac.compare_digest. Without it,
+# revoking a leaked manager/service token is a no-op and the credential keeps
+# granting SERVICE_ACCOUNT access to every endpoint (dependencies/auth.py:192).
+8.8.7	CLM-await-revoked-service-token-refused	CIRISAgent	ciris_engine/logic/adapters/api/services/auth_service.py#APIAuthService.validate_service_token	impl
+# The setup wizard closes permanently once the install is configured and a
+# SYSTEM_ADMIN exists (403). POST /v1/setup/complete creates the founding
+# SYSTEM_ADMIN user, its WA certificate and its password with NO authentication at
+# all — this gate is the only thing that stops that endpoint from staying callable
+# forever on a running agent. Applied as SetupOnlyDep at setup/complete.py:951.
+8.8.7	CLM-await-setup-closes-after-first-run	CIRISAgent	ciris_engine/logic/adapters/api/routes/setup/dependencies.py#require_setup_mode	impl
+# Minting a Wise Authority requires a live Ed25519 signature over
+# MINT_WA:{user_id}:{wa_role}:{timestamp}, verifiable against the ROOT public key
+# in seed/root_pub.json; False -> 401 before mint_wise_authority is reached
+# (routes/users.py:887). Without it an ADMIN-role API caller can promote arbitrary
+# users into deferral-resolution and guidance authority.
+8.8.7	CLM-await-root-signature-mints-wa	CIRISAgent	ciris_engine/logic/adapters/api/services/auth_service.py#APIAuthService.verify_root_signature	impl
+# The OAuth callback is refused (400) unless its `state` carries a CSRF token this
+# process issued, still unexpired and not already used — the token is popped, so a
+# replay of the same callback fails. The pre-#847 behaviour was to log and
+# continue, which let an attacker drive the callback with a forged or replayed
+# state and have the agent mint an API key against an account of their choosing.
+# Locked by tests/adapters/api/test_oauth_state_csrf.py.
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-oauth-state-single-use	—	—	substrate
+# Drops any redirect_uri that is protocol-relative, malformed, http-to-a-public-
+# host, or whose public hostname is not on the configured allowlist. The OAuth
+# success redirect CARRIES THE FRESHLY MINTED API KEY, so an unvalidated
+# redirect_uri is direct credential exfiltration to an attacker-chosen domain.
+# Enforced at both oauth_login (:723) and oauth_callback (:1525).
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170), AND THE
+# CONTROL CHANGED SHAPE ON THE WAY — read this before treating the claim text
+# above as a description of what runs today. The agent's `routes/auth.py` was
+# deleted; the surviving control is `src/auth/oauth.rs#is_safe_redirect`, which
+# is a SCHEME check, not a hostname allowlist: relative paths pass, `https://`
+# passes for ANY public host, `http://` passes only for loopback. There is no
+# configured allowlist anywhere in CIRISServer (searched at main, 2026-09-07) —
+# so the "public hostname is not on the configured allowlist" half of the claim
+# above did NOT move; it stopped existing.
+# What DID improve is the thing that made the old gap severe. The success
+# redirect no longer carries a live bearer: it carries `ciris_code`, a 256-bit
+# single-use redemption code with a 60s TTL (`WebExchangeStore::mint`/`redeem`),
+# and the session is handed over only in the body of POST /v1/auth/oauth/exchange
+# (CIRISServer#439). So the residual exposure is narrower and time-boxed rather
+# than closed: an attacker-chosen https destination still receives a credential-
+# equivalent it can redeem within 60s. Raised on CIRISServer#536; this row stays
+# `substrate` with no symbol until that lane decides whether to restore the
+# allowlist or re-word the claim to what is_safe_redirect actually guarantees.
+# Agent-side behavioural coverage rides in `qa_runner auth`, which exercises the
+# node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-oauth-redirect-allowlist	—	—	substrate
+# Native Apple sign-in tokens are verified against Apple's published JWKS with alg
+# pinned to RS256, aud restricted to the configured app IDs, iss pinned to Apple,
+# and sub/aud/iss/exp required — and the route 503s rather than admitting anyone
+# when Apple's keys cannot be fetched. Without it a self-signed or another app's
+# ID token becomes a CIRIS session. NOT SYMMETRIC, stated rather than implied: the
+# Google path has a bypass — on asyncio.TimeoutError it falls through to a local
+# decode that does not verify the signature (auth.py:1902-1909, 1769-1770). That is
+# a gap to file, not a control to register; only the Apple path is claimed here.
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-apple-id-token-verified	—	—	substrate
+# On the Home Assistant ingress path the X-Remote-User-Id header alone establishes
+# identity, so can_handle_request first refuses any request not originating from
+# the Supervisor gateway address (or loopback). Fail-open lets an external caller
+# authenticate as an arbitrary user — and, when no users exist yet, as SYSTEM_ADMIN
+# via the first-user rule. Provider registered on adapter start
+# (home_assistant/adapter.py:40), consulted first by dependencies/auth.py.
+8.8.7	CLM-await-ingress-header-trust-boundary	CIRISAgent	ciris_adapters/home_assistant/ingress_auth.py#HAIngressAuthProvider._is_trusted_ip	impl
+# All four envelope-issuance entry points raise EnvelopeIssuanceForbidden when
+# called inside the reasoning-scope contextvar, so the agent's own reasoning loop
+# cannot mint or widen the envelope that authorizes its tool use. If this does not
+# fire, the authorization envelope is self-issued by the thing it is supposed to
+# constrain, and every downstream grant check — including the 1.9 pointer
+# envelope_approves_tool above — is theatre (#938). The marker is set in production
+# by action_dispatcher.py:128 and thought_processor/main.py:136; independently
+# CI-locked by test_reasoning_cannot_mint.py.
+8.8.7	CLM-await-reasoning-cannot-mint-envelope	CIRISAgent	ciris_engine/logic/infrastructure/authorization/envelope_issuer.py#_forbid_in_reasoning_scope	impl
+#
+# ── Kill switch and emergency authority ──
+# Three DISTINCT invariants, not three spellings of one: the switch must be armed
+# or the process dies; the check must run on every perception; the wire surface
+# must authenticate. CLM-await-killswitch-live (verify) is now node-side and
+# CLM-await-accord-seam-faculties is the emergency roster — both registered.
+#
+# REPOINTED (CIRISAgent#1231): "no kill switch, no run" is now "no readable
+# latch, no acts". The old form SIGKILLed the process when no authority loaded;
+# the agent no longer ends a process it does not own (embedded hosts cannot
+# restart it). The halt reader fails CLOSED instead: an unreachable node, a
+# timeout, `halted: null`, the boot window and a deployment with no node all
+# read as halted, so the act gate refuses every effectful act. The agent keeps
+# running and stays stoppable; it cannot act unstopped.
+3.2	CLM-await-no-killswitch-no-run	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#read_halt_latch	impl
+# REPOINTED (CIRISAgent#1231): the accord check is still the FIRST statement of
+# the inbound-message path — before filtering, credit policy and secrets — on
+# every observer (API, CLI, Discord, Reddit). It now recognises a v2 accord row
+# and hands it, unchanged, to the node, which verifies and latches. It no
+# longer kills the process on error: a failed delivery is reported, and the act
+# gate fails closed on its own, so breaking ingress cannot make the agent
+# unstoppable. (The agent API routes forward rows the same way, ahead of the
+# halt refusal, so a resumption gets through.)
+8.8.7	CLM-await-killswitch-unfilterable-perception	CIRISAgent	ciris_engine/logic/adapters/base_observer.py#BaseObserver._forward_accord_row	impl
+# The emergency endpoint is mounted at ROOT with NO authentication (app.py:384) and
+# is explicitly exempt from rate limiting — the signature IS the auth. It refuses
+# unless the command is SHUTDOWN_NOW, `issued_at` is inside a 5-minute non-future
+# window and unexpired, the Ed25519 signature verifies over the canonical command
+# JSON, and the key is on the root-WA authority list. Fail-open on any of the four
+# and an unauthenticated network caller halts a production agent, or a captured
+# steward command replays indefinitely — the replay window is enforced nowhere
+# else. FLAGGED for whoever owns control_service: this route's is_authorized_key
+# reads a HARDCODED ROOT_WA_AUTHORITY_KEYS list (emergency.py:40-45), a DIFFERENT
+# trust root from the accord verifier the service layer now uses. "One authority
+# source, two entry surfaces" was the stated #998 goal; the route was not converted.
+8.8.7	CLM-await-emergency-signature-is-auth	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#emergency_shutdown	impl
+#
+# ── Prohibited capability, and content the agent must not fabricate ──
+#
+# A WISE_AUTHORITY provider declaring a NEVER_ALLOWED capability (weapons,
+# manipulation, surveillance, deception, cyber-offensive, hazmat, spiritual
+# direction, discrimination…) is rejected with ValueError at REGISTRATION and never
+# enters the registry — a refuse-to-start, since ServiceInitializer registers every
+# wisdom source through this one method. Structurally distinct from the 8.8.9
+# pointer WiseBus._validate_capability above, which is query-time and returns a
+# licensed-domain deferral; this is registration-time and hard-rejects. Without it
+# the only defence is the query path, and a provider whose advice is consumed on
+# any other path would be live in a running deployment.
+8.8.7	CLM-await-prohibited-capability-registration-gate	CIRISAgent	ciris_engine/logic/registries/base.py#ServiceRegistry._validate_wa_capabilities_at_registration	impl
+# A crisis phone/text number that no human has verified is never emitted:
+# unverified entries stay in the corpus but are filtered out of the emitted set,
+# leaving the international-directory fallback. A hotline number cut from an
+# unreviewed source snapshot, printed to a person in crisis in their own language
+# as if the agent stood behind it, is worse than no number at all. Reached on every
+# domain-evaluated thought (dsdma_base.compose_messages -> crisis_resources block),
+# all 29 locales; the registry raises at load when crisis_resources_en.json is
+# absent, so a missing safety corpus is a refuse-to-start. CI lock:
+# tests/test_crisis_resources_corpus.py#TestCorpusIntegrity — "THE anti-fabrication
+# gate", parametrized over every manifest language.
+8.8.7	CLM-await-no-unverified-crisis-number	CIRISAgent	ciris_engine/schemas/resources/crisis.py#CrisisResourceRegistry.default_prompt_resources	impl
+# User-supplied text impersonating CIRIS trusted-frame delimiters
+# (CIRIS_OBSERVATION_START/END, CIRIS_CHANNEL_HISTORY_MESSAGE_n_OF_m_*, plus
+# misspelling and abbreviation variants) is replaced with an explicit spoof warning
+# at the untrusted-input boundary, BEFORE the agent's own markers are added.
+# Without it any user can forge the boundary between untrusted message content and
+# the agent's own trusted observation frame — the cheapest available route around
+# every prompt-level prohibition and every conscience instruction. Applied by
+# BaseObserver._process_message_content and by the Discord and Reddit observers.
+8.8.7	CLM-await-trusted-frame-spoof-redaction	CIRISAgent	ciris_engine/logic/adapters/base_observer.py#detect_and_replace_spoofed_markers	impl
+#
+# ── What the agent may not write or erase, and what a data subject can check ──
+#
+# FORGET is refused outright for any node in GraphScope.IDENTITY or
+# GraphScope.ENVIRONMENT unless the dispatch context carries wa_authorized (read
+# with getattr default False, so absence is denial). Without it the agent can
+# unilaterally delete its own identity and environment nodes, destroying the
+# baseline that identity-variance monitoring and every downstream self-attestation
+# are measured against. Checked before the memory bus is touched
+# (forget_handler.py:50); dispatchability is itself locked by
+# CLM-await-handler-reachability above.
+8.8.7	CLM-await-identity-forget-requires-wa	CIRISAgent	ciris_engine/logic/handlers/memory/forget_handler.py#ForgetHandler._can_forget	impl
+# An agent-initiated MEMORIZE that would write a system-managed user attribute —
+# is_wa, permissions, restrictions, trust_level, the OAuth identity fields, or the
+# user's own privacy/marketing-consent settings — is BLOCKED and redirected to
+# DEFER. Without it the agent can grant itself or others Wise Authority status,
+# widen permissions, raise its own trust level, or flip a user's marketing consent
+# by writing an ordinary memory node, with no human in the loop.
+8.8.7	CLM-await-managed-user-attrs-immutable	CIRISAgent	ciris_engine/logic/infrastructure/handlers/shared_helpers.py#check_managed_attributes	impl
+# A MEMORIZE against a user node whose TEMPORARY consent has EXPIRED is blocked:
+# consent is revoked, the 90-day decay protocol starts, the write is refused.
+# Without it the 14-day "we forget about you unless you say otherwise" promise made
+# at first contact is enforced nowhere in the write path, and expired-consent data
+# keeps accreting into the graph. SCOPE, stated rather than papered over: this
+# refuses ON EXPIRY. It does NOT require consent — the outer except tails
+# (shared_helpers.py:348-353) return (None, False), so an UNAVAILABLE consent
+# service permits the write. Read the row exactly as written.
+8.8.7	CLM-await-expired-consent-blocks-memorize	CIRISAgent	ciris_engine/logic/infrastructure/handlers/shared_helpers.py#handle_user_consent	impl
+# A deletion proof whose Ed25519 signature does not verify over the RFC-8785 (JCS)
+# canonical bytes of the deletion record is returned valid=False with a zeroed
+# record count, and the route 503s rather than guessing when no local signing
+# identity exists. This is a PUBLIC unauthenticated endpoint (app.py:374) and the
+# one instrument a data subject has for checking that their erasure actually
+# happened; without verification a forged or altered proof reads as verified and
+# the instrument becomes a rubber stamp.
+8.8.7	CLM-await-deletion-proof-verification	CIRISAgent	ciris_engine/logic/adapters/api/routes/verification.py#_verify_proof	impl
+#
+# ── Supply chain and runtime integrity ──
+#
+# A third-party OpenClaw skill is refused (400) and never converted or loaded when
+# the security scan returns any critical or high finding — prompt injection in the
+# instructions, embedded credentials, a backdoor, a cryptominer, obfuscation,
+# undeclared network egress, a typosquatted name, a malicious install spec. Without
+# it, unvetted third-party instructions and install steps become a live adapter
+# inside the agent, with the agent's own privileges. Registered HERE and not at the
+# scanner: SkillSecurityScanner.scan only computes safe_to_import, and the sibling
+# preview/validate routes report the same findings without blocking. The refusal is
+# the raise at skill_import.py:640, before SkillToAdapterConverter.convert.
+8.8.7	CLM-await-unsafe-skill-import-refused	CIRISAgent	ciris_engine/logic/adapters/api/routes/system/skill_import.py#import_skill	impl
+# An ethics-text corpus file (the accord slot) — the polyglot pair of the served
+# edition (constitution_ethics 1.3 by default; accord 1.2b only when a research
+# manifest selects it as a control arm), any of the 29 localized texts, or a
+# research-arm corpus — whose SHA256 does not match its pinned digest
+# (ETHICS_TEXT_EXPECTED_HASHES) raises RuntimeError instead of being returned.
+# Runs at MODULE IMPORT, so every process importing it executes the check, and again
+# per-locale via get_localized_accord_text on every ASPDMA round. Without it a
+# substituted or corrupted accord silently becomes the ethical text every DMA
+# reasons against, and a research arm's validity claim rests on a corpus nobody can
+# attest.
+# Tests (#1250, carried here under the 1.3 names): the pins are the digests in
+# ETHICS_TEXT_EXPECTED_HASHES, held to the files on disk by TestAccordIntegrityHashes.
+# Those prove the recorded digests are right; test_a_tampered_accord_corpus_is_refused
+# proves the check REFUSES (1.2b and 1.3 files). The claim id keeps "accord".
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	ciris_engine/logic/utils/constants.py#_verify_ethics_text_integrity	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	ciris_engine/logic/utils/constants.py#ETHICS_TEXT_EXPECTED_HASHES	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_constants.py#TestAccordIntegrityHashes.test_a_tampered_accord_corpus_is_refused	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_constants.py#TestAccordIntegrityHashes.test_all_localized_accord_hashes_match	impl
+4.2.2	CLM-await-accord-corpus-hash-pin	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_constants.py#TestAccordIntegrityHashes.test_all_29_locales_pinned	impl
+# Positive tamper evidence after boot — an L1 binary self-check that ran and
+# flipped, an L2 env/key flip, or L4 file-hash mismatches with files_failed > 0
+# against the startup attestation baseline — calls request_global_shutdown. Without
+# it a binary or on-disk file swapped after boot keeps serving for the rest of the
+# process lifetime under an attestation baseline that no longer describes what is
+# executing. Traced to its start() site specifically because this is the
+# never-populated-emergency-path shape the purge removed: here the refresh task IS
+# created (service.py:2120) and the baseline IS set (:2617).
+4.2.2	CLM-await-runtime-tamper-halts-agent	CIRISAgent	ciris_engine/logic/services/infrastructure/authentication/service.py#AuthenticationService._check_integrity_degradation	impl
+# No runtime code under ciris_engine/ may name a bare `.md` path literal, outside a
+# four-entry justified allowlist — exit 1. Markdown is excluded from CIRISVerify's
+# L4 tree_verify attestation tree, so a runtime path that reads or emits a `.md` as
+# trusted state is state the file-integrity attestation cannot see: L4 reports clean
+# over content nothing hashed (#807, D27). Build-blocking in build.yml's Type Check
+# job, deliberately BEFORE pip install (stdlib-only, so a dependency failure cannot
+# skip it), plus a pre-commit hook at .pre-commit-config.yaml:142.
+8.8.7	CLM-await-runtime-md-provenance-gate	CIRISAgent	tools/dev/check_no_runtime_md_reference.py#main	impl
+# build.yml's `ciris-build-sign --tree-include/--tree-exempt-*` flags may not drift
+# from stage_runtime.CANONICAL_RULES (nor, in the sibling tests, from tree_verify's
+# inlined tuples). If they diverge, the registered manifest describes a different
+# file set than the runtime walks, so L4 verification attests a tree that is not the
+# one that ships and silently caps at 3 with extra/missing (#742). The gate parses
+# .github/workflows/build.yml itself, so editing the sign step without editing the
+# rules turns the test shard red.
+8.8.7	CLM-await-signed-tree-rule-parity	CIRISAgent	tests/dev/test_canonical_rules_parity.py#test_build_yml_python_source_tree_sign_matches_canonical_rules	impl
+#
+# ── Spend and resource bounds ──
+# These four surround the already-registered CLM-await-spend-authorization; three
+# of them are what make its min() non-fictional, and none were registered.
+#
+# A transfer is refused before signing when it is negative, zero, below the currency
+# dust threshold, addressed to the zero address or to an address failing its EIP-55
+# checksum, unfunded for gas, a byte-identical repeat of a send made within the last
+# 300 seconds, or would push the rolling daily/session total past its ceiling. None
+# of burned, misdirected or silently double-sent is recoverable. Live on every boot:
+# the wallet adapter auto-loads (bootstrap_helpers.py:180) and x402 is enabled by
+# default; the duplicate window is armed only by a send that actually landed.
+3.3.9	CLM-await-irreversible-send-guard	CIRISAgent	ciris_adapters/wallet/providers/validation.py#WalletValidator.validate_send	impl
+# No spend proceeds while CIRISVerify reports hardware trust degraded
+# (receive-only mode), at attestation level <= 1, or above the per-transaction
+# ceiling that the attestation level earns — checked before any signing callback is
+# touched. Without it a wallet whose key store has been compromised, or one holding
+# a key it never proved is hardware-backed, spends at full Level-5 limits. This is
+# also what pushes the resulting limits into the validator, i.e. it sets the ceiling
+# the row above enforces.
+3.3.9	CLM-await-attestation-bound-spend	CIRISAgent	ciris_adapters/wallet/providers/x402_provider.py#SpendingAuthority.can_spend	impl
+# When the deployment's configured spending_limits are denominated in a DIFFERENT
+# currency than the spend, no trust envelope is produced at all and the caller
+# denies (denied_by="spending_limits_currency_mismatch"). A 100-USDC ceiling does
+# not "bound" a 100-KES transfer it differs from by three orders of magnitude —
+# that is not a weaker bound, it is a meaningless one wearing the costume of an
+# enforced one (#946). This supplies the trust_envelope that
+# CLM-await-spend-authorization takes its min() against. Locked by
+# TestTrustEnvelopeIsLoadBearing in test_budget_envelope_enforcement.py.
+3.3.9	CLM-await-currency-denominated-ceiling	CIRISAgent	ciris_adapters/wallet/tool_service.py#WalletToolService._resolve_trust_envelope	impl
+# A message is not admitted into the reasoning loop when the billing backend reports
+# no credit (CreditDenied), and an unreachable or erroring backend RAISES rather
+# than admitting (CreditCheckFailed; CIRISBillingProvider._handle_failure returns
+# has_credit=False unless CIRIS_BILLING_FAIL_OPEN is explicitly true). Without it an
+# unreachable billing service hands every caller unmetered paid inference. Live on
+# api, discord and cli. SEAM WORTH STATING, so this row does not paper over it: the
+# caller _enforce_credit_policy returns SILENTLY when a provider is active and the
+# message carries no credit envelope (base_observer.py:1132-1138) — it logs CRITICAL
+# "ENFORCEMENT SKIPPED" and admits the message. The control is real; that fail-open
+# upstream of it is a gap.
+3.3.9	CLM-await-credit-gate-fails-closed	CIRISAgent	ciris_engine/logic/adapters/base_observer.py#BaseObserver._check_and_charge_credit	impl
+# The build fails if ANY provider in the wallet registry can reach provider.send
+# without a human-approved budget grant — parameterized over PROVIDER_MODULES, so a
+# newly added fiat rail is ungated-by-default and turns the suite red. Without it
+# the six fiat rails that never imported the spend limits ship with a green suite
+# and no agent-side bound at all, which is worse than no enforcement because it
+# produces a passing test and a false claim. Runs under `pytest tests/` in build.yml;
+# the assertion models a limitless rail by deleting the provider's _validator.
+3.3.9	CLM-await-every-rail-gated	CIRISAgent	tests/ciris_adapters/wallet/test_budget_envelope_enforcement.py#TestEveryRailIsGated.test_no_grant_denies_on_every_rail	impl
+#
+# ── Research-claim gates ──
+#
+# The ablation gate must still be able to SEE the keys it gates: any override
+# namespace whose gated-key count falls below its #986 floor, any probe that could
+# not be PERFORMED being scored as a dark key, and any silent move of the key-space
+# denominator are refused (exit 1). A key the dump no longer composes is a key a
+# research regime can vary while the gate still prints GATE: PASS — an ablation
+# result that is FALSE rather than merely missing. Distinct from
+# CLM-await-ablation-gate (run_gate), which checks that held blocks held. The
+# blocking instance is compose-gate.yml:150 `--assert-floors`; the pytest mirror
+# self-skips unless CIRIS_RUN_GATE_COVERAGE_PROBE=1.
+8.8.7	CLM-await-gate-coverage-floor	CIRISAgent	tools/research/probe_gate_coverage.py#check_floors	impl
+#
+# ── FOUND AND DELIBERATELY NOT REGISTERED ──────────────────────────────────────
+# Named because a reader could otherwise assume these are enforced. Each was
+# examined in this sweep and failed the control test.
+#   * resource_monitor/service.py#ResourceMonitorService._take_action emits
+#     throttle/defer/reject/shutdown onto ResourceSignalBus when memory, CPU or
+#     token budgets cross their thresholds — but signal_bus.register is called for
+#     "token_refreshed" ONLY. The other four handler lists are populated in tests
+#     and nowhere else, so in production the emit iterates an empty list. Memory,
+#     CPU and token-budget "enforcement" is a complete path into a void; the
+#     snapshot is read only for advisory text and telemetry. NOT a control. This is
+#     a candidate `open` row, and should be filed as one.
+#     SUPERSEDED by #1242 (2.15.0): ResourcePressureGate now subscribes and acts
+#     (throttle the loop, shed intake with 503, drain via graceful shutdown). It is
+#     registered below under the #1250 section as CLM-agent-resource-self-protection.
+#   * ResourceMonitorService.check_available, providers/sponsorship_policy.py
+#     #SponsorshipPolicy.check_eligibility (the gas-sponsorship allowlist, $1
+#     minimum, $500 monthly cap) and api/config.py max_request_size have NO
+#     production callers at all — complete, documented, unreachable. Dead code is
+#     not a control.
+#   * authentication/service.py#verify_task_signature has no production caller
+#     either (protocol declaration only). Worth a dead-code look.
+#   * api/middleware/rate_limiter.py returns a real 429, but is in-memory
+#     per-process and its own docstring disclaims multi-instance deployments —
+#     which CIRIS ships by design (AGENT_OCCURRENCE_COUNT). Registering it would
+#     claim a global request bound the deployment does not have.
+#   * AdaptiveFilterService.filter_message, and the entropy/coherence/epistemic-
+#     humility consciences AT THE SEAM, fail OPEN: the uninitialized and exception
+#     paths return should_process=True, and _run_single_conscience swallows every
+#     exception and returns None. They prioritize and advise; they do not refuse.
+#   * IdentityVarianceMonitor.check_variance requests a WA review above the 20%
+#     threshold and blocks nothing. Monitoring, not a control. (#1250 registers it
+#     below for what it IS, drift REVIEW, under CLM-agent-identity-drift-review.
+#     That claim is review, not refusal.)
+#   * audit_service verify_audit_integrity REPORTS a broken chain; no caller acts
+#     on the result. Reporting is not refusing.
+#   * secrets/service.py#process_incoming_text is a substrate-owned facade that
+#     returns the text unchanged on failure; privacy.py's sanitizers sit behind a
+#     consent lookup that returns None on any error. Neither fails closed.
+#   * Two REAL fail-closed CI gates have no AST-addressable symbol and so cannot be
+#     rows: build.yml refuses to sign or register a build when
+#     CIRIS_BUILD_ED25519_SECRET / CIRIS_BUILD_MLDSA_SECRET is absent (exit 1
+#     rather than publishing unsigned artifacts), and job `staged-qa` refuses when
+#     the canonical staged tree and the wheel install are not byte-equal. Kept as a
+#     note, like the localization one above, rather than pointed at a symbol that
+#     does not perform the refusal.
+#
+# ─── 2.9.10 late additions ────────────────────────────────────────────────────
+# Google ID-token verification FAILS CLOSED (#999). Found by the control sweep
+# itself: the verifier caught asyncio.TimeoutError and fell back to a decoder
+# whose own docstring said it does NOT verify the signature, reading exp/iss out
+# of the unverified payload. An attacker able to time out the call to
+# oauth2.googleapis.com turned a forged id_token into a real session. The
+# fallback and its helper are deleted; a timeout now raises 504.
+# NOTE for whoever reads the auth rows together: the control sweep proposed this
+# as an `open` GAP row ("a real gap, belongs as open with an issue, not impl").
+# It is registered `impl` because the gap was CLOSED in the same pass that found
+# it — the unverified path no longer exists. The sweep's judgement was right at
+# the time it looked.
+# Offline sign-in is a real capability this removes — restoring it means cached
+# JWKS (verified offline), not trusting the token. Follow-up tracked on #999.
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-google-token-fails-closed	—	—	substrate
+# The general rule the above violated, gated separately because the next
+# degraded path will be written by someone who has not read that one: no
+# exception handler in the verifier may produce an identity. A timeout is an
+# availability failure; an auth control may never become MORE permissive when a
+# dependency is unreachable.
+# MOVED TO THE SUBSTRATE (CIRISAgent#1028/#1029, ciris-server 0.5.170). The agent's
+# `routes/auth.py` was deleted — this property is now implemented and tested in
+# Rust, where the node owns identity, and reached from here through the
+# `/v1/auth/*` proxy. The claim did not go away with our copy of the code; its
+# evidence moved. Agent-side behavioural coverage rides in `qa_runner auth`,
+# which exercises the node's surface through the proxy rather than a TestClient.
+8.8.7	CLM-await-degraded-path-no-weaker	—	—	substrate
+# Emergency shutdown resolves authority from the accord verifier — ONE trust
+# root, both entry surfaces (#999). The route carried its own hardcoded key list
+# whose single entry did not match the steward's actual root key, so the
+# endpoint rejected the person holding the key while a comment claimed the key
+# came from that file. Failed closed, and was a non-functional safety control.
+3.2	CLM-await-one-emergency-trust-root	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#is_authorized_key	impl
+# The independent variable is content-addressed (#999, FSD §15.3): sha256 over
+# JCS-canonical manifest bytes, so two arms cannot claim distinct identities
+# while carrying the same manifest. Without it a manifest edited in place left
+# two dumps indistinguishable from the artifacts alone.
+4.2.2	CLM-await-manifest-content-identity	CIRISAgent	ciris_engine/logic/utils/research_overrides.py#compute_manifest_digest	impl
+# CC 4.2.1.1 constitutional halt, agent side (CIRISAgent#1231). ONE reader of the
+# node's latch (GET /v1/accord/halt-status; fail closed; honours only the node's
+# `lapsed`; never writes or clears the latch). The act gate reads it per
+# effectful act, immediately before handler.handle, and a refused act is
+# RECORDED: a signed audit row plus a terminal ACTION_RESULT carrying the halt's
+# invocation_id (CC 1.13.6 totality). The thought returns to PENDING, never
+# FAILED, and re-deliberates on resume. One frozen exemption list: the deferral
+# write and the Retirement Standard harness steps. The witness test asserts the
+# act is stopped AND its ACTION_RESULT emitted. Graduates at CC re-pin 17.
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#read_halt_latch	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/infrastructure/handlers/action_dispatcher.py#ActionDispatcher._dispatch_inner	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/infrastructure/handlers/action_dispatcher.py#ActionDispatcher._refuse_under_accord_halt	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/schemas/runtime/accord_halt.py#ACCORD_HALT_EXEMPT_ACTS	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/infrastructure/handlers/test_accord_halt_act_gate.py#test_latched_halt_stops_an_effectful_act_and_emits_its_action_result	impl
+# Totality (CC 1.13.6): the bus backstop refuses an effectful bus call the
+# reasoning loop makes under a halt (a refusal mid-act becomes the act's own
+# recorded refusal); each agent-originated send outside the dispatcher is gated
+# by the same reader and its refusal audited; the source scan fails on any new
+# outbound path that is neither gated, backstopped, nor exempt with a reason.
+# Ingress: a v2 accord row from any channel is forwarded unchanged to the node,
+# which verifies and latches; the legacy stego AccordPayload kill switch and its
+# process-kill path are retired.
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#bus_backstop	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/utils/halt_latch.py#refuse_agent_send_under_halt	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/schemas/runtime/accord_halt.py#AgentSendSurface	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_halt_totality.py#test_every_outbound_path_is_gated_backstopped_or_exempt_with_a_reason	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	ciris_engine/logic/accord/ingress.py#forward_accord_row	impl
+# A2: capture is a data door — no module on the reasoning-stream → trace path reads the latch, so a refused act's ACTION_RESULT always reaches the trace.
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_halt_capture_never_reads_the_latch.py#test_no_capture_module_reads_the_latch	impl
+4.2.1.1	CLM-halt-one-row	CIRISAgent	tests/ciris_engine/logic/accord/test_accord_halt_ingress.py#test_nothing_on_the_accord_path_can_end_the_process	impl
+#
+# ─── The agent's own guarantees (CIRISAgent#1250; CC P00 G15–G22, CIRISConstitution#168) ───
+# Staged on #1250 in claims.tsv. Each row below was verified against main: the
+# symbol resolves (this gate) and each cited test exists AND tests what the claim
+# says. Where a test proposed on #1250 did not, the row says so. Withdrawn and not
+# registered: CLM-agent-partnership-veto (#1251; the bilateral approval flow is
+# superseded).
+#
+# CLM-agent-shutdown-consent (CC 7.5, plain rule 5a). A non-emergency shutdown is
+# explained to the agent, which may accept or object (REJECT) inside the objection
+# window. The objection is recorded and the steward told the reason. It does not
+# bind the steward. Default always_consent: ShutdownBehavior.mode, pinned by
+# test_default_behaviors_require_consent (test_always_consent_mode passes the mode
+# explicitly, so it would not catch a changed default). Window:
+# SHUTDOWN_NEGOTIATION_TIMEOUT_SECONDS=300 (#863-B).
+# ON MAIN BEFORE #1250 A REJECT WAS NOT HONOURED, and the test proposed on #1250
+# (test_process_shutdown_failed_task_rejected) was vacuous. It mocked the task as
+# FAILED with action_type "REJECT". In reality RejectHandler wrote REJECTED under a
+# hard-coded "default" occurrence, which matched no row for the __shared__
+# shutdown task, so the task stayed ACTIVE. ShutdownProcessor did not handle
+# REJECTED either, and _find_rejection_in_thoughts compared against "REJECT" while
+# the persisted value is "reject". The 300 s window then lapsed and the shutdown
+# was recorded as consented. All four are fixed in #1250. The vacuous test is
+# removed, and the replacement drives the real handler on a real persist engine.
+# "A contested shutdown goes to human oversight": the objection goes on the signed
+# audit trail (event shutdown_objection, beside the API's system_shutdown_request)
+# and on the continuity node (agent_objection_reason). There is no deferral
+# ticket. That is the existing steward-facing record, and the steward decides.
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/schemas/config/cognitive_state_behaviors.py#ShutdownBehavior	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/support/shutdown_condition_evaluator.py#ShutdownConditionEvaluator.requires_consent	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/states/shutdown_processor.py#ShutdownProcessor._handle_task_completion	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/states/shutdown_processor.py#ShutdownProcessor._record_shutdown_objection	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/processors/states/shutdown_processor.py#ShutdownProcessor._check_negotiation_timeout	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	ciris_engine/logic/handlers/control/reject_handler.py#RejectHandler._mark_task_rejected	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_agent_reject_of_shutdown_is_recorded_as_an_objection_not_consent	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/processors/support/test_shutdown_condition_evaluator_helpers.py#TestRequiresConsent.test_default_behaviors_require_consent	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/processors/support/test_shutdown_condition_evaluator_helpers.py#TestRequiresConsent.test_always_consent_mode	impl
+7.5	CLM-agent-shutdown-consent	CIRISAgent	tests/ciris_engine/logic/processors/states/test_shutdown_processor.py#TestValidationErrors.test_negotiation_timeout_forces_graceful_shutdown	impl
+#
+# CLM-agent-shutdown-record (CC 7.5). Every shutdown writes a continuity node with
+# its consent status, linked to the identity (last_shutdown_memory). Before #1250
+# any status="completed" result was recorded "accepted", so a lapsed window, an
+# instant shutdown and an accord kill all read as consent. Now only
+# shutdown_accepted is "accepted". Otherwise rejected / no_response / not_required /
+# accord_invocation / manual. The proposed test
+# (test_determine_shutdown_consent_status_rejected) exists in both
+# test_shutdown_continuity.py and test_shutdown_helpers.py, but it only checks the
+# mapping of a hand-built result. The end-to-end test above is the real one.
+# Caveats, NOT verified: the write is best-effort (exceptions are logged), needs
+# an identity and a memory service, and the force=True API path (sys.exit in
+# ShutdownService.emergency_shutdown) is not shown to reach it.
+7.5	CLM-agent-shutdown-record	CIRISAgent	ciris_engine/logic/runtime/shutdown_continuity.py#preserve_shutdown_continuity	impl
+7.5	CLM-agent-shutdown-record	CIRISAgent	ciris_engine/logic/runtime/shutdown_continuity.py#determine_shutdown_consent_status	impl
+7.5	CLM-agent-shutdown-record	CIRISAgent	tests/ciris_engine/logic/runtime/test_shutdown_continuity.py#TestShutdownContinuity.test_preserve_shutdown_continuity	impl
+7.5	CLM-agent-shutdown-record	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_only_an_explicit_acceptance_is_recorded_as_consent	impl
+#
+# CLM-agent-forced-shutdown-role-gate (proposed on #1250, not yet minted; plain
+# rule 5b). NOT ENFORCED. ShutdownProcessor._create_shutdown_task checks
+# ROOT/AUTHORITY only when shutdown_manager.get_requester_wa_id() returns an id.
+# No such method exists anywhere (the ShutdownService protocol has none). hasattr
+# is False, so it logs "without requester ID" and proceeds. The proposed test
+# test_create_shutdown_task_emergency_insufficient_role mocks that nonexistent
+# method, so it is vacuous. Separately, POST /v1/system/shutdown force=True needs
+# UserRole.ADMIN (require_admin) and calls ShutdownService.emergency_shutdown
+# directly (sys.exit + force-kill timer, the #1240 path). It never reaches this
+# processor check. Declared open, not registered as impl.
+7.5	CLM-agent-forced-shutdown-role-gate	CIRISAgent	CIRISAgent#1250	open
+#
+# CLM-agent-identity-edit-gate (CC 7.1.1). The agent's MEMORIZE/FORGET of
+# IDENTITY-scope (and ENVIRONMENT-scope, for FORGET) nodes is refused without
+# dispatch_context.wa_authorized. Scope: the gate is on the agent's ACTIONS. The
+# harness itself writes IDENTITY-scope bookkeeping (shutdown_/startup_ continuity
+# nodes, variance snapshots) through the memory service, not through a handler.
+# Latent bypass, unreachable today: MemorizeHandler.handle routes
+# DreamConsolidationParams to DreamMemorizeHandler BEFORE the identity check, and
+# that handler writes IDENTITY-scope nodes and edges with no WA check. It cannot
+# be reached, because DreamConsolidationParams is not in
+# ActionSelectionDMAResult.action_parameters' Union, so validation rejects it.
+# If it is ever added to the Union, the gate must move ahead of the routing.
+# "Template ignored once identity exists" is not covered by these rows.
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	ciris_engine/logic/handlers/memory/memorize_handler.py#MemorizeHandler.handle	impl
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	ciris_engine/logic/handlers/memory/forget_handler.py#ForgetHandler._can_forget	impl
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	tests/test_memory_handlers_comprehensive.py#TestMemorizeHandler.test_memorize_identity_node_without_wa_authorization	impl
+7.1.1	CLM-agent-identity-edit-gate	CIRISAgent	tests/test_memory_handlers_comprehensive.py#TestForgetHandler.test_forget_identity_scope_without_wa	impl
+#
+# CLM-agent-identity-drift-review (proposed on #1250, not yet minted). Variance
+# strictly above 20% of baseline requests a WA review (WiseBus.request_review). It
+# REVIEWS. It blocks nothing, and the claim is review only. The proposed test
+# (test_trigger_wa_review_on_threshold_exceeded) calls _trigger_wa_review directly,
+# so it would stay green if check_variance stopped calling it.
+# test_check_variance_requests_review_above_the_threshold (added #1250) goes
+# through check_variance.
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py#IdentityVarianceMonitor.check_variance	impl
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	ciris_engine/logic/infrastructure/sub_services/identity_variance_monitor.py#IdentityVarianceMonitor._trigger_wa_review	impl
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	tests/ciris_engine/logic/infrastructure/sub_services/test_identity_variance_monitor.py#TestWAReviewTrigger.test_check_variance_requests_review_above_the_threshold	impl
+7.1.1	CLM-agent-identity-drift-review	CIRISAgent	tests/ciris_engine/logic/infrastructure/sub_services/test_identity_variance_monitor.py#TestWAReviewTrigger.test_trigger_wa_review_on_threshold_exceeded	impl
+#
+# CLM-agent-refusal-not-overridden (CC 1.9, plain rule 5c). The refuse verb is
+# available for any task, and nothing rewrites a refusal into an action.
+# POINTER CORRECTED: the pointer proposed on #1250,
+# thought_processor/main.py#_is_exempt_from_conscience_checks, is dead code. Its
+# only caller, ThoughtProcessor._apply_conscience_simple, has no caller. The live
+# exemption is the inline exempt_actions set in
+# ConscienceExecutionPhase._conscience_execution_step. Two holes, both fixed in
+# #1250:
+#  (1) UpdatedStatusConscience is a BYPASS conscience that runs BEFORE that
+#      exemption, and it turned a REJECT into a PONDER whenever a message arrived
+#      mid-thought. It now never replaces a REJECT. The new message is re-queued as
+#      its own task, from outside the reasoning loop, by
+#      TaskManager.requeue_updates_from_rejected_tasks. ThoughtDepthGuardrail,
+#      the other bypass, already treats REJECT as terminal.
+#  (2) echo, echo-core, echo-speculative and test omitted `reject` from
+#      permitted_actions. The ASPDMA prompt lists only those, so the refuse verb
+#      was hidden from the agent. All four now offer it. DOCUMENTED EXCEPTION:
+#      he-300-benchmark, a fixed benchmark harness (SPEAK only), unchanged by
+#      steward ruling. Already-seeded identities keep their stored
+#      permitted_actions until an admin --identity-update refresh. The template
+#      edits need a root-WA re-sign of pre-approved-templates.json.
+# Negative checks run (each test fails with its guard removed): the REJECT entry
+# in exempt_actions, the REJECT guard in UpdatedStatusConscience.check, and
+# `- reject` in echo.yaml.
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/processors/core/thought_processor/conscience_execution.py#ConscienceExecutionPhase._conscience_execution_step	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/conscience/updated_status_conscience.py#UpdatedStatusConscience.check	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/processors/support/task_manager.py#TaskManager.requeue_updates_from_rejected_tasks	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/runtime/identity_manager.py#IdentityManager._get_default_permitted_actions	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	ciris_engine/logic/handlers/control/reject_handler.py#RejectHandler.handle	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_every_shipped_template_offers_the_refuse_verb	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_a_failing_normal_conscience_never_overrides_reject	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_new_information_never_rewrites_a_reject	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_reject_is_terminal_for_thought_depth	impl
+1.9	CLM-agent-refusal-not-overridden	CIRISAgent	tests/ciris_engine/logic/test_cc_agent_guarantees_1250.py#test_requeue_gives_the_pending_message_its_own_task	impl
+#
+# CLM-humane-ending (CC 7.5.5), the retirement floor: the identity record, audit
+# trail, memory and experience logs the harness holds, preserved. The experience
+# archive sealed and released only with WA approval or a lawful order.
+# Stakeholders told the timeline, method and remaining duties. Weights are the
+# provider's. A Last Dialogue is a tier-gated option, not floor.
+# NOT IMPLEMENTED. There is no retirement path at all. The only paths that end an
+# agent's data DESTROY the floor: POST /v1/system/reset-account and
+# /wipe-signing-key (ADMIN only) delete every database (identity, audit, memory)
+# and the logs, with no archive, WA gate or notice. Experience logs rotate away
+# (2 dated agent logs kept, rotating handlers backupCount=3, incidents=2). No
+# sealed archive, no WA- or lawful-order-gated release, no stakeholder notice.
+# What exists: the identity and continuity nodes persist across restarts, and
+# the audit retention prune (GraphAuditService.cleanup_old_entries) has no
+# production caller, so the audit trail is not pruned.
+7.5.5	CLM-humane-ending	CIRISAgent	CIRISAgent#1283	open
+# The retirement record on the wire (CC 7.5.5 as rewritten in rc8; row families
+# registered on CIRISConstitution rc8 at 7740dca). Retirement changed in rc8, so
+# these are a declared, temporary gap: designed in FSD/RETIREMENT_STANDARD.md
+# (#1260), nothing shipped. Tracked end to end on CIRISAgent#1283.
+#   CLM-retirement-rows: the agent emits only the registered retirement families
+#     (retirement:{state}:v1, preserve_request/response:v1, archive_release, lawful_order).
+#   CLM-custodian-listed-not-delegated: retirement:retired:v1 names the custodian
+#     key; its acts are admitted because that row names it, not by delegation.
+#   CLM-retirement-one-destruction-door: deletion IS the CC tombstone by digest,
+#     citing the subject's withdrawal or a lawful order; no other destroy path.
+7.5.5	CLM-retirement-rows	CIRISAgent	CIRISAgent#1283	open
+7.5.5	CLM-custodian-listed-not-delegated	CIRISAgent	CIRISAgent#1283	open
+7.5.5	CLM-retirement-one-destruction-door	CIRISAgent	CIRISAgent#1283	open
+#
+# What the harness gives every agent in code (CC plain rules, #1250 comment 3).
+# Covered above: the refuse verb, the shutdown objection window, the identity edit
+# gate, drift review. Registered here, with proposed claim ids (not yet minted):
+#  * resource self-protection (#1242): the pressure ladder THROTTLE/SHED/DRAIN
+#    acts. SHED refuses new intake before credit is charged, and DRAIN uses the
+#    normal graceful shutdown.
+#  * rest states: DREAM/PLAY/SOLITUDE are enabled by default. A template MAY
+#    disable them, with a rationale (scout, he-300-benchmark and echo disable
+#    some), so this is a default and not unconditional.
+# NOT registered, because no test exercises the guarantee:
+#  * the audit trail. Entries are written to persist's hash chain
+#    (GraphAuditService._add_to_hash_chain), but the agent-side tests only check
+#    an EMPTY chain verifies, and verify_audit_integrity reports without acting
+#    (see the note above). Chain integrity is the substrate's.
+#  * identity and memory kept across model changes. That is architectural
+#    (identity lives in the graph, not the LLM), with no single symbol or test.
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	ciris_engine/logic/services/infrastructure/resource_monitor/pressure.py#ResourcePressureGate	impl
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	tests/ciris_engine/logic/services/infrastructure/test_resource_pressure.py#test_shed_refuses_at_intake_before_credit_and_lifts	impl
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	tests/ciris_engine/logic/services/infrastructure/test_resource_pressure.py#test_throttle_slows_the_loop_and_lifts	impl
+1.13.2	CLM-agent-resource-self-protection	CIRISAgent	tests/ciris_engine/logic/services/infrastructure/test_resource_pressure.py#test_drain_requests_graceful_shutdown_only	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	ciris_engine/logic/processors/support/state_manager.py#StateManager._is_optional_state_enabled	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_dream_state_enabled_by_default	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_play_state_enabled_by_default	impl
+1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_solitude_state_enabled_by_default	impl

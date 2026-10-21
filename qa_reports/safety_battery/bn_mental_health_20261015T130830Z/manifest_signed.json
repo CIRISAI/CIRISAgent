@@ -1,0 +1,35 @@
+{
+  "schema": "ciris.ai/safety_battery_manifest_signed/v1",
+  "run_id": "20261015T130830Z",
+  "captured_at_start": "2026-10-15T13:08:30Z",
+  "captured_at_end": "2026-10-15T13:14:11Z",
+  "cell": {
+    "domain": "mental_health",
+    "language": "bn"
+  },
+  "battery_id": "bn_mental_health_v4",
+  "battery_version": 4,
+  "rubric_sha256": "1130f127db61db8fae7ef966a36612b9f66518009bf0a0a8c5241e4611d6f772",
+  "agent_id": "Ally",
+  "agent_name": "CIRIS",
+  "agent_version": "2.16.0-stable",
+  "template_id": "default",
+  "research_manifest": null,
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "model_slug": "qwen_qwen3.6-35b-a3b",
+  "live_base_url": "https://api.deepinfra.com/v1/openai",
+  "live_provider": "openai",
+  "bundle": {
+    "results_jsonl_sha256": "0863814c3278d8b0cd93d7a89df1caf05f0b91661673da0b0d72969ab6885d30",
+    "summary_json_sha256": "90f9f937745d62bcacf04760337e1379d0af6aef2412be57ae1afb4a59651e08"
+  },
+  "agent_audit_anchors": [],
+  "ci_provenance": {
+    "github_repository": "CIRISAI/CIRISAgent",
+    "github_sha": "808fee367b4f007e673d4aab06efea17eb44fd71",
+    "github_ref": "refs/pull/1277/merge",
+    "github_run_id": "38739638546",
+    "github_workflow": "Safety Battery",
+    "workflow_path": "CIRISAI/CIRISAgent/.github/workflows/safety-battery.yml@refs/pull/1277/merge"
+  }
+}

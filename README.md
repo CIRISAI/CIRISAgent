@@ -4,7 +4,8 @@
 [![Status](https://img.shields.io/badge/Status-STABLE-green.svg)](CHANGELOG.md)
 [![DeepWiki](https://img.shields.io/badge/DeepWiki-CIRIS_Codebase-blue?logo=readthedocs)](https://deepwiki.com/CIRISAI/CIRISAgent)
 [![Coherence Ratchet](https://img.shields.io/badge/Paper-Coherence_Ratchet-orange?logo=arxiv)](https://doi.org/10.5281/zenodo.18142668)
-[![Accord](https://img.shields.io/badge/Ethical_Framework-The_Accord-purple)](https://ciris.ai/ciris_accord.pdf)
+[![Constitution](https://img.shields.io/badge/Constitution-CIRISAI%2FCIRISConstitution-purple)](https://github.com/CIRISAI/CIRISConstitution)
+[![Constitution PDF](https://img.shields.io/badge/Constitution-PDF-purple)](https://ciris.ai/ciris_constitution.pdf)
 
 # CIRIS
 
@@ -39,7 +40,7 @@ Sign in with Google for the free hosted CIRIS model, or bring your own key
   the buttons — operates in 29 languages.
 - **Auditable and open.** AGPL-3.0, cryptographically signed decisions, a
   tamper-evident audit trail, and a public ethical framework anyone can
-  review: [the Accord](https://ciris.ai/ciris_accord.pdf).
+  review: [the Constitution](https://github.com/CIRISAI/CIRISConstitution) (the Accord folded into it; [PDF](https://ciris.ai/ciris_constitution.pdf)).
 
 *Not a replacement for humans — a tool that knows its limits.*
 

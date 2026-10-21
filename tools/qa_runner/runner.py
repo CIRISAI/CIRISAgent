@@ -536,6 +536,7 @@ class QARunner:
             QAModule.IDENTITY_UPDATE,
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
+            QAModule.WA_IDENTITY_APPROVAL,
             QAModule.AIR,
             QAModule.ACCORD_METRICS,
             QAModule.AGENT_MODE,
@@ -1725,6 +1726,7 @@ class QARunner:
         from .modules.system_messages_tests import SystemMessagesTests
         from .modules.utility_adapters_tests import UtilityAdaptersTests
         from .modules.vision_tests import VisionTests
+        from .modules.wa_identity_approval_tests import WAIdentityApprovalTests
         from .modules.wallet_tests import WalletTests
 
         all_passed = True
@@ -1751,6 +1753,7 @@ class QARunner:
             QAModule.IDENTITY_UPDATE: IdentityUpdateTests,
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
+            QAModule.WA_IDENTITY_APPROVAL: WAIdentityApprovalTests,
             QAModule.AIR: AIRTests,
             QAModule.ACCORD_METRICS: AccordMetricsTests,
             QAModule.AGENT_MODE: AgentModeTests,

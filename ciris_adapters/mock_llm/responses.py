@@ -316,6 +316,26 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                             # Skip to next message - don't process as observation
                             break
 
+                        # === STEP 1b: A Wise Authority's guidance task ===
+                        # resolve_deferral creates "[WA GUIDANCE] Original: <task>
+                        # \n\nWA Response: <guidance>". The original task embeds the
+                        # user's own "@user (ID: x): ..." line, which STEP 2 would
+                        # match and re-run, so the guidance must win. A $command in
+                        # the guidance is what the WA approved; follow it, as a real
+                        # model follows the WA's guidance.
+                        wa_guidance = re.search(r"WA Response:\s*(.+)", actual_thought_content, re.DOTALL)
+                        if "[WA GUIDANCE]" in actual_thought_content and wa_guidance:
+                            guidance = wa_guidance.group(1).split("\n")[0].split("\\n")[0].strip().strip('"')
+                            logger.info(f"[MOCK_LLM] TYPE: WA GUIDANCE TASK: {guidance[:100]}")
+                            context_items.append(f"user_input:{guidance}")
+                            context_items.append(f"task:{guidance}")
+                            if guidance.startswith("$"):
+                                parts = guidance.split(None, 1)
+                                context_items.append(f"forced_action:{parts[0][1:].lower()}")
+                                if len(parts) > 1:
+                                    context_items.append(f"action_params:{parts[1]}")
+                            break
+
                         # === STEP 2: Check for USER OBSERVATION ===
                         # Support formats:
                         # 1. Old format: "You observed @user say: message"

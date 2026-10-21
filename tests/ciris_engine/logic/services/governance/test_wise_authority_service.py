@@ -1107,3 +1107,138 @@ class TestPostgreSQLDictRowHandling:
         assert result.status == "pending"
         assert result.priority == "medium"  # priority 5 = medium
         assert "Detailed task description" in result.context.get("task_description", "")
+
+
+# ========== A verified WA approval authorizes its guidance task ==========
+#
+# MemorizeHandler refuses MEMORIZE to IDENTITY scope unless
+# DispatchContext.wa_authorized is true. Before this, nothing in production ever
+# set it: resolve_deferral built the guidance task's context without it, and
+# TaskContext (extra="forbid") had nowhere to carry it, so a Wise Authority's
+# approval of an identity change could never take effect.
+
+
+def _guidance_task_of(parent_task_id: str):
+    from ciris_engine.logic.persistence.models.tasks import _list_with_filter
+
+    tasks = [t for t in _list_with_filter({"agent_occurrence_id": "default"}) if t.parent_task_id == parent_task_id]
+    assert len(tasks) == 1, tasks
+    return tasks[0]
+
+
+def _verified_response(reason: str = "Approved: update the identity") -> DeferralResponse:
+    return DeferralResponse(
+        approved=True,
+        reason=reason,
+        wa_id="wa-2025-06-24-AUTH01",
+        signature="dmVyaWZpZWQtc2lnbmF0dXJl",
+        signed_at="2026-10-21T12:00:00+00:00",
+        signing_key_id="node-key",
+    )
+
+
+@pytest.mark.asyncio
+async def test_verified_approval_authorizes_its_guidance_task(wise_authority_service, auth_service, time_service, temp_db):
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-wa-verified")
+    # The real _verify_resolution runs; only the cryptographic check is stubbed.
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+
+    assert await wise_authority_service.resolve_deferral(deferral_id, _verified_response()) is True
+
+    guidance = _guidance_task_of("task-wa-verified")
+    grant = guidance.context.wa_authorization
+    assert grant is not None, "the guidance task of a verified approval must carry the WA authorization"
+    assert grant.wa_id == "wa-2025-06-24-AUTH01"
+    assert grant.deferral_id == deferral_id
+    assert grant.verification == "verified"
+
+
+@pytest.mark.asyncio
+async def test_unsigned_approval_does_not_authorize(wise_authority_service, time_service, temp_db):
+    """Legacy unsigned approvals still resolve (deployed data), but grant nothing."""
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-wa-unsigned")
+    response = DeferralResponse(approved=True, reason="Approved", wa_id="wa-2025-06-24-AUTH01", signature="")
+
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+    assert _guidance_task_of("task-wa-unsigned").context.wa_authorization is None
+
+
+@pytest.mark.asyncio
+async def test_dispatch_of_the_guidance_task_is_wa_authorized(wise_authority_service, auth_service, time_service, temp_db):
+    """The link that was missing: the guidance task's thoughts dispatch with
+    wa_authorized=True, and an ordinary task's do not."""
+    from ciris_engine.logic.utils.context_utils import build_dispatch_context
+
+    await wise_authority_service.start()
+    # An adapter-shaped context: adapters always put the channel in it.
+    _insert_task_via_persist(
+        task_id="task-wa-dispatch",
+        channel_id="test-channel",
+        description="Update my identity",
+        status="active",
+        priority=5,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+        agent_occurrence_id="default",
+        context={"correlation_id": "corr-task-wa-dispatch", "channel_id": "test-channel"},
+    )
+    deferral_id = await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-wa-dispatch",
+            thought_id="thought-task-wa-dispatch",
+            reason="Identity change needs WA approval",
+            defer_until=time_service.now() + timedelta(hours=1),
+            context={},
+        )
+    )
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+    assert await wise_authority_service.resolve_deferral(deferral_id, _verified_response()) is True
+    guidance = _guidance_task_of("task-wa-dispatch")
+
+    def thought_of(task):
+        return MagicMock(thought_id=f"th-{task.task_id}", source_task_id=task.task_id, context=None)
+
+    ctx = build_dispatch_context(thought=thought_of(guidance), time_service=time_service, task=guidance)
+    assert ctx.wa_authorized is True
+    assert ctx.wa_id == "wa-2025-06-24-AUTH01"
+
+    from ciris_engine.logic.persistence.models.tasks import get_task_by_id
+
+    ordinary = get_task_by_id("task-wa-dispatch", "default")
+    assert ordinary is not None and ordinary.context.wa_authorization is None
+    ctx_ordinary = build_dispatch_context(thought=thought_of(ordinary), time_service=time_service, task=ordinary)
+    assert ctx_ordinary.wa_authorized is False
+
+
+def test_wa_authorization_cannot_represent_an_unverified_approval():
+    from pydantic import ValidationError
+
+    from ciris_engine.schemas.runtime.models import WAAuthorization
+
+    with pytest.raises(ValidationError):
+        WAAuthorization(wa_id="wa", deferral_id="d", granted_at="t", verification="unsigned")
+
+
+def test_wa_authorization_round_trips_and_malformed_grants_nothing():
+    from ciris_engine.logic.persistence.models.tasks import _persist_row_to_task, _task_to_persist_payload
+    from ciris_engine.schemas.runtime.enums import TaskStatus
+    from ciris_engine.schemas.runtime.models import Task, TaskContext, WAAuthorization
+
+    grant = WAAuthorization(wa_id="wa-1", deferral_id="defer_x", granted_at="2026-10-21T12:00:00+00:00")
+    task = Task(
+        task_id="t-rt",
+        channel_id="c",
+        description="d",
+        status=TaskStatus.PENDING,
+        priority=5,
+        created_at="2026-10-21T12:00:00+00:00",
+        updated_at="2026-10-21T12:00:00+00:00",
+        context=TaskContext(channel_id="c", correlation_id="corr", wa_authorization=grant),
+    )
+    row = _task_to_persist_payload(task)
+    assert _persist_row_to_task(row).context.wa_authorization == grant
+
+    row["context"]["wa_authorization"] = {"wa_id": "wa-1", "verification": "unsigned"}
+    assert _persist_row_to_task(row).context.wa_authorization is None

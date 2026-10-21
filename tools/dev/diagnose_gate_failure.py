@@ -110,6 +110,15 @@ SIGNATURES: list[tuple[str, str, str]] = [
         r"(ERROR|CRITICAL)\b[^\n]*\bDMA\b|\b\w*DMA\w*(Evaluator)?\b[^\n]*\b(raised|failed:|exception|ValidationError)",
         "a DMA errored",
     ),
+    # The QA runner's incidents gate names each agent log line that failed the
+    # run (tools/qa_runner/runner.py, "[INCIDENTS-GATE] FAILED (Nx): <line>").
+    # Quoting that line is the answer to "why is a run with every test passing
+    # red?" -- which used to read UNKNOWN (run 39664086947: 38/38 passed).
+    (
+        "AGENT",
+        r"\[INCIDENTS-GATE\] FAILED",
+        "the agent logged an ERROR/CRITICAL the QA incidents gate does not expect",
+    ),
     ("AGENT", r"(ERROR|CRITICAL)\b[^\n]*conscience|conscience[^\n]*(raised|failed:|exception)", "a conscience errored"),
     ("AGENT", r"Traceback \(most recent call last\)", "unhandled exception in the agent"),
     ("INFRA", r"none of the given log paths exist", "no logs were produced: the app or server never started"),
@@ -141,7 +150,7 @@ SIGNATURES: list[tuple[str, str, str]] = [
 # and `reset` were not, so nightly 34596459034's three Windows failures each
 # reported "UNKNOWN -- no known signature matched" -- the classifier had nothing
 # to say about the only leg that failed (CIRISAgent#1172). Keep this in step with
-# `grep -oE '--phase [a-z-]+' .github/workflows/five-platform-live-qa.yml`;
+# `grep -oE '--phase [a-z-]+'` over five-platform-live-qa.yml AND five-platform-modular-qa.yml;
 # test_diagnose_phases_are_complete asserts exactly that.
 PHASE_DEFAULT = {
     "setup": ("CLIENT", "the setup wizard did not complete"),
@@ -152,6 +161,9 @@ PHASE_DEFAULT = {
     "interact": ("SILENT", "no reply was rendered"),
     "delivery": ("DELIVERY", "trace delivery did not reach the required rung"),
     "identity": ("AGENT", "the one-holder-per-identity invariant broke"),
+    # five-platform-modular-qa.yml
+    "reach": ("INFRA", "the host could not reach the platform's backend after setup"),
+    "modular": ("AGENT", "a QA runner module failed or the incidents gate tripped"),
 }
 
 

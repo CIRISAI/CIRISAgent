@@ -397,6 +397,9 @@ class QARunner:
 
         self.results: Dict[str, Dict] = {}
         self._startup_incidents_position = 0
+        # The lines that failed the incidents gate, collapsed, with counts (see _record_incident_reason).
+        self._incident_reasons: List[str] = []
+        self._incident_reason_counts: Dict[str, int] = {}
         self._filter_helper: Optional[FilterTestHelper] = None
 
     def run(self, modules: List[QAModule]) -> bool:
@@ -730,7 +733,21 @@ class QARunner:
                 )
             else:
                 self.console.print("[bold red][ALERT] CRITICAL: INCIDENTS DETECTED DURING TESTING! [ALERT][/bold red]")
-                self.console.print("[bold red]REVIEW THE INCIDENTS LOG ABOVE IMMEDIATELY![/bold red]")
+                self.console.print(
+                    f"[bold red]The incidents gate failed this run on {len(self._incident_reasons)} distinct "
+                    "line(s) it does not expect:[/bold red]"
+                )
+                for reason in self._incident_reasons[:10]:
+                    count = self._incident_reason_counts.get(reason, 1)
+                    # One plain, greppable line per reason: tools/dev/diagnose_gate_failure.py
+                    # classifies on it and puts it in the job summary.
+                    print(f"[INCIDENTS-GATE] FAILED ({count}x): {reason}", flush=True)
+                if len(self._incident_reasons) > 10:
+                    self.console.print(f"   ... and {len(self._incident_reasons) - 10} more")
+                self.console.print(
+                    "[dim]Expected during QA? Add it to EXPECTED_QA_INCIDENT_PATTERNS in "
+                    "tools/qa_runner/runner.py with the module that drives it. Otherwise it is a defect.[/dim]"
+                )
             self.console.print("=" * 60)
             return False  # Force failure if incidents occurred
         else:
@@ -993,6 +1010,8 @@ class QARunner:
         been there, and we cannot tell after the fact which ones were.
         """
         incidents_log = self._incidents_log_path()
+        self._incident_reasons = []
+        self._incident_reason_counts = {}
 
         if not incidents_log.exists():
             self.console.print(
@@ -1038,7 +1057,12 @@ class QARunner:
                     if any(pattern in line for pattern in ignore_patterns):
                         continue
                     if "ERROR" in line or "CRITICAL" in line:
-                        return True
+                        # Keep reading: the run must say WHICH lines failed it,
+                        # not just that something did (a red run that reads
+                        # "INCIDENTS DETECTED" and nothing else sends its reader
+                        # to grep 30k lines for the one that mattered).
+                        self._record_incident_reason(line)
+                        continue
                     if "WARNING" in line:
                         # Normalize away per-event variables (uuids, hex ids,
                         # numbers) so identical warnings collapse to one key.
@@ -1054,12 +1078,33 @@ class QARunner:
                         f"[bold red]🚨 WARNING flood: '{sig}' repeated {count}× "
                         f"during testing — systemic malfunction[/bold red]"
                     )
-                    return True
+                    self._incident_reasons.append(f"WARNING flood ({count}x): {sig}")
 
-        except Exception:
-            return False
+        except Exception as e:
+            # Fail closed: a gate that could not read the log did not check it.
+            self.console.print(f"[bold red][FAIL] CANNOT CERTIFY: reading the incidents log raised {e!r}[/bold red]")
+            self._incidents_unverifiable = True
+            return True
 
-        return False
+        return bool(self._incident_reasons)
+
+    def _record_incident_reason(self, line: str) -> None:
+        """Remember one gate-failing line, collapsed so 50 identical errors read as one."""
+        body = line.strip().split(" - ", 2)[-1] if " - " in line else line.strip()
+        key = re.sub(r"[0-9a-fA-F]{8}-[0-9a-fA-F-]{8,}|\b[0-9a-fA-F]{12,}\b|th_[\w-]+", "<id>", body)[:200]
+        self._incident_reason_counts[key] = self._incident_reason_counts.get(key, 0) + 1
+        if self._incident_reason_counts[key] == 1:
+            self._incident_reasons.append(key)
+
+    def incident_gate_report(self) -> Dict[str, Any]:
+        """The incidents gate's verdict and the lines behind it (for the JSON report and the CI summary)."""
+        return {
+            "failed": bool(self._incident_reasons) or bool(getattr(self, "_incidents_unverifiable", False)),
+            "unverifiable": bool(getattr(self, "_incidents_unverifiable", False)),
+            "lines": [
+                {"line": r, "count": self._incident_reason_counts.get(r, 1)} for r in self._incident_reasons
+            ],
+        }
 
     def _assert_token_valid(self, after_label: str) -> bool:
         """Diagnostic auth gate — confirm self.token still works after `after_label`.
@@ -2570,6 +2615,7 @@ class QARunner:
                 },
                 "results": self.results,
                 "summary": self._get_summary(),
+                "incidents_gate": self.incident_gate_report(),
             }
 
             with open(json_file, "w") as f:

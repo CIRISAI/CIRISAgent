@@ -29,10 +29,13 @@ import asyncio
 import logging
 import secrets
 import traceback
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
 from rich.console import Console
+
+from ciris_adapters.mock_llm.response_packaging import decode_response
 
 from .filter_test_helper import FilterTestHelper
 
@@ -61,6 +64,7 @@ class WAIdentityApprovalTests:
         self.approved_node = f"qa_wa_identity_approved_{suffix}"
         self.deferral_id: Optional[str] = None
         self._last_lookup: List[Dict[str, Any]] = []
+        self.approved_at = datetime.now(timezone.utc)
 
     async def run(self) -> List[Dict[str, Any]]:
         self.console.print("\n[cyan] Testing WA-approved identity change (defer → approve → identity MEMORIZE)[/cyan]")
@@ -147,6 +151,45 @@ class WAIdentityApprovalTests:
         self._last_lookup = list(seen.values())
         return [n for n in seen.values() if str(n.get("scope", "")).lower() == scope]
 
+    async def _recalled_from_history(self, marker: str, scope: str, since: datetime) -> List[Dict[str, Any]]:
+        """Nodes the agent reported storing after ``since``, recalled through the memory service.
+
+        The memory API's text search does not reach every node the agent's
+        memory service writes (run 39670981757: the stored IDENTITY node was
+        absent from it). So also take the node id from the agent's own MEMORIZE
+        report in the channel history (the mock's ``CIRIS_MOCK_MEMORIZE:`` reply, via
+        ``response_packaging.decode_response``), and recall it by id at ``scope``. That is the same
+        ``memory_service.recall`` path the agent itself reads with.
+        """
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            r = await http.get(f"{self.base_url}/v1/agent/history", headers=self._headers(), params={"limit": 100})
+        assert r.status_code == 200, f"GET /v1/agent/history answered {r.status_code}: {r.text[:200]}"
+        messages = (r.json().get("data") or {}).get("messages") or []
+        node_ids: List[str] = []
+        for msg in messages:
+            content = str(msg.get("content") or "")
+            stamp = str(msg.get("timestamp") or "")
+            if not msg.get("is_agent"):
+                continue
+            decoded = decode_response(content)
+            if decoded is None or decoded.action.upper() != "MEMORIZE":
+                continue
+            try:
+                when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if when < since:
+                continue
+            node_id = decoded.payload.get("node_id")
+            if node_id:
+                node_ids.append(str(node_id))
+        found = []
+        for node_id in node_ids:
+            for node in await self._query({"node_id": node_id, "scope": scope}):
+                if marker in (self._content(node) or "") and str(node.get("scope", "")).lower() == scope:
+                    found.append(node)
+        return found
+
     async def _stored_anywhere(self, marker: str) -> List[Dict[str, Any]]:
         return await self._stored(marker, "identity") + await self._stored(marker, "local")
 
@@ -202,6 +245,7 @@ class WAIdentityApprovalTests:
                 json={"resolution": "approve", "guidance": f"$memorize {self.approved_node} CONCEPT IDENTITY"},
             )
         assert r.status_code == 200, f"resolve answered {r.status_code}: {r.text[:300]}"
+        self.approved_at = datetime.now(timezone.utc)
         assert self.deferral_id not in {d["deferral_id"] for d in await self._pending_deferrals()}, (
             "the deferral is still pending after approval"
         )
@@ -211,7 +255,9 @@ class WAIdentityApprovalTests:
         deadline = asyncio.get_event_loop().time() + APPROVAL_TIMEOUT_SECONDS
         node: Optional[Dict[str, Any]] = None
         while asyncio.get_event_loop().time() < deadline:
-            found = await self._stored(self.approved_node, "identity")
+            found = await self._stored(self.approved_node, "identity") or await self._recalled_from_history(
+                self.approved_node, "identity", self.approved_at
+            )
             if found:
                 node = found[0]
                 break

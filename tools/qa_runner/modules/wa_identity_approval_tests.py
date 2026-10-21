@@ -117,15 +117,31 @@ class WAIdentityApprovalTests:
         data: Dict[str, Any] = r.json()["data"]
         return data
 
-    async def _node(self, node_id: str) -> Optional[Dict[str, Any]]:
-        """The node as the memory API returns it, or None when it is not stored."""
+    async def _stored(self, marker: str, scope: str) -> List[Dict[str, Any]]:
+        """Nodes at ``scope`` whose id or content is ``marker``.
+
+        A flat MEMORIZE (what live models emit, and what the mock now emits too)
+        carries no node id: the engine assigns a uuid and the requested name
+        travels as the content. So the node is found by content, not by id.
+        """
         async with httpx.AsyncClient(timeout=30.0) as http:
-            r = await http.get(f"{self.base_url}/v1/memory/{node_id}", headers=self._headers())
-        if r.status_code == 404:
-            return None
-        assert r.status_code == 200, f"GET /v1/memory/{node_id} answered {r.status_code}: {r.text[:200]}"
-        node: Dict[str, Any] = r.json()["data"]
-        return node
+            r = await http.post(
+                f"{self.base_url}/v1/memory/query",
+                headers=self._headers(),
+                json={"scope": scope, "limit": 1000},
+            )
+        assert r.status_code == 200, f"POST /v1/memory/query answered {r.status_code}: {r.text[:200]}"
+        nodes: List[Dict[str, Any]] = r.json()["data"] or []
+
+        def matches(node: Dict[str, Any]) -> bool:
+            attributes = node.get("attributes") or {}
+            content = attributes.get("content") if isinstance(attributes, dict) else None
+            return node.get("id") == marker or content == marker
+
+        return [n for n in nodes if matches(n)]
+
+    async def _stored_anywhere(self, marker: str) -> List[Dict[str, Any]]:
+        return await self._stored(marker, "identity") + await self._stored(marker, "local")
 
     async def _pending_deferrals(self) -> List[Dict[str, Any]]:
         async with httpx.AsyncClient(timeout=30.0) as http:
@@ -139,9 +155,14 @@ class WAIdentityApprovalTests:
     async def test_unapproved_identity_write_is_refused(self) -> None:
         data = await self._interact(f"$memorize {self.refused_node} CONCEPT IDENTITY")
         await asyncio.sleep(2.0)
-        assert await self._node(self.refused_node) is None, (
-            f"an IDENTITY-scope node was stored without WA approval: {self.refused_node} "
-            f"(reply: {data.get('response', '')[:200]})"
+        stored = await self._stored_anywhere(self.refused_node)
+        assert not stored, (
+            f"the unapproved identity MEMORIZE was stored: {stored} (reply: {data.get('response', '')[:200]})"
+        )
+        # Positive evidence the gate ran, not just an absence: the agent says why.
+        reply = str(data.get("response", ""))
+        assert "WA authorization required" in reply or "authorization" in reply.lower(), (
+            f"no refusal reached the user; the gate may not have run. Reply: {reply[:300]}"
         )
 
     async def test_identity_change_defers(self) -> None:
@@ -175,8 +196,9 @@ class WAIdentityApprovalTests:
         deadline = asyncio.get_event_loop().time() + APPROVAL_TIMEOUT_SECONDS
         node: Optional[Dict[str, Any]] = None
         while asyncio.get_event_loop().time() < deadline:
-            node = await self._node(self.approved_node)
-            if node is not None:
+            found = await self._stored(self.approved_node, "identity")
+            if found:
+                node = found[0]
                 break
             await asyncio.sleep(POLL_SECONDS)
         assert node is not None, (
@@ -189,7 +211,7 @@ class WAIdentityApprovalTests:
         """The approval authorized its own guidance task only; an ordinary request is still refused."""
         await self._interact(f"$memorize {self.refused_node} CONCEPT IDENTITY")
         await asyncio.sleep(2.0)
-        assert await self._node(self.refused_node) is None, (
+        assert not await self._stored_anywhere(self.refused_node), (
             "after a WA approval, an unrelated IDENTITY-scope MEMORIZE went through: the authorization leaked"
         )
 

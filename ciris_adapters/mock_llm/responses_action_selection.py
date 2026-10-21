@@ -46,6 +46,20 @@ from .response_packaging import (
 _logger = logging.getLogger(__name__)
 
 
+
+def _enum_value(value: Any, default: str) -> str:
+    """An enum's value (``GraphScope.IDENTITY`` -> ``"identity"``), or the string itself."""
+    if value is None:
+        return default
+    return str(getattr(value, "value", value)).lower()
+
+
+def _node_content(node: Dict[str, Any]) -> str:
+    """What a flat MEMORIZE stores: the node's content, else its requested id."""
+    attributes = node.get("attributes")
+    content = attributes.get("content") if isinstance(attributes, dict) else None
+    return str(content or node.get("content") or node.get("id") or "")
+
 def _extract_text_content(content: Any) -> str:
     """Extract text from message content, handling multimodal list format.
 
@@ -1875,9 +1889,14 @@ def aspdma_llm_result(
         flat_result = ASPDMALLMResult(
             selected_action=action,
             reasoning=rationale,
-            memorize_node_type=str(node.get("node_type", "observation")),
-            memorize_content=node.get("content", ""),
-            memorize_scope=str(node.get("scope", "local")),
+            # GraphNode dumps as `type` / `scope` (enums). Reading `node_type`
+            # and str(enum) turned EVERY mock $memorize into a LOCAL
+            # observation, so no mock run ever exercised an IDENTITY-scope
+            # write or its WA gate (#1303). The flat schema has no node id, so
+            # the requested id travels as the content.
+            memorize_node_type=_enum_value(node.get("type") or node.get("node_type"), "observation"),
+            memorize_content=_node_content(node),
+            memorize_scope=_enum_value(node.get("scope"), "local"),
         )
     elif action == HandlerActionType.FORGET:
         node = params_dict.get("node", {})

@@ -387,7 +387,7 @@ class SetupCompleteRequest(BaseModel):
     admin_username: str = Field(default="owner", description="New user's username")
     admin_password: Optional[str] = Field(
         None,
-        description="New user's password (min 8 characters). Optional for OAuth users - if not provided, a random password is generated and password auth is disabled for this user.",
+        description="Unused by setup: the owner's credential is the node's (it is set at claim). Accepted for older clients.",
     )
     system_admin_password: Optional[str] = Field(
         None, description="System admin password to replace default (min 8 characters, optional)"

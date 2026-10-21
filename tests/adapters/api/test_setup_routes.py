@@ -423,8 +423,11 @@ class TestCompleteSetupEndpoint:
         mock_save.assert_called_once()
 
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
-    def test_complete_setup_password_too_short(self, mock_first_run, client):
-        """Test setup completion with password too short."""
+    def test_complete_setup_system_admin_password_too_short(self, mock_first_run, client):
+        """The local admin replacement password keeps its minimum length.
+
+        The owner's own password is the node's and is no longer judged here.
+        """
         mock_first_run.return_value = True
 
         response = client.post(
@@ -438,13 +441,13 @@ class TestCompleteSetupEndpoint:
                 "enabled_adapters": ["api"],
                 "adapter_config": {},
                 "admin_username": "admin",
-                "admin_password": "short",  # Only 5 characters
+                "system_admin_password": "short",  # Only 5 characters
                 "agent_port": 8080,
             },
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "8 characters" in response.json()["detail"]
+        assert "System admin password" in response.json()["detail"]
 
     @patch("ciris_engine.logic.adapters.api.routes.setup.dependencies.is_first_run")
     def test_complete_setup_already_configured(self, mock_first_run, client):
@@ -882,30 +885,12 @@ class TestResumeFromFirstRun:
         # happens asynchronously and is difficult to verify in sync test
 
 
-class TestValidateSetupPasswords:
-    """Test _validate_setup_passwords helper function."""
+class TestValidateSystemAdminPassword:
+    """Setup validates only the local admin replacement password."""
 
-    def test_valid_password(self):
-        """Test password validation with valid password."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
-
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test123",
-            template_id="general",
-            enabled_adapters=["api"],
-            adapter_config={},
-            admin_username="admin",
-            admin_password="secure_password_123",
-            agent_port=8080,
-        )
-
-        result = _validate_setup_passwords(setup, is_oauth_user=False)
-        assert result == "secure_password_123"
-
-    def test_short_password_raises_error(self):
-        """Test password validation raises error for short password."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+    def test_no_owner_password_is_accepted(self):
+        """Add-device setups carry no owner password and no OAuth; they must not 400."""
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_system_admin_password
 
         setup = SetupCompleteRequest(
             llm_provider="openai",
@@ -914,55 +899,13 @@ class TestValidateSetupPasswords:
             enabled_adapters=["api"],
             adapter_config={},
             admin_username="admin",
-            admin_password="short",  # Too short
+            admin_password=None,
             agent_port=8080,
         )
-
-        with pytest.raises(Exception) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert "8 characters" in str(exc_info.value.detail)
-
-    def test_empty_password_for_non_oauth_raises_error(self):
-        """Test empty password raises error for non-OAuth users."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
-
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test123",
-            template_id="general",
-            enabled_adapters=["api"],
-            adapter_config={},
-            admin_username="admin",
-            admin_password="",  # Empty
-            agent_port=8080,
-        )
-
-        with pytest.raises(Exception) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
-        assert "8 characters" in str(exc_info.value.detail)
-
-    def test_oauth_user_generates_random_password(self):
-        """Test OAuth user without password gets random password generated."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
-
-        setup = SetupCompleteRequest(
-            llm_provider="openai",
-            llm_api_key="sk-test123",
-            template_id="general",
-            enabled_adapters=["api"],
-            adapter_config={},
-            admin_username="admin",
-            admin_password="",  # Empty - should generate random for OAuth
-            oauth_provider="google",
-            agent_port=8080,
-        )
-
-        result = _validate_setup_passwords(setup, is_oauth_user=True)
-        assert len(result) >= 32  # Random password should be at least 32 chars
+        _validate_system_admin_password(setup)
 
     def test_system_admin_password_too_short_raises_error(self):
-        """Test system admin password validation."""
-        from ciris_engine.logic.adapters.api.routes.setup import _validate_setup_passwords
+        from ciris_engine.logic.adapters.api.routes.setup import _validate_system_admin_password
 
         setup = SetupCompleteRequest(
             llm_provider="openai",
@@ -971,13 +914,12 @@ class TestValidateSetupPasswords:
             enabled_adapters=["api"],
             adapter_config={},
             admin_username="admin",
-            admin_password="secure_password_123",
             system_admin_password="short",  # Too short
             agent_port=8080,
         )
 
         with pytest.raises(Exception) as exc_info:
-            _validate_setup_passwords(setup, is_oauth_user=False)
+            _validate_system_admin_password(setup)
         assert "System admin password" in str(exc_info.value.detail)
 
 

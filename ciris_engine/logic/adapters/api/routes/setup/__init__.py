@@ -38,7 +38,7 @@ from .helpers import (
     _get_available_adapters,
     _is_setup_allowed_without_auth,
     _should_skip_manifest,
-    _validate_setup_passwords,
+    _validate_system_admin_password,
 )
 
 # LLM validation - imported from llm_validation.py module
@@ -129,7 +129,7 @@ __all__ = [
     "_should_skip_manifest",
     "_validate_api_key_for_provider",
     "_validate_llm_connection",
-    "_validate_setup_passwords",
+    "_validate_system_admin_password",
     "_detect_ollama",
     "_get_provider_base_url",
     "_annotate_models_with_capabilities",

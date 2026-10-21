@@ -24,7 +24,7 @@ from ciris_engine.schemas.runtime.node_ownership import CLAIM_ROUTE, NODE_UNCLAI
 
 from .._common import RESPONSES_400_403_500
 from .dependencies import SetupOnlyDep
-from .helpers import _validate_setup_passwords
+from .helpers import _validate_system_admin_password
 from .llm_validation import _get_provider_base_url
 from .models import SetupCompleteRequest
 
@@ -1113,14 +1113,9 @@ async def complete_setup(
         _ingress_provider = ingress_user_id.split(":")[0] if ":" in ingress_user_id else "unknown"
         logger.info(f"[SETUP] Ingress user detected ({_ingress_provider}) - will auto-mint WA")
 
-    # Determine if this is an OAuth user (password is optional for OAuth users)
-    is_oauth_user = bool(setup.oauth_provider)
-    logger.debug(
-        f"CIRIS_SETUP_DEBUG is_oauth_user (for password validation) = {is_oauth_user}"
-    )  # NOSONAR - boolean only
-
-    # Validate passwords and potentially generate for OAuth users
-    setup.admin_password = _validate_setup_passwords(setup, is_oauth_user)
+    # The owner's credential is the node's (password, OAuth, or none at all for
+    # add-device); only the local admin replacement is checked here.
+    _validate_system_admin_password(setup)
 
     config_path: Optional[Path] = None
     try:

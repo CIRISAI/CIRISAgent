@@ -9,7 +9,6 @@ consistency with the "Add Adapters" card in system/adapters.py.
 
 import asyncio
 import logging
-import secrets
 from typing import TYPE_CHECKING, Any, List
 
 if TYPE_CHECKING:
@@ -262,45 +261,16 @@ def _create_adapter_from_manifest(*args: Any, **kwargs: Any) -> AdapterConfig:
     raise NotImplementedError("Use _module_info_to_adapter_config instead")
 
 
-def _validate_setup_passwords(setup: SetupCompleteRequest, is_oauth_user: bool) -> str:
-    """Validate and potentially generate admin password for setup.
+def _validate_system_admin_password(setup: SetupCompleteRequest) -> None:
+    """Reject a too-short replacement for the default local admin password.
 
-    For OAuth users without a password, generates a secure random password.
-    For non-OAuth users, validates password requirements.
-
-    Args:
-        setup: Setup configuration request
-        is_oauth_user: Whether user is authenticating via OAuth
-
-    Returns:
-        Validated or generated admin password
+    The OWNER's credential is not validated here: the node owns it (password,
+    OAuth, or add-device, which carries none), and setup never writes it.
 
     Raises:
-        HTTPException: If password validation fails
+        HTTPException: If system_admin_password is set and shorter than 8 characters
     """
-    admin_password = setup.admin_password
-
-    if not admin_password or len(admin_password) == 0:
-        if is_oauth_user:
-            # Generate a secure random password for OAuth users
-            # They won't use this password - they'll authenticate via OAuth
-            admin_password = secrets.token_urlsafe(32)
-            logger.info("[Setup Complete] Generated random password for OAuth user (password auth disabled)")
-        else:
-            # Non-OAuth users MUST provide a password
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
-            )
-    elif len(admin_password) < 8:
-        # If a password was provided, it must meet minimum requirements
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="New user password must be at least 8 characters"
-        )
-
-    # Validate system admin password strength if provided
     if setup.system_admin_password and len(setup.system_admin_password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="System admin password must be at least 8 characters"
         )
-
-    return admin_password

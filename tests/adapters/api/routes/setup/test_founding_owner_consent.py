@@ -180,6 +180,23 @@ async def test_password_owner(graph_db: str, node_store: Dict[str, Any]) -> None
 
 
 @pytest.mark.asyncio
+async def test_add_device_owner(graph_db: str, node_store: Dict[str, Any]) -> None:
+    """Add-device: no owner password, no OAuth, and the wizard's default username.
+
+    The node bound its owner through setup/root with the claim PIN; that row is the
+    one user, found as the node's single owner even though no name matches.
+    """
+    _claimed(node_store, name="mooreericnyc")
+    setup = _setup(username="owner")
+    setup.admin_password = None
+    auth = await _run_setup(setup, graph_db)
+
+    await _assert_owner_is_partnered()
+    auth.create_wa.assert_not_awaited()
+    auth.update_wa.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_the_founding_record_is_keyed_to_the_owner_wa_id_only(graph_db: str, node_store: Dict[str, Any]) -> None:
     """No second record under provider:subject for anything to read by mistake."""
     from ciris_engine.logic.persistence import get_graph_node

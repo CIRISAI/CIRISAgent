@@ -424,6 +424,7 @@ def _handle_substrate_session_auth(
         permissions=set(ROLE_PERMISSIONS.get(role, set())),
         api_key_id=None,
         authenticated_at=datetime.now(timezone.utc),
+        substrate_verified=True,
     )
 
 
@@ -743,7 +744,8 @@ def check_permissions(permissions: list[str]) -> Callable[..., Any]:
     """
 
     async def check(  # NOSONAR - FastAPI requires async for dependency injection
-        auth: AuthContext = Depends(get_auth_context), auth_service: APIAuthService = Depends(get_auth_service)
+        auth: AuthContext = Depends(get_auth_context),
+        auth_service: APIAuthService = Depends(get_auth_service),
     ) -> None:
         """Validate user has required permissions."""
         from ciris_engine.schemas.runtime.api import APIRole
@@ -751,20 +753,37 @@ def check_permissions(permissions: list[str]) -> Callable[..., Any]:
 
         # Get the user from auth service to get their API role
         user = auth_service.get_user(auth.user_id)
-        if not user:
+        if user:
+            user_permissions = set(auth_service.get_permissions_for_role(user.api_role))
+        elif auth.substrate_verified:
+            # A NODE-ISSUED SESSION whose subject the brain's table does not hold.
+            #
+            # The node owns identity: a node-claimed owner (and anyone else the
+            # node signs in) is a federation identity, and the brain's user table
+            # deliberately skips those rows (_is_brain_wa_row). Looking the caller
+            # up there therefore answered 403 "User not found" to the OWNER of the
+            # node on every check_permissions route -- /v1/users list, create,
+            # update, mint-wa -- although get_auth_context had already verified
+            # the session with the substrate.
+            #
+            # The role here is the substrate's verdict: substrate_verified is set
+            # ONLY by _handle_substrate_session_auth, from ciris_server.resolve_bearer.
+            # It is not inferred from the request (an ingress provider authenticates
+            # before the bearer is read, so a `Bearer sess:` header proves nothing
+            # about how auth.role was established). Any other credential whose
+            # subject is unknown is still refused below.
+            user_permissions = set(auth_service.get_permissions_for_role(APIRole(auth.role.value)))
+        else:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not found")
-
-        # Get permissions for user's API role
-        user_permissions = set(auth_service.get_permissions_for_role(user.api_role))
 
         # ROOT WA role inherits AUTHORITY permissions (for deferral resolution, etc.)
         # This is separate from API role - ROOT WAs get both SYSTEM_ADMIN + AUTHORITY perms
-        if hasattr(user, "wa_role") and user.wa_role == WARole.ROOT:
+        if user is not None and hasattr(user, "wa_role") and user.wa_role == WARole.ROOT:
             authority_perms = auth_service.get_permissions_for_role(APIRole.AUTHORITY)
             user_permissions.update(authority_perms)
 
         # Add any custom permissions
-        if hasattr(user, "custom_permissions") and user.custom_permissions:
+        if user is not None and hasattr(user, "custom_permissions") and user.custom_permissions:
             for perm in user.custom_permissions:
                 user_permissions.add(perm)
 

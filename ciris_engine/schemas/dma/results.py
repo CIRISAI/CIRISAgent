@@ -251,6 +251,9 @@ class ActionSelectionDMAResult(BaseModel):
 
     # User prompt for debugging/transparency (set by evaluator)
     user_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
+    # The system message: where the CORE IDENTITY, its approved amendments and
+    # any WA approval live, so a trace can show what identity the model had.
+    system_prompt: Optional[str] = Field(None, description="System prompt passed to ASPDMA")
 
     # selection_confidence / alternatives_considered removed — see comment on
     # ASPDMALLMResult. extra="ignore" so stale consumers or older event wire
@@ -449,6 +452,7 @@ def convert_llm_result_to_action_result(
     evaluation_time_ms: Optional[float] = None,
     resource_usage: Optional[JSONDict] = None,
     user_prompt: Optional[str] = None,
+    system_prompt: Optional[str] = None,
 ) -> "ActionSelectionDMAResult":
     """Convert flat LLM result to fully typed ActionSelectionDMAResult.
 
@@ -466,6 +470,7 @@ def convert_llm_result_to_action_result(
         evaluation_time_ms=evaluation_time_ms,
         resource_usage=resource_usage,
         user_prompt=user_prompt,
+        system_prompt=system_prompt,
     )
 
 

@@ -895,6 +895,9 @@ class ConscienceExecutionStepData(BaseStepData):
     override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
     conscience_result: ConscienceResult = Field(..., description="Complete conscience evaluation result")
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA for debugging")
+    aspdma_system_prompt: Optional[str] = Field(
+        None, description="System prompt passed to ASPDMA (CORE IDENTITY, amendments, WA approval)"
+    )
 
 
 class RecursiveASPDMAStepData(BaseStepData):
@@ -1299,6 +1302,9 @@ class ASPDMAResultEvent(BaseModel):
 
     # User prompt passed to ASPDMA (for debugging/transparency)
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
+    # The system message, which carries the CORE IDENTITY, its approved
+    # amendments and any WA approval: what identity the model actually had.
+    aspdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to ASPDMA")
 
 
 class TSASPDMAResultEvent(BaseModel):

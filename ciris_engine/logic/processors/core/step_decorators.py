@@ -700,6 +700,7 @@ def _create_conscience_execution_data(
 
     # Extract ASPDMA prompt if available (set by evaluator in user_prompt field)
     aspdma_prompt = getattr(input_action_result, "user_prompt", None)
+    aspdma_system_prompt = getattr(input_action_result, "system_prompt", None)
 
     # Create comprehensive conscience evaluation details for full transparency
     conscience_check_result = _create_comprehensive_conscience_result(result)
@@ -716,6 +717,7 @@ def _create_conscience_execution_data(
         override_reason=override_reason,
         conscience_result=conscience_result,
         aspdma_prompt=aspdma_prompt,
+        aspdma_system_prompt=aspdma_system_prompt,
     )
 
 
@@ -1723,6 +1725,7 @@ def _create_aspdma_result_event(
 
     # Extract ASPDMA prompt if available (from ConscienceExecutionStepData)
     aspdma_prompt = getattr(step_data, "aspdma_prompt", None)
+    aspdma_system_prompt = getattr(step_data, "aspdma_system_prompt", None)
 
     return create_reasoning_event(
         event_type=ReasoningEvent.ASPDMA_RESULT,
@@ -1733,6 +1736,7 @@ def _create_aspdma_result_event(
         selected_action=getattr(step_data, "selected_action", ""),
         action_rationale=getattr(step_data, "action_rationale", ""),
         aspdma_prompt=aspdma_prompt,  # User prompt passed to ASPDMA
+        aspdma_system_prompt=aspdma_system_prompt,  # System prompt: the identity the model had
     )
 
 

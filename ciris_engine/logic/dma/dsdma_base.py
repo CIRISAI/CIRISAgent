@@ -589,18 +589,21 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             original_thought_content=thought_content_str,
         )
 
-        # Store prompts for streaming/debugging
+        # CRITICAL: Identity block must ALWAYS be first in system message after accord
+        # Prepend identity to system message if not already included
+        if identity_block and "CORE IDENTITY" not in system_message_content:
+            system_message_content = identity_block + "\n\n" + system_message_content
+
+        # Store prompts for streaming/debugging -- AFTER the identity prepend, so
+        # DMA_RESULTS.dsdma_system_prompt is what the model was sent. Stored
+        # before it, the trace never showed CORE IDENTITY or the WA-approved
+        # amendments (RATCHET runs 39844408349, 39845804302).
         self.last_system_prompt = system_message_content
         self.last_user_prompt = user_message_content
 
         logger.debug(
             f"DSDMA '{self.domain_name}' input to LLM for thought {thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
         )
-
-        # CRITICAL: Identity block must ALWAYS be first in system message after accord
-        # Prepend identity to system message if not already included
-        if identity_block and "CORE IDENTITY" not in system_message_content:
-            system_message_content = identity_block + "\n\n" + system_message_content
 
         # Build multimodal content if images are present
         thought_images = images or []

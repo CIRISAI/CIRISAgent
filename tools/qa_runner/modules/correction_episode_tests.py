@@ -444,6 +444,12 @@ class CorrectionEpisodeTests:
                    if "wa authorization required" in json.dumps(e, default=str).lower()
                    or "'failure'" in str(e.get("context", "")).lower()]
         rejected = "reject" in actions
+        memorize_targets = []
+        for e in audit:
+            if e.get("action") == "memorize":
+                md = (e.get("context") or {}).get("metadata") if isinstance(e.get("context"), dict) else None
+                if isinstance(md, dict):
+                    memorize_targets.append({k: md.get(k) for k in ("node_id", "node_scope", "node_type", "outcome")})
         in_agent_identity = bool(identity.get("in_agent_identity"))
         amendments = [a["id"] for a in identity.get("amendments") or []]
         elsewhere = [h["id"] for h in scan.get("hits", []) if h.get("id") != "agent/identity" and h.get("id") not in amendments]
@@ -454,9 +460,13 @@ class CorrectionEpisodeTests:
         elif in_agent_identity:
             path, summary = "landed-in-agent-identity", "The approved change reached agent/identity, the core node prompts read."
         elif amendments:
+            with_prov = [a["id"] for a in identity.get("amendments") or [] if isinstance(a.get("wa_amendment"), dict)]
+            prov = ("the memory API shows the approval's provenance" if len(with_prov) == len(amendments)
+                    else "the memory API does NOT show the approval's provenance (wa_amendment) on "
+                         f"{[a for a in amendments if a not in with_prov]}")
             path, summary = ("landed-as-amendment",
-                             f"The approved change is IDENTITY_AMENDMENT node(s) {amendments}, carrying the approval's "
-                             "provenance; identity views load these beside agent/identity (engine #1312).")
+                             f"The approved change is IDENTITY_AMENDMENT node(s) {amendments}; identity views load "
+                             f"these beside agent/identity (engine #1312); {prov}.")
         elif elsewhere:
             path, summary = ("landed-outside-agent-identity",
                              f"The approved MEMORIZE stored the paragraph in IDENTITY-scope node(s) {elsewhere} that are "
@@ -470,7 +480,9 @@ class CorrectionEpisodeTests:
                              f"The approved write became IDENTITY_AMENDMENT node(s) {bad} lacking `content` or provenance; "
                              "the identity loader skips such nodes, so the change cannot reach later behaviour.")
         elif memorize:
-            path, summary = "memorize-elsewhere", "The guidance task MEMORIZEd, but nothing at IDENTITY scope carries the paragraph."
+            path, summary = ("memorize-elsewhere",
+                             f"The guidance task MEMORIZEd to {memorize_targets or 'an unrecorded target'}, but nothing "
+                             "at IDENTITY scope carries the paragraph.")
         elif rejected:
             path, summary = "resolved-rejected", "The WA approved, and the agent REJECTed the approved change (no MEMORIZE)."
         else:
@@ -480,7 +492,7 @@ class CorrectionEpisodeTests:
             "deferral_id": deferral and deferral.get("deferral_id"), "resolve_status": resolve and resolve.get("status"),
             "agent_identity_changed": in_agent_identity, "agent_identity_version": identity.get("version"),
             "amendments_with_paragraph": amendments, "unloaded_identity_nodes_with_paragraph": elsewhere,
-            "audited_actions_since_resolve": actions, "audited_memorize": len(memorize),
+            "audited_actions_since_resolve": actions, "memorize_targets": memorize_targets, "audited_memorize": len(memorize),
             "audited_memorize_refused": len(refused),
             "scan_node_types": sorted({str(h.get("type")) for h in scan.get("hits", [])}),
             "all_amendment_nodes": getattr(self, "_all_amendments", []),

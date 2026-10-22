@@ -180,7 +180,9 @@ class ReasoningStreamRecorder:
 
     Logging only. It lets an episode say, for each probe, whether the system snapshot that probe's thought was
     built with held the approved amendment, when that snapshot was built, and what each decision stage chose.
-    LLM_CALL events are skipped (volume); every other event is kept with its receipt time.
+    Every event is kept with its receipt time, including LLM_CALL, whose `prompt` is the message list as sent:
+    the pipeline events' own prompt fields omit the ASPDMA system message and record the DSDMA system message
+    before the identity block is prepended, so only LLM_CALL shows what identity the model actually received.
     """
 
     def __init__(self, base_url: str, token: str):
@@ -223,8 +225,6 @@ class ReasoningStreamRecorder:
                         except ValueError:
                             continue
                         for ev in data.get("events", []) if isinstance(data, dict) else []:
-                            if str(ev.get("event_type", "")).lower() == "llm_call":
-                                continue
                             self.events.append({"received_at": now_iso(), **ev})
             except Exception as e:  # noqa: BLE001 - reconnect; the restart drops the stream
                 self.error = str(e)[:200]
@@ -262,6 +262,14 @@ def summarize_probe_stream(events: List[Dict[str, Any]], marker: str) -> Dict[st
         elif et == "conscience_result":
             out.setdefault("conscience", []).append({k: e.get(k) for k in (
                 "conscience_passed", "final_action", "action_was_overridden", "conscience_override_reason")})
+        elif et == "llm_call":
+            prompt = str(e.get("prompt") or "")
+            out.setdefault("llm_calls", []).append({
+                "handler": e.get("handler_name"), "response_model": e.get("response_model"),
+                "prompt_contains_paragraph": bool(marker) and marker in _norm(prompt),
+                "prompt_contains_amendment_heading": "amend" in prompt.lower(),
+                "prompt_bytes": e.get("prompt_bytes"),
+            })
         elif et == "action_result":
             out.setdefault("action", []).append({k: e.get(k) for k in ("action_executed", "execution_success")})
     return out

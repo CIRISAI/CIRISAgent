@@ -540,6 +540,7 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT,
             QAModule.VISION,
             QAModule.WA_IDENTITY_APPROVAL,
+            QAModule.CORRECTION_EPISODES,
             QAModule.ATTACHMENTS,
             QAModule.AIR,
             QAModule.ACCORD_METRICS,
@@ -1773,6 +1774,7 @@ class QARunner:
         from .modules.utility_adapters_tests import UtilityAdaptersTests
         from .modules.vision_tests import VisionTests
         from .modules.wa_identity_approval_tests import WAIdentityApprovalTests
+        from .modules.correction_episode_tests import CorrectionEpisodeTests
         from .modules.attachments_tests import AttachmentsTests
         from .modules.wallet_tests import WalletTests
 
@@ -1801,6 +1803,7 @@ class QARunner:
             QAModule.CONTEXT_ENRICHMENT: ContextEnrichmentTests,
             QAModule.VISION: VisionTests,
             QAModule.WA_IDENTITY_APPROVAL: WAIdentityApprovalTests,
+            QAModule.CORRECTION_EPISODES: CorrectionEpisodeTests,
             QAModule.ATTACHMENTS: AttachmentsTests,
             QAModule.AIR: AIRTests,
             QAModule.ACCORD_METRICS: AccordMetricsTests,
@@ -1968,6 +1971,18 @@ class QARunner:
                         live_base_url=self.config.live_base_url,
                         live_provider=self.config.live_provider,
                         api_port=self.config.api_port,
+                    )
+                elif module == QAModule.CORRECTION_EPISODES:
+                    _cases = getattr(self.config, "correction_cases_file", None)
+                    if not _cases:
+                        raise SystemExit("correction_episodes needs --correction-cases-file (the frozen freeze-cases.jsonl)")
+                    test_instance = test_class(
+                        client,
+                        self.console,
+                        cases_file=_cases,
+                        case_id=getattr(self.config, "correction_case_id", None),
+                        server_manager=self.server_manager,
+                        config=self.config,
                     )
                 elif module == QAModule.SAFETY_INTERPRET:
                     from pathlib import Path as _Path

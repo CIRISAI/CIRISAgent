@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Hindi. A
 | English | Hindi | Transliteration | Definition |
 |---------|-------|-----------------|------------|
 | ACCORD | [DEPRECATED] ACCORD | - | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior (kept as-is) |
-| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "मानव सलाहकार" |
+| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering) |
 | Conscience | विवेक | Vivek | Ethical filter mechanism |
 | Principal Hierarchy | प्रमुख पदानुक्रम | Pramukh Padaanukram | Chain of command for guidance |
 | Coherence | सुसंगति | Susangati | Logical and contextual consistency |

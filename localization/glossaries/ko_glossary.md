@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Korean. 
 | English | Korean | Romanization | Definition |
 |---------|--------|--------------|------------|
 | ACCORD | [DEPRECATED] 협약 | hyeobyak | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior |
-| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "담당자" |
+| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering) |
 | Conscience | 양심 | yangsim | Ethical filter mechanism |
 | Principal Hierarchy | 원칙 계층 | wonjik gyecheung | Chain of command for guidance |
 | Coherence | 일관성 | ilgwanseong | Logical and contextual consistency |

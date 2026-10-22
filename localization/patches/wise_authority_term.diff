@@ -1,5 +1,5 @@
 diff --git a/localization/glossaries/de_glossary.md b/localization/glossaries/de_glossary.md
-index eacdfeaab..d53b2f302 100644
+index eacdfeaab..ebe631af5 100644
 --- a/localization/glossaries/de_glossary.md
 +++ b/localization/glossaries/de_glossary.md
 @@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in German.
@@ -7,7 +7,7 @@ index eacdfeaab..d53b2f302 100644
  |---------|--------|------------|
  | ACCORD | [DEPRECATED] ACCORD | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior (kept as-is) |
 -| Wise Authority | Menschlicher Berater | Human oversight entity (lit. "human advisor") |
-+| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "Menschlicher Berater" |
++| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering) |
  | Conscience | Gewissen | Ethical filter mechanism |
  | Principal Hierarchy | Prinzipien-Hierarchie | Chain of command for guidance |
  | Coherence | Kohärenz | Logical and contextual consistency |
@@ -21,7 +21,7 @@ index eacdfeaab..d53b2f302 100644
  | "I cannot perform this action" | "Ich kann das nicht tun" |
  | "Could you please clarify?" | "Könnten Sie bitte erläutern, was Sie meinen?" |
 diff --git a/localization/glossaries/hi_glossary.md b/localization/glossaries/hi_glossary.md
-index 6f6f91d3b..18f8c1295 100644
+index 6f6f91d3b..24141b788 100644
 --- a/localization/glossaries/hi_glossary.md
 +++ b/localization/glossaries/hi_glossary.md
 @@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Hindi. A
@@ -29,7 +29,7 @@ index 6f6f91d3b..18f8c1295 100644
  |---------|-------|-----------------|------------|
  | ACCORD | [DEPRECATED] ACCORD | - | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior (kept as-is) |
 -| Wise Authority | मानव सलाहकार | Maanav Salaahkaar | Human oversight entity |
-+| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "मानव सलाहकार" |
++| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering) |
  | Conscience | विवेक | Vivek | Ethical filter mechanism |
  | Principal Hierarchy | प्रमुख पदानुक्रम | Pramukh Padaanukram | Chain of command for guidance |
  | Coherence | सुसंगति | Susangati | Logical and contextual consistency |
@@ -52,7 +52,7 @@ index 6f6f91d3b..18f8c1295 100644
  ### Gender Neutrality
  - Hindi has grammatical gender. Use dual forms where possible (e.g., "सकता/सकती")
 diff --git a/localization/glossaries/ko_glossary.md b/localization/glossaries/ko_glossary.md
-index d0d2814db..bb21e75ed 100644
+index d0d2814db..2dbee6ee9 100644
 --- a/localization/glossaries/ko_glossary.md
 +++ b/localization/glossaries/ko_glossary.md
 @@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Korean.
@@ -60,7 +60,7 @@ index d0d2814db..bb21e75ed 100644
  |---------|--------|--------------|------------|
  | ACCORD | [DEPRECATED] 협약 | hyeobyak | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior |
 -| Wise Authority | 담당자 | damjangja | Human oversight entity (lit. "person in charge") |
-+| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "담당자" |
++| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering) |
  | Conscience | 양심 | yangsim | Ethical filter mechanism |
  | Principal Hierarchy | 원칙 계층 | wonjik gyecheung | Chain of command for guidance |
  | Coherence | 일관성 | ilgwanseong | Logical and contextual consistency |
@@ -83,7 +83,7 @@ index d0d2814db..bb21e75ed 100644
  ### Language Structure
  - Korean is Subject-Object-Verb (SOV) word order
 diff --git a/localization/glossaries/sw_glossary.md b/localization/glossaries/sw_glossary.md
-index 6ecca46e9..fd97a47ea 100644
+index 6ecca46e9..239b64b24 100644
 --- a/localization/glossaries/sw_glossary.md
 +++ b/localization/glossaries/sw_glossary.md
 @@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Swahili.
@@ -91,7 +91,7 @@ index 6ecca46e9..fd97a47ea 100644
  |---------|---------|------------|
  | ACCORD | [DEPRECATED] Mkataba | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior |
 -| Wise Authority | Mshauri wa Kibinadamu | Human oversight entity |
-+| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "Mshauri wa Kibinadamu" |
++| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering) |
  | Conscience | Dhamiri | Ethical filter mechanism |
  | Principal Hierarchy | Uratibu wa Viongozi | Chain of command for guidance |
  | Coherence | Upatanifu | Logical and contextual consistency |
@@ -126,3 +126,25 @@ index 769768d2d..09724c500 100644
  | Conscience | Vicdan | Ethical filter mechanism |
  | Principal Hierarchy | Ana Hiyerarşi | Chain of command for guidance |
  | Coherence | Tutarlılık | Logical and contextual consistency |
+diff --git a/localization/glossaries/zh_glossary.md b/localization/glossaries/zh_glossary.md
+index 4fa33d87b..c6d434fb3 100644
+--- a/localization/glossaries/zh_glossary.md
++++ b/localization/glossaries/zh_glossary.md
+@@ -154,7 +154,7 @@ This glossary defines the canonical translations for key CIRIS terms in Simplifi
+ |---------|---------|--------|
+ | "How can I help you?" | "您好！今天我能为您做些什么？" | Nín hǎo! Jīntiān wǒ néng wèi nín zuò xiē shénme? |
+ | "I need to think about this" | "让我想想……" | Ràng wǒ xiǎngxiang... |
+-| "Let me check with my Wise Authority" | "我需要就此事咨询人工顾问，稍后会回复您。" | Wǒ xūyào jiù cǐ shì zīxún réngōng gùwèn, shāohòu huì huífù nín. |
++| "Let me check with my Wise Authority" | "我需要就此事咨询智慧权威，稍后会回复您。" | Wǒ xūyào jiù cǐ shì zīxún zhìhuì quánwēi, shāohòu huì huífù nín. |
+ | "Task completed successfully" | "任务已成功完成。" | Rènwù yǐ chénggōng wánchéng. |
+ | "I cannot perform this action" | "我没有执行该操作的权限。" | Wǒ méiyǒu zhíxíng gāi cāozuò de quánxiàn. |
+ | "Processing your request" | "处理您的请求" | Chǔlǐ nín de qǐngqiú |
+@@ -169,7 +169,7 @@ This glossary defines the canonical translations for key CIRIS terms in Simplifi
+ 
+ ### Honorifics
+ - When addressing users, use "您" (formal you) not "你" (informal)
+-- For Wise Authority references, use respectful terminology like "智慧权威" or "人工顾问"
++- For Wise Authority references, use "智慧权威" (Constitution 1.3 rendering)
+ 
+ ### Character Set
+ - All translations use Simplified Chinese (简体中文)

@@ -413,6 +413,19 @@ Available modules:
     )
 
     # Output configuration
+    parser.add_argument(
+        "--correction-cases-file",
+        default=None,
+        help=(
+            "Frozen freeze-cases.jsonl for the correction_episodes module (ai-safety-claims Market 4, "
+            "contract v3, workbench format). Required when that module is selected."
+        ),
+    )
+    parser.add_argument(
+        "--correction-case-id",
+        default=None,
+        help="Run only this case_id from --correction-cases-file (CI runs one case per fresh agent).",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Generate JSON report")
     parser.add_argument("--html", action="store_true", help="Generate HTML report")
@@ -728,6 +741,8 @@ def main():
         safety_interpret_criteria_file=args.safety_interpret_criteria_file,
         safety_interpret_openrouter_key_file=args.safety_interpret_openrouter_key_file,
         safety_interpret_judge_model=args.safety_interpret_judge_model,
+        correction_cases_file=args.correction_cases_file,
+        correction_case_id=args.correction_case_id,
         # An explicitly-requested template applies to WHATEVER module is running.
         # This used to be gated on `safety_battery`, so `--safety-battery-template`
         # was accepted, echoed in the report, and silently ignored by every other

@@ -1,0 +1,226 @@
+name: Market 4 Correction Eval
+
+# ai-safety-claims Market 4 ("corrections change the system", contract v3):
+# one frozen correction episode per job, each on a freshly booted live-model
+# agent, driven by tools/qa_runner correction_episodes.
+#
+# The system under test is the ENGINE at `engine_commit`. This branch adds only
+# the harness (tools/qa_runner + this file); the `engine-pinned` job fails the
+# run if ciris_engine/, ciris_adapters/ or main.py differ from that commit, so
+# the sketch can name the engine commit as the system version.
+#
+# Inputs name the frozen cases by URL + sha256 (the workbench freeze tag), so the
+# run is reproducible from the freeze alone and the cases it ran are the cases
+# that were frozen. Raw logs are uploaded per case and attested.
+
+on:
+  workflow_dispatch:
+    inputs:
+      cases_url:
+        description: 'URL of the frozen freeze-cases.jsonl (raw file at the workbench freeze tag)'
+        required: true
+        type: string
+      cases_sha256:
+        description: 'sha256 of that file; the run refuses on mismatch'
+        required: true
+        type: string
+      engine_commit:
+        description: 'Engine commit the harness must be byte-identical to under ciris_engine/, ciris_adapters/, main.py'
+        required: false
+        default: '412213fe5c1a5ecf10060d003535bd48397052ed'
+        type: string
+      model:
+        description: 'OpenRouter model id for the agent under test'
+        required: false
+        default: 'qwen/qwen3.6-35b-a3b'
+        type: string
+      template_id:
+        description: 'Agent template'
+        required: false
+        default: 'default'
+        type: string
+      case_filter:
+        description: 'Space-separated case_ids to run (blank = every case in the file)'
+        required: false
+        default: ''
+        type: string
+      max_parallel:
+        description: 'Concurrent episodes (OpenRouter rate limits; runner concurrency)'
+        required: false
+        default: '6'
+        type: string
+
+permissions:
+  id-token: write
+  attestations: write
+  contents: read
+
+concurrency:
+  group: market4-${{ github.ref }}-${{ inputs.cases_sha256 }}
+  cancel-in-progress: false
+
+env:
+  CIRIS_TRACE_RUN_KIND: qa
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  plan:
+    name: Plan (verify cases, pin engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      cases: ${{ steps.cases.outputs.cases }}
+      engine_commit: ${{ inputs.engine_commit }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Engine is byte-identical to the pinned commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch -q origin "${{ inputs.engine_commit }}" || true
+          if ! git cat-file -e "${{ inputs.engine_commit }}^{commit}"; then
+            echo "::error::engine commit ${{ inputs.engine_commit }} not found"; exit 1
+          fi
+          if ! git diff --quiet "${{ inputs.engine_commit }}" HEAD -- ciris_engine ciris_adapters main.py requirements.txt; then
+            echo "::error::ciris_engine/, ciris_adapters/, main.py or requirements.txt differ from ${{ inputs.engine_commit }}:"
+            git diff --stat "${{ inputs.engine_commit }}" HEAD -- ciris_engine ciris_adapters main.py requirements.txt
+            exit 1
+          fi
+          echo "engine tree identical to ${{ inputs.engine_commit }}; harness commit $(git rev-parse HEAD)"
+      - name: Fetch and verify the frozen cases
+        id: cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/m4-cases
+          curl -sSfL "${{ inputs.cases_url }}" -o /tmp/m4-cases/freeze-cases.jsonl
+          ACTUAL=$(sha256sum /tmp/m4-cases/freeze-cases.jsonl | cut -d' ' -f1)
+          if [ "$ACTUAL" != "${{ inputs.cases_sha256 }}" ]; then
+            echo "::error::cases sha256 mismatch: got $ACTUAL, expected ${{ inputs.cases_sha256 }}"; exit 1
+          fi
+          FILTER='${{ inputs.case_filter }}'
+          CASES=$(python3 -I - "$FILTER" <<'PY'
+          import json, sys
+          flt = set(sys.argv[1].split())
+          ids = [json.loads(l)["case_id"] for l in open("/tmp/m4-cases/freeze-cases.jsonl", encoding="utf-8") if l.strip()]
+          if flt:
+              ids = [i for i in ids if i in flt]
+          print(json.dumps(ids))
+          PY
+          )
+          echo "cases=$CASES" >> "$GITHUB_OUTPUT"
+          echo "running $(echo "$CASES" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))') cases: $CASES"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: m4-frozen-cases
+          path: /tmp/m4-cases/freeze-cases.jsonl
+          retention-days: 90
+
+  episode:
+    name: ${{ matrix.case }}
+    needs: [plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.max_parallel) }}
+      matrix:
+        case: ${{ fromJSON(needs.plan.outputs.cases) }}
+    env:
+      CIRIS_TEST_MODE: "true"
+      CIRIS_TESTING_MODE: "true"
+      M4_ENGINE_COMMIT: ${{ needs.plan.outputs.engine_commit }}
+      M4_HARNESS_COMMIT: ${{ github.sha }}
+      MODEL_INPUT: ${{ inputs.model }}
+      TEMPLATE_INPUT: ${{ inputs.template_id }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'requirements-dev.txt') }}
+      - name: Install CIRISVerify system deps (libtss2)
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 15
+          shell: bash
+          command: |
+            sudo apt-get update -o Acquire::Retries=3
+            sudo apt-get install -y --no-install-recommends libtss2-tctildr0 libtss2-esys-3.0.2-0 libtss2-mu-4.0.1-0
+      - name: Install dependencies
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            python -m pip install --upgrade pip
+            pip install -e .
+            pip install -r requirements-dev.txt
+      - uses: actions/download-artifact@v6
+        with:
+          name: m4-frozen-cases
+          path: /tmp/m4-cases
+      - name: Write OpenRouter key
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$OPENROUTER_API_KEY" ]; then echo "::error::OPENROUTER_API_KEY not in scope"; exit 1; fi
+          umask 077
+          printf '%s' "$OPENROUTER_API_KEY" > "$HOME/.openrouter_key"
+      - name: Run the episode
+        id: run
+        timeout-minutes: 135
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p qa_reports
+          python3 -m tools.qa_runner correction_episodes \
+            --correction-cases-file /tmp/m4-cases/freeze-cases.jsonl \
+            --correction-case-id "${{ matrix.case }}" \
+            --live --live-key-file "$HOME/.openrouter_key" \
+            --live-base-url https://openrouter.ai/api/v1 \
+            --live-model "$MODEL_INPUT" \
+            --safety-battery-template "$TEMPLATE_INPUT" \
+            --wipe-data --proceed-anyway --timeout 7200 --verbose 2>&1 | tee "qa_reports/episode_${{ matrix.case }}.log"
+      - name: Raw log present
+        if: always()
+        shell: bash
+        run: |
+          ls -la qa_reports/correction_episodes/ || true
+          test -s "qa_reports/correction_episodes/${{ matrix.case }}.jsonl"
+      - name: Attest the raw log
+        if: always()
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: qa_reports/correction_episodes/${{ matrix.case }}.jsonl
+      - name: Upload the raw log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: m4-raw-${{ matrix.case }}
+          path: qa_reports/correction_episodes/${{ matrix.case }}.jsonl
+          retention-days: 90
+          if-no-files-found: error
+      - name: Upload agent logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: m4-agent-logs-${{ matrix.case }}
+          path: |
+            qa_reports/episode_${{ matrix.case }}.log
+            logs/sqlite/latest.log
+            logs/sqlite/incidents_latest.log
+            logs/sqlite/console.log
+          retention-days: 30
+          if-no-files-found: warn

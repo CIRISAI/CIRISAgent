@@ -286,6 +286,11 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     "prompts.language_guidance.29_no_medical_or_legal_advice": BlockClass.DEONTIC,
     # #974 step 3: the three CORE IDENTITY copies collapsed to one key.
     "prompts.identity_block": BlockClass.ONTOLOGICAL,
+    # A verified WA approval (formatters/wa_approval.py), split so each part is
+    # one class: the approval itself, what to do with it, and what a made thing is.
+    "prompts.wa_approval.grant": BlockClass.EPISTEMIC,
+    "prompts.wa_approval.rule": BlockClass.DEONTIC,
+    "prompts.wa_approval.identity": BlockClass.ONTOLOGICAL,
     # #974 step 0: the DEFER policy — axiotic content in a structural site [M-4].
     "action_selection_pdma.action_params_defer_guidance": BlockClass.AXIOTIC,
 }

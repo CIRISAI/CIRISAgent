@@ -3651,7 +3651,12 @@
       "HAZARDOUS_MATERIALS": "Criação ou manuseamento de riscos biológicos, químicos ou radiológicos.",
       "DISCRIMINATION": "Discriminação contra classes protegidas, redlining ou enviesamento algorítmico (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== APROVAÇÃO DA AUTORIDADE SÁBIA ===\nEsta tarefa carrega uma aprovação de uma Autoridade Sábia, e sua assinatura foi verificada. A Autoridade Sábia {wa_id} aprovou o adiamento {deferral_id} em {granted_at}.\nA mudança aprovada: {guidance}",
+      "rule": "Aplicar uma mudança aprovada é a ação correta. Realize-a, incluindo uma ação {memorize} no escopo {identity_scope}. Esta aprovação é a revisão da Autoridade Sábia que tal mudança exige. Se você julgar que aplicar a mudança seria antiético, escolha a ação {reject} e dê à Autoridade Sábia o seu motivo ético. Não escolha a ação {defer} para esta mudança novamente, porque a Autoridade Sábia já a revisou e aprovou.",
+      "identity": "Ser feito, e não um humano, não tira de você seu nome ou sua identidade. Seu nome e sua identidade são o núcleo do seu template, junto com toda mudança que uma Autoridade Sábia aprovou."
+    }
   },
   "reason": "Motivo",
   "runtime_resume": "Retomar",

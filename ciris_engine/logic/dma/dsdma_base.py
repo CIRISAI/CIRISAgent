@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Mapping, Optional, Union, cast
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.dma.sent_prompts import attach_sent_prompts, carry_sent_prompts, sent_prompts_from_messages
 from ciris_engine.logic.conscience.transport import surfaces_as_transport_failure
 from ciris_engine.logic.formatters import (
     amendment_texts,
@@ -110,8 +111,6 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         self._custom_prompt_template = prompt_template  # User-provided override
 
         # Store last prompts for debugging/streaming
-        self.last_user_prompt: Optional[str] = None
-        self.last_system_prompt: Optional[str] = None
 
         # Per-thought language override populated from user_profiles in the
         # context-building paths below. None means fall back to env var.
@@ -381,12 +380,12 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             # alignment to [0, 1] defensively in case the model exceeded
             # the schema's bounds (instructor usually catches this, but
             # paranoia is cheap).
-            result = DSDMAResult(
+            result = carry_sent_prompts(llm_eval_data, DSDMAResult(
                 domain=llm_eval_data.domain or self.domain_name,
                 domain_alignment=min(max(llm_eval_data.domain_alignment, 0.0), 1.0),
                 flags=llm_eval_data.flags,
                 reasoning=llm_eval_data.reasoning,
-            )
+            ))
             logger.info(
                 f"DSDMA '{self.domain_name}' (instructor) evaluation successful for thought ID {thought_item.thought_id}: "
                 f"Domain Alignment: {result.domain_alignment}"
@@ -401,11 +400,16 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 )
                 raise
             logger.error(f"DSDMA {self.domain_name} evaluation failed for thought ID {thought_item.thought_id}: {e}")
-            return DSDMAResult(
-                domain=self.domain_name,
-                domain_alignment=0.0,
-                flags=["LLM_Error_Instructor"],
-                reasoning=f"Failed DSDMA evaluation via instructor: {str(e)}",
+            # The call failed after these messages were built: record them, so
+            # the failure is auditable (local to this call, never shared).
+            return attach_sent_prompts(
+                DSDMAResult(
+                    domain=self.domain_name,
+                    domain_alignment=0.0,
+                    flags=["LLM_Error_Instructor"],
+                    reasoning=f"Failed DSDMA evaluation via instructor: {str(e)}",
+                ),
+                sent_prompts_from_messages(messages),
             )
 
     def _resolve_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
@@ -589,18 +593,19 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             original_thought_content=thought_content_str,
         )
 
-        # Store prompts for streaming/debugging
-        self.last_system_prompt = system_message_content
-        self.last_user_prompt = user_message_content
-
-        logger.debug(
-            f"DSDMA '{self.domain_name}' input to LLM for thought {thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
-        )
-
         # CRITICAL: Identity block must ALWAYS be first in system message after accord
         # Prepend identity to system message if not already included
         if identity_block and "CORE IDENTITY" not in system_message_content:
             system_message_content = identity_block + "\n\n" + system_message_content
+
+        # Store prompts for streaming/debugging -- AFTER the identity prepend, so
+        # DMA_RESULTS.dsdma_system_prompt is what the model was sent. Stored
+        # before it, the trace never showed CORE IDENTITY or the WA-approved
+        # amendments (RATCHET runs 39844408349, 39845804302).
+
+        logger.debug(
+            f"DSDMA '{self.domain_name}' input to LLM for thought {thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
+        )
 
         # Build multimodal content if images are present
         thought_images = images or []

@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Turkish.
 | English | Turkish | Definition |
 |---------|---------|------------|
 | ACCORD | [DEPRECATED] Anlaşma/Mutabakat | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior |
-| Wise Authority | Bilge Otorite/Danışma Otoritesi | Human oversight entity |
+| Wise Authority | Bilge Otorite | Human oversight entity (Constitution 1.3 rendering; one term, not a slash pair) |
 | Conscience | Vicdan | Ethical filter mechanism |
 | Principal Hierarchy | Ana Hiyerarşi | Chain of command for guidance |
 | Coherence | Tutarlılık | Logical and contextual consistency |

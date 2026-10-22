@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from ciris_engine.schemas.dma.sent_prompts import sent_prompts_of
 from ciris_engine.logic.config.llm_budget import Deadline, active_budget
 from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
 from ciris_engine.logic.dma.csdma import CSDMAEvaluator
@@ -143,7 +144,8 @@ class DMAOrchestrator:
                 csdma_result=dma_results["csdma"],
                 dsdma_result=dma_results["dsdma"],
             )
-            idma_prompt = getattr(self.idma_evaluator, "last_user_prompt", None)
+            idma_sent = sent_prompts_of(idma_result)
+            idma_prompt = idma_sent.user if idma_sent else None
             cb.record_success()
 
             if idma_result and idma_result.fragility_flag:
@@ -243,7 +245,14 @@ class DMAOrchestrator:
             logger.warning(f"IDMA evaluation unavailable (non-blocking): {e}")
             # idma_result stays None - thought continues without epistemic metadata
 
-        # Capture prompts from evaluators (set during evaluation)
+        # Each prompt comes from the result object its own call returned, never
+        # from the evaluator, which every concurrent thought shares: reading it
+        # there put another task's prompts on this thought's trace (RATCHET run
+        # 39853438022). See schemas/dma/sent_prompts.py.
+        pdma_sent = sent_prompts_of(dma_results["ethical_pdma"])
+        csdma_sent = sent_prompts_of(dma_results["csdma"])
+        dsdma_sent = sent_prompts_of(dma_results["dsdma"])
+        idma_sent = sent_prompts_of(idma_result)
         return InitialDMAResults(
             ethical_pdma=dma_results["ethical_pdma"],
             csdma=dma_results["csdma"],
@@ -251,17 +260,15 @@ class DMAOrchestrator:
             idma=idma_result,
             bounce_summary=bounce_summary,
             # User prompts (for backwards compatibility)
-            ethical_pdma_prompt=getattr(self.ethical_pdma_evaluator, "last_user_prompt", None),
-            csdma_prompt=getattr(self.csdma_evaluator, "last_user_prompt", None),
-            dsdma_prompt=getattr(self.dsdma, "last_user_prompt", None) if self.dsdma else None,
+            ethical_pdma_prompt=pdma_sent.user if pdma_sent else None,
+            csdma_prompt=csdma_sent.user if csdma_sent else None,
+            dsdma_prompt=dsdma_sent.user if dsdma_sent else None,
             idma_prompt=idma_prompt,
             # System prompts (for debugging format instructions)
-            ethical_pdma_system_prompt=getattr(self.ethical_pdma_evaluator, "last_system_prompt", None),
-            csdma_system_prompt=getattr(self.csdma_evaluator, "last_system_prompt", None),
-            dsdma_system_prompt=getattr(self.dsdma, "last_system_prompt", None) if self.dsdma else None,
-            idma_system_prompt=(
-                getattr(self.idma_evaluator, "last_system_prompt", None) if self.idma_evaluator else None
-            ),
+            ethical_pdma_system_prompt=pdma_sent.system if pdma_sent else None,
+            csdma_system_prompt=csdma_sent.system if csdma_sent else None,
+            dsdma_system_prompt=dsdma_sent.system if dsdma_sent else None,
+            idma_system_prompt=idma_sent.system if idma_sent else None,
         )
 
     # ─────────────────────────── DMA bounce ──────────────────────────────

@@ -463,7 +463,17 @@ class ThoughtProcessor(
         handler = self._VERB_SECOND_PASS.get(action_result.selected_action)
         if handler is None:
             return action_result
-        return await handler(self, thought_item, action_result, thought_context)
+        result: ActionSelectionDMAResult = await handler(self, thought_item, action_result, thought_context)
+        # A second pass returns a NEW result that never saw the action-selection
+        # prompts, and ASPDMA_RESULT is built from whatever result comes out of
+        # here. Carry them across, or the trace loses the prompt on exactly the
+        # paths a second pass rewrites -- the approved identity MEMORIZE among
+        # them (RATCHET run 39851060130: 0 chars there, 19,359 on TASK_COMPLETE).
+        # These two fields are the ACTION SELECTION's prompts by definition; the
+        # second pass's own prompts ride on the result privately (sent_prompts).
+        return result.model_copy(
+            update={"user_prompt": action_result.user_prompt, "system_prompt": action_result.system_prompt}
+        )
 
     async def _maybe_run_tsaspdma(
         self,
@@ -996,6 +1006,11 @@ class ThoughtProcessor(
             return
 
         try:
+            from ciris_engine.schemas.dma.sent_prompts import sent_prompts_of
+
+            # The second pass's own call, carried by its result -- never read
+            # from the evaluator, which concurrent thoughts share.
+            second_pass_sent = sent_prompts_of(second_pass_result)
             timestamp = datetime.now(timezone.utc).isoformat()
             event = create_reasoning_event(
                 event_type=ReasoningEvent.VERB_SECOND_PASS_RESULT,
@@ -1008,6 +1023,11 @@ class ThoughtProcessor(
                 final_action=second_pass_result.selected_action.value,
                 final_reasoning=second_pass_result.rationale or "",
                 verb_specific_data=verb_specific_data,
+                # The prompts the second pass was sent. MSASPDMA's system guide
+                # carries the WA approval on an approved identity change, so
+                # without these the trace could not show what it decided on.
+                second_pass_prompt=second_pass_sent.user if second_pass_sent else None,
+                second_pass_system_prompt=second_pass_sent.system if second_pass_sent else None,
             )
             await reasoning_event_stream.broadcast_reasoning_event(event)
             logger.info(
@@ -1667,9 +1687,12 @@ class ThoughtProcessor(
         idma_result = dma_results_dict.get("idma") if isinstance(dma_results_dict, dict) else None
 
         # Create typed context for conscience checks (needed for both bypass and normal)
+        from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+
         context = ConscienceCheckContext(
             thought=thought,
             idma_result=idma_result,
+            wa_authorization=wa_authorization_of(processing_context),
             dma_results=dma_results_dict,  # extra="allow" accepts additional fields
         )
 

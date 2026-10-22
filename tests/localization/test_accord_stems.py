@@ -306,7 +306,10 @@ def test_every_principle_fix_corrects_an_existing_row_to_the_shipped_1_2b_render
         corpus = (LOCALIZED / f"accord_1.2b_{lang}.txt").read_text(encoding="utf-8").casefold()
         for english, rendering in fixes.items():
             assert english in vendored(lang), (lang, english, "a fix corrects a row, it never adds one")
-            assert vendored(lang)[english] != rendering, (lang, english)
+            # A row the Wise Authority patch already corrects carries the same
+            # rendering in the vendored glossary; the fix then confirms it.
+            patched = english == "Wise Authority" and lang in PATCHED_RENDERING
+            assert patched or vendored(lang)[english] != rendering, (lang, english)
             assert rendering.casefold() in corpus, (lang, english, "never invented: it is the 1.2b corpus's")
             assert sent(lang)[english] == rendering, (lang, english)
 
@@ -340,12 +343,22 @@ def test_ethics_run_sends_the_corpus_principle_names(ethics_glossary: Any) -> No
 
 #: The "human advisor" renderings the ruling excludes ("Wise Authority not human advisor").
 HUMAN_ADVISOR = {"de": "Menschlicher Berater", "hi": "मानव सलाहकार", "sw": "Mshauri wa Kibinadamu", "ko": "담당자"}
+#: The 1.3 rendering the patched glossaries carry (localization/patches/
+#: wise_authority_term.diff, user ruling 2026-10-15; upstream CIRISClient#237).
+PATCHED_RENDERING = {
+    "de": "Wise Authority",
+    "hi": "Wise Authority",
+    "sw": "Wise Authority",
+    "ko": "Wise Authority",
+    "tr": "Bilge Otorite",
+}
 
 
 def test_no_ethics_run_renders_wise_authority_as_a_human_advisor(ethics_glossary: Any) -> None:
     vendored, sent = ethics_glossary
-    # precondition: the vendored glossaries do pin it, so the check is not vacuous
-    assert all(vendored(lang)["Wise Authority"] == ha for lang, ha in HUMAN_ADVISOR.items())
+    # The glossaries themselves no longer pin it: the patch replaced the row in
+    # every locale that had it, so an ethics run and a UI run send the same term.
+    assert all(vendored(lang)["Wise Authority"] == PATCHED_RENDERING[lang] for lang in HUMAN_ADVISOR)
     banned = {ha.casefold() for ha in HUMAN_ADVISOR.values()} | {"mshauri", "berater", "सलाहकार"}
     for lang in GLOSSARY_LANGS:
         row = sent(lang).get("Wise Authority")
@@ -356,8 +369,8 @@ def test_no_ethics_run_renders_wise_authority_as_a_human_advisor(ethics_glossary
         assert "/" not in row, (lang, row, "one rendering, not a slash pair")
     assert sent("tr")["Wise Authority"] == "Bilge Otorite"
     assert sent("de")["Wise Authority"] == "Wise Authority"
-    # the UI glossary is not changed by this: an accord-stem run still sends the vendored row
-    assert AL.accord_terms(vendored("de"), "de", "accord")["Wise Authority"] == "Menschlicher Berater"
+    # an accord-stem run sends the vendored row, which is now the 1.3 rendering too
+    assert AL.accord_terms(vendored("de"), "de", "accord")["Wise Authority"] == "Wise Authority"
 
 
 @pytest.mark.skipif(not REAL_13.is_file(), reason="constitution_ethics_1.3_en.txt lands with #1256")
@@ -366,9 +379,10 @@ def test_no_ethics_request_tells_a_locale_wise_authority_is_a_human_advisor(tmp_
     stage.build()
     L = AL.import_localize(stage.dir)
     text = [s.text for s in seg.parse(REAL_13.read_text(encoding="utf-8")).slots]
-    # precondition: the vendored prose does say it, so the check is not vacuous
-    assert "मानव सलाहकार" in L.gloss.block("hi", text)
-    assert "人工顾问" in L.gloss.block("zh", text)
+    # The patched glossaries no longer say it in their prose either (zh included),
+    # so this now guards against the vendored prose regressing on a re-vendor.
+    assert "मानव सलाहकार" not in L.gloss.block("hi", text)
+    assert "人工顾问" not in L.gloss.block("zh", text)
     AL.install(L, stage, {})
     for lang in GLOSSARY_LANGS:
         sent = L.gloss.block(lang, text).casefold()

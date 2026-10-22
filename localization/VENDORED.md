@@ -48,10 +48,15 @@ vendored directory (`glossaries/`, `upstream/`).
 | `localization/glossaries/*_glossary.md` (28 + `TEMPLATE`) | `localization/glossaries/` |
 | `localization/upstream/check_localization_sync.py` | `client/tools/check_localization_sync.py` |
 
-**Patched** files: none. No vendored file needed an edit. If one ever does, the
-change goes in as a `kind: "patched"` entry: the patch file in the tree, the
-upstream digest kept, and the sha256 of the patched result recorded. An edit
-that isn't declared that way fails the check.
+**Patched** files: the `de`, `hi`, `sw`, `ko`, `tr` and `zh` glossaries, by
+`localization/patches/wise_authority_term.diff`. They rendered Wise Authority as
+"human advisor" (de, hi, sw, and zh in its example and usage note), "person in charge" (ko) or a slash pair (tr); the
+Constitution 1.3 texts and Eric's ruling (2026-10-15) use "Wise Authority"
+(Bilge Otorite in tr), and the pipeline injects glossary terms as binding, so
+every new string inherited the wrong term. The same fix is upstream as
+CIRISClient#237; drop the patch on the next re-vendor once it lands there. A patched
+entry keeps the upstream digest and records the sha256 of the patched result; an
+edit that isn't declared that way fails the check.
 
 **Derived** files are ours and adapted for this repo. The record keeps their
 upstream digest for provenance only, so `--upstream` can report when the source

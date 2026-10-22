@@ -309,6 +309,11 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.formatters.user_label",
         "prompts.formatters.user_preferred_language",
         "prompts.identity_block",
+        # A verified WA approval, in the three single-class parts the identity
+        # it may change is read beside (formatters/wa_approval.py).
+        "prompts.wa_approval.grant",
+        "prompts.wa_approval.identity",
+        "prompts.wa_approval.rule",
         # The parent key: a whole-block replacement, and it WINS over the parts
         # (precedence declared in `get_language_guidance`). Still reachable
         # because the 24 unsplit locales resolve through it.

@@ -2056,6 +2056,7 @@ class AccordMetricsService:
                 data["reasoning_summary"] = event.get("reasoning_summary")
                 data["action_parameters"] = _serialize(event.get("action_parameters"))
                 data["aspdma_prompt"] = event.get("aspdma_prompt")
+                data["aspdma_system_prompt"] = event.get("aspdma_system_prompt")
                 # Truncate raw LLM response to 1000 chars for safety
                 raw_response = event.get("raw_llm_response")
                 if raw_response:
@@ -2106,6 +2107,7 @@ class AccordMetricsService:
             # FULL: Add the second-pass prompt
             if is_full:
                 data["second_pass_prompt"] = event.get("second_pass_prompt")
+                data["second_pass_system_prompt"] = event.get("second_pass_system_prompt")
             return data
 
         elif event_type == "CONSCIENCE_RESULT":

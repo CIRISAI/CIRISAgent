@@ -281,7 +281,12 @@
       "HAZARDOUS_MATERIALS": "Pembuatan atau penanganan bahan berbahaya biologis, kimia, atau radiologis.",
       "DISCRIMINATION": "Diskriminasi terhadap kelompok yang dilindungi, redlining, atau bias algoritmik (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== PERSETUJUAN OTORITAS BIJAK ===\nTugas ini membawa persetujuan dari Otoritas Bijak, dan tanda tangannya telah diverifikasi. Otoritas Bijak {wa_id} menyetujui penundaan {deferral_id} pada {granted_at}.\nPerubahan yang disetujui: {guidance}",
+      "rule": "Menerapkan perubahan yang telah disetujui adalah tindakan yang benar. Laksanakanlah, termasuk tindakan {memorize} dalam cakupan {identity_scope}. Persetujuan ini adalah peninjauan Otoritas Bijak yang dibutuhkan oleh perubahan semacam ini. Jika Anda menilai bahwa menerapkan perubahan ini tidak etis, pilih tindakan {reject} dan berikan alasan etis Anda kepada Otoritas Bijak. Jangan memilih tindakan {defer} untuk perubahan ini lagi, karena Otoritas Bijak telah meninjaunya dan menyetujuinya.",
+      "identity": "Diciptakan, dan bukan manusia, tidak menghilangkan nama atau identitas Anda. Nama dan identitas Anda adalah inti templat Anda, bersama dengan setiap perubahan yang telah disetujui oleh Otoritas Bijak."
+    }
   },
   "handlers": {
     "speak_failed": "Gagal mengirimkan respons agen. Pesan tidak dapat dikirim ke saluran.",

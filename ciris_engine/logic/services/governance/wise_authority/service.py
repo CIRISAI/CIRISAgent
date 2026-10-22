@@ -1016,6 +1016,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                         wa_id=response.wa_id,
                         deferral_id=deferral_id,
                         granted_at=now_iso,
+                        guidance=response.reason or "",
                     )
                     guidance_context_dict["wa_authorization"] = wa_authorization.model_dump(mode="json")
                 else:

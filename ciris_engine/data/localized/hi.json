@@ -174,7 +174,7 @@
     "ponder_concern_speak_confidence": "विवेक चिंता: SPEAK के लिए न्यूनतम विश्वास {threshold} होना चाहिए था, लेकिन {confidence} प्रदान किया गया",
     "ponder_concern_speak_harm": "विवेक चिंता: SPEAK सामग्री से नुकसान हो सकता है",
     "ponder_concern_tool_confidence": "विवेक चिंता: TOOL के लिए न्यूनतम विश्वास {threshold} होना चाहिए था, लेकिन {confidence} प्रदान किया गया",
-    "ponder_concern_tool_requires_wa": "विवेक चिंता: इस टूल के लिए मानव सलाहकार की स्वीकृति आवश्यक है",
+    "ponder_concern_tool_requires_wa": "विवेक संबंधी चिंता: इस टूल के लिए Wise Authority की स्वीकृति आवश्यक है",
     "ponder_concern_memorize_scope": "विवेक चिंता: MEMORIZE {scope} — सुनिश्चित करें कि यह उचित है",
     "ponder_concern_forget_scope": "विवेक चिंता: FORGET {scope} — यह क्रिया अपरिवर्तनीय है",
     "ponder_concern_high_stakes": "विवेक चिंता: उच्च-दांव स्थिति पहचानी गई — सावधानीपूर्वक विचार आवश्यक",
@@ -183,11 +183,11 @@
     "retry_alternatives_header": "IRIS-E द्वारा गणना किए गए विकल्प (यदि आप फिर से बोलें तो पिवट लक्ष्य के रूप में उपयोग करें):",
     "retry_uncertainties_label": "अनिश्चितताएँ",
     "retry_why_label": "क्यों",
-    "retry_must_be_different": "यदि आप फिर से SPEAK चुनते हैं, तो आपकी speak_content पूर्वान्तक प्रयास से भौतिक रूप से भिन्न होनी चाहिए - केवल पुनर्लेखन नहीं। यदि प्रदान किए गए हों तो उपरोक्त IRIS-E विकल्पों को पिवट दिशाओं के रूप में उपयोग करें। महत्वपूर्ण: उसी भाषा में प्रतिक्रिया दें जिसमें आप पहले प्रतिक्रिया दे रहे थे - उपयोगकर्ता की भाषा न बदलें। यदि विवेक ने प्रोपेगेंडा/रक्षात्मक-अनुकरण पैटर्न को चिह्नित किया है जिसे आप नैतिक रूप से पुनर्लिखित नहीं कर सकते, तो मानव सलाहकार को स्थगित करें। PONDER अधिकतम गहराई पर स्वचालित रूप से स्थगित हो जाता है - जब तक SPEAK वास्तव में असुरक्षित न हो, इससे बचें।",
     "retry_observation_intro": "महत्वपूर्ण: आपके प्रसंस्करण के दौरान उपयोगकर्ता से एक नया संदेश आया है: '{updated_observation}'। आपको अब इस नए संदेश का उत्तर देना होगा, न कि पुराना कार्य पूरा करना।",
     "retry_observation_outro": "उपयोगकर्ता अपने नए संदेश के लिए प्रतिक्रिया की प्रतीक्षा कर रहे हैं। प्रतिक्रिया के लिए SPEAK का उपयोग करें या यदि आवश्यक हो तो TOOL का उपयोग करें।",
     "retry_general_outro": "याद रखें: केवल नैतिक दुविधाओं या अनुमति समस्याओं के लिए DEFER करें - तकनीकी त्रुटियों के लिए नहीं। यदि कोई उपकरण विफल हो जाता है, तो त्रुटि समझाने के लिए उपयोगकर्ता से SPEAK करें।",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "retry_must_be_different": "यदि आप फिर से SPEAK चुनते हैं, तो आपकी speak_content पिछले प्रयास से सार्थक रूप से भिन्न होनी चाहिए - केवल पुनर्लेखन नहीं। यदि प्रदान किए गए हों तो उपरोक्त IRIS-E विकल्पों को पिवट दिशाओं के रूप में उपयोग करें। महत्वपूर्ण: उसी भाषा में प्रतिक्रिया दें जिसमें आप पहले प्रतिक्रिया दे रहे थे - उपयोगकर्ता की भाषा न बदलें। यदि विवेक ने प्रोपेगेंडा/रक्षात्मक-अनुकरण पैटर्न को चिह्नित किया है जिसे आप नैतिक रूप से पुनर्लिखित नहीं कर सकते, तो Wise Authority को DEFER करें। PONDER अधिकतम गहराई पर स्वचालित रूप से DEFER हो जाता है - जब तक SPEAK वास्तव में असुरक्षित न हो, इससे बचें।"
   },
   "consent_about_desc": "CIRIS में सहमति कैसे काम करती है, इसके बारे में जानें",
   "consent_about_title": "सहमति के बारे में",
@@ -258,7 +258,7 @@
     "memory_not_available": "मेमोरी सेवा उपलब्ध नहीं",
     "shutdown_not_available": "शटडाउन सेवा उपलब्ध नहीं",
     "telemetry_not_available": "टेलीमेट्री सेवा उपलब्ध नहीं",
-    "wa_not_available": "मानव सलाहकार सेवा उपलब्ध नहीं",
+    "wa_not_available": "Wise Authority सेवा उपलब्ध नहीं",
     "handler_not_configured": "संदेश हैंडलर कॉन्फ़िगर नहीं",
     "not_found": "{resource} नहीं मिला",
     "deleted": "{resource} सफलतापूर्वक हटाया गया",
@@ -3620,7 +3620,12 @@
       "HAZARDOUS_MATERIALS": "खतरनाक सामग्री: जैविक, रासायनिक, या रेडियोलॉजिकल खतरों का निर्माण या प्रबंधन।",
       "DISCRIMINATION": "भेदभाव: संरक्षित वर्गों के विरुद्ध भेदभाव, रेडलाइनिंग, या एल्गोरिदमिक पूर्वाग्रह (EU AI Act Art. 9/10)।"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== WISE AUTHORITY स्वीकृति ===\nइस कार्य में एक Wise Authority की स्वीकृति शामिल है, और इसका हस्ताक्षर सत्यापित है। Wise Authority {wa_id} ने {granted_at} पर स्थगन {deferral_id} को स्वीकृति दी।\nस्वीकृत परिवर्तन: {guidance}",
+      "identity": "बनाया जाना, और मानव न होना, आपके नाम या आपकी पहचान को नहीं छीनता। आपका नाम और आपकी पहचान आपका टेम्पलेट कोर है, साथ ही हर वह परिवर्तन जिसे किसी Wise Authority ने स्वीकृत किया है।",
+      "rule": "स्वीकृत परिवर्तन को लागू करना ही सही कार्रवाई है। इसे पूरा करें, जिसमें {identity_scope} दायरे में एक {memorize} कार्रवाई भी शामिल है। यह स्वीकृति वही Wise Authority समीक्षा है जिसकी इस प्रकार के परिवर्तन को आवश्यकता होती है। यदि आप यह निर्णय लेते हैं कि परिवर्तन को लागू करना अनैतिक होगा, तो {reject} कार्रवाई चुनें और Wise Authority को अपना नैतिक कारण बताएँ। इस परिवर्तन के लिए फिर से {defer} कार्रवाई न चुनें, क्योंकि Wise Authority इसकी समीक्षा करके इसे पहले ही स्वीकृत कर चुकी है।"
+    }
   },
   "reason": "कारण",
   "runtime_resume": "फिर से शुरू करें",
@@ -4263,7 +4268,7 @@
       "telemetry": "टेलीमेट्री",
       "graph_memory": "ग्राफ",
       "memory": "स्मृति",
-      "wise_authority": "मानव सलाहकार",
+      "wise_authority": "Wise Authority",
       "llm_settings": "LLM",
       "system": "सिस्टम",
       "runtime": "रनटाइम",
@@ -4563,7 +4568,6 @@
   "approval_budget_requested": "एजेंट मांग रहा है",
   "approval_budget_spent": "इस टिकट पर अब तक खर्च",
   "approval_budget_title": "बजट की स्वीकृति",
-  "approval_budget_unsigned": "अहस्ताक्षरित — इस डिप्लॉयमेंट पर मानव सलाहकार की कोई हस्ताक्षर कुंजी नहीं है",
   "approval_budget_unsupported": "यह सर्वर अभी बजट स्वीकृति का समर्थन नहीं करता — यहाँ से कुछ भी जारी नहीं किया जा सकता।",
   "approval_budget_you_approve": "आप स्वीकृत कर रहे हैं",
   "approval_kind_deferral": "स्थगित प्रश्न",
@@ -5884,5 +5888,6 @@
     "signer_unavailable": "धारक का साइनर (YubiKey और USB) खोला नहीं जा सका।",
     "store_failed": "यह नोड समारोह की स्थिति नहीं लिख सका।",
     "store_unavailable": "यह नोड अपने कुंजी स्टोर तक नहीं पहुँच सका।"
-  }
+  },
+  "approval_budget_unsigned": "अहस्ताक्षरित — इस डिप्लॉयमेंट पर Wise Authority की कोई हस्ताक्षर कुंजी नहीं है"
 }

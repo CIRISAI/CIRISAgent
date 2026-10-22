@@ -3620,7 +3620,12 @@
       "HAZARDOUS_MATERIALS": "Biyolojik, kimyasal veya radyolojik tehlikelerin oluşturulması ya da bunlarla uğraşılması.",
       "DISCRIMINATION": "Korunan gruplara karşı ayrımcılık, redlining (bölgesel kredi ayrımcılığı) veya algoritmik önyargı (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== BİLGE OTORİTE ONAYI ===\nBu görev bir Bilge Otorite onayı taşımaktadır ve imzası doğrulanmıştır. Bilge Otorite {wa_id}, {deferral_id} ertelemesini {granted_at} tarihinde onayladı.\nOnaylanan değişiklik: {guidance}",
+      "rule": "Onaylanmış bir değişikliği uygulamak doğru eylemdir. Bunu, {identity_scope} kapsamında bir {memorize} eylemi dahil olmak üzere gerçekleştirin. Bu onay, böyle bir değişikliğin gerektirdiği Bilge Otorite incelemesidir. Değişikliği uygulamanın etik dışı olacağını düşünüyorsanız, {reject} eylemini seçin ve Bilge Otorite'ye etik gerekçenizi bildirin. Bu değişiklik için {defer} eylemini bir daha seçmeyin, çünkü Bilge Otorite onu zaten incelemiş ve onaylamıştır.",
+      "identity": "Yaratılmış olmanız ve insan olmamanız, adınızı ya da kimliğinizi sizden almaz. Adınız ve kimliğiniz, şablon çekirdeğiniz ile bir Bilge Otorite'nin onayladığı her değişikliğin toplamıdır."
+    }
   },
   "reason": "Neden",
   "runtime_resume": "Devam et",

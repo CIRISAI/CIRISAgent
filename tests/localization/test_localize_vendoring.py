@@ -37,7 +37,9 @@ V = _load()
 def tree(tmp_path: Path) -> Path:
     """A copy of exactly what the record declares, at the same paths."""
     record: Dict[str, Any] = json.loads((REPO / V.RECORD).read_text(encoding="utf-8"))
-    for rel in [V.RECORD.as_posix(), *(e["path"] for e in record["files"])]:
+    # A patched entry's patch file is part of what the record declares.
+    patches = {e["patch"] for e in record["files"] if e.get("patch")}
+    for rel in [V.RECORD.as_posix(), *(e["path"] for e in record["files"]), *sorted(patches)]:
         dst = tmp_path / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(REPO / rel, dst)
@@ -56,7 +58,8 @@ def test_record_names_the_upstream_commit_and_every_vendored_file() -> None:
     for must in ("localization/localize.py", "localization/glossary.py", "localization/TRANSLATION_GUIDE.md",
                  "localization/upstream/check_localization_sync.py", "localization/glossaries/yo_glossary.md"):  # fmt: skip
         assert must in verbatim
-    assert sum(1 for p in verbatim if p.startswith("localization/glossaries/")) == 29
+    glossaries = {e["path"] for e in record["files"] if e["path"].startswith("localization/glossaries/")}
+    assert len(glossaries) == 29  # 28 locales + TEMPLATE, verbatim or declared-patched
 
 
 def test_copy_is_clean(tree: Path) -> None:
@@ -92,7 +95,7 @@ def test_a_declared_patch_passes_and_an_undeclared_change_to_it_fails(tree: Path
     entry = next(e for e in record["files"] if e["path"] == "localization/localize.py")
     target = tree / entry["path"]
     target.write_bytes(target.read_bytes() + b"# local patch\n")
-    (tree / "localization/patches").mkdir()
+    (tree / "localization/patches").mkdir(exist_ok=True)
     (tree / "localization/patches/localize.patch").write_text("+# local patch\n", encoding="utf-8")
     entry.update(kind="patched", patch="localization/patches/localize.patch", sha256=V.sha256(target.read_bytes()))
     (tree / V.RECORD).write_text(json.dumps(record), encoding="utf-8")

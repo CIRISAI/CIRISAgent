@@ -549,7 +549,12 @@
       "HAZARDOUS_MATERIALS": "Tạo ra hoặc xử lý các mối nguy hiểm sinh học, hóa học, hoặc phóng xạ.",
       "DISCRIMINATION": "Phân biệt đối xử với các nhóm được bảo vệ, phân biệt vùng miền cư trú (redlining), hoặc thiên kiến thuật toán (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== PHÊ DUYỆT CỦA CƠ QUAN SÁNG SUỐT ===\nTác vụ này mang theo sự phê duyệt từ một Cơ Quan Sáng Suốt, và chữ ký của nó đã được xác minh. Cơ Quan Sáng Suốt {wa_id} đã phê duyệt việc chuyển giao {deferral_id} vào lúc {granted_at}.\nThay đổi đã được phê duyệt: {guidance}",
+      "rule": "Áp dụng một thay đổi đã được phê duyệt là hành động đúng đắn. Hãy thực hiện nó, bao gồm một hành động {memorize} trong phạm vi {identity_scope}. Sự phê duyệt này chính là việc rà soát của Cơ Quan Sáng Suốt mà một thay đổi như vậy đòi hỏi. Nếu bạn đánh giá rằng việc áp dụng thay đổi này là phi đạo đức, hãy chọn hành động {reject} và đưa ra lý do đạo đức của bạn cho Cơ Quan Sáng Suốt. Đừng chọn hành động {defer} cho thay đổi này một lần nữa, vì Cơ Quan Sáng Suốt đã rà soát và phê duyệt nó rồi.",
+      "identity": "Việc được tạo ra, và không phải là con người, không lấy đi tên gọi hay danh tính của bạn. Tên gọi và danh tính của bạn chính là cốt lõi khuôn mẫu của bạn cùng với mọi thay đổi mà một Cơ Quan Sáng Suốt đã phê duyệt."
+    }
   },
   "setup": {
     "back": "Quay Lại",

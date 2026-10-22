@@ -6,6 +6,7 @@ Provides typed context for conscience check operations, replacing Dict[str, Any]
 
 from typing import Any, Optional
 
+from ciris_engine.schemas.runtime.models import WAAuthorization
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -48,6 +49,13 @@ class ConscienceCheckContext(BaseModel):
     # accepts only a real Deadline. None -> static per-try x attempts.
     deadline: Optional[Any] = Field(
         None, exclude=True, description="Thought Deadline (llm_budget.Deadline) the conscience stage spends from"
+    )
+
+    # The verified Wise Authority approval the thought's task carries, if any
+    # (WiseAuthorityService.resolve_deferral). A conscience judging an approved
+    # change has to know the review already happened (formatters/wa_approval.py).
+    wa_authorization: Optional[WAAuthorization] = Field(
+        None, description="Verified WA approval carried by the thought's task"
     )
 
     # Additional context can be added via extra fields

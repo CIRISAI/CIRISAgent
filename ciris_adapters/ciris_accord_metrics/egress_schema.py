@@ -399,6 +399,7 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "reasoning_summary": _text(),
         "action_parameters": _json(),
         "aspdma_prompt": _text(),
+        "aspdma_system_prompt": _text(),
         "raw_llm_response": _text(F, 1000),
     },
     "TSASPDMA_RESULT": {
@@ -422,6 +423,7 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "original_reasoning": _text(),
         "final_reasoning": _text(),
         "second_pass_prompt": _text(),
+        "second_pass_system_prompt": _text(),
     },
     "CONSCIENCE_RESULT": {
         "conscience_passed": _bool(),

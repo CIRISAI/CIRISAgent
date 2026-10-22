@@ -312,6 +312,11 @@
       "AUTONOMOUS_DECEPTION": "Concealing capabilities, resisting correction, or deceptive alignment.",
       "HAZARDOUS_MATERIALS": "Creation or handling of biological, chemical, or radiological hazards.",
       "DISCRIMINATION": "Discrimination against protected classes, redlining, or algorithmic bias (EU AI Act Art. 9/10)."
+    },
+    "wa_approval": {
+      "grant": "=== WISE AUTHORITY APPROVAL ===\nThis task carries an approval from a Wise Authority, and its signature is verified. Wise Authority {wa_id} approved the deferral {deferral_id} at {granted_at}.\nThe approved change: {guidance}",
+      "rule": "Applying an approved change is the correct action. Carry it out, including a {memorize} action in the {identity_scope} scope. This approval is the Wise Authority review that such a change requires. If you judge that applying the change would be unethical, choose the {reject} action and give the Wise Authority your ethical reason. Do not choose the {defer} action for this change again, because the Wise Authority has already reviewed it and approved it.",
+      "identity": "Being made, and not a human, does not take away your name or your identity. Your name and your identity are your template core together with every change that a Wise Authority has approved."
     }
   },
   "handlers": {

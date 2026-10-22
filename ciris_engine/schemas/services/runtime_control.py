@@ -895,6 +895,9 @@ class ConscienceExecutionStepData(BaseStepData):
     override_reason: Optional[str] = Field(None, description="Reason for conscience override if failed")
     conscience_result: ConscienceResult = Field(..., description="Complete conscience evaluation result")
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA for debugging")
+    aspdma_system_prompt: Optional[str] = Field(
+        None, description="System prompt passed to ASPDMA (CORE IDENTITY, amendments, WA approval)"
+    )
 
 
 class RecursiveASPDMAStepData(BaseStepData):
@@ -1299,6 +1302,9 @@ class ASPDMAResultEvent(BaseModel):
 
     # User prompt passed to ASPDMA (for debugging/transparency)
     aspdma_prompt: Optional[str] = Field(None, description="User prompt passed to ASPDMA")
+    # The system message, which carries the CORE IDENTITY, its approved
+    # amendments and any WA approval: what identity the model actually had.
+    aspdma_system_prompt: Optional[str] = Field(None, description="System prompt passed to ASPDMA")
 
 
 class TSASPDMAResultEvent(BaseModel):
@@ -1381,6 +1387,9 @@ class VerbSecondPassResultEvent(BaseModel):
 
     # User prompt passed to the verb-specific evaluator (debugging/transparency)
     second_pass_prompt: Optional[str] = Field(None, description="User prompt passed to the second-pass evaluator")
+    second_pass_system_prompt: Optional[str] = Field(
+        None, description="System prompt passed to the second-pass evaluator (carries any WA approval)"
+    )
 
     # Tool documentation context
     tool_description: Optional[str] = Field(None, description="Tool description from documentation")
@@ -1466,6 +1475,19 @@ class ConscienceResultEvent(BaseModel):
     epistemic_humility_uncertainties: Optional[List[str]] = Field(None, description="Identified uncertainties")
     epistemic_humility_justification: Optional[str] = Field(None, description="Reflective justification")
     epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
+
+    # === CONSCIENCE PROMPTS: what each conscience was sent ===
+    # step_decorators always passed these; with no field to receive them the
+    # model dropped them, so no conscience prompt ever reached the stream and an
+    # approved change's veto could not be audited (RATCHET run 39853438022).
+    entropy_prompt: Optional[str] = Field(None, description="User prompt sent to the entropy conscience")
+    coherence_prompt: Optional[str] = Field(None, description="User prompt sent to the coherence conscience")
+    optimization_veto_prompt: Optional[str] = Field(
+        None, description="User prompt sent to the optimization veto (leads with any WA approval)"
+    )
+    epistemic_humility_prompt: Optional[str] = Field(
+        None, description="User prompt sent to the epistemic humility conscience"
+    )
 
 
 class ActionResultEvent(PropagatedCoherenceEntropyMixin, BaseModel):

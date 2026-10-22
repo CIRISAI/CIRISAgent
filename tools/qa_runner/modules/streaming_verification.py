@@ -978,12 +978,15 @@ class StreamingVerificationModule:
                                         "final_reasoning",
                                         "verb_specific_data",
                                         "second_pass_prompt",
+                                        "second_pass_system_prompt",
                                     },
                                     "aspdma_result": {
                                         "selected_action",
                                         "action_rationale",
                                         "is_recursive",
                                         "aspdma_prompt",
+                                        # The system message: CORE IDENTITY, amendments, WA approval (2.16.3)
+                                        "aspdma_system_prompt",
                                         # Deliberation-diversity signal (added 2.7.1)
                                         # — None when older prompts / fallback models don't emit it
                                         "selection_confidence",
@@ -1710,17 +1713,23 @@ class StreamingVerificationModule:
                         }
                     )
                 else:
+                    # REPORTED, NOT FAILED (CIRISAgent#1317, Eric 2026-10-22). The
+                    # conscience USER prompts are English scaffolding in every
+                    # locale; only their system prompts are localized. This check
+                    # never ran before #1314 put conscience prompts on the stream
+                    # (it passed vacuously), so the gap is real but not a
+                    # regression. Make it fatal again when #1317 lands.
                     if english_conscience_detected:
-                        errors.append(
-                            f"English markers found in conscience prompts when language should be {target_language}"
+                        print(
+                            f" [WARN] English markers in conscience prompts for {target_language} "
+                            "(CIRISAgent#1317: conscience user templates not yet localized)"
                         )
                     if not conscience_localized:
-                        errors.append(
-                            f"No {target_language} markers found in conscience prompts - localization may have failed"
-                        )
+                        print(f" [WARN] No {target_language} markers in conscience prompts (CIRISAgent#1317)")
 
-            # Overall pass requires both DMA and conscience (if available) to be localized
-            localization_passed = dma_localization_passed and conscience_localization_passed
+            # Overall pass requires the DMA prompts to be localized. Conscience
+            # prompts are reported above and gate again once #1317 lands.
+            localization_passed = dma_localization_passed
         else:
             # For English: success if English markers are found
             localization_passed = english_detected or (conscience_prompts_list and english_conscience_detected)

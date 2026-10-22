@@ -50,8 +50,6 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         self._prompt_template_name = "pdma_ethical"
 
         # Store last prompts for debugging/streaming
-        self.last_user_prompt: Optional[str] = None
-        self.last_system_prompt: Optional[str] = None
 
         # Per-thought language override; populated from user_profiles in
         # _build_context_strings. None means fall back to env var. Never use
@@ -233,8 +231,6 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
 
         # Store prompts for streaming/debugging
         system_messages = [m for m in messages if m.get("role") == "system"]
-        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
-        self.last_user_prompt = user_message_text
 
         return messages
 

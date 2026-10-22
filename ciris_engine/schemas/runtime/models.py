@@ -53,6 +53,7 @@ class WAAuthorization(BaseModel):
     wa_id: str = Field(..., description="The Wise Authority that approved")
     deferral_id: str = Field(..., description="The deferral whose approval this is")
     granted_at: str = Field(..., description="ISO-8601 time the approval was applied")
+    guidance: str = Field("", description="The change the Wise Authority approved, in its own words")
     verification: Literal["verified"] = Field(
         "verified",
         description="Only a verified approval can be represented; unsigned or failed ones grant nothing",

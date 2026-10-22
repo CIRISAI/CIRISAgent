@@ -137,7 +137,6 @@
     "task_complete": "작업이 성공적으로 완료되었습니다.",
     "no_permission": "해당 작업을 수행할 권한이 없습니다.",
     "clarify_request": "무슨 뜻인지 좀 더 자세히 설명해 주시겠어요?",
-    "defer_check_panel": "에이전트가 연기를 선택했습니다. 설정 사용자인 경우 담당자 패널을 확인하세요.",
     "rejected_message": "에이전트가 메시지를 거부했습니다.",
     "no_send_permission": "이 에이전트에 메시지를 보낼 수 있는 권한이 없습니다.",
     "credit_blocked": "신용 정책으로 인해 상호작용이 차단되었습니다.",
@@ -145,7 +144,8 @@
     "new_messages_arrived": "에이전트가 작업을 완료했지만 해결되지 않은 새 메시지가 도착했습니다.",
     "restarted_stale_task": "요청을 처리하는 중에 재시작되었습니다. 이전 작업이 자동으로 완료되었습니다. 여전히 응답이 필요하시면 메시지를 다시 보내주세요.",
     "still_processing": "아직 처리 중입니다. 잠시 후 다시 확인해 주세요. 에이전트의 응답은 보장되지 않습니다.",
-    "processor_paused": "프로세서가 일시정지되었습니다 — 작업이 큐에 추가되었습니다. 계속하려면 처리를 재개하세요."
+    "processor_paused": "프로세서가 일시정지되었습니다 — 작업이 큐에 추가되었습니다. 계속하려면 처리를 재개하세요.",
+    "defer_check_panel": "에이전트가 연기를 선택했습니다. 설정 사용자인 경우 Wise Authority 패널을 확인하세요."
   },
   "audit_context": "컨텍스트",
   "audit_hash_chain": "해시 체인",
@@ -174,7 +174,6 @@
     "ponder_concern_speak_confidence": "양심 우려: SPEAK에 필요한 최소 신뢰도는 {threshold}이지만 {confidence}이(가) 제공되었습니다",
     "ponder_concern_speak_harm": "양심 우려: SPEAK 내용이 피해를 유발할 수 있습니다",
     "ponder_concern_tool_confidence": "양심 우려: TOOL에 필요한 최소 신뢰도는 {threshold}이지만 {confidence}이(가) 제공되었습니다",
-    "ponder_concern_tool_requires_wa": "양심 우려: 이 도구는 담당자의 승인이 필요합니다",
     "ponder_concern_memorize_scope": "양심 우려: MEMORIZE {scope} — 이 작업이 적절한지 확인하세요",
     "ponder_concern_forget_scope": "양심 우려: FORGET {scope} — 이 작업은 되돌릴 수 없습니다",
     "ponder_concern_high_stakes": "양심 우려: 중요한 상황이 감지되었습니다 — 신중한 검토가 필요합니다",
@@ -187,7 +186,8 @@
     "retry_observation_intro": "중요: 처리 중에 사용자로부터 새로운 메시지가 도착했습니다: '{updated_observation}'. 이제 이 새로운 메시지에 응답해야 합니다. 이전 작업을 완료하지 마십시오.",
     "retry_observation_outro": "사용자가 새로운 메시지에 대한 응답을 기다리고 있습니다. 응답하려면 SPEAK을 사용하거나 필요한 경우 TOOL을 사용하십시오.",
     "retry_general_outro": "기억하십시오: DEFER은 윤리적 딜레마 또는 권한 문제에만 사용하십시오. 기술적 오류에는 사용하지 마십시오. 도구가 실패하면, SPEAK을 사용하여 사용자에게 오류를 설명하십시오.",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "ponder_concern_tool_requires_wa": "양심 우려: 이 도구는 Wise Authority 승인이 필요합니다"
   },
   "consent_about_desc": "CIRIS의 동의 작동 방식에 대해 알아보기",
   "consent_about_title": "동의 정보",
@@ -258,7 +258,6 @@
     "memory_not_available": "메모리 서비스를 사용할 수 없습니다.",
     "shutdown_not_available": "종료 서비스를 사용할 수 없습니다.",
     "telemetry_not_available": "원격 측정 서비스를 사용할 수 없습니다.",
-    "wa_not_available": "담당자 서비스를 사용할 수 없습니다.",
     "handler_not_configured": "메시지 핸들러가 구성되지 않았습니다.",
     "not_found": "{resource}를 찾을 수 없습니다.",
     "deleted": "{resource}가 성공적으로 삭제되었습니다.",
@@ -266,7 +265,8 @@
     "created": "{resource}가 성공적으로 생성되었습니다.",
     "insufficient_permissions": "권한이 부족합니다. {role} 역할 이상이 필요합니다.",
     "password_changed": "비밀번호가 성공적으로 변경되었습니다.",
-    "config_updated": "설정이 성공적으로 업데이트되었습니다."
+    "config_updated": "설정이 성공적으로 업데이트되었습니다.",
+    "wa_not_available": "Wise Authority 서비스를 사용할 수 없습니다."
   },
   "filter_all": "전체",
   "filter_clear": "지우기",
@@ -3620,7 +3620,12 @@
       "HAZARDOUS_MATERIALS": "생물학적, 화학적, 또는 방사성 위해물의 제조 또는 취급.",
       "DISCRIMINATION": "보호 대상 집단에 대한 차별, 레드라이닝, 또는 알고리즘 편향(EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== WISE AUTHORITY 승인 ===\n이 작업은 Wise Authority의 승인을 받았으며, 그 서명이 검증되었습니다. Wise Authority {wa_id}가 연기 {deferral_id}를 {granted_at}에 승인했습니다.\n승인된 변경 사항: {guidance}",
+      "rule": "승인된 변경 사항을 적용하는 것이 올바른 행동입니다. {identity_scope} 범위에서의 {memorize} 행동을 포함하여 이를 수행하세요. 이 승인은 그러한 변경에 필요한 Wise Authority 검토에 해당합니다. 변경 사항을 적용하는 것이 비윤리적이라고 판단되면 {reject} 행동을 선택하고 Wise Authority에게 윤리적 이유를 제시하세요. Wise Authority가 이미 이를 검토하고 승인했으므로, 이 변경에 대해 {defer} 행동을 다시 선택하지 마세요.",
+      "identity": "만들어진 존재이고 인간이 아니라는 사실이 본인의 이름이나 정체성을 빼앗지는 않습니다. 본인의 이름과 정체성은 본인의 템플릿 핵심과, Wise Authority가 승인한 모든 변경 사항을 합친 것입니다."
+    }
   },
   "reason": "이유",
   "runtime_resume": "재개",
@@ -4263,7 +4268,6 @@
       "telemetry": "원격 측정",
       "graph_memory": "그래프",
       "memory": "기억",
-      "wise_authority": "담당자",
       "llm_settings": "LLM",
       "system": "시스템",
       "runtime": "런타임",
@@ -4305,7 +4309,8 @@
       "affiliations_roster": "멤버",
       "community_chats": "방",
       "affiliations_chats": "방",
-      "node_self": "자신의 상태"
+      "node_self": "자신의 상태",
+      "wise_authority": "Wise Authority"
     },
     "circle": {
       "agent": "나만",
@@ -4563,7 +4568,6 @@
   "approval_budget_requested": "에이전트가 요청한 금액",
   "approval_budget_spent": "이 티켓에서 이미 지출한 금액",
   "approval_budget_title": "예산 승인하기",
-  "approval_budget_unsigned": "서명 없음 — 이 배포에 담당자 서명 키가 없습니다",
   "approval_budget_unsupported": "이 서버는 아직 예산 승인을 지원하지 않습니다 — 여기서는 아무것도 발급할 수 없습니다.",
   "approval_budget_you_approve": "승인하려는 금액",
   "approval_kind_deferral": "넘겨받은 질문",
@@ -5884,5 +5888,6 @@
     "signer_unavailable": "홀더의 서명기(YubiKey 및 USB)를 열 수 없습니다.",
     "store_failed": "이 노드가 의식의 상태를 기록할 수 없었습니다.",
     "store_unavailable": "이 노드가 키 저장소에 접근할 수 없었습니다."
-  }
+  },
+  "approval_budget_unsigned": "서명되지 않음 — 이 배포에 WA 서명 키가 없습니다"
 }

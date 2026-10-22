@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
@@ -32,7 +33,7 @@ from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader, safe_format
 
 
-class TSASPDMALLMResult(BaseModel):
+class TSASPDMALLMResult(PromptCarrier):
     """Gemini-compatible TSASPDMA LLM output - FLAT structure, NO Union types.
 
     TSASPDMA returns 3 action types:
@@ -107,7 +108,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         self._prompt_template_name = "tsaspdma"
 
         # Store last user prompt for debugging/streaming
-        self.last_user_prompt: Optional[str] = None
 
         # Per-thought language override populated from user_profiles. None
         # falls back to env var. Avoids the legacy global set_prompt_language
@@ -456,7 +456,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         # Store user prompt for debugging
         user_messages = [m for m in messages if m.get("role") == "user"]
         content = user_messages[-1]["content"] if user_messages else None
-        self.last_user_prompt = str(content) if content is not None else None
 
         logger.debug(
             "TSASPDMA evaluating tool action for thought %s: tool=%s",
@@ -493,14 +492,14 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                     reasoning=tsaspdma_result.rationale,
                     evaluation_time_ms=tsaspdma_result.evaluation_time_ms,
                     resource_usage=tsaspdma_result.resource_usage,
-                    user_prompt=tsaspdma_result.user_prompt,
                 )
 
             logger.info(
                 f"TSASPDMA evaluation for thought {original_thought.thought_id}: "
                 f"action={tsaspdma_result.selected_action}"
             )
-            return tsaspdma_result
+            # This call's prompts, carried by its result (schemas/dma/sent_prompts.py).
+            return carry_sent_prompts(llm_result, tsaspdma_result)
 
         except Exception as e:
             logger.error(
@@ -606,7 +605,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                 f"action={tsaspdma_result.selected_action}, "
                 f"corrected_to={llm_result.tool_name if llm_result.tool_name else 'N/A'}"
             )
-            return tsaspdma_result
+            return carry_sent_prompts(llm_result, tsaspdma_result)
 
         except Exception as e:
             logger.error(f"TSASPDMA-CORRECTION: Failed for '{requested_tool_name}': {e}", exc_info=True)

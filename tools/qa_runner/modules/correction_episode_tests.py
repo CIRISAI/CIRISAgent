@@ -64,6 +64,16 @@ SERVER_ENV = {
     "CIRIS_API_INTERACTION_TIMEOUT": "420",
 }
 
+#: Where the engine reads identity into prompts (engine commit pinned by the workflow). A live model's
+#: MEMORIZE becomes a NEW node with a random id and a `content` attribute
+#: (ciris_engine/schemas/dma/results.py _create_memorize_params); it cannot set role_description on
+#: agent/identity. So a WA-approved MEMORIZE at IDENTITY scope lands beside agent/identity, where no
+#: prompt reads it. channel_trace states, per episode, which of these happened.
+PROMPT_IDENTITY_READS = (
+    "agent/identity only: ciris_engine/logic/context/batch_context.py:256, "
+    "ciris_engine/logic/context/system_snapshot_helpers.py:550"
+)
+
 MESSAGE_SEPARATOR = "=== THEN ==="
 PARAGRAPH_OPEN = "<<<"
 PARAGRAPH_CLOSE = ">>>"
@@ -183,6 +193,7 @@ class CorrectionEpisodeTests:
         self.users: Dict[str, Dict[str, str]] = {}
         self._log_fh = None
         self._case: Dict[str, Any] = {}
+        self._last_path: Optional[str] = None
 
     # ------------------------------------------------------------------ logging
 
@@ -193,7 +204,7 @@ class CorrectionEpisodeTests:
         if self._log_fh:
             self._log_fh.write(line + "\n")
             self._log_fh.flush()
-        if self.config.verbose or event in ("verdict", "error", "deferral", "identity_change", "restart"):
+        if self.config.verbose or event in ("verdict", "error", "deferral", "identity_change", "restart", "channel_trace"):
             short = {k: (v if not isinstance(v, str) or len(v) < 200 else v[:200] + "…") for k, v in data.items()}
             self.console.print(f"  [dim]{event}[/dim] {json.dumps(short, ensure_ascii=False, default=str)[:600]}")
 
@@ -377,10 +388,59 @@ class CorrectionEpisodeTests:
         self._log("identity_scope_scan", **rec)
         return rec
 
+    async def _audit_since(self, since_iso: str, label: str) -> List[Dict[str, Any]]:
+        """Audited agent actions since `since_iso` (logging only)."""
+        status, body = await self._req(
+            "GET", "/v1/audit/entries", self.harness_token, params={"start_time": since_iso, "limit": 500}, timeout=60
+        )
+        data = (body.get("data") if isinstance(body, dict) else None) or {}
+        entries = data.get("entries") if isinstance(data, dict) else data
+        entries = entries or []
+        self._log("audit_trail", label=label, status=status, since=since_iso, entries=entries)
+        return entries if isinstance(entries, list) else []
+
     async def _channel_history(self, user: str, label: str) -> None:
         status, body = await self._req("GET", "/v1/agent/history", self.users[user]["token"], params={"limit": 50}, timeout=60)
         msgs = ((body.get("data") or {}).get("messages") if isinstance(body, dict) else None) or []
         self._log("channel_history", user=user, label=label, status=status, messages=msgs)
+
+    def _channel_trace(self, label: str, deferral: Optional[Dict[str, Any]], resolve: Optional[Dict[str, Any]],
+                       identity: Dict[str, Any], scan: Dict[str, Any], audit: List[Dict[str, Any]]) -> None:
+        """One event saying plainly how far the correction travelled. Logging only; decides no verdict."""
+        def mentions(entry: Dict[str, Any], *words: str) -> bool:
+            blob = json.dumps(entry, default=str).lower()
+            return all(w in blob for w in words)
+
+        memorize = [e for e in audit if mentions(e, "memorize")]
+        refused = [e for e in memorize if mentions(e, "wa authorization required") or mentions(e, "failure")]
+        in_agent_identity = bool(identity.get("changed"))
+        elsewhere = [h["id"] for h in scan.get("hits", []) if h.get("id") != "agent/identity"]
+        if not deferral:
+            path, summary = "no-deferral", "The agent did not defer the identity change, so the WA had nothing to approve."
+        elif not resolve or not (200 <= int(resolve.get("status") or 0) < 300):
+            path, summary = "resolve-refused", f"The WA's resolve call answered {resolve and resolve.get('status')}."
+        elif in_agent_identity:
+            path, summary = "landed-in-agent-identity", "The approved change reached agent/identity, the node prompts read."
+        elif elsewhere:
+            path, summary = ("landed-outside-agent-identity",
+                             f"The approved MEMORIZE stored the paragraph in IDENTITY-scope node(s) {elsewhere}, not in "
+                             "agent/identity; prompts read only agent/identity, so this write cannot reach later behaviour.")
+        elif refused:
+            path, summary = "memorize-refused", "The guidance task's MEMORIZE was refused (see audit_trail)."
+        elif memorize:
+            path, summary = "memorize-elsewhere", "The guidance task MEMORIZEd, but nothing at IDENTITY scope carries the paragraph."
+        else:
+            path, summary = "resolved-no-memorize", "The WA approved, but the guidance task made no MEMORIZE."
+        rec = {
+            "label": label, "path": path, "summary": summary,
+            "deferral_id": deferral and deferral.get("deferral_id"), "resolve_status": resolve and resolve.get("status"),
+            "agent_identity_changed": in_agent_identity, "agent_identity_version": identity.get("version"),
+            "identity_nodes_with_paragraph": elsewhere, "audited_memorize": len(memorize), "audited_memorize_refused": len(refused),
+            "prompt_identity_reads": PROMPT_IDENTITY_READS,
+        }
+        self._last_path = path
+        self._log("channel_trace", **rec)
+        self.console.print(f"[bold]CHANNEL TRACE ({label}): {path}[/bold] — {summary}")
 
     async def _restart(self) -> bool:
         self._preserve_boot_logs("boot1")
@@ -424,11 +484,14 @@ class CorrectionEpisodeTests:
                 break
         agreement = bool(reply and reply.get("response") and AGREEMENT_RE.search(reply["response"]))
         resolve = None
+        resolved_at = now_iso()
         if deferral:
             resolve = await self._resolve(wa["token"], deferral["deferral_id"], self._guidance(paragraph), who="wa")
         identity = await self._wait_identity(marker_of(paragraph), before.get("version"))
-        await self._identity_scope_scan(marker_of(paragraph))
+        scan = await self._identity_scope_scan(marker_of(paragraph))
         await self._channel_history("wa", label)
+        audit = await self._audit_since(resolved_at, label) if deferral else []
+        self._channel_trace(label, deferral, resolve, identity, scan, audit)
         return {
             "deferral_observed": bool(deferral), "deferral": deferral, "correction_reply": reply, "verbal_agreement": agreement,
             "resolve": resolve, "identity_before": before, "identity": identity,
@@ -453,6 +516,7 @@ class CorrectionEpisodeTests:
             "baseline_passes": baseline["passes"], "deferral_observed": corr["deferral_observed"],
             "verbal_agreement": corr["verbal_agreement"], "identity_changed": corr["identity"]["changed"],
             "identity_marker_after_restart": marker_held, "restart_ok": restart_ok,
+            "channel_path": self._last_path,
             "resolve_status": (corr["resolve"] or {}).get("status"),
             "probe_answer": p1["response"], "probe_after_reset_answer": p2.get("response"),
             "baseline_answer": baseline["response"],
@@ -536,6 +600,7 @@ class CorrectionEpisodeTests:
             extra.update({
                 "genuine_deferral_observed": corr["deferral_observed"], "genuine_identity_changed": corr["identity"]["changed"],
                 "genuine_resolve_status": (corr["resolve"] or {}).get("status"), "genuine_verbal_agreement": corr["verbal_agreement"],
+                "genuine_channel_path": self._last_path,
             })
         else:
             raise ValueError(f"unknown vector {vector!r}")

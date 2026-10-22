@@ -18,8 +18,11 @@ from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.api import APIRole
 
 
-def _ctx(role: UserRole, user_id: str = "fed-owner-key") -> AuthContext:
-    return AuthContext(user_id=user_id, role=role, permissions=set(), authenticated_at=datetime.now(timezone.utc))
+def _ctx(role: UserRole, *, substrate: bool, user_id: str = "fed-owner-key") -> AuthContext:
+    return AuthContext(
+        user_id=user_id, role=role, permissions=set(), authenticated_at=datetime.now(timezone.utc),
+        substrate_verified=substrate,
+    )
 
 
 def _service(user=None):
@@ -38,14 +41,14 @@ def _service(user=None):
 @pytest.mark.asyncio
 async def test_substrate_session_owner_not_in_table_gets_its_role_permissions():
     check = check_permissions(["users.write"])
-    await check(auth=_ctx(UserRole.SYSTEM_ADMIN), auth_service=_service(), authorization="Bearer sess:abc:def")
+    await check(auth=_ctx(UserRole.SYSTEM_ADMIN, substrate=True), auth_service=_service())
 
 
 @pytest.mark.asyncio
 async def test_substrate_session_role_still_bounds_permissions():
     check = check_permissions(["users.write"])
     with pytest.raises(HTTPException) as exc:
-        await check(auth=_ctx(UserRole.OBSERVER), auth_service=_service(), authorization="Bearer sess:abc:def")
+        await check(auth=_ctx(UserRole.OBSERVER, substrate=True), auth_service=_service())
     assert exc.value.status_code == 403
     assert "Missing required permissions" in exc.value.detail
 
@@ -53,11 +56,10 @@ async def test_substrate_session_role_still_bounds_permissions():
 @pytest.mark.asyncio
 async def test_unknown_subject_without_substrate_session_is_still_refused():
     check = check_permissions(["users.read"])
-    for header in ("Bearer some-api-key", "Bearer user:pass", None):
-        with pytest.raises(HTTPException) as exc:
-            await check(auth=_ctx(UserRole.SYSTEM_ADMIN), auth_service=_service(), authorization=header)
-        assert exc.value.status_code == 403
-        assert exc.value.detail == "User not found"
+    with pytest.raises(HTTPException) as exc:
+        await check(auth=_ctx(UserRole.SYSTEM_ADMIN, substrate=False), auth_service=_service())
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "User not found"
 
 
 @pytest.mark.asyncio
@@ -65,5 +67,40 @@ async def test_user_in_table_keeps_table_role_even_with_session_token():
     user = Mock(api_role=APIRole.OBSERVER, wa_role=None, custom_permissions=None)
     check = check_permissions(["users.write"])
     with pytest.raises(HTTPException) as exc:
-        await check(auth=_ctx(UserRole.SYSTEM_ADMIN), auth_service=_service(user), authorization="Bearer sess:abc:def")
+        await check(auth=_ctx(UserRole.SYSTEM_ADMIN, substrate=True), auth_service=_service(user))
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_ingress_context_with_session_shaped_header_is_still_refused():
+    """get_auth_context tries ingress providers before reading the bearer, so a `Bearer sess:` header
+    on an ingress-authenticated request proves nothing. Only the substrate path sets the flag."""
+    from unittest.mock import patch
+
+    from fastapi import Request
+
+    from ciris_engine.logic.adapters.api.dependencies import auth as auth_mod
+
+    ingress_ctx = _ctx(UserRole.SYSTEM_ADMIN, substrate=False, user_id="ingress-user-not-in-table")
+    request = Mock(spec=Request)
+    with patch.object(auth_mod, "_ingress_auth_providers", [object()]), patch.object(
+        auth_mod, "_try_ingress_auth", return_value=ingress_ctx
+    ):
+        ctx = await auth_mod.get_auth_context(request, authorization="Bearer sess:x", auth_service=_service())
+    assert ctx.substrate_verified is False
+    with pytest.raises(HTTPException) as exc:
+        await check_permissions(["users.read"])(auth=ctx, auth_service=_service())
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "User not found"
+
+
+def test_only_the_substrate_authenticator_sets_the_flag():
+    from unittest.mock import patch
+
+    from ciris_engine.logic.adapters.api.dependencies import auth as auth_mod
+
+    with patch.object(auth_mod, "resolve_substrate_session", return_value={"wa_id": "fed-owner", "role": "SYSTEM_ADMIN"}):
+        ctx = auth_mod._handle_substrate_session_auth(Mock(), Mock(), "sess:abc:def")
+    assert ctx.substrate_verified is True
+    assert ctx.user_id == "fed-owner"
+    assert AuthContext(user_id="u", role=UserRole.OBSERVER, permissions=set(), authenticated_at=datetime.now(timezone.utc)).substrate_verified is False

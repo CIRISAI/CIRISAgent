@@ -173,6 +173,11 @@ class AuthContext(BaseModel):
     api_key_id: Optional[str] = Field(None, description="API key ID if using key auth")
     session_id: Optional[str] = Field(None, description="Session ID if using session auth")
     authenticated_at: datetime = Field(..., description="When authentication occurred")
+    substrate_verified: bool = Field(
+        False,
+        description="True only when the substrate (ciris_server.resolve_bearer) verified a node-issued session "
+        "and assigned `role`; set solely by the substrate-session authenticator.",
+    )
 
     model_config = ConfigDict(defer_build=True, arbitrary_types_allowed=True)
 

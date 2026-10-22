@@ -16,6 +16,8 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
 
 class RateLimiter:
     """Simple in-memory rate limiter using token bucket algorithm.
@@ -273,6 +275,24 @@ class RateLimitMiddleware:
         digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
         return f"cred_{digest}"
 
+    @staticmethod
+    def _rejected_budget_id(request: Request, client_host: str) -> Optional[str]:
+        """Whose budget a rejected credential is charged to, or None for no charge.
+
+        Every request the node reverse-proxies onto this listener arrives from
+        127.0.0.1 (BrainAdapter), so the loopback peer address is everyone who
+        reaches the brain through the node. Charging it would let one caller
+        throttle all of them. From a loopback peer, the forwarded client
+        address is used when the proxy supplies one; without it, nothing is
+        charged and the node in front is the per-caller throttle. A forwarded
+        address is trusted only from loopback, never from a remote peer.
+        """
+        if client_host in _LOOPBACK_HOSTS:
+            forwarded = request.headers.get("X-Forwarded-For", "")
+            first = forwarded.split(",")[0].strip() if forwarded else ""
+            return f"ip_{first}" if first else None
+        return f"ip_{client_host}"
+
     def _too_many(self, limiter: RateLimiter, client_id: str, request: Request) -> JSONResponse:
         retry_after = limiter.get_retry_after(client_id)
         logger.warning(
@@ -313,9 +333,9 @@ class RateLimitMiddleware:
 
         client_host = request.client.host if request.client else "unknown"
         client_id = self._client_id(request, client_host)
-        rejected_id = f"ip_{client_host}"
+        rejected_id = self._rejected_budget_id(request, client_host)
 
-        if await self.rejected_limiter.is_exhausted(rejected_id):
+        if rejected_id and await self.rejected_limiter.is_exhausted(rejected_id):
             return self._too_many(self.rejected_limiter, rejected_id, request)
 
         limiter = self.limiter
@@ -328,7 +348,7 @@ class RateLimitMiddleware:
         processed_response = await call_next(request)
         typed_response: Response = cast(Response, processed_response)
 
-        if typed_response.status_code == 401:
+        if rejected_id and typed_response.status_code == 401:
             await self.rejected_limiter.check_rate_limit(rejected_id)
 
         # Add rate limit headers to response

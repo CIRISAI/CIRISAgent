@@ -758,13 +758,15 @@ class TestRateLimitMiddlewareIntegration:
         assert response.status_code == 200
 
 
-def _request(path="/v1/test", token=None, host="127.0.0.1", method="GET"):
+def _request(path="/v1/test", token=None, host="127.0.0.1", method="GET", forwarded=None):
     request = Mock(spec=Request)
     request.url.path = path
     request.method = method
     request.client.host = host
-    header = f"Bearer {token}" if token else ""
-    request.headers.get = Mock(side_effect=lambda key, default="": header if key == "Authorization" else default)
+    headers = {"Authorization": f"Bearer {token}" if token else ""}
+    if forwarded:
+        headers["X-Forwarded-For"] = forwarded
+    request.headers.get = Mock(side_effect=lambda key, default="": headers.get(key, default))
     return request
 
 
@@ -842,3 +844,37 @@ class TestRateLimitPerCredential:
         other = middleware._client_id(_request(token="sess:wa-alice:mac2"), "127.0.0.1")
         assert first == again, "keyed by the credential, not the host it arrives from"
         assert first != other
+
+    @pytest.mark.asyncio
+    async def test_rejected_tokens_through_the_node_never_throttle_other_callers(self):
+        """The node proxies every caller from 127.0.0.1; one caller's junk must not lock the others out."""
+        middleware = RateLimitMiddleware(requests_per_minute=2)
+        rejected = AsyncMock(return_value=Response(content="no", status_code=401))
+        ok = AsyncMock(return_value=Response(content="OK"))
+
+        for n in range(5):
+            await middleware(_request(token=f"sess:forged:{n}"), rejected)
+        assert (await middleware(_request(token="sess:wa-alice:mac1"), ok)).status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_a_forwarded_client_is_charged_for_its_own_rejections(self):
+        middleware = RateLimitMiddleware(requests_per_minute=2)
+        rejected = AsyncMock(return_value=Response(content="no", status_code=401))
+        ok = AsyncMock(return_value=Response(content="OK"))
+
+        for n in range(2):
+            await middleware(_request(token=f"sess:forged:{n}", forwarded="203.0.113.7"), rejected)
+        throttled = await middleware(_request(token="sess:forged:x", forwarded="203.0.113.7, 10.0.0.1"), rejected)
+        assert throttled.status_code == 429
+        other = await middleware(_request(token="sess:wa-bob:mac", forwarded="198.51.100.2"), ok)
+        assert other.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_a_remote_peer_cannot_spoof_its_forwarded_address(self):
+        middleware = RateLimitMiddleware(requests_per_minute=2)
+        rejected = AsyncMock(return_value=Response(content="no", status_code=401))
+
+        for n in range(3):
+            await middleware(_request(token=f"sess:f:{n}", host="10.0.0.9", forwarded=f"192.0.2.{n}"), rejected)
+        assert "ip_10.0.0.9" in middleware.rejected_limiter.buckets
+        assert not any(k.startswith("ip_192.0.2.") for k in middleware.rejected_limiter.buckets)

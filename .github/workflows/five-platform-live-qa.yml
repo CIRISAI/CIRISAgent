@@ -753,6 +753,16 @@ jobs:
               --screenshot-on-success "artifacts/shots/$plat-setup-noai.png" \
               -v || { overall=1; noai_ok=0; echo "::error::$plat run-without-AI setup failed"; python3 tools/dev/diagnose_gate_failure.py --platform "$plat" --phase setup-noai --logs artifacts "${CIRIS_QA_LOG_DIR:-artifacts/cmdlogs}" || true; }
 
+            # KEEP THE NO-AI PASS'S OWN LOGS. The reset below wipes $CIRIS_HOME, and
+            # with it the agent log of the wizard run and the log of the node it
+            # exec'd into on the hand-off: the two logs that time a slow hand-off.
+            # Run 39777874603 lost both, so a 20s+ setup_complete could not be
+            # attributed. Desktop only: a mobile home is inside the device.
+            if [ "$target" = desktop ] && [ -d "$CIRIS_HOME/logs" ]; then
+              mkdir -p "artifacts/logs-noai/$plat"
+              cp -r "$CIRIS_HOME/logs/." "artifacts/logs-noai/$plat/" 2>/dev/null || true
+            fi
+
             # ONE FAULT, ONE RED. If the no-AI setup never completed, a login
             # failure here is its CONSEQUENCE, not a finding: the app is mid-wizard,
             # so every element the driver waits for is legitimately absent. Nightly

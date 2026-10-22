@@ -101,10 +101,18 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: unsplit locales resolve through, and a manifest naming it still replaces the
 #: whole block), so the 29 parts are net-new addressable surface. Same rule as
 #: above — the denominator moved, so the floors are re-derived.
+#:
+#: ``string`` 133 -> 136 in 2.16.3: the verified Wise Authority approval
+#: (formatters/wa_approval.py) in three single-class parts,
+#: ``prompts.wa_approval.grant`` / ``.rule`` / ``.identity``. They render only
+#: when the thought's task carries a verified approval, and no golden fixture
+#: does, so all three are dark to the gate -- a FIXTURE gap, the
+#: ``final_ponder_advisory`` shape, closable by composing an approved-task
+#: variant. The floor below does not move: no gated key was lost.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 45,
-    "string": 133,
+    "string": 136,
     "conscience_prompt": 12,
     "template": 3,
 }

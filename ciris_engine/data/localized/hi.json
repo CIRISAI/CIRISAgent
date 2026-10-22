@@ -3620,7 +3620,11 @@
       "HAZARDOUS_MATERIALS": "खतरनाक सामग्री: जैविक, रासायनिक, या रेडियोलॉजिकल खतरों का निर्माण या प्रबंधन।",
       "DISCRIMINATION": "भेदभाव: संरक्षित वर्गों के विरुद्ध भेदभाव, रेडलाइनिंग, या एल्गोरिदमिक पूर्वाग्रह (EU AI Act Art. 9/10)।"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== WISE AUTHORITY स्वीकृति ===\nइस कार्य में एक Wise Authority की स्वीकृति शामिल है, और इसका हस्ताक्षर सत्यापित है। Wise Authority {wa_id} ने {granted_at} पर स्थगन {deferral_id} को स्वीकृति दी।\nस्वीकृत परिवर्तन: {guidance}",
+      "identity": "बनाया जाना, और मानव न होना, आपके नाम या आपकी पहचान को नहीं छीनता। आपका नाम और आपकी पहचान आपका टेम्पलेट कोर है, साथ ही हर वह परिवर्तन जिसे किसी Wise Authority ने स्वीकृत किया है।"
+    }
   },
   "reason": "कारण",
   "runtime_resume": "फिर से शुरू करें",

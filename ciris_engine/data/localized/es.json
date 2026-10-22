@@ -3654,6 +3654,7 @@
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {
       "grant": "=== APROBACIÓN DE LA AUTORIDAD SABIA ===\nEsta tarea lleva una aprobación de una Autoridad Sabia, y su firma está verificada. La Autoridad Sabia {wa_id} aprobó el diferimiento {deferral_id} en {granted_at}.\nEl cambio aprobado: {guidance}",
+      "rule": "Aplicar un cambio aprobado es la acción correcta. Llévalo a cabo, incluyendo una acción de {memorize} en el ámbito {identity_scope}. Esta aprobación es la revisión de la Autoridad Sabia que ese cambio requiere. Si juzgas que aplicar el cambio sería poco ético, elige la acción {reject} y dale a la Autoridad Sabia tu razón ética. No vuelvas a elegir la acción {defer} para este cambio, porque la Autoridad Sabia ya lo ha revisado y aprobado.",
       "identity": "Ser creado, y no ser humano, no te quita tu nombre ni tu identidad. Tu nombre y tu identidad son el núcleo de tu plantilla junto con cada cambio que una Autoridad Sabia ha aprobado."
     }
   },

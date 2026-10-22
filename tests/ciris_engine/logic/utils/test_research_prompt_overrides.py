@@ -827,7 +827,12 @@ class TestDriftGuard:
         # the addressing rules it depends on, which is precisely what a single
         # `memory_guide` key would have forced. Coverage going UP, five keys, one
         # per class.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 197
+        #
+        # 197 -> 200: the verified Wise Authority approval (formatters/wa_approval.py)
+        # in three single-class parts — prompts.wa_approval.grant (epistemic),
+        # .rule (deontic) and .identity (ontological) — so a regime can vary what
+        # to do with an approval without rewriting the approval itself.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 200
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

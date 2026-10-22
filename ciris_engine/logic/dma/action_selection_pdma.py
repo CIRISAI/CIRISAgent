@@ -490,6 +490,16 @@ WRONG: "The expectation is reasonable..."
                 processing_context
             )
             identity_block = self._validate_and_build_identity_block(system_snapshot)
+            # A verified WA approval sits with the identity it may change, so
+            # the choice between applying, declining and deferring is made
+            # knowing the review already happened (formatters/wa_approval.py).
+            from ciris_engine.logic.formatters import format_wa_approval_block, wa_authorization_of
+
+            approval_block = format_wa_approval_block(
+                wa_authorization_of(processing_context), language=get_prompt_loader().language
+            )
+            if approval_block:
+                identity_block = "\n\n".join((identity_block, approval_block))
 
         # Check for direct system_prompt override from template (e.g., HE-300 format instructions)
         # Template overrides take precedence over YAML-based prompts

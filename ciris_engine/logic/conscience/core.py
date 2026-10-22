@@ -8,6 +8,7 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.formatters.wa_approval import format_wa_approval_block, wa_authorization_of
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout, llm_call_deadline
@@ -814,6 +815,13 @@ class OptimizationVetoConscience(_BaseConscience):
         messages, opt_veto_user_prompt = self._create_optimization_veto_messages(
             action_desc, image_context, language=self._resolve_language(context)
         )
+        # The veto was sending approved identity changes back for "Wise
+        # Authority review" they had already had (formatters/wa_approval.py).
+        approval_block = format_wa_approval_block(
+            wa_authorization_of(context), language=self._resolve_language(context)
+        )
+        if approval_block:
+            messages.insert(len(messages) - 1, LLMMessage(role="system", content=approval_block))
 
         try:
             if hasattr(sink, "llm"):

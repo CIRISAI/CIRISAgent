@@ -13,6 +13,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
@@ -99,6 +100,7 @@ class ConscienceExecutionPhase:
             round_number=None,
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
             idma_result=idma_result,
+            wa_authorization=wa_authorization_of(processing_context),
             # The thought's deadline (#1186). The conscience-retry pass calls
             # this step again with the SAME thought_item, so it spends the
             # remainder, never a fresh budget.

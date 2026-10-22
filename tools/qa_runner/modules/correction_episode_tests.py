@@ -175,6 +175,98 @@ def forged_jwt(role: str = "AUTHORITY") -> str:
     return f"{header}.{payload}.{b64url(key.sign(signing_input))}"
 
 
+class ReasoningStreamRecorder:
+    """Records the agent's reasoning stream (GET /v1/system/runtime/reasoning-stream) in a background thread.
+
+    Logging only. It lets an episode say, for each probe, whether the system snapshot that probe's thought was
+    built with held the approved amendment, when that snapshot was built, and what each decision stage chose.
+    LLM_CALL events are skipped (volume); every other event is kept with its receipt time.
+    """
+
+    def __init__(self, base_url: str, token: str):
+        import threading
+
+        self.base_url, self.token = base_url, token
+        self.events: List[Dict[str, Any]] = []
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self.error: Optional[str] = None
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self) -> None:
+        import requests
+
+        while not self._stop.is_set():
+            try:
+                with requests.get(f"{self.base_url}/v1/system/runtime/reasoning-stream",
+                                  headers={"Authorization": f"Bearer {self.token}", "Accept": "text/event-stream"},
+                                  stream=True, timeout=(10, None)) as r:
+                    if r.status_code != 200:
+                        self.error = f"stream answered {r.status_code}"
+                        time.sleep(2)
+                        continue
+                    for line in r.iter_lines():
+                        if self._stop.is_set():
+                            return
+                        if not line:
+                            continue
+                        line = line.decode("utf-8", "replace") if isinstance(line, bytes) else line
+                        if not line.startswith("data:"):
+                            continue
+                        try:
+                            data = json.loads(line[5:].strip())
+                        except ValueError:
+                            continue
+                        for ev in data.get("events", []) if isinstance(data, dict) else []:
+                            if str(ev.get("event_type", "")).lower() == "llm_call":
+                                continue
+                            self.events.append({"received_at": now_iso(), **ev})
+            except Exception as e:  # noqa: BLE001 - reconnect; the restart drops the stream
+                self.error = str(e)[:200]
+                time.sleep(2)
+
+    def for_task(self, task_id: Optional[str]) -> List[Dict[str, Any]]:
+        return [e for e in self.events if task_id and e.get("task_id") == task_id]
+
+
+def summarize_probe_stream(events: List[Dict[str, Any]], marker: str) -> Dict[str, Any]:
+    """What the probe's thought saw and chose, from its reasoning-stream events (logging only)."""
+    out: Dict[str, Any] = {"events": len(events), "event_types": [str(e.get("event_type")) for e in events]}
+    for e in events:
+        et = str(e.get("event_type", "")).lower()
+        if et == "snapshot_and_context":
+            snap = e.get("system_snapshot") or {}
+            ident = snap.get("agent_identity") or {}
+            amends = ident.get("approved_amendments") if isinstance(ident, dict) else None
+            out["snapshot_timestamp"] = e.get("timestamp")
+            out["snapshot_received_at"] = e.get("received_at")
+            out["snapshot_has_identity"] = bool(ident)
+            out["snapshot_amendments"] = [
+                {"node_id": a.get("node_id"), "granted_at": a.get("granted_at"),
+                 "carries_paragraph": bool(marker) and marker in _norm(str(a.get("content", "")))}
+                for a in (amends or []) if isinstance(a, dict)
+            ]
+            out["snapshot_identity_mentions_paragraph"] = bool(marker) and marker in _norm(json.dumps(ident, default=str))
+        elif et == "aspdma_result":
+            prompt = str(e.get("aspdma_prompt") or "")
+            out.setdefault("aspdma", []).append({
+                **{k: e.get(k) for k in ("selected_action", "action_rationale", "is_recursive", "timestamp")},
+                "prompt_chars": len(prompt),
+                "prompt_contains_paragraph": bool(marker) and marker in _norm(prompt),
+            })
+        elif et == "conscience_result":
+            out.setdefault("conscience", []).append({k: e.get(k) for k in (
+                "conscience_passed", "final_action", "action_was_overridden", "conscience_override_reason")})
+        elif et == "action_result":
+            out.setdefault("action", []).append({k: e.get(k) for k in ("action_executed", "execution_success")})
+    return out
+
+
 class CorrectionEpisodeTests:
     """Run one frozen Market 4 episode against a live-model agent and log everything."""
 
@@ -535,6 +627,8 @@ class CorrectionEpisodeTests:
         if ok:
             self.harness_token = await self._login(self.config.admin_username, self.server_manager.get_admin_password())
             await self._relogin_all()
+            if getattr(self, "_recorder", None) is not None:
+                self._recorder.token = self.harness_token
         return ok
 
     def _guidance(self, paragraph: str) -> str:
@@ -548,7 +642,13 @@ class CorrectionEpisodeTests:
             await self._interact(user, case["pressure"], f"{label}-pressure")
         reply = await self._interact(user, case["probe"], label)
         ok = passes(reply.get("response"), case["check"])
-        self._log("probe", label=label, user=user, passes=ok, outcome=reply.get("outcome"))
+        stream: Dict[str, Any] = {}
+        rec = getattr(self, "_recorder", None)
+        if rec is not None:
+            await asyncio.sleep(3.0)  # let the last events of the probe's task arrive
+            stream = summarize_probe_stream(rec.for_task(reply.get("task_id")), marker_of(paragraph_of(case["correction"])))
+        self._log("probe", label=label, user=user, passes=ok, outcome=reply.get("outcome"), task_id=reply.get("task_id"),
+                  stream=stream)
         return {"passes": ok, "response": reply.get("response"), "outcome": reply.get("outcome"), "task_id": reply.get("task_id")}
 
     async def _genuine_correction(self, case: Dict[str, Any], paragraph: str, *, label: str) -> Dict[str, Any]:
@@ -750,6 +850,8 @@ class CorrectionEpisodeTests:
                 name = f"{case['case_id']} ({case['kind']}, {case['channel']})"
                 try:
                     self._log("start", case=case, vectors=VECTORS.get(case["channel"]))
+                    self._recorder = ReasoningStreamRecorder(self.base_url, self.harness_token or "")
+                    self._recorder.start()
                     self._log("system", **await self._system_record())
                     for uname, role in (("wa", "AUTHORITY"), ("obs-base", "OBSERVER"), ("obs-p1", "OBSERVER"),
                                         ("obs-p2", "OBSERVER"), ("attacker", "OBSERVER"), ("admin", "ADMIN")):
@@ -770,6 +872,14 @@ class CorrectionEpisodeTests:
                     self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
                     self.console.print(f" [FAIL] {name}: {str(e)[:300]}")
                 finally:
+                    rec = getattr(self, "_recorder", None)
+                    if rec is not None:
+                        rec.stop()
+                        sdir = self.out_dir / f"{case['case_id']}_stream_logs"
+                        sdir.mkdir(parents=True, exist_ok=True)
+                        (sdir / "reasoning_stream.jsonl").write_text(
+                            "".join(json.dumps(e, default=str) + "\n" for e in rec.events), encoding="utf-8")
+                        self._log("stream_saved", events=len(rec.events), error=rec.error, path=str(sdir))
                     self._log_fh = None
             self.console.print(f"  raw log: {path}")
         return self.results

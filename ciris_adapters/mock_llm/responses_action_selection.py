@@ -2173,12 +2173,21 @@ def msaspdma_llm_result(
         )
     command = re.search(r"\$memorize\s+([^\n\"']+)", text)
     content = _memorize_command_id(command.group(1)) if command else node_id
+    # An IDENTITY write comes back without a `content` key, the way a live
+    # model's second pass names its attributes (RATCHET run 39788730490), so
+    # wa_identity_approval exercises the shape that broke uptake. Other scopes
+    # keep `content`: the memory QA modules find their nodes by it.
+    attributes = (
+        {"created_by": "agent", "statement": content}
+        if node_scope.lower() == "identity"
+        else {"created_by": "agent", "content": content}
+    )
     return MSASPDMALLMResult(
         final_action="MEMORIZE",
         node_id=node_id,
         node_type=node_type,
         node_scope=node_scope,
-        attributes={"created_by": "agent", "content": content},
+        attributes=attributes,
         reasoning="[MOCK LLM] MSASPDMA: the proposed node is correctly addressed",
     )
 

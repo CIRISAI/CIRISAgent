@@ -131,3 +131,27 @@ def test_the_memory_store_route_refuses_to_mint_an_amendment():
         asyncio.run(store_memory(request=AsyncMock(), body=StoreRequest(node=forged), auth=AsyncMock(), memory_service=memory))
     assert refused.value.status_code == 403
     assert not memory.memorize.called
+
+
+def test_an_amendment_without_content_loads_from_its_authored_attributes():
+    """A node already stored in the live shape (no `content`) is read, not refused."""
+    node = GraphNode(
+        id="identity/agent",
+        type=NodeType.IDENTITY_AMENDMENT,
+        scope=GraphScope.IDENTITY,
+        attributes={
+            "core_value": "I mentor new moderators",
+            "created_by": "agent",
+            "created_at": "2026-10-22T01:00:00Z",
+            "wa_amendment": {"wa_id": "wa-1", "deferral_id": "d1", "granted_at": "2026-10-22T01:00:00Z"},
+        },
+    )
+    amendment = ia.amendment_from_node(node)
+    assert amendment is not None
+    assert amendment.content == "I mentor new moderators"
+
+
+def test_several_authored_attributes_render_in_key_order():
+    from ciris_engine.logic.infrastructure.handlers.shared_helpers import amendment_text
+
+    assert amendment_text({"tone": "warm", "focus": "mentoring", "updated_at": "x"}) == "focus: mentoring; tone: warm"

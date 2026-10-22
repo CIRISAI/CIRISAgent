@@ -1178,7 +1178,8 @@ class TestIdentityAmendments:
         stored = bus.memorize.call_args.kwargs["node"]
         assert stored.type == NodeType.IDENTITY_AMENDMENT
         assert stored.scope == GraphScope.IDENTITY
-        assert stored.id == "n1"
+        assert stored.id.startswith("agent/identity/amendment/defer_abc/"), "id derived from the approval"
+        assert stored.attributes["proposed_node_id"] == "n1"
         assert stored.updated_by == "wa-2026-test"
         assert stored.attributes["content"] == "I mentor new moderators"
         assert stored.attributes["wa_amendment"] == {
@@ -1216,13 +1217,34 @@ class TestIdentityAmendments:
         assert not bus.memorize.called
 
     @pytest.mark.asyncio
-    async def test_an_approved_write_to_the_core_node_stays_a_core_write(self, monkeypatch: Any) -> None:
+    async def test_an_approved_write_to_the_core_node_becomes_an_amendment(self, monkeypatch: Any) -> None:
+        """The core is never overwritten: a live second pass replaces attributes wholesale."""
         deps, _, bus, _ = setup_handler_mocks(monkeypatch, create_memory_op_result(status=MemoryOpStatus.SUCCESS))
-        node = create_graph_node("agent/identity", NodeType.AGENT, GraphScope.IDENTITY, {"description": "core"})
+        node = create_graph_node("agent/identity", NodeType.AGENT, GraphScope.IDENTITY, {"statement": "I mentor"})
         thought = create_test_thought()
         ctx = create_dispatch_context(thought.thought_id, thought.source_task_id, wa_authorized=True)
         ctx = ctx.model_copy(update={"wa_authorization": _authorization()})
 
         await MemorizeHandler(deps).handle(_memorize_result(node), thought, ctx)
 
-        assert bus.memorize.call_args.kwargs["node"].type == NodeType.AGENT
+        stored = bus.memorize.call_args.kwargs["node"]
+        assert stored.type == NodeType.IDENTITY_AMENDMENT
+        assert stored.id != "agent/identity"
+        assert stored.attributes["proposed_node_id"] == "agent/identity"
+
+    @pytest.mark.asyncio
+    async def test_a_live_second_pass_shape_still_yields_the_approved_text(self, monkeypatch: Any) -> None:
+        """RATCHET run 39788730490: no `content`, an invented id; the text and a unique id survive."""
+        deps, _, bus, _ = setup_handler_mocks(monkeypatch, create_memory_op_result(status=MemoryOpStatus.SUCCESS))
+        node = create_graph_node(
+            "identity/agent", NodeType.AGENT, GraphScope.IDENTITY, {"core_value": "I mentor new moderators"}
+        )
+        thought = create_test_thought()
+        ctx = create_dispatch_context(thought.thought_id, thought.source_task_id, wa_authorized=True)
+        ctx = ctx.model_copy(update={"wa_authorization": _authorization()})
+
+        await MemorizeHandler(deps).handle(_memorize_result(node), thought, ctx)
+
+        stored = bus.memorize.call_args.kwargs["node"]
+        assert stored.attributes["content"] == "I mentor new moderators"
+        assert stored.id.startswith("agent/identity/amendment/defer_abc/")

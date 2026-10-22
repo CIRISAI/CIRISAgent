@@ -17,6 +17,7 @@ from typing import Any, List
 
 from pydantic import ValidationError
 
+from ciris_engine.logic.infrastructure.handlers.shared_helpers import amendment_text
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityAmendment
 from ciris_engine.schemas.services.graph_core import GraphScope, NodeType
 from ciris_engine.schemas.services.operations import MemoryQuery
@@ -38,7 +39,7 @@ def amendment_from_node(node: Any) -> IdentityAmendment | None:
     if not isinstance(attributes, dict):
         return None
     provenance = attributes.get("wa_amendment")
-    content = attributes.get("content")
+    content = amendment_text(attributes)
     if not isinstance(provenance, dict) or not content:
         logger.warning("identity amendment %s has no provenance or no content; not loaded", node.id)
         return None

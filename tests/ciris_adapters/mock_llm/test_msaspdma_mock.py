@@ -38,8 +38,16 @@ def test_affirms_the_proposed_node_with_the_same_content():
     assert result.final_action == "MEMORIZE"
     assert result.node_id == "19b2535b-f92b-436b-86eb-2ee2fda88f08"
     assert (result.node_type, result.node_scope) == ("concept", "identity")
-    # Same content the action-selection pass stored, so nothing downstream changes.
-    assert result.attributes == {"created_by": "agent", "content": "qa_wa_identity_ok_concept_identity"}
+    # An IDENTITY write comes back without `content`, the way a live second pass
+    # names its attributes (RATCHET run 39788730490), so wa_identity_approval
+    # exercises that shape; the text is the same the action-selection pass stored.
+    assert result.attributes == {"created_by": "agent", "statement": "qa_wa_identity_ok_concept_identity"}
+
+
+def test_other_scopes_keep_content_for_the_memory_modules():
+    messages = _prompt("@qa: $memorize qa_local_fact CONCEPT LOCAL", "n-local", "concept", "local")
+    result = create_response(MSASPDMALLMResult, messages=messages)
+    assert result.attributes == {"created_by": "agent", "content": "qa_local_fact_concept_local"}
 
 
 def test_an_unreadable_prompt_ponders_rather_than_writes():

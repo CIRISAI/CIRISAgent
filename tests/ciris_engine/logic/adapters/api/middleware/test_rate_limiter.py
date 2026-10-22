@@ -6,6 +6,7 @@ and all edge cases.
 """
 
 import asyncio
+import hashlib
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -377,8 +378,10 @@ class TestRateLimitMiddlewareClientIdentification:
 
         await middleware(request, call_next)
 
-        # Should create bucket with auth prefix
-        assert "auth_192.168.1.100" in middleware.limiter.buckets
+        # An unverifiable credential gets its own bucket, keyed by digest
+        digest = hashlib.sha256(b"eyJhbGciOiJIUzI1NiIs...").hexdigest()[:24]
+        assert f"cred_{digest}" in middleware.limiter.buckets
+        assert "auth_192.168.1.100" not in middleware.limiter.buckets
 
     @pytest.mark.asyncio
     async def test_service_token_identification(self):
@@ -570,8 +573,9 @@ class TestRateLimitMiddlewareJWTExtraction:
 
         await middleware(request, call_next)
 
-        # Should fall back to auth_IP format
-        assert "auth_192.168.1.100" in middleware.limiter.buckets
+        # Falls back to a per-credential bucket, never one shared by the IP
+        digest = hashlib.sha256(b"invalid-jwt-token").hexdigest()[:24]
+        assert f"cred_{digest}" in middleware.limiter.buckets
 
 
 class TestRateLimitMiddlewareEnforcement:
@@ -752,3 +756,89 @@ class TestRateLimitMiddlewareIntegration:
         # Make another request - should succeed with refilled tokens
         response = await middleware(request, call_next)
         assert response.status_code == 200
+
+
+def _request(path="/v1/test", token=None, host="127.0.0.1", method="GET"):
+    request = Mock(spec=Request)
+    request.url.path = path
+    request.method = method
+    request.client.host = host
+    header = f"Bearer {token}" if token else ""
+    request.headers.get = Mock(side_effect=lambda key, default="": header if key == "Authorization" else default)
+    return request
+
+
+class TestRateLimitPerCredential:
+    """CIRISAgent: one desktop UI's polling refused the user's own message (429 on interact)."""
+
+    @pytest.mark.asyncio
+    async def test_session_tokens_on_one_host_get_separate_buckets(self):
+        middleware = RateLimitMiddleware(requests_per_minute=1)
+        call_next = AsyncMock(return_value=Response(content="OK"))
+
+        assert (await middleware(_request(token="sess:wa-alice:mac1"), call_next)).status_code == 200
+        assert (await middleware(_request(token="sess:wa-bob:mac2"), call_next)).status_code == 200
+        limited = await middleware(_request(token="sess:wa-alice:mac1"), call_next)
+        assert limited.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_the_bucket_key_never_contains_the_token(self):
+        middleware = RateLimitMiddleware()
+        await middleware(_request(token="sess:wa-alice:secretmac"), AsyncMock(return_value=Response(content="OK")))
+        (key,) = middleware.limiter.buckets
+        assert "secretmac" not in key
+        assert "wa-alice" not in key
+
+    @pytest.mark.asyncio
+    async def test_polling_cannot_refuse_the_users_message(self):
+        middleware = RateLimitMiddleware(requests_per_minute=2)
+        call_next = AsyncMock(return_value=Response(content="OK"))
+        token = "sess:wa-alice:mac1"
+
+        for _ in range(2):
+            await middleware(_request("/v1/agent/history", token), call_next)
+        assert (await middleware(_request("/v1/agent/history", token), call_next)).status_code == 429
+
+        sent = await middleware(_request("/v1/agent/interact", token, method="POST"), call_next)
+        assert sent.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_the_users_messages_are_still_limited(self):
+        middleware = RateLimitMiddleware(requests_per_minute=1)
+        call_next = AsyncMock(return_value=Response(content="OK"))
+        token = "sess:wa-alice:mac1"
+
+        assert (await middleware(_request("/v1/agent/interact", token, method="POST"), call_next)).status_code == 200
+        limited = await middleware(_request("/v1/agent/interact", token, method="POST"), call_next)
+        assert limited.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_rotating_rejected_tokens_is_throttled_per_ip(self):
+        middleware = RateLimitMiddleware(requests_per_minute=3)
+        rejected = AsyncMock(return_value=Response(content="no", status_code=401))
+
+        for n in range(3):
+            response = await middleware(_request(token=f"sess:forged:{n}", host="10.0.0.9"), rejected)
+            assert response.status_code == 401
+        throttled = await middleware(_request(token="sess:forged:fresh", host="10.0.0.9"), rejected)
+        assert throttled.status_code == 429
+
+        other_host = await middleware(_request(token="sess:forged:x", host="10.0.0.10"), rejected)
+        assert other_host.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_accepted_requests_are_never_charged_to_the_rejected_budget(self):
+        middleware = RateLimitMiddleware(requests_per_minute=2)
+        ok = AsyncMock(return_value=Response(content="OK"))
+
+        for n in range(5):
+            assert (await middleware(_request(token=f"sess:wa-{n}:mac"), ok)).status_code == 200
+        assert not middleware.rejected_limiter.buckets
+
+    def test_a_session_token_maps_to_the_same_bucket_on_every_request(self):
+        middleware = RateLimitMiddleware()
+        first = middleware._client_id(_request(token="sess:wa-alice:mac1"), "127.0.0.1")
+        again = middleware._client_id(_request(token="sess:wa-alice:mac1", host="10.1.1.1"), "10.1.1.1")
+        other = middleware._client_id(_request(token="sess:wa-alice:mac2"), "127.0.0.1")
+        assert first == again, "keyed by the credential, not the host it arrives from"
+        assert first != other

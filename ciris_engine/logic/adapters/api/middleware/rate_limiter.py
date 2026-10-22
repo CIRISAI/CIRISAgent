@@ -5,6 +5,7 @@ Implements a basic in-memory rate limiter using token bucket algorithm.
 """
 
 import asyncio
+import hashlib
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Optional, Tuple, cast
@@ -85,6 +86,15 @@ class RateLimiter:
             self.buckets[client_id] = (tokens, now)
             return False
 
+    async def is_exhausted(self, client_id: str) -> bool:
+        """True when ``client_id`` has no token left. Consumes nothing."""
+        async with self._lock:
+            if client_id not in self.buckets:
+                return False
+            tokens, last_update = self.buckets[client_id]
+            elapsed = (datetime.now() - last_update).total_seconds()
+            return min(self.rate, tokens + elapsed * (self.rate / 60.0)) < 1
+
     def _cleanup_old_entries(self) -> None:
         """Remove entries that haven't been used in over an hour."""
         now = datetime.now()
@@ -133,6 +143,14 @@ class RateLimitMiddleware:
             gateway_secret: Secret for verifying JWT tokens (required for user-based rate limiting)
         """
         self.limiter = RateLimiter(requests_per_minute)
+        # The user's own messages draw from a bucket of their own, so a UI's
+        # background polling can never refuse the message the user just sent.
+        self.interact_limiter = RateLimiter(requests_per_minute)
+        # Per-IP budget for REJECTED credentials (401s). Buckets are keyed by
+        # credential before auth has judged it, so without this a caller could
+        # mint a fresh bucket per request by rotating junk tokens. Legitimate
+        # callers are never charged against it.
+        self.rejected_limiter = RateLimiter(requests_per_minute)
         self.gateway_secret = gateway_secret
         # Exempt paths that should not be rate limited
         self.exempt_paths = {
@@ -145,6 +163,8 @@ class RateLimitMiddleware:
             "/v1/setup/adapter-types",  # Adapter type listing for add adapter dialog
         }
         # Static file extensions that should be exempt from rate limiting
+        # POSTs that carry the user's own words to the agent.
+        self.user_message_paths = {"/v1/agent/interact", "/v1/agent/message"}
         self.exempt_extensions = {
             ".js",
             ".css",
@@ -230,6 +250,54 @@ class RateLimitMiddleware:
             logger.debug(f"Failed to verify JWT in rate limiter: {type(e).__name__}: {e}")
             return None
 
+    def _client_id(self, request: Request, client_host: str) -> str:
+        """The bucket this request draws from: one per credential, else one per IP.
+
+        Neither token the agent issues today is an HS256 JWT: a node session is
+        ``sess:<wa_id>:<mac>`` and an API key is ``ciris_...``. Keying those by
+        IP put every request a desktop UI makes into one bucket of 60/min, and
+        behind a reverse proxy it put EVERY USER into one bucket, so one user's
+        polling refused another user's message. An unverified credential gets
+        its own bucket by digest (never the token itself); forging one buys a
+        401 and a charge against the per-IP rejected budget.
+        """
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return f"ip_{client_host}"
+        token = auth_header[7:]
+        if token.startswith("service:"):
+            return f"service_{client_host}"
+        user_id = self._extract_user_id_from_jwt(token, request)
+        if user_id:
+            return f"user_{user_id}"
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
+        return f"cred_{digest}"
+
+    def _too_many(self, limiter: RateLimiter, client_id: str, request: Request) -> JSONResponse:
+        retry_after = limiter.get_retry_after(client_id)
+        logger.warning(
+            "Rate limit exceeded for %s on %s %s (retry_after=%ds)",
+            client_id,
+            request.method,
+            request.url.path,
+            retry_after,
+        )
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": f"Too many requests. Please wait {retry_after} seconds before trying again.",
+                "error": "rate_limit_exceeded",
+                "retry_after": retry_after,
+                "message": "You're sending requests too quickly. The system will be ready again shortly.",
+            },
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(limiter.rate),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Window": "60",
+            },
+        )
+
     async def __call__(self, request: Request, call_next: Callable[..., Any]) -> Response:
         """Process request through rate limiter."""
         # Check if path is exempt
@@ -243,68 +311,30 @@ class RateLimitMiddleware:
             response = await call_next(request)
             return cast(Response, response)
 
-        # Extract client identifier (prefer authenticated user, fallback to IP)
         client_host = request.client.host if request.client else "unknown"
-        client_id = None
+        client_id = self._client_id(request, client_host)
+        rejected_id = f"ip_{client_host}"
 
-        # Try to extract user ID from authentication
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]  # Remove "Bearer " prefix
+        if await self.rejected_limiter.is_exhausted(rejected_id):
+            return self._too_many(self.rejected_limiter, rejected_id, request)
 
-            # Check for service token format: "service:TOKEN"
-            if token.startswith("service:"):
-                # Service tokens use IP-based rate limiting
-                client_id = f"service_{client_host}"
-            else:
-                # JWT tokens: verify and extract user_id for per-user rate limiting
-                user_id = self._extract_user_id_from_jwt(token, request)
-                if user_id:
-                    # Use user ID from verified JWT for per-user rate limiting
-                    client_id = f"user_{user_id}"
-                else:
-                    # Failed to verify JWT, fall back to IP-based
-                    client_id = f"auth_{client_host}"
-        else:
-            # No authentication - use IP-based rate limiting
-            client_id = f"ip_{client_host}"
-
-        # Check rate limit
-        allowed = await self.limiter.check_rate_limit(client_id)
-
-        if not allowed:
-            retry_after = self.limiter.get_retry_after(client_id)
-            logger.warning(
-                "Rate limit exceeded for %s on %s %s (retry_after=%ds)",
-                client_id,
-                request.method,
-                request.url.path,
-                retry_after,
-            )
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "detail": f"Too many requests. Please wait {retry_after} seconds before trying again.",
-                    "error": "rate_limit_exceeded",
-                    "retry_after": retry_after,
-                    "message": "You're sending requests too quickly. The system will be ready again shortly.",
-                },
-                headers={
-                    "Retry-After": str(retry_after),
-                    "X-RateLimit-Limit": str(self.limiter.rate),
-                    "X-RateLimit-Remaining": "0",
-                    "X-RateLimit-Window": "60",
-                },
-            )
+        limiter = self.limiter
+        if request.method == "POST" and path in self.user_message_paths:
+            limiter = self.interact_limiter
+        if not await limiter.check_rate_limit(client_id):
+            return self._too_many(limiter, client_id, request)
 
         # Process request
         processed_response = await call_next(request)
         typed_response: Response = cast(Response, processed_response)
 
+        if typed_response.status_code == 401:
+            await self.rejected_limiter.check_rate_limit(rejected_id)
+
         # Add rate limit headers to response
-        if client_id in self.limiter.buckets:
-            tokens, _ = self.limiter.buckets[client_id]
-            typed_response.headers["X-RateLimit-Limit"] = str(self.limiter.rate)
+        if client_id in limiter.buckets:
+            tokens, _ = limiter.buckets[client_id]
+            typed_response.headers["X-RateLimit-Limit"] = str(limiter.rate)
             typed_response.headers["X-RateLimit-Remaining"] = str(int(tokens))
             typed_response.headers["X-RateLimit-Window"] = "60"
 

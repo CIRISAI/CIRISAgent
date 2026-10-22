@@ -39,9 +39,11 @@ def test_the_block_states_the_approval_the_rule_and_the_identity():
     block = format_wa_approval_block(GRANT, language="en")
     for fact in ("wa-2026-test", "defer_c5aaf93c", "2026-10-22T14:00:00+00:00", "Take care, from Ally."):
         assert fact in block
-    assert "REJECT" in block
-    assert "Do not DEFER it again" in block
-    assert "does not mean having no name" in block
+    assert "choose the REJECT action" in block
+    assert "Do not choose the DEFER action for this change again" in block
+    assert "MEMORIZE action in the identity scope" in block
+    assert "does not take away your name" in block
+    assert "{" not in block, "every placeholder is filled"
 
 
 @pytest.mark.parametrize(

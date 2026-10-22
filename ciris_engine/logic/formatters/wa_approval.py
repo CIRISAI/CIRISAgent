@@ -19,7 +19,9 @@ verified approval; otherwise nothing, and the prompt is byte-identical.
 
 from typing import Any, Optional
 
+from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import WAAuthorization
+from ciris_engine.schemas.services.graph_core import GraphScope
 
 WA_APPROVAL_KEYS = ("prompts.wa_approval.grant", "prompts.wa_approval.rule", "prompts.wa_approval.identity")
 
@@ -62,6 +64,15 @@ def format_wa_approval_block(authorization: Optional[WAAuthorization], language:
         granted_at=authorization.granted_at,
         guidance=authorization.guidance or "-",
     )
-    rule = get_string(lang, "prompts.wa_approval.rule")
+    # The action and scope names are the enum values the model answers with,
+    # so they reach every locale as placeholders, never as translated words.
+    rule = get_string(
+        lang,
+        "prompts.wa_approval.rule",
+        memorize=HandlerActionType.MEMORIZE.value.upper(),
+        reject=HandlerActionType.REJECT.value.upper(),
+        defer=HandlerActionType.DEFER.value.upper(),
+        identity_scope=GraphScope.IDENTITY.value,
+    )
     identity = get_string(lang, "prompts.wa_approval.identity")
     return "\n\n".join((grant, rule, identity))

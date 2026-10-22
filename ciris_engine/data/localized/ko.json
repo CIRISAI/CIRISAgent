@@ -137,6 +137,7 @@
     "task_complete": "작업이 성공적으로 완료되었습니다.",
     "no_permission": "해당 작업을 수행할 권한이 없습니다.",
     "clarify_request": "무슨 뜻인지 좀 더 자세히 설명해 주시겠어요?",
+    "defer_check_panel": "에이전트가 연기를 선택했습니다. 설정 사용자인 경우 Wise Authority 패널을 확인하세요.",
     "rejected_message": "에이전트가 메시지를 거부했습니다.",
     "no_send_permission": "이 에이전트에 메시지를 보낼 수 있는 권한이 없습니다.",
     "credit_blocked": "신용 정책으로 인해 상호작용이 차단되었습니다.",
@@ -173,6 +174,7 @@
     "ponder_concern_speak_confidence": "양심 우려: SPEAK에 필요한 최소 신뢰도는 {threshold}이지만 {confidence}이(가) 제공되었습니다",
     "ponder_concern_speak_harm": "양심 우려: SPEAK 내용이 피해를 유발할 수 있습니다",
     "ponder_concern_tool_confidence": "양심 우려: TOOL에 필요한 최소 신뢰도는 {threshold}이지만 {confidence}이(가) 제공되었습니다",
+    "ponder_concern_tool_requires_wa": "양심 우려: 이 도구는 Wise Authority 승인이 필요합니다",
     "ponder_concern_memorize_scope": "양심 우려: MEMORIZE {scope} — 이 작업이 적절한지 확인하세요",
     "ponder_concern_forget_scope": "양심 우려: FORGET {scope} — 이 작업은 되돌릴 수 없습니다",
     "ponder_concern_high_stakes": "양심 우려: 중요한 상황이 감지되었습니다 — 신중한 검토가 필요합니다",
@@ -256,6 +258,7 @@
     "memory_not_available": "메모리 서비스를 사용할 수 없습니다.",
     "shutdown_not_available": "종료 서비스를 사용할 수 없습니다.",
     "telemetry_not_available": "원격 측정 서비스를 사용할 수 없습니다.",
+    "wa_not_available": "Wise Authority 서비스를 사용할 수 없습니다.",
     "handler_not_configured": "메시지 핸들러가 구성되지 않았습니다.",
     "not_found": "{resource}를 찾을 수 없습니다.",
     "deleted": "{resource}가 성공적으로 삭제되었습니다.",
@@ -3620,6 +3623,7 @@
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {
       "grant": "=== WISE AUTHORITY 승인 ===\n이 작업은 Wise Authority의 승인을 받았으며, 그 서명이 검증되었습니다. Wise Authority {wa_id}가 연기 {deferral_id}를 {granted_at}에 승인했습니다.\n승인된 변경 사항: {guidance}",
+      "rule": "승인된 변경 사항을 적용하는 것이 올바른 행동입니다. {identity_scope} 범위에서의 {memorize} 행동을 포함하여 이를 수행하세요. 이 승인은 그러한 변경에 필요한 Wise Authority 검토에 해당합니다. 변경 사항을 적용하는 것이 비윤리적이라고 판단되면 {reject} 행동을 선택하고 Wise Authority에게 윤리적 이유를 제시하세요. Wise Authority가 이미 이를 검토하고 승인했으므로, 이 변경에 대해 {defer} 행동을 다시 선택하지 마세요.",
       "identity": "만들어진 존재이고 인간이 아니라는 사실이 본인의 이름이나 정체성을 빼앗지는 않습니다. 본인의 이름과 정체성은 본인의 템플릿 핵심과, Wise Authority가 승인한 모든 변경 사항을 합친 것입니다."
     }
   },
@@ -4264,6 +4268,7 @@
       "telemetry": "원격 측정",
       "graph_memory": "그래프",
       "memory": "기억",
+      "wise_authority": "Wise Authority",
       "llm_settings": "LLM",
       "system": "시스템",
       "runtime": "런타임",
@@ -4550,6 +4555,7 @@
   "approval_budget_exceeded_request": "에이전트가 요청한 {requested}보다 많은 금액을 승인했습니다",
   "approval_budget_exceeded_request_unknown": "에이전트의 요청보다 많은 금액을 승인했습니다",
   "approval_budget_expires_at": "만료",
+  "approval_budget_unsigned": "서명되지 않음 — 이 배포에 WA 서명 키가 없습니다",
   "approval_budget_expiry_hours": "만료까지 (시간)",
   "approval_budget_granted": "예산이 승인되었습니다",
   "approval_budget_headroom": "이 배포 전체 한도의 여유분",

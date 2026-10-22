@@ -1226,6 +1226,26 @@ class DesktopAppTestRunner:
                 f"YOU: without_ai={run_without_ai}, band={age_band}, username={username}, " f"fed-ID label={fed_label}"
             )
 
+            # -1. WHICH CIRIS ID — the wizard's first question since ciris-client
+            # 0.5.229 (CIRISClient 5023deb8, FSD/ADD_DEVICE.md §1.1): a new CIRIS
+            # ID, or this device added to an existing one. Neither is preselected
+            # and Next stays disabled until it is answered, so a driver that does
+            # not answer it stalls on "Choose first" with every field below
+            # unreachable. That was all five legs of run 39704117504: "setup wizard
+            # did not complete" with nothing else to go on. This harness always
+            # makes a NEW identity. Older clients (< 0.5.229) have no such step.
+            if await self.helper.wait_for_optional_element("btn_setup_new_identity", timeout=8000):
+                self._log("identity path: btn_setup_new_identity (a new CIRIS ID)")
+                if not await self.helper.click("btn_setup_new_identity"):
+                    raise RuntimeError("Failed to click btn_setup_new_identity on the wizard's first question")
+                await asyncio.sleep(0.3)
+                chosen = await self.helper.get_element("setup_identity_path")
+                if chosen is not None and chosen.text is not None and chosen.text != "NEW":
+                    await self._dump_tree("you_step:identity_path")
+                    raise RuntimeError(f"the identity-path choice reads {chosen.text!r} after choosing a new CIRIS ID")
+            else:
+                self._log("identity path: no first question on this client (< 0.5.229); new-ID path is implicit")
+
             # 0. THE AI QUESTION — FIRST, because that is where the screen puts it.
             # Client 0.5.203 renders AiPreferenceSection ABOVE age/account/fed-ID
             # (0.5.202 had no such section), and it is answered first here for two

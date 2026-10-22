@@ -101,21 +101,11 @@ def test_a_platform_that_cannot_run_fails_rather_than_vanishing(raw: str) -> Non
 
 
 def test_the_trace_gate_still_runs_and_still_asks_for_replication(raw: str) -> None:
-    """Reaching Interact is half the gate; traces leaving is the other half.
+    """Reaching Interact is half the gate; traces reaching the canonical is the other half.
 
-    Enforcement is currently OFF: the `replication` rung sits on the
-    KEX/replication path upstream is rebuilding, so it cannot pass for reasons
-    no change here can fix, and holding five platforms red on someone else's
-    in-flight work trains everyone to ignore the colour.
-
-    What must NOT drift while it is off:
-      * it still runs (a check nobody executes rots silently)
-      * it still asks for `replication`, never `ship` — 'ship' keys on
-        envelopes_sent_total, which is blind to the replication plane
-        (CIRISEdge#434); softening the RUNG rather than the ENFORCEMENT would
-        quietly redefine what "delivered" means
-      * the run still SAYS so — an unenforced check that is also invisible is a
-        vacuous pass with extra steps
+    It still asks for `replication`, never `ship`: 'ship' keys on
+    envelopes_sent_total, which is blind to the replication plane
+    (CIRISEdge#434). Softening the RUNG would quietly redefine "delivered".
     """
     assert "assert_traces_reached_canonical.py" in raw
     assert "--require replication" in raw
@@ -123,19 +113,8 @@ def test_the_trace_gate_still_runs_and_still_asks_for_replication(raw: str) -> N
         "'ship' keys on envelopes_sent_total, which is blind to the replication "
         "plane (CIRISEdge#434) — the gate must require 'replication'"
     )
-    # THE WINDOW IS THE CASE STATEMENT, NOT A CHARACTER COUNT. This used to
-    # slice 600 chars after the invocation, which held until the receipt rung
-    # added its arguments and its own `4)` outcome with a comment explaining
-    # why unknown is not failure — and the `*)` warning fell off the end. A
-    # test that fails because a comment got longer is measuring the wrong
-    # thing: what must not drift is that the branch which CONSUMES the result
-    # says enforcement is off, wherever it sits.
     after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
     assert 'case "$trace_status" in' in after, "the result is not dispatched on at all"
-    case_block = after.split('case "$trace_status" in')[1].split("esac")[0]
-    assert "::warning::" in case_block, "the non-enforced result is not surfaced at all"
-    assert "NOT enforced" in case_block, "the log does not say enforcement is off"
-
 
 def test_the_interact_gate_is_still_fatal(raw: str) -> None:
     """Whatever happens to the trace rung, silence on screen must stay fatal.
@@ -215,17 +194,41 @@ def test_each_platform_starts_from_a_clean_host(raw: str) -> None:
         assert port in teardown, f"teardown does not clear :{port}"
 
 
-def test_the_trace_rung_has_three_outcomes(raw: str) -> None:
-    """Unknown must not be recorded as delivered.
+def _trace_branches(raw: str) -> dict:
+    after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
+    case_block = after.split('case "$trace_status" in')[1].split("esac")[0]
+    branches = {}
+    for chunk in case_block.split(";;"):
+        stripped = chunk.strip()
+        for code in ("0", "1", "2", "3", "4", "5", "*"):
+            marker = f"{code})"
+            lines = [ln for ln in stripped.splitlines() if not ln.strip().startswith("#")]
+            if lines and lines[0].strip().startswith(marker):
+                branches[code] = chunk
+    return branches
 
-    Exit 3 (CIRISServer#518: no replication counter on this substrate) once ran
-    the success branch, so chat-*.json said "traces": true and the gallery
-    claimed delivery for a run whose own output said NOT COVERED.
+
+def test_delivery_is_enforced_on_every_rung(raw: str) -> None:
+    """2.16.3 (Eric, 2026-10-21): every non-zero trace result fails the job.
+
+    It was report-only from 2.9.45 while upstream rebuilt KEX/replication. Once
+    the canonical sealed (edge v43, 10-20) it refused every pre-v43 agent, its
+    trace count stayed flat for 33 h, and this job stayed green: run 39600828244
+    held 0 of 2 authored with verdict false. Unknown is not zero, and it is not a
+    pass either.
     """
-    assert "trace_status" in raw
-    assert "traces_json=null" in raw, "the unobservable case is not recorded distinctly"
-    assert "traces_json=true" in raw and "traces_json=false" in raw
+    branches = _trace_branches(raw)
+    assert set(branches) >= {"0", "1", "2", "3", "4", "5", "*"}, sorted(branches)
+    assert "overall=1" not in branches["0"]
+    for code in ("1", "2", "3", "4", "5", "*"):
+        assert "overall=1" in branches[code], f"trace exit {code} does not fail the job"
+        assert "::error::" in branches[code], f"trace exit {code} does not say why"
+        assert "traces_json=true" not in branches[code], f"trace exit {code} is recorded as delivered"
 
+
+def test_the_tile_requires_chat_and_traces(raw: str) -> None:
+    """With delivery enforced, a green tile means both halves passed."""
+    assert '[ $chat_rc -eq 0 ] && [ $trace_rc -eq 0 ] && echo true || echo false' in raw
 
 def test_android_provisioning_asserts_the_avd_exists(raw: str) -> None:
     """Installing the emulator is not the same as having an AVD.
@@ -492,15 +495,12 @@ def test_the_no_ai_login_leg_declares_the_install_it_drives(raw: str) -> None:
 
 
 def test_authored_traces_are_enforced(raw: str) -> None:
-    """authored > 0 is FATAL (exit 5 sets overall=1); delivery itself stays reported-only.
+    """authored > 0 is requested and FATAL (exit 5).
 
     2026-10-09..14 every platform authored 0 traces and the job stayed green.
     """
     after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
     invocation = after.split("trace_status=$?")[0]
     assert "--require-authored" in invocation, "the authored rung is not requested"
-    case_block = after.split('case "$trace_status" in')[1].split("esac")[0]
-    five = case_block.split("5)")[1].split(";;")[0]
-    assert "overall=1" in five, "authored=0 does not fail the job"
-    star = case_block.split("*)")[1].split(";;")[0]
-    assert "overall=1" not in star, "delivery must stay reported-only while upstream KEX is in flight"
+    assert "overall=1" in _trace_branches(raw)["5"], "authored=0 does not fail the job"
+

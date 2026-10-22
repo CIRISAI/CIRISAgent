@@ -5,7 +5,7 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.16.3-stable] - 2026-10-21
+## [2.16.3-stable] - 2026-10-22
 
 ### Substrate
 
@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Multi-device end to end.** A joined device is the owner: the owner's signing keys are the fed-ID plus the live user-role roster keys (CIRISServer#793). Self-roster proposals (#794): `GET /v1/self/roster/proposals`, and assent/object on each. Add-device past a roster of two answers `202 {held, proposal_id}` and resumes when the roster lands the key; `409 add_device.roster_change_held` is retired.
   - **Edge v43.1.1, sealed transport: a fleet break.** Every link is sealed by a hybrid transit key exchange, and a node on an older edge exchanges nothing with a v43 node. Roll nodes together.
   - Persist v59.1.0 (the genesis bundle v4 seeds the canonical's transit pair) and verify v20.2.0.
-- **ciris-client 0.5.229**, the server's new floor. It carries the iOS crash-recorder fix: the hook no longer segfaults inside NSLog, and writes `kotlin_crash.log` first.
+- **ciris-client 0.5.230**. It carries 0.5.229, the server's new floor, with the iOS crash-recorder fix (the hook no longer segfaults inside NSLog, and writes `kotlin_crash.log` first). 0.5.230 adds only new UI test tags; desktop test clicks now return after their handlers run.
 
 ### Wise Authority
 
@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Reliability
 
+- **Claude works on iOS** (#1309, fixes #1298). The iOS bundle cannot carry the `anthropic` SDK, and the agent fell back to an OpenAI client pointed at openrouter.ai carrying the user's Anthropic key. It now calls the Claude API directly over HTTPS: chat, model list and key check. Structured replies use the API's own schema enforcement, and reasoning is turned off (or to lowest effort) per model on every Claude path.
 - **MSASPDMA verdicts take effect** (#1304). The memorize second pass passed a ResourceUsage model where a dict was required, so every verdict was discarded and the original MEMORIZE ran instead.
 - **"No proxy token available" warns once** per absence, not on every billing check (#1304).
 

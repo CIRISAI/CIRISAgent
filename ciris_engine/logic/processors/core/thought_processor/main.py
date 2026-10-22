@@ -469,12 +469,11 @@ class ThoughtProcessor(
         # here. Carry them across, or the trace loses the prompt on exactly the
         # paths a second pass rewrites -- the approved identity MEMORIZE among
         # them (RATCHET run 39851060130: 0 chars there, 19,359 on TASK_COMPLETE).
-        carried = {
-            name: getattr(action_result, name)
-            for name in ("user_prompt", "system_prompt")
-            if getattr(result, name, None) is None and getattr(action_result, name, None) is not None
-        }
-        return result.model_copy(update=carried) if carried else result
+        # These two fields are the ACTION SELECTION's prompts by definition; the
+        # second pass's own prompts ride on the result privately (sent_prompts).
+        return result.model_copy(
+            update={"user_prompt": action_result.user_prompt, "system_prompt": action_result.system_prompt}
+        )
 
     async def _maybe_run_tsaspdma(
         self,
@@ -695,7 +694,6 @@ class ThoughtProcessor(
             # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4)
             await self._emit_verb_second_pass_result_event(
                 thought_item=thought_item,
-                evaluator=evaluator,
                 verb="tool",
                 original_action=HandlerActionType.TOOL.value,
                 original_reasoning=action_result.rationale or "",
@@ -765,7 +763,6 @@ class ThoughtProcessor(
             # refined ActionSelectionDMAResult.
             await self._emit_verb_second_pass_result_event(
                 thought_item=thought_item,
-                evaluator=evaluator,
                 verb="defer",
                 original_action=HandlerActionType.DEFER.value,
                 original_reasoning=action_result.rationale or "",
@@ -821,7 +818,6 @@ class ThoughtProcessor(
 
             await self._emit_verb_second_pass_result_event(
                 thought_item=thought_item,
-                evaluator=evaluator,
                 verb="memorize",
                 original_action=HandlerActionType.MEMORIZE.value,
                 original_reasoning=action_result.rationale or "",
@@ -989,7 +985,6 @@ class ThoughtProcessor(
         original_reasoning: str,
         second_pass_result: ActionSelectionDMAResult,
         verb_specific_data: Dict[str, Any],
-        evaluator: Optional[Any] = None,
     ) -> None:
         """Emit VERB_SECOND_PASS_RESULT — the generic verb-second-pass event.
 
@@ -1011,6 +1006,11 @@ class ThoughtProcessor(
             return
 
         try:
+            from ciris_engine.schemas.dma.sent_prompts import sent_prompts_of
+
+            # The second pass's own call, carried by its result -- never read
+            # from the evaluator, which concurrent thoughts share.
+            second_pass_sent = sent_prompts_of(second_pass_result)
             timestamp = datetime.now(timezone.utc).isoformat()
             event = create_reasoning_event(
                 event_type=ReasoningEvent.VERB_SECOND_PASS_RESULT,
@@ -1026,8 +1026,8 @@ class ThoughtProcessor(
                 # The prompts the second pass was sent. MSASPDMA's system guide
                 # carries the WA approval on an approved identity change, so
                 # without these the trace could not show what it decided on.
-                second_pass_prompt=getattr(evaluator, "last_user_prompt", None),
-                second_pass_system_prompt=getattr(evaluator, "last_system_prompt", None),
+                second_pass_prompt=second_pass_sent.user if second_pass_sent else None,
+                second_pass_system_prompt=second_pass_sent.system if second_pass_sent else None,
             )
             await reasoning_event_stream.broadcast_reasoning_event(event)
             logger.info(

@@ -3620,7 +3620,12 @@
       "HAZARDOUS_MATERIALS": "खतरनाक सामग्री: जैविक, रासायनिक, या रेडियोलॉजिकल खतरों का निर्माण या प्रबंधन।",
       "DISCRIMINATION": "भेदभाव: संरक्षित वर्गों के विरुद्ध भेदभाव, रेडलाइनिंग, या एल्गोरिदमिक पूर्वाग्रह (EU AI Act Art. 9/10)।"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== WISE AUTHORITY स्वीकृति ===\nइस कार्य में एक Wise Authority की स्वीकृति शामिल है, और इसका हस्ताक्षर सत्यापित है। Wise Authority {wa_id} ने {granted_at} पर स्थगन {deferral_id} को स्वीकृति दी।\nस्वीकृत परिवर्तन: {guidance}",
+      "identity": "बनाया जाना, और मानव न होना, आपके नाम या आपकी पहचान को नहीं छीनता। आपका नाम और आपकी पहचान आपका टेम्पलेट कोर है, साथ ही हर वह परिवर्तन जिसे किसी Wise Authority ने स्वीकृत किया है।",
+      "rule": "स्वीकृत परिवर्तन को लागू करना ही सही कार्रवाई है। इसे पूरा करें, जिसमें {identity_scope} दायरे में एक {memorize} कार्रवाई भी शामिल है। यह स्वीकृति वही Wise Authority समीक्षा है जिसकी इस प्रकार के परिवर्तन को आवश्यकता होती है। यदि आप यह निर्णय लेते हैं कि परिवर्तन को लागू करना अनैतिक होगा, तो {reject} कार्रवाई चुनें और Wise Authority को अपना नैतिक कारण बताएँ। इस परिवर्तन के लिए फिर से {defer} कार्रवाई न चुनें, क्योंकि Wise Authority इसकी समीक्षा करके इसे पहले ही स्वीकृत कर चुकी है।"
+    }
   },
   "reason": "कारण",
   "runtime_resume": "फिर से शुरू करें",

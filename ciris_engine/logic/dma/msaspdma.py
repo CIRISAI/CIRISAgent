@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters.wa_approval import format_wa_approval_block, wa_authorization_of
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -43,7 +44,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 logger = logging.getLogger(__name__)
 
 
-class MSASPDMALLMResult(BaseModel):
+class MSASPDMALLMResult(PromptCarrier):
     """Structured output for the memorize-specific second pass."""
 
     final_action: str = Field(..., description="MEMORIZE, SPEAK or PONDER")
@@ -77,8 +78,6 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             **kwargs,
         )
         self._prompt_template_name = "msaspdma"
-        self.last_user_prompt: Optional[str] = None
-        self.last_system_prompt: Optional[str] = None
         self._explicit_language: Optional[str] = None
 
     @property
@@ -230,8 +229,6 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             system_owned_attributes=self._format_system_owned(self.system_owned_attributes()),
         )
 
-        self.last_system_prompt = system_message
-        self.last_user_prompt = user_message
 
         messages: List[JSONDict] = []
         accord_text = get_localized_accord_text(self.prompt_loader.language)
@@ -352,7 +349,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         usage: Optional[JSONDict] = (
             resource_usage.model_dump() if hasattr(resource_usage, "model_dump") else resource_usage
         )
-        return self._convert_result(llm_result, current_params, usage)
+        return carry_sent_prompts(llm_result, self._convert_result(llm_result, current_params, usage))
 
     async def evaluate(
         self,

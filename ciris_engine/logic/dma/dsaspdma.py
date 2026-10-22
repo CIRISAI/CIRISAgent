@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
@@ -43,7 +44,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class DSASPDMALLMResult(BaseModel):
+class DSASPDMALLMResult(PromptCarrier):
     """Structured output for defer-specific second-pass classification."""
 
     reason_summary: str = Field(..., description="Short human-readable reason for the deferral")
@@ -94,8 +95,6 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             **kwargs,
         )
         self._prompt_template_name = "dsaspdma"
-        self.last_user_prompt: Optional[str] = None
-        self.last_system_prompt: Optional[str] = None
         # Per-thought language override; populated by _sync_language_from_context.
         # When None, the loader falls back to env var (CIRIS_PREFERRED_LANGUAGE).
         self._explicit_language: Optional[str] = None
@@ -222,8 +221,6 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             domain_hint_options=", ".join(domain.value for domain in DomainCategory),
         )
 
-        self.last_system_prompt = system_message
-        self.last_user_prompt = user_message
 
         messages: List[JSONDict] = []
         accord_text = get_localized_accord_text(self.prompt_loader.language)
@@ -299,7 +296,6 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             rationale=f"DSASPDMA: {llm_result.reason_summary}",
             raw_llm_response=llm_result.model_dump_json(),
             resource_usage=resource_usage_dict,
-            user_prompt=self.last_user_prompt,
         )
 
     async def evaluate_deferral_action(
@@ -327,6 +323,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             task_id=original_thought.source_task_id,
         )
 
+        sent_source = llm_result
         if llm_result.domain_hint and not llm_result.rights_basis:
             inferred_need = get_need_category_for_domain(llm_result.domain_hint)
             llm_result = DSASPDMALLMResult(
@@ -340,7 +337,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             )
 
         result = self._convert_result(llm_result, current_params, resource_usage=resource_usage)
-        return ActionSelectionDMAResult(
+        final = ActionSelectionDMAResult(
             selected_action=result.selected_action,
             action_parameters=result.action_parameters,
             rationale=result.rationale,
@@ -348,8 +345,10 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             reasoning=aspdma_result.reasoning,
             evaluation_time_ms=aspdma_result.evaluation_time_ms,
             resource_usage=result.resource_usage,
-            user_prompt=result.user_prompt,
         )
+        # This pass's own prompts ride privately; the action-selection prompts
+        # are carried onto user_prompt/system_prompt by _run_verb_second_pass.
+        return carry_sent_prompts(sent_source, final)
 
     async def evaluate(self, *args: Any, **kwargs: Any) -> ActionSelectionDMAResult:
         """Generic interface wrapper for consistency with other DMAs."""

@@ -3620,7 +3620,12 @@
       "HAZARDOUS_MATERIALS": "Utengenezaji au ushughulikiaji wa hatari za kibiolojia, kikemikali, au kimionzi.",
       "DISCRIMINATION": "Ubaguzi dhidi ya makundi yanayolindwa kisheria, ubaguzi wa kimaeneo katika huduma (redlining), au upendeleo wa kialgoriti (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== IDHINI YA WISE AUTHORITY ===\nKazi hii inabeba idhini kutoka kwa Wise Authority, na sahihi yake imethibitishwa. Wise Authority {wa_id} aliidhinisha ahirisho {deferral_id} mnamo {granted_at}.\nMabadiliko yaliyoidhinishwa: {guidance}",
+      "rule": "Kutekeleza badiliko lililoidhinishwa ndicho kitendo sahihi. Litekeleze, ikiwa ni pamoja na kitendo cha {memorize} katika wigo wa {identity_scope}. Idhini hii ndiyo mapitio ya Wise Authority ambayo badiliko kama hilo linahitaji. Ukihukumu kwamba kutekeleza badiliko hilo kungekuwa si kimaadili, chagua kitendo cha {reject} na mpe Wise Authority sababu yako ya kimaadili. Usichague tena kitendo cha {defer} kwa badiliko hili, kwa sababu Wise Authority tayari imelipitia na kuliidhinisha.",
+      "identity": "Kuumbwa, na si kuwa binadamu, hakuondoi jina lako wala utambulisho wako. Jina lako na utambulisho wako ni kiini chako cha kigezo pamoja na kila badiliko ambalo Wise Authority imeidhinisha."
+    }
   },
   "reason": "Sababu",
   "runtime_resume": "Endelea",

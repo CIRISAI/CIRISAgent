@@ -15,6 +15,7 @@ import logging
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Union
 
+from ciris_engine.schemas.dma.sent_prompts import PromptCarrier
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ciris_engine.schemas.types import JSONDict
@@ -37,7 +38,7 @@ from ..services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, No
 logger = logging.getLogger(__name__)
 
 
-class IDMAResult(BaseModel):
+class IDMAResult(PromptCarrier):
     """Result from Intuition Decision Making Algorithm (IDMA).
 
     IDMA is a semantic implementation of the CCA (Coherent Collective Action)
@@ -108,7 +109,7 @@ def _coerce_to_string(v: Any) -> str:
     return str(v)
 
 
-class EthicalDMAResult(BaseModel):
+class EthicalDMAResult(PromptCarrier):
     """Result from Principled Decision Making Algorithm (PDMA) — v3.0 reshape.
 
     PDMA evaluates a thought against the six CIRIS Foundational Principles + M-1
@@ -201,7 +202,7 @@ class EthicalDMAResult(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
-class CSDMAResult(BaseModel):
+class CSDMAResult(PromptCarrier):
     """Result from Common Sense Decision Making Algorithm."""
 
     plausibility_score: float = Field(..., ge=0.0, le=1.0, description="Plausibility rating")
@@ -211,7 +212,7 @@ class CSDMAResult(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
-class DSDMAResult(BaseModel):
+class DSDMAResult(PromptCarrier):
     """Result from Domain Specific Decision Making Algorithm."""
 
     domain: str = Field(..., description="Primary domain of expertise")
@@ -222,7 +223,7 @@ class DSDMAResult(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
-class ActionSelectionDMAResult(BaseModel):
+class ActionSelectionDMAResult(PromptCarrier):
     """Result from Action Selection DMA - the meta-decision maker."""
 
     # Core fields matching handler expectations
@@ -262,7 +263,7 @@ class ActionSelectionDMAResult(BaseModel):
     model_config = ConfigDict(extra="ignore", defer_build=True)
 
 
-class ASPDMALLMResult(BaseModel):
+class ASPDMALLMResult(PromptCarrier):
     """Gemini-compatible ASPDMA LLM output schema - NO Union types.
 
     This flat schema is used as the response_model for LLM structured output

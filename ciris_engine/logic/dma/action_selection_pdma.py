@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, cast
 
+from ciris_engine.schemas.dma.sent_prompts import carry_sent_prompts, sent_prompts_of
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
@@ -84,8 +85,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         self.faculty_integration = FacultyIntegration(faculties) if faculties else None
 
         # Store last prompts for debugging/streaming
-        self.last_user_prompt: Optional[str] = None
-        self.last_system_prompt: Optional[str] = None
 
     async def evaluate(  # type: ignore[override]  # Extends base signature with enable_recursive_evaluation
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool = False
@@ -317,6 +316,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # Get channel_id from context if available
         channel_id = _get_value(input_data.processing_context, "channel_id") if input_data.processing_context else None
 
+        sent = sent_prompts_of(llm_result)
         # Convert flat LLM result to typed ActionSelectionDMAResult
         final_result = convert_llm_result_to_action_result(
             llm_result=llm_result,
@@ -324,9 +324,12 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             raw_llm_response=None,  # Set if needed for debugging
             evaluation_time_ms=None,  # Set from metrics if available
             resource_usage=None,  # Set from metrics if available
-            user_prompt=self.last_user_prompt,
-            system_prompt=self.last_system_prompt,
+            # From THIS call's result, never from the evaluator: one evaluator
+            # serves every concurrent thought (schemas/dma/sent_prompts.py).
+            user_prompt=sent.user if sent else None,
+            system_prompt=sent.system if sent else None,
         )
+        carry_sent_prompts(llm_result, final_result)
 
         if final_result.selected_action == HandlerActionType.OBSERVE:
             thought_id = input_data.original_thought.thought_id
@@ -394,8 +397,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         messages.append({"role": "user", "content": user_content})
 
         # Store prompts for streaming/debugging
-        self.last_system_prompt = system_message
-        self.last_user_prompt = main_user_content
 
         return messages
 

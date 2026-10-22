@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, Generic, List, Optional, Tuple, Typ
 import yaml
 from pydantic import BaseModel
 
+from ciris_engine.schemas.dma.sent_prompts import attach_sent_prompts, sent_prompts_from_messages
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.services import LLMService
 from ciris_engine.schemas.dma.prompts import PromptCollection
@@ -243,6 +244,11 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         if not isinstance(result, tuple):
             raise RuntimeError(f"Multi-service sink returned non-tuple: {type(result)}")
 
+        # The prompts travel with THIS call's result, derived from THESE messages
+        # (schemas/dma/sent_prompts.py). Never stored on the evaluator, which
+        # every concurrent thought shares.
+        if result:
+            attach_sent_prompts(result[0], sent_prompts_from_messages(messages))
         return result
 
     async def apply_faculties(self, content: str, context: Optional[JSONDict] = None) -> Dict[str, BaseModel]:

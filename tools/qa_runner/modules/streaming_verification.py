@@ -978,12 +978,15 @@ class StreamingVerificationModule:
                                         "final_reasoning",
                                         "verb_specific_data",
                                         "second_pass_prompt",
+                                        "second_pass_system_prompt",
                                     },
                                     "aspdma_result": {
                                         "selected_action",
                                         "action_rationale",
                                         "is_recursive",
                                         "aspdma_prompt",
+                                        # The system message: CORE IDENTITY, amendments, WA approval (2.16.3)
+                                        "aspdma_system_prompt",
                                         # Deliberation-diversity signal (added 2.7.1)
                                         # — None when older prompts / fallback models don't emit it
                                         "selection_confidence",

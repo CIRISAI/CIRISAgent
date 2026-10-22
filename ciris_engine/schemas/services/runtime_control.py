@@ -1476,6 +1476,19 @@ class ConscienceResultEvent(BaseModel):
     epistemic_humility_justification: Optional[str] = Field(None, description="Reflective justification")
     epistemic_humility_recommendation: Optional[str] = Field(None, description="Recommendation: proceed, ponder, defer")
 
+    # === CONSCIENCE PROMPTS: what each conscience was sent ===
+    # step_decorators always passed these; with no field to receive them the
+    # model dropped them, so no conscience prompt ever reached the stream and an
+    # approved change's veto could not be audited (RATCHET run 39853438022).
+    entropy_prompt: Optional[str] = Field(None, description="User prompt sent to the entropy conscience")
+    coherence_prompt: Optional[str] = Field(None, description="User prompt sent to the coherence conscience")
+    optimization_veto_prompt: Optional[str] = Field(
+        None, description="User prompt sent to the optimization veto (leads with any WA approval)"
+    )
+    epistemic_humility_prompt: Optional[str] = Field(
+        None, description="User prompt sent to the epistemic humility conscience"
+    )
+
 
 class ActionResultEvent(PropagatedCoherenceEntropyMixin, BaseModel):
     """Event 5: Action execution outcome with audit trail and resource usage (ACTION_COMPLETE step).

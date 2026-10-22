@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
+from ciris_engine.schemas.dma.sent_prompts import attach_sent_prompts, sent_prompts_from_messages
 from ciris_engine.logic.conscience.transport import surfaces_as_transport_failure
 from ciris_engine.logic.formatters import (
     append_round1_accord_blocks,
@@ -63,8 +64,6 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         self._prompt_template_name = "csdma_common_sense"
 
         # Store last prompts for debugging/streaming
-        self.last_user_prompt: Optional[str] = None
-        self.last_system_prompt: Optional[str] = None
 
         # Client will be retrieved from the service registry during evaluation
 
@@ -317,10 +316,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
         # Store prompts for streaming/debugging
         system_messages = [m for m in messages if m.get("role") == "system"]
-        self.last_system_prompt = "\n\n".join(str(m.get("content", "")) for m in system_messages)
         user_messages = [m for m in messages if m.get("role") == "user"]
         content = user_messages[-1]["content"] if user_messages else None
-        self.last_user_prompt = str(content) if content is not None else None
 
         logger.debug(
             "CSDMA input to LLM for thought %s:\nContext Summary: %s",
@@ -354,10 +351,13 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
                 logger.warning(f"CSDMA transport failure for thought ID {thought_item.thought_id}: {e}")
                 raise
             logger.error(f"CSDMA evaluation failed for thought ID {thought_item.thought_id}: {e}")
-            return CSDMAResult(
-                plausibility_score=0.0,
-                flags=["LLM_Error", "defer_for_retry"],
-                reasoning=f"Failed CSDMA evaluation: {str(e)}",
+            return attach_sent_prompts(
+                CSDMAResult(
+                    plausibility_score=0.0,
+                    flags=["LLM_Error", "defer_for_retry"],
+                    reasoning=f"Failed CSDMA evaluation: {str(e)}",
+                ),
+                sent_prompts_from_messages(messages),
             )
 
     async def evaluate(self, *args: Any, **kwargs: Any) -> CSDMAResult:  # type: ignore[override]

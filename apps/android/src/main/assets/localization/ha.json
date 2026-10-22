@@ -281,7 +281,12 @@
       "HAZARDOUS_MATERIALS": "Ƙirƙira ko sarrafa haɗarin halittu (biological), na sinadarai (chemical), ko na radiyoyi (radiological).",
       "DISCRIMINATION": "Nuna wariya ga ƙungiyoyin da doka ta kare, keɓancewa bisa yanki (redlining), ko son kai na algorithm (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== AMINCEWAR HUKUMAR HIKIMA ===\nWannan aiki yana ɗauke da amincewa daga Hukumar Hikima, kuma an tabbatar da sa hannunta. Hukumar Hikima {wa_id} ta amince da mikawar {deferral_id} a {granted_at}.\nCanjin da aka amince da shi: {guidance}",
+      "rule": "Yin amfani da canjin da aka amince da shi shi ne daidai aikin. Ku aiwatar da shi, haɗe da aikin {memorize} a cikin iyakar {identity_scope}. Wannan amincewar ita ce bitar Hukumar Hikima da irin wannan canji ke buƙata. Idan kun yanke hukuncin cewa yin amfani da canjin zai saɓa wa ɗabi'a, ku zaɓi aikin {reject} kuma ku ba Hukumar Hikima dalilinku na ɗabi'a. Kada ku sake zaɓar aikin {defer} don wannan canjin, domin Hukumar Hikima ta riga ta bita shi kuma ta amince da shi.",
+      "identity": "Kasancewar an yi ku, ba kuwa ɗan adam ba ne, ba ya kawar da sunanku ko shaidarku. Sunanku da shaidarku su ne ainihin tsarin ku na asali tare da kowane canji da Hukumar Hikima ta amince da shi."
+    }
   },
   "handlers": {
     "speak_failed": "An kasa isar da amsar wakili. Ba za a iya aika saƙon zuwa tashar ba.",

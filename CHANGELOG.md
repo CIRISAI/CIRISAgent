@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Reliability
 
+- **A request for an absent agent route no longer loops.** The agent forwarded any `/v1` path it does not serve to its node, and the node proxies agent paths back. So a request for a missing agent route, such as a newer client asking for a route this agent lacks, went back and forth through the rate limiter until the caller's whole minute was spent. It now answers 404 without forwarding.
+- **Rate limits are per credential** (#1311). The limiter recognised only HS256 JWTs and fell back to one bucket per IP. That meant one 60/min bucket for a whole desktop UI, and one for every user behind a proxy. Sends to the agent now have their own bucket, so background polling cannot refuse a message.
 - **Claude works on iOS** (#1309, fixes #1298). The iOS bundle cannot carry the `anthropic` SDK, and the agent fell back to an OpenAI client pointed at openrouter.ai carrying the user's Anthropic key. It now calls the Claude API directly over HTTPS: chat, model list and key check. Structured replies use the API's own schema enforcement, and reasoning is turned off (or to lowest effort) per model on every Claude path.
 - **MSASPDMA verdicts take effect** (#1304). The memorize second pass passed a ResourceUsage model where a dict was required, so every verdict was discarded and the original MEMORIZE ran instead.
 - **"No proxy token available" warns once** per absence, not on every billing check (#1304).

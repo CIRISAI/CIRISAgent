@@ -1202,6 +1202,8 @@ async def test_dispatch_of_the_guidance_task_is_wa_authorized(wise_authority_ser
 
     ctx = build_dispatch_context(thought=thought_of(guidance), time_service=time_service, task=guidance)
     assert ctx.wa_authorized is True
+    # The approval itself rides on dispatch, so the MEMORIZE it authorizes can record its provenance.
+    assert ctx.wa_authorization == guidance.context.wa_authorization
     assert ctx.wa_id == "wa-2025-06-24-AUTH01"
 
     from ciris_engine.logic.persistence.models.tasks import get_task_by_id
@@ -1210,6 +1212,7 @@ async def test_dispatch_of_the_guidance_task_is_wa_authorized(wise_authority_ser
     assert ordinary is not None and ordinary.context.wa_authorization is None
     ctx_ordinary = build_dispatch_context(thought=thought_of(ordinary), time_service=time_service, task=ordinary)
     assert ctx_ordinary.wa_authorized is False
+    assert ctx_ordinary.wa_authorization is None
 
 
 def test_wa_authorization_cannot_represent_an_unverified_approval():

@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from ciris_engine.logic.buses import BusManager
     from ciris_engine.logic.services.governance.consent import ConsentService
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+    from ciris_engine.schemas.runtime.models import WAAuthorization
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,103 @@ def is_identity_node(node: GraphNode) -> bool:
         True if node is an identity node
     """
     return node.scope == GraphScope.IDENTITY or node.id.startswith("agent/identity") or node.type == NodeType.AGENT
+
+
+#: The core identity node: template-derived, and never edited by a MEMORIZE.
+#: Every approved IDENTITY-scope write is an amendment beside it.
+CORE_IDENTITY_NODE_ID = "agent/identity"
+
+
+def is_identity_amendment_candidate(node: GraphNode) -> bool:
+    """True for an IDENTITY-scope write that, once WA-approved, is an amendment.
+
+    That includes a write addressed to ``agent/identity`` itself: a live second
+    pass replaces a node's attributes with its own, so an approved write there
+    would leave the core without ``agent_id`` or ``description`` and fail every
+    DMA's identity check. Excludes CONFIG nodes, which have their own
+    IDENTITY-scope semantics (ConfigNodeType).
+    """
+    return node.scope == GraphScope.IDENTITY and node.type not in (NodeType.CONFIG, NodeType.IDENTITY_AMENDMENT)
+
+
+#: Attributes that record how a node was written, not what the agent was told.
+_AMENDMENT_BOOKKEEPING = frozenset(
+    {
+        "content",
+        "created_by",
+        "updated_by",
+        "tags",
+        "wa_amendment",
+        "proposed_node_id",
+        "memory_type",
+        "node_class",
+        "version",
+        "source",
+    }
+)
+
+
+def amendment_text(attributes: Any) -> str:
+    """The approved identity text an amendment carries.
+
+    ``content`` when the write has one. A live model's memorize second pass
+    (MSASPDMA) replaces the attributes with its own and names them freely, so
+    otherwise the text is every authored attribute, ``key: value`` in key order
+    (a single one renders as its bare value). Timestamps and bookkeeping are not
+    identity text. RATCHET run 39788730490: the approved change was stored with
+    no ``content`` and was refused on every read.
+    """
+    if hasattr(attributes, "model_dump"):
+        attributes = attributes.model_dump()
+    if not isinstance(attributes, dict):
+        return ""
+    content = attributes.get("content")
+    if isinstance(content, str) and content.strip():
+        return content.strip()
+    authored = {
+        key: str(value).strip()
+        for key, value in attributes.items()
+        if key not in _AMENDMENT_BOOKKEEPING
+        and not key.endswith("_at")
+        and isinstance(value, (str, int, float, bool))
+        and str(value).strip()
+    }
+    if len(authored) == 1:
+        return next(iter(authored.values()))
+    return "; ".join(f"{key}: {authored[key]}" for key in sorted(authored))
+
+
+def as_identity_amendment(node: GraphNode, authorization: "WAAuthorization") -> GraphNode:
+    """``node`` as a WA-approved identity amendment, carrying the approval's provenance.
+
+    The node type is what the identity loader selects on, and the provenance is
+    what makes each amendment individually auditable and revocable. The id is
+    derived from the approval, not taken from the write: a live second pass
+    invents ids (``identity/agent``), and two approvals addressed alike would
+    otherwise overwrite one another instead of standing side by side.
+    """
+    import hashlib
+
+    attributes = serialize_attributes_to_json(node.attributes)
+    text = amendment_text(attributes)
+    if text:
+        attributes["content"] = text
+    attributes["proposed_node_id"] = node.id
+    attributes["wa_amendment"] = {
+        "wa_id": authorization.wa_id,
+        "deferral_id": authorization.deferral_id,
+        "granted_at": authorization.granted_at,
+    }
+    digest = hashlib.sha256(node.id.encode("utf-8")).hexdigest()[:8]
+    return GraphNode(
+        id=f"{CORE_IDENTITY_NODE_ID}/amendment/{authorization.deferral_id}/{digest}",
+        type=NodeType.IDENTITY_AMENDMENT,
+        scope=GraphScope.IDENTITY,
+        attributes=attributes,
+        version=node.version,
+        updated_by=authorization.wa_id,
+        updated_at=node.updated_at,
+    )
 
 
 def is_config_node(node: GraphNode) -> bool:

@@ -35,6 +35,7 @@ from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery
 from ciris_engine.schemas.types import JSONDict
 
+from .identity_amendments import load_identity_amendments
 from .secrets_snapshot import ERROR_KEY, build_secrets_snapshot
 
 logger = logging.getLogger(__name__)
@@ -569,6 +570,7 @@ async def _extract_agent_identity(
             role=attrs_dict.get("role_description", "Unknown"),
             trust_level=attrs_dict.get("trust_level", 0.5),
             stewardship=attrs_dict.get("stewardship"),
+            approved_amendments=await load_identity_amendments(memory_service),
         )
 
         # Create typed identity summary

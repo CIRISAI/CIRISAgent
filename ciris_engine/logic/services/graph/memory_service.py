@@ -234,40 +234,32 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         """
         Export agent identity context as formatted text.
 
-        Uses format_agent_identity() to convert raw graph node data into
-        human-readable text with shutdown history.
+        The core is ``agent/identity``, with every Wise Authority-approved
+        amendment beside it in the description. This used to format whichever
+        IDENTITY-scope node was newest, which is usually a telemetry snapshot
+        (one is written per thought), and present it as the identity.
         """
         import asyncio
 
-        from ciris_engine.logic.formatters.identity import format_agent_identity
+        from ciris_engine.logic.context.identity_amendments import amendment_from_node
+        from ciris_engine.logic.formatters.identity import describe_with_amendments, format_agent_identity
+        from ciris_engine.logic.persistence.models.graph import get_all_graph_nodes, get_graph_node
 
         def _query_identity() -> str:
-            # A1 completion: route through persist Engine instead of raw
-            # sqlite3 on cirisgraph_nodes. Closes the concurrency boundary
-            # that was causing "database disk image is malformed" cascades
-            # when persist writes raced raw-sqlite3 reads in CI.
-            from ciris_engine.logic.persistence.models.graph import get_persist_engine
-
-            engine = get_persist_engine()
-            if engine is None:
-                logger.warning("persist engine not wired — _query_identity returning empty")
+            core = get_graph_node("agent/identity", GraphScope.IDENTITY)
+            if core is None or not core.attributes:
                 return ""
-
-            cursor_json = json.dumps(
-                {"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""}
+            attributes = core.attributes
+            attrs = dict(attributes.model_dump() if hasattr(attributes, "model_dump") else attributes)
+            nodes = get_all_graph_nodes(
+                scope=GraphScope.IDENTITY, node_type=NodeType.IDENTITY_AMENDMENT.value, limit=100
             )
-            raw = engine.cirisgraph_query_nodes(
-                json.dumps({"scope": "IDENTITY"}), cursor_json, 10
-            )
-            parsed = json.loads(raw) if isinstance(raw, str) else raw
-            items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
-            if not items:
-                return ""
-            first = items[0]
-            attrs_raw = first.get("attributes") if isinstance(first, dict) else None
-            if not attrs_raw:
-                return ""
-            attrs = attrs_raw if isinstance(attrs_raw, dict) else json.loads(attrs_raw)
+            amendments = [a for a in (amendment_from_node(n) for n in nodes) if a is not None]
+            amendments.sort(key=lambda a: (a.granted_at, a.node_id))
+            if amendments:
+                attrs["description"] = describe_with_amendments(
+                    str(attrs.get("description", "")), [a.content for a in amendments]
+                )
             return format_agent_identity(attrs)
 
         loop = asyncio.get_event_loop()

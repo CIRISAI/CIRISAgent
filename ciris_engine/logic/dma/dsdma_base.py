@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from ciris_engine.logic.conscience.transport import surfaces_as_transport_failure
 from ciris_engine.logic.formatters import (
+    amendment_texts,
     append_round1_accord_blocks,
     format_core_identity_block,
     format_system_prompt_blocks,
@@ -252,7 +253,11 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             # for the CORE IDENTITY doctrine, replaceable via the research
             # `string` namespace and translatable per bundle.
             identity_block = format_core_identity_block(
-                str(agent_id), str(description), str(role), language=self._explicit_language
+                str(agent_id),
+                str(description),
+                str(role),
+                language=self._explicit_language,
+                amendments=amendment_texts(agent_identity),
             )
         else:
             # NO FALLBACK - STRICT TYPE CHECKING ONLY
@@ -314,7 +319,11 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             # synced language, and en-fallback keeps bytes identical wherever
             # the bundle has no translation.
             identity_block = format_core_identity_block(
-                str(agent_id), str(description), str(role), language=self._explicit_language
+                str(agent_id),
+                str(description),
+                str(role),
+                language=self._explicit_language,
+                amendments=amendment_texts(agent_identity_raw),
             )
 
             # Format optional blocks - type narrow for .get() access

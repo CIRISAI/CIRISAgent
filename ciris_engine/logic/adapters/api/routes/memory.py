@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_int
 from ciris_engine.schemas.api.responses import ResponseMetadata, SuccessResponse
-from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode
+from ciris_engine.schemas.services.graph_core import GraphEdge, GraphNode, NodeType
 from ciris_engine.schemas.services.operations import GraphScope, MemoryOpResult, MemoryOpStatus
 
 from ..dependencies.auth import AuthContext
@@ -338,6 +338,15 @@ async def store_memory(
     This is the primary way to add information to the agent's memory.
     Requires ADMIN role as this modifies system state.
     """
+
+    # An identity amendment is the record of a verified Wise Authority approval
+    # and is minted only by the MEMORIZE handler. Storing one here would put
+    # unapproved text into the agent's CORE IDENTITY as if a WA had approved it.
+    if body.node.type == NodeType.IDENTITY_AMENDMENT:
+        raise HTTPException(
+            status_code=403,
+            detail="Identity amendments are created only from a verified Wise Authority approval",
+        )
 
     try:
         # Store node via memory service

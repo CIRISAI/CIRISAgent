@@ -5,7 +5,7 @@ Converts raw identity graph node data into human-readable text format,
 including shutdown/continuity history.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from ciris_engine.logic.utils.jsondict_helpers import get_dict, get_list, get_str
 from ciris_engine.schemas.types import JSONDict
@@ -13,11 +13,39 @@ from ciris_engine.schemas.types import JSONDict
 from ._localized import label_localizer
 
 
+def amendment_texts(agent_identity: Any) -> List[str]:
+    """The approved identity amendments' texts, from ``IdentityData`` or its dict form."""
+    if isinstance(agent_identity, dict):
+        raw = agent_identity.get("approved_amendments") or []
+    else:
+        raw = getattr(agent_identity, "approved_amendments", None) or []
+    texts: List[str] = []
+    for amendment in raw:
+        content = amendment.get("content") if isinstance(amendment, dict) else getattr(amendment, "content", None)
+        if content:
+            texts.append(str(content).strip())
+    return [text for text in texts if text]
+
+
+def describe_with_amendments(description: str, amendments: Sequence[str]) -> str:
+    """The core description followed by each approved amendment, one per line.
+
+    The amendments are the Wise Authority-approved text itself, so they render
+    inside the description slot of the identity block rather than under new
+    doctrine; nothing here is authored prose.
+    """
+    if not amendments:
+        return description
+    lines = [description.rstrip()] + [f"- {text}" for text in amendments]
+    return "\n".join(lines)
+
+
 def format_core_identity_block(
     agent_id: str,
     description: str,
     role: str,
     language: Optional[str] = None,
+    amendments: Sequence[str] = (),
 ) -> str:
     """The "=== CORE IDENTITY ===" block — one routed source (#974 step 3).
 
@@ -37,7 +65,7 @@ def format_core_identity_block(
         lang,
         "prompts.identity_block",
         agent_id=agent_id,
-        description=description,
+        description=describe_with_amendments(description, amendments),
         role=role,
     )
 

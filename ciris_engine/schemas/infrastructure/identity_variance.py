@@ -98,6 +98,16 @@ class CurrentIdentityData(BaseModel):
     adaptation_rate: float = Field(0.1, description="Rate of adaptation")
 
 
+class IdentityAmendment(BaseModel):
+    """A Wise Authority-approved change to the agent's identity, with its provenance."""
+
+    node_id: str = Field(..., description="The amendment's graph node")
+    content: str = Field(..., description="The approved identity text")
+    wa_id: str = Field(..., description="The Wise Authority that approved it")
+    deferral_id: str = Field(..., description="The deferral whose approval this is")
+    granted_at: str = Field(..., description="ISO-8601 time the approval was applied")
+
+
 class IdentityData(BaseModel):
     """Identity data schema for system snapshots - sourced from local graph memory."""
 
@@ -107,6 +117,10 @@ class IdentityData(BaseModel):
     trust_level: float = Field(0.5, ge=0.0, le=1.0, description="Agent trust level")
     stewardship: Optional[Union[str, JSONValue]] = Field(
         None, description="Stewardship description or data structure if present"
+    )
+    approved_amendments: List[IdentityAmendment] = Field(
+        default_factory=list,
+        description="Wise Authority-approved identity amendments, oldest first, rendered with the core identity",
     )
 
 

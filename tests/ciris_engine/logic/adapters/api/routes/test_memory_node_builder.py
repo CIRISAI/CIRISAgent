@@ -43,3 +43,26 @@ def test_a_genuinely_broken_agent_row_still_logs_an_error(caplog):
     with caplog.at_level(logging.ERROR):
         assert GraphNodeBuilder.build_from_row(row) is None
     assert any("Failed to build GraphNode" in r.getMessage() for r in caplog.records)
+
+
+def test_an_amendment_comes_back_with_its_approval():
+    """RATCHET run 39795442173: an amendment read back here had no wa_amendment."""
+    provenance = {"wa_id": "wa-1", "deferral_id": "defer_c5", "granted_at": "2026-10-22T14:00:00+00:00"}
+    node = GraphNodeBuilder.build_from_row(
+        _row(
+            "identity_amendment",
+            content="Take care, from Ally.",
+            wa_amendment=provenance,
+            proposed_node_id="identity/agent",
+        )
+    )
+    assert node is not None
+    assert node.attributes["wa_amendment"] == provenance
+    assert node.attributes["proposed_node_id"] == "identity/agent"
+    assert node.attributes["content"] == "Take care, from Ally."
+
+
+def test_other_nodes_keep_the_base_projection():
+    node = GraphNodeBuilder.build_from_row(_row("concept", content="fact", wa_amendment={"wa_id": "x"}))
+    assert node is not None
+    assert not isinstance(node.attributes, dict)

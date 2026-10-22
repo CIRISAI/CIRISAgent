@@ -1489,10 +1489,29 @@ class DesktopAppTestRunner:
             # entire point of the step, and logging that it did not happen while
             # returning success is how a run reports 5/5 on a wizard that never
             # finished.
+            #
+            # But SAY WHAT IS THERE, and HOW LATE: what is on screen at the deadline,
+            # then keep watching (still a failure) to time when it actually leaves.
+            # "Did not finish" and "finished at 41s" are different findings, and the
+            # first macOS run on server 0.5.233 could not tell them apart.
+            drivable = sorted(
+                e.test_tag
+                for e in await self.helper.get_elements()
+                if (e.visible if e.visible is not None else (e.width > 0 and e.height > 0))
+            )
+            await self._dump_tree("setup_complete_deadline")
+            finished_at: Optional[str] = None
+            while (datetime.now() - start).total_seconds() < 120:
+                screen = await self.helper.get_screen()
+                if (screen and screen != "Setup") or not await self.helper.is_element_present("btn_next"):
+                    finished_at = f"{(datetime.now() - start).total_seconds():.1f}s (screen {screen!r})"
+                    break
+                await asyncio.sleep(0.5)
             raise RuntimeError(
                 "Setup did not reach COMPLETE within 20s: still on the Setup screen "
                 "with btn_next present.\n"
-                "        The wizard was driven to the end and did not finish."
+                f"        On screen and drivable at 20s: {drivable[:16]}\n"
+                f"        It left the wizard at: {finished_at or 'never, within 120s'}"
             )
 
         await self.run_test("setup_complete", wait_for_complete)

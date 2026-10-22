@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Substrate
 
-- **ciris-server 0.5.232** (this PR):
+- **ciris-server 0.5.233**, which carries 0.5.232:
+  - **A roster key claims for its fedID** (CIRISServer#805/#806). `claim-remote` ships a roster proof that the target's setup admits, so the claimed node's owner is the fedID from the moment of the claim. The claimed node must itself run 0.5.233, which is what lets the manager claim the production agents. Associating a device mints its key under the fedID with a fedID-signed occurrence row.
+  - The served home decides the key tier (#807). Two directly peered nodes link without a canonical (#808).
+  - Substrate unchanged from 0.5.232 (edge v43.1.1, persist v59.1.0, verify v20.2.0).
   - **Multi-device end to end.** A joined device is the owner: the owner's signing keys are the fed-ID plus the live user-role roster keys (CIRISServer#793). Self-roster proposals (#794): `GET /v1/self/roster/proposals`, and assent/object on each. Add-device past a roster of two answers `202 {held, proposal_id}` and resumes when the roster lands the key; `409 add_device.roster_change_held` is retired.
   - **Edge v43.1.1, sealed transport: a fleet break.** Every link is sealed by a hybrid transit key exchange, and a node on an older edge exchanges nothing with a v43 node. Roll nodes together.
   - Persist v59.1.0 (the genesis bundle v4 seeds the canonical's transit pair) and verify v20.2.0.

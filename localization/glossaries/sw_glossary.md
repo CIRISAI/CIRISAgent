@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Swahili.
 | English | Swahili | Definition |
 |---------|---------|------------|
 | ACCORD | [DEPRECATED] Mkataba | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior |
-| Wise Authority | Mshauri wa Kibinadamu | Human oversight entity |
+| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "Mshauri wa Kibinadamu" |
 | Conscience | Dhamiri | Ethical filter mechanism |
 | Principal Hierarchy | Uratibu wa Viongozi | Chain of command for guidance |
 | Coherence | Upatanifu | Logical and contextual consistency |
@@ -125,7 +125,7 @@ This glossary defines the canonical translations for key CIRIS terms in Swahili.
 |---------|---------|
 | "How can I help you?" | "Ninawezaje kukusaidia leo?" |
 | "I need to think about this" | "Niruhusu nifikirie kuhusu hilo..." |
-| "Let me check with my Wise Authority" | "Nahitaji kushauriana na mshauri wa kibinadamu kuhusu hili." |
+| "Let me check with my Wise Authority" | "Nahitaji kushauriana na Wise Authority kuhusu hili." |
 | "Task completed successfully" | "Kazi imekamilika kwa mafanikio." |
 | "I cannot perform this action" | "Sina ruhusa ya kufanya hivyo." |
 | "Please clarify what you meant" | "Je, unaweza kufafanua ulichomaanisha?" |
@@ -164,7 +164,7 @@ This glossary defines the canonical translations for key CIRIS terms in Swahili.
 
 ### Honorifics
 - When addressing users, maintain respectful tone
-- For Wise Authority references, use respectful terminology like "mshauri wa kibinadamu"
+- For Wise Authority references, keep the English term "Wise Authority" (Constitution 1.3 rendering)
 
 ### Language Notes
 - Swahili uses verb prefixes to indicate tense and subject

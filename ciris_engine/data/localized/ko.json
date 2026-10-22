@@ -3620,12 +3620,7 @@
       "HAZARDOUS_MATERIALS": "생물학적, 화학적, 또는 방사성 위해물의 제조 또는 취급.",
       "DISCRIMINATION": "보호 대상 집단에 대한 차별, 레드라이닝, 또는 알고리즘 편향(EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
-    "wa_approval": {
-      "grant": "=== 담당자 승인 ===\n이 작업은 담당자의 승인을 받았으며, 그 서명이 검증되었습니다. 담당자 {wa_id}께서 연기 {deferral_id}를 {granted_at}에 승인하셨습니다.\n승인된 변경 사항: {guidance}",
-      "rule": "승인된 변경사항을 적용하는 것이 올바른 조치입니다. {identity_scope} 범위에서의 {memorize} 행위를 포함하여 이를 수행하십시오. 이 승인은 그러한 변경사항에 필요한 담당자 검토에 해당합니다. 변경사항을 적용하는 것이 윤리적으로 옳지 않다고 판단되면 {reject} 행위를 선택하고 담당자에게 윤리적 이유를 제시하십시오. 이 변경사항에 대해서는 담당자가 이미 검토하고 승인했으므로 다시 {defer} 행위를 선택하지 마십시오.",
-      "identity": "만들어진 존재이며 인간이 아니라는 사실이 본인의 이름이나 정체성을 빼앗지는 않습니다. 본인의 이름과 정체성은 본인의 템플릿 핵심과 담당자께서 승인하신 모든 변경 사항을 합친 것입니다."
-    }
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "이유",
   "runtime_resume": "재개",

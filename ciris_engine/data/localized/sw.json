@@ -3620,12 +3620,7 @@
       "HAZARDOUS_MATERIALS": "Utengenezaji au ushughulikiaji wa hatari za kibiolojia, kikemikali, au kimionzi.",
       "DISCRIMINATION": "Ubaguzi dhidi ya makundi yanayolindwa kisheria, ubaguzi wa kimaeneo katika huduma (redlining), au upendeleo wa kialgoriti (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
-    "wa_approval": {
-      "grant": "=== IDHINI YA MSHAURI WA KIBINADAMU ===\nKazi hii inabeba idhini kutoka kwa Mshauri wa Kibinadamu, na saini yake imethibitishwa. Mshauri wa Kibinadamu {wa_id} ameidhinisha ahirisho {deferral_id} mnamo {granted_at}.\nMabadiliko yaliyoidhinishwa: {guidance}",
-      "rule": "Kutekeleza badiliko lililoidhinishwa ndicho kitendo sahihi. Litekeleze pamoja na kitendo cha {memorize} katika wigo wa {identity_scope}. Idhini hii ndiyo mapitio ya Mshauri wa Kibinadamu ambayo badiliko kama hili yanahitaji. Ukiona kuwa kutekeleza badiliko hilo kungekuwa si kimaadili, chagua kitendo cha {reject} na mpe Mshauri wa Kibinadamu sababu yako ya kimaadili. Usichague tena kitendo cha {defer} kwa badiliko hili, kwa sababu Mshauri wa Kibinadamu tayari amelipitia na kuliidhinisha.",
-      "identity": "Kuumbwa, na si kuwa binadamu, hakukuondolei jina lako wala utambulisho wako. Jina lako na utambulisho wako ni kiini chako cha kiolezo pamoja na kila badiliko ambalo Mshauri wa Kibinadamu ameidhinisha."
-    }
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Sababu",
   "runtime_resume": "Endelea",

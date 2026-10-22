@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Korean. 
 | English | Korean | Romanization | Definition |
 |---------|--------|--------------|------------|
 | ACCORD | [DEPRECATED] 협약 | hyeobyak | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior |
-| Wise Authority | 담당자 | damjangja | Human oversight entity (lit. "person in charge") |
+| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "담당자" |
 | Conscience | 양심 | yangsim | Ethical filter mechanism |
 | Principal Hierarchy | 원칙 계층 | wonjik gyecheung | Chain of command for guidance |
 | Coherence | 일관성 | ilgwanseong | Logical and contextual consistency |
@@ -92,7 +92,7 @@ This glossary defines the canonical translations for key CIRIS terms in Korean. 
 |---------|--------|--------------|
 | "How can I help you?" | "오늘 어떻게 도와드릴까요?" | "oneul eotteoke dowadeurilkkayo?" |
 | "I need to think about this" | "생각하고 있습니다" | "saenggakhago itsseumnida" |
-| "Let me check with my Wise Authority" | "담당자에게 확인이 필요합니다" | "damjangjae-ege hwag-ini pilyohamnida" |
+| "Let me check with my Wise Authority" | "Wise Authority에게 확인이 필요합니다" | "Wise Authority-ege hwag-ini pilyohamnida" |
 | "Task completed successfully" | "작업이 성공적으로 완료되었습니다" | "jageobi seongongjeogeuro wanlyodoeotsseumnida" |
 | "I cannot perform this action" | "해당 작업을 수행할 권한이 없습니다" | "haedang jageobeul suhanghal gwonhani eopsseumnida" |
 | "Could you explain in more detail?" | "무슨 뜻인지 좀 더 자세히 설명해 주시겠어요?" | "museun tteus-inji jom deo jasehi seolmyeonghae jusigesseoyo?" |
@@ -109,7 +109,7 @@ This glossary defines the canonical translations for key CIRIS terms in Korean. 
 - When addressing users, always use polite forms (존댓말)
 - Use 께 (kke) instead of 에게 (ege) for respectful "to"
 - Add -시- honorific infix for actions by respected parties
-- For Wise Authority references, use respectful terminology (담당자)
+- For Wise Authority references, keep the English term "Wise Authority" (Constitution 1.3 rendering)
 
 ### Language Structure
 - Korean is Subject-Object-Verb (SOV) word order

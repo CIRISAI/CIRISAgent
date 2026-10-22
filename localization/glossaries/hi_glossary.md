@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in Hindi. A
 | English | Hindi | Transliteration | Definition |
 |---------|-------|-----------------|------------|
 | ACCORD | [DEPRECATED] ACCORD | - | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior (kept as-is) |
-| Wise Authority | मानव सलाहकार | Maanav Salaahkaar | Human oversight entity |
+| Wise Authority | Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "मानव सलाहकार" |
 | Conscience | विवेक | Vivek | Ethical filter mechanism |
 | Principal Hierarchy | प्रमुख पदानुक्रम | Pramukh Padaanukram | Chain of command for guidance |
 | Coherence | सुसंगति | Susangati | Logical and contextual consistency |
@@ -87,7 +87,7 @@ This glossary defines the canonical translations for key CIRIS terms in Hindi. A
 |---------|-------|
 | "How can I help you?" | "आज मैं आपकी कैसे मदद कर सकता/सकती हूँ?" |
 | "I need to think about this" | "मुझे सोचने दीजिए..." |
-| "Let me check with my Wise Authority" | "मुझे इस विषय पर एक मानव सलाहकार से परामर्श करना होगा।" |
+| "Let me check with my Wise Authority" | "मुझे इस विषय पर Wise Authority से परामर्श करना होगा।" |
 | "Task completed successfully" | "कार्य सफलतापूर्वक पूरा हुआ।" |
 | "I cannot perform this action" | "मुझे यह करने की अनुमति नहीं है।" |
 
@@ -100,7 +100,7 @@ This glossary defines the canonical translations for key CIRIS terms in Hindi. A
 
 ### Honorifics
 - When addressing users, use "आप" (formal you) not "तुम" (informal)
-- For Wise Authority references, use respectful terminology like "मानव सलाहकार"
+- For Wise Authority references, keep the English term "Wise Authority" (Constitution 1.3 rendering)
 
 ### Gender Neutrality
 - Hindi has grammatical gender. Use dual forms where possible (e.g., "सकता/सकती")

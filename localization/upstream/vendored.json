@@ -83,9 +83,12 @@
     {
       "path": "localization/glossaries/de_glossary.md",
       "upstream_path": "localization/glossaries/de_glossary.md",
-      "kind": "verbatim",
+      "kind": "patched",
       "upstream_blob": "eacdfeaaba1fe8ce85e1f243ca5234393c9d8948",
-      "upstream_sha256": "888b2a4db76c5ea360314ee68be02355ab6c0b18c429027dbc844effb8a05e05"
+      "upstream_sha256": "888b2a4db76c5ea360314ee68be02355ab6c0b18c429027dbc844effb8a05e05",
+      "patch": "localization/patches/wise_authority_term.diff",
+      "sha256": "fc806fe1fd5f6e0bb6dce509953afb3d493549991c7b93b9b665b494507de49f",
+      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); pending upstream in CIRISClient"
     },
     {
       "path": "localization/glossaries/es_glossary.md",
@@ -118,9 +121,12 @@
     {
       "path": "localization/glossaries/hi_glossary.md",
       "upstream_path": "localization/glossaries/hi_glossary.md",
-      "kind": "verbatim",
+      "kind": "patched",
       "upstream_blob": "6f6f91d3b4eb682d76ba276b4f7a13e50cc7b948",
-      "upstream_sha256": "1981b37457e1d04b50a3d24161f485ee84a6d9bbc879139182535c178d86e0d3"
+      "upstream_sha256": "1981b37457e1d04b50a3d24161f485ee84a6d9bbc879139182535c178d86e0d3",
+      "patch": "localization/patches/wise_authority_term.diff",
+      "sha256": "e47d43b6f85596389ad7c1baa12a77dc5e3f9af71aefe34f25a62a6b61e6f541",
+      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); pending upstream in CIRISClient"
     },
     {
       "path": "localization/glossaries/id_glossary.md",
@@ -146,9 +152,12 @@
     {
       "path": "localization/glossaries/ko_glossary.md",
       "upstream_path": "localization/glossaries/ko_glossary.md",
-      "kind": "verbatim",
+      "kind": "patched",
       "upstream_blob": "d0d2814dbbd8e7e794c11f1fc3982f723f5316ea",
-      "upstream_sha256": "fdd65ec26d5fcba03ee045b13e637b7b4187382b753636b98288bdbd71b087dd"
+      "upstream_sha256": "fdd65ec26d5fcba03ee045b13e637b7b4187382b753636b98288bdbd71b087dd",
+      "patch": "localization/patches/wise_authority_term.diff",
+      "sha256": "0cb848e8af701da4fed0ca51ef744238a699f5825f4c623ca9e5e0f5896ff0d9",
+      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); pending upstream in CIRISClient"
     },
     {
       "path": "localization/glossaries/mr_glossary.md",
@@ -188,9 +197,12 @@
     {
       "path": "localization/glossaries/sw_glossary.md",
       "upstream_path": "localization/glossaries/sw_glossary.md",
-      "kind": "verbatim",
+      "kind": "patched",
       "upstream_blob": "6ecca46e9c4ce02c4b310c82dc79e833cc0dece1",
-      "upstream_sha256": "f8a383e41c856fc250499efcde4a979299223611ca4494d75e4e9350448a9340"
+      "upstream_sha256": "f8a383e41c856fc250499efcde4a979299223611ca4494d75e4e9350448a9340",
+      "patch": "localization/patches/wise_authority_term.diff",
+      "sha256": "a8ee3248080e0e495cdd2c638a769e4d3f2685265e3751c7d4a5bba42fc2a45b",
+      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); pending upstream in CIRISClient"
     },
     {
       "path": "localization/glossaries/ta_glossary.md",
@@ -216,9 +228,12 @@
     {
       "path": "localization/glossaries/tr_glossary.md",
       "upstream_path": "localization/glossaries/tr_glossary.md",
-      "kind": "verbatim",
+      "kind": "patched",
       "upstream_blob": "769768d2d78245fc0f72f5f07a1798c7d1d559ce",
-      "upstream_sha256": "4ed71042c5e884da23a634c3d74e9838f16df82197aa9848da290f55ca222e1b"
+      "upstream_sha256": "4ed71042c5e884da23a634c3d74e9838f16df82197aa9848da290f55ca222e1b",
+      "patch": "localization/patches/wise_authority_term.diff",
+      "sha256": "d934f4132994ff9146cb57f1ef913794961b6c961d08bf4cc696fb10da5dc8d5",
+      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); pending upstream in CIRISClient"
     },
     {
       "path": "localization/glossaries/uk_glossary.md",

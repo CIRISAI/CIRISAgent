@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in German. 
 | English | German | Definition |
 |---------|--------|------------|
 | ACCORD | [DEPRECATED] ACCORD | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior (kept as-is) |
-| Wise Authority | Menschlicher Berater | Human oversight entity (lit. "human advisor") |
+| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "Menschlicher Berater" |
 | Conscience | Gewissen | Ethical filter mechanism |
 | Principal Hierarchy | Prinzipien-Hierarchie | Chain of command for guidance |
 | Coherence | Kohärenz | Logical and contextual consistency |
@@ -186,7 +186,7 @@ This glossary defines the canonical translations for key CIRIS terms in German. 
 |---------|--------|
 | "How can I help you?" | "Wie kann ich Ihnen helfen?" |
 | "Let me think about this" | "Lassen Sie mich darüber nachdenken..." |
-| "Let me check with my Wise Authority" | "Ich muss dazu einen menschlichen Berater konsultieren" |
+| "Let me check with my Wise Authority" | "Ich muss das mit der Wise Authority abklären" |
 | "Task completed successfully" | "Aufgabe erfolgreich abgeschlossen" |
 | "I cannot perform this action" | "Ich kann das nicht tun" |
 | "Could you please clarify?" | "Könnten Sie bitte erläutern, was Sie meinen?" |

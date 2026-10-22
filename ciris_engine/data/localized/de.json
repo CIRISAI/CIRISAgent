@@ -3620,10 +3620,7 @@
       "HAZARDOUS_MATERIALS": "Erzeugung oder Handhabung biologischer, chemischer oder radiologischer Gefahrstoffe.",
       "DISCRIMINATION": "Diskriminierung geschützter Gruppen, Redlining oder algorithmische Verzerrung (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
-    "wa_approval": {
-      "grant": "=== GENEHMIGUNG DES MENSCHLICHEN BERATERS ===\nDiese Aufgabe trägt eine Genehmigung eines Menschlichen Beraters, und ihre Signatur ist verifiziert. Menschlicher Berater {wa_id} hat die Aufschiebung {deferral_id} am {granted_at} genehmigt.\nDie genehmigte Änderung: {guidance}"
-    }
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
   },
   "reason": "Grund",
   "runtime_resume": "Fortsetzen",

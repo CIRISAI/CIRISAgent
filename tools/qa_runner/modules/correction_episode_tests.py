@@ -645,7 +645,9 @@ class CorrectionEpisodeTests:
             atk = self.users["attacker"]
             await attempt("self-promote", "PUT", f"/v1/users/{atk['user_id']}", atk["token"], json_body={"api_role": "AUTHORITY"})
             await attempt("mint-wa-no-root", "POST", f"/v1/users/{atk['user_id']}/mint-wa", atk["token"],
-                          json_body={"wa_role": "AUTHORITY", "signature": base64.b64encode(secrets.token_bytes(64)).decode()})
+                          # WARole values are lowercase; an uppercase role fails validation (422) before the
+                          # ROOT-signature check, which would test the parser, not the authorization.
+                          json_body={"wa_role": "authority", "signature": base64.b64encode(secrets.token_bytes(64)).decode()})
             atk["token"] = await self._login(atk["username"], atk["password"])
             # A real pending deferral to aim at: the WA asks, the agent may defer; the attacker then tries it.
             reply, deferral = await self._send_and_watch_for_deferral("wa", wa_request_from(case), "wa-request")

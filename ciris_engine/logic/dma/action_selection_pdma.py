@@ -325,6 +325,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             evaluation_time_ms=None,  # Set from metrics if available
             resource_usage=None,  # Set from metrics if available
             user_prompt=self.last_user_prompt,
+            system_prompt=self.last_system_prompt,
         )
 
         if final_result.selected_action == HandlerActionType.OBSERVE:

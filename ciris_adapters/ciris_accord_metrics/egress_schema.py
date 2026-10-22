@@ -399,6 +399,7 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "reasoning_summary": _text(),
         "action_parameters": _json(),
         "aspdma_prompt": _text(),
+        "aspdma_system_prompt": _text(),
         "raw_llm_response": _text(F, 1000),
     },
     "TSASPDMA_RESULT": {

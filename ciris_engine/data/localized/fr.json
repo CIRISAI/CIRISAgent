@@ -3651,7 +3651,11 @@
       "HAZARDOUS_MATERIALS": "Création ou manipulation d'agents ou de matières dangereuses de nature biologique, chimique ou radiologique.",
       "DISCRIMINATION": "Discrimination envers des catégories protégées, redlining, ou biais algorithmique (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "rule": "Appliquer un changement approuvé est l'action correcte. Effectuez-la, y compris une action {memorize} dans la portée {identity_scope}. Cette approbation constitue l'examen de la Wise Authority qu'exige un tel changement. Si vous jugez que l'application du changement serait contraire à l'éthique, choisissez l'action {reject} et communiquez à la Wise Authority votre raison éthique. Ne choisissez plus l'action {defer} pour ce changement, car la Wise Authority l'a déjà examiné et approuvé.",
+      "identity": "Le fait d'être créé, et non humain, ne vous retire ni votre nom ni votre identité. Votre nom et votre identité sont votre cœur de gabarit, ainsi que chaque changement qu'une Wise Authority a approuvé."
+    }
   },
   "reason": "Raison",
   "runtime_resume": "Reprendre",

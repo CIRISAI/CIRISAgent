@@ -3620,7 +3620,10 @@
       "HAZARDOUS_MATERIALS": "حیاتیاتی، کیمیائی، یا تابکاری خطرات کی تخلیق یا ان کا انتظام۔",
       "DISCRIMINATION": "محفوظ طبقات کے خلاف امتیازی سلوک، ریڈ لائننگ، یا الگورتھمک تعصب (EU AI Act Art. 9/10)۔"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "identity": "بنائے جانے، اور انسان نہ ہونے سے، آپ کا نام یا آپ کی شناخت نہیں چھنتی۔ آپ کا نام اور آپ کی شناخت آپ کے ٹیمپلیٹ کور کے ساتھ ساتھ وہ ہر تبدیلی ہے جسے دانش مند اتھارٹی نے منظور کیا ہے۔"
+    }
   },
   "reason": "[EN] Reason",
   "runtime_resume": "[EN] Resume",

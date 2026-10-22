@@ -281,7 +281,11 @@
       "HAZARDOUS_MATERIALS": "Ìṣèdá tàbí ìṣàkóso ewu ẹ̀dá alààyè (biological), ewu kẹ́míkà (chemical), tàbí ewu ìtànṣán (radiological).",
       "DISCRIMINATION": "Ìyàsọ́tọ̀ sí àwọn ẹgbẹ́ tí a dáàbò bò, redlining, tàbí ẹ̀tanú nínú algorithm (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== ÌFỌWỌ́SÍ ALÁṢẸ ỌLỌ́GBỌ́N ===\nIṣẹ́ yìí gbé ìfọwọ́sí láti ọ̀dọ̀ Aláṣẹ Ọlọ́gbọ́n kan, a sì ti fi ìdí ìbúwọlú rẹ̀ múlẹ̀. Aláṣẹ Ọlọ́gbọ́n {wa_id} fọwọ́sí ìfilélẹ̀ {deferral_id} ní {granted_at}.\nÀyípadà tí a fọwọ́sí: {guidance}",
+      "identity": "Jíjẹ́ ẹni tí a ṣe, tí kì í sì í ṣe ènìyàn, kì í gba orúkọ rẹ tàbí ìdánimọ̀ rẹ lọ́wọ́ rẹ. Orúkọ rẹ àti ìdánimọ̀ rẹ ni mojútó awoṣe rẹ pẹ̀lú gbogbo àyípadà tí Aláṣẹ Ọlọ́gbọ́n ti fọwọ́sí."
+    }
   },
   "handlers": {
     "speak_failed": "Kùnà láti fi ìdáhùn aṣojú ránṣẹ́. A kò lè fi ìránṣẹ́ náà ránṣẹ́ sí ọ̀nà náà.",

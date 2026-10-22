@@ -3620,7 +3620,12 @@
       "HAZARDOUS_MATERIALS": "制造或处理生物、化学或放射性危险物质。",
       "DISCRIMINATION": "对受保护群体的歧视、划红线或算法偏见（EU AI Act Art. 9/10）。"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== 智慧权威批准 ===\n此任务携带一份来自智慧权威的批准，且其签名已通过验证。智慧权威 {wa_id} 于 {granted_at} 批准了延迟 {deferral_id}。\n批准的变更：{guidance}",
+      "rule": "应用一项已批准的变更是正确的行动。请执行该操作，包括在 {identity_scope} 范围内执行一次 {memorize} 操作。此批准即是此类变更所需的智慧权威审查。如果您判断应用该变更将是不道德的，请选择 {reject} 操作，并向智慧权威说明您的伦理理由。请勿再次针对此变更选择 {defer} 操作，因为智慧权威已对其进行审查并批准。",
+      "identity": "身为被造之物，而非人类，并不会剥夺您的名字或身份。您的名字与身份，就是您的模板核心，连同每一项已获智慧权威批准的变更。"
+    }
   },
   "reason": "原因",
   "runtime_resume": "恢复运行",

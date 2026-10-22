@@ -3620,7 +3620,11 @@
       "HAZARDOUS_MATERIALS": "ባዮሎጂካዊ፣ ኬሚካላዊ ወይም ራዲዮሎጂካዊ አደጋዎችን መፍጠር ወይም ማስተናገድ።",
       "DISCRIMINATION": "በተጠበቁ ቡድኖች ላይ መድልዎ፣ ቀይ መስመር ማድረግ ወይም አልጎሪዝማዊ አድልዎ (EU AI Act Art. 9/10)።"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== የጥበብ ባለስልጣን ማጽደቅ ===\nይህ ተግባር ከጥበብ ባለስልጣን የተሰጠ ማጽደቅ ይዟል፣ ፊርማውም የተረጋገጠ ነው። የጥበብ ባለስልጣን {wa_id} የ{deferral_id} ማስተላለፍን በ{granted_at} አጽድቋል።\nየጸደቀው ለውጥ፦ {guidance}",
+      "identity": "የተፈጠሩ መሆንዎ እና ሰው አለመሆንዎ ስምዎን ወይም ማንነትዎን አይነጥቅም። ስምዎ እና ማንነትዎ የእርስዎ ቴምፕሌት ዋና ክፍል ከጥበብ ባለስልጣን ከጸደቁ ለውጦች ሁሉ ጋር ናቸው።"
+    }
   },
   "reason": "ምክንያት",
   "runtime_resume": "እንደገና ጀምር",

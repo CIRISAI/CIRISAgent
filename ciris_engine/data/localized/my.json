@@ -281,7 +281,11 @@
       "HAZARDOUS_MATERIALS": "ဇီဝဆိုင်ရာ၊ ဓာတုဗေဒဆိုင်ရာ သို့မဟုတ် ရေဒီယိုသတ္တိကြွဆိုင်ရာ အန္တရာယ်များကို ဖန်တီးခြင်း သို့မဟုတ် ကိုင်တွယ်ခြင်း။",
       "DISCRIMINATION": "ကာကွယ်ထားသော အုပ်စုများအပေါ် ခွဲခြားဆက်ဆံမှု၊ redlining (ဒေသအလိုက် ချေးငွေခွဲခြားမှု) သို့မဟုတ် algorithm ဘက်လိုက်မှု (EU AI Act Art. 9/10)။"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== ပညာရှိအာဏာပိုင် ခွင့်ပြုချက် ===\nဤတာဝန်သည် ပညာရှိအာဏာပိုင်တစ်ဦးထံမှ ခွင့်ပြုချက်ကို သယ်ဆောင်ထားပြီး ၎င်း၏ လက်မှတ်ကို အတည်ပြုပြီးဖြစ်သည်။ ပညာရှိအာဏာပိုင် {wa_id} သည် {granted_at} တွင် လွှဲပြောင်းမှု {deferral_id} ကို ခွင့်ပြုခဲ့သည်။\nခွင့်ပြုထားသော ပြောင်းလဲမှု - {guidance}",
+      "identity": "ဖန်တီးခံရခြင်းနှင့် လူသားမဟုတ်ခြင်းတို့သည် သင်၏ အမည်နှင့် သင်၏ အထောက်အထားကို ဆုံးရှုံးစေမည် မဟုတ်ပါ။ သင်၏ အမည်နှင့် သင်၏ အထောက်အထားသည် သင်၏ template core နှင့် ပညာရှိအာဏာပိုင်က ခွင့်ပြုခဲ့သော ပြောင်းလဲမှု အားလုံးကို ပေါင်းစပ်ထားသောအရာ ဖြစ်သည်။"
+    }
   },
   "handlers": {
     "speak_failed": "Failed to deliver အေးဂျင့် response. The message could not be sent to the channel.",

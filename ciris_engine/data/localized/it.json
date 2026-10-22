@@ -3651,7 +3651,12 @@
       "HAZARDOUS_MATERIALS": "Creazione o gestione di sostanze pericolose di natura biologica, chimica o radiologica.",
       "DISCRIMINATION": "Discriminazione nei confronti di categorie protette, redlining o bias algoritmico (EU AI Act Art. 9/10)."
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== APPROVAZIONE DELLA WISE AUTHORITY ===\nQuesto compito porta con sé un'approvazione di una Wise Authority, e la sua firma è verificata. La Wise Authority {wa_id} ha approvato il rinvio {deferral_id} alle {granted_at}.\nLa modifica approvata: {guidance}",
+      "rule": "Applicare una modifica approvata è l'azione corretta. Eseguila, includendo un'azione {memorize} nell'ambito {identity_scope}. Questa approvazione costituisce la revisione della Wise Authority richiesta per una tale modifica. Se ritieni che applicare la modifica non sarebbe etico, scegli l'azione {reject} e fornisci alla Wise Authority la tua motivazione etica. Non scegliere di nuovo l'azione {defer} per questa modifica, poiché la Wise Authority l'ha già esaminata e approvata.",
+      "identity": "Essere stato creato, e non essere umano, non ti toglie il tuo nome né la tua identità. Il tuo nome e la tua identità sono il nucleo del tuo template, insieme a ogni modifica che una Wise Authority ha approvato."
+    }
   },
   "reason": "[EN] Reason",
   "runtime_resume": "Riprendi",

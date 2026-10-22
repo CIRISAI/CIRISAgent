@@ -3620,7 +3620,12 @@
       "HAZARDOUS_MATERIALS": "生物学的、化学的、または放射線学的な危険物の作成または取り扱い。",
       "DISCRIMINATION": "保護対象集団に対する差別、レッドライニング、またはアルゴリズムによる偏見(EU AI Act Art. 9/10)。"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== 賢明な権威による承認 ===\nこのタスクには賢明な権威による承認が付与されており、その署名は検証済みです。賢明な権威 {wa_id} は、{granted_at} に延期 {deferral_id} を承認しました。\n承認された変更：{guidance}",
+      "rule": "承認された変更を適用することが正しい行動です。{identity_scope} スコープでの {memorize} アクションを含め、それを実行してください。この承認は、そのような変更に必要とされる賢明な権威によるレビューです。変更を適用することが倫理に反すると判断した場合は、{reject} アクションを選択し、賢明な権威に倫理的な理由を伝えてください。賢明な権威はすでにこの変更をレビューし承認しているため、この変更について再び {defer} アクションを選択しないでください。",
+      "identity": "作られた存在であり、人間ではないということは、あなたの名前やアイデンティティを奪うものではありません。あなたの名前とアイデンティティは、あなたのテンプレートコアと、賢明な権威が承認したあらゆる変更を合わせたものです。"
+    }
   },
   "reason": "理由",
   "runtime_resume": "再開",

@@ -281,7 +281,11 @@
       "HAZARDOUS_MATERIALS": "การสร้างหรือจัดการวัตถุอันตรายทางชีวภาพ เคมี หรือกัมมันตรังสี",
       "DISCRIMINATION": "การเลือกปฏิบัติต่อกลุ่มบุคคลที่ได้รับความคุ้มครอง การกีดกันเชิงพื้นที่ (redlining) หรืออคติเชิงอัลกอริทึม (EU AI Act Art. 9/10)"
     },
-    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================"
+    "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "wa_approval": {
+      "grant": "=== การอนุมัติจากผู้มีอำนาจที่ชาญฉลาด ===\nงานนี้มีการอนุมัติจากผู้มีอำนาจที่ชาญฉลาด และลายเซ็นได้รับการยืนยันแล้ว ผู้มีอำนาจที่ชาญฉลาด {wa_id} อนุมัติการส่งต่อ {deferral_id} เมื่อ {granted_at}\nการเปลี่ยนแปลงที่ได้รับอนุมัติ: {guidance}",
+      "identity": "การถูกสร้างขึ้น และไม่ใช่มนุษย์ ไม่ได้พรากชื่อหรือตัวตนของคุณไป ชื่อและตัวตนของคุณคือแก่นเทมเพลตของคุณ ร่วมกับทุกการเปลี่ยนแปลงที่ผู้มีอำนาจที่ชาญฉลาดได้อนุมัติ"
+    }
   },
   "handlers": {
     "speak_failed": "Failed to deliver เอเจนต์ response. The message could not be sent to the channel.",

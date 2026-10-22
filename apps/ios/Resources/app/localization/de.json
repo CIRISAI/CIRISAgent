@@ -144,7 +144,8 @@
     "new_messages_arrived": "Agent hat die Aufgabe erledigt, aber es sind neue Nachrichten eingegangen, die nicht beantwortet wurden",
     "restarted_stale_task": "Ich wurde während der Verarbeitung Ihrer Anfrage neu gestartet. Die vorherige Aufgabe wurde automatisch abgeschlossen. Bitte senden Sie Ihre Nachricht erneut, wenn Sie noch eine Antwort benötigen.",
     "still_processing": "Die Verarbeitung läuft noch. Bitte schauen Sie später erneut nach. Eine Antwort des Agenten ist nicht garantiert.",
-    "processor_paused": "Prozessor pausiert – die Aufgabe wurde der Warteschlange hinzugefügt. Nehmen Sie die Verarbeitung wieder auf, um fortzufahren."
+    "processor_paused": "Prozessor pausiert – die Aufgabe wurde der Warteschlange hinzugefügt. Nehmen Sie die Verarbeitung wieder auf, um fortzufahren.",
+    "defer_check_panel": "Der Agent hat sich für Aufschieben entschieden. Überprüfen Sie das Wise-Authority-Panel, wenn Sie der Einrichtungsbenutzer sind."
   },
   "audit_context": "Kontext",
   "audit_hash_chain": "Hash-Kette",
@@ -185,7 +186,8 @@
     "retry_observation_intro": "WICHTIG: Eine NEUE NACHRICHT des Benutzers traf während der Verarbeitung ein: '{updated_observation}'. Sie müssen nun auf DIESE neue Nachricht antworten, nicht die alte Aufgabe abschließen.",
     "retry_observation_outro": "Der Benutzer wartet auf eine Antwort zu seiner neuen Nachricht. Nutzen Sie SPRECHEN, um zu antworten, oder verwenden Sie ein WERKZEUG, falls nötig.",
     "retry_general_outro": "Denken Sie daran: SCHIEBEN Sie nur bei ethischen Dilemmata oder Berechtigungsproblemen AUF – NICHT bei technischen Fehlern. Falls ein Werkzeug fehlschlägt, SPRECHEN Sie mit dem Benutzer, um den Fehler zu erklären.",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "ponder_concern_tool_requires_wa": "GEWISSENSBEDENKEN: Dieses Werkzeug erfordert eine Genehmigung durch die Wise Authority"
   },
   "consent_about_desc": "Sehen Sie, wie CIRIS Zustimmung, Datenschutz und gemeinsame Nutzung verwaltet",
   "consent_about_title": "Über Zustimmung",
@@ -263,7 +265,8 @@
     "created": "{resource} erfolgreich erstellt",
     "insufficient_permissions": "Unzureichende Berechtigungen. Erfordert die Rolle {role} oder höher.",
     "password_changed": "Passwort erfolgreich geändert",
-    "config_updated": "Konfiguration erfolgreich aktualisiert"
+    "config_updated": "Konfiguration erfolgreich aktualisiert",
+    "wa_not_available": "Wise-Authority-Dienst nicht verfügbar"
   },
   "filter_all": "Alle",
   "filter_clear": "Filter löschen",
@@ -4301,7 +4304,8 @@
       "affiliations_roster": "Mitglieder",
       "community_chats": "Räume",
       "affiliations_chats": "Räume",
-      "node_self": "Eigener Stand"
+      "node_self": "Eigener Stand",
+      "wise_authority": "Wise Authority"
     },
     "circle": {
       "agent": "Nur ich",

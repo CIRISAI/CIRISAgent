@@ -144,7 +144,8 @@
     "new_messages_arrived": "Wakala alikamilisha kazi lakini jumbe mpya zilifika ambazo hazikushughulikiwa",
     "restarted_stale_task": "Nilianzishwa tena wakati wa kushughulikia ombi lako. Kazi iliyopita ilikamilishwa kiotomatiki. Tafadhali tuma tena ujumbe wako ikiwa unahitaji jibu.",
     "still_processing": "Bado inashughulikiwa. Tafadhali angalia tena baadaye. Hakuna uhakika kwamba wakala atajibu.",
-    "processor_paused": "Kichakataji kimesitishwa — kazi imeongezwa kwenye foleni. Anza tena uchakataji ili kuendelea."
+    "processor_paused": "Kichakataji kimesitishwa — kazi imeongezwa kwenye foleni. Anza tena uchakataji ili kuendelea.",
+    "defer_check_panel": "Wakala alichagua kuahirisha; kagua paneli ya Wise Authority ikiwa wewe ni mtumiaji wa usanidi"
   },
   "audit_context": "Muktadha",
   "audit_hash_chain": "Mnyororo wa Hash",

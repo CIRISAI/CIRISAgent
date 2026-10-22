@@ -1373,31 +1373,42 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         logger.info(f"Initialized OpenAI client with model={model_name}, mode={selected_mode}")
 
     def _init_anthropic_client(self, api_key: str, model_name: str, timeout: int) -> None:
-        """Initialize native Anthropic client for Claude models.
+        """Initialize the Claude client: the native SDK, or the Claude API over HTTPS without it.
 
-        Falls back to OpenAI-compatible mode if SDK not available (e.g., on mobile).
+        Without the SDK (iOS: its `jiter` dependency has no iOS wheel,
+        CIRISAgent#1298) this used to fall back to an OpenAI client pointed at
+        openrouter.ai and hand it the user's ANTHROPIC key: a credential sent to a
+        third party, for a chat that could not work there. It now talks to
+        api.anthropic.com directly (anthropic_http).
         """
         try:
             import anthropic
         except ImportError:
-            # Fall back to OpenAI-compatible mode (e.g., via OpenRouter)
-            # This happens on mobile where native SDK has unsupported dependencies
-            logger.warning(
-                "Anthropic SDK not available - falling back to OpenAI-compatible mode. "
-                "For native Anthropic support, install: pip install anthropic"
-            )
-            # Use OpenAI client with OpenRouter base URL for Claude access
-            base_url = os.environ.get("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
-            self._init_openai_client(api_key, base_url, model_name, timeout, "json")
+            from .anthropic_http import AnthropicHTTPClient, AnthropicHTTPInstructor
+
+            http_client = AnthropicHTTPClient(api_key, timeout=timeout)
+            self.client = http_client
+            self.instruct_client = AnthropicHTTPInstructor(http_client)
+            logger.info(f"Initialized Claude over HTTPS (no Anthropic SDK on this build) with model={model_name}")
             return
 
         # Create async Anthropic client. SDK retries off, as for OpenAI: the SDK
         # default (2) retried timeouts inside one call, tripling it (#1186).
         self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout, max_retries=0)
 
-        # Use instructor with Anthropic - ANTHROPIC_TOOLS mode for best results
-        self.instruct_client = instructor.from_anthropic(self.client, mode=instructor.Mode.ANTHROPIC_TOOLS)
-        logger.info(f"Initialized native Anthropic client with model={model_name}")
+        # ANTHROPIC_TOOLS forces the response tool (tool_choice "tool"), which is
+        # a 400 on Opus 5.5 / Sonnet 5.5 / Fable 5.x: every call failed. Those
+        # get ANTHROPIC_JSON (schema in the prompt, validated), as the HTTPS
+        # path does; older models keep tool-based extraction.
+        from .anthropic_http import claude_rejects_forced_tool_use
+
+        mode = (
+            instructor.Mode.ANTHROPIC_JSON
+            if claude_rejects_forced_tool_use(model_name)
+            else instructor.Mode.ANTHROPIC_TOOLS
+        )
+        self.instruct_client = instructor.from_anthropic(self.client, mode=mode)
+        logger.info(f"Initialized native Anthropic client with model={model_name}, mode={mode}")
 
     def _init_google_client(self, api_key: str, model_name: str, timeout: int) -> None:
         """Initialize native Google client for Gemini models.
@@ -2222,10 +2233,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             return {}
 
         if is_host(host, "anthropic.com"):
-            # Anthropic uses a top-level `thinking` parameter on the
-            # Messages API, not extra_body. Default Claude calls don't
-            # opt into extended thinking; nothing to disable here.
-            return {}
+            # Claude 5-series models think by default, and some cannot turn it
+            # off at all. These are top-level Messages API fields; the SDK
+            # merges extra_body into the request body, and the HTTPS shim
+            # forwards them. See claude_reasoning_off for the per-model table.
+            from .anthropic_http import claude_reasoning_off
+
+            return claude_reasoning_off(model_name)
 
         # Positively-identified local endpoint (vLLM/llama.cpp/ollama/LM
         # Studio): send the vLLM key. CIRIS owns reasoning via the DMA
@@ -2281,6 +2295,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 f"on local endpoint={base_url} (CIRIS provides reasoning structure)"
             )
 
+        if getattr(self, "provider", None) == LLMProvider.ANTHROPIC:
+            # The Anthropic provider usually has no base_url, so the host-keyed
+            # policy above never sees it. Ask for reasoning off by model.
+            from .anthropic_http import claude_reasoning_off
+
+            extra_body.update(claude_reasoning_off(self.model_name))
         extra_kwargs["extra_body"] = extra_body
         return extra_kwargs
 

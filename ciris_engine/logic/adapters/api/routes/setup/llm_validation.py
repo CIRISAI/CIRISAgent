@@ -434,6 +434,31 @@ async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValida
     )
 
 
+async def _validate_anthropic_over_https(config: LLMValidationRequest) -> LLMValidationResponse:
+    """Validate a key and model with GET /v1/models/{id}, for builds without the SDK (iOS, #1298).
+
+    It answers the same two questions as a one-token completion (is the key good,
+    does this key see this model) without spending a token.
+    """
+    from ciris_engine.logic.services.runtime.llm_service.anthropic_http import AnthropicHTTPClient
+
+    model_to_test = config.model or ""
+    client = AnthropicHTTPClient(config.api_key or "", timeout=30.0)
+    try:
+        logger.info("[VALIDATE_LLM] Anthropic SDK not on this build; validating over HTTPS")
+        await client.retrieve_model(model_to_test)
+        return LLMValidationResponse(
+            valid=True,
+            message=f"Connection successful! Model '{model_to_test}' is available.",
+            error=None,
+        )
+    except Exception as e:
+        logger.exception(f"[VALIDATE_LLM] Anthropic HTTPS check FAILED: {type(e).__name__}: {e}")
+        return _classify_llm_connection_error(e, "api.anthropic.com")
+    finally:
+        await client.aclose()
+
+
 async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMValidationResponse:
     """Validate Anthropic API connection using native SDK."""
     try:
@@ -444,10 +469,15 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
 
         # Try a minimal completion
         model_to_test = config.model or ""  # unreachable empty: _validate_llm_connection refuses first
+        from ciris_engine.logic.services.runtime.llm_service.anthropic_http import claude_reasoning_off
+
         await client.messages.create(
             model=model_to_test,
             max_tokens=1,
             messages=[{"role": "user", "content": "Hi"}],
+            # Same reasoning-off request the pipeline sends, so validation asks
+            # the provider the same question the real call will.
+            extra_body=claude_reasoning_off(model_to_test),
         )  # Validation only - response not needed
         logger.info(f"[VALIDATE_LLM] SUCCESS! Anthropic test completion worked with model: {model_to_test}")
         return LLMValidationResponse(
@@ -456,12 +486,7 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
             error=None,
         )
     except ImportError:
-        logger.error("[VALIDATE_LLM] Anthropic SDK not installed")
-        return LLMValidationResponse(
-            valid=False,
-            message="SDK not installed",
-            error="Anthropic SDK not installed. Run: pip install anthropic",
-        )
+        return await _validate_anthropic_over_https(config)
     except Exception as e:
         logger.error(f"[VALIDATE_LLM] Anthropic API call FAILED: {type(e).__name__}: {e}")
         return _classify_llm_connection_error(e, "api.anthropic.com")

@@ -69,7 +69,18 @@ async def _list_openai_compatible(api_key: str, base_url: Optional[str], timeout
 
 
 async def _list_anthropic(api_key: str, timeout: float) -> List[str]:
-    import anthropic
+    try:
+        import anthropic
+    except ImportError:
+        # No SDK on this build (iOS: its `jiter` dependency has no iOS wheel,
+        # CIRISAgent#1298). The same GET /v1/models over HTTPS.
+        from .anthropic_http import AnthropicHTTPClient
+
+        http_client = AnthropicHTTPClient(api_key, timeout=timeout)
+        try:
+            return await http_client.list_model_ids()
+        finally:
+            await http_client.aclose()
 
     client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout, max_retries=0)
     page = await client.models.list(limit=100)

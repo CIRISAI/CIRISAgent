@@ -119,8 +119,14 @@ jobs:
             # truncated JSON for this repo ("unexpected end of JSON input" at
             # per_page=100 and 30 while 50 and 10 answered, 2026-09-25), and a
             # single unretried call failed the job before any database booted.
-            NAME=$(jq -r '[.[] | select(.name|test("upgrade-fixture")) | select(.expired==false)]
-                          | sort_by(.created_at) | .[0].name // empty' "$(list_artifacts)")
+            #
+            # Only fixtures captured by THIS version or an older one qualify. A
+            # fixture from a newer branch (e.g. a release bump's own run) carries
+            # migrations this code has never heard of, and booting it fails on
+            # "migration V… is missing from the filesystem" -- a downgrade, not
+            # the upgrade this job proves. The name embeds the capturing version:
+            # upgrade-fixture-<major.minor.patch>-<suffix>-<source>.
+            NAME=$(python3 tools/dev/pick_upgrade_fixture.py "$(list_artifacts)")
           fi
           if [ -z "$NAME" ]; then
             echo "::error::No unexpired upgrade fixture exists. The capture steps produce them; if none survive, the long jump is untested and this job cannot pretend otherwise."

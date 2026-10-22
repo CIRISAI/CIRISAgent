@@ -15,11 +15,21 @@ header, and within a version Anthropic keeps existing inputs and outputs.
 It is used ONLY when ``import anthropic`` fails. Desktop, server and Android keep
 the SDK path unchanged.
 
-Structured output works the way the OpenAI-compatible path's instructor JSON
-mode does: the response model's JSON schema goes in the system prompt, the reply
-is validated with pydantic, and a mismatch is re-asked with the validation error.
-Forced tool use is avoided on purpose: ``tool_choice`` ``any``/``tool`` returns a
-400 on current Claude models.
+Structured output uses the API's own mechanisms, never prose written here (the
+prompt-loader guard forbids text that bypasses the loader, and this path has
+none to add):
+
+- a schema strict mode can express goes in ``output_config.format`` and the
+  reply is constrained to it;
+- any other schema (a free-form ``Dict`` field, recursion) becomes the
+  ``input_schema`` of a tool named after the response model and described by
+  its docstring, as instructor's tools mode does. The tool is forced where the
+  model allows it; Opus 5.5, Sonnet 5.5 and Fable/Mythos 5.x 400 on a forced
+  tool, so they get ``tool_choice: auto``.
+
+Either way the reply is validated with pydantic, and a mismatch is sent back
+with pydantic's error (as a ``tool_result`` on the tool path) up to the re-ask
+budget.
 """
 
 from __future__ import annotations
@@ -28,7 +38,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, TypeVar
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Type, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -271,13 +281,145 @@ def convert_messages(messages: Sequence[Dict[str, Any]]) -> Tuple[str, List[Dict
     return "\n\n".join(p for p in system_parts if p), out
 
 
-def _schema_instruction(response_model: Type[BaseModel]) -> str:
-    schema = json.dumps(response_model.model_json_schema(), separators=(",", ":"))
-    return (
-        "Respond with ONLY a JSON object that validates against this JSON schema. "
-        "No prose, no code fences, nothing before or after the object.\n"
-        f"JSON schema: {schema}"
+#: Model families whose Messages API accepts ``output_config.format``.
+_STRUCTURED_OUTPUT_MODELS = (
+    "claude-fable-5",
+    "claude-mythos-5",
+    "claude-mythos-preview",
+    "claude-opus-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-opus-4-5",
+    "claude-sonnet-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-5",
+    "claude-haiku-5-5",
+    "claude-haiku-4-5",
+)
+
+#: Constraints strict mode rejects. pydantic still enforces them on the reply.
+_STRICT_UNSUPPORTED = frozenset(
+    {
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "maxItems",
+        "uniqueItems",
+        "discriminator",
+    }
+)
+_STRICT_FORMATS = frozenset(
+    {"date-time", "time", "date", "duration", "email", "hostname", "uri", "ipv4", "ipv6", "uuid"}
+)
+
+
+class _NotStrict(Exception):
+    """The schema has a shape strict mode cannot express."""
+
+
+def _supports_structured_outputs(model: str) -> bool:
+    name = (model or "").lower()
+    return any(name.startswith(prefix) for prefix in _STRUCTURED_OUTPUT_MODELS)
+
+
+def _strict_node(node: Any) -> Any:
+    if isinstance(node, list):
+        return [_strict_node(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    out: Dict[str, Any] = {}
+    for key, value in node.items():
+        if key in _STRICT_UNSUPPORTED:
+            continue
+        if key == "format" and value not in _STRICT_FORMATS:
+            continue
+        if key == "minItems" and value not in (0, 1):
+            continue
+        if key == "allOf" and any(isinstance(v, dict) and "$ref" in v for v in value):
+            raise _NotStrict("allOf over a $ref")
+        if key == "enum" and any(isinstance(v, (dict, list)) for v in value):
+            raise _NotStrict("enum of complex values")
+        if key == "$ref" and not str(value).startswith("#/"):
+            raise _NotStrict("external $ref")
+        out["anyOf" if key == "oneOf" else key] = _strict_node(value)
+    if out.get("type") == "object" or "properties" in out:
+        if out.get("additionalProperties") not in (None, False) or "properties" not in out:
+            raise _NotStrict("free-form object")
+        out["additionalProperties"] = False
+    return out
+
+
+def _refs(node: Any) -> List[str]:
+    if isinstance(node, list):
+        return [ref for item in node for ref in _refs(item)]
+    if not isinstance(node, dict):
+        return []
+    found = [str(node["$ref"]).rsplit("/", 1)[-1]] if "$ref" in node else []
+    return found + [ref for key, value in node.items() if key != "$defs" for ref in _refs(value)]
+
+
+def _is_recursive(schema: Dict[str, Any]) -> bool:
+    defs = schema.get("$defs", {})
+    edges = {name: set(_refs(body)) for name, body in defs.items()}
+
+    def reaches(start: str, target: str, seen: FrozenSet[str]) -> bool:
+        for nxt in edges.get(start, ()):
+            if nxt == target or (nxt not in seen and reaches(nxt, target, seen | {nxt})):
+                return True
+        return False
+
+    return any(reaches(name, name, frozenset({name})) for name in defs)
+
+
+def strict_output_schema(response_model: Type[BaseModel]) -> Optional[Dict[str, Any]]:
+    """``response_model``'s schema in the form ``output_config.format`` accepts, or None.
+
+    Constraints strict mode does not support are dropped (pydantic still checks
+    the reply against them). None when the schema has a free-form object, which
+    strict mode would force empty, or is recursive.
+    """
+    schema = response_model.model_json_schema()
+    if _is_recursive(schema):
+        return None
+    try:
+        strict: Dict[str, Any] = _strict_node(schema)
+    except _NotStrict:
+        return None
+    return strict
+
+
+def _structured_output_request(model: str, response_model: Type[BaseModel]) -> Dict[str, Any]:
+    """The request fields that make Claude answer as ``response_model``."""
+    strict = strict_output_schema(response_model) if _supports_structured_outputs(model) else None
+    if strict is not None:
+        return {"output_config": {"format": {"type": "json_schema", "schema": strict}}}
+    name = response_model.__name__[:64]
+    tool: Dict[str, Any] = {
+        "name": name,
+        "description": (response_model.__doc__ or response_model.__name__).strip(),
+        "input_schema": response_model.model_json_schema(),
+    }
+    choice = (
+        {"type": "auto"} if claude_rejects_forced_tool_use(model) else {"type": "tool", "name": name}
     )
+    return {"tools": [tool], "tool_choice": choice}
+
+
+def _merge_request(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
+    """``base`` with ``extra`` added; ``output_config`` objects are merged, not replaced."""
+    merged = dict(base)
+    for key, value in extra.items():
+        if key == "output_config" and isinstance(merged.get(key), dict):
+            merged[key] = {**merged[key], **value}
+        else:
+            merged[key] = value
+    return merged
 
 
 def _text_of(data: Dict[str, Any]) -> str:
@@ -290,6 +432,26 @@ def _extract_json(text: str) -> str:
         stripped = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", stripped)
     start, end = stripped.find("{"), stripped.rfind("}")
     return stripped[start : end + 1] if start != -1 and end > start else stripped
+
+
+def _tool_call(data: Dict[str, Any], tool_name: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The reply's call to the response tool, if the request offered one and Claude made it."""
+    if tool_name is None:
+        return None
+    for block in data.get("content", []):
+        if block.get("type") == "tool_use" and block.get("name") == tool_name:
+            return dict(block)
+    return None
+
+
+def _reask_turns(data: Dict[str, Any], call: Optional[Dict[str, Any]], error: ValidationError) -> List[Dict[str, Any]]:
+    """The turns that send pydantic's error back. The assistant turn is the reply
+    verbatim, thinking blocks included, as the API requires."""
+    assistant = {"role": "assistant", "content": data.get("content") or [{"type": "text", "text": "{}"}]}
+    if call is not None:
+        result = {"type": "tool_result", "tool_use_id": call.get("id", ""), "is_error": True, "content": str(error)}
+        return [assistant, {"role": "user", "content": [result]}]
+    return [assistant, {"role": "user", "content": str(error)}]
 
 
 def _reask_attempts(max_retries: Any) -> int:
@@ -321,14 +483,16 @@ class _Completions:
         extra_body = _ignored.get("extra_body") or {}
         passthrough = {k: extra_body[k] for k in _FORWARDED_EXTRA if k in extra_body}
         system, api_messages = convert_messages(messages)
-        system = f"{system}\n\n{_schema_instruction(response_model)}" if system else _schema_instruction(response_model)
+        shape = _structured_output_request(model, response_model)
+        tool_name = shape["tools"][0]["name"] if "tools" in shape else None
         total = _Usage()
         last_error: Optional[Exception] = None
 
         for attempt in range(_reask_attempts(max_retries) + 1):
-            data = await self._client.create_message(
-                {"model": model, "max_tokens": max_tokens, "system": system, "messages": api_messages, **passthrough}
-            )
+            request: Dict[str, Any] = {"model": model, "max_tokens": max_tokens, "messages": api_messages}
+            if system:
+                request["system"] = system
+            data = await self._client.create_message(_merge_request(_merge_request(request, passthrough), shape))
             usage = data.get("usage") or {}
             total.input_tokens += int(usage.get("input_tokens", 0) or 0)
             total.output_tokens += int(usage.get("output_tokens", 0) or 0)
@@ -342,9 +506,11 @@ class _Completions:
                 category = (data.get("stop_details") or {}).get("category")
                 raise AnthropicRefusalError(f"Claude declined the request (refusal, category={category})")
 
-            text = _text_of(data)
+            call = _tool_call(data, tool_name)
             try:
-                return response_model.model_validate_json(_extract_json(text)), completion
+                if call is not None:
+                    return response_model.model_validate(call.get("input") or {}), completion
+                return response_model.model_validate_json(_extract_json(_text_of(data))), completion
             except ValidationError as e:
                 last_error = e
                 logger.info(
@@ -353,14 +519,7 @@ class _Completions:
                     attempt + 1,
                     str(e)[:300],
                 )
-                api_messages = api_messages + [
-                    {"role": "assistant", "content": text or "(empty)"},
-                    {
-                        "role": "user",
-                        "content": f"That reply did not validate against the schema:\n{e}\n"
-                        "Reply again with ONLY the corrected JSON object.",
-                    },
-                ]
+                api_messages = api_messages + _reask_turns(data, call, e)
         raise AnthropicStructuredOutputError(
             f"{response_model.__name__}: no schema-valid reply after re-asks: {last_error}"
         ) from last_error

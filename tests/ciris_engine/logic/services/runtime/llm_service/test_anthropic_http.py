@@ -17,7 +17,7 @@ from typing import Any, Dict, List
 import httpx
 import openai
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ciris_engine.logic.services.runtime.llm_service import anthropic_http as ah
 
@@ -80,8 +80,11 @@ async def test_structured_call_sends_a_native_request_and_parses_the_reply():
     assert request.headers["x-api-key"] == "sk-ant-test"
     assert request.headers["anthropic-version"] == ah.ANTHROPIC_API_VERSION
     body = json.loads(request.content)
-    assert set(body) == {"model", "max_tokens", "system", "messages"}, "no temperature / extra_body / seed"
-    assert body["system"].startswith("You are CIRIS.") and '"action"' in body["system"]
+    assert set(body) == {"model", "max_tokens", "system", "messages", "output_config"}, "no temperature / extra_body / seed"
+    assert body["system"] == "You are CIRIS.", "no schema prose is added to the system prompt"
+    fmt = body["output_config"]["format"]
+    assert fmt["type"] == "json_schema" and fmt["schema"]["additionalProperties"] is False
+    assert set(fmt["schema"]["properties"]) == {"action", "confidence"}
     assert body["messages"][0]["content"][1] == {
         "type": "image",
         "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo="},
@@ -104,7 +107,8 @@ async def test_a_schema_mismatch_is_reasked_with_the_error():
     assert result.confidence == 0.5
     assert completion.usage.prompt_tokens == 24, "usage sums across the re-ask"
     reask = json.loads(seen[1].content)["messages"]
-    assert reask[-2]["role"] == "assistant" and "did not validate" in reask[-1]["content"]
+    assert reask[-2] == {"role": "assistant", "content": _reply('{"action": "speak"}')["content"]}, "reply verbatim"
+    assert reask[-1]["role"] == "user" and "confidence" in reask[-1]["content"], "pydantic's error goes back"
 
 
 @pytest.mark.asyncio
@@ -179,8 +183,7 @@ def test_without_the_sdk_the_service_talks_to_anthropic_never_openrouter(no_anth
     service._init_anthropic_client("sk-ant-secret", "claude-opus-5-5", 45)
     assert isinstance(service.instruct_client, ah.AnthropicHTTPInstructor)
     assert isinstance(service.client, ah.AnthropicHTTPClient)
-    assert "anthropic.com" in str(service.client.base_url)
-    assert "openrouter" not in str(service.client.base_url)
+    assert httpx.URL(str(service.client.base_url)).host == "api.anthropic.com", "never openrouter.ai"
     assert service.client.timeout == 45
 
 
@@ -314,3 +317,136 @@ def test_the_sdk_path_never_forces_a_tool_on_models_that_reject_it(model, mode_n
     service = object.__new__(OpenAICompatibleClient)
     service._init_anthropic_client("sk-ant-test", model, 45)
     assert service.instruct_client.mode == getattr(instructor.Mode, mode_name)
+
+
+class Bounded(BaseModel):
+    """A bounded verdict."""
+
+    score: float = Field(ge=0.0, le=1.0)
+    label: str = Field(min_length=1, pattern="^[a-z]+$")
+
+
+class FreeForm(BaseModel):
+    """Record the parameters for the tool."""
+
+    name: str
+    parameters: Dict[str, Any] = {}
+
+
+class Node(BaseModel):
+    children: List["Node"] = []
+
+
+def _tool_reply(tool_input: Dict[str, Any], name: str = "FreeForm", tool_id: str = "toolu_1") -> Dict[str, Any]:
+    return {
+        "id": "msg_t",
+        "model": "m",
+        "stop_reason": "tool_use",
+        "content": [{"type": "tool_use", "id": tool_id, "name": name, "input": tool_input}],
+        "usage": {"input_tokens": 3, "output_tokens": 2},
+    }
+
+
+def test_strict_schema_drops_unsupported_constraints_and_closes_objects():
+    strict = ah.strict_output_schema(Bounded)
+    assert strict is not None
+    assert strict["additionalProperties"] is False
+    assert strict["properties"]["score"] == {"title": "Score", "type": "number"}
+    assert "pattern" not in strict["properties"]["label"] and "minLength" not in strict["properties"]["label"]
+
+
+def test_free_form_and_recursive_schemas_are_not_forced_strict():
+    assert ah.strict_output_schema(FreeForm) is None, "additionalProperties:false would force the dict empty"
+    assert ah.strict_output_schema(Node) is None
+
+
+def test_the_agent_dma_schemas_take_the_expected_path():
+    from ciris_engine.logic.dma.msaspdma import MSASPDMALLMResult
+    from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
+    from ciris_engine.schemas.dma.results import EthicalDMAResult
+
+    assert ah.strict_output_schema(EthicalDMAResult) is not None
+    assert ah.strict_output_schema(TSASPDMALLMResult) is None, "tool_parameters is free-form"
+    assert ah.strict_output_schema(MSASPDMALLMResult) is None, "attributes is a Dict"
+
+
+@pytest.mark.asyncio
+async def test_effort_and_format_share_output_config():
+    seen: List[httpx.Request] = []
+    client = _client([httpx.Response(200, json=_reply('{"action": "speak", "confidence": 1}'))], seen)
+    await ah.AnthropicHTTPInstructor(client).chat.completions.create_with_completion(
+        model="claude-opus-5-5",
+        messages=[{"role": "user", "content": "hi"}],
+        response_model=Verdict,
+        extra_body=ah.claude_reasoning_off("claude-opus-5-5"),
+    )
+    body = json.loads(seen[0].content)
+    assert body["output_config"]["effort"] == "low"
+    assert body["output_config"]["format"]["type"] == "json_schema"
+    assert "system" not in body, "no system prompt is invented"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model,choice",
+    [
+        ("claude-opus-5", {"type": "tool", "name": "FreeForm"}),
+        ("claude-opus-5-5", {"type": "auto"}),
+        ("claude-sonnet-5-5", {"type": "auto"}),
+    ],
+)
+async def test_a_free_form_schema_goes_through_the_response_tool(model, choice):
+    seen: List[httpx.Request] = []
+    client = _client([httpx.Response(200, json=_tool_reply({"name": "t", "parameters": {"k": [1]}}))], seen)
+    result, _ = await ah.AnthropicHTTPInstructor(client).chat.completions.create_with_completion(
+        model=model, messages=[{"role": "user", "content": "hi"}], response_model=FreeForm
+    )
+    assert result == FreeForm(name="t", parameters={"k": [1]})
+    body = json.loads(seen[0].content)
+    assert body["tool_choice"] == choice
+    (tool,) = body["tools"]
+    assert tool["name"] == "FreeForm" and tool["description"] == "Record the parameters for the tool."
+    assert tool["input_schema"] == FreeForm.model_json_schema()
+    assert "output_config" not in body
+
+
+@pytest.mark.asyncio
+async def test_a_model_without_structured_outputs_gets_the_forced_tool():
+    seen: List[httpx.Request] = []
+    client = _client([httpx.Response(200, json=_tool_reply({"action": "speak", "confidence": 1}, name="Verdict"))], seen)
+    result, _ = await ah.AnthropicHTTPInstructor(client).chat.completions.create_with_completion(
+        model="claude-3-5-haiku-20241022", messages=[{"role": "user", "content": "hi"}], response_model=Verdict
+    )
+    assert result.action == "speak"
+    body = json.loads(seen[0].content)
+    assert body["tool_choice"] == {"type": "tool", "name": "Verdict"} and "output_config" not in body
+
+
+@pytest.mark.asyncio
+async def test_a_bad_tool_call_is_reasked_as_an_error_tool_result():
+    seen: List[httpx.Request] = []
+    client = _client(
+        [
+            httpx.Response(200, json=_tool_reply({"parameters": {}}, tool_id="toolu_bad")),
+            httpx.Response(200, json=_tool_reply({"name": "ok"})),
+        ],
+        seen,
+    )
+    result, _ = await ah.AnthropicHTTPInstructor(client).chat.completions.create_with_completion(
+        model="claude-opus-5", messages=[{"role": "user", "content": "hi"}], response_model=FreeForm
+    )
+    assert result.name == "ok"
+    reask = json.loads(seen[1].content)["messages"]
+    assert reask[-2]["role"] == "assistant" and reask[-2]["content"][0]["id"] == "toolu_bad"
+    (tool_result,) = reask[-1]["content"]
+    assert tool_result["type"] == "tool_result" and tool_result["tool_use_id"] == "toolu_bad"
+    assert tool_result["is_error"] is True and "name" in tool_result["content"]
+
+
+@pytest.mark.asyncio
+async def test_auto_tool_choice_still_accepts_a_json_text_answer():
+    client = _client([httpx.Response(200, json=_reply('{"name": "t"}'))], [])
+    result, _ = await ah.AnthropicHTTPInstructor(client).chat.completions.create_with_completion(
+        model="claude-opus-5-5", messages=[{"role": "user", "content": "hi"}], response_model=FreeForm
+    )
+    assert result.name == "t"

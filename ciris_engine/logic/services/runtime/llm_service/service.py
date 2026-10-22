@@ -2285,7 +2285,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 f"on local endpoint={base_url} (CIRIS provides reasoning structure)"
             )
 
-        if self.provider == LLMProvider.ANTHROPIC:
+        if getattr(self, "provider", None) == LLMProvider.ANTHROPIC:
             # The Anthropic provider usually has no base_url, so the host-keyed
             # policy above never sees it. Ask for reasoning off by model.
             from .anthropic_http import claude_reasoning_off

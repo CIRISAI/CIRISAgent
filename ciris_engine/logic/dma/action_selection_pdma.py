@@ -440,9 +440,11 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # the CORE IDENTITY doctrine, replaceable via the research `string`
         # namespace. ASPDMA has no prompt_loader; language resolves from the
         # deployment env inside the helper, matching this DMA's convention.
-        from ciris_engine.logic.formatters import format_core_identity_block
+        from ciris_engine.logic.formatters import amendment_texts, format_core_identity_block
 
-        return format_core_identity_block(str(agent_id), str(description), str(role))
+        return format_core_identity_block(
+            str(agent_id), str(description), str(role), amendments=amendment_texts(agent_identity)
+        )
 
     def _build_conscience_guidance_block(self, processing_context: Any) -> str:
         """Build conscience guidance block for retry format enforcement."""

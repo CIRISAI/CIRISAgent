@@ -12,6 +12,7 @@ from ciris_engine.schemas.conscience.core import EpistemicData
 
 from ..conscience.results import ConscienceResult
 from .enums import HandlerActionType
+from .models import WAAuthorization
 from .system_context import ChannelContext
 
 
@@ -44,6 +45,9 @@ class DispatchContext(BaseModel):
     # Additional context - REQUIRED with sensible defaults
     wa_id: Optional[str] = Field(None, description="Wise Authority ID if applicable")
     wa_authorized: bool = Field(False, description="Whether WA authorized this action")
+    wa_authorization: Optional[WAAuthorization] = Field(
+        None, description="The verified WA approval behind wa_authorized, when it came from one"
+    )
     wa_context: Optional[str] = Field(None, description="WA context if applicable")
 
     # conscience and processing context - OPTIONAL

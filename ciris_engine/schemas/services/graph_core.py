@@ -64,6 +64,10 @@ class NodeType(str, Enum):
     BEHAVIORAL = "behavioral"
     SOCIAL = "social"
     IDENTITY = "identity"
+    # A Wise Authority-approved change to the agent's identity. Minted only by
+    # MemorizeHandler from a verified WAAuthorization; loaded into the CORE
+    # IDENTITY block beside agent/identity.
+    IDENTITY_AMENDMENT = "identity_amendment"
     OBSERVATION = "observation"
     CONSENT = "consent"
     DECAY = "decay"

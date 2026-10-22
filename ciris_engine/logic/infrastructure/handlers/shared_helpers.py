@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from ciris_engine.logic.buses import BusManager
     from ciris_engine.logic.services.governance.consent import ConsentService
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+    from ciris_engine.schemas.runtime.models import WAAuthorization
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,47 @@ def is_identity_node(node: GraphNode) -> bool:
         True if node is an identity node
     """
     return node.scope == GraphScope.IDENTITY or node.id.startswith("agent/identity") or node.type == NodeType.AGENT
+
+
+#: The core identity node. A WA-approved write to it edits the core itself;
+#: every other approved IDENTITY-scope write is an amendment beside it.
+CORE_IDENTITY_NODE_ID = "agent/identity"
+
+
+def is_identity_amendment_candidate(node: GraphNode) -> bool:
+    """True for an IDENTITY-scope write that, once WA-approved, is an amendment.
+
+    Excludes the core node itself and CONFIG nodes, which have their own
+    IDENTITY-scope semantics (ConfigNodeType).
+    """
+    return (
+        node.scope == GraphScope.IDENTITY
+        and node.id != CORE_IDENTITY_NODE_ID
+        and node.type not in (NodeType.CONFIG, NodeType.IDENTITY_AMENDMENT)
+    )
+
+
+def as_identity_amendment(node: GraphNode, authorization: "WAAuthorization") -> GraphNode:
+    """``node`` as a WA-approved identity amendment, carrying the approval's provenance.
+
+    The node type is what the identity loader selects on, and the provenance is
+    what makes each amendment individually auditable and revocable.
+    """
+    attributes = serialize_attributes_to_json(node.attributes)
+    attributes["wa_amendment"] = {
+        "wa_id": authorization.wa_id,
+        "deferral_id": authorization.deferral_id,
+        "granted_at": authorization.granted_at,
+    }
+    return GraphNode(
+        id=node.id,
+        type=NodeType.IDENTITY_AMENDMENT,
+        scope=GraphScope.IDENTITY,
+        attributes=attributes,
+        version=node.version,
+        updated_by=authorization.wa_id,
+        updated_at=node.updated_at,
+    )
 
 
 def is_config_node(node: GraphNode) -> bool:

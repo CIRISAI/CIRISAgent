@@ -11,7 +11,13 @@ The path under test (CIRISAgent#1303):
    ``resolve_deferral`` verifies it and creates a guidance task carrying
    ``TaskContext.wa_authorization``.
 4. The guidance task's thoughts dispatch with ``wa_authorized=True``, so the
-   approved IDENTITY-scope MEMORIZE goes through and the node is in the graph.
+   approved IDENTITY-scope MEMORIZE goes through and the node is in the graph,
+   stored as an ``identity_amendment`` carrying this deferral's provenance.
+5. The approved text is in the CORE IDENTITY block of the agent's own
+   action-selection prompt, read back through the mock's ``$speak $context``,
+   and the refused text is not. Stored-but-unread was the gap RATCHET found:
+   until this, an approved change was authorized and written and the agent
+   never saw it.
 
 Before #1303, step 4 never happened: nothing in production set
 ``wa_authorized``, so a WA approval of an identity change could never take
@@ -82,6 +88,7 @@ class WAIdentityApprovalTests:
             ("The WA approves through the signed resolve route", self.test_wa_approves),
             ("The approved identity change is applied", self.test_approved_identity_write_lands),
             ("Approval authorized only its own change", self.test_approval_did_not_leak),
+            ("The agent's CORE IDENTITY carries the approved change", self.test_identity_block_carries_the_change),
         ]
         try:
             for name, test_func in tests:
@@ -267,6 +274,14 @@ class WAIdentityApprovalTests:
             f"IDENTITY scope {APPROVAL_TIMEOUT_SECONDS:.0f}s after approval. {await self._diagnose(self.approved_node)}"
         )
         assert str(node.get("scope", "")).lower() == "identity", f"stored at the wrong scope: {node}"
+        assert str(node.get("type", "")).lower() == "identity_amendment", (
+            f"the approved change was stored as {node.get('type')!r}, not an identity amendment: the identity "
+            f"loader selects on that type, so the agent would never see it. Node: {node}"
+        )
+        provenance = (node.get("attributes") or {}).get("wa_amendment") or {}
+        assert provenance.get("deferral_id") == self.deferral_id, (
+            f"the amendment does not record the approval it came from (deferral {self.deferral_id}): {provenance}"
+        )
 
     async def test_approval_did_not_leak(self) -> None:
         """The approval authorized its own guidance task only; an ordinary request is still refused."""
@@ -274,6 +289,22 @@ class WAIdentityApprovalTests:
         await asyncio.sleep(2.0)
         assert not await self._stored_anywhere(self.refused_node), (
             "after a WA approval, an unrelated IDENTITY-scope MEMORIZE went through: the authorization leaked"
+        )
+
+    async def test_identity_block_carries_the_change(self) -> None:
+        """The approved text is in the identity the agent reasons with; the refused text is not."""
+        data = await self._interact("$speak $context")
+        context = str(data.get("response") or "")
+        start = context.find("=== CORE IDENTITY")
+        assert start != -1, f"no CORE IDENTITY block in the agent's prompt as echoed by $context: {context[:400]!r}"
+        end = context.find("\n====", start + 1)
+        block = context[start : end if end != -1 else start + 4000]
+        assert self.approved_node in block, (
+            f"the WA-approved change {self.approved_node!r} is stored but NOT in the CORE IDENTITY block the agent "
+            f"reasons with:\n{block[:1200]}"
+        )
+        assert self.refused_node not in context, (
+            f"the refused change {self.refused_node!r} reached the agent's prompt"
         )
 
     def _print_summary(self) -> None:

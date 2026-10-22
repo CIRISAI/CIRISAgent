@@ -145,6 +145,7 @@ def build_dispatch_context(
         # Additional context
         wa_id=wa_id,
         wa_authorized=wa_authorized,
+        wa_authorization=wa_authorization,
         correlation_id=correlation_id or f"ctx_{time_service.timestamp()}",
         # conscience results (None for terminal actions)
         # Extract ConscienceResult from ConscienceApplicationResult if needed

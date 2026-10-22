@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Wise Authority
 
 - **A WA-approved identity change takes effect** (#1304, fixes #1303). Nothing in production ever set `DispatchContext.wa_authorized`, so an approved identity MEMORIZE was always refused. A guidance task created from a **verified** WA approval now carries a typed `wa_authorization`, which dispatch reads for that task only. Unsigned legacy approvals still resolve but grant nothing.
+- **The agent sees the identity change it was approved for.** An approved change was authorized and stored, then never read: every CORE IDENTITY block came from `agent/identity` alone, and `export_identity_context` presented whichever identity-scope node was newest (usually a telemetry snapshot) as the identity. An approved change is now an `identity_amendment` node recording the WA and the deferral, and it loads beside the core into every identity view. `agent/identity` stays the template-derived core, and each amendment stays individually auditable. Only a verified approval can mint one: the MEMORIZE handler refuses otherwise, and so does `POST /v1/memory/store`. The `wa_identity_approval` QA module now checks that the approved text is in the agent's own prompt.
 - **Setup never asks for the owner's password** (#1297). The node owns that credential, and the add-device path carries none.
 
 ### Files and attachments

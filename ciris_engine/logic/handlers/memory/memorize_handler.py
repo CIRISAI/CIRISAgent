@@ -10,11 +10,13 @@ from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHa
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.logic.infrastructure.handlers.helpers import create_follow_up_thought
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
+    as_identity_amendment,
     check_managed_attributes,
     create_config_node,
     extract_user_id_from_node,
     handle_user_consent,
     is_config_node,
+    is_identity_amendment_candidate,
     is_identity_node,
     is_user_node,
     validate_config_node,
@@ -25,7 +27,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
-from ciris_engine.schemas.services.graph_core import GraphNode
+from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
 
 logger = logging.getLogger(__name__)
@@ -103,6 +105,27 @@ class MemorizeHandler(BaseActionHandler):
                 ),
                 action_result=result,
                 status=ThoughtStatus.FAILED,
+            )
+
+        # An identity amendment exists only as the record of a verified WA
+        # approval: nothing else may mint one, or the identity loader would
+        # present unapproved text as approved.
+        authorization = dispatch_context.wa_authorization
+        if node.type == NodeType.IDENTITY_AMENDMENT and authorization is None:
+            self.logger.warning(f"MEMORIZE of an identity amendment without a verified WA approval. Thought {thought_id} denied.")
+            return self.complete_thought_and_create_followup(
+                thought=thought,
+                follow_up_content=self._localized_followup(
+                    "memorize_wa_required",
+                    default="MEMORIZE action failed: WA authorization required for identity changes",
+                ),
+                action_result=result,
+                status=ThoughtStatus.FAILED,
+            )
+        if authorization is not None and is_identity_amendment_candidate(node):
+            node = as_identity_amendment(node, authorization)
+            self.logger.info(
+                f"WA-approved identity amendment {node.id} (wa={authorization.wa_id}, deferral={authorization.deferral_id})"
             )
 
         # Handle CONFIG node transformation

@@ -453,7 +453,7 @@ async def _validate_anthropic_over_https(config: LLMValidationRequest) -> LLMVal
             error=None,
         )
     except Exception as e:
-        logger.error(f"[VALIDATE_LLM] Anthropic HTTPS check FAILED: {type(e).__name__}: {e}")
+        logger.exception(f"[VALIDATE_LLM] Anthropic HTTPS check FAILED: {type(e).__name__}: {e}")
         return _classify_llm_connection_error(e, "api.anthropic.com")
     finally:
         await client.aclose()

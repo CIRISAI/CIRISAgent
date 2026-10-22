@@ -328,26 +328,33 @@ def _supports_structured_outputs(model: str) -> bool:
     return any(name.startswith(prefix) for prefix in _STRUCTURED_OUTPUT_MODELS)
 
 
+def _strict_keeps(key: str, value: Any) -> bool:
+    """False for a keyword strict mode rejects; raises for a shape it cannot express."""
+    if key in _STRICT_UNSUPPORTED:
+        return False
+    if key == "format":
+        return value in _STRICT_FORMATS
+    if key == "minItems":
+        return value in (0, 1)
+    if key == "allOf" and any(isinstance(v, dict) and "$ref" in v for v in value):
+        raise _NotStrict("allOf over a $ref")
+    if key == "enum" and any(isinstance(v, (dict, list)) for v in value):
+        raise _NotStrict("enum of complex values")
+    if key == "$ref" and not str(value).startswith("#/"):
+        raise _NotStrict("external $ref")
+    return True
+
+
 def _strict_node(node: Any) -> Any:
     if isinstance(node, list):
         return [_strict_node(item) for item in node]
     if not isinstance(node, dict):
         return node
-    out: Dict[str, Any] = {}
-    for key, value in node.items():
-        if key in _STRICT_UNSUPPORTED:
-            continue
-        if key == "format" and value not in _STRICT_FORMATS:
-            continue
-        if key == "minItems" and value not in (0, 1):
-            continue
-        if key == "allOf" and any(isinstance(v, dict) and "$ref" in v for v in value):
-            raise _NotStrict("allOf over a $ref")
-        if key == "enum" and any(isinstance(v, (dict, list)) for v in value):
-            raise _NotStrict("enum of complex values")
-        if key == "$ref" and not str(value).startswith("#/"):
-            raise _NotStrict("external $ref")
-        out["anyOf" if key == "oneOf" else key] = _strict_node(value)
+    out: Dict[str, Any] = {
+        ("anyOf" if key == "oneOf" else key): _strict_node(value)
+        for key, value in node.items()
+        if _strict_keeps(key, value)
+    }
     if out.get("type") == "object" or "properties" in out:
         if out.get("additionalProperties") not in (None, False) or "properties" not in out:
             raise _NotStrict("free-form object")
@@ -427,11 +434,33 @@ def _text_of(data: Dict[str, Any]) -> str:
 
 
 def _extract_json(text: str) -> str:
+    # The outermost braces: this also strips a ```json fence and any prose around it.
     stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", stripped)
     start, end = stripped.find("{"), stripped.rfind("}")
     return stripped[start : end + 1] if start != -1 and end > start else stripped
+
+
+def _completion(data: Dict[str, Any], model: str, total: _Usage) -> AnthropicCompletion:
+    """Add this reply's usage to ``total``; raise on a refusal."""
+    usage = data.get("usage") or {}
+    total.input_tokens += int(usage.get("input_tokens", 0) or 0)
+    total.output_tokens += int(usage.get("output_tokens", 0) or 0)
+    if data.get("stop_reason") == "refusal":
+        category = (data.get("stop_details") or {}).get("category")
+        raise AnthropicRefusalError(f"Claude declined the request (refusal, category={category})")
+    return AnthropicCompletion(
+        id=str(data.get("id", "")),
+        model=str(data.get("model", model)),
+        stop_reason=data.get("stop_reason"),
+        usage=total,
+    )
+
+
+def _parse_reply(response_model: Type[ModelT], data: Dict[str, Any], call: Optional[Dict[str, Any]]) -> ModelT:
+    """The reply as ``response_model``: the tool call's input, else the text's JSON object."""
+    if call is not None:
+        return response_model.model_validate(call.get("input") or {})
+    return response_model.model_validate_json(_extract_json(_text_of(data)))
 
 
 def _tool_call(data: Dict[str, Any], tool_name: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -493,24 +522,10 @@ class _Completions:
             if system:
                 request["system"] = system
             data = await self._client.create_message(_merge_request(_merge_request(request, passthrough), shape))
-            usage = data.get("usage") or {}
-            total.input_tokens += int(usage.get("input_tokens", 0) or 0)
-            total.output_tokens += int(usage.get("output_tokens", 0) or 0)
-            completion = AnthropicCompletion(
-                id=str(data.get("id", "")),
-                model=str(data.get("model", model)),
-                stop_reason=data.get("stop_reason"),
-                usage=total,
-            )
-            if data.get("stop_reason") == "refusal":
-                category = (data.get("stop_details") or {}).get("category")
-                raise AnthropicRefusalError(f"Claude declined the request (refusal, category={category})")
-
+            completion = _completion(data, model, total)
             call = _tool_call(data, tool_name)
             try:
-                if call is not None:
-                    return response_model.model_validate(call.get("input") or {}), completion
-                return response_model.model_validate_json(_extract_json(_text_of(data))), completion
+                return _parse_reply(response_model, data, call), completion
             except ValidationError as e:
                 last_error = e
                 logger.info(

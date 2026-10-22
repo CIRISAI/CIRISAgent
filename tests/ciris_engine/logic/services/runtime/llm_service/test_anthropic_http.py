@@ -209,3 +209,77 @@ async def test_without_the_sdk_setup_validation_checks_the_model_over_https(no_a
     config = llm_validation.LLMValidationRequest(provider="anthropic", api_key="sk-ant-test", model="claude-opus-5-5")
     result = await llm_validation._validate_anthropic_connection(config)
     assert result.valid is True and asked == ["claude-opus-5-5"]
+
+
+# ---- reasoning off: CIRIS reasons in its DMA pipeline; model-side thinking is pure cost here
+
+
+@pytest.mark.parametrize(
+    "model,expected",
+    [
+        # cannot be disabled: lowest effort
+        ("claude-opus-5-5", {"output_config": {"effort": "low"}}),
+        ("claude-fable-5-1", {"output_config": {"effort": "low"}}),
+        ("claude-fable-5", {"output_config": {"effort": "low"}}),
+        ("claude-mythos-5-1", {"output_config": {"effort": "low"}}),
+        # disabled is a 400; between_tools is the off mode
+        ("claude-sonnet-5-5", {"thinking": {"type": "between_tools"}}),
+        # disabled accepted (at their default effort)
+        ("claude-opus-5", {"thinking": {"type": "disabled"}}),
+        ("claude-sonnet-5", {"thinking": {"type": "disabled"}}),
+        ("claude-haiku-5-5", {"thinking": {"type": "disabled"}}),
+        ("claude-opus-4-8", {"thinking": {"type": "disabled"}}),
+        ("claude-opus-4-7", {"thinking": {"type": "disabled"}}),
+        # do not think unless asked, or unknown: send nothing
+        ("claude-opus-4-6", {}),
+        ("claude-sonnet-4-6", {}),
+        ("claude-haiku-4-5", {}),
+        ("claude-sonnet-4-20250514", {}),
+        ("claude-some-future-model", {}),
+        ("", {}),
+    ],
+)
+def test_reasoning_off_per_model(model, expected):
+    assert ah.claude_reasoning_off(model) == expected
+
+
+def test_reasoning_off_matches_the_most_specific_prefix():
+    # claude-opus-5-5 must not fall through to claude-opus-5's "disabled" (a 400 on 5.5).
+    assert ah.claude_reasoning_off("claude-opus-5-5") != ah.claude_reasoning_off("claude-opus-5")
+    assert ah.claude_reasoning_off("claude-sonnet-5-5") != ah.claude_reasoning_off("claude-sonnet-5")
+
+
+@pytest.mark.asyncio
+async def test_the_shim_forwards_only_the_reasoning_controls_from_extra_body():
+    seen: List[httpx.Request] = []
+    client = _client([httpx.Response(200, json=_reply('{"action": "speak", "confidence": 1}'))], seen)
+    await ah.AnthropicHTTPInstructor(client).chat.completions.create_with_completion(
+        model="claude-sonnet-5-5",
+        messages=[{"role": "user", "content": "hi"}],
+        response_model=Verdict,
+        extra_body={**ah.claude_reasoning_off("claude-sonnet-5-5"), "provider": {"order": ["x"]}, "metadata": {"a": 1}},
+    )
+    body = json.loads(seen[0].content)
+    assert body["thinking"] == {"type": "between_tools"}
+    assert "provider" not in body and "metadata" not in body
+
+
+def test_the_service_asks_for_reasoning_off_on_the_anthropic_provider_without_a_base_url():
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.services.runtime.llm_service.service import LLMProvider, OpenAICompatibleClient
+
+    service = object.__new__(OpenAICompatibleClient)
+    service.provider = LLMProvider.ANTHROPIC
+    service.model_name = "claude-opus-5-5"
+    service.openai_config = SimpleNamespace(base_url=None, require_zero_data_retention=True)
+    extra = service._build_extra_kwargs(None, None, "Verdict", None)
+    assert extra["extra_body"]["output_config"] == {"effort": "low"}
+
+
+def test_the_host_keyed_policy_agrees_for_api_anthropic_com():
+    from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient
+
+    assert OpenAICompatibleClient._build_reasoning_off_extras(
+        "https://api.anthropic.com/v1", "claude-sonnet-5-5"
+    ) == {"thinking": {"type": "between_tools"}}

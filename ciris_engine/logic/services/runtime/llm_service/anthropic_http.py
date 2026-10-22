@@ -45,6 +45,46 @@ DEFAULT_REASK_ATTEMPTS = 2
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
+#: Per-family request parameters that turn Claude's reasoning off, or as near
+#: off as the model allows. Most specific prefix first ("claude-opus-5-5"
+#: before "claude-opus-5"). CIRIS does its own reasoning in the DMA pipeline;
+#: model-side thinking only adds latency and cost here.
+_REASONING_OFF: Tuple[Tuple[str, Dict[str, Any]], ...] = (
+    # Thinking cannot be disabled (every disable form is a 400): lowest effort.
+    ("claude-opus-5-5", {"output_config": {"effort": "low"}}),
+    ("claude-fable-5", {"output_config": {"effort": "low"}}),
+    ("claude-mythos-5", {"output_config": {"effort": "low"}}),
+    # {"type": "disabled"} is a 400; between_tools is its thinking-off mode
+    # (accepted at the default effort, high).
+    ("claude-sonnet-5-5", {"thinking": {"type": "between_tools"}}),
+    # Disabled is accepted at effort high or below, and these run at or below
+    # high by default (Opus 5 high, Haiku 5.5 medium).
+    ("claude-haiku-5-5", {"thinking": {"type": "disabled"}}),
+    ("claude-opus-5", {"thinking": {"type": "disabled"}}),
+    ("claude-sonnet-5", {"thinking": {"type": "disabled"}}),
+    ("claude-opus-4-8", {"thinking": {"type": "disabled"}}),
+    ("claude-opus-4-7", {"thinking": {"type": "disabled"}}),
+)
+
+
+def claude_reasoning_off(model: str) -> Dict[str, Any]:
+    """The Messages API parameters that turn reasoning off for ``model``.
+
+    Empty for models that do not think unless asked (Opus/Sonnet 4.6, Haiku 4.5
+    and older) and for ids this table does not know. A wrong guess on an
+    unknown model would be a 400 on every call, which is worse than thinking.
+    """
+    name = (model or "").lower()
+    for prefix, params in _REASONING_OFF:
+        if name.startswith(prefix):
+            return {k: dict(v) for k, v in params.items()}
+    return {}
+
+
+#: Keys from the service's per-request extra_body that are Messages API fields.
+_FORWARDED_EXTRA = ("thinking", "output_config")
+
+
 class AnthropicStructuredOutputError(ValueError):
     """Claude's reply never matched the response model, re-asks included."""
 
@@ -256,10 +296,14 @@ class _Completions:
     ) -> Tuple[ModelT, AnthropicCompletion]:
         """instructor's ``create_with_completion`` over the native Messages API.
 
-        ``temperature``, ``extra_body`` (OpenRouter routing, metadata) and seeds
-        are accepted and not sent: current Claude models reject non-default
-        sampling parameters, and the rest belongs to other providers.
+        From ``extra_body`` only the Messages API's own reasoning controls
+        (``thinking``, ``output_config``) are sent; the service puts
+        ``claude_reasoning_off(model)`` there. ``temperature``, OpenRouter
+        routing, metadata and seeds are accepted and not sent: current Claude
+        models reject non-default sampling, and the rest belongs to others.
         """
+        extra_body = _ignored.get("extra_body") or {}
+        passthrough = {k: extra_body[k] for k in _FORWARDED_EXTRA if k in extra_body}
         system, api_messages = convert_messages(messages)
         system = f"{system}\n\n{_schema_instruction(response_model)}" if system else _schema_instruction(response_model)
         total = _Usage()
@@ -267,7 +311,7 @@ class _Completions:
 
         for attempt in range(_reask_attempts(max_retries) + 1):
             data = await self._client.create_message(
-                {"model": model, "max_tokens": max_tokens, "system": system, "messages": api_messages}
+                {"model": model, "max_tokens": max_tokens, "system": system, "messages": api_messages, **passthrough}
             )
             usage = data.get("usage") or {}
             total.input_tokens += int(usage.get("input_tokens", 0) or 0)

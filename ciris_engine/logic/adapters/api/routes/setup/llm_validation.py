@@ -469,10 +469,15 @@ async def _validate_anthropic_connection(config: LLMValidationRequest) -> LLMVal
 
         # Try a minimal completion
         model_to_test = config.model or ""  # unreachable empty: _validate_llm_connection refuses first
+        from ciris_engine.logic.services.runtime.llm_service.anthropic_http import claude_reasoning_off
+
         await client.messages.create(
             model=model_to_test,
             max_tokens=1,
             messages=[{"role": "user", "content": "Hi"}],
+            # Same reasoning-off request the pipeline sends, so validation asks
+            # the provider the same question the real call will.
+            extra_body=claude_reasoning_off(model_to_test),
         )  # Validation only - response not needed
         logger.info(f"[VALIDATE_LLM] SUCCESS! Anthropic test completion worked with model: {model_to_test}")
         return LLMValidationResponse(

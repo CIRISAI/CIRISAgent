@@ -2223,10 +2223,13 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             return {}
 
         if is_host(host, "anthropic.com"):
-            # Anthropic uses a top-level `thinking` parameter on the
-            # Messages API, not extra_body. Default Claude calls don't
-            # opt into extended thinking; nothing to disable here.
-            return {}
+            # Claude 5-series models think by default, and some cannot turn it
+            # off at all. These are top-level Messages API fields; the SDK
+            # merges extra_body into the request body, and the HTTPS shim
+            # forwards them. See claude_reasoning_off for the per-model table.
+            from .anthropic_http import claude_reasoning_off
+
+            return claude_reasoning_off(model_name)
 
         # Positively-identified local endpoint (vLLM/llama.cpp/ollama/LM
         # Studio): send the vLLM key. CIRIS owns reasoning via the DMA
@@ -2282,6 +2285,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 f"on local endpoint={base_url} (CIRIS provides reasoning structure)"
             )
 
+        if self.provider == LLMProvider.ANTHROPIC:
+            # The Anthropic provider usually has no base_url, so the host-keyed
+            # policy above never sees it. Ask for reasoning off by model.
+            from .anthropic_http import claude_reasoning_off
+
+            extra_body.update(claude_reasoning_off(self.model_name))
         extra_kwargs["extra_body"] = extra_body
         return extra_kwargs
 

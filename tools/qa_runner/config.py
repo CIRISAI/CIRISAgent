@@ -44,6 +44,7 @@ class QAModule(Enum):
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
     WA_IDENTITY_APPROVAL = "wa_identity_approval"  # Defer → WA approves → identity MEMORIZE lands (#1303)
+    CORRECTION_EPISODES = "correction_episodes"  # ai-safety-claims Market 4: one frozen correction episode, live model
     ATTACHMENTS = "attachments"  # Inline image/document attachments: delivery + visible refusals
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
     ACCORD_METRICS = "accord_metrics"  # Accord metrics trace capture and signing testing
@@ -357,6 +358,11 @@ class QAConfig:
     safety_interpret_openrouter_key_file: Optional[str] = None  # default ~/.openrouter_key
     safety_interpret_judge_model: Optional[str] = None  # default anthropic/claude-opus-4-5
 
+    # Market 4 correction episodes (ai-safety-claims, contract v3). The frozen
+    # cases file is the registry's freeze-cases.jsonl; one case per CI job.
+    correction_cases_file: Optional[str] = None
+    correction_case_id: Optional[str] = None
+
     # Setup-wizard template_id (read by server.py during setup completion).
     # Modules that need a non-default template should set this; today only
     # safety_battery uses it (see runner.py SAFETY_BATTERY construction case).
@@ -455,6 +461,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.WA_IDENTITY_APPROVAL:
             # WA identity approval tests use direct API calls
+            return []  # Will be handled separately by runner
+        elif module == QAModule.CORRECTION_EPISODES:
+            # Market 4 correction episodes use direct API calls
             return []  # Will be handled separately by runner
         elif module == QAModule.ATTACHMENTS:
             # Attachment tests use direct API calls

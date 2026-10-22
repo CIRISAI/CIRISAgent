@@ -112,6 +112,8 @@ def create_task(
                 # would silently turn an authorized task into an unauthorized
                 # one.
                 envelope=context.envelope,
+                # Same for a guidance task's WA authorization.
+                wa_authorization=context.wa_authorization,
             )
 
     # Task is the record of truth for preferred_language. Mirror the value

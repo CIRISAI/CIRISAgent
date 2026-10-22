@@ -184,6 +184,10 @@ def rank_candidates(candidates: Sequence[Tuple[str, str]]) -> List[Tuple[str, st
     return sorted(candidates, key=key, reverse=True)
 
 
+#: Whether the current run of "no proxy token" has been reported at WARNING.
+_absence_reported = False
+
+
 def read_proxy_token(
     current: str = "",
     callback_token: str = "",
@@ -227,14 +231,23 @@ def read_proxy_token(
             seen.add(token)
     if callback_token and callback_token not in seen:
         present.append(("callback", callback_token))
+    global _absence_reported
     if not present:
-        logger.warning(
+        # Logged at WARNING once per absence, then DEBUG. This runs on every
+        # billing check, so a node with no proxy token (its own LLM key, or a
+        # QA run) logged the same warning per message; 50 in one QA session
+        # tripped the incidents gate's WARNING-flood check (run 39684260533).
+        # A token that later appears and then goes away warns again.
+        log = logger.debug if _absence_reported else logger.warning
+        log(
             "%s no proxy token available (looked at %s%s)",
             LOG_PREFIX,
             ", ".join(sources),
             " and the refresh callback" if callback_token == "" else "",
         )
+        _absence_reported = True
         return "", ""
+    _absence_reported = False
 
     ranked = rank_candidates(present)
     var, token = ranked[0]

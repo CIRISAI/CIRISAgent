@@ -5,6 +5,7 @@ import shlex
 from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic.dma.dsaspdma import DSASPDMALLMResult
+from ciris_engine.logic.dma.msaspdma import MSASPDMALLMResult
 from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.schemas.actions import (
@@ -45,6 +46,25 @@ from .response_packaging import (
 
 _logger = logging.getLogger(__name__)
 
+
+
+
+def _memorize_command_id(args: str) -> str:
+    """The node id (and so the stored content) a mock "$memorize <args>" proposes."""
+    return "_".join(args.split()[:3]).lower().replace(",", "").replace(".", "") or "memory_node"
+
+def _enum_value(value: Any, default: str) -> str:
+    """An enum's value (``GraphScope.IDENTITY`` -> ``"identity"``), or the string itself."""
+    if value is None:
+        return default
+    return str(getattr(value, "value", value)).lower()
+
+
+def _node_content(node: Dict[str, Any]) -> str:
+    """What a flat MEMORIZE stores: the node's content, else its requested id."""
+    attributes = node.get("attributes")
+    content = attributes.get("content") if isinstance(attributes, dict) else None
+    return str(content or node.get("content") or node.get("id") or "")
 
 
 def attachment_markers(context: List[str]) -> str:
@@ -1145,15 +1165,24 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             command_found = True
         elif command_from_context == "$memorize":
             content = command_args_from_context if command_args_from_context else "Empty memory"
-            node_id = "_".join(content.split()[:3]).lower().replace(",", "").replace(".", "")
-            if not node_id:
-                node_id = "memory_node"
+            words = content.split()
+            # "$memorize <id> <TYPE> <SCOPE>" keeps its SCOPE. This path used to
+            # hard-code LOCAL, so a user's "$memorize x CONCEPT IDENTITY" never
+            # reached the IDENTITY-scope WA gate (#1303). The type stays CONCEPT:
+            # honouring CONFIG here changed what the filters/handlers QA modules
+            # store (run 39668234751, filters 16/28), and only the scope matters
+            # to the gate. The id keeps its old shape too.
+            node_id = _memorize_command_id(content)
+            node_type = NodeType.CONCEPT
+            node_scope = GraphScope.LOCAL
+            if len(words) >= 3 and words[1].upper() in NodeType.__members__ and words[2].upper() in GraphScope.__members__:
+                node_scope = GraphScope[words[2].upper()]
 
             params = MemorizeParams(
                 node=GraphNode(
                     id=node_id,
-                    type=NodeType.CONCEPT,
-                    scope=GraphScope.LOCAL,
+                    type=node_type,
+                    scope=node_scope,
                     attributes={"created_by": "mock_llm", "tags": [f"content:{content[:50]}", "source:mock_llm"]},
                 )
             )
@@ -1895,9 +1924,14 @@ def aspdma_llm_result(
         flat_result = ASPDMALLMResult(
             selected_action=action,
             reasoning=rationale,
-            memorize_node_type=str(node.get("node_type", "observation")),
-            memorize_content=node.get("content", ""),
-            memorize_scope=str(node.get("scope", "local")),
+            # GraphNode dumps as `type` / `scope` (enums). Reading `node_type`
+            # and str(enum) turned EVERY mock $memorize into a LOCAL
+            # observation, so no mock run ever exercised an IDENTITY-scope
+            # write or its WA gate (#1303). The flat schema has no node id, so
+            # the requested id travels as the content.
+            memorize_node_type=_enum_value(node.get("type") or node.get("node_type"), "observation"),
+            memorize_content=_node_content(node),
+            memorize_scope=_enum_value(node.get("scope"), "local"),
         )
     elif action == HandlerActionType.FORGET:
         node = params_dict.get("node", {})
@@ -2106,3 +2140,45 @@ def dsaspdma_llm_result(
         current_reason = reason_match.group(1).strip()
 
     return _infer_dsaspdma_result(prompt_text, current_reason)
+
+
+def msaspdma_llm_result(
+    context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
+) -> MSASPDMALLMResult:
+    """Mock MSASPDMALLMResult: affirm the proposed MEMORIZE as proposed.
+
+    MSASPDMA re-decides a MEMORIZE against the graph's conventions. The mock had
+    no answer for it, so every mock MEMORIZE logged "MSASPDMA: Failed ...
+    no attribute 'final_action'" (13 ERRORs per handlers/filters run) and fell
+    back to the original action. The incidents gate then failed runs whose
+    tests all passed (run 39664086947, 38/38).
+
+    The verdict is MEMORIZE with the proposed id, type and scope read back from
+    the prompt. The content is re-derived from the thought's ``$memorize``
+    arguments exactly as the action-selection pass derived it, so the stored
+    node is the one the fallback used to store.
+    """
+    text = "\n".join(_extract_text_content(m.get("content", "")) for m in (messages or []) if isinstance(m, dict))
+
+    def field(label: str) -> Optional[str]:
+        match = re.search(rf"^{label}:\s*(.+)$", text, re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    node_id, node_type, node_scope = field("node id"), field("node type"), field("scope")
+    if not (node_id and node_type and node_scope):
+        return MSASPDMALLMResult(
+            final_action="PONDER",
+            questions=["[MOCK LLM] MSASPDMA could not read the proposed node from the prompt."],
+            reasoning="[MOCK LLM] MSASPDMA: no proposed node in the prompt",
+        )
+    command = re.search(r"\$memorize\s+([^\n\"']+)", text)
+    content = _memorize_command_id(command.group(1)) if command else node_id
+    return MSASPDMALLMResult(
+        final_action="MEMORIZE",
+        node_id=node_id,
+        node_type=node_type,
+        node_scope=node_scope,
+        attributes={"created_by": "agent", "content": content},
+        reasoning="[MOCK LLM] MSASPDMA: the proposed node is correctly addressed",
+    )
+

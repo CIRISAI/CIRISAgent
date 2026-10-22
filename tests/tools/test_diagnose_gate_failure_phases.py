@@ -7,7 +7,10 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = ROOT / ".github/workflows/five-platform-live-qa.yml"
+WORKFLOWS = [
+    ROOT / ".github/workflows/five-platform-live-qa.yml",
+    ROOT / ".github/workflows/five-platform-modular-qa.yml",
+]
 
 _spec = importlib.util.spec_from_file_location("dgf", ROOT / "tools/dev/diagnose_gate_failure.py")
 assert _spec and _spec.loader
@@ -18,10 +21,25 @@ _spec.loader.exec_module(dgf)
 def test_every_phase_the_workflow_passes_has_a_default():
     """UNKNOWN is not a classification. The nightly's only failing leg produced
     three of them because these keys were missing."""
-    passed = set(re.findall(r"--phase ([a-z-]+)", WORKFLOW.read_text()))
-    assert passed, "no --phase arguments found; did the workflow move?"
-    missing = sorted(passed - set(dgf.PHASE_DEFAULT))
-    assert not missing, f"phases with no PHASE_DEFAULT entry: {missing}"
+    for workflow in WORKFLOWS:
+        passed = set(re.findall(r"--phase ([a-z-]+)", workflow.read_text()))
+        assert passed, f"no --phase arguments found in {workflow.name}; did the workflow move?"
+        missing = sorted(passed - set(dgf.PHASE_DEFAULT))
+        assert not missing, f"{workflow.name}: phases with no PHASE_DEFAULT entry: {missing}"
+
+
+def test_an_incidents_gate_failure_names_the_line():
+    """A run where every test passed but the incidents gate tripped used to read
+    UNKNOWN (run 39664086947, 38/38). The classifier must quote the agent line."""
+    blob = (
+        "[OK] All tests passed!\n"
+        "[INCIDENTS-GATE] FAILED (13x): ciris_engine.logic.processors.core.thought_processor.main - "
+        "main.py:823 - MSASPDMA: Failed for thought <id>: no attribute 'final_action'\n"
+    )
+    layer, meaning, evidence = dgf.classify(blob, "modular")
+    assert layer == "AGENT", (layer, meaning)
+    assert "incidents gate" in meaning
+    assert "MSASPDMA: Failed" in evidence
 
 
 def test_an_unreachable_test_server_is_infra_not_client():

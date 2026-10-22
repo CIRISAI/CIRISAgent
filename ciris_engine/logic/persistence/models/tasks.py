@@ -19,6 +19,7 @@ from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.core import EventPayload
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
+from ciris_engine.logic.persistence.utils import decode_wa_authorization
 from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 from ciris_engine.schemas.services.graph.audit import AuditEventData
@@ -145,6 +146,7 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
                 agent_occurrence_id=ctx_data.get("agent_occurrence_id", agent_occurrence_id),
                 preferred_language=ctx_data.get("preferred_language"),
                 envelope=_decode_envelope(ctx_data.get("envelope"), row.get("task_id")),
+                wa_authorization=decode_wa_authorization(ctx_data.get("wa_authorization"), row.get("task_id")),
             )
         except Exception as e:
             logger.warning(f"Failed to decode context for task {row.get('task_id')}: {e}")

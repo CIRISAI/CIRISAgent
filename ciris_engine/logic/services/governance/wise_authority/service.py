@@ -22,7 +22,7 @@ from ciris_engine.logic.services.infrastructure.authentication import Authentica
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
-from ciris_engine.schemas.runtime.models import TaskContext
+from ciris_engine.schemas.runtime.models import TaskContext, WAAuthorization
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
     AuthorizationDecision,
@@ -1007,6 +1007,24 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # Build TaskContext from the guidance context dict
                 ctx_user_id = context.get("user_id")
                 ctx_user_id_str: Optional[str] = str(ctx_user_id) if ctx_user_id else None
+                # A VERIFIED approval authorizes the guidance task (and only it)
+                # for actions that need WA authorization, such as MEMORIZE to
+                # IDENTITY scope. An unsigned legacy resolution grants nothing.
+                wa_authorization: Optional[WAAuthorization] = None
+                if verification is DeferralVerification.VERIFIED:
+                    wa_authorization = WAAuthorization(
+                        wa_id=response.wa_id,
+                        deferral_id=deferral_id,
+                        granted_at=now_iso,
+                    )
+                    guidance_context_dict["wa_authorization"] = wa_authorization.model_dump(mode="json")
+                else:
+                    logger.warning(
+                        "Deferral %s approved without a verified signature (%s): the guidance task "
+                        "carries no WA authorization",
+                        deferral_id,
+                        verification.value,
+                    )
                 task_context = TaskContext(
                     channel_id=channel_id,
                     user_id=ctx_user_id_str,
@@ -1014,6 +1032,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     parent_task_id=original_task_id,
                     agent_occurrence_id=agent_occurrence_id,
                     preferred_language=resolved_language,
+                    wa_authorization=wa_authorization,
                 )
 
                 # Create new task description incorporating WA guidance

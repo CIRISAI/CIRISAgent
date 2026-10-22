@@ -1032,3 +1032,21 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: D401
     except Exception:  # noqa: BLE001
         pass
     os._exit(exitstatus)
+
+
+@pytest.fixture(autouse=True, scope="function")
+def _reset_proxy_token_absence_report():
+    """token_handshake warns once per absence of a proxy token (process-global).
+
+    Without a reset, whichever test first read an empty environment consumed the
+    warning, and a later test asserting that the warning names the variables it
+    checked saw only the DEBUG line (shard 6 of #1304). Each test starts fresh.
+    """
+    try:
+        from ciris_engine.logic.utils import token_handshake
+    except Exception:  # noqa: BLE001 - a test tree without the engine importable
+        yield
+        return
+    token_handshake._absence_reported = False
+    yield
+    token_handshake._absence_reported = False

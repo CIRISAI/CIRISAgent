@@ -116,6 +116,15 @@ def build_dispatch_context(
         handler_name = extra_context.get("handler_name")
         event_summary = extra_context.get("event_summary")
 
+    # A Wise Authority's verified approval rides on the guidance task it created
+    # (WiseAuthorityService.resolve_deferral). Every thought of that one task is
+    # dispatched WA-authorized, which is what lets a WA-approved identity change
+    # (MEMORIZE/FORGET to IDENTITY scope) go through. No other task carries it.
+    wa_authorization = getattr(getattr(task, "context", None), "wa_authorization", None)
+    if wa_authorization is not None:
+        wa_authorized = True
+        wa_id = wa_id or wa_authorization.wa_id
+
     # Create the DispatchContext object with defaults for None values
     dispatch_context = DispatchContext(
         # Core identification

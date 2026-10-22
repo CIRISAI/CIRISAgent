@@ -4,10 +4,34 @@ import uuid
 from typing import Any, Optional
 
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
-from ciris_engine.schemas.runtime.models import FinalAction, Task, TaskContext, TaskOutcome, Thought, ThoughtContext
+from ciris_engine.schemas.runtime.models import (
+    FinalAction,
+    Task,
+    TaskContext,
+    TaskOutcome,
+    Thought,
+    ThoughtContext,
+    WAAuthorization,
+)
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 
 logger = logging.getLogger(__name__)
+
+
+def decode_wa_authorization(raw: Any, task_id: Any) -> Optional[WAAuthorization]:
+    """Decode a guidance task's WA authorization. Anything malformed grants nothing.
+
+    Only ``WiseAuthorityService.resolve_deferral`` writes it, and only for a
+    VERIFIED approval. A row that cannot be read back is treated as not
+    authorized, never as authorized.
+    """
+    if raw is None:
+        return None
+    try:
+        return WAAuthorization.model_validate(raw)
+    except Exception as exc:
+        logger.warning("Failed to decode WA authorization for task %s; treating as not authorized: %s", task_id, exc)
+        return None
 
 
 def _decode_task_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
@@ -56,6 +80,7 @@ def map_row_to_task(row: Any) -> Task:
                     # decode failure resolves to None, the fail-closed
                     # direction: absence is denial, never "unconstrained".
                     envelope=_decode_task_envelope(ctx_data.get("envelope"), row_dict.get("task_id")),
+                    wa_authorization=decode_wa_authorization(ctx_data.get("wa_authorization"), row_dict.get("task_id")),
                 )
                 # Mirror onto the Task's top-level field — Task is the record
                 # of truth for preferred_language. The schema field defaults

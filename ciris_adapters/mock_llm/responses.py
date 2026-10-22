@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
 from ciris_engine.logic.dma.dsaspdma import DSASPDMALLMResult
+from ciris_engine.logic.dma.msaspdma import MSASPDMALLMResult
 from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.schemas.dma.results import (
     ActionSelectionDMAResult,
@@ -343,6 +344,26 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                             context_items.append(f"followup_content:{followup_content}")
                             logger.info("=" * 60)
                             # Skip to next message - don't process as observation
+                            break
+
+                        # === STEP 1b: A Wise Authority's guidance task ===
+                        # resolve_deferral creates "[WA GUIDANCE] Original: <task>
+                        # \n\nWA Response: <guidance>". The original task embeds the
+                        # user's own "@user (ID: x): ..." line, which STEP 2 would
+                        # match and re-run, so the guidance must win. A $command in
+                        # the guidance is what the WA approved; follow it, as a real
+                        # model follows the WA's guidance.
+                        wa_guidance = re.search(r"WA Response:\s*(.+)", actual_thought_content, re.DOTALL)
+                        if "[WA GUIDANCE]" in actual_thought_content and wa_guidance:
+                            guidance = wa_guidance.group(1).split("\n")[0].split("\\n")[0].strip().strip('"')
+                            logger.info(f"[MOCK_LLM] TYPE: WA GUIDANCE TASK: {guidance[:100]}")
+                            context_items.append(f"user_input:{guidance}")
+                            context_items.append(f"task:{guidance}")
+                            if guidance.startswith("$"):
+                                parts = guidance.split(None, 1)
+                                context_items.append(f"forced_action:{parts[0][1:].lower()}")
+                                if len(parts) > 1:
+                                    context_items.append(f"action_params:{parts[1]}")
                             break
 
                         # === STEP 2: Check for USER OBSERVATION ===
@@ -729,6 +750,7 @@ from .responses_action_selection import (
     action_selection,
     aspdma_llm_result,
     dsaspdma_llm_result,
+    msaspdma_llm_result,
     tsaspdma_llm_result,
 )
 from .responses_epistemic import coherence, coherence_raw, entropy, entropy_raw
@@ -745,6 +767,7 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
     ASPDMALLMResult: aspdma_llm_result,  # Gemini-compatible flat schema
     DSASPDMALLMResult: dsaspdma_llm_result,  # Deferral-specific action selection schema
     TSASPDMALLMResult: tsaspdma_llm_result,  # Gemini-compatible TSASPDMA schema
+    MSASPDMALLMResult: msaspdma_llm_result,  # memorize second pass
     EntropyCheckResult: entropy,
     CoherenceCheckResult: coherence,
     EntropyResult: entropy_raw,  # what EntropyConscience actually requests

@@ -43,6 +43,7 @@ class QAModule(Enum):
     IDENTITY_UPDATE = "identity_update"  # Identity update from template testing (--identity-update flag)
     CONTEXT_ENRICHMENT = "context_enrichment"  # Context enrichment tool testing
     VISION = "vision"  # Native multimodal vision testing
+    WA_IDENTITY_APPROVAL = "wa_identity_approval"  # Defer → WA approves → identity MEMORIZE lands (#1303)
     ATTACHMENTS = "attachments"  # Inline image/document attachments: delivery + visible refusals
     AIR = "air"  # AIR (Artificial Interaction Reminder) parasocial prevention testing
     ACCORD_METRICS = "accord_metrics"  # Accord metrics trace capture and signing testing
@@ -451,6 +452,9 @@ class QAConfig:
             return []  # Will be handled separately by runner
         elif module == QAModule.VISION:
             # Vision tests use direct API calls
+            return []  # Will be handled separately by runner
+        elif module == QAModule.WA_IDENTITY_APPROVAL:
+            # WA identity approval tests use direct API calls
             return []  # Will be handled separately by runner
         elif module == QAModule.ATTACHMENTS:
             # Attachment tests use direct API calls

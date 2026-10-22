@@ -39,6 +39,28 @@ class ImageContent(BaseModel):
         return f"data:{self.media_type};base64,{self.data}"
 
 
+class WAAuthorization(BaseModel):
+    """A Wise Authority's verified approval, carried by the task it authorizes.
+
+    Issued only by ``WiseAuthorityService.resolve_deferral`` on the guidance
+    task it creates, and only when the approval's signature VERIFIED (#944).
+    An unsigned legacy resolution or a refusal carries no grant. It is read at
+    dispatch into ``DispatchContext.wa_authorized`` for every thought of that
+    one task, which is what lets a WA-approved identity change (MEMORIZE /
+    FORGET to IDENTITY scope) go through. No other task inherits it.
+    """
+
+    wa_id: str = Field(..., description="The Wise Authority that approved")
+    deferral_id: str = Field(..., description="The deferral whose approval this is")
+    granted_at: str = Field(..., description="ISO-8601 time the approval was applied")
+    verification: Literal["verified"] = Field(
+        "verified",
+        description="Only a verified approval can be represented; unsigned or failed ones grant nothing",
+    )
+
+    model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
 class TaskContext(BaseModel):
     """Typed context for tasks."""
 
@@ -63,6 +85,15 @@ class TaskContext(BaseModel):
             "creation from outside the reasoning loop and bound to this task id; "
             "its lifetime is the task's. None means DENY to a future tool gate — "
             "never 'unconstrained'. Nothing enforces it in Phase 1."
+        ),
+    )
+
+    wa_authorization: Optional[WAAuthorization] = Field(
+        None,
+        description=(
+            "Set only on a guidance task created from a VERIFIED Wise Authority "
+            "approval. Dispatch reads it into DispatchContext.wa_authorized. None "
+            "means no WA authorization."
         ),
     )
 

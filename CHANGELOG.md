@@ -5,6 +5,43 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.3-stable] - 2026-10-21
+
+### Substrate
+
+- **ciris-server 0.5.232** (this PR):
+  - **Multi-device end to end.** A joined device is the owner: the owner's signing keys are the fed-ID plus the live user-role roster keys (CIRISServer#793). Self-roster proposals (#794): `GET /v1/self/roster/proposals`, and assent/object on each. Add-device past a roster of two answers `202 {held, proposal_id}` and resumes when the roster lands the key; `409 add_device.roster_change_held` is retired.
+  - **Edge v43.1.1, sealed transport: a fleet break.** Every link is sealed by a hybrid transit key exchange, and a node on an older edge exchanges nothing with a v43 node. Roll nodes together.
+  - Persist v59.1.0 (the genesis bundle v4 seeds the canonical's transit pair) and verify v20.2.0.
+- **ciris-client 0.5.229**, the server's new floor. It carries the iOS crash-recorder fix: the hook no longer segfaults inside NSLog, and writes `kotlin_crash.log` first.
+
+### Wise Authority
+
+- **A WA-approved identity change takes effect** (#1304, fixes #1303). Nothing in production ever set `DispatchContext.wa_authorized`, so an approved identity MEMORIZE was always refused. A guidance task created from a **verified** WA approval now carries a typed `wa_authorization`, which dispatch reads for that task only. Unsigned legacy approvals still resolve but grant nothing.
+- **Setup never asks for the owner's password** (#1297). The node owns that credential, and the add-device path carries none.
+
+### Files and attachments
+
+- **iOS reads PDF and DOCX.** The iOS bundle never shipped the parsers, so every document was dropped there (#1302).
+- **Every attachment gets a visible outcome** (#1302). The interact response lists each file as accepted, or refused with a stable reason id (too_large, too_many, unsupported_type, type_mismatch, unreadable, no_text, parser_unavailable, text_limit_reached), and the agent is told about refused files.
+  - The type is checked against the bytes.
+  - Documents are accepted up to 10 MB, 5 per message.
+  - Plain text, Markdown and CSV are read.
+  - `GET /v1/agent/attachments/policy` serves the limits.
+- **Memory reads return content** (#1304). `/v1/memory/query` stripped node content, and logged an ERROR for every substrate-owned row in a scope listing.
+
+### Reliability
+
+- **MSASPDMA verdicts take effect** (#1304). The memorize second pass passed a ResourceUsage model where a dict was required, so every verdict was discarded and the original MEMORIZE ran instead.
+- **"No proxy token available" warns once** per absence, not on every billing check (#1304).
+
+### QA and evidence
+
+- **A red QA run says why** (#1304). The incidents gate lists every line that failed it, the JSON report records them, an unreadable log fails closed, and the CI summary quotes the cause.
+- **New QA modules** `wa_identity_approval` and `attachments` (#1304, #1302). The mock LLM now honours a requested scope, follows WA guidance, and answers MSASPDMA. Before this, no mock run had exercised an IDENTITY-scope write.
+- **Safety evidence** - the bundles the sync harvested on 10-16 have landed. The harvester lists artifacts run by run, because the repo-wide listing returns an empty body at this repo's size, and it fails loudly on an unreadable listing (#1299).
+- **Docs** - the Retirement Standard FSD (#1260), and the README links the Constitution (#1263).
+
 ## [2.16.2-stable] - 2026-10-17
 
 ### Substrate

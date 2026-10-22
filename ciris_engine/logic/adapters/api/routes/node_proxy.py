@@ -171,6 +171,14 @@ def _is_node_owned(path: str) -> bool:
     return any(full == p or full.startswith(p + "/") for p in NODE_OWNED_PREFIXES)
 
 
+def _is_brain_owned(path: str) -> bool:
+    """Is `/v1/<path>` under a prefix the node proxies back to this listener?"""
+    from ciris_engine.logic.runtime.brain_adapter import _BRAIN_PREFIXES
+
+    full = f"/v1/{path}"
+    return any(full == p or full.startswith(p + "/") for p in _BRAIN_PREFIXES)
+
+
 def _safe_forward_path(path: str) -> Optional[str]:
     """The path to forward, or None when it must not be forwarded at all.
 
@@ -205,6 +213,17 @@ def _safe_forward_path(path: str) -> Optional[str]:
 )
 async def forward_to_node(path: str, request: Request) -> Response:
     """Forward one node-owned `/v1` request to the node, verbatim both ways."""
+    if _is_brain_owned(path):
+        # NEVER FORWARD A BRAIN PATH. The node proxies these prefixes back onto
+        # this listener (brain_adapter._BRAIN_PREFIXES), so a brain path that no
+        # brain route matched -- an absent route, e.g. a newer client asking a
+        # 2.16.2 agent for /v1/agent/attachments/policy -- went agent -> node ->
+        # agent -> node ... and every lap passed the rate limiter on the same
+        # credential, until the empty bucket's 429 broke the loop. One request
+        # drained the caller's whole minute (47 -> 0 in 1.5 s, CIRISClient gate
+        # run 39820724677, where the node logged the one GET twice). The brain
+        # does not serve it, so it does not exist.
+        raise HTTPException(status_code=404, detail="Not Found")
     known_node_prefix = _is_node_owned(path)
 
     safe_path = _safe_forward_path(path)

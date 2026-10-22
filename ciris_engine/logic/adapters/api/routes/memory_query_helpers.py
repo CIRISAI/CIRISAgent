@@ -183,6 +183,10 @@ def _content_or_none(value: Any) -> Optional[str]:
     return None if value is None else str(value)
 
 
+#: Amendment attributes the API returns beside the base projection.
+_AMENDMENT_PROVENANCE = ("wa_amendment", "proposed_node_id")
+
+
 class GraphNodeBuilder:
     """Build GraphNode objects from persist `cirisgraph_query_nodes` rows."""
 
@@ -230,11 +234,22 @@ class GraphNodeBuilder:
                 content=_content_or_none(attributes_dict.get("content")),
             )
 
+            attributes: Any = typed_attributes
+            if str(node_type).lower() == NodeType.IDENTITY_AMENDMENT.value:
+                # An amendment is auditable only if its approval is visible: the
+                # base projection above has no room for the provenance, so it
+                # rides beside it. RATCHET run 39795442173 read an amendment
+                # back here with no wa_amendment at all.
+                attributes = {
+                    **typed_attributes.model_dump(mode="json"),
+                    **{k: attributes_dict[k] for k in _AMENDMENT_PROVENANCE if k in attributes_dict},
+                }
+
             return GraphNode(
                 id=node_id,
                 scope=scope_lower,
                 type=node_type,
-                attributes=typed_attributes,
+                attributes=attributes,
                 version=int(version) if version else 1,
                 updated_by=updated_by,
                 updated_at=updated_at,

@@ -73,6 +73,7 @@ _REGISTRY: Dict[QAModule, tuple] = {
     # runs its own two-node compose stack; no agent API server involved.
     QAModule.MESH_REPRO: ("tools.qa_runner.modules.mesh_repro_tests", "MeshReproTests"),
     QAModule.ACCORD_HALT: ("tools.qa_runner.modules.accord_halt_tests", "AccordHaltTests"),
+    QAModule.CORRECTION_EPISODES: ("tools.qa_runner.modules.correction_episode_tests", "CorrectionEpisodeTests"),
 }
 
 

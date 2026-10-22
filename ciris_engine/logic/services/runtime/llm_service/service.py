@@ -1396,9 +1396,19 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # default (2) retried timeouts inside one call, tripling it (#1186).
         self.client = anthropic.AsyncAnthropic(api_key=api_key, timeout=timeout, max_retries=0)
 
-        # Use instructor with Anthropic - ANTHROPIC_TOOLS mode for best results
-        self.instruct_client = instructor.from_anthropic(self.client, mode=instructor.Mode.ANTHROPIC_TOOLS)
-        logger.info(f"Initialized native Anthropic client with model={model_name}")
+        # ANTHROPIC_TOOLS forces the response tool (tool_choice "tool"), which is
+        # a 400 on Opus 5.5 / Sonnet 5.5 / Fable 5.x: every call failed. Those
+        # get ANTHROPIC_JSON (schema in the prompt, validated), as the HTTPS
+        # path does; older models keep tool-based extraction.
+        from .anthropic_http import claude_rejects_forced_tool_use
+
+        mode = (
+            instructor.Mode.ANTHROPIC_JSON
+            if claude_rejects_forced_tool_use(model_name)
+            else instructor.Mode.ANTHROPIC_TOOLS
+        )
+        self.instruct_client = instructor.from_anthropic(self.client, mode=mode)
+        logger.info(f"Initialized native Anthropic client with model={model_name}, mode={mode}")
 
     def _init_google_client(self, api_key: str, model_name: str, timeout: int) -> None:
         """Initialize native Google client for Gemini models.

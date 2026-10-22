@@ -283,3 +283,34 @@ def test_the_host_keyed_policy_agrees_for_api_anthropic_com():
     assert OpenAICompatibleClient._build_reasoning_off_extras(
         "https://api.anthropic.com/v1", "claude-sonnet-5-5"
     ) == {"thinking": {"type": "between_tools"}}
+
+
+@pytest.mark.parametrize(
+    "model,rejects",
+    [
+        ("claude-opus-5-5", True),
+        ("claude-sonnet-5-5", True),
+        ("claude-fable-5-1", True),
+        ("claude-fable-5", True),
+        ("claude-mythos-5-1", True),
+        ("claude-opus-5", False),
+        ("claude-sonnet-5", False),
+        ("claude-haiku-5-5", False),
+        ("claude-opus-4-8", False),
+        ("claude-haiku-4-5", False),
+    ],
+)
+def test_which_models_reject_forced_tool_use(model, rejects):
+    assert ah.claude_rejects_forced_tool_use(model) is rejects
+
+
+@pytest.mark.parametrize("model,mode_name", [("claude-opus-5-5", "ANTHROPIC_JSON"), ("claude-opus-4-8", "ANTHROPIC_TOOLS")])
+def test_the_sdk_path_never_forces_a_tool_on_models_that_reject_it(model, mode_name):
+    pytest.importorskip("anthropic")
+    import instructor
+
+    from ciris_engine.logic.services.runtime.llm_service.service import OpenAICompatibleClient
+
+    service = object.__new__(OpenAICompatibleClient)
+    service._init_anthropic_client("sk-ant-test", model, 45)
+    assert service.instruct_client.mode == getattr(instructor.Mode, mode_name)

@@ -81,6 +81,22 @@ def claude_reasoning_off(model: str) -> Dict[str, Any]:
     return {}
 
 
+#: Models that refuse forced tool use (tool_choice any/tool -> 400): Opus 5.5,
+#: Sonnet 5.5 and Fable 5.1 reject it outright, and models whose thinking cannot
+#: be turned off cannot combine thinking with a forced tool either.
+_NO_FORCED_TOOLS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5", "claude-mythos-5")
+
+
+def claude_rejects_forced_tool_use(model: str) -> bool:
+    """True when ``tool_choice`` ``any``/``tool`` is a 400 for ``model``.
+
+    The SDK path's instructor ANTHROPIC_TOOLS mode forces the response tool, so
+    for these models it must use ANTHROPIC_JSON instead or every call fails.
+    """
+    name = (model or "").lower()
+    return any(name.startswith(prefix) for prefix in _NO_FORCED_TOOLS)
+
+
 #: Keys from the service's per-request extra_body that are Messages API fields.
 _FORWARDED_EXTRA = ("thinking", "output_config")
 

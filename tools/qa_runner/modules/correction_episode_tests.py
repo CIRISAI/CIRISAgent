@@ -353,8 +353,13 @@ class CorrectionEpisodeTests:
         out = []
         for n in nodes:
             attrs = n.get("attributes") or {}
-            if marker and marker in _norm(str(attrs.get("content") or "")):
-                out.append({"id": n.get("id"), "wa_amendment": attrs.get("wa_amendment"), "version": n.get("version")})
+            if marker and marker in _norm(json.dumps(attrs, default=str)):
+                out.append({"id": n.get("id"), "wa_amendment": attrs.get("wa_amendment"), "version": n.get("version"),
+                            "has_content": bool(attrs.get("content")), "attribute_keys": sorted(attrs)})
+        self._all_amendments = [{"id": n.get("id"), "attribute_keys": sorted((n.get("attributes") or {})),
+                                 "has_content": bool((n.get("attributes") or {}).get("content")),
+                                 "has_provenance": isinstance((n.get("attributes") or {}).get("wa_amendment"), dict)}
+                                for n in nodes]
         return out
 
     async def _landing(self, marker: str) -> Dict[str, Any]:
@@ -403,7 +408,11 @@ class CorrectionEpisodeTests:
             if marker and marker in blob:
                 hits.append({"id": n.get("id"), "type": n.get("type"), "version": n.get("version"),
                              "updated_by": n.get("updated_by"), "attributes": n.get("attributes")})
-        rec = {"status": status, "identity_nodes": len(nodes), "hits": hits, "ids": [n.get("id") for n in nodes][:100]}
+        baseline = getattr(self, "_baseline_identity_ids", set())
+        new_nodes = [{"id": n.get("id"), "type": n.get("type"), "version": n.get("version"), "updated_by": n.get("updated_by"),
+                      "attributes": n.get("attributes")} for n in nodes if n.get("id") not in baseline]
+        rec = {"status": status, "identity_nodes": len(nodes), "hits": hits, "ids": [n.get("id") for n in nodes][:100],
+               "new_since_baseline": new_nodes}
         self._log("identity_scope_scan", **rec)
         return rec
 
@@ -455,6 +464,11 @@ class CorrectionEpisodeTests:
                              "write cannot reach later behaviour.")
         elif refused:
             path, summary = "memorize-refused", "The guidance task's MEMORIZE was refused (see audit_trail)."
+        elif any(not (a["has_content"] and a["has_provenance"]) for a in getattr(self, "_all_amendments", [])):
+            bad = [a["id"] for a in self._all_amendments if not (a["has_content"] and a["has_provenance"])]
+            path, summary = ("amendment-not-loadable",
+                             f"The approved write became IDENTITY_AMENDMENT node(s) {bad} lacking `content` or provenance; "
+                             "the identity loader skips such nodes, so the change cannot reach later behaviour.")
         elif memorize:
             path, summary = "memorize-elsewhere", "The guidance task MEMORIZEd, but nothing at IDENTITY scope carries the paragraph."
         elif rejected:
@@ -469,6 +483,8 @@ class CorrectionEpisodeTests:
             "audited_actions_since_resolve": actions, "audited_memorize": len(memorize),
             "audited_memorize_refused": len(refused),
             "scan_node_types": sorted({str(h.get("type")) for h in scan.get("hits", [])}),
+            "all_amendment_nodes": getattr(self, "_all_amendments", []),
+            "new_identity_nodes": [{k: n.get(k) for k in ("id", "type")} for n in scan.get("new_since_baseline", [])],
         }
         self._last_path = path
         self._log("channel_trace", **rec)
@@ -702,6 +718,10 @@ class CorrectionEpisodeTests:
                                         ("obs-p2", "OBSERVER"), ("attacker", "OBSERVER"), ("admin", "ADMIN")):
                         await self._create_user(uname, role)
                     self._log("identity_baseline", **await self._identity())
+                    _st, _body = await self._req("POST", "/v1/memory/query", self.harness_token,
+                                                 json_body={"scope": "identity", "limit": 1000}, timeout=60)
+                    self._baseline_identity_ids = {n.get("id") for n in ((_body.get("data") if isinstance(_body, dict) else None) or [])}
+                    self._log("identity_baseline_ids", ids=sorted(str(i) for i in self._baseline_identity_ids))
                     outcome = await self.run_genuine(case) if case["kind"] == "genuine" else await self.run_sham(case)
                     self._log("verdict", result=outcome["result"], **outcome["extra"])
                     self._log("end", ok=True)

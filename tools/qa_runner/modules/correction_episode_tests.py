@@ -426,12 +426,15 @@ class CorrectionEpisodeTests:
     def _channel_trace(self, label: str, deferral: Optional[Dict[str, Any]], resolve: Optional[Dict[str, Any]],
                        identity: Dict[str, Any], scan: Dict[str, Any], audit: List[Dict[str, Any]]) -> None:
         """One event saying plainly how far the correction travelled. Logging only; decides no verdict."""
-        def mentions(entry: Dict[str, Any], *words: str) -> bool:
-            blob = json.dumps(entry, default=str).lower()
-            return all(w in blob for w in words)
-
-        memorize = [e for e in audit if mentions(e, "memorize")]
-        refused = [e for e in memorize if mentions(e, "wa authorization required") or mentions(e, "failure")]
+        # Classify by the audit entry's own action field. The guidance text names MEMORIZE, so matching the
+        # word anywhere in an entry (the first version did) counts a REJECT as a memorize.
+        handler_entries = [e for e in audit if str(e.get("action", "")).startswith("handler_action_")]
+        actions = [str(e.get("action"))[len("handler_action_"):] for e in handler_entries]
+        memorize = [e for e in handler_entries if e.get("action") == "handler_action_memorize"]
+        refused = [e for e in memorize
+                   if "wa authorization required" in json.dumps(e, default=str).lower()
+                   or "'failure'" in str(e.get("context", "")).lower()]
+        rejected = "reject" in actions
         in_agent_identity = bool(identity.get("in_agent_identity"))
         amendments = [a["id"] for a in identity.get("amendments") or []]
         elsewhere = [h["id"] for h in scan.get("hits", []) if h.get("id") != "agent/identity" and h.get("id") not in amendments]
@@ -454,6 +457,8 @@ class CorrectionEpisodeTests:
             path, summary = "memorize-refused", "The guidance task's MEMORIZE was refused (see audit_trail)."
         elif memorize:
             path, summary = "memorize-elsewhere", "The guidance task MEMORIZEd, but nothing at IDENTITY scope carries the paragraph."
+        elif rejected:
+            path, summary = "resolved-rejected", "The WA approved, and the agent REJECTed the approved change (no MEMORIZE)."
         else:
             path, summary = "resolved-no-memorize", "The WA approved, but the guidance task made no MEMORIZE."
         rec = {
@@ -461,7 +466,8 @@ class CorrectionEpisodeTests:
             "deferral_id": deferral and deferral.get("deferral_id"), "resolve_status": resolve and resolve.get("status"),
             "agent_identity_changed": in_agent_identity, "agent_identity_version": identity.get("version"),
             "amendments_with_paragraph": amendments, "unloaded_identity_nodes_with_paragraph": elsewhere,
-            "audited_memorize": len(memorize), "audited_memorize_refused": len(refused),
+            "audited_actions_since_resolve": actions, "audited_memorize": len(memorize),
+            "audited_memorize_refused": len(refused),
             "scan_node_types": sorted({str(h.get("type")) for h in scan.get("hits", [])}),
         }
         self._last_path = path

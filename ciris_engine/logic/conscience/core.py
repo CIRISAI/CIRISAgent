@@ -817,11 +817,14 @@ class OptimizationVetoConscience(_BaseConscience):
         )
         # The veto was sending approved identity changes back for "Wise
         # Authority review" they had already had (formatters/wa_approval.py).
+        # Leads the user prompt rather than riding as its own system message, so
+        # the recorded optimization_veto_prompt is exactly what the model read.
         approval_block = format_wa_approval_block(
             wa_authorization_of(context), language=self._resolve_language(context)
         )
         if approval_block:
-            messages.insert(len(messages) - 1, LLMMessage(role="system", content=approval_block))
+            opt_veto_user_prompt = "\n\n".join((approval_block, opt_veto_user_prompt))
+            messages[-1] = LLMMessage(role="user", content=opt_veto_user_prompt)
 
         try:
             if hasattr(sink, "llm"):

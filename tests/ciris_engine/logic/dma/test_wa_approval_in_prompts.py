@@ -147,8 +147,10 @@ async def test_the_optimization_veto_sees_the_approval():
     action = cg.make_memorize_aspdma_result()
     thought = SimpleNamespace(thought_id="t1", source_task_id="task1")
 
-    await conscience.check(action, ConscienceCheckContext(thought=thought, wa_authorization=GRANT))
+    checked = await conscience.check(action, ConscienceCheckContext(thought=thought, wa_authorization=GRANT))
     with_grant = json.dumps([getattr(m, "content", m) for m in seen["messages"]], default=str)
+    # The recorded prompt is what the model read, approval included.
+    assert "defer_c5aaf93c" in (checked.optimization_veto_prompt or "")
     await conscience.check(action, ConscienceCheckContext(thought=thought))
     without = json.dumps([getattr(m, "content", m) for m in seen["messages"]], default=str)
 

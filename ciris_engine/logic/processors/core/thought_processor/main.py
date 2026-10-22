@@ -463,7 +463,18 @@ class ThoughtProcessor(
         handler = self._VERB_SECOND_PASS.get(action_result.selected_action)
         if handler is None:
             return action_result
-        return await handler(self, thought_item, action_result, thought_context)
+        result: ActionSelectionDMAResult = await handler(self, thought_item, action_result, thought_context)
+        # A second pass returns a NEW result that never saw the action-selection
+        # prompts, and ASPDMA_RESULT is built from whatever result comes out of
+        # here. Carry them across, or the trace loses the prompt on exactly the
+        # paths a second pass rewrites -- the approved identity MEMORIZE among
+        # them (RATCHET run 39851060130: 0 chars there, 19,359 on TASK_COMPLETE).
+        carried = {
+            name: getattr(action_result, name)
+            for name in ("user_prompt", "system_prompt")
+            if getattr(result, name, None) is None and getattr(action_result, name, None) is not None
+        }
+        return result.model_copy(update=carried) if carried else result
 
     async def _maybe_run_tsaspdma(
         self,
@@ -684,6 +695,7 @@ class ThoughtProcessor(
             # (FSD/TRACE_EVENT_LOG_PERSISTENCE.md §4)
             await self._emit_verb_second_pass_result_event(
                 thought_item=thought_item,
+                evaluator=evaluator,
                 verb="tool",
                 original_action=HandlerActionType.TOOL.value,
                 original_reasoning=action_result.rationale or "",
@@ -753,6 +765,7 @@ class ThoughtProcessor(
             # refined ActionSelectionDMAResult.
             await self._emit_verb_second_pass_result_event(
                 thought_item=thought_item,
+                evaluator=evaluator,
                 verb="defer",
                 original_action=HandlerActionType.DEFER.value,
                 original_reasoning=action_result.rationale or "",
@@ -808,6 +821,7 @@ class ThoughtProcessor(
 
             await self._emit_verb_second_pass_result_event(
                 thought_item=thought_item,
+                evaluator=evaluator,
                 verb="memorize",
                 original_action=HandlerActionType.MEMORIZE.value,
                 original_reasoning=action_result.rationale or "",
@@ -975,6 +989,7 @@ class ThoughtProcessor(
         original_reasoning: str,
         second_pass_result: ActionSelectionDMAResult,
         verb_specific_data: Dict[str, Any],
+        evaluator: Optional[Any] = None,
     ) -> None:
         """Emit VERB_SECOND_PASS_RESULT — the generic verb-second-pass event.
 
@@ -1008,6 +1023,11 @@ class ThoughtProcessor(
                 final_action=second_pass_result.selected_action.value,
                 final_reasoning=second_pass_result.rationale or "",
                 verb_specific_data=verb_specific_data,
+                # The prompts the second pass was sent. MSASPDMA's system guide
+                # carries the WA approval on an approved identity change, so
+                # without these the trace could not show what it decided on.
+                second_pass_prompt=getattr(evaluator, "last_user_prompt", None),
+                second_pass_system_prompt=getattr(evaluator, "last_system_prompt", None),
             )
             await reasoning_event_stream.broadcast_reasoning_event(event)
             logger.info(

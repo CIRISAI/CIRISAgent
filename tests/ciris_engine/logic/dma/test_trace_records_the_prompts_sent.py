@@ -82,3 +82,64 @@ def test_egress_ships_the_system_prompt_only_at_full_traces():
     generic = enforce_egress_schema("ASPDMA_RESULT", TraceLevel.GENERIC, data).data
     assert full["aspdma_system_prompt"] == "=== CORE IDENTITY === ..."
     assert "aspdma_system_prompt" not in generic
+
+
+@pytest.mark.asyncio
+async def test_a_verb_second_pass_keeps_the_action_selection_prompts():
+    """RATCHET run 39851060130: the approved MEMORIZE's ASPDMA_RESULT had both prompts empty."""
+    from ciris_engine.logic.processors.core.thought_processor.main import ThoughtProcessor
+    from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+
+    original = cg.make_memorize_aspdma_result().model_copy(
+        update={"user_prompt": "the user prompt", "system_prompt": "=== CORE IDENTITY === ..."}
+    )
+
+    async def second_pass(_self: Any, _item: Any, result: Any, _ctx: Any) -> ActionSelectionDMAResult:
+        return cg.make_memorize_aspdma_result()  # a fresh result, as MSASPDMA returns
+
+    processor = object.__new__(ThoughtProcessor)
+    processor._VERB_SECOND_PASS = {original.selected_action: second_pass}  # type: ignore[misc]
+    out = await processor._run_verb_second_pass(cg.make_queue_item(), original, None)
+
+    assert out.user_prompt == "the user prompt"
+    assert out.system_prompt == "=== CORE IDENTITY === ..."
+
+
+@pytest.mark.asyncio
+async def test_the_second_pass_event_records_the_prompts_its_evaluator_was_sent(monkeypatch):
+    """The MSASPDMA guide carries the WA approval; its trace event must show it."""
+    from ciris_engine.logic.infrastructure import step_streaming
+    from ciris_engine.logic.processors.core.thought_processor.main import ThoughtProcessor
+
+    seen: list = []
+
+    class _Stream:
+        _subscribers = [object()]
+        _recent_events: list = []
+
+        async def broadcast_reasoning_event(self, event: Any) -> None:
+            seen.append(event)
+
+    monkeypatch.setattr(step_streaming, "reasoning_event_stream", _Stream())
+    evaluator = SimpleNamespace(last_user_prompt="second-pass user", last_system_prompt="=== WISE AUTHORITY APPROVAL ===")
+    processor = object.__new__(ThoughtProcessor)
+    await processor._emit_verb_second_pass_result_event(
+        thought_item=cg.make_queue_item(),
+        verb="memorize",
+        original_action="memorize",
+        original_reasoning="r",
+        second_pass_result=cg.make_memorize_aspdma_result(),
+        verb_specific_data={},
+        evaluator=evaluator,
+    )
+    (event,) = seen
+    assert event.second_pass_prompt == "second-pass user"
+    assert event.second_pass_system_prompt == "=== WISE AUTHORITY APPROVAL ==="
+
+
+def test_egress_ships_the_second_pass_system_prompt_only_at_full_traces():
+    from ciris_adapters.ciris_accord_metrics.egress_schema import TraceLevel, enforce_egress_schema
+
+    data = {"verb": "memorize", "second_pass_system_prompt": "=== WISE AUTHORITY APPROVAL ==="}
+    assert enforce_egress_schema("VERB_SECOND_PASS_RESULT", TraceLevel.FULL_TRACES, data).data["second_pass_system_prompt"]
+    assert "second_pass_system_prompt" not in enforce_egress_schema("VERB_SECOND_PASS_RESULT", TraceLevel.GENERIC, data).data

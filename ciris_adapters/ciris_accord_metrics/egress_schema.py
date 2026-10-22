@@ -423,6 +423,7 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "original_reasoning": _text(),
         "final_reasoning": _text(),
         "second_pass_prompt": _text(),
+        "second_pass_system_prompt": _text(),
     },
     "CONSCIENCE_RESULT": {
         "conscience_passed": _bool(),

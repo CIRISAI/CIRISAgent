@@ -1387,6 +1387,9 @@ class VerbSecondPassResultEvent(BaseModel):
 
     # User prompt passed to the verb-specific evaluator (debugging/transparency)
     second_pass_prompt: Optional[str] = Field(None, description="User prompt passed to the second-pass evaluator")
+    second_pass_system_prompt: Optional[str] = Field(
+        None, description="System prompt passed to the second-pass evaluator (carries any WA approval)"
+    )
 
     # Tool documentation context
     tool_description: Optional[str] = Field(None, description="Tool description from documentation")

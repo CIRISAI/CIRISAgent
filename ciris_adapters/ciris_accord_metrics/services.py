@@ -2107,6 +2107,7 @@ class AccordMetricsService:
             # FULL: Add the second-pass prompt
             if is_full:
                 data["second_pass_prompt"] = event.get("second_pass_prompt")
+                data["second_pass_system_prompt"] = event.get("second_pass_system_prompt")
             return data
 
         elif event_type == "CONSCIENCE_RESULT":

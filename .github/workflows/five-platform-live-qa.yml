@@ -29,13 +29,12 @@
 #     falls back to the replication-counter ladder when the receipt cannot be
 #     established or the wheel is older. Rooting, KEX and envelope counts are
 #     the sender's preconditions and can all be green with nothing stored at the
-#     far end — which is the gap the receipt closes. Still NON-BLOCKING while
-#     upstream rebuilds KEX/replication; it reports instead of failing, and the
-#     restore is marked at the call site.
-#     A null verdict is UNKNOWN, NOT ZERO, and is reported as such — never red.
-#     ONE EXCEPTION IS ENFORCED: the node must have AUTHORED > 0 traces
-#     (`--require-authored`, exit 5). That rung is below delivery and does not
-#     wait on upstream; its absence hid a zero-trace regression for six nightlies.
+#     far end — which is the gap the receipt closes. ENFORCED since 2.16.3:
+#     every rung fails the job — not held, no logs, not observable, receipt
+#     unknown (unknown is not zero, and not a pass), and authored nothing
+#     (`--require-authored`, exit 5). It was report-only from 2.9.45 while
+#     upstream rebuilt KEX/replication, and that carve-out hid a sealed canonical
+#     receiving nothing for 33 h behind green runs (run 39600828244).
 #   * a platform that cannot run must SKIP loudly; it must never quietly pass
 
 name: Five-Platform Live QA
@@ -1023,27 +1022,35 @@ jobs:
               --require-authored
             trace_status=$?
             set -e
+            # DELIVERY IS ENFORCED (2.16.3, Eric 2026-10-21). From 2.9.45 every
+            # non-zero here except 5 was a ::warning or ::notice and the job stayed
+            # green "while upstream rebuilds KEX/replication". That revamp landed
+            # (ciris-server 0.5.232, edge v43 sealed transport), and the carve-out
+            # had become a vacuous green: after the canonical sealed on 10-20 it
+            # refused every pre-v43 agent, its stored trace count stayed flat for
+            # 33 h, and the gate reported green throughout (run 39600828244: held 0
+            # of 2 authored, verdict false, job success). Every rung below now fails
+            # the job, each with its own reason.
             case "$trace_status" in
               0) trace_rc=0; traces_json=true ;;
-              3) trace_rc=0; traces_json=null
-                 echo "::notice::$plat trace delivery NOT OBSERVABLE on this substrate (CIRISServer#518)" ;;
-              4) trace_rc=0; traces_json=null
-                 # UNKNOWN IS NOT FAILURE. Upstream is explicit that a null verdict
-                 # means unreachable / unverified / partial — someone else's outage
-                 # or an incomplete directory, not a statement that we did not
-                 # deliver. Scoring it red would make this gate report other
-                 # people's weather.
-                 echo "::notice::$plat canonical RECEIPT NOT ESTABLISHED (unknown, not zero) — see the per-canonical reasons above" ;;
+              1) trace_rc=1; traces_json=false; overall=1
+                 echo "::error::$plat traces did NOT reach the canonical: a canonical that answered does not hold the newest trace this node authored (receipt-$plat.json: newest_authored_held, shipped_any)" ;;
+              2) trace_rc=1; traces_json=false; overall=1
+                 echo "::error::$plat trace delivery could not be checked: none of the agent's log paths exist" ;;
+              3) trace_rc=1; traces_json=false; overall=1
+                 echo "::error::$plat trace delivery NOT OBSERVABLE on this substrate: the node exposes no receipt (CIRISServer#518). On ciris-server >= 0.5.232 that is a regression, not a skip" ;;
+              4) trace_rc=1; traces_json=false; overall=1
+                 # UNKNOWN IS NOT ZERO, AND IT IS NOT A PASS EITHER. It means the
+                 # canonical was unreachable / unverified / partial. The job cannot
+                 # certify delivery it could not see, so it fails, and says which.
+                 echo "::error::$plat canonical RECEIPT NOT ESTABLISHED (unknown, not zero): see the per-canonical reasons above; delivery was not certified" ;;
               5) trace_rc=1; traces_json=false; overall=1
-                 # ENFORCED: THE NODE SEALED NOTHING. Below delivery and independent
-                 # of the upstream KEX/replication revamp, so it is fatal now. From
-                 # 2026-10-09 to 10-14 every platform authored 0 traces (a mock-LLM
-                 # latch set by adapter discovery in a LIVE run, CIRISAgent#1244)
-                 # and this job stayed green: "authored 0" reads as receipt
-                 # UNKNOWN (4), and 4 is not failure. Vacuous green, six nightlies.
+                 # THE NODE SEALED NOTHING. From 2026-10-09 to 10-14 every platform
+                 # authored 0 traces (a mock-LLM latch set by adapter discovery in a
+                 # LIVE run, CIRISAgent#1244) and this job stayed green.
                  echo "::error::$plat authored NO traces (receipt authored=0 or unreadable) — local fault, check [MOCK-GUARD]/[CONSENT] in the agent log" ;;
-              *) trace_rc=1; traces_json=false
-                 echo "::warning::$plat traces did not reach canonical (NOT enforced — upstream KEX/replication revamp in flight)" ;;
+              *) trace_rc=1; traces_json=false; overall=1
+                 echo "::error::$plat trace check exited $trace_status (unrecognised): delivery not certified" ;;
             esac
 
             # BACKEND MEMORY, while the platform is still standing. The agent's node
@@ -1068,10 +1075,10 @@ jobs:
               # and it would bury the screenshots this gallery exists to show.
               # So `success` tracks the enforced half, and `traces` keeps carrying
               # the un-enforced rung as its own field so nothing is concealed.
-              # Restore the conjunction here when enforcement comes back.
+              # Enforcement is back (2.16.3): `success` is chat AND traces again.
               printf '{"platform":"%s","success":%s,"interact":%s,"traces":%s}\n' \
                 "$plat" \
-                "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
+                "$([ $chat_rc -eq 0 ] && [ $trace_rc -eq 0 ] && echo true || echo false)" \
                 "$([ $chat_rc -eq 0 ] && echo true || echo false)" \
                 "$traces_json" \
                 > "artifacts/chat-$plat.json"

@@ -46,6 +46,22 @@ from .response_packaging import (
 
 _logger = logging.getLogger(__name__)
 
+# The observer fences the current message between these markers (#1320):
+#   "... say: CIRIS_CURRENT_MESSAGE_START [Timestamp: ...]\n<message>\nCIRIS_CURRENT_MESSAGE_END"
+# The mock reads the message the way it did before the fence, so the fence is
+# lifted first. The newline may arrive literal or escaped ("\\n") in a prompt.
+_CURRENT_MESSAGE_FENCE = re.compile(
+    r"CIRIS_CURRENT_MESSAGE_START[^\n\\]*(?:\n|\\n)(.*?)(?:\n|\\n)CIRIS_CURRENT_MESSAGE_END",
+    re.DOTALL,
+)
+
+
+def unfence_current_message(text: str) -> str:
+    """Text with the observer's current-message fence removed and the message left in place."""
+    if "CIRIS_CURRENT_MESSAGE_START" not in text:
+        return text
+    return _CURRENT_MESSAGE_FENCE.sub(lambda m: m.group(1), text)
+
 
 
 
@@ -1499,7 +1515,7 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             # Look for the user message in the messages list
             for msg in messages or []:
                 if isinstance(msg, dict) and msg.get("role") == "user":
-                    user_content = _extract_text_content(msg.get("content", ""))
+                    user_content = unfence_current_message(_extract_text_content(msg.get("content", "")))
 
                     # Debug logging
                     logger.debug(f"[MOCK_LLM] Processing user message: {user_content[:200]}...")

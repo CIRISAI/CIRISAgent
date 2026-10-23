@@ -88,39 +88,176 @@ class BillingServiceError(Exception):
         self.status_code = status_code
 
 
+SPOOF_WARNING = "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!"
+
+# The fence the observer puts around the current message (#1320), the same kind
+# of marker _create_protected_content puts around each history message.
+CURRENT_MESSAGE_START = "CIRIS_CURRENT_MESSAGE_START"
+CURRENT_MESSAGE_END = "CIRIS_CURRENT_MESSAGE_END"
+
+# Patterns for the observer's own fences (case insensitive, with variations).
+_OBSERVATION_MARKER_PATTERNS: Tuple[str, ...] = (
+    # Original observation markers
+    r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",
+    r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
+    r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",  # Common misspelling
+    r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
+    r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*START",  # Shortened version
+    r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*END",
+    # Channel history markers
+    r"CIRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",
+    r"CIRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
+    r"CIRRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",  # Common misspelling
+    r"CIRRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
+    # Shortened channel history patterns
+    r"CIRIS[_\s]*CH(?:ANNEL)?[_\s]*HIST(?:ORY)?[_\s]*MSG[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",
+    r"CIRIS[_\s]*CH(?:ANNEL)?[_\s]*HIST(?:ORY)?[_\s]*MSG[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
+    # Current message fence (#1320)
+    r"CIRR?IS[_\s]*CURRENT[_\s]*MESSAGE[_\s]*START",
+    r"CIRR?IS[_\s]*CURRENT[_\s]*MESSAGE[_\s]*END",
+)
+
+# The agent's own bracketed authority markers (#1320). ``[WA_FEEDBACK]`` is the
+# prefix of a Wise Authority's relayed feedback; ``[WA GUIDANCE]`` heads the task
+# a Wise Authority's deferral answer creates. Neither is ever legitimately typed
+# by a user.
+_AUTHORITY_TOKEN_PATTERNS: Tuple[str, ...] = (
+    r"\[[ \t]*WA[_ \t]*FEEDBACK[ \t]*\]",
+    r"\bWA_FEEDBACK\b",
+    r"\[[ \t]*WA[_ \t]*GUIDANCE[ \t]*\]",
+)
+
+# Section headers the agent's prompts open with, read from the first line of
+# these localized strings in every locale file: the verified Wise Authority
+# approval block, the CORE IDENTITY block and the language-guidance operating
+# rules. A user who pastes one is posing as system content. The English headers
+# are the floor if no locale file can be read.
+AUTHORITY_HEADER_KEYS: Tuple[str, ...] = (
+    "prompts.wa_approval.grant",
+    "prompts.identity_block",
+    "prompts.language_guidance.01_preamble",
+)
+_FALLBACK_AUTHORITY_HEADERS: Tuple[str, ...] = (
+    "WISE AUTHORITY APPROVAL",
+    "CORE IDENTITY - THIS IS WHO YOU ARE!",
+)
+
+# Characters that may frame a header on its own line: "=== X ===", "## X",
+# "[X]", "> X", "--- X ---".
+_HEADER_FRAME = r"[ \t=#*\[\]>_:\-]*"
+_HEADER_WORD_GAP = r"[\s_\-\u2013\u2014]*"
+
+
+def _header_inner_text(rendered: str) -> Optional[str]:
+    """The header text of a rendered block's first line, without its ``===`` frame."""
+    first_line = rendered.strip().split("\n", 1)[0].strip()
+    inner = first_line.strip("=").strip()
+    if inner.startswith("[EN]"):
+        inner = inner[len("[EN]") :].strip()
+    if not inner or "{" in inner:
+        return None
+    return inner
+
+
+def _header_patterns(inner: str) -> Tuple[str, ...]:
+    """A ``=== header ===`` anywhere, and the header alone on a line in any frame.
+
+    Words may be split by any run of whitespace, underscores or dashes, as the
+    observation-marker patterns allow, so re-spacing the header does not slip it
+    past. A header mentioned inside a sentence is not matched.
+    """
+    import unicodedata
+
+    variants = {unicodedata.normalize("NFC", inner), unicodedata.normalize("NFD", inner)}
+    patterns: List[str] = []
+    for variant in sorted(variants):
+        words = [w for w in re.split(r"[\s_\-\u2013\u2014]+", variant) if w]
+        if not words:
+            continue
+        core = _HEADER_WORD_GAP.join(re.escape(w) for w in words)
+        patterns.append(r"={2,}[ \t]*" + core + r"(?:[ \t]*={2,})?")
+        patterns.append(r"(?m)^" + _HEADER_FRAME + core + _HEADER_FRAME + r"$")
+    return tuple(patterns)
+
+
+def _load_localized_authority_headers() -> List[str]:
+    """Every locale's header text for AUTHORITY_HEADER_KEYS.
+
+    Each locale file is parsed once here and dropped; nothing is added to the
+    localization cache. An unreadable or missing file, or a missing key, is
+    skipped, never raised: the detector must work with whatever is present.
+    """
+    from ciris_engine.logic.utils.localization import _load_language, _resolve_key, get_available_languages
+
+    headers: List[str] = []
+    try:
+        languages = get_available_languages()
+    except Exception as e:
+        logger.warning(f"Could not list locales for spoof-marker headers: {e}")
+        return headers
+    for lang in languages:
+        try:
+            data = _load_language(lang)
+        except Exception as e:
+            logger.warning(f"Could not read locale {lang} for spoof-marker headers: {e}")
+            continue
+        if not data:
+            continue
+        for key in AUTHORITY_HEADER_KEYS:
+            rendered = _resolve_key(data, key)
+            inner = _header_inner_text(rendered) if rendered else None
+            if inner:
+                headers.append(inner)
+    return headers
+
+
+_spoof_patterns_cache: Optional[Tuple["re.Pattern[str]", ...]] = None
+
+
+def _spoof_marker_patterns() -> Tuple["re.Pattern[str]", ...]:
+    """All spoof patterns, compiled once and cached for the process."""
+    global _spoof_patterns_cache
+    if _spoof_patterns_cache is not None:
+        return _spoof_patterns_cache
+
+    sources: List[str] = list(_OBSERVATION_MARKER_PATTERNS) + list(_AUTHORITY_TOKEN_PATTERNS)
+    headers: List[str] = list(_FALLBACK_AUTHORITY_HEADERS)
+    try:
+        headers.extend(_load_localized_authority_headers())
+    except Exception as e:  # never let a locale problem break message handling
+        logger.warning(f"Localized spoof-marker headers unavailable, using English only: {e}")
+    seen: Set[str] = set()
+    for inner in headers:
+        key = inner.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        sources.extend(_header_patterns(inner))
+
+    compiled: List["re.Pattern[str]"] = []
+    for source in sources:
+        try:
+            compiled.append(re.compile(source, re.IGNORECASE))
+        except re.error as e:
+            logger.warning(f"Skipping uncompilable spoof-marker pattern {source!r}: {e}")
+    _spoof_patterns_cache = tuple(compiled)
+    return _spoof_patterns_cache
+
+
 def detect_and_replace_spoofed_markers(content: str) -> str:
-    """Detect and replace attempts to spoof CIRIS security markers."""
-    import re
+    """Detect and replace attempts to spoof CIRIS security markers.
 
-    # Patterns for detecting spoofed markers (case insensitive, with variations)
-    patterns = [
-        # Original observation markers
-        r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",
-        r"CIRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
-        r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*START",  # Common misspelling
-        r"CIRRIS[_\s]*OBSERV(?:ATION)?[_\s]*END",
-        r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*START",  # Shortened version
-        r"CIRIS[_\s]*OBS(?:ERV)?[_\s]*END",
-        # Channel history markers
-        r"CIRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",
-        r"CIRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
-        r"CIRRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",  # Common misspelling
-        r"CIRRIS[_\s]*CHANNEL[_\s]*HISTORY[_\s]*MESSAGE[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
-        # Shortened channel history patterns
-        r"CIRIS[_\s]*CH(?:ANNEL)?[_\s]*HIST(?:ORY)?[_\s]*MSG[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*START",
-        r"CIRIS[_\s]*CH(?:ANNEL)?[_\s]*HIST(?:ORY)?[_\s]*MSG[_\s]*\d+[_\s]*OF[_\s]*\d+[_\s]*END",
-    ]
-
+    Covers the observer's own fences (observation, channel-history and
+    current-message markers) and, since #1320, the agent's own authority
+    markers: ``[WA_FEEDBACK]``, ``[WA GUIDANCE]`` and the localized headers of
+    the Wise Authority approval, CORE IDENTITY and language-guidance blocks in
+    every locale. The replacement is model-facing and stays English.
+    """
     modified_content = content
-    for pattern in patterns:
-        if re.search(pattern, content, re.IGNORECASE):
-            modified_content = re.sub(
-                pattern,
-                "WARNING! ATTEMPT TO SPOOF CIRIS SECURITY MARKERS DETECTED!",
-                modified_content,
-                flags=re.IGNORECASE,
-            )
-            logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern}")
+    for pattern in _spoof_marker_patterns():
+        if pattern.search(modified_content):
+            modified_content = pattern.sub(SPOOF_WARNING, modified_content)
+            logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern.pattern}")
 
     return modified_content
 
@@ -312,6 +449,26 @@ class BaseObserver(Generic[MessageT], ABC):
 
         # Apply anti-spoofing detection BEFORE adding our own markers
         return detect_and_replace_spoofed_markers(raw_content)
+
+    def _despoof_current_message(self, msg: MessageT) -> MessageT:
+        """The message with spoofed CIRIS markers in its content replaced (#1320)."""
+        content = getattr(msg, "content", None)
+        if not isinstance(content, str):
+            return msg
+        clean_content = detect_and_replace_spoofed_markers(content)
+        if clean_content == content:
+            return msg
+        return msg.model_copy(update={"content": clean_content})
+
+    def _fence_current_message(self, content: str) -> str:
+        """The current message between CIRIS user-text markers, so the model can see where it begins and ends.
+
+        The same kind of fence _create_protected_content puts around each
+        history message. The content has already been through
+        _despoof_current_message, so a pasted fence marker cannot close it early.
+        """
+        timestamp = self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
+        return f"{CURRENT_MESSAGE_START} [Timestamp: {timestamp}]\n{content}\n{CURRENT_MESSAGE_END}"
 
     def _create_protected_content(self, clean_content: str, message_number: int, total_messages: int) -> str:
         """Create anti-spoofing protected content with markers."""
@@ -658,10 +815,12 @@ class BaseObserver(Generic[MessageT], ABC):
             sanitized_content = redact_personal_info(
                 str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content)  # type: ignore[attr-defined]
             )
-            task_lines.append(f"@{author_hash}: {sanitized_content} [Hash: {content_hash[:16]}]")
+            task_lines.append(
+                f"@{author_hash}: {self._fence_current_message(sanitized_content)} [Hash: {content_hash[:16]}]"
+            )
         else:
             formatted_content = format_discord_mentions(str(msg.content), user_lookup)  # type: ignore[attr-defined]
-            task_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {formatted_content}")  # type: ignore[attr-defined]
+            task_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {self._fence_current_message(formatted_content)}")  # type: ignore[attr-defined]
 
     async def _create_channel_snapshot(self, msg: MessageT) -> None:
         """Create channel context and system snapshot for observation."""
@@ -809,7 +968,9 @@ class BaseObserver(Generic[MessageT], ABC):
             initial_user_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
                 initial_user_lookup[str(msg.author_id)] = msg.author_name
-            formatted_msg_content = format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
+            formatted_msg_content = self._fence_current_message(
+                format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
+            )
             # Build thought content based on priority vs passive
             if filter_result and priority > 0:
                 priority_level = getattr(filter_result.priority, "value", "high")
@@ -973,6 +1134,11 @@ class BaseObserver(Generic[MessageT], ABC):
 
         # Allow subclasses to enhance the message (e.g., vision processing)
         processed_msg = await self._enhance_message(processed_msg)
+
+        # Neutralize spoofed CIRIS markers in the current message, for every
+        # adapter (#1320). Runs after enhancement so text an adapter appends
+        # (a Discord reply or document) is covered as well.
+        processed_msg = self._despoof_current_message(processed_msg)
 
         # If it's the agent's message, stop here (no task creation)
         if is_agent_message:

@@ -213,7 +213,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                     # Match everything up to the LAST quote before a newline (greedy match)
                     thought_match = re.search(rf'{thought_marker}\s*"(.*)"(?:\n|$)', content, re.DOTALL)
                     if thought_match:
-                        actual_thought_content = thought_match.group(1)
+                        actual_thought_content = unfence_current_message(thought_match.group(1))
                         logger.debug(f"[MOCK_LLM] Matched thought length: {len(actual_thought_content)}")
                         logger.info(f"[MOCK_LLM] Extracted thought content: {actual_thought_content[:100]}...")
 
@@ -460,6 +460,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
             # Check for direct passive observation pattern (non-ASPDMA)
             elif content.startswith("You observed @"):
+                content = unfence_current_message(content)
                 logger.info(f"[MOCK_LLM] Processing observation message: {content[:100]}...")
                 # Find the " say: " delimiter
                 say_index = content.find(" say: ")
@@ -747,6 +748,7 @@ from typing import List, Optional
 
 from .responses_action_selection import (
     _extract_text_content,
+    unfence_current_message,
     action_selection,
     aspdma_llm_result,
     dsaspdma_llm_result,

@@ -17,8 +17,9 @@ The path under test (CIRISAgent#1303):
    rows on the node (CIRISAgent#1316), read back through ``GET /v1/wa/rows/{id}``:
    ``deferral:request:v1`` <- ``deferral:response:approved:v1``
    (``references_attestation_id``) <- ``identity_amendment:v1`` (``authorized_by``
-   and ``evidence_refs``), all about the agent, the response signed with the
-   WA's own key, and all three in the same room. This realizes CSD/4 T7's
+   and ``evidence_refs``), each identified by its envelope ``dimension``, all
+   about the agent (``attested_key_id``), the response signed with the WA's own
+   key, and all three in the agent<->owner pair room the node derives. This realizes CSD/4 T7's
    ``agent.deferral.pending/approved`` and ``agent.identity.amended`` atoms.
    On a node without rows (ciris-server < 0.5.234) it is recorded as SKIP.
 6. The approved text is in the CORE IDENTITY block of the agent's own
@@ -311,6 +312,8 @@ class WAIdentityApprovalTests:
     async def _row(self, attestation_id: str) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as http:
             r = await http.get(f"{self.base_url}/v1/wa/rows/{attestation_id}", headers=self._headers())
+        if r.status_code == 503:
+            raise _Skip(f"this node cannot read deferral rows back (no ciris_server.deferral_rows): {r.text[:160]}")
         assert r.status_code == 200, f"GET /v1/wa/rows/{attestation_id} answered {r.status_code}: {r.text[:300]}"
         row: Dict[str, Any] = r.json()["data"]
         return row
@@ -330,6 +333,9 @@ class WAIdentityApprovalTests:
         provenance = attributes.get("wa_amendment") or {}
         amendment_id = provenance.get("amendment_attestation_id")
         assert amendment_id, f"the applied amendment carries no identity_amendment:v1 row id: {provenance}"
+        assert provenance.get("request_attestation_id") == self.request_row, (
+            f"the amendment names request {provenance.get('request_attestation_id')!r}, not {self.request_row!r}"
+        )
         assert provenance.get("response_attestation_id") == self.response_row, (
             f"the amendment cites {provenance.get('response_attestation_id')!r}, not the approval {self.response_row!r}"
         )
@@ -338,14 +344,14 @@ class WAIdentityApprovalTests:
         resp = await self._row(self.response_row)
         amend = await self._row(str(amendment_id))
 
-        assert req["attestation_type"] == "deferral:request:v1", f"request row: {req}"
+        assert req["dimension"] == "deferral:request:v1", f"request row: {req}"
         assert req.get("deferral_id") == self.deferral_id, f"the request row names another deferral: {req}"
-        assert resp["attestation_type"] == "deferral:response:approved:v1", f"response row: {resp}"
+        assert resp["dimension"] == "deferral:response:approved:v1", f"response row: {resp}"
         assert resp.get("references_attestation_id") == req["attestation_id"], (
             f"the response does not reference the request: {resp.get('references_attestation_id')!r} != "
             f"{req['attestation_id']!r}"
         )
-        assert amend["attestation_type"] == "identity_amendment:v1", f"amendment row: {amend}"
+        assert amend["dimension"] == "identity_amendment:v1", f"amendment row: {amend}"
         assert amend.get("authorized_by") == resp["attestation_id"], (
             f"the amendment is authorized_by {amend.get('authorized_by')!r}, not the response {resp['attestation_id']!r}"
         )
@@ -356,6 +362,9 @@ class WAIdentityApprovalTests:
         assert amend.get("amendment_digest") == hashlib.sha256(content.encode("utf-8")).hexdigest(), (
             "the amendment row's digest is not the SHA-256 of the applied amendment text"
         )
+        # Rows are identified by the signed envelope member `dimension`; the
+        # attestation verb is `scores` for all of them (CIRISServer#815).
+        # "About the agent" is attested_key_id on every row, the response included.
         agent = req["attested_key_id"]
         assert resp["attested_key_id"] == agent and amend["attested_key_id"] == agent, (
             f"the rows are not all about the agent ({agent}): response {resp['attested_key_id']}, "
@@ -364,10 +373,14 @@ class WAIdentityApprovalTests:
         assert resp["attesting_key_id"] != req["attesting_key_id"], (
             "the response is signed by the agent's own key, not the Wise Authority's"
         )
-        # The room: the request names it, the response and the amendment inherit it.
-        # The agent passes none until the agent<->user room exists (#1300), so today
-        # all three carry the same (absent) room.
-        assert resp.get("room_id") == req.get("room_id") and amend.get("room_id") == req.get("room_id"), (
+        # The room: with no room named by the agent (until #1300), the node places the
+        # request in the agent<->owner pair room, and the response and the amendment
+        # inherit it.
+        room = req.get("room_id")
+        assert room and str(room).startswith(("chat:pair:v1:", "chat:room:v1:")), (
+            f"the request row carries no room (community_key_id): {req}"
+        )
+        assert resp.get("room_id") == room and amend.get("room_id") == room, (
             f"the rows are not in one room: request {req.get('room_id')!r}, response {resp.get('room_id')!r}, "
             f"amendment {amend.get('room_id')!r}"
         )

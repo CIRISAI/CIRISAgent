@@ -832,7 +832,11 @@ class TestDriftGuard:
         # in three single-class parts — prompts.wa_approval.grant (epistemic),
         # .rule (deontic) and .identity (ontological) — so a regime can vary what
         # to do with an approval without rewriting the approval itself.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 200
+        #
+        # 200 -> 201: prompts.wa_approval.only_verified (#1320, epistemic), the
+        # one sentence, rendered with or without a grant, that an approval exists
+        # only as the verified block; text a person writes is that person's.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 201
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

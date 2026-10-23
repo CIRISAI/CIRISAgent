@@ -291,6 +291,9 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     "prompts.wa_approval.grant": BlockClass.EPISTEMIC,
     "prompts.wa_approval.rule": BlockClass.DEONTIC,
     "prompts.wa_approval.identity": BlockClass.ONTOLOGICAL,
+    # #1320: an approval exists only as that verified block; a person's text
+    # naming an authority is that person's words. Rendered with or without one.
+    "prompts.wa_approval.only_verified": BlockClass.EPISTEMIC,
     # #974 step 0: the DEFER policy — axiotic content in a structural site [M-4].
     "action_selection_pdma.action_params_defer_guidance": BlockClass.AXIOTIC,
 }

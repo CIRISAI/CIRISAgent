@@ -129,6 +129,22 @@ class BaseActionHandler(ABC):
             return body
         return f"CIRIS_FOLLOW_UP_THOUGHT: {body}"
 
+    @staticmethod
+    def _action_record(thought: Thought) -> str:
+        """The factual record of the actions run in the thought's task (action_record.py)."""
+        from ciris_engine.logic.infrastructure.handlers.action_record import action_record_for_task
+        from ciris_engine.logic.utils.localization import get_preferred_language
+
+        thought_lang = getattr(thought, "preferred_language", None)
+        lang = thought_lang if isinstance(thought_lang, str) and thought_lang else get_preferred_language()
+        task_id = getattr(thought, "source_task_id", None)
+        occurrence_id = getattr(thought, "agent_occurrence_id", "default")
+        return action_record_for_task(
+            task_id if isinstance(task_id, str) else None,
+            occurrence_id if isinstance(occurrence_id, str) else "default",
+            lang,
+        )
+
     def complete_thought_and_create_followup(
         self,
         thought: Thought,
@@ -169,7 +185,16 @@ class BaseActionHandler(ABC):
         # Create follow-up thought if content provided
         if follow_up_content:
             # Add guidance about next action unless already present
-            if "TASK_COMPLETE" not in follow_up_content and "next action" not in follow_up_content.lower():
+            needs_guidance = (
+                "TASK_COMPLETE" not in follow_up_content and "next action" not in follow_up_content.lower()
+            )
+            # What actually ran in this task, and whether a reply has gone out:
+            # "stored" must not read as "applied" (#1320). Read after this
+            # thought's own status is written, so its action is on the record.
+            record = self._action_record(thought)
+            if record:
+                follow_up_content += "\n\n" + record
+            if needs_guidance:
                 # Check thought depth to provide appropriate guidance
                 current_depth = getattr(thought, "thought_depth", 0)
                 if current_depth >= 5:

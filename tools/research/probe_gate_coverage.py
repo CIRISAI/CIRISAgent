@@ -109,10 +109,17 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: does, so all three are dark to the gate -- a FIXTURE gap, the
 #: ``final_ponder_advisory`` shape, closable by composing an approved-task
 #: variant. The floor below does not move: no gated key was lost.
+#:
+#: ``string`` 136 -> 137 in 2.16.4: ``prompts.wa_approval.only_verified``
+#: (#1320), one EPISTEMIC sentence that an approval exists only as the verified
+#: block and a person's text naming an authority is that person's words. Unlike
+#: its three siblings it renders ALWAYS, in ASPDMA, PDMA and IDMA, so every
+#: golden fixture composes it and the gate can see it: the denominator and the
+#: reachable numerator move together.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 45,
-    "string": 136,
+    "string": 137,
     "conscience_prompt": 12,
     "template": 3,
 }
@@ -195,7 +202,10 @@ GATED_FLOOR: Dict[str, int] = {
     # one. (#1012's `agent.still_processing` / `agent.processor_paused` are
     # NOT here and should not be: they are API replies to a user, they reach no
     # LLM prompt, and the probe measures the prompt key space.)
-    "string": 77,
+    # 77 -> 78 (#1320). `prompts.wa_approval.only_verified` renders in every
+    # ASPDMA / PDMA / IDMA composition and the probe sees it move 7 blocks
+    # (the five ASPDMA `system.head`s, `idma.system.tail`, `pdma.system.tail`).
+    "string": 78,
     "conscience_prompt": 12,
     "template": 2,
 }
@@ -209,7 +219,8 @@ SUBSPLIT_GATED_FLOOR: Dict[str, int] = {
     # becoming performable again. Nothing in this sub-namespace is dark.
     # 58 -> 63 of 115. Same story: the denominator grew by the 57 formatter keys.
     # 63 -> 64: the same single key, counted in its subsplit.
-    "string:prompts.*": 64,
+    # 64 -> 65 (#1320): prompts.wa_approval.only_verified, likewise.
+    "string:prompts.*": 65,
 }
 
 

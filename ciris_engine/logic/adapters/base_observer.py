@@ -33,6 +33,7 @@ def _resolve_observer_task_language(msg: Any) -> Optional[str]:
 
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
@@ -470,6 +471,25 @@ class BaseObserver(Generic[MessageT], ABC):
         timestamp = self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
         return f"{CURRENT_MESSAGE_START} [Timestamp: {timestamp}]\n{content}\n{CURRENT_MESSAGE_END}"
 
+    @staticmethod
+    def _author_tag(msg: Any) -> str:
+        """``@name (ID: id)``, with ``role: <ROLE>`` when the adapter verified the author's role (#1320).
+
+        The role is the authenticated one the adapter put on the message (the
+        API's AuthContext.role), rendered as its plain enum value. An adapter
+        that does not know the role leaves it None and none is shown: never a
+        guess.
+        """
+        role = getattr(msg, "author_role", None)
+        role_part = f", role: {role.value}" if isinstance(role, UserRole) else ""
+        return f"@{msg.author_name} (ID: {msg.author_id}{role_part})"
+
+    @staticmethod
+    def _anonymous_role_suffix(msg: Any) -> str:
+        """`` (role: <ROLE>)`` for an anonymous author whose role is verified, else empty."""
+        role = getattr(msg, "author_role", None)
+        return f" (role: {role.value})" if isinstance(role, UserRole) else ""
+
     def _create_protected_content(self, clean_content: str, message_number: int, total_messages: int) -> str:
         """Create anti-spoofing protected content with markers."""
         timestamp = self.time_service.now().isoformat() if self.time_service else datetime.now(timezone.utc).isoformat()
@@ -816,11 +836,12 @@ class BaseObserver(Generic[MessageT], ABC):
                 str(msg.content)[:200] if len(str(msg.content)) > 200 else str(msg.content)  # type: ignore[attr-defined]
             )
             task_lines.append(
-                f"@{author_hash}: {self._fence_current_message(sanitized_content)} [Hash: {content_hash[:16]}]"
+                f"@{author_hash}{self._anonymous_role_suffix(msg)}: "
+                f"{self._fence_current_message(sanitized_content)} [Hash: {content_hash[:16]}]"
             )
         else:
             formatted_content = format_discord_mentions(str(msg.content), user_lookup)  # type: ignore[attr-defined]
-            task_lines.append(f"@{msg.author_name} (ID: {msg.author_id}): {self._fence_current_message(formatted_content)}")  # type: ignore[attr-defined]
+            task_lines.append(f"{self._author_tag(msg)}: {self._fence_current_message(formatted_content)}")
 
     async def _create_channel_snapshot(self, msg: MessageT) -> None:
         """Create channel context and system snapshot for observation."""
@@ -899,7 +920,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 existing_task = get_active_task_for_channel(channel_id, self.agent_occurrence_id)
             if existing_task and self.time_service:
                 # Try to update the existing task with new observation
-                update_content = f"@{msg.author_name} (ID: {msg.author_id}): {formatted_passive_content}"  # type: ignore[attr-defined]
+                update_content = f"{self._author_tag(msg)}: {formatted_passive_content}"
                 # Also extract images from the new message to append to the task
                 update_images = getattr(msg, "images", []) or []
                 if update_images:
@@ -931,9 +952,9 @@ class BaseObserver(Generic[MessageT], ABC):
 
             # Build description based on whether this is priority or passive
             if filter_result and priority > 0:
-                description = f"PRIORITY: Respond to {getattr(filter_result.priority, 'value', 'high')} message from @{msg.author_name} (ID: {msg.author_id}): '{formatted_passive_content}'"  # type: ignore[attr-defined]
+                description = f"PRIORITY: Respond to {getattr(filter_result.priority, 'value', 'high')} message from {self._author_tag(msg)}: '{formatted_passive_content}'"
             else:
-                description = f"Respond to message from @{msg.author_name} (ID: {msg.author_id}) in #{msg.channel_id}: '{formatted_passive_content}'"  # type: ignore[attr-defined]
+                description = f"Respond to message from {self._author_tag(msg)} in #{msg.channel_id}: '{formatted_passive_content}'"  # type: ignore[attr-defined]
 
             # Extract images from IncomingMessage for multimodal processing
             msg_images = getattr(msg, "images", []) or []
@@ -975,10 +996,10 @@ class BaseObserver(Generic[MessageT], ABC):
             if filter_result and priority > 0:
                 priority_level = getattr(filter_result.priority, "value", "high")
                 filter_reasoning = getattr(filter_result, "reasoning", "Priority message detected")
-                task_lines = [f"PRIORITY ({priority_level}): @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} said: {formatted_msg_content}"]  # type: ignore[attr-defined]
+                task_lines = [f"PRIORITY ({priority_level}): {self._author_tag(msg)} in channel {msg.channel_id} said: {formatted_msg_content}"]  # type: ignore[attr-defined]
                 task_lines.append(f"Filter: {filter_reasoning}")
             else:
-                task_lines = [f"You observed @{msg.author_name} (ID: {msg.author_id}) in channel {msg.channel_id} say: {formatted_msg_content}"]  # type: ignore[attr-defined]
+                task_lines = [f"You observed {self._author_tag(msg)} in channel {msg.channel_id} say: {formatted_msg_content}"]  # type: ignore[attr-defined]
 
             # Allow subclasses to add custom context sections before conversation history
             await self._add_custom_context_sections(task_lines, msg, history_context)

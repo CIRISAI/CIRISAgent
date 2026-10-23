@@ -54,6 +54,15 @@ class WAAuthorization(BaseModel):
     deferral_id: str = Field(..., description="The deferral whose approval this is")
     granted_at: str = Field(..., description="ISO-8601 time the approval was applied")
     guidance: str = Field("", description="The change the Wise Authority approved, in its own words")
+    response_attestation_id: Optional[str] = Field(
+        None,
+        description=(
+            "The approved deferral:response:approved:v1 row, signed with the Wise Authority's own key "
+            "(CIRISAgent#1316). Where the node authors deferral rows, an identity amendment needs it: the "
+            "amendment row cites it, and the node refuses an amendment it does not authorize. None on a "
+            "node without rows, and on grants stored before #1316."
+        ),
+    )
     verification: Literal["verified"] = Field(
         "verified",
         description="Only a verified approval can be represented; unsigned or failed ones grant nothing",

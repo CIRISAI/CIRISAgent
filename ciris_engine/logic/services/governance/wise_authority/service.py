@@ -18,11 +18,18 @@ from typing import Dict, List, Optional, Union
 from ciris_engine.logic.config import get_sqlite_db_full_path
 from ciris_engine.logic.persistence.db.dialect import get_adapter
 from ciris_engine.logic.services.base_service import BaseService
+from ciris_engine.logic.services.governance.wise_authority.deferral_rows import (
+    DeferralRowRefused,
+    DeferralRowsUnavailable,
+    deferral_room_id,
+    emit_deferral_request,
+)
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
 from ciris_engine.schemas.runtime.models import TaskContext, WAAuthorization
+from ciris_engine.schemas.services.authority.deferral_rows import DeferralRequestRow, DeferralRowStatus
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
     AuthorizationDecision,
@@ -52,6 +59,17 @@ MINTING_ACTIONS = frozenset({"mint_wa", "create_wa", "bootstrap_root"})
 # The complete set an OBSERVER may take. Unchanged from the original role gate —
 # hoisted out of the function body only so the two gates read as data.
 OBSERVER_ACTIONS = frozenset({"read", "send_message", "observe", "get_status"})
+
+
+def request_row_of(deferral_info: Dict[str, object]) -> Optional[DeferralRequestRow]:
+    """The stored request-row record of a deferral, or None (recorded before #1316, or malformed)."""
+    raw = deferral_info.get("request_row")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return DeferralRequestRow.model_validate(raw)
+    except ValueError:
+        return None
 
 
 class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
@@ -254,6 +272,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
         created_at_dt = datetime.fromisoformat(updated_at.replace(" ", "T")) if updated_at else self._now()
         timeout_dt = created_at_dt + timedelta(days=7)
+        request_row = request_row_of(deferral_info)
 
         return PendingDeferral(
             deferral_id=deferral_id,
@@ -271,6 +290,8 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             question=reason,
             context=ui_context,
             timeout_at=timeout_dt.isoformat(),
+            request_attestation_id=request_row.attestation_id if request_row else None,
+            request_row_status=request_row.status if request_row else None,
         )
 
     # ========== Authorization Operations ==========
@@ -651,6 +672,8 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 "requires_wa_approval": True,
                 "context": deferral.context or {},
                 "created_at": self._now().isoformat(),
+                # The signed deferral:request:v1 row (#1316), or why there is none.
+                "request_row": (await self._emit_request_row(deferral_id, deferral)).model_dump(mode="json"),
             }
 
             # Build an upsert payload preserving every field while flipping
@@ -669,6 +692,39 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to send deferral: {e}")
             raise
+
+    async def _emit_request_row(self, deferral_id: str, deferral: DeferralRequest) -> DeferralRequestRow:
+        """Have the node sign ``deferral:request:v1`` for this deferral (CIRISAgent#1316).
+
+        Never raises: a failed emit must not lose the deferral. The deferral
+        stands, is recorded as having no request row, and one WARNING names the
+        node's reason. A node without rows (server < 0.5.234) is recorded as
+        ``unavailable``, and nothing pretends a row exists.
+        """
+        room_id = deferral_room_id()
+        try:
+            attestation_id = await emit_deferral_request(
+                deferral_id,
+                deferral.task_id,
+                deferral.thought_id,
+                deferral.reason,
+                domain_hint=deferral.context.get("domain_hint"),
+                room_id=room_id,
+            )
+        except DeferralRowsUnavailable:
+            logger.debug("Deferral %s: this node has no deferral rows; recorded without a request row", deferral_id)
+            return DeferralRequestRow(status=DeferralRowStatus.UNAVAILABLE)
+        except DeferralRowRefused as refused:
+            logger.warning(
+                "Deferral %s stands WITHOUT a signed request row: the node refused it (%s, %s): %s",
+                deferral_id,
+                refused.refusal.reason_id,
+                refused.refusal.kind.value,
+                refused.refusal.text,
+            )
+            return DeferralRequestRow(status=DeferralRowStatus.FAILED, reason_id=refused.refusal.reason_id)
+        logger.info("Deferral %s: signed request row %s", deferral_id, attestation_id)
+        return DeferralRequestRow(status=DeferralRowStatus.EMITTED, attestation_id=attestation_id, room_id=room_id)
 
     async def get_pending_deferrals(self, wa_id: Optional[str] = None) -> List[PendingDeferral]:
         """Get pending deferrals from the tasks table.
@@ -1017,6 +1073,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                         deferral_id=deferral_id,
                         granted_at=now_iso,
                         guidance=response.reason or "",
+                        response_attestation_id=response.response_attestation_id,
                     )
                     guidance_context_dict["wa_authorization"] = wa_authorization.model_dump(mode="json")
                 else:

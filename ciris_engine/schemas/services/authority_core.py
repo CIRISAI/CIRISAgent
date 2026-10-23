@@ -313,6 +313,14 @@ class DeferralResponse(BaseModel):
         default=None,
         description="CEG federation identity (key_id) that owns the signing key. None when the node is not owner-provisioned.",
     )
+    response_attestation_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "The signed deferral:response:{approved|rejected}:v1 row the node stored for this answer, signed with "
+            "the resolver's own key (CIRISAgent#1316). None when the node has no deferral rows or the deferral "
+            "has no request row. Not part of the #944 signed payload: the row carries its own signature."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -378,6 +386,8 @@ def deferral_resolution_record(
         "signing_key_id": response.signing_key_id,
         "owner_key_id": response.owner_key_id,
         "verification": verification.value,
+        # The signed response row (#1316), when the node authored one.
+        "response_attestation_id": response.response_attestation_id,
     }
 
 

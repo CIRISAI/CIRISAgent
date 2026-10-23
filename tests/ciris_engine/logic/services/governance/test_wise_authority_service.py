@@ -1245,3 +1245,85 @@ def test_wa_authorization_round_trips_and_malformed_grants_nothing():
 
     row["context"]["wa_authorization"] = {"wa_id": "wa-1", "verification": "unsigned"}
     assert _persist_row_to_task(row).context.wa_authorization is None
+
+
+# ========== Signed deferral rows (CIRISAgent#1316) ==========
+
+
+def _stored_deferral(task_id: str) -> dict:
+    import json as _json
+
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+    row = get_persist_engine().task_get(task_id)
+    row = _json.loads(row) if isinstance(row, str) else row
+    context = row.get("context")
+    if isinstance(context, str):
+        context = _json.loads(context)
+    return context["deferral"]
+
+
+@pytest.mark.asyncio
+async def test_a_deferral_gets_its_signed_request_row(wise_authority_service, time_service, temp_db, monkeypatch):
+    import hashlib
+
+    from tests.fixtures.deferral_rows import install_fake_node
+
+    node = install_fake_node(monkeypatch)
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-row")
+
+    (args,) = node.calls_to("emit_deferral_request")
+    assert args[:4] == (deferral_id, "task-row", "thought-task-row", hashlib.sha256(b"Test resolution").hexdigest())
+    assert args[5] is None, "no room until #1300"
+    stored = _stored_deferral("task-row")["request_row"]
+    assert stored == {"status": "emitted", "attestation_id": node.rows[0].attestation_id, "reason_id": None, "room_id": None}
+
+    (pending,) = [d for d in await wise_authority_service.get_pending_deferrals() if d.deferral_id == deferral_id]
+    assert pending.request_attestation_id == node.rows[0].attestation_id
+    assert pending.request_row_status == "emitted"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_request_row_does_not_lose_the_deferral(
+    wise_authority_service, time_service, temp_db, monkeypatch, caplog
+):
+    import logging
+
+    from tests.fixtures.deferral_rows import FakeNode, install_fake_node
+
+    install_fake_node(monkeypatch, FakeNode(fail={"emit_deferral_request": RuntimeError("deferral.store: store: down")}))
+    await wise_authority_service.start()
+    with caplog.at_level(logging.WARNING):
+        deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-row-fail")
+
+    assert deferral_id, "the deferral stands"
+    stored = _stored_deferral("task-row-fail")
+    assert stored["deferral_id"] == deferral_id
+    assert stored["request_row"] == {"status": "failed", "attestation_id": None, "reason_id": "deferral.store", "room_id": None}
+    (pending,) = [d for d in await wise_authority_service.get_pending_deferrals() if d.deferral_id == deferral_id]
+    assert pending.request_attestation_id is None and pending.request_row_status == "failed"
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING and "request row" in r.getMessage()]
+    assert len(warnings) == 1 and "deferral.store" in warnings[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_a_node_without_rows_records_the_deferral_as_before(wise_authority_service, time_service, temp_db):
+    """The unit suite runs fold-off: no node, so no row, and nothing pretends there is one."""
+    await wise_authority_service.start()
+    await _seed_deferral(wise_authority_service, time_service, "task-row-none")
+    assert _stored_deferral("task-row-none")["request_row"]["status"] == "unavailable"
+    assert _stored_deferral("task-row-none")["request_row"]["attestation_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_the_response_row_travels_into_the_grant(wise_authority_service, auth_service, time_service, temp_db):
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-row-grant")
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+    response = _verified_response().model_copy(update={"response_attestation_id": "att-resp-1"})
+
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+
+    assert _guidance_task_of("task-row-grant").context.wa_authorization.response_attestation_id == "att-resp-1"
+    assert _stored_resolution("task-row-grant")["response_attestation_id"] == "att-resp-1"

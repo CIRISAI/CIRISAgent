@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### API
 
-- **`GET /v1/users/{user_id}` answers for the node-claimed owner.** The brain's user table holds no row for a node identity, so the owner got a 404. When the table has no row and the id is the owner's (its `wa_id`, or its fedID when bound), the answer now comes from `ciris_server.owner_record()` (CIRISServer 0.5.234). It uses only that record's fields. The role maps to permissions through the auth service's own mapping, and every other field keeps its schema default. `GET /v1/users` lists the owner when the table does not. If the record can't be read, both routes answer 503, not 404. A server older than 0.5.234, a node with no ROOT, fold off, or an owner with no `oauth_provider` (the record doesn't give its `auth_type`) still answer 404.
+- **`GET /v1/users/{user_id}` answers for the node-claimed owner.** The brain's user table holds no row for a node identity, so the owner got a 404. When the table has no row and the id is the owner's (its `wa_id`, or its fedID when bound), the answer now comes from `ciris_server.owner_record()` (CIRISServer 0.5.234). It uses only that record's fields. The role maps to permissions through the auth service's own mapping. `auth_type` follows the brain's convention from the record's `oauth_provider` and `has_password` (oauth, password, or certificate), and every other field keeps its schema default. `GET /v1/users` lists the owner when the table does not. If the record can't be read, both routes answer 503, not 404. A server older than 0.5.234, a node with no ROOT, or fold off still answer 404.
 
 ## [2.16.3-stable] - 2026-10-22
 

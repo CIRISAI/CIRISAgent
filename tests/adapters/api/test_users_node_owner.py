@@ -31,13 +31,16 @@ OWNER_FED_ID = "fed-owner-key-1"
 OWNER_CREATED = "2026-10-01T12:00:00Z"
 
 
-def _record(**overrides: Optional[str]) -> str:
+def _record(**overrides: object) -> str:
     record = {
         "wa_id": OWNER_WA_ID,
         "name": "Node Owner",
         "role": "root",
+        "user_role": "SYSTEM_ADMIN",
         "created_at": OWNER_CREATED,
         "owner_key_id": OWNER_FED_ID,
+        "auth_type": "oauth",
+        "has_password": False,
         "oauth_provider": "google",
     }
     record.update(overrides)
@@ -175,15 +178,32 @@ class TestGetUserNodeOwner:
         assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
-    async def test_owner_without_oauth_provider_is_not_given_an_invented_auth_type(
-        self, monkeypatch, auth, auth_service
-    ):
-        """The record says no auth_type for a non-OAuth owner; it is not guessed."""
-        _install_server(monkeypatch, lambda: _record(oauth_provider=None))
+    async def test_a_password_owner_is_answered_from_the_record(self, monkeypatch, auth, auth_service):
+        """A non-OAuth owner (including a legacy ROOT) is answered: the record states has_password."""
+        _install_server(
+            monkeypatch,
+            lambda: _record(oauth_provider=None, auth_type="standard", has_password=True, owner_key_id=None),
+        )
+
+        detail = await get_user(OWNER_WA_ID, auth, auth_service, None)
+        assert detail.auth_type == "password"
+        assert detail.oauth_provider is None
+
+    @pytest.mark.asyncio
+    async def test_a_key_only_owner_is_a_certificate_user(self, monkeypatch, auth, auth_service):
+        _install_server(monkeypatch, lambda: _record(oauth_provider=None, auth_type="standard", has_password=False))
+
+        detail = await get_user(OWNER_WA_ID, auth, auth_service, None)
+        assert detail.auth_type == "certificate"
+
+    @pytest.mark.asyncio
+    async def test_the_session_role_spelling_is_not_a_wa_role(self, monkeypatch, auth, auth_service):
+        """The 0.5.234 pre-fix bug: role "SYSTEM_ADMIN" is not a WaRole, so the record is unreadable (503)."""
+        _install_server(monkeypatch, lambda: _record(role="SYSTEM_ADMIN"))
 
         with pytest.raises(HTTPException) as exc:
             await get_user(OWNER_WA_ID, auth, auth_service, None)
-        assert exc.value.status_code == 404
+        assert exc.value.status_code == 503
 
     @pytest.mark.asyncio
     async def test_table_row_answers_without_asking_the_node(self, monkeypatch, auth, auth_service):

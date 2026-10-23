@@ -231,24 +231,24 @@ def _is_owner_id(user_id: str, record: NodeOwnerRecord) -> bool:
     return user_id == record.wa_id or (record.owner_key_id is not None and user_id == record.owner_key_id)
 
 
-def _owner_as_user(record: NodeOwnerRecord, auth_service: APIAuthService) -> Optional[User]:
+def _owner_as_user(record: NodeOwnerRecord, auth_service: APIAuthService) -> User:
     """The owner record as a `User`, from the record's fields only.
 
-    `auth_type` is required and the record says it only for an OAuth owner. With no
-    `oauth_provider` the record cannot tell a password owner from a key-only one,
-    so there is no owner user to answer with rather than a guessed auth_type.
+    `auth_type` follows the brain's own convention for a WaCert row
+    (APIAuthService: "password" when the cert has a password hash, else
+    "certificate"), with "oauth" for an OAuth owner. The record states all three
+    facts (CIRISServer#815), so nothing is guessed.
     """
-    if not record.oauth_provider:
-        logger.warning(
-            "users: the node owner %s has no oauth_provider; the record does not say its auth_type, "
-            "so it is not answered as a user",
-            _sanitize_for_log(record.wa_id),
-        )
-        return None
+    if record.oauth_provider:
+        auth_type = "oauth"
+    elif record.has_password:
+        auth_type = "password"
+    else:
+        auth_type = "certificate"
     return User(
         wa_id=record.wa_id,
         name=record.name,
-        auth_type="oauth",
+        auth_type=auth_type,
         api_role=auth_service.wa_role_to_api_role(record.role),
         wa_role=record.role,
         oauth_provider=record.oauth_provider,
@@ -406,7 +406,7 @@ async def list_users(
     record = await _read_owner_record_or_503()
     if record is not None and not _owner_in_table(record, auth_service):
         owner = _owner_as_user(record, auth_service)
-        if owner is not None and auth_service.user_matches_filters(
+        if auth_service.user_matches_filters(
             owner, search=search, auth_type=auth_type, api_role=api_role, wa_role=wa_role, is_active=is_active
         ):
             users = auth_service.sort_users([*users, (record.wa_id, owner)])
@@ -754,9 +754,7 @@ async def get_user(
         # the node's own record answers for them.
         record = await _read_owner_record_or_503()
         if record is not None and _is_owner_id(user_id, record):
-            owner = _owner_as_user(record, auth_service)
-            if owner is not None:
-                return _owner_detail(user_id, record, owner, auth_service)
+            return _owner_detail(user_id, record, _owner_as_user(record, auth_service), auth_service)
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
     return _build_user_detail(user_id, user, auth_service)

@@ -91,8 +91,11 @@ class NodeOwnerRecord(BaseModel):
     wa_id: str = Field(..., description="The founding ROOT WaCert's wa_id (a substrate session's user_id)")
     name: str = Field(..., description="The WaCert's name")
     role: WARole = Field(..., description="The WaCert's role (persist WaRole, lowercase on the wire)")
+    user_role: Optional[str] = Field(None, description="The session role the node grants (e.g. 'SYSTEM_ADMIN')")
     created_at: datetime = Field(..., description="When the WaCert was created")
     owner_key_id: Optional[str] = Field(None, description="owner_of(node): the bound fedID; null for a legacy ROOT")
+    auth_type: str = Field(..., description="The WaCert's token type: standard | session | api_key | oauth | service")
+    has_password: bool = Field(..., description="Whether the WaCert carries a password hash")
     oauth_provider: Optional[str] = Field(None, description="The WaCert's OAuth provider, when it has one")
 
 

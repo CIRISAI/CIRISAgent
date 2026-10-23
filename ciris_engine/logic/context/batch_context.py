@@ -798,7 +798,11 @@ async def build_system_snapshot_with_batch(
         user_ids_to_enrich = _extract_user_ids_from_context(task, thought)
         if user_ids_to_enrich:
             logger.debug(f"[DEBUG BATCH] Enriching {len(user_ids_to_enrich)} user profiles: {user_ids_to_enrich}")
-            user_profiles = await _enrich_user_profiles(memory_service, user_ids_to_enrich, channel_id, user_profiles)
+            # The speaker's verified role decides Wise Authority status (#1320).
+            auth_service = getattr(runtime, "authentication_service", None) if runtime else None
+            user_profiles = await _enrich_user_profiles(
+                memory_service, user_ids_to_enrich, channel_id, user_profiles, auth_service=auth_service
+            )
 
     # Collect adapter channels and tools (if runtime available)
     adapter_channels = {}

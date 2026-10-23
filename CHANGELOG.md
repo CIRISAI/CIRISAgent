@@ -5,6 +5,12 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.4-stable] - Unreleased
+
+### Substrate
+
+- **ciris-client 0.5.231.** One rate governor per agent host (CIRISClient#230). Harness fixes for nodes older than #808 and for wizard controls that register late (#232). Compose 1.7.3 fixes the iOS popup-dispose crash (#233), and the stale-click fix (#234). The client no longer sends the attachment-policy GET to agents older than 2.16.3, which ends the agent-to-node loop on 2.16.2 (#235). No test tags were added, renamed or removed. A desktop test click now waits up to 1 s for the frame after a preceding input.
+
 ## [2.16.3-stable] - 2026-10-22
 
 ### Substrate

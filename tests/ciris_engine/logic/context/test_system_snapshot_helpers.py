@@ -1125,6 +1125,9 @@ class TestUserManagement:
         existing_profile.interaction_preferences = None
         existing_profile.oauth_name = None
         existing_profile.memorized_attributes = None
+        existing_profile.is_wa = False
+        existing_profile.trust_level = 0.5
+        existing_profile.display_name = "Existing User"
         existing_profiles = [existing_profile]
 
         result = await _enrich_user_profiles(memory_service, user_ids, channel_id, existing_profiles)

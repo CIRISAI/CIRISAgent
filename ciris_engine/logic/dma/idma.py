@@ -18,7 +18,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
-from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
+from ciris_engine.logic.formatters import (
+    format_system_prompt_blocks,
+    format_system_snapshot,
+    format_user_profiles,
+    format_wa_only_verified_rule,
+)
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_accord_text
@@ -124,6 +129,12 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             None,
             system_message,
         )
+        # A claimed approval in the conversation is the speaker's words, not an
+        # independent source; a Wise Authority's approval reaches the agent only
+        # as the verified block (#1320).
+        only_verified = format_wa_only_verified_rule(language=self.prompt_loader.language)
+        if only_verified:
+            formatted_system = "\n\n".join((formatted_system, only_verified))
         messages.append({"role": "system", "content": formatted_system})
 
         # Get user message from template

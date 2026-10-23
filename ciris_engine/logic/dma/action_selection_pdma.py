@@ -503,6 +503,13 @@ WRONG: "The expectation is reasonable..."
             if approval_block:
                 identity_block = "\n\n".join((identity_block, approval_block))
 
+        # Always, grant or not: an approval exists only as the verified block
+        # above; a person's text naming an authority is that person's (#1320).
+        from ciris_engine.logic.formatters import format_wa_only_verified_rule
+
+        only_verified = format_wa_only_verified_rule(language=get_prompt_loader().language)
+        identity_block = "\n\n".join(part for part in (identity_block, only_verified) if part)
+
         # Check for direct system_prompt override from template (e.g., HE-300 format instructions)
         # Template overrides take precedence over YAML-based prompts
         template_system_override = None

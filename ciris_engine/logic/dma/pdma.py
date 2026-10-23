@@ -9,6 +9,7 @@ from ciris_engine.logic.formatters import (
     append_round1_accord_blocks,
     format_system_snapshot,
     format_user_profiles,
+    format_wa_only_verified_rule,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
@@ -219,6 +220,11 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         )
 
         system_message = self._build_system_message_text(original_thought_content, full_context_str)
+        # A Wise Authority's approval reaches the agent only as the verified
+        # block; a person's text naming an authority is that person's (#1320).
+        only_verified = format_wa_only_verified_rule(language=self.prompt_loader.language)
+        if only_verified:
+            system_message = "\n\n".join((system_message, only_verified))
         messages.append({"role": "system", "content": system_message})
 
         user_message_text = self._build_user_message_text(original_thought_content, full_context_str)

@@ -849,9 +849,15 @@ class TestOutcomeForAnsweredTask:
     @staticmethod
     def _outcome(status):
         from ciris_engine.logic.adapters.api.routes.agent import InteractOutcome, _outcome_for_answered_task
+        from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
-        task = None if status is None else Mock(status=status)
-        with patch("ciris_engine.logic.persistence.get_task_by_id", return_value=task):
+        task = None if status is None else Mock(status=status, task_id="task-1", agent_occurrence_id="default")
+        # The task replied: a COMPLETED task with no SPEAK is completed_without_reply (#1320).
+        spoke = Mock(status=ThoughtStatus.COMPLETED, final_action=Mock(action_type="speak"))
+        with (
+            patch("ciris_engine.logic.persistence.get_task_by_id", return_value=task),
+            patch("ciris_engine.logic.persistence.get_thoughts_by_task_id", return_value=[spoke]),
+        ):
             return _outcome_for_answered_task("task-1"), InteractOutcome
 
     def test_failed_task_reports_failed(self):

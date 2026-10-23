@@ -63,6 +63,8 @@ class InteractOutcome(str, Enum):
     PAUSED = "paused"
     #: The task failed before it could answer; `response` is the error notice.
     FAILED = "failed"
+    #: The task completed without the agent replying; `response` is the notice saying so.
+    COMPLETED_WITHOUT_REPLY = "completed_without_reply"
 
 
 class InteractResponse(BaseModel):
@@ -80,7 +82,8 @@ class InteractResponse(BaseModel):
         InteractOutcome.COMPLETE,
         description="complete: response is the agent's reply; timeout: the server's deadline passed and "
         "response is a placeholder; paused: processor paused, message queued; failed: the task failed "
-        "before answering and response is the error notice",
+        "before answering and response is the error notice; completed_without_reply: the task completed "
+        "without a reply and response is the notice saying so",
     )
 
     @property

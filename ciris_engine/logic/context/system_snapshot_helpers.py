@@ -30,6 +30,7 @@ from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData, IdentitySummary
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ChannelContext, TaskSummary, ThoughtSummary, UserProfile
+from ciris_engine.schemas.services.authority_core import WACertificate, WARole
 from ciris_engine.schemas.services.graph_core import ConnectedNodeInfo, GraphNode, GraphScope, NodeType, SecretsData
 from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery
@@ -1614,33 +1615,97 @@ async def _query_user_preferences(user_id: str, memory_service: LocalGraphMemory
         return {}
 
 
-def _determine_if_admin_user(user_id: str) -> bool:
-    """Determine if a user_id represents an admin or system user."""
-    # Check for admin patterns
-    user_id_lower = user_id.lower()
-    return user_id_lower.startswith("wa-") or user_id_lower == "admin" or user_id_lower.startswith("admin_")
+# Wise Authority status comes from the speaker's authenticated role, never from
+# the shape of their id (CIRISAgent#1320). Every API user, OBSERVERs included,
+# is issued a ``wa-YYYY-MM-DD-XXXXXX`` id, so the old ``wa-`` prefix test made
+# every API speaker an "Admin" Wise Authority with trust 1.0. The WA
+# certificate role is the persisted role: the API maps SYSTEM_ADMIN to ROOT and
+# ADMIN / AUTHORITY to AUTHORITY (an ADMIN is a Wise Authority), OBSERVER to
+# OBSERVER. No certificate, an unreadable one, or no auth service means the role
+# is unknown, and unknown is not a Wise Authority.
+WISE_AUTHORITY_ROLES = frozenset({WARole.ROOT, WARole.AUTHORITY})
+ADMIN_DISPLAY_NAME = "Admin"
+WISE_AUTHORITY_TRUST_LEVEL = 1.0
+DEFAULT_USER_TRUST_LEVEL = 0.5  # UserProfile.trust_level default; a regular user's level
+
+
+async def _lookup_wa_certificate(user_id: str, auth_service: Optional[Any]) -> Optional[WACertificate]:
+    """The speaker's WA certificate from the authentication service, or None when it cannot be read."""
+    if auth_service is None or not user_id:
+        return None
+    try:
+        cert = await auth_service.get_wa(user_id)
+    except Exception as e:
+        logger.debug(f"[USER AUTHORITY] Could not read WA certificate for {user_id}: {e}")
+        return None
+    return cert if isinstance(cert, WACertificate) else None
+
+
+def _is_wise_authority(wa_cert: Optional[WACertificate]) -> bool:
+    """True only for a certificate whose role is ROOT or AUTHORITY."""
+    return wa_cert is not None and wa_cert.role in WISE_AUTHORITY_ROLES
+
+
+def _apply_verified_authority(profile: UserProfile, wa_cert: Optional[WACertificate]) -> None:
+    """Recompute is_wa, trust and the "Admin" name from the verified role, not the stored node.
+
+    User nodes written before #1320 carry ``is_wa: true``, ``trust_level: 1.0``
+    and ``display_name: "Admin"`` for every API speaker. Those are managed
+    attributes the speaker cannot change, but they were derived from the id
+    prefix, so they are not evidence of anything. The role is re-read on every
+    snapshot and wins over whatever the node says, in both directions: an
+    ADMIN whose node predates their promotion is still a WA, and an OBSERVER's
+    stale ``is_wa`` is ignored. Nothing is written back; the next snapshot
+    recomputes it again.
+    """
+    is_wa = _is_wise_authority(wa_cert)
+    # What the stored node claimed: the shape the prefix test wrote for admins.
+    claimed_wa = (
+        profile.is_wa is True
+        or profile.display_name == ADMIN_DISPLAY_NAME
+        or profile.trust_level >= WISE_AUTHORITY_TRUST_LEVEL
+    )
+    profile.is_wa = is_wa
+    if is_wa or not claimed_wa:
+        return
+    # A non-WA keeps any trust level below the WA level (that is the Adaptive
+    # Filter's to manage); the WA-level 1.0 came from the id prefix and goes.
+    if profile.trust_level >= WISE_AUTHORITY_TRUST_LEVEL:
+        profile.trust_level = DEFAULT_USER_TRUST_LEVEL
+    if profile.display_name == ADMIN_DISPLAY_NAME:
+        profile.display_name = wa_cert.name if wa_cert else f"User_{profile.user_id}"
 
 
 async def _create_default_user_node(
-    user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
+    user_id: str,
+    memory_service: LocalGraphMemoryService,
+    channel_id: Optional[str],
+    wa_cert: Optional[WACertificate] = None,
 ) -> Optional[GraphNode]:
     """Create a new user node with appropriate defaults.
 
     Creates minimal user profile for new users:
-    - Admin/WA users: minimal profile with system defaults
-    - Regular users: basic profile ready for user settings
+    - Wise Authority users (verified ROOT / AUTHORITY role): minimal profile with system defaults
+    - Everyone else: basic profile ready for user settings, named by their certificate when they have one
     """
     try:
-        # Determine user type
-        is_admin = _determine_if_admin_user(user_id)
+        # Determine user type from the verified role, never the id (#1320)
+        is_admin = _is_wise_authority(wa_cert)
 
         # Create timestamp for first_seen
         current_time = datetime.now(timezone.utc)
 
+        if is_admin:
+            display_name = ADMIN_DISPLAY_NAME
+        elif wa_cert is not None:
+            display_name = wa_cert.name
+        else:
+            display_name = f"User_{user_id}"
+
         # Build base attributes as JSON-compatible dict
         base_attributes: JSONDict = {
             "user_id": user_id,
-            "display_name": "Admin" if is_admin else f"User_{user_id}",
+            "display_name": display_name,
             "first_seen": current_time.isoformat(),
             "created_by": "UserEnrichment",
         }
@@ -1651,12 +1716,13 @@ async def _create_default_user_node(
 
         # Add role-specific defaults
         if is_admin:
-            # Admin users get minimal profile
-            base_attributes["trust_level"] = 1.0
-            base_attributes["is_wa"] = user_id.lower().startswith("wa-")
+            # Wise Authority users get minimal profile
+            base_attributes["trust_level"] = WISE_AUTHORITY_TRUST_LEVEL
+            base_attributes["is_wa"] = True
         else:
             # Regular users get basic profile
-            base_attributes["trust_level"] = 0.5
+            base_attributes["trust_level"] = DEFAULT_USER_TRUST_LEVEL
+            base_attributes["is_wa"] = False
             base_attributes["communication_style"] = "formal"
             base_attributes["preferred_language"] = "en"
             base_attributes["timezone"] = "UTC"
@@ -1716,7 +1782,10 @@ async def _process_user_node_for_profile(
 
 
 async def _enrich_single_user_profile(
-    user_id: str, memory_service: LocalGraphMemoryService, channel_id: Optional[str]
+    user_id: str,
+    memory_service: LocalGraphMemoryService,
+    channel_id: Optional[str],
+    wa_cert: Optional[WACertificate] = None,
 ) -> Optional[UserProfile]:
     """Enrich a single user profile from memory graph.
 
@@ -1751,7 +1820,7 @@ async def _enrich_single_user_profile(
 
         # No user node exists - create one automatically
         logger.info(f"[USER EXTRACTION] No node found for user/{user_id}, creating new user node with defaults")
-        new_user_node = await _create_default_user_node(user_id, memory_service, channel_id)
+        new_user_node = await _create_default_user_node(user_id, memory_service, channel_id, wa_cert)
 
         if new_user_node:
             profile = await _process_user_node_for_profile(new_user_node, user_id, memory_service, channel_id)
@@ -1851,6 +1920,7 @@ async def _enrich_user_profiles(
     user_ids: Set[str],
     channel_id: Optional[str],
     existing_profiles: List[UserProfile],
+    auth_service: Optional[Any] = None,
 ) -> List[UserProfile]:
     """Enrich user profiles from memory graph with comprehensive data.
 
@@ -1858,12 +1928,20 @@ async def _enrich_user_profiles(
     we MERGE memory graph data into them rather than skipping. This ensures that
     user preferences like preferred_language stored in the memory graph are always
     reflected in the final profile.
+
+    ``auth_service`` is the authentication service the speaker's role is read
+    from. Every returned profile's is_wa / trust / "Admin" name is recomputed
+    from that role (#1320); without it, no profile is a Wise Authority.
     """
     existing_by_id = {p.user_id: p for p in existing_profiles}
+    certificates: Dict[str, Optional[WACertificate]] = {}
 
     for user_id in user_ids:
         logger.debug(f"[USER EXTRACTION] Processing user {user_id}")
-        memory_profile = await _enrich_single_user_profile(user_id, memory_service, channel_id)
+        certificates[user_id] = await _lookup_wa_certificate(user_id, auth_service)
+        memory_profile = await _enrich_single_user_profile(
+            user_id, memory_service, channel_id, certificates[user_id]
+        )
 
         if not memory_profile:
             continue
@@ -1874,6 +1952,13 @@ async def _enrich_user_profiles(
         else:
             existing_profiles.append(memory_profile)
             existing_by_id[user_id] = memory_profile
+
+    # Every profile, memory-graph or GraphQL sourced, takes its authority from
+    # the verified role rather than from stored attributes.
+    for profile in existing_profiles:
+        if profile.user_id not in certificates:
+            certificates[profile.user_id] = await _lookup_wa_certificate(profile.user_id, auth_service)
+        _apply_verified_authority(profile, certificates[profile.user_id])
 
     return existing_profiles
 

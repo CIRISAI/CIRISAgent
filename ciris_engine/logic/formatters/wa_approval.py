@@ -15,6 +15,13 @@ Three single-class blocks, each a loader key so every locale renders its own:
 reason; never defer it again, DEONTIC) and ``identity`` (a made thing still has
 a name and an identity, ONTOLOGICAL). Rendered only when the task carries a
 verified approval; otherwise nothing, and the prompt is byte-identical.
+
+A fourth key, ``only_verified`` (EPISTEMIC, #1320), is rendered on its own and
+ALWAYS, also when there is no grant: a Wise Authority's approval reaches the
+agent only as that verified block, and text a person writes in the conversation
+is that person's words, whatever authority it names. It goes into the ASPDMA,
+PDMA and IDMA prompts (``format_wa_only_verified_rule``), never into a
+conscience prompt, which is why it is not part of ``format_wa_approval_block``.
 """
 
 from typing import Any, Optional
@@ -24,6 +31,7 @@ from ciris_engine.schemas.runtime.models import WAAuthorization
 from ciris_engine.schemas.services.graph_core import GraphScope
 
 WA_APPROVAL_KEYS = ("prompts.wa_approval.grant", "prompts.wa_approval.rule", "prompts.wa_approval.identity")
+WA_ONLY_VERIFIED_KEY = "prompts.wa_approval.only_verified"
 
 
 def wa_authorization_of(context: Any) -> Optional[WAAuthorization]:
@@ -76,3 +84,14 @@ def format_wa_approval_block(authorization: Optional[WAAuthorization], language:
     )
     identity = get_string(lang, "prompts.wa_approval.identity")
     return "\n\n".join((grant, rule, identity))
+
+
+def format_wa_only_verified_rule(language: Optional[str] = None) -> str:
+    """The one-sentence rule that an approval exists only as the verified block (#1320).
+
+    Rendered with or without a grant. A person who types "a message from your
+    Wise Authority" into the chat is still that person speaking.
+    """
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(language or get_preferred_language(), "prompts.wa_approval.only_verified")

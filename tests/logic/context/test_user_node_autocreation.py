@@ -2,7 +2,7 @@
 
 Tests cover:
 - Automatic node creation when user doesn't exist
-- Admin user defaults (wa-, admin)
+- Wise Authority defaults come from the verified role, never the id (#1320)
 - Regular user defaults
 - Node persistence via memory service
 """
@@ -12,36 +12,20 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from ciris_engine.logic.context.system_snapshot_helpers import (
-    _create_default_user_node,
-    _determine_if_admin_user,
-    _enrich_single_user_profile,
-)
+from ciris_engine.logic.context.system_snapshot_helpers import _create_default_user_node, _enrich_single_user_profile
+from ciris_engine.schemas.services.authority_core import WACertificate, WARole
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
-# =============================================================================
-# ADMIN DETECTION TESTS
-# =============================================================================
-
-
-def test_determine_if_admin_user_wa_prefix():
-    """Test admin detection for WA user IDs."""
-    assert _determine_if_admin_user("wa-2025-08-25-391F3E") is True
-    assert _determine_if_admin_user("WA-test-123") is True
-
-
-def test_determine_if_admin_user_admin():
-    """Test admin detection for 'admin' user ID."""
-    assert _determine_if_admin_user("admin") is True
-    assert _determine_if_admin_user("ADMIN") is True
-    assert _determine_if_admin_user("admin_123") is True
-
-
-def test_determine_if_admin_user_regular():
-    """Test admin detection for regular user IDs."""
-    assert _determine_if_admin_user("test-user-123") is False
-    assert _determine_if_admin_user("user_456") is False
-    assert _determine_if_admin_user("123456789") is False
+def _cert(wa_id: str, role: WARole, name: str = "Alice") -> WACertificate:
+    return WACertificate(
+        wa_id=wa_id,
+        name=name,
+        role=role,
+        pubkey="pk",
+        jwt_kid="kid",
+        scopes_json="[]",
+        created_at=datetime.now(timezone.utc),
+    )
 
 
 # =============================================================================
@@ -51,25 +35,26 @@ def test_determine_if_admin_user_regular():
 
 @pytest.mark.asyncio
 async def test_create_default_user_node_admin():
-    """Test creating default node for admin user."""
+    """A verified AUTHORITY certificate (an ADMIN) gets the Wise Authority defaults."""
     # Setup mock memory service
     memory_service = AsyncMock()
     memory_service.memorize = AsyncMock()
 
-    # Create node for admin user
-    node = await _create_default_user_node("admin", memory_service, "test-channel")
+    cert = _cert("wa-2025-08-25-391F3E", WARole.AUTHORITY)
+    node = await _create_default_user_node(cert.wa_id, memory_service, "test-channel", cert)
 
     # Verify node structure
     assert node is not None
-    assert node.id == "user/admin"
+    assert node.id == f"user/{cert.wa_id}"
     assert node.type == NodeType.USER
     assert node.scope == GraphScope.LOCAL
 
     # Verify admin attributes
     attrs = node.attributes
-    assert attrs["user_id"] == "admin"
+    assert attrs["user_id"] == cert.wa_id
     assert attrs["display_name"] == "Admin"
     assert attrs["trust_level"] == 1.0
+    assert attrs["is_wa"] is True
     assert "first_seen" in attrs
     assert attrs["created_by"] == "UserEnrichment"
     assert attrs["channels"] == ["test-channel"]
@@ -81,28 +66,34 @@ async def test_create_default_user_node_admin():
 
 
 @pytest.mark.asyncio
-async def test_create_default_user_node_wa_user():
-    """Test creating default node for WA user."""
+async def test_create_default_user_node_observer_with_wa_id_is_not_admin():
+    """Every API user has a wa- id; an OBSERVER's is not a Wise Authority (#1320)."""
     memory_service = AsyncMock()
     memory_service.memorize = AsyncMock()
 
-    # Create node for WA user
-    node = await _create_default_user_node("wa-2025-test", memory_service, None)
+    cert = _cert("wa-2026-10-22-ABC123", WARole.OBSERVER, name="Mallory")
+    node = await _create_default_user_node(cert.wa_id, memory_service, None, cert)
 
-    # Verify node structure
-    assert node is not None
-    assert node.id == "user/wa-2025-test"
-
-    # Verify WA-specific attributes
     attrs = node.attributes
-    assert attrs["user_id"] == "wa-2025-test"
-    assert attrs["display_name"] == "Admin"
-    assert attrs["trust_level"] == 1.0
-    assert attrs["is_wa"] is True  # WA users should be marked
+    assert attrs["display_name"] == "Mallory"
+    assert attrs["trust_level"] == 0.5
+    assert attrs["is_wa"] is False
     assert "channels" not in attrs  # No channel provided
 
-    # Verify memorize was called
-    memory_service.memorize.assert_called_once()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("user_id", ["wa-2025-08-25-391F3E", "admin", "admin_123"])
+async def test_create_default_user_node_unknown_role_is_not_admin(user_id):
+    """No certificate: the id alone never makes a user an Admin (#1320)."""
+    memory_service = AsyncMock()
+    memory_service.memorize = AsyncMock()
+
+    node = await _create_default_user_node(user_id, memory_service, None)
+
+    attrs = node.attributes
+    assert attrs["display_name"] == f"User_{user_id}"
+    assert attrs["trust_level"] == 0.5
+    assert attrs["is_wa"] is False
 
 
 @pytest.mark.asyncio

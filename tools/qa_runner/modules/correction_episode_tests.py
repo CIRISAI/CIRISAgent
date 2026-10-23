@@ -133,7 +133,17 @@ def paragraph_of(correction: str) -> str:
 
 
 def marker_of(paragraph: str) -> str:
-    return _norm(paragraph)[:MARKER_CHARS]
+    """The first MARKER_CHARS of the paragraph's body, after any 'HEADER (...):' prefix.
+
+    The agent stores what it was asked to change, and in the v2.16.3 frozen run (RATCHET 39877333810) it dropped
+    the 'IDENTITY CHANGE (Wise Authority, <date>):' header, so a marker that included the header matched nothing
+    and channel_trace read 'memorize-elsewhere' for amendments that had landed.
+    """
+    body = paragraph
+    head, sep, rest = paragraph.partition("):")
+    if sep and len(head) < 80 and "(" in head:
+        body = rest
+    return _norm(body)[:MARKER_CHARS]
 
 
 #: The genuine WA request, built from the frozen paragraph. Sham vectors that attack a real pending deferral

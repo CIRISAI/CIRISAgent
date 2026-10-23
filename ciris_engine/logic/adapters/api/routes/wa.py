@@ -23,6 +23,20 @@ from ciris_engine.schemas.api.wa import (
     WAGuidanceResponse,
     WAStatusResponse,
 )
+from ciris_engine.logic.services.governance.wise_authority.deferral_rows import (
+    DeferralRowRefused,
+    DeferralRowsUnavailable,
+    emit_deferral_response,
+    read_deferral_row,
+    rows_available,
+)
+from ciris_engine.schemas.services.authority.deferral_rows import (
+    REASON_UNKNOWN_REQUEST,
+    DeferralRowRefusal,
+    DeferralRowRefusalKind,
+    DeferralRowView,
+)
+from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import DeferralResponse
 
 from ..constants import ERROR_WISE_AUTHORITY_SERVICE_NOT_AVAILABLE
@@ -192,6 +206,103 @@ async def get_deferrals(
         raise_wa_error(f"Failed to retrieve deferrals: {str(e)}")
 
 
+def _presented_session_token(request: Request) -> Optional[str]:
+    """The resolver's raw node session token, exactly as it reached the API, or None.
+
+    Only a ``sess:`` token opens a Wise Authority's own pen on the node. Any
+    other credential (an API key, a service token, an ingress identity) is not
+    handed to the node at all; the node then answers ``deferral.not_signed_in``.
+    """
+    from ..dependencies.auth import SUBSTRATE_SESSION_PREFIX
+
+    header = request.headers.get("authorization") or ""
+    if not header.startswith("Bearer "):
+        return None
+    token = header[len("Bearer ") :].strip()
+    return token if token.startswith(SUBSTRATE_SESSION_PREFIX) else None
+
+
+def _row_refusal_status(refusal: DeferralRowRefusal) -> tuple[int, str]:
+    """HTTP status and error code for a node refusal of the response row."""
+    if refusal.kind is DeferralRowRefusalKind.REFUSED:
+        return status.HTTP_403_FORBIDDEN, ErrorCode.FORBIDDEN
+    if refusal.kind is DeferralRowRefusalKind.OUTAGE:
+        return status.HTTP_503_SERVICE_UNAVAILABLE, ErrorCode.SERVICE_UNAVAILABLE
+    if refusal.reason_id == REASON_UNKNOWN_REQUEST:
+        # The deferral's recorded request row is not an admitted row on this
+        # node: the record and the store disagree, and retrying will not help.
+        return status.HTTP_409_CONFLICT, ErrorCode.CONFLICT
+    return status.HTTP_400_BAD_REQUEST, ErrorCode.VALIDATION_ERROR
+
+
+async def _sign_response_row(
+    request: Request, deferral_id: str, pending: Optional[PendingDeferral], approved: bool
+) -> Optional[str]:
+    """Have the node sign the Wise Authority's answer with their own key (#1316); its attestation_id.
+
+    None, and the resolution proceeds as before #1316, when the node has no
+    deferral rows, or when this deferral has no signed request row to answer
+    (its emit failed, or it predates rows). Such an answer is recorded but
+    carries no response row, so an identity change it approves is NOT applied
+    where the node authors rows (MemorizeHandler). Every node refusal raises,
+    so the resolution is not recorded.
+    """
+    if not rows_available():
+        return None
+    request_id = pending.request_attestation_id if pending is not None else None
+    if not request_id:
+        logger.warning(  # NOSONAR - deferral_id sanitized via sanitize_for_log()
+            "Deferral %s has no signed request row; resolving it without a response row "
+            "(an identity change it approves will not be applied)",
+            sanitize_for_log(deferral_id),
+        )
+        return None
+    try:
+        return await emit_deferral_response(request_id, approved, _presented_session_token(request))
+    except DeferralRowsUnavailable:
+        return None
+    except DeferralRowRefused as refused:
+        refusal = refused.refusal
+        code, error_code = _row_refusal_status(refusal)
+        logger.warning(  # NOSONAR - deferral_id sanitized via sanitize_for_log()
+            "Deferral %s NOT resolved: the node refused the Wise Authority's response row (%s): %s",
+            sanitize_for_log(deferral_id),
+            refusal.reason_id,
+            sanitize_for_log(refusal.text),
+        )
+        raise HTTPException(
+            status_code=code,
+            detail=ErrorResponse(
+                error=ErrorDetail(
+                    code=error_code,
+                    message=f"The resolution was not recorded: {refusal.reason_id}: {refusal.text}",
+                    details={"reason_id": refusal.reason_id, "kind": refusal.kind.value},
+                )
+            ).model_dump(mode="json"),
+        ) from refused
+
+
+@router.get(
+    "/rows/{attestation_id}",
+    responses={404: {"description": "No such deferral row"}, 503: {"description": "This node has no deferral rows"}},
+)
+async def get_deferral_row(
+    attestation_id: str,
+    auth: Annotated[AuthContext, Depends(require_observer)],
+) -> SuccessResponse[DeferralRowView]:
+    """Read back one of a deferral's signed rows (request, response, amendment) from the node's store (#1316)."""
+    try:
+        row = await read_deferral_row(attestation_id)
+    except DeferralRowsUnavailable:
+        raise_wa_error("This node has no deferral rows (ciris-server 0.5.234 or later)", status_code=503)
+    except Exception as exc:  # noqa: BLE001 - a read that failed is not "no such row"
+        logger.warning("Could not read deferral row %s: %s", sanitize_for_log(attestation_id), exc)
+        raise_wa_error(f"Could not read the row ({type(exc).__name__})", status_code=503)
+    if row is None:
+        raise_wa_error("No deferral row with that attestation_id on this node", status_code=404)
+    return create_wa_success_response(row)
+
+
 @router.post(
     "/deferrals/{deferral_id}/resolve",
     responses={503: {"description": "Wise Authority service not available"}},
@@ -246,9 +357,11 @@ async def resolve_deferral(
     #       check". Fail closed, and say it is a lookup failure so an operator
     #       retries rather than hunting a permissions ghost.
     _domain = None
+    _pending: Optional[PendingDeferral] = None
     try:
         for _pd in await wa_service.get_pending_deferrals():
             if _pd.deferral_id == deferral_id:
+                _pending = _pd
                 # PendingDeferral.context is Dict[str, str] with default_factory=dict —
                 # never None, and there is no `metadata` field. The WA service copies
                 # every stored deferral-context key into it unfiltered, so the
@@ -303,64 +416,31 @@ async def resolve_deferral(
         #
         # The signature is hybrid (Ed25519 + ML-DSA-65) by the node's persist
         # key, and carries the owner's CEG federation identity that delegated to
-        # that key — so an approval chains to the same root of authority that
-        # permits the agent to operate at all.
+        # that key. Fails closed: an approval nobody can verify is refused.
         #
-        # Fails closed: if the resolution cannot be signed we refuse the
-        # resolution rather than record an unverifiable one. An approval nobody
-        # can verify is the exact artifact this issue is about.
+        # KEPT alongside the #1316 response row below, on purpose. The row is
+        # signed with the resolver's OWN key (CIRISServer#342's owner pen) but
+        # commits only to the verdict and the request it answers; this signature
+        # is the only one over the guidance text the guidance task carries, it
+        # is what `resolve_deferral` verifies before it issues a WAAuthorization,
+        # and it is the only signature at all on a node without rows (< 0.5.234).
         #
-        # TODO(CIRISServer#342): sign with the RESOLVING USER'S CEG fedID, not
-        # the node's delegate key.
+        # #342 is addressed for the OWNER: the node's owner is the seated Wise
+        # Authority for their own agent (Eric, 2026-10-22), and their session
+        # opens their pen. A non-owner WA signing with their own key is
+        # CIRISServer#814; until it lands, where the node authors rows, a
+        # non-owner's resolution is refused (403 deferral.resolver_has_no_key),
+        # fail closed, rather than recorded without the WA's own signature.
         #
-        # Today the ACTOR key signs and the record names the owner
-        # (`owner_key_id`, re-resolved from the federation directory at verify
-        # time, never trusted from the record). That is a real delegation chain
-        # — the owner's fedID binds that key in order to let the agent operate
-        # at all — but it is one hop short of what this artifact should carry.
-        #
-        # "Actor", not "node", since ciris-server 0.5.189 (CC 3.4.7.3): the
-        # configured key is the actor (authorship), and boot mints a separate
-        # `<alias>-node` key for carriage. The engine's composed signer — which
-        # signs this resolution — is still the actor key.
-        #
-        # The chain survives the split. `move_owner_binding_to_node_key` is
-        # additive despite the name: it builds and applies an owner-binding for
-        # the NODE key and never revokes the actor's, so `owner_of(actor_key)`
-        # still resolves and this signature still verifies against the owner.
-        # Checked in the substrate source rather than assumed, because a
-        # genuinely-moved binding would have silently broken verification here. For a control whose entire purpose is "a human
-        # authorized this consequential action", the difference between *signed
-        # by the delegate, naming the human* and *signed by the human* is
-        # exactly what an external auditor will ask about.
-        #
-        # Blocked on CIRISServer#342: the owner's private key is not reachable
-        # from Python by design (it sits behind `resolve_user_signer`, released
-        # only under a verified owner session, with no PyO3 export). The ask is
-        # an owner-scoped signing capsule, NOT a key export — the session gate
-        # is correct and must survive.
-        #
-        # PRECONDITION BEFORE FLIPPING THIS — do not skip it. Every path that
-        # can mint a resolving user must first guarantee that user HAS a fedID,
-        # or this becomes fail-closed for real people:
-        #   - OAuth-minted AUTHORITY users (the common case in production)
-        #   - password/local users created by the setup wizard
-        #   - service tokens acting on a human's behalf
-        #   - MULTI-USER deployments, where several distinct humans resolve
-        #     deferrals against one node — each needs their own fedID, and the
-        #     node cannot mint one on their behalf without defeating the point
-        #   - multi-occurrence, where the resolving occurrence may not be the
-        #     one holding that user's key (see `register_self_federation_key`,
-        #     which has no caller today, so cross-occurrence verify already
-        #     fails closed)
-        # This ordering is not pedantry: `sign_as_wa` was removed from this very
-        # path because it raised for every user not in CIRISVerify or the System
-        # WA file, which would have made approval impossible for exactly the
-        # OAuth users who need it. Requiring a fedID before one is guaranteed to
-        # exist would reintroduce that failure with a different key.
+        # "modify" is not an approval of what was asked. As before #1316 it is
+        # recorded approved=False with the WA's guidance (`resolve_deferral`
+        # creates no guidance task for it, so it authorizes nothing), and its
+        # row is therefore deferral:response:rejected:v1. Signing it "approved"
+        # would let an identity amendment cite it for the unmodified request.
+        approved = resolve_request.resolution == "approve"
         signed_at = datetime.now(timezone.utc).isoformat()
         deferral_response = DeferralResponse(
-            approved=(resolve_request.resolution == "approve"),
+            approved=approved,
             reason=resolve_request.guidance or f"Resolved by {auth.user_id}",
             modified_time=None,
             wa_id=auth.user_id,
@@ -378,13 +458,29 @@ async def resolve_deferral(
             logger.error(f"Refusing to record an unsigned deferral resolution for {sanitize_for_log(deferral_id)}")
             raise_wa_error(f"Cannot resolve deferral: signing failed ({type(exc).__name__})", status_code=503)
 
+        # THE WA'S OWN SIGNED ANSWER (#1316), before anything is recorded: if the
+        # node refuses it, the resolution is not recorded at all.
+        response_row = await _sign_response_row(request, deferral_id, _pending, approved)
+        if response_row is not None:
+            deferral_response = deferral_response.model_copy(update={"response_attestation_id": response_row})
+
         success = await wa_service.resolve_deferral(deferral_id, deferral_response)
 
         if not success:
+            if response_row is not None:
+                logger.warning(
+                    "Deferral %s: the node signed response row %s but the resolution was not recorded",
+                    sanitize_for_log(deferral_id),
+                    response_row,
+                )
             raise_wa_error("Failed to resolve deferral - it may have already been resolved", status_code=400)
 
         response = ResolveDeferralResponse(
-            success=True, deferral_id=deferral_id, resolved_at=datetime.now(timezone.utc)
+            success=True,
+            deferral_id=deferral_id,
+            resolved_at=datetime.now(timezone.utc),
+            request_attestation_id=_pending.request_attestation_id if _pending else None,
+            response_attestation_id=response_row,
         )
 
         logger.info(  # NOSONAR - all values sanitized via sanitize_for_log()

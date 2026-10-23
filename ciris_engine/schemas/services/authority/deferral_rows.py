@@ -35,6 +35,9 @@ DEFERRAL_ROW_DIMENSIONS = (
 #: The node's reason ids the agent branches on.
 REASON_UNKNOWN_REQUEST = "deferral.unknown_request"
 REASON_AMENDMENT_UNAUTHORIZED = "identity_amendment_unauthorized"
+REASON_RESPONSE_ALREADY_USED = "deferral.response_already_used"
+#: Set by the agent, never by the node: the approval carries no request row id.
+REASON_NO_REQUEST_ROW = "deferral.no_request_row"
 #: Set by the agent, never by the node: the approval carries no response row.
 REASON_NO_RESPONSE_ROW = "deferral.no_response_row"
 #: Set by the agent: the node answered with a message that is not "<reason_id>: <text>".
@@ -75,16 +78,20 @@ class DeferralRequestRow(BaseModel):
     status: DeferralRowStatus = Field(..., description="emitted / unavailable / failed")
     attestation_id: Optional[str] = Field(None, description="The deferral:request:v1 row, when emitted")
     reason_id: Optional[str] = Field(None, description="Why there is no row, when it failed")
-    room_id: Optional[str] = Field(None, description="The room the row was placed in; None until #1300")
+    room_id: Optional[str] = Field(
+        None, description="The room the agent named; None = the node's agent<->owner pair room (until #1300)"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
 
 class DeferralRowView(BaseModel):
-    """One of the three rows, read back from the node's store (GET /v1/wa/rows/{id})."""
+    """One of the rows, read back from the node's own store (``ciris_server.deferral_rows``)."""
 
     attestation_id: str
-    attestation_type: str = Field(..., description="The row's dimension, e.g. deferral:request:v1")
+    dimension: str = Field(..., description="Which row it is, from the signed envelope, e.g. deferral:request:v1")
+    attestation_type: str = Field(..., description="The attestation verb (scores); never the row's identity")
+    weight: Optional[float] = None
     attesting_key_id: str = Field(..., description="Who signed it")
     attested_key_id: str = Field(..., description="Whom it is about (the agent's identity)")
     asserted_at: str
@@ -106,7 +113,9 @@ __all__ = [
     "DEFERRAL_ROW_DIMENSIONS",
     "IDENTITY_AMENDMENT_DIMENSION",
     "REASON_AMENDMENT_UNAUTHORIZED",
+    "REASON_NO_REQUEST_ROW",
     "REASON_NO_RESPONSE_ROW",
+    "REASON_RESPONSE_ALREADY_USED",
     "REASON_TIMEOUT",
     "REASON_UNKNOWN_REQUEST",
     "REASON_UNPARSED",

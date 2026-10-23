@@ -23,15 +23,18 @@ then behave exactly as before #1316. Nothing here ever fakes a row.
 
 THE ROOM. The rows belong in the room of the agent's conversation with the
 person (Eric: "Deferrals are not chat messages, but they do use the same
-room"). There is no agent<->user room yet (#1300), and the stop-gap derivation,
-edge's ``pair_community_key_id(agent_identity, owner_fedID)``, cannot be made
-reliably from here: no ciris_server/ciris_edge binding exports it, and the
-"agent identity" the node signs about is persist's
-``active_identity_for_occurrence(occurrence)``, which no Python binding exposes
-(``lookup_identity_for_occurrence_json`` is the historical LIMIT-1 read persist
-warns is not an admission resolver). A Python copy of the hash over a guessed
-identity would place well-formed rows in a room nobody installs, so
-:func:`deferral_room_id` answers None until the node can name the room.
+room"). There is no agent<->user room yet (#1300). Until there is, the NODE
+names the room: with ``room_id`` absent it derives the agent<->owner pair room
+(edge's ``pair_community_key_id`` over the registered agent principal and the
+owner's fedID, CIRISServer#815), and the response and the amendment inherit it.
+The agent does not derive it: no binding exports the hash, and only the node
+knows which identity it signs about. So :func:`deferral_room_id` answers None,
+which means "the node's default room", until #1300 gives the agent a room id.
+
+READ-BACK is ``ciris_server.deferral_rows(ids)`` (0.5.234): this node's own
+store, one entry per id or null, so the owner-signed response is visible. Rows
+are ``scores`` attestations; which row it is lives in the signed envelope
+member ``dimension``, never in ``attestation_type``.
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ import hashlib
 import json
 import logging
 import re
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from ciris_engine.schemas.services.authority.deferral_rows import (
     DEFERRAL_ROW_DIMENSIONS,
@@ -56,10 +59,6 @@ logger = logging.getLogger(__name__)
 
 #: One signed write on the node. Longer than this and the store is not answering.
 DEFERRAL_ROW_CALL_TIMEOUT_SECONDS = 15.0
-
-#: Pages of one dimension a read-back walks before it gives up (newest first).
-_READ_PAGE_SIZE = 100
-_READ_MAX_PAGES = 20
 
 _SERVER_FUNCTIONS = ("emit_deferral_request", "emit_deferral_response", "emit_identity_amendment")
 _REASON_RE = re.compile(r"^\s*([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*):\s?(.*)$", re.DOTALL)
@@ -121,11 +120,12 @@ def sha256_hex(text: str) -> str:
 
 
 def deferral_room_id() -> Optional[str]:
-    """The room a deferral's rows belong in, or None. None until #1300: see the module docstring."""
+    """The room to name on a deferral's request row; None = the node's agent<->owner pair room (until #1300)."""
     return None
 
 
-async def _call(name: str, *args: object) -> str:
+async def _call_raw(name: str, *args: object) -> object:
+    """``ciris_server.<name>(*args)`` off the event loop; every failure a typed refusal."""
     fn = _server_function(name)
     if fn is None:
         raise DeferralRowsUnavailable(f"ciris_server.{name} is not available on this node")
@@ -141,6 +141,12 @@ async def _call(name: str, *args: object) -> str:
         ) from None
     except Exception as exc:  # noqa: BLE001 - every failure is a typed refusal
         raise DeferralRowRefused(parse_refusal(exc)) from exc
+    return result
+
+
+async def _call(name: str, *args: object) -> str:
+    """A signing call: its answer must be the stored attestation_id."""
+    result = await _call_raw(name, *args)
     if not isinstance(result, str) or not result:
         raise DeferralRowRefused(
             DeferralRowRefusal(
@@ -171,29 +177,41 @@ async def emit_deferral_response(request_id: str, approved: bool, bearer: Option
     return await _call("emit_deferral_response", request_id, approved, bearer)
 
 
-async def emit_identity_amendment(amendment_text: str, authorized_by: str) -> str:
-    """Sign ``identity_amendment:v1`` citing the approved response. The node checks CC 3.1.5 first."""
-    return await _call("emit_identity_amendment", sha256_hex(amendment_text), authorized_by)
+async def emit_identity_amendment(amendment_text: str, authorized_by: str, request_id: str) -> str:
+    """Sign ``identity_amendment:v1`` citing the approved response to ``request_id``, this agent's deferral.
+
+    The node checks CC 3.1.5 first, that the response answers that request, and
+    that the response has not already authorized an amendment
+    (``deferral.response_already_used``): one approval, one amendment.
+    """
+    return await _call("emit_identity_amendment", sha256_hex(amendment_text), authorized_by, request_id)
 
 
 # --------------------------------------------------------------------- read back
 
 
 def _view(item: object) -> Optional[DeferralRowView]:
+    """One stored row as a typed view, or None when it is not one of the deferral rows."""
     if not isinstance(item, dict):
         return None
     envelope = item.get("attestation_envelope")
-    env = envelope if isinstance(envelope, dict) else {}
+    env: Dict[str, object] = envelope if isinstance(envelope, dict) else {}
 
     def text(key: str) -> Optional[str]:
         value = env.get(key)
         return str(value) if isinstance(value, str) and value else None
 
+    dimension = text("dimension")
+    if dimension not in DEFERRAL_ROW_DIMENSIONS:
+        return None
     refs = env.get("evidence_refs")
     evidence: List[str] = [str(r) for r in refs] if isinstance(refs, list) else []
+    weight = item.get("weight")
     return DeferralRowView(
         attestation_id=str(item.get("attestation_id", "")),
+        dimension=str(dimension),
         attestation_type=str(item.get("attestation_type", "")),
+        weight=float(weight) if isinstance(weight, (int, float)) else None,
         attesting_key_id=str(item.get("attesting_key_id", "")),
         attested_key_id=str(item.get("attested_key_id", "")),
         asserted_at=str(item.get("asserted_at", "")),
@@ -207,39 +225,37 @@ def _view(item: object) -> Optional[DeferralRowView]:
     )
 
 
-def _read_deferral_row_sync(attestation_id: str) -> Optional[DeferralRowView]:
-    """Find one deferral-family row by id in the node's store. Blocking; never call on the event loop."""
-    from ciris_engine.logic.persistence.models.graph import get_persist_engine
-    from ciris_engine.logic.runtime.edge_runtime import get_federation_address
+async def read_deferral_rows(ids: List[str]) -> List[Optional[DeferralRowView]]:
+    """The rows by id from this node's own store, one entry per id: the row, or None.
 
-    engine = get_persist_engine()
-    list_attestations = getattr(engine, "list_attestations", None)
-    if list_attestations is None:
-        raise DeferralRowsUnavailable("no persist engine to read rows from")
-    caller = get_federation_address()
-    for dimension in DEFERRAL_ROW_DIMENSIONS:
-        cursor: Optional[str] = None
-        for _ in range(_READ_MAX_PAGES):
-            page = json.loads(
-                list_attestations(json.dumps({"attestation_type": dimension}), cursor, _READ_PAGE_SIZE, caller)
+    None also for a stored row that is not one of the four deferral dimensions:
+    this reads deferral rows, not attestations in general. Raises
+    :class:`DeferralRowsUnavailable` on a server without ``deferral_rows``.
+    """
+    raw = await _call_raw("deferral_rows", list(ids))
+    try:
+        entries = json.loads(raw if isinstance(raw, (str, bytes, bytearray)) else "")
+    except (TypeError, ValueError) as exc:
+        raise DeferralRowRefused(
+            DeferralRowRefusal(
+                reason_id=REASON_UNPARSED, text=f"deferral_rows returned unreadable JSON: {exc}", kind=DeferralRowRefusalKind.OUTAGE
             )
-            for item in page.get("items", []) if isinstance(page, dict) else []:
-                if isinstance(item, dict) and item.get("attestation_id") == attestation_id:
-                    return _view(item)
-            next_cursor = page.get("next_cursor") if isinstance(page, dict) else None
-            if not next_cursor:
-                break
-            cursor = json.dumps(next_cursor)
-    return None
+        ) from exc
+    if not isinstance(entries, list) or len(entries) != len(ids):
+        raise DeferralRowRefused(
+            DeferralRowRefusal(
+                reason_id=REASON_UNPARSED,
+                text=f"deferral_rows answered {type(entries).__name__} for {len(ids)} ids",
+                kind=DeferralRowRefusalKind.OUTAGE,
+            )
+        )
+    return [_view(entry) if entry is not None else None for entry in entries]
 
 
 async def read_deferral_row(attestation_id: str) -> Optional[DeferralRowView]:
-    """One of the three rows by id, or None when this node's store does not hold it."""
-    if not rows_available():
-        raise DeferralRowsUnavailable("this node has no deferral rows")
-    return await asyncio.wait_for(
-        asyncio.to_thread(_read_deferral_row_sync, attestation_id), timeout=DEFERRAL_ROW_CALL_TIMEOUT_SECONDS
-    )
+    """One deferral row by id, or None when this node's store does not hold it."""
+    (row,) = await read_deferral_rows([attestation_id])
+    return row
 
 
 __all__ = [
@@ -252,6 +268,7 @@ __all__ = [
     "emit_identity_amendment",
     "parse_refusal",
     "read_deferral_row",
+    "read_deferral_rows",
     "rows_available",
     "sha256_hex",
 ]

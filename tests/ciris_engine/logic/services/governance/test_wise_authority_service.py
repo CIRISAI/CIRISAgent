@@ -1317,13 +1317,32 @@ async def test_a_node_without_rows_records_the_deferral_as_before(wise_authority
 
 
 @pytest.mark.asyncio
-async def test_the_response_row_travels_into_the_grant(wise_authority_service, auth_service, time_service, temp_db):
+async def test_the_response_row_travels_into_the_grant(
+    wise_authority_service, auth_service, time_service, temp_db, monkeypatch
+):
+    """The grant carries both ids the amendment row needs: the approval, and the deferral it answers."""
+    from tests.fixtures.deferral_rows import install_fake_node
+
+    node = install_fake_node(monkeypatch)
     await wise_authority_service.start()
     deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-row-grant")
+    request_id = node.rows[0].attestation_id
     auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
     response = _verified_response().model_copy(update={"response_attestation_id": "att-resp-1"})
 
     assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
 
-    assert _guidance_task_of("task-row-grant").context.wa_authorization.response_attestation_id == "att-resp-1"
+    grant = _guidance_task_of("task-row-grant").context.wa_authorization
+    assert grant.response_attestation_id == "att-resp-1"
+    assert grant.request_attestation_id == request_id, "from this deferral's own stored request row"
     assert _stored_resolution("task-row-grant")["response_attestation_id"] == "att-resp-1"
+
+
+@pytest.mark.asyncio
+async def test_a_grant_without_a_request_row_names_none(wise_authority_service, auth_service, time_service, temp_db):
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-row-grant-none")
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+    assert await wise_authority_service.resolve_deferral(deferral_id, _verified_response()) is True
+    grant = _guidance_task_of("task-row-grant-none").context.wa_authorization
+    assert grant.request_attestation_id is None and grant.response_attestation_id is None

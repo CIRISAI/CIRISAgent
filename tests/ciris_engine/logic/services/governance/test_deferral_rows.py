@@ -86,7 +86,7 @@ async def test_a_server_older_than_0_5_234_means_rows_unavailable(monkeypatch: p
     with pytest.raises(DeferralRowsUnavailable):
         await emit_deferral_response("att-1", True, "sess:x")
     with pytest.raises(DeferralRowsUnavailable):
-        await emit_identity_amendment("text", "att-2")
+        await emit_identity_amendment("text", "att-2", "att-1")
 
 
 @pytest.mark.asyncio
@@ -132,8 +132,10 @@ async def test_each_call_reaches_the_node_with_the_contract_arguments(monkeypatc
     assert await emit_deferral_response("att-req", False, "sess:wa-1:mac") == "att-resp"
     assert seen["response"] == ("att-req", False, "sess:wa-1:mac")
 
-    assert await emit_identity_amendment("I mentor", "att-resp") == "att-amend"
-    assert seen["amendment"] == (hashlib.sha256(b"I mentor").hexdigest(), "att-resp")
+    assert await emit_identity_amendment("I mentor", "att-resp", "att-req") == "att-amend"
+    assert seen["amendment"] == (hashlib.sha256(b"I mentor").hexdigest(), "att-resp", "att-req"), (
+        "the request id binds the amendment to its own deferral"
+    )
 
 
 @pytest.mark.asyncio
@@ -182,49 +184,88 @@ async def test_an_answer_that_is_not_an_id_is_never_taken_as_a_row(monkeypatch: 
     assert caught.value.refusal.kind is DeferralRowRefusalKind.OUTAGE
 
 
-def test_the_room_is_not_guessed() -> None:
-    """No agent<->user room yet (#1300) and no reliable derivation from here: None, never a guess."""
+def test_the_room_is_left_to_the_node() -> None:
+    """No agent<->user room yet (#1300): None, and the node derives the agent<->owner pair room."""
     assert deferral_rows.deferral_room_id() is None
 
 
 # ---------------------------------------------------------------- read back
 
 
-def test_a_row_reads_back_with_its_chain_members(monkeypatch: pytest.MonkeyPatch) -> None:
-    import json
-
-    from ciris_engine.logic.persistence.models import graph
-    from ciris_engine.logic.runtime import edge_runtime
-
-    amendment = {
-        "attestation_id": "att-3",
-        "attestation_type": "identity_amendment:v1",
+def _stored(row_id: str, dimension: str, **envelope: object) -> dict:
+    return {
+        "attestation_id": row_id,
+        "attestation_type": "scores",
+        "weight": 1.0,
         "attesting_key_id": "agent-occ",
         "attested_key_id": "agent-id",
         "asserted_at": "2026-10-22T12:00:00Z",
-        "attestation_envelope": {
-            "amendment_digest": "a" * 64,
-            "authorized_by": "att-2",
-            "evidence_refs": ["att-2"],
-            "community_key_id": "chat:pair:v1:abc",
-        },
+        "attestation_envelope": {"dimension": dimension, **envelope},
     }
-    queries = []
 
-    class Engine:
-        def list_attestations(self, filter_json: str, cursor: object, limit: int, caller: object) -> str:
-            queries.append((json.loads(filter_json), caller))
-            dim = json.loads(filter_json)["attestation_type"]
-            items = [amendment] if dim == "identity_amendment:v1" else []
-            return json.dumps({"items": items, "next_cursor": None})
 
-    monkeypatch.setattr(graph, "get_persist_engine", lambda: Engine())
-    monkeypatch.setattr(edge_runtime, "get_federation_address", lambda: "agent-occ")
+@pytest.mark.asyncio
+async def test_rows_read_back_one_entry_per_id_nulls_included(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
 
-    row = deferral_rows._read_deferral_row_sync("att-3")
-    assert row is not None
-    assert row.attestation_type == "identity_amendment:v1"
-    assert row.authorized_by == "att-2" and row.evidence_refs == ["att-2"]
-    assert row.room_id == "chat:pair:v1:abc"
-    assert all(caller == "agent-occ" for _, caller in queries)
-    assert deferral_rows._read_deferral_row_sync("att-missing") is None
+    _fold_on(monkeypatch)
+    store = {
+        "att-3": _stored(
+            "att-3",
+            "identity_amendment:v1",
+            amendment_digest="a" * 64,
+            authorized_by="att-2",
+            evidence_refs=["att-2"],
+            community_key_id="chat:pair:v1:abc",
+        ),
+        "att-2": _stored("att-2", "deferral:response:approved:v1", references_attestation_id="att-1"),
+    }
+    asked = []
+
+    def deferral_rows_fn(ids: list) -> str:
+        asked.append(list(ids))
+        return json.dumps([store.get(i) for i in ids])
+
+    _server(monkeypatch, deferral_rows=deferral_rows_fn)
+
+    rows = await deferral_rows.read_deferral_rows(["att-3", "att-missing", "att-2"])
+
+    assert asked == [["att-3", "att-missing", "att-2"]], "one call for all ids"
+    amend, missing, resp = rows
+    assert missing is None, "a null entry stays None"
+    assert amend is not None and amend.dimension == "identity_amendment:v1" and amend.attestation_type == "scores"
+    assert amend.authorized_by == "att-2" and amend.evidence_refs == ["att-2"]
+    assert amend.room_id == "chat:pair:v1:abc"
+    assert resp is not None and resp.dimension == "deferral:response:approved:v1"
+    assert resp.references_attestation_id == "att-1"
+    assert await deferral_rows.read_deferral_row("att-missing") is None
+
+
+@pytest.mark.asyncio
+async def test_a_row_is_identified_by_its_dimension_never_its_verb(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every row is `scores`; a scores row under another dimension is not a deferral row."""
+    import json
+
+    _fold_on(monkeypatch)
+    consent = _stored("att-c", "consent:community_trust:v1")
+    verb_only = dict(_stored("att-v", "deferral:request:v1"), attestation_type="deferral:request:v1")
+    verb_only["attestation_envelope"] = {}  # the old grammar: no dimension in the envelope
+    _server(monkeypatch, deferral_rows=lambda ids: json.dumps([consent, verb_only]))
+    assert await deferral_rows.read_deferral_rows(["att-c", "att-v"]) == [None, None]
+
+
+@pytest.mark.asyncio
+async def test_a_server_without_deferral_rows_cannot_read_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fold_on(monkeypatch)
+    _server(monkeypatch, emit_deferral_request=lambda *a: "att-1")
+    with pytest.raises(DeferralRowsUnavailable):
+        await deferral_rows.read_deferral_row("att-1")
+
+
+@pytest.mark.asyncio
+async def test_a_read_back_of_the_wrong_shape_is_an_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fold_on(monkeypatch)
+    _server(monkeypatch, deferral_rows=lambda ids: "[]")
+    with pytest.raises(DeferralRowRefused) as caught:
+        await deferral_rows.read_deferral_rows(["att-1"])
+    assert caught.value.refusal.kind is DeferralRowRefusalKind.OUTAGE

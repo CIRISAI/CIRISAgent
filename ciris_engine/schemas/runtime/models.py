@@ -63,6 +63,13 @@ class WAAuthorization(BaseModel):
             "node without rows, and on grants stored before #1316."
         ),
     )
+    request_attestation_id: Optional[str] = Field(
+        None,
+        description=(
+            "The deferral:request:v1 row this approval answers (CIRISAgent#1316). The amendment row names it, "
+            "so the node can check the approval answers THIS agent's deferral. None where response_attestation_id is."
+        ),
+    )
     verification: Literal["verified"] = Field(
         "verified",
         description="Only a verified approval can be represented; unsigned or failed ones grant nothing",

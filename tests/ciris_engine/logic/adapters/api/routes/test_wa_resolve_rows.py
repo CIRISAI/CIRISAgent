@@ -181,3 +181,32 @@ async def test_jurisdiction_is_checked_before_the_wa_signs(monkeypatch: pytest.M
         await h.resolve()
     assert caught.value.status_code == 403
     assert node.calls == [], "no row is signed for a resolution the caller has no jurisdiction over"
+
+
+# ------------------------------------------------------------ GET /v1/wa/rows/{id}
+
+
+@pytest.mark.asyncio
+async def test_a_row_reads_back_by_id_identified_by_its_dimension(monkeypatch: pytest.MonkeyPatch) -> None:
+    node = install_fake_node(monkeypatch, _node_with_request())
+    result = await wa.get_deferral_row("att-req", SimpleNamespace(user_id="x"))  # type: ignore[arg-type]
+    assert result.data.dimension == "deferral:request:v1"
+    assert result.data.attestation_type == "scores"
+    assert result.data.room_id and result.data.room_id.startswith("chat:pair:v1:")
+    assert node.calls_to("deferral_rows") == [(["att-req"],)]
+
+
+@pytest.mark.asyncio
+async def test_an_absent_row_is_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_fake_node(monkeypatch, _node_with_request())
+    with pytest.raises(HTTPException) as caught:
+        await wa.get_deferral_row("att-nope", SimpleNamespace(user_id="x"))  # type: ignore[arg-type]
+    assert caught.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_server_without_read_back_is_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_fake_node(monkeypatch, FakeNode(missing=("deferral_rows",)))
+    with pytest.raises(HTTPException) as caught:
+        await wa.get_deferral_row("att-req", SimpleNamespace(user_id="x"))  # type: ignore[arg-type]
+    assert caught.value.status_code == 503

@@ -72,6 +72,12 @@ def request_row_of(deferral_info: Dict[str, object]) -> Optional[DeferralRequest
         return None
 
 
+def _request_row_id(deferral_info: object) -> Optional[str]:
+    """The signed request row's id from a stored deferral record, when it has one."""
+    row = request_row_of(deferral_info) if isinstance(deferral_info, dict) else None
+    return row.attestation_id if row is not None and row.status is DeferralRowStatus.EMITTED else None
+
+
 class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
     """
     Wise Authority Service for authorization and guidance.
@@ -1074,6 +1080,8 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                         granted_at=now_iso,
                         guidance=response.reason or "",
                         response_attestation_id=response.response_attestation_id,
+                        # The request the response answers, from this deferral's own record.
+                        request_attestation_id=_request_row_id(deferral_info),
                     )
                     guidance_context_dict["wa_authorization"] = wa_authorization.model_dump(mode="json")
                 else:

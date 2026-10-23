@@ -106,6 +106,12 @@ class IdentityAmendment(BaseModel):
     wa_id: str = Field(..., description="The Wise Authority that approved it")
     deferral_id: str = Field(..., description="The deferral whose approval this is")
     granted_at: str = Field(..., description="ISO-8601 time the approval was applied")
+    response_attestation_id: Optional[str] = Field(
+        None, description="The Wise Authority's signed approval row it cites (CIRISAgent#1316), if any"
+    )
+    amendment_attestation_id: Optional[str] = Field(
+        None, description="The signed identity_amendment:v1 row for this change (CIRISAgent#1316), if any"
+    )
 
 
 class IdentityData(BaseModel):

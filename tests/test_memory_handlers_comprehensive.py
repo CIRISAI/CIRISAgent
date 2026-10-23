@@ -1248,3 +1248,87 @@ class TestIdentityAmendments:
         stored = bus.memorize.call_args.kwargs["node"]
         assert stored.attributes["content"] == "I mentor new moderators"
         assert stored.id.startswith("agent/identity/amendment/defer_abc/")
+
+
+# ============================================================================
+# The applied amendment as a signed row (CIRISAgent#1316)
+# ============================================================================
+
+
+def _approved_authorization(response_row: Optional[str] = "att-resp") -> WAAuthorization:
+    return _authorization().model_copy(update={"response_attestation_id": response_row})
+
+
+async def _memorize_identity(monkeypatch: Any, authorization: WAAuthorization) -> Any:
+    deps, persistence, bus, _ = setup_handler_mocks(monkeypatch, create_memory_op_result(status=MemoryOpStatus.SUCCESS))
+    node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, {"content": "I mentor new moderators"})
+    thought = create_test_thought()
+    ctx = create_dispatch_context(thought.thought_id, thought.source_task_id, wa_authorized=True)
+    ctx = ctx.model_copy(update={"wa_authorization": authorization})
+    await MemorizeHandler(deps).handle(_memorize_result(node), thought, ctx)
+    return bus, persistence
+
+
+class TestIdentityAmendmentRows:
+    """Where the node authors rows, an amendment stands only with its signed identity_amendment:v1 row."""
+
+    @pytest.mark.asyncio
+    async def test_the_amendment_row_is_signed_before_the_write_and_recorded_on_it(self, monkeypatch: Any) -> None:
+        import hashlib
+
+        from tests.fixtures.deferral_rows import install_fake_node
+
+        node = install_fake_node(monkeypatch)
+        bus, _ = await _memorize_identity(monkeypatch, _approved_authorization())
+
+        (args,) = node.calls_to("emit_identity_amendment")
+        assert args == (hashlib.sha256(b"I mentor new moderators").hexdigest(), "att-resp")
+        stored = bus.memorize.call_args.kwargs["node"]
+        assert stored.attributes["wa_amendment"]["amendment_attestation_id"] == node.rows[-1].attestation_id
+        assert stored.attributes["wa_amendment"]["response_attestation_id"] == "att-resp"
+        assert stored.attributes["wa_amendment"]["deferral_id"] == "defer_abc"
+
+    @pytest.mark.asyncio
+    async def test_an_amendment_the_node_does_not_authorize_never_stands(self, monkeypatch: Any) -> None:
+        from tests.fixtures.deferral_rows import FakeNode, install_fake_node
+
+        refusal = PermissionError("identity_amendment_unauthorized: att-resp is not deferral:response:approved:v1")
+        install_fake_node(monkeypatch, FakeNode(fail={"emit_identity_amendment": refusal}))
+        bus, persistence = await _memorize_identity(monkeypatch, _approved_authorization())
+
+        assert not bus.memorize.called, "refused BEFORE the write: nothing to roll back"
+        statuses = [c.kwargs.get("status") for c in persistence.update_thought_status.call_args_list]
+        assert ThoughtStatus.FAILED in statuses
+
+    @pytest.mark.asyncio
+    async def test_an_approval_without_a_response_row_cannot_amend_where_rows_exist(self, monkeypatch: Any) -> None:
+        from tests.fixtures.deferral_rows import install_fake_node
+
+        node = install_fake_node(monkeypatch)
+        bus, _ = await _memorize_identity(monkeypatch, _approved_authorization(response_row=None))
+
+        assert node.calls == [], "nothing to cite, so nothing is asked of the node"
+        assert not bus.memorize.called
+
+    @pytest.mark.asyncio
+    async def test_a_node_outage_refuses_the_amendment(self, monkeypatch: Any) -> None:
+        from tests.fixtures.deferral_rows import FakeNode, install_fake_node
+
+        install_fake_node(monkeypatch, FakeNode(fail={"emit_identity_amendment": RuntimeError("deferral.store: down")}))
+        bus, _ = await _memorize_identity(monkeypatch, _approved_authorization())
+        assert not bus.memorize.called
+
+    @pytest.mark.asyncio
+    async def test_a_node_without_rows_applies_the_approval_as_before(self, monkeypatch: Any) -> None:
+        from tests.fixtures.deferral_rows import FakeNode, install_fake_node
+
+        node = install_fake_node(
+            monkeypatch,
+            FakeNode(missing=("emit_deferral_request", "emit_deferral_response", "emit_identity_amendment")),
+        )
+        bus, _ = await _memorize_identity(monkeypatch, _approved_authorization(response_row=None))
+
+        assert node.calls == []
+        stored = bus.memorize.call_args.kwargs["node"]
+        assert stored.type == NodeType.IDENTITY_AMENDMENT
+        assert "amendment_attestation_id" not in stored.attributes["wa_amendment"]

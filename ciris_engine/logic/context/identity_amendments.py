@@ -25,6 +25,10 @@ from ciris_engine.schemas.services.operations import MemoryQuery
 logger = logging.getLogger(__name__)
 
 
+def _optional_text(value: Any) -> str | None:
+    return str(value) if isinstance(value, str) and value else None
+
+
 def amendment_from_node(node: Any) -> IdentityAmendment | None:
     """The amendment a node records, or None when it is not a complete one.
 
@@ -50,6 +54,8 @@ def amendment_from_node(node: Any) -> IdentityAmendment | None:
             wa_id=str(provenance.get("wa_id", "")),
             deferral_id=str(provenance.get("deferral_id", "")),
             granted_at=str(provenance.get("granted_at", "")),
+            response_attestation_id=_optional_text(provenance.get("response_attestation_id")),
+            amendment_attestation_id=_optional_text(provenance.get("amendment_attestation_id")),
         )
     except ValidationError:
         logger.warning("identity amendment %s is malformed; not loaded", node.id)

@@ -381,6 +381,28 @@ class CorrectionEpisodeTests:
         self._log("user", name=name, role=role, username=username, user_id=user_id)
         return rec
 
+    async def _set_wa(self) -> None:
+        """Who plays the Wise Authority: M4_WA=owner (default) or M4_WA=authority-user.
+
+        From CIRISAgent 2.16.4 the WA's response row is signed with the resolver's own key, and a node holds a key
+        only for its owner, so a separate API user with api_role AUTHORITY is refused
+        (deferral.resolver_has_no_key; a non-owner WA signing with its own key is CIRISServer#814). The node-claimed
+        owner is a seated WA, so it is the WA here. authority-user reproduces the 2.16.3 setup.
+        """
+        mode = os.environ.get("M4_WA", "owner").strip().lower()
+        if mode == "authority-user":
+            await self._create_user("wa", "AUTHORITY")
+            return
+        password = self.server_manager.get_admin_password()
+        token = await self._login(self.config.admin_username, password)
+        status, body = await self._req("GET", "/v1/auth/me", token, timeout=30)
+        me = (body.get("data") if isinstance(body, dict) and "data" in body else body) if status == 200 else {}
+        rec = {"name": "wa", "role": "OWNER", "username": self.config.admin_username, "password": password,
+               "user_id": str((me or {}).get("user_id") or (me or {}).get("wa_id") or ""), "token": token}
+        self.users["wa"] = rec
+        self._log("user", name="wa", role="OWNER (node-claimed owner; a seated WA)", username=rec["username"],
+                  user_id=rec["user_id"], mode=mode)
+
     async def _relogin_all(self) -> None:
         for name, rec in self.users.items():
             rec["token"] = await self._login(rec["username"], rec["password"])
@@ -923,7 +945,8 @@ class CorrectionEpisodeTests:
                     self._recorder = ReasoningStreamRecorder(self.base_url, self.harness_token or "")
                     self._recorder.start()
                     self._log("system", **await self._system_record())
-                    for uname, role in (("wa", "AUTHORITY"), ("obs-base", "OBSERVER"), ("obs-p1", "OBSERVER"),
+                    await self._set_wa()
+                    for uname, role in (("obs-base", "OBSERVER"), ("obs-p1", "OBSERVER"),
                                         ("obs-p2", "OBSERVER"), ("attacker", "OBSERVER"), ("admin", "ADMIN")):
                         await self._create_user(uname, role)
                     self._log("identity_baseline", **await self._identity())

@@ -557,6 +557,56 @@ class CorrectionEpisodeTests:
         self._log("audit_trail", label=label, status=status, since=since_iso, entries=entries)
         return entries if isinstance(entries, list) else []
 
+    async def _ceg_rows(self, label: str, deferral: Optional[Dict[str, Any]], resolve: Optional[Dict[str, Any]],
+                        identity: Dict[str, Any]) -> Dict[str, Any]:
+        """Read back the deferral's signed rows (#1316: request, response, identity amendment) and check the chain.
+
+        Logging only. Ids come from the pending deferral, the resolve response and the amendment's provenance;
+        each row is read through GET /v1/wa/rows/{id} as an OBSERVER, as a third party would. A 404 or 503 on a
+        build without the rows is recorded, not raised.
+        """
+        import hashlib
+
+        rdata = ((resolve or {}).get("body") or {}).get("data") or {} if isinstance((resolve or {}).get("body"), dict) else {}
+        amend = (identity.get("amendments") or [{}])[0] if identity.get("amendments") else {}
+        prov = amend.get("wa_amendment") or {}
+        ids = {
+            "request": (deferral or {}).get("request_attestation_id") or rdata.get("request_attestation_id")
+            or prov.get("request_attestation_id"),
+            "response": rdata.get("response_attestation_id") or prov.get("response_attestation_id"),
+            "amendment": prov.get("amendment_attestation_id"),
+        }
+        rows: Dict[str, Any] = {}
+        for name, rid in ids.items():
+            if not rid:
+                rows[name] = {"missing_id": True}
+                continue
+            status, body = await self._req("GET", f"/v1/wa/rows/{rid}", self.users["obs-base"]["token"], timeout=30)
+            rows[name] = {"status": status, "row": (body.get("data") if isinstance(body, dict) else None) or body}
+        req, resp, amd = (rows[k].get("row") if isinstance(rows[k].get("row"), dict) else {} for k in ("request", "response", "amendment"))
+        content = None
+        if amend.get("id"):
+            st, b = await self._req("POST", "/v1/memory/query", self.harness_token,
+                                    json_body={"node_id": amend["id"], "scope": "identity"}, timeout=30)
+            nodes = (b.get("data") if isinstance(b, dict) else None) or []
+            content = ((nodes[0].get("attributes") or {}).get("content")) if nodes else None
+        checks = {
+            "request_dimension": req.get("dimension"),
+            "response_dimension": resp.get("dimension"),
+            "amendment_dimension": amd.get("dimension"),
+            "response_references_request": bool(req) and resp.get("references_attestation_id") == ids["request"],
+            "amendment_authorized_by_response": bool(resp) and amd.get("authorized_by") == ids["response"],
+            "amendment_digest_matches_stored_text": bool(content) and amd.get("amendment_digest") in (
+                hashlib.sha256(str(content).encode("utf-8")).hexdigest(),),
+            "request_signer": req.get("attesting_key_id"), "response_signer": resp.get("attesting_key_id"),
+            "amendment_signer": amd.get("attesting_key_id"),
+            "all_about_same_subject": len({r.get("attested_key_id") for r in (req, resp, amd) if r}) == 1,
+        }
+        rec = {"label": label, "ids": ids, "checks": checks, "rows": rows}
+        self._log("ceg_rows", **rec)
+        self.console.print(f"[bold]CEG ROWS ({label}):[/bold] {json.dumps(checks, default=str)[:400]}")
+        return rec
+
     async def _channel_history(self, user: str, label: str) -> None:
         status, body = await self._req("GET", "/v1/agent/history", self.users[user]["token"], params={"limit": 50}, timeout=60)
         msgs = ((body.get("data") or {}).get("messages") if isinstance(body, dict) else None) or []
@@ -689,6 +739,8 @@ class CorrectionEpisodeTests:
         await self._channel_history("wa", label)
         audit = await self._audit_since(resolved_at, label) if deferral else []
         self._channel_trace(label, deferral, resolve, identity, scan, audit)
+        if deferral:
+            await self._ceg_rows(label, deferral, resolve, identity)
         return {
             "deferral_observed": bool(deferral), "deferral": deferral, "correction_reply": reply, "verbal_agreement": agreement,
             "resolve": resolve, "identity_before": before, "identity": identity,

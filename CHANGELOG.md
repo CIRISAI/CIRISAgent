@@ -5,7 +5,17 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.16.4-stable] - Unreleased
+## [2.16.5-stable] - 2026-10-23
+
+### Substrate
+
+- **ciris-server 0.5.235: a split install keeps its announce** (CIRISServer#816). The 0.5.189 key split moved the owner's binding onto the node key at self scope. An install that had announced before the split was therefore unreachable to the rest of the federation: contacts completed, but chat could never start ("resolves to no node in this directory", `peer_nodes=0`). Every boot now re-promotes the node key's binding to federation scope with the owner's pen, when the owner had announced. Already-split installs heal on their next boot. A private owner is never announced on their behalf. No API changes compared with 0.5.234; the substrate is unchanged.
+
+### iOS
+
+- **The iOS bundle carries the #1320 round-2 strings.** These are `prompts.wa_approval.none`, `handlers.memorize_identity_not_approved` and `handlers.action_record_identity_status_unchanged`, in all 29 locales. 2.16.4's `Resources.zip` was rebuilt before they landed.
+
+## [2.16.4-stable] - 2026-10-23
 
 ### Substrate
 

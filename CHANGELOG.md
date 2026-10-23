@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Substrate
 
+- **ciris-server 0.5.234** (tag v0.5.234 = CIRISServer 98c0b9cb):
+  - **The server side of #1316** (CIRISServer#815). The in-process `ciris_server.emit_deferral_request`, `emit_deferral_response` and `emit_identity_amendment` sign `deferral:request:v1`, `deferral:response:{approved|rejected}:v1` (with the resolver's own key) and `identity_amendment:v1`. All three rows sit in the room of the agent's conversation. The node refuses an amendment with `identity_amendment_unauthorized` unless the cited response meets four conditions: it is admitted and approved, it is about this agent and answers this deferral, and it is signed by the node owner. One approval authorises one amendment. `deferral_rows(ids)` reads the rows back from the node's own store. `owner_record()` returns the founding ROOT's record and `owner_of(node)`, which is what `GET /v1/users/{id}` answers for the node-claimed owner.
+  - **A staged owner-binding claims a node the owner's fedID was never on** (#811/#813). The owner's device signs the binding with `POST /v1/setup/sign-owner-binding`. The target applies it with `POST /v1/self/upgrade-owner`, and both calls are loopback only. The target refuses a node that is already owned and a binding for another node key. A node that is owned but has no binding warns once at boot.
+  - CSD/4 catalogue v5 (#810): each promise names the repo that realizes it. T7 gains `agent.deferral.pending/approved/rejected` and `agent.identity.amended`, and CIRISAgent realizes them.
+  - Substrate unchanged from 0.5.233 (edge v43.1.1, persist v59.1.0, verify v20.2.0). Client floor 0.5.230, met by the pinned 0.5.231.
 - **ciris-client 0.5.231.** One rate governor per agent host (CIRISClient#230). Harness fixes for nodes older than #808 and for wizard controls that register late (#232). Compose 1.7.3 fixes the iOS popup-dispose crash (#233), and the stale-click fix (#234). The client no longer sends the attachment-policy GET to agents older than 2.16.3, which ends the agent-to-node loop on 2.16.2 (#235). No test tags were added, renamed or removed. A desktop test click now waits up to 1 s for the frame after a preceding input.
 
 ### API

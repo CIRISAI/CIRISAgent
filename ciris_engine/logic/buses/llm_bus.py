@@ -186,6 +186,7 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
         prompt_bytes = len(prompt_text.encode("utf-8"))
         prompt_hash = hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
 
+        sent = ctx.usage.sampling if ctx.usage is not None else None
         response_text, completion_bytes = _serialize_response(ctx.result)
         status, error_class = _resolve_status_and_error_class(ctx.success, ctx.error)
 
@@ -216,6 +217,11 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
             prompt_bytes=prompt_bytes,
             completion_bytes=completion_bytes,
             cost_usd=cost_usd,
+            sent_temperature=sent.temperature if sent else None,
+            sent_seed=sent.seed if sent else None,
+            sent_max_tokens=sent.max_tokens if sent else None,
+            served_by=sent.served_by if sent else None,
+            served_model=sent.served_model if sent else None,
             duration_ms=float(ctx.duration_ms),
             status=status,
             error_class=error_class,

@@ -498,6 +498,12 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "prompt_bytes": _int(),
         "completion_bytes": _int(),
         "cost_usd": _num(),
+        "sent_temperature": _num(),
+        "sent_seed": _int(),
+        "sent_max_tokens": _int(),
+        # A router-reported company name ("Google AI Studio"): may hold spaces.
+        "served_by": _label(G, IDENTIFIER_MAX_CHARS),
+        "served_model": _tok(G, IDENTIFIER_MAX_CHARS),
         "status": _tok(),
         "error_class": _tok(G, IDENTIFIER_MAX_CHARS),
         "attempt_count": _int(),

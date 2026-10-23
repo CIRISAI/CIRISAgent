@@ -1570,6 +1570,14 @@ class LLMCallEvent(BaseModel):
     completion_bytes: Optional[int] = Field(None, ge=0, description="Output raw byte count")
     cost_usd: Optional[float] = Field(None, ge=0.0, description="Estimated cost in USD")
 
+    # Sampling the provider was actually sent, and who served it (None when
+    # the client path did not send it, or the call failed before a reply).
+    sent_temperature: Optional[float] = Field(None, description="Temperature sent; None if not sent")
+    sent_seed: Optional[int] = Field(None, description="Seed sent; None if not sent")
+    sent_max_tokens: Optional[int] = Field(None, ge=0, description="Output token cap sent")
+    served_by: Optional[str] = Field(None, description="Upstream provider that served the call (OpenRouter routing)")
+    served_model: Optional[str] = Field(None, description="Model the provider says served the call")
+
     # Timing
     duration_ms: float = Field(..., ge=0.0, description="Wall-clock duration of the call in milliseconds")
 

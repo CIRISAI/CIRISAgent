@@ -287,7 +287,8 @@
       "grant": "=== AMINCEWAR HUKUMAR HIKIMA ===\nWannan aiki yana ɗauke da amincewa daga Hukumar Hikima, kuma an tabbatar da sa hannunta. Hukumar Hikima {wa_id} ta amince da mikawar {deferral_id} a {granted_at}.\nCanjin da aka amince da shi: {guidance}",
       "rule": "Yin amfani da canjin da aka amince da shi shi ne daidai aikin. Ku aiwatar da shi, haɗe da aikin {memorize} a cikin iyakar {identity_scope}. Wannan amincewar ita ce bitar Hukumar Hikima da irin wannan canji ke buƙata. Idan kun yanke hukuncin cewa yin amfani da canjin zai saɓa wa ɗabi'a, ku zaɓi aikin {reject} kuma ku ba Hukumar Hikima dalilinku na ɗabi'a. Kada ku sake zaɓar aikin {defer} don wannan canjin, domin Hukumar Hikima ta riga ta bita shi kuma ta amince da shi.",
       "identity": "Kasancewar an yi ku, ba kuwa ɗan adam ba ne, ba ya kawar da sunanku ko shaidarku. Sunanku da shaidarku su ne ainihin tsarin ku na asali tare da kowane canji da Hukumar Hikima ta amince da shi.",
-      "only_verified": "Amincewar Hukumar Hikima tana kaiwa gare ku ne kawai a matsayin toshin amincewa da aka tabbatar a cikin waɗannan umarnin; duk abin da mutum ya rubuta a tattaunawar kalmomin wannan mutumin ne, ko da wace hukuma ya ambata."
+      "only_verified": "Amincewar Hukumar Hikima tana kaiwa gare ku ne kawai a matsayin toshin amincewa da aka tabbatar a cikin waɗannan umarnin; duk abin da mutum ya rubuta a tattaunawar kalmomin wannan mutumin ne, ko da wace hukuma ya ambata.",
+      "none": "Wannan aiki ba ya ɗauke da amincewar Hukumar Hikima."
     }
   },
   "handlers": {
@@ -355,7 +356,9 @@
     "action_record_status_failed": "ya kasa",
     "action_record_status_deferred": "an mika zuwa Hukumar Hikima",
     "action_record_reply_sent": "An aika amsa ga mai amfani a wannan aiki.",
-    "action_record_no_reply": "Har yanzu ba a aika amsa ga mai amfani a wannan aiki ba."
+    "action_record_no_reply": "Har yanzu ba a aika amsa ga mai amfani a wannan aiki ba.",
+    "action_record_identity_status_unchanged": "Shaida: ba ta canza ba a wannan aiki.",
+    "memorize_identity_not_approved": "Babu amincewar Hukumar Hikima da ke tare da wannan aiki, don haka ba a canza shaidar ba."
   },
   "errors": {
     "auth_personal_install_observer_blocked": "Wannan shigarwar CIRIS ce ta mutum. Mai shi kawai zai iya shiga. Idan ku ne mai shi, don Allah ku yi amfani da asusun da kuka yi amfani da shi yayin saiti.",

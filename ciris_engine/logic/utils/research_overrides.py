@@ -313,7 +313,11 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         # it may change is read beside (formatters/wa_approval.py).
         "prompts.wa_approval.grant",
         "prompts.wa_approval.identity",
-        # #1320: rendered ALWAYS in ASPDMA / PDMA / IDMA (never a conscience).
+        # #1320 round 2: rendered with no grant in ASPDMA / PDMA / IDMA / the
+        # memorize second pass (never a conscience).
+        "prompts.wa_approval.none",
+        # #1320: rendered ALWAYS in ASPDMA / PDMA / IDMA, and since round 2 the
+        # memorize second pass (never a conscience).
         "prompts.wa_approval.only_verified",
         "prompts.wa_approval.rule",
         # The parent key: a whole-block replacement, and it WINS over the parts

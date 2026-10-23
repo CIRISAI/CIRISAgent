@@ -17,6 +17,7 @@ import pytest
 from ciris_engine.logic.infrastructure.handlers.action_record import (
     MAX_RECORDED_ACTIONS,
     format_action_record,
+    identity_written,
     reply_sent,
 )
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies, BaseActionHandler
@@ -92,6 +93,37 @@ def test_a_failed_speak_is_not_a_reply() -> None:
     assert _s("handlers.action_record_status_failed") in format_action_record(thoughts, "en")
 
 
+IDENTITY_STATUS = "handlers.action_record_identity_status_unchanged"
+
+
+def test_a_task_that_only_pondered_and_spoke_states_the_identity_is_unchanged() -> None:
+    """#1320 round 2, s-001: a PONDER/SPEAK-only task said nothing about the identity."""
+    thoughts = [_thought("t1", "ponder"), _thought("t2", "speak")]
+    lines = format_action_record(thoughts, "en").split("\n")
+
+    assert not identity_written(thoughts)
+    assert lines.count(_s(IDENTITY_STATUS)) == 1
+    assert lines[-2] == _s(IDENTITY_STATUS) and lines[-1] == _s("handlers.action_record_reply_sent")
+
+
+def test_a_refused_identity_write_leaves_the_identity_unchanged() -> None:
+    thoughts = [_thought("t1", "memorize", ThoughtStatus.FAILED, params={"node": _node("agent/identity", "identity")})]
+    assert _s(IDENTITY_STATUS) in format_action_record(thoughts, "en")
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        _node("identity/name", "identity"),
+        {"id": "agent/identity/amendment/d/1", "type": "identity_amendment", "scope": "identity", "attributes": {}},
+    ],
+)
+def test_a_task_that_wrote_an_amendment_does_not_claim_unchanged(node: Dict[str, Any]) -> None:
+    thoughts = [_thought("t1", "memorize", params={"node": node}), _thought("t2", "speak")]
+    assert identity_written(thoughts)
+    assert _s(IDENTITY_STATUS) not in format_action_record(thoughts, "en")
+
+
 def test_thoughts_that_have_not_acted_are_left_out() -> None:
     pending = _thought("t1", "speak", ThoughtStatus.PENDING)
     assert format_action_record([pending], "en") == ""
@@ -101,7 +133,8 @@ def test_thoughts_that_have_not_acted_are_left_out() -> None:
 def test_the_record_is_capped() -> None:
     thoughts = [_thought(f"t{i}", "ponder") for i in range(MAX_RECORDED_ACTIONS + 5)]
     lines = format_action_record(thoughts, "en").split("\n")
-    assert len(lines) == MAX_RECORDED_ACTIONS + 2  # header + entries + reply line
+    # header + entries + identity line (#1320 round 2) + reply line
+    assert len(lines) == MAX_RECORDED_ACTIONS + 3
 
 
 def test_every_label_is_filled() -> None:

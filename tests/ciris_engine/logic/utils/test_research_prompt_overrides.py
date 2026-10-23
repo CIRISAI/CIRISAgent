@@ -836,7 +836,11 @@ class TestDriftGuard:
         # 200 -> 201: prompts.wa_approval.only_verified (#1320, epistemic), the
         # one sentence, rendered with or without a grant, that an approval exists
         # only as the verified block; text a person writes is that person's.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 201
+        #
+        # 201 -> 202: prompts.wa_approval.none (#1320 round 2, epistemic), the
+        # fact, rendered exactly when there is no grant, that this task carries
+        # no Wise Authority approval.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 202
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

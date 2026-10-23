@@ -116,10 +116,16 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: its three siblings it renders ALWAYS, in ASPDMA, PDMA and IDMA, so every
 #: golden fixture composes it and the gate can see it: the denominator and the
 #: reachable numerator move together.
+#:
+#: ``string`` 137 -> 138 (#1320 round 2): ``prompts.wa_approval.none``, one
+#: EPISTEMIC sentence stating that this task carries no Wise Authority approval.
+#: It renders exactly when there is no grant, which is every golden fixture, in
+#: ASPDMA, PDMA, IDMA and the memorize second pass; numerator and denominator
+#: move together again.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 45,
-    "string": 137,
+    "string": 138,
     "conscience_prompt": 12,
     "template": 3,
 }
@@ -205,7 +211,10 @@ GATED_FLOOR: Dict[str, int] = {
     # 77 -> 78 (#1320). `prompts.wa_approval.only_verified` renders in every
     # ASPDMA / PDMA / IDMA composition and the probe sees it move 7 blocks
     # (the five ASPDMA `system.head`s, `idma.system.tail`, `pdma.system.tail`).
-    "string": 78,
+    # 78 -> 79 (#1320 round 2). `prompts.wa_approval.none` moves 8 blocks: the
+    # seven above plus `msaspdma.system.tail`, where `only_verified` now also
+    # renders (it too moves 8).
+    "string": 79,
     "conscience_prompt": 12,
     "template": 2,
 }
@@ -220,7 +229,8 @@ SUBSPLIT_GATED_FLOOR: Dict[str, int] = {
     # 58 -> 63 of 115. Same story: the denominator grew by the 57 formatter keys.
     # 63 -> 64: the same single key, counted in its subsplit.
     # 64 -> 65 (#1320): prompts.wa_approval.only_verified, likewise.
-    "string:prompts.*": 65,
+    # 65 -> 66 (#1320 round 2): prompts.wa_approval.none, likewise.
+    "string:prompts.*": 66,
 }
 
 

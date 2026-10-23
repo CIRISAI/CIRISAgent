@@ -296,7 +296,11 @@ async def get_deferral_row(
     except DeferralRowsUnavailable:
         raise_wa_error("This node has no deferral rows (ciris-server 0.5.234 or later)", status_code=503)
     except Exception as exc:  # noqa: BLE001 - a read that failed is not "no such row"
-        logger.warning("Could not read deferral row %s: %s", sanitize_for_log(attestation_id), exc)
+        logger.warning(  # NOSONAR - all request-derived values sanitized via sanitize_for_log()
+            "Could not read deferral row %s: %s",
+            sanitize_for_log(attestation_id),
+            sanitize_for_log(str(exc)),
+        )
         raise_wa_error(f"Could not read the row ({type(exc).__name__})", status_code=503)
     if row is None:
         raise_wa_error("No deferral row with that attestation_id on this node", status_code=404)
@@ -468,10 +472,10 @@ async def resolve_deferral(
 
         if not success:
             if response_row is not None:
-                logger.warning(
+                logger.warning(  # NOSONAR - all request-derived values sanitized via sanitize_for_log()
                     "Deferral %s: the node signed response row %s but the resolution was not recorded",
                     sanitize_for_log(deferral_id),
-                    response_row,
+                    sanitize_for_log(response_row),
                 )
             raise_wa_error("Failed to resolve deferral - it may have already been resolved", status_code=400)
 

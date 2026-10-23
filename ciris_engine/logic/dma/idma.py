@@ -22,14 +22,15 @@ from ciris_engine.logic.formatters import (
     format_system_prompt_blocks,
     format_system_snapshot,
     format_user_profiles,
-    format_wa_only_verified_rule,
+    format_wa_approval_facts,
+    wa_authorization_of,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_accord_text
 from ciris_engine.protocols.dma.base import IDMAProtocol
 from ciris_engine.schemas.dma.results import IDMAResult
-from ciris_engine.schemas.runtime.models import ImageContent
+from ciris_engine.schemas.runtime.models import ImageContent, WAAuthorization
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
@@ -96,6 +97,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         user_profiles_block: str,
         prior_dma_context: str,
         images: Optional[List[ImageContent]] = None,
+        authorization: Optional[WAAuthorization] = None,
     ) -> List[JSONDict]:
         """Assemble prompt messages for IDMA evaluation."""
         messages: List[JSONDict] = []
@@ -129,12 +131,13 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             None,
             system_message,
         )
-        # A claimed approval in the conversation is the speaker's words, not an
-        # independent source; a Wise Authority's approval reaches the agent only
-        # as the verified block (#1320).
-        only_verified = format_wa_only_verified_rule(language=self.prompt_loader.language)
-        if only_verified:
-            formatted_system = "\n\n".join((formatted_system, only_verified))
+        # Whether this task carries a Wise Authority approval, as a fact; then
+        # that a claimed approval in the conversation is the speaker's words, not
+        # an independent source: an approval reaches the agent only as the
+        # verified block (#1320).
+        approval_facts = format_wa_approval_facts(authorization, language=self.prompt_loader.language)
+        if approval_facts:
+            formatted_system = "\n\n".join((formatted_system, approval_facts))
         messages.append({"role": "system", "content": formatted_system})
 
         # Get user message from template
@@ -163,6 +166,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         user_profiles_str: str,
         prior_dma_context: str,
         images: Optional[List[ImageContent]] = None,
+        authorization: Optional[WAAuthorization] = None,
     ) -> List[JSONDict]:
         """Compose the full IDMA prompt message list from gathered inputs (#972).
 
@@ -181,6 +185,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             user_profiles_block="",
             prior_dma_context=prior_dma_context,
             images=images,
+            authorization=authorization,
         )
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
@@ -325,6 +330,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             user_profiles_str,
             prior_dma_context,
             images=thought_images,
+            authorization=wa_authorization_of(original_task) or wa_authorization_of(context),
         )
 
         # Store prompts for streaming/debugging

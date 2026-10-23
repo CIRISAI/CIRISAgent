@@ -23,7 +23,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
-from ciris_engine.logic.formatters.wa_approval import format_wa_approval_block, wa_authorization_of
+from ciris_engine.logic.formatters.wa_approval import (
+    format_wa_approval_block,
+    format_wa_approval_facts,
+    wa_authorization_of,
+)
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
@@ -181,6 +185,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
 
         node = params.node
         attrs = node.attributes if isinstance(node.attributes, dict) else {}
+        authorization = wa_authorization_of(context)
 
         # Each block is composed as its OWN message so it stays single-class on
         # the wire. Bundling them back into one system string would recreate the
@@ -209,7 +214,12 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
                     # "Do not write to identity scope without Wise Authority
                     # approval" (memory_prohibitions) is decidable only if the
                     # approval is in front of it (formatters/wa_approval.py).
-                    format_wa_approval_block(wa_authorization_of(context), language=self.prompt_loader.language),
+                    format_wa_approval_block(authorization, language=self.prompt_loader.language),
+                    # With no grant, the fact that there is none (the no-grant
+                    # case rendered nothing here before, and a model filled the
+                    # gap with a person's claimed approval); then the rule that
+                    # an approval exists only as that verified block (#1320).
+                    format_wa_approval_facts(authorization, language=self.prompt_loader.language),
                 ),
             )
         ).strip()

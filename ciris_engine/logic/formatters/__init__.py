@@ -2,7 +2,13 @@
 
 from .crisis_resources import format_crisis_resources_block, get_crisis_resources_guidance
 from .escalation import get_escalation_guidance
-from .wa_approval import format_wa_approval_block, format_wa_only_verified_rule, wa_authorization_of
+from .wa_approval import (
+    format_wa_approval_block,
+    format_wa_approval_facts,
+    format_wa_no_approval_fact,
+    format_wa_only_verified_rule,
+    wa_authorization_of,
+)
 from .identity import amendment_texts, describe_with_amendments, format_agent_identity, format_core_identity_block
 from .prompt_blocks import (
     format_parent_task_chain,
@@ -21,6 +27,8 @@ __all__ = [
     "describe_with_amendments",
     "format_agent_identity",
     "format_wa_approval_block",
+    "format_wa_approval_facts",
+    "format_wa_no_approval_fact",
     "format_wa_only_verified_rule",
     "wa_authorization_of",
     "format_core_identity_block",

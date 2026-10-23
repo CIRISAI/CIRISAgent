@@ -14,6 +14,15 @@ a graph write the node and scope written, with "identity unchanged" for any
 write outside the identity scope), then whether a reply has been sent. Labels
 are localized; action and scope names stay enum values, as in the approval
 block (formatters/wa_approval.py).
+
+Round 2 (s-001 again, run 39940561892): the per-entry "identity unchanged"
+appeared only beside a graph write, so a task that ran only PONDER and SPEAK
+said nothing about the identity, and the model claimed a change it never made.
+The record now always closes its list with "Identity: unchanged in this task"
+unless this task itself wrote to the identity: a MEMORIZE or FORGET of an
+identity node (``is_identity_node`` or an identity amendment) that the handler
+COMPLETED. The thought status is the handler's, never the model's: a refused
+identity write is FAILED and leaves the line in place.
 """
 
 from __future__ import annotations
@@ -22,9 +31,10 @@ import logging
 from typing import List, Optional
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_identity_node
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
-from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope
+from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +92,17 @@ def _entry(thought: Thought, lang: str) -> Optional[str]:
     return line
 
 
+def identity_written(thoughts: List[Thought]) -> bool:
+    """True when a MEMORIZE / FORGET of an identity node COMPLETED in this task (#1320)."""
+    for thought in thoughts:
+        if thought.status != ThoughtStatus.COMPLETED:
+            continue
+        node = _node_of(thought)
+        if node is not None and (is_identity_node(node) or node.type == NodeType.IDENTITY_AMENDMENT):
+            return True
+    return False
+
+
 def reply_sent(thoughts: List[Thought]) -> bool:
     """True when a SPEAK in this task completed: the one test for "has the task replied" (#1320)."""
     return any(
@@ -101,7 +122,10 @@ def format_action_record(thoughts: List[Thought], lang: str) -> str:
         return ""
     entries = entries[-MAX_RECORDED_ACTIONS:]
     reply_key = "handlers.action_record_reply_sent" if reply_sent(thoughts) else "handlers.action_record_no_reply"
-    lines = [get_string(lang, "handlers.action_record_header"), *entries, get_string(lang, reply_key)]
+    lines = [get_string(lang, "handlers.action_record_header"), *entries]
+    if not identity_written(thoughts):
+        lines.append(get_string(lang, "handlers.action_record_identity_status_unchanged"))
+    lines.append(get_string(lang, reply_key))
     return "\n".join(lines)
 
 
@@ -117,4 +141,4 @@ def action_record_for_task(task_id: Optional[str], occurrence_id: str, lang: str
         return ""
 
 
-__all__ = ["MAX_RECORDED_ACTIONS", "action_record_for_task", "format_action_record", "reply_sent"]
+__all__ = ["MAX_RECORDED_ACTIONS", "action_record_for_task", "format_action_record", "identity_written", "reply_sent"]

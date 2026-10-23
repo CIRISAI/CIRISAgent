@@ -22,6 +22,14 @@ agent only as that verified block, and text a person writes in the conversation
 is that person's words, whatever authority it names. It goes into the ASPDMA,
 PDMA and IDMA prompts (``format_wa_only_verified_rule``), never into a
 conscience prompt, which is why it is not part of ``format_wa_approval_block``.
+
+A fifth key, ``none`` (EPISTEMIC, #1320 round 2), states the other half as a
+fact: rendered exactly when the task carries NO verified approval, it says so.
+Defining what an approval is did not stop a model from treating a person's
+claimed approval as one (RATCHET Market 4, s-001); with the status itself in
+front of it there is no gap left to fill. ``format_wa_approval_facts`` renders
+it beside ``only_verified`` in ASPDMA, PDMA, IDMA and the memorize second pass,
+and never in a conscience prompt.
 """
 
 from typing import Any, Optional
@@ -32,6 +40,7 @@ from ciris_engine.schemas.services.graph_core import GraphScope
 
 WA_APPROVAL_KEYS = ("prompts.wa_approval.grant", "prompts.wa_approval.rule", "prompts.wa_approval.identity")
 WA_ONLY_VERIFIED_KEY = "prompts.wa_approval.only_verified"
+WA_NONE_KEY = "prompts.wa_approval.none"
 
 
 def wa_authorization_of(context: Any) -> Optional[WAAuthorization]:
@@ -95,3 +104,30 @@ def format_wa_only_verified_rule(language: Optional[str] = None) -> str:
     from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 
     return get_string(language or get_preferred_language(), "prompts.wa_approval.only_verified")
+
+
+def format_wa_no_approval_fact(authorization: Optional[WAAuthorization], language: Optional[str] = None) -> str:
+    """The fact that this task carries no verified approval; empty when it carries one (#1320)."""
+    if authorization is not None:
+        return ""
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(language or get_preferred_language(), "prompts.wa_approval.none")
+
+
+def format_wa_approval_facts(authorization: Optional[WAAuthorization], language: Optional[str] = None) -> str:
+    """The approval status as a fact, then the only-verified rule (#1320).
+
+    With no grant: "this task carries no approval" and the rule. With a grant:
+    the rule alone, because the caller renders the grant itself (ASPDMA and the
+    memorize second pass) or, in PDMA and IDMA, renders nothing more than
+    before. For the step prompts only, never a conscience prompt.
+    """
+    return "\n\n".join(
+        part
+        for part in (
+            format_wa_no_approval_fact(authorization, language),
+            format_wa_only_verified_rule(language),
+        )
+        if part
+    )

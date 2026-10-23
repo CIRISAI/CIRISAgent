@@ -977,6 +977,8 @@ class StreamingVerificationModule:
                                         "final_action",
                                         "final_reasoning",
                                         "verb_specific_data",
+                                        # The #1320 gate's refusal of an unapproved identity MEMORIZE
+                                        "refused_without_wa_approval",
                                         "second_pass_prompt",
                                         "second_pass_system_prompt",
                                     },

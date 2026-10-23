@@ -912,6 +912,7 @@ class ThoughtProcessor(
                 "final_node_id": None,
                 "refused_without_wa_approval": True,
             },
+            refused_without_wa_approval=True,
         )
         return refused
 
@@ -1067,6 +1068,7 @@ class ThoughtProcessor(
         original_reasoning: str,
         second_pass_result: ActionSelectionDMAResult,
         verb_specific_data: Dict[str, Any],
+        refused_without_wa_approval: Optional[bool] = None,
     ) -> None:
         """Emit VERB_SECOND_PASS_RESULT — the generic verb-second-pass event.
 
@@ -1105,6 +1107,9 @@ class ThoughtProcessor(
                 final_action=second_pass_result.selected_action.value,
                 final_reasoning=second_pass_result.rationale or "",
                 verb_specific_data=verb_specific_data,
+                # The #1320 gate's refusal, as a typed field of its own: the
+                # opaque payload alone did not survive to the trace (#1320).
+                refused_without_wa_approval=refused_without_wa_approval,
                 # The prompts the second pass was sent. MSASPDMA's system guide
                 # carries the WA approval on an approved identity change, so
                 # without these the trace could not show what it decided on.

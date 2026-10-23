@@ -2099,6 +2099,8 @@ class AccordMetricsService:
                 # serialized whole, ordered/decoded by `verb` discriminator
                 # at query time. Lens may project verb-specific columns later.
                 "verb_specific_data": _serialize(event.get("verb_specific_data", {})),
+                # The #1320 gate's refusal: a code-set boolean, GENERIC.
+                "refused_without_wa_approval": event.get("refused_without_wa_approval"),
             }
             # DETAILED: Add reasoning text
             if is_detailed:

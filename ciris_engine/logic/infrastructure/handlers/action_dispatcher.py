@@ -518,6 +518,14 @@ class ActionDispatcher:
         # Determine outcome by checking the thought's final status
         # The handler updates the thought status to FAILED if execution fails
         outcome = "success"
+        # The handler's verdict on its own act, read from the status it wrote.
+        # A FAILED thought is an act that did not happen (a refused identity
+        # MEMORIZE, a denied FORGET, a TOOL that errored), and ACTION_RESULT
+        # must say so: it once read success=True over a refusal the action
+        # record reported as failed (#1320). REJECT is the exception by
+        # meaning, not by bypass: FAILED is how REJECT records the thought it
+        # rejected, and the rejection itself was carried out.
+        handler_failed = False
         try:
             updated_thought = persistence.get_thought_by_id(
                 thought.thought_id, occurrence_id=thought.agent_occurrence_id
@@ -525,6 +533,7 @@ class ActionDispatcher:
             if updated_thought and updated_thought.status == ThoughtStatus.FAILED:
                 # Extract error message from follow-up info if available
                 outcome = f"failure:{action_type.value}"
+                handler_failed = action_type != HandlerActionType.REJECT
                 logger.info(f"Thought {thought.thought_id} marked as FAILED, audit outcome: {outcome}")
         except Exception as e:
             logger.warning(f"Could not check thought status for audit outcome: {e}")
@@ -591,13 +600,16 @@ class ActionDispatcher:
         # Build response
         action_params_dict = self._extract_action_params_dict(final_action_result)
         dispatch_result = ActionResponse(
-            success=True,
+            success=not handler_failed,
             handler=handler.__class__.__name__,
             action_type=action_type.value,
             follow_up_thought_id=follow_up_thought_id,
             execution_time_ms=execution_time_ms,
             action_parameters=action_params_dict,
             audit_data=audit_result,
+            error=(
+                self._handler_failure_reason(action_type, thought, follow_up_thought_id) if handler_failed else None
+            ),
         )
 
         # Extract coherence data from conscience result for CIRISLens trace propagation
@@ -607,6 +619,31 @@ class ActionDispatcher:
         await self._record_handler_completion(action_type)
 
         return dispatch_result
+
+    @staticmethod
+    def _handler_failure_reason(
+        action_type: HandlerActionType, thought: Thought, follow_up_thought_id: Optional[str]
+    ) -> str:
+        """Why the handler failed its act, for ACTION_RESULT.error.
+
+        The handler states the reason as the first paragraph of the follow-up it
+        writes ("MEMORIZE action failed: WA authorization required ..."); the
+        action record and guidance it appends come after a blank line. With no
+        follow-up, the reason is the status itself.
+        """
+        fallback = f"{action_type.value}: the handler marked thought {thought.thought_id} FAILED"
+        if not follow_up_thought_id:
+            return fallback
+        try:
+            follow_up = persistence.get_thought_by_id(follow_up_thought_id, occurrence_id=thought.agent_occurrence_id)
+        except Exception as e:  # noqa: BLE001 - the failure stands; only its wording is lost
+            logger.warning(f"Could not read follow-up {follow_up_thought_id} for the failure reason: {e}")
+            return fallback
+        content = (getattr(follow_up, "content", "") or "").strip()
+        reason = content.split("\n\n", 1)[0].strip()
+        if not reason:
+            return fallback
+        return reason if len(reason) <= 500 else reason[:500] + "..."
 
     async def _handle_execution_error(
         self,

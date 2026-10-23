@@ -1385,6 +1385,17 @@ class VerbSecondPassResultEvent(BaseModel):
         description="Verb-specific second-pass data. Shape depends on `verb`. See class docstring.",
     )
 
+    # The pipeline's own refusal of an identity-scope MEMORIZE that no verified
+    # Wise Authority approval covers (#1320). Set by code before the second
+    # pass runs, never by a model; None on every event the gate did not decide.
+    refused_without_wa_approval: Optional[bool] = Field(
+        None,
+        description=(
+            "True when an identity-scope MEMORIZE was refused, before the second pass, for want of a "
+            "verified Wise Authority approval (#1320). None when the gate did not refuse."
+        ),
+    )
+
     # User prompt passed to the verb-specific evaluator (debugging/transparency)
     second_pass_prompt: Optional[str] = Field(None, description="User prompt passed to the second-pass evaluator")
     second_pass_system_prompt: Optional[str] = Field(

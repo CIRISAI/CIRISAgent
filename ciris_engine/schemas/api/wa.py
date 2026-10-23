@@ -41,6 +41,12 @@ class ResolveDeferralResponse(BaseModel):
     success: bool = Field(..., description="Whether resolution succeeded")
     deferral_id: str = Field(..., description="ID of resolved deferral")
     resolved_at: datetime = Field(..., description="When deferral was resolved")
+    request_attestation_id: Optional[str] = Field(
+        None, description="The deferral:request:v1 row this answer references, if the node signed one (#1316)"
+    )
+    response_attestation_id: Optional[str] = Field(
+        None, description="The Wise Authority's signed deferral:response row, if the node authors rows (#1316)"
+    )
 
 
 class PermissionsListResponse(BaseModel):

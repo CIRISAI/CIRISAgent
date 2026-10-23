@@ -155,3 +155,17 @@ def test_several_authored_attributes_render_in_key_order():
     from ciris_engine.logic.infrastructure.handlers.shared_helpers import amendment_text
 
     assert amendment_text({"tone": "warm", "focus": "mentoring", "updated_at": "x"}) == "focus: mentoring; tone: warm"
+
+
+def test_an_amendment_reads_back_its_signed_rows():
+    """#1316: the ids of the approval row it cites and its own identity_amendment:v1 row."""
+    node = _amendment_node("s", "signed", "2026-10-22T04:00:00Z")
+    node.attributes["wa_amendment"].update(
+        {"response_attestation_id": "att-resp", "amendment_attestation_id": "att-amend"}
+    )
+    amendment = ia.amendment_from_node(node)
+    assert amendment is not None
+    assert amendment.response_attestation_id == "att-resp"
+    assert amendment.amendment_attestation_id == "att-amend"
+    unsigned = ia.amendment_from_node(_amendment_node("u", "unsigned", "2026-10-22T04:00:00Z"))
+    assert unsigned is not None and unsigned.amendment_attestation_id is None

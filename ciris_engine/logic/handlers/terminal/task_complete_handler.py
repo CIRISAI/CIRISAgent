@@ -252,18 +252,36 @@ class TaskCompleteHandler(BaseActionHandler):
             await self._handle_completion_notification(task, task_id)
 
     async def _handle_completion_notification(self, task: Task, task_id: str) -> None:
-        """Send notification for API channel completions with unhandled updates.
+        """Tell an API channel how the task ended when the agent did not say so itself.
 
-        Note: Silent completion (without SPEAK) is expected behavior when tool actions
-        are performed. We only notify when new messages arrived that weren't addressed.
+        - Completed without any reply (#1320): a localized notice is sent under
+          this task's reasoning scope, so the API adapter hands it only to an
+          interact() request this task owns, and that request returns at once
+          with outcome ``completed_without_reply`` instead of waiting out its
+          whole window. Completing without speaking is still allowed (a tool or
+          memory action can be the whole answer); it is just no longer silent.
+        - Replied, but new messages arrived that were not addressed: the
+          existing notice.
         """
         if not is_api_channel(task.channel_id):
+            return
+
+        from ciris_engine.logic.infrastructure.handlers.action_record import reply_sent
+
+        thoughts = persistence.get_thoughts_by_task_id(task_id, task.agent_occurrence_id)
+        if not reply_sent(thoughts):
+            from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+            lang = task.preferred_language or get_preferred_language()
+            self.logger.info(
+                f"Task {task_id} completed without a reply on API channel {task.channel_id} - releasing its request"
+            )
+            await self._send_notification(task.channel_id, get_string(lang, "agent.completed_without_reply"))
             return
 
         has_unhandled_updates = getattr(task, "updated_info_available", False)
 
         # Only notify if there are unhandled updates (new messages arrived during processing)
-        # Silent completion without speaking is expected behavior - tool actions are shown in timeline
         if not has_unhandled_updates:
             return
 

@@ -51,7 +51,7 @@ from ciris_engine.protocols.services.runtime.llm import MessageDict
 from ciris_engine.schemas.config.llm_budget import ProviderClass
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.protocols_core import LLMStatus, LLMUsageStatistics
-from ciris_engine.schemas.runtime.resources import ResourceUsage
+from ciris_engine.schemas.runtime.resources import LLMCallSampling, ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from ciris_engine.schemas.services.core import ServiceCapabilities
 from ciris_engine.schemas.services.llm import (
@@ -1961,7 +1961,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 _call_duration = _time.monotonic() - _call_start
                 logger.info(f"[LLM_REQUEST] Instructor call completed in {_call_duration:.2f}s")
                 self._log_completion_details(completion, image_count, thought_id)
-                return await self._process_successful_response(response, completion)
+                sent = self._sampling_sent(temp, max_toks, seed_param.get("seed"), completion)
+                return await self._process_successful_response(response, completion, sent)
 
             except AuthenticationError as e:
                 self._handle_auth_error(e)
@@ -2335,8 +2336,35 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if provider_name and "openrouter.ai" in base_url:
             logger.info(f"[OPENROUTER] SUCCESS - Provider: {provider_name}, Model: {self.model_name}")
 
+    def _sampling_sent(
+        self, temperature: float, max_tokens: int, seed: Optional[int], completion: Any
+    ) -> LLMCallSampling:
+        """What this call put on the wire, per client path, and who served it.
+
+        Claude over HTTPS (``AnthropicHTTPInstructor``) sends no temperature
+        and no seed; Gemini takes temperature and max tokens in its
+        generation_config and is never sent a seed. Every other path sends all
+        three as given (seed only when ``CIRIS_LLM_SEED`` is set).
+        """
+        from .anthropic_http import AnthropicHTTPInstructor
+
+        if isinstance(self.instruct_client, AnthropicHTTPInstructor):
+            temperature_sent: Optional[float] = None
+            seed = None
+        else:
+            temperature_sent = temperature
+        served_by = getattr(completion, "provider", None)
+        served_model = getattr(completion, "model", None)
+        return LLMCallSampling(
+            temperature=temperature_sent,
+            seed=seed,
+            max_tokens=max_tokens,
+            served_by=served_by if isinstance(served_by, str) and served_by else None,
+            served_model=served_model if isinstance(served_model, str) and served_model else None,
+        )
+
     async def _process_successful_response(
-        self, response: BaseModel, completion: Any
+        self, response: BaseModel, completion: Any, sent: Optional[LLMCallSampling] = None
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Process a successful LLM response and return usage data."""
         self.circuit_breaker.record_success()
@@ -2363,6 +2391,9 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             completion_tokens=completion_tokens,
             provider_name="openai",
         )
+
+        if sent is not None:
+            usage_obj = usage_obj.model_copy(update={"sampling": sent})
 
         self._total_input_tokens += prompt_tokens
         self._total_output_tokens += completion_tokens

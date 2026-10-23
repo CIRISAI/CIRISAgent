@@ -119,6 +119,9 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "prohibition",
         "pdma_ethical.system_guidance_header",
         "pdma_ethical.system_guidance_header.slots",
+        # #1320: `prompts.wa_approval.only_verified` follows the composed system
+        # message, joined by the composer, so it reports as named residue.
+        "system.tail",
         "pdma_ethical.context_integration",
         "pdma_ethical.context_integration.slots",
     ]

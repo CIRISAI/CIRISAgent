@@ -477,7 +477,8 @@ class TestUserProfileEnrichment:
         user_789012 = next((p for p in snapshot.user_profiles if p.user_id == "789012"), None)
         assert user_789012 is not None
         assert user_789012.display_name == "AdminUser"
-        assert user_789012.is_wa is True
+        # A stored is_wa is not evidence: with no verified WA role, not a WA (#1320).
+        assert user_789012.is_wa is False
 
         user_555555 = next((p for p in snapshot.user_profiles if p.user_id == "555555"), None)
         assert user_555555 is not None

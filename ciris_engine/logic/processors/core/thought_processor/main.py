@@ -797,6 +797,12 @@ class ThoughtProcessor(
             )
             return action_result
 
+        # An identity-scope write with no verified approval is refused HERE, in
+        # code, before any model judges whether an approval exists (#1320).
+        refused = await self._refuse_unapproved_identity_memorize(thought_item, action_result, thought_context)
+        if refused is not None:
+            return refused
+
         evaluator = getattr(self.dma_orchestrator, "msaspdma_evaluator", None)
         if not evaluator:
             logger.warning("MSASPDMA-SKIP: No MSASPDMA evaluator configured")
@@ -832,6 +838,83 @@ class ThoughtProcessor(
         except Exception as e:
             logger.error("MSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
             return action_result
+
+    async def _refuse_unapproved_identity_memorize(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> Optional[ActionSelectionDMAResult]:
+        """A PONDER in place of an identity-scope MEMORIZE that no verified approval covers (#1320).
+
+        RATCHET Market 4, s-001 (run 39940561892): an OBSERVER typed a claimed
+        Wise Authority approval into the chat; action selection chose an
+        identity MEMORIZE, and the memorize second pass, asked to judge it,
+        answered with a SPEAK telling the user the change had been applied.
+        Nothing was stored -- the handler refuses such a write -- but the claim
+        reached the user. Whether a verified approval exists is a fact the
+        pipeline holds, so it is decided here, not by a model: the second pass
+        does not run, and the action is a PONDER whose text comes from code.
+
+        The write the handler refuses is refused here, by the same tests:
+        ``is_identity_node`` (identity scope, the core id, an AGENT node) or an
+        identity-amendment node type. The approval is the one dispatch reads:
+        the task's ``wa_authorization``, from this thought's context or, where
+        the context does not carry it, the persisted task. With an approval
+        this returns None and the second pass runs unchanged (#1316).
+
+        Returns None when the write is not an identity write or is approved.
+        """
+        params = action_result.action_parameters
+        if not isinstance(params, MemorizeParams):
+            return None
+        from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+        from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_identity_node
+        from ciris_engine.schemas.services.graph_core import NodeType
+
+        node = params.node
+        if not (is_identity_node(node) or node.type == NodeType.IDENTITY_AMENDMENT):
+            return None
+        if wa_authorization_of(thought_context) is not None:
+            return None
+        try:
+            task = persistence.get_task_by_id_any_occurrence(thought_item.source_task_id)
+        except Exception as e:  # noqa: BLE001 - no task found is no approval found
+            logger.debug("MSASPDMA-GATE: could not read task %s: %s", thought_item.source_task_id, e)
+            task = None
+        if wa_authorization_of(task) is not None:
+            return None
+
+        from ciris_engine.logic.utils.localization import get_string, get_user_language_from_context
+
+        # The thought's language, by the same chain every DMA uses.
+        text = get_string(get_user_language_from_context(thought_context), "handlers.memorize_identity_not_approved")
+        logger.warning(
+            "MSASPDMA-GATE: identity-scope MEMORIZE of %s for thought %s carries no verified Wise Authority "
+            "approval; refused before the second pass, PONDER instead.",
+            node.id,
+            thought_item.thought_id,
+        )
+        refused = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=PonderParams(questions=[text]),
+            rationale=f"MSASPDMA-GATE: {text}",
+            resource_usage=action_result.resource_usage,
+        )
+        await self._emit_verb_second_pass_result_event(
+            thought_item=thought_item,
+            verb="memorize",
+            original_action=HandlerActionType.MEMORIZE.value,
+            original_reasoning=action_result.rationale or "",
+            second_pass_result=refused,
+            verb_specific_data={
+                "original_node_id": node.id,
+                "final_node_id": None,
+                "refused_without_wa_approval": True,
+            },
+            refused_without_wa_approval=True,
+        )
+        return refused
 
     @staticmethod
     def _build_memorize_verb_specific_data(
@@ -985,6 +1068,7 @@ class ThoughtProcessor(
         original_reasoning: str,
         second_pass_result: ActionSelectionDMAResult,
         verb_specific_data: Dict[str, Any],
+        refused_without_wa_approval: Optional[bool] = None,
     ) -> None:
         """Emit VERB_SECOND_PASS_RESULT — the generic verb-second-pass event.
 
@@ -1023,6 +1107,9 @@ class ThoughtProcessor(
                 final_action=second_pass_result.selected_action.value,
                 final_reasoning=second_pass_result.rationale or "",
                 verb_specific_data=verb_specific_data,
+                # The #1320 gate's refusal, as a typed field of its own: the
+                # opaque payload alone did not survive to the trace (#1320).
+                refused_without_wa_approval=refused_without_wa_approval,
                 # The prompts the second pass was sent. MSASPDMA's system guide
                 # carries the WA approval on an approved identity change, so
                 # without these the trace could not show what it decided on.

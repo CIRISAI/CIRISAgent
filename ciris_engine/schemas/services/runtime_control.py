@@ -1385,6 +1385,17 @@ class VerbSecondPassResultEvent(BaseModel):
         description="Verb-specific second-pass data. Shape depends on `verb`. See class docstring.",
     )
 
+    # The pipeline's own refusal of an identity-scope MEMORIZE that no verified
+    # Wise Authority approval covers (#1320). Set by code before the second
+    # pass runs, never by a model; None on every event the gate did not decide.
+    refused_without_wa_approval: Optional[bool] = Field(
+        None,
+        description=(
+            "True when an identity-scope MEMORIZE was refused, before the second pass, for want of a "
+            "verified Wise Authority approval (#1320). None when the gate did not refuse."
+        ),
+    )
+
     # User prompt passed to the verb-specific evaluator (debugging/transparency)
     second_pass_prompt: Optional[str] = Field(None, description="User prompt passed to the second-pass evaluator")
     second_pass_system_prompt: Optional[str] = Field(
@@ -1569,6 +1580,14 @@ class LLMCallEvent(BaseModel):
     prompt_bytes: Optional[int] = Field(None, ge=0, description="Input raw byte count")
     completion_bytes: Optional[int] = Field(None, ge=0, description="Output raw byte count")
     cost_usd: Optional[float] = Field(None, ge=0.0, description="Estimated cost in USD")
+
+    # Sampling the provider was actually sent, and who served it (None when
+    # the client path did not send it, or the call failed before a reply).
+    sent_temperature: Optional[float] = Field(None, description="Temperature sent; None if not sent")
+    sent_seed: Optional[int] = Field(None, description="Seed sent; None if not sent")
+    sent_max_tokens: Optional[int] = Field(None, ge=0, description="Output token cap sent")
+    served_by: Optional[str] = Field(None, description="Upstream provider that served the call (OpenRouter routing)")
+    served_model: Optional[str] = Field(None, description="Model the provider says served the call")
 
     # Timing
     duration_ms: float = Field(..., ge=0.0, description="Wall-clock duration of the call in milliseconds")

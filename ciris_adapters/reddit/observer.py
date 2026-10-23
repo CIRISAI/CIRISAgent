@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import httpx
 
-from ciris_engine.logic.adapters.base_observer import BaseObserver, detect_and_replace_spoofed_markers
+from ciris_engine.logic.adapters.base_observer import BaseObserver
 from ciris_engine.logic.buses import BusManager
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -341,12 +341,11 @@ class RedditObserver(BaseObserver[RedditMessage]):
         return True
 
     async def _enhance_message(self, msg: RedditMessage) -> RedditMessage:
-        """Apply Reddit-specific content hardening before processing."""
+        """Surface Reddit permalink metadata before processing.
 
-        cleaned = detect_and_replace_spoofed_markers(msg.content)
-        if cleaned != msg.content:
-            msg.content = cleaned
-
+        Spoofed markers are replaced for every adapter by
+        BaseObserver.handle_incoming_message (#1320).
+        """
         # Surface permalink metadata for downstream context builders
         if msg.permalink:
             setattr(msg, "permalink_url", msg.permalink)

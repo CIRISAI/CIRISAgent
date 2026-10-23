@@ -2099,6 +2099,8 @@ class AccordMetricsService:
                 # serialized whole, ordered/decoded by `verb` discriminator
                 # at query time. Lens may project verb-specific columns later.
                 "verb_specific_data": _serialize(event.get("verb_specific_data", {})),
+                # The #1320 gate's refusal: a code-set boolean, GENERIC.
+                "refused_without_wa_approval": event.get("refused_without_wa_approval"),
             }
             # DETAILED: Add reasoning text
             if is_detailed:
@@ -2242,6 +2244,12 @@ class AccordMetricsService:
                 "prompt_bytes": event.get("prompt_bytes"),
                 "completion_bytes": event.get("completion_bytes"),
                 "cost_usd": event.get("cost_usd"),
+                # Repeatability: the sampling actually sent, and who served it.
+                "sent_temperature": event.get("sent_temperature"),
+                "sent_seed": event.get("sent_seed"),
+                "sent_max_tokens": event.get("sent_max_tokens"),
+                "served_by": event.get("served_by"),
+                "served_model": event.get("served_model"),
                 "status": event.get("status"),
                 "error_class": event.get("error_class"),
                 "attempt_count": event.get("attempt_count", 1),

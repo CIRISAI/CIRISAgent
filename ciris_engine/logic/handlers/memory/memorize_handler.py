@@ -10,6 +10,7 @@ from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHa
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.logic.infrastructure.handlers.helpers import create_follow_up_thought
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
+    amendment_text,
     as_identity_amendment,
     check_managed_attributes,
     create_config_node,
@@ -19,14 +20,27 @@ from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
     is_identity_amendment_candidate,
     is_identity_node,
     is_user_node,
+    serialize_attributes_to_json,
     validate_config_node,
 )
 from ciris_engine.logic.services.governance.consent import ConsentService
+from ciris_engine.logic.services.governance.wise_authority.deferral_rows import (
+    DeferralRowRefused,
+    DeferralRowsUnavailable,
+    emit_identity_amendment,
+    rows_available,
+)
 from ciris_engine.schemas.actions import DreamConsolidationParams, MemorizeParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
-from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.models import Thought, WAAuthorization
+from ciris_engine.schemas.services.authority.deferral_rows import (
+    REASON_NO_REQUEST_ROW,
+    REASON_NO_RESPONSE_ROW,
+    REASON_RESPONSE_ALREADY_USED,
+    DeferralRowRefusalKind,
+)
 from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
 from ciris_engine.schemas.services.operations import MemoryOpStatus
 
@@ -127,6 +141,11 @@ class MemorizeHandler(BaseActionHandler):
             self.logger.info(
                 f"WA-approved identity amendment {node.id} (wa={authorization.wa_id}, deferral={authorization.deferral_id})"
             )
+        if authorization is not None and node.type == NodeType.IDENTITY_AMENDMENT:
+            signed = await self._sign_identity_amendment(node, authorization, thought, result)
+            if isinstance(signed, str):
+                return signed
+            node = signed
 
         # Handle CONFIG node transformation
         if is_config_node(node):
@@ -137,6 +156,98 @@ class MemorizeHandler(BaseActionHandler):
 
         # Execute memorize operation
         return await self._execute_memorize(node, thought, result, dispatch_context)
+
+    async def _sign_identity_amendment(
+        self,
+        node: GraphNode,
+        authorization: WAAuthorization,
+        thought: Thought,
+        result: ActionSelectionDMAResult,
+    ) -> GraphNode | str:
+        """Have the node sign ``identity_amendment:v1`` BEFORE the amendment is written (CIRISAgent#1316).
+
+        Returns the node to write, carrying the row's id, or the follow-up id of
+        a refusal. Refused BEFORE the write, so an amendment the node will not
+        sign never stands locally and there is nothing to roll back:
+
+        - the node has no deferral rows (server < 0.5.234): written as before;
+        - the approval carries no signed response row, or not the request row
+          it answers: refused, because where the node authors rows an approval
+          is the WA's own signed answer to this agent's own deferral;
+        - the node refuses (``identity_amendment_unauthorized``, bad input) or
+          does not answer: refused. An outage is not a verdict, but an
+          amendment without its row is the unattested change this closes;
+        - the approval already authorized an amendment
+          (``deferral.response_already_used``): refused. One approval, one
+          amendment; the agent is told the approval is spent, not that it
+          lacks one, so it does not ask the Wise Authority again for a change
+          that has already been applied.
+        """
+        thought_id = thought.thought_id
+        if not rows_available():
+            return node
+        response_id = authorization.response_attestation_id
+        request_id = authorization.request_attestation_id
+        if not response_id or not request_id:
+            missing = REASON_NO_RESPONSE_ROW if not response_id else REASON_NO_REQUEST_ROW
+            self.logger.warning(
+                f"Identity amendment {node.id} refused: the approval of deferral {authorization.deferral_id} "
+                f"carries no signed row to cite ({missing}). Thought {thought_id}."
+            )
+            return self._refuse_amendment(thought, result, missing, name_reason=False)
+        try:
+            amendment_id = await emit_identity_amendment(amendment_text(node.attributes), response_id, request_id)
+        except DeferralRowsUnavailable:
+            return node
+        except DeferralRowRefused as refused:
+            refusal = refused.refusal
+            self.logger.warning(
+                f"Identity amendment {node.id} refused: the node would not sign it ({refusal.reason_id}, "
+                f"{refusal.kind.value}): {refusal.text}. Thought {thought_id}."
+            )
+            return self._refuse_amendment(
+                thought,
+                result,
+                refusal.reason_id,
+                name_reason=refusal.kind is DeferralRowRefusalKind.OUTAGE
+                or refusal.reason_id == REASON_RESPONSE_ALREADY_USED,
+            )
+        attributes = serialize_attributes_to_json(node.attributes)
+        provenance = attributes.get("wa_amendment")
+        provenance = dict(provenance) if isinstance(provenance, dict) else {}
+        provenance["amendment_attestation_id"] = amendment_id
+        provenance["response_attestation_id"] = authorization.response_attestation_id
+        provenance["request_attestation_id"] = authorization.request_attestation_id
+        attributes["wa_amendment"] = provenance
+        self.logger.info(f"Identity amendment {node.id}: signed row {amendment_id}")
+        return node.model_copy(update={"attributes": attributes})
+
+    def _refuse_amendment(
+        self, thought: Thought, result: ActionSelectionDMAResult, reason_id: str, *, name_reason: bool
+    ) -> str:
+        """The FAILED follow-up for an identity amendment the node did not sign.
+
+        ``name_reason`` (an outage, or a spent approval) names the node's reason
+        id; anything else says WA authorization is required, which is the truth
+        of a missing or unauthorized approval.
+        """
+        if name_reason:
+            content = self._localized_followup(
+                "memorize_action_failed_with_reason",
+                default=f"MEMORIZE action failed: {reason_id}",
+                reason=reason_id,
+            )
+        else:
+            content = self._localized_followup(
+                "memorize_wa_required",
+                default="MEMORIZE action failed: WA authorization required for identity changes",
+            )
+        return (
+            self.complete_thought_and_create_followup(
+                thought=thought, follow_up_content=content, action_result=result, status=ThoughtStatus.FAILED
+            )
+            or ""
+        )
 
     async def _validate_user_node(
         self, node: GraphNode, thought: Thought, result: ActionSelectionDMAResult

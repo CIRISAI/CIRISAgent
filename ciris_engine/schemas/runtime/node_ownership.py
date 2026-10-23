@@ -14,6 +14,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.services.authority_core import WARole
+
 #: The error token for every refusal on an unowned node (intake 423, setup 409, act refusal).
 NODE_UNCLAIMED_ERROR = "node_unclaimed"
 
@@ -78,11 +80,31 @@ class NodeOwnership(BaseModel):
         )
 
 
+class NodeOwnerRecord(BaseModel):
+    """The node-claimed owner, as `ciris_server.owner_record()` reports it (CIRISServer 0.5.234).
+
+    Every value comes from the node's founding ROOT WaCert; the substrate invents
+    none of them, and neither does the agent. The brain's user table holds no row
+    for this identity (the node owns identity), so this is the only source.
+    """
+
+    wa_id: str = Field(..., description="The founding ROOT WaCert's wa_id (a substrate session's user_id)")
+    name: str = Field(..., description="The WaCert's name")
+    role: WARole = Field(..., description="The WaCert's role (persist WaRole, lowercase on the wire)")
+    user_role: Optional[str] = Field(None, description="The session role the node grants (e.g. 'SYSTEM_ADMIN')")
+    created_at: datetime = Field(..., description="When the WaCert was created")
+    owner_key_id: Optional[str] = Field(None, description="owner_of(node): the bound fedID; null for a legacy ROOT")
+    auth_type: str = Field(..., description="The WaCert's token type: standard | session | api_key | oauth | service")
+    has_password: bool = Field(..., description="Whether the WaCert carries a password hash")
+    oauth_provider: Optional[str] = Field(None, description="The WaCert's OAuth provider, when it has one")
+
+
 __all__ = [
     "CLAIM_PIN_FILE_NAME",
     "CLAIM_ROUTE",
     "NODE_UNCLAIMED_ERROR",
     "UPGRADE_CLAIM_ROUTES",
+    "NodeOwnerRecord",
     "NodeOwnership",
     "NodeOwnershipReading",
 ]

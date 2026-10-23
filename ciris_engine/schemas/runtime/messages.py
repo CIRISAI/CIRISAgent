@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.accord_halt import AccordRowForward
 
 if TYPE_CHECKING:
@@ -104,6 +105,14 @@ class IncomingMessage(BaseModel):
             "(e.g. from MessageContext.metadata.language on the API). When set, "
             "becomes TaskContext.preferred_language for the task created here."
         ),
+    )
+
+    # The author's authenticated role (#1320), set only by an adapter that
+    # verified it: the API copies AuthContext.role. None where the adapter does
+    # not know it (Discord, CLI), and then no role is shown to the model.
+    author_role: Optional[UserRole] = Field(
+        default=None,
+        description="The author's role as verified by the adapter's authentication, or None when not known",
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="allow", defer_build=True)

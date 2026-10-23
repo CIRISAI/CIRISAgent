@@ -291,6 +291,8 @@ _VERB_SPECIFIC_DATA: Dict[str, FieldSpec] = {
     "original_node_id": _label(D),
     "final_node_id": _label(D),
     "node_id_corrected": _bool(),
+    # MEMORIZE refused by the #1320 gate for want of a verified WA approval
+    "refused_without_wa_approval": _bool(),
 }
 
 EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
@@ -419,6 +421,8 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "original_action": _tok(),
         "final_action": _tok(),
         "verb_specific_data": _obj(_VERB_SPECIFIC_DATA),
+        # Set by code when the #1320 gate refused an unapproved identity MEMORIZE.
+        "refused_without_wa_approval": _bool(),
         # The pass rationales are the reasoning chain (FULL), not a summary.
         "original_reasoning": _text(),
         "final_reasoning": _text(),
@@ -498,6 +502,12 @@ EVENT_SCHEMAS: Dict[str, Dict[str, FieldSpec]] = {
         "prompt_bytes": _int(),
         "completion_bytes": _int(),
         "cost_usd": _num(),
+        "sent_temperature": _num(),
+        "sent_seed": _int(),
+        "sent_max_tokens": _int(),
+        # A router-reported company name ("Google AI Studio"): may hold spaces.
+        "served_by": _label(G, IDENTIFIER_MAX_CHARS),
+        "served_model": _tok(G, IDENTIFIER_MAX_CHARS),
         "status": _tok(),
         "error_class": _tok(G, IDENTIFIER_MAX_CHARS),
         "attempt_count": _int(),

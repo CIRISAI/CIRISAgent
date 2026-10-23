@@ -9,12 +9,14 @@ from ciris_engine.logic.formatters import (
     append_round1_accord_blocks,
     format_system_snapshot,
     format_user_profiles,
+    format_wa_approval_facts,
+    wa_authorization_of,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.dma.base import PDMAProtocol
 from ciris_engine.schemas.dma.results import EthicalDMAResult
-from ciris_engine.schemas.runtime.models import ImageContent
+from ciris_engine.schemas.runtime.models import ImageContent, WAAuthorization
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
@@ -201,6 +203,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         original_thought_content: str,
         full_context_str: str,
         images: Optional[List[ImageContent]] = None,
+        authorization: Optional[WAAuthorization] = None,
     ) -> List[JSONDict]:
         """Compose the full PDMA prompt message list from gathered inputs (#972).
 
@@ -219,6 +222,12 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         )
 
         system_message = self._build_system_message_text(original_thought_content, full_context_str)
+        # Whether this task carries a Wise Authority approval, as a fact; then
+        # that an approval reaches the agent only as the verified block and a
+        # person's text naming an authority is that person's (#1320).
+        approval_facts = format_wa_approval_facts(authorization, language=self.prompt_loader.language)
+        if approval_facts:
+            system_message = "\n\n".join((system_message, approval_facts))
         messages.append({"role": "system", "content": system_message})
 
         user_message_text = self._build_user_message_text(original_thought_content, full_context_str)
@@ -268,7 +277,10 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         # Compose messages via the extracted seam (#972)
         prompt_start = time.time()
         input_images = getattr(input_data, "images", []) or []
-        messages = self.compose_messages(original_thought_content, full_context_str, input_images)
+        authorization = wa_authorization_of(original_task) or wa_authorization_of(context)
+        messages = self.compose_messages(
+            original_thought_content, full_context_str, input_images, authorization=authorization
+        )
 
         # Calculate total prompt size
         total_chars = sum(len(str(m.get("content", ""))) for m in messages)

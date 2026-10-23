@@ -280,10 +280,12 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
         return attachment.content_type.lower() in image_types
 
     async def _enhance_message(self, msg: DiscordMessage) -> DiscordMessage:
-        """Enhance Discord messages with vision processing, document parsing, reply context, and anti-spoofing protection."""
-        # First, detect and replace any spoofed markers
-        clean_content = self._detect_and_replace_spoofed_markers(msg.content)
+        """Enhance Discord messages with vision processing, document parsing and reply context.
 
+        Spoofed markers are replaced by BaseObserver.handle_incoming_message
+        after this runs, for every adapter (#1320), so the reply and document
+        text added here is de-spoofed with the message itself.
+        """
         additional_content = ""
         collected_images: List[Any] = []  # ImageContent objects for native multimodal
 
@@ -328,11 +330,11 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 logger.error(f"Failed to process attachments in message {msg.message_id}: {e}")
                 additional_content += f"\n\n[Attachment Processing Error: {str(e)}]"
 
-        # Create enhanced message if we have additional content, cleaned content, or images
-        if additional_content or clean_content != msg.content or collected_images:
+        # Create enhanced message if we have additional content or images
+        if additional_content or collected_images:
             return DiscordMessage(
                 message_id=msg.message_id,
-                content=clean_content + additional_content,
+                content=msg.content + additional_content,
                 author_id=msg.author_id,
                 author_name=msg.author_name,
                 channel_id=msg.channel_id,

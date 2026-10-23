@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.schemas.services.authority.deferral_rows import DeferralRowStatus
+
 
 class PermissionEntry(BaseModel):
     """A single permission entry for a WA."""
@@ -90,6 +92,14 @@ class PendingDeferral(BaseModel):
     question: Optional[str] = Field(None, description="Question/description for UI display")
     context: Dict[str, str] = Field(default_factory=dict, description="Additional context for UI")
     timeout_at: Optional[str] = Field(None, description="When deferral times out (ISO format)")
+
+    # Signed request row (CIRISAgent#1316)
+    request_attestation_id: Optional[str] = Field(
+        None, description="The deferral:request:v1 row the node signed for this deferral, if any"
+    )
+    request_row_status: Optional[DeferralRowStatus] = Field(
+        None, description="emitted / unavailable / failed; None for deferrals recorded before #1316"
+    )
 
 
 class DeferralResolution(BaseModel):

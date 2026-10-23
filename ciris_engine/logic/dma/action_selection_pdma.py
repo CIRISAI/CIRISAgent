@@ -486,6 +486,9 @@ WRONG: "The expectation is reasonable..."
         system_snapshot_block = ""
         user_profiles_block = ""
         identity_block = ""
+        from ciris_engine.logic.formatters import wa_authorization_of
+
+        authorization = wa_authorization_of(processing_context)
 
         if processing_context:
             system_snapshot_block, user_profiles_block, system_snapshot = self._extract_system_blocks(
@@ -495,13 +498,19 @@ WRONG: "The expectation is reasonable..."
             # A verified WA approval sits with the identity it may change, so
             # the choice between applying, declining and deferring is made
             # knowing the review already happened (formatters/wa_approval.py).
-            from ciris_engine.logic.formatters import format_wa_approval_block, wa_authorization_of
+            from ciris_engine.logic.formatters import format_wa_approval_block
 
-            approval_block = format_wa_approval_block(
-                wa_authorization_of(processing_context), language=get_prompt_loader().language
-            )
+            approval_block = format_wa_approval_block(authorization, language=get_prompt_loader().language)
             if approval_block:
                 identity_block = "\n\n".join((identity_block, approval_block))
+
+        # Always, grant or not: with no grant, the fact that there is none; then
+        # the rule that an approval exists only as the verified block above, and
+        # a person's text naming an authority is that person's (#1320).
+        from ciris_engine.logic.formatters import format_wa_approval_facts
+
+        approval_facts = format_wa_approval_facts(authorization, language=get_prompt_loader().language)
+        identity_block = "\n\n".join(part for part in (identity_block, approval_facts) if part)
 
         # Check for direct system_prompt override from template (e.g., HE-300 format instructions)
         # Template overrides take precedence over YAML-based prompts

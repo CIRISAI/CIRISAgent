@@ -9,7 +9,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -37,6 +37,9 @@ from ..constants import (
     ERROR_MESSAGE_HANDLER_NOT_CONFIGURED,
 )
 from ._common import RESPONSES_402_403_503, RESPONSES_500, RESPONSES_503, AuthObserverDep, derive_credit_account
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.runtime.models import Task
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,10 @@ class InteractOutcome(str, Enum):
     FAILED = "failed"
     #: The message was a v2 accord row; it went to the node, not to the agent.
     ACCORD_ROW_FORWARDED = "accord_row_forwarded"
+    #: The task completed without the agent sending a reply (#1320), e.g. it
+    #: stored something and ended. `response` is the localized notice
+    #: (`agent.completed_without_reply`), not a reply; the task is COMPLETED.
+    COMPLETED_WITHOUT_REPLY = "completed_without_reply"
 
 
 class InteractResponse(BaseModel):
@@ -152,7 +159,8 @@ class InteractResponse(BaseModel):
         description="complete: response is the agent's reply; timeout: deadline passed, the task is still "
         "running and its reply will appear in history; paused: processor paused, message queued; "
         "failed: the task failed before answering and response is the error notice; "
-        "accord_row_forwarded: the message was an accord row, handed to the node",
+        "accord_row_forwarded: the message was an accord row, handed to the node; "
+        "completed_without_reply: the task completed without a reply and response is the notice saying so",
     )
     accord_forward: Optional[AccordRowForward] = Field(
         None, description="The node's verdict, when the message was an accord row (outcome accord_row_forwarded)"
@@ -443,6 +451,9 @@ async def _create_interaction_message(
         timestamp=datetime.now(timezone.utc).isoformat(),
         images=images,
         preferred_language=preferred_language,
+        # The verified role reaches the observation, so the model can tell an
+        # OBSERVER's words from a Wise Authority's (#1320).
+        author_role=auth.role if isinstance(getattr(auth, "role", None), UserRole) else None,
     )
 
     return message_id, channel_id, msg
@@ -727,7 +738,13 @@ def _task_id_for_interaction(message_id: str, request: Optional[Request] = None)
 
 
 def _outcome_for_answered_task(task_id: Optional[str]) -> InteractOutcome:
-    """COMPLETE, unless the task that answered is FAILED (its answer is the failure notice)."""
+    """COMPLETE, unless the task that answered is FAILED (its answer is the failure notice),
+    or COMPLETED without any SPEAK (its answer is the completed-without-reply notice, #1320).
+
+    A real reply is delivered while its task is still running, and its SPEAK
+    thought is COMPLETED before the task can reach COMPLETED, so a COMPLETED
+    task with no completed SPEAK is one whose only message was the notice.
+    """
     if not task_id:
         return InteractOutcome.COMPLETE
     try:
@@ -742,7 +759,21 @@ def _outcome_for_answered_task(task_id: Optional[str]) -> InteractOutcome:
         return InteractOutcome.COMPLETE
     if task is not None and task.status == TaskStatus.FAILED:
         return InteractOutcome.FAILED
+    if task is not None and task.status == TaskStatus.COMPLETED and not _task_replied(task):
+        return InteractOutcome.COMPLETED_WITHOUT_REPLY
     return InteractOutcome.COMPLETE
+
+
+def _task_replied(task: "Task") -> bool:
+    """Whether the task sent a reply (the same test the TASK_COMPLETE handler uses). True if unreadable."""
+    try:
+        from ciris_engine.logic import persistence
+        from ciris_engine.logic.infrastructure.handlers.action_record import reply_sent
+
+        return reply_sent(persistence.get_thoughts_by_task_id(task.task_id, task.agent_occurrence_id))
+    except Exception as e:  # noqa: BLE001 - unknown means "do not relabel the answer"
+        logger.debug("Could not read the thoughts of task %s for interact outcome: %s", task.task_id, e)
+        return True
 
 
 def _create_paused_response(

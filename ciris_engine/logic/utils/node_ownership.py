@@ -37,7 +37,12 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from ciris_engine.schemas.runtime.node_ownership import CLAIM_PIN_FILE_NAME, NodeOwnership, NodeOwnershipReading
+from ciris_engine.schemas.runtime.node_ownership import (
+    CLAIM_PIN_FILE_NAME,
+    NodeOwnerRecord,
+    NodeOwnership,
+    NodeOwnershipReading,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +157,39 @@ async def hold_until_node_owned(stop_event: Optional[asyncio.Event] = None) -> b
             pass
 
 
+def _read_owner_record_sync() -> Optional[NodeOwnerRecord]:
+    """One read of `ciris_server.owner_record()`. Blocking; never call on the event loop.
+
+    None: no substrate, a substrate older than 0.5.234 (no `owner_record`), or
+    the node has no ROOT. An exception (the call raised, or it answered
+    something that is not an owner record) means the record could NOT be read,
+    which a caller must not report as "no such user". Fold off (CIRIS_NODE_FOLD=false)
+    is no node in this process, so no owner: None, as `_read_from_node` reads it.
+    """
+    from ciris_engine.logic.runtime.node_fold import fold_status
+
+    if fold_status() is None:
+        return None
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except ImportError:
+        return None
+    owner_record = getattr(ciris_server, "owner_record", None)
+    if owner_record is None:
+        return None
+    raw = owner_record()
+    if raw is None:
+        return None
+    return NodeOwnerRecord.model_validate_json(raw)
+
+
+async def read_owner_record() -> Optional[NodeOwnerRecord]:
+    """The node-claimed owner's record, read off the event loop. Raises when it could not be read."""
+    return await asyncio.wait_for(
+        asyncio.to_thread(_read_owner_record_sync), timeout=NODE_OWNERSHIP_READ_TIMEOUT_SECONDS
+    )
+
+
 def invalidate_node_ownership_cache() -> None:
     """Force the next read to ask the node."""
     global _cached_at
@@ -166,4 +204,5 @@ __all__ = [
     "hold_until_node_owned",
     "invalidate_node_ownership_cache",
     "node_owned",
+    "read_owner_record",
 ]

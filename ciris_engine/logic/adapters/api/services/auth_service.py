@@ -335,6 +335,10 @@ class APIAuthService:
             logger.error(f"CIRIS_USER_CREATE: Error loading users from database: {e}", exc_info=True)
             raise
 
+    def wa_role_to_api_role(self, wa_role: Optional[WARole]) -> APIRole:
+        """Convert WA role to API role (the one mapping; ROOT -> SYSTEM_ADMIN)."""
+        return self._wa_role_to_api_role(wa_role)
+
     def _wa_role_to_api_role(self, wa_role: Optional[WARole]) -> APIRole:
         """Convert WA role to API role."""
         if not wa_role:
@@ -653,20 +657,40 @@ class APIAuthService:
                 continue
             seen_wa_ids.add(user.wa_id)
 
-            # Apply filters
-            if search and search.lower() not in user.name.lower():
-                continue
-            if auth_type and user.auth_type != auth_type:
-                continue
-            if api_role and user.api_role != api_role:
-                continue
-            if wa_role and user.wa_role != wa_role:
-                continue
-            if is_active is not None and user.is_active != is_active:
+            if not self.user_matches_filters(
+                user, search=search, auth_type=auth_type, api_role=api_role, wa_role=wa_role, is_active=is_active
+            ):
                 continue
 
             users.append((user_id, user))  # Use the dict key as the canonical user_id
 
+        return self.sort_users(users)
+
+    @staticmethod
+    def user_matches_filters(
+        user: User,
+        search: Optional[str] = None,
+        auth_type: Optional[str] = None,
+        api_role: Optional[APIRole] = None,
+        wa_role: Optional[WARole] = None,
+        is_active: Optional[bool] = None,
+    ) -> bool:
+        """The list filters, as one predicate (also applied to the node-claimed owner)."""
+        if search and search.lower() not in user.name.lower():
+            return False
+        if auth_type and user.auth_type != auth_type:
+            return False
+        if api_role and user.api_role != api_role:
+            return False
+        if wa_role and user.wa_role != wa_role:
+            return False
+        if is_active is not None and user.is_active != is_active:
+            return False
+        return True
+
+    @staticmethod
+    def sort_users(users: List[tuple[str, User]]) -> List[tuple[str, User]]:
+        """Newest first, the order list_users answers in."""
         return sorted(users, key=lambda tu: tu[1].created_at or datetime.min, reverse=True)
 
     def _user_role_to_api_role(self, role: UserRole) -> APIRole:

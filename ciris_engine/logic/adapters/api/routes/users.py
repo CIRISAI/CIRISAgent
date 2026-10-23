@@ -11,8 +11,10 @@ import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.utils.node_ownership import read_owner_record
 from ciris_engine.schemas.api.auth import AuthContext, PermissionRequestResponse, PermissionRequestUser, UserRole
 from ciris_engine.schemas.runtime.api import APIRole
+from ciris_engine.schemas.runtime.node_ownership import NodeOwnerRecord
 from ciris_engine.schemas.services.authority_core import OAuthIdentityLink, WARole
 from ciris_engine.schemas.types import JSONDict
 
@@ -24,6 +26,7 @@ from ..services.auth_service import (
     PERMISSION_USERS_WRITE,
     PERMISSION_WA_MINT,
     APIAuthService,
+    User,
 )
 from ._common import (
     RESPONSES_400,
@@ -31,6 +34,7 @@ from ._common import (
     RESPONSES_403,
     RESPONSES_404,
     RESPONSES_404_500,
+    RESPONSES_404_500_503,
     RESPONSES_500,
     RESPONSES_500_503,
     AuthDep,
@@ -51,6 +55,7 @@ ERROR_CREATE_USER_FAILED = "Failed to create user"
 ERROR_CHANGE_PASSWORD_FAILED = "Failed to change password. Check current password."
 ERROR_CANNOT_DEMOTE_SELF = "Cannot demote your own role"
 ERROR_CANNOT_DEACTIVATE_SELF = "Cannot deactivate your own account"
+ERROR_OWNER_RECORD_UNREADABLE = "The node owner's record could not be read"
 
 
 ERROR_ONLY_ADMIN_MINT_WA = "Only ADMIN or higher can mint Wise Authorities"
@@ -208,6 +213,71 @@ def _build_user_detail(user_id: str, user: Any, auth_service: APIAuthService) ->
     )
 
 
+async def _read_owner_record_or_503() -> Optional[NodeOwnerRecord]:
+    """The node-claimed owner's record, or None (no ROOT, or a server older than 0.5.234).
+
+    A raise means the record could NOT be read. That is not "no such user", so it
+    answers 503, never 404.
+    """
+    try:
+        return await read_owner_record()
+    except Exception as exc:  # noqa: BLE001 - an unreadable record is not an absent one
+        logger.error("users: the node owner's record could not be read: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(status_code=503, detail=ERROR_OWNER_RECORD_UNREADABLE) from None
+
+
+def _is_owner_id(user_id: str, record: NodeOwnerRecord) -> bool:
+    """The owner is named by its wa_id (a substrate session's user_id) or, when bound, its fedID."""
+    return user_id == record.wa_id or (record.owner_key_id is not None and user_id == record.owner_key_id)
+
+
+def _owner_as_user(record: NodeOwnerRecord, auth_service: APIAuthService) -> Optional[User]:
+    """The owner record as a `User`, from the record's fields only.
+
+    `auth_type` is required and the record says it only for an OAuth owner. With no
+    `oauth_provider` the record cannot tell a password owner from a key-only one,
+    so there is no owner user to answer with rather than a guessed auth_type.
+    """
+    if not record.oauth_provider:
+        logger.warning(
+            "users: the node owner %s has no oauth_provider; the record does not say its auth_type, "
+            "so it is not answered as a user",
+            _sanitize_for_log(record.wa_id),
+        )
+        return None
+    return User(
+        wa_id=record.wa_id,
+        name=record.name,
+        auth_type="oauth",
+        api_role=auth_service.wa_role_to_api_role(record.role),
+        wa_role=record.role,
+        oauth_provider=record.oauth_provider,
+        created_at=record.created_at,
+    )
+
+
+def _owner_in_table(record: NodeOwnerRecord, auth_service: APIAuthService) -> bool:
+    """Whether the brain's user table already holds the owner (then the table answers)."""
+    if auth_service.get_user(record.wa_id) is not None:
+        return True
+    return record.owner_key_id is not None and auth_service.get_user(record.owner_key_id) is not None
+
+
+def _owner_detail(user_id: str, record: NodeOwnerRecord, owner: User, auth_service: APIAuthService) -> UserDetail:
+    """UserDetail for the node-claimed owner. Fields the record does not carry keep their schema defaults."""
+    return UserDetail(
+        user_id=user_id,
+        username=owner.name,
+        auth_type=owner.auth_type,
+        api_role=owner.api_role,
+        wa_role=owner.wa_role,
+        wa_id=owner.wa_id,
+        oauth_provider=owner.oauth_provider,
+        created_at=record.created_at,
+        permissions=auth_service.get_effective_permissions(owner),
+    )
+
+
 class UpdateUserRequest(BaseModel):
     """Request to update user information."""
 
@@ -308,7 +378,7 @@ class UpdateUserSettingsRequest(BaseModel):
     marketing_opt_in: Optional[bool] = Field(None, description="User consent for marketing communications")
 
 
-@router.get("", responses=RESPONSES_500)
+@router.get("", responses=RESPONSES_500_503)
 async def list_users(
     auth: AuthDep,
     auth_service: AuthServiceDep,
@@ -330,6 +400,16 @@ async def list_users(
     users = await auth_service.list_users(
         search=search, auth_type=auth_type, api_role=api_role, wa_role=wa_role, is_active=is_active
     )
+
+    # The node-claimed owner is the one user (#1287), and the table holds no row for
+    # a node identity. List them from the node's record when the table does not.
+    record = await _read_owner_record_or_503()
+    if record is not None and not _owner_in_table(record, auth_service):
+        owner = _owner_as_user(record, auth_service)
+        if owner is not None and auth_service.user_matches_filters(
+            owner, search=search, auth_type=auth_type, api_role=api_role, wa_role=wa_role, is_active=is_active
+        ):
+            users = auth_service.sort_users([*users, (record.wa_id, owner)])
 
     # Paginate results
     total = len(users)
@@ -656,7 +736,7 @@ async def update_my_settings(
         raise HTTPException(status_code=500, detail="Failed to update user settings")
 
 
-@router.get("/{user_id}", responses=RESPONSES_404_500)
+@router.get("/{user_id}", responses=RESPONSES_404_500_503)
 async def get_user(
     user_id: str,
     auth: AuthDep,
@@ -670,6 +750,13 @@ async def get_user(
     """
     user = auth_service.get_user(user_id)
     if not user:
+        # The node-claimed owner is a node identity the table does not hold;
+        # the node's own record answers for them.
+        record = await _read_owner_record_or_503()
+        if record is not None and _is_owner_id(user_id, record):
+            owner = _owner_as_user(record, auth_service)
+            if owner is not None:
+                return _owner_detail(user_id, record, owner, auth_service)
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
     return _build_user_detail(user_id, user, auth_service)

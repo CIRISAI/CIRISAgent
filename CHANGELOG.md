@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **ciris-client 0.5.231.** One rate governor per agent host (CIRISClient#230). Harness fixes for nodes older than #808 and for wizard controls that register late (#232). Compose 1.7.3 fixes the iOS popup-dispose crash (#233), and the stale-click fix (#234). The client no longer sends the attachment-policy GET to agents older than 2.16.3, which ends the agent-to-node loop on 2.16.2 (#235). No test tags were added, renamed or removed. A desktop test click now waits up to 1 s for the frame after a preceding input.
 
+### API
+
+- **`GET /v1/users/{user_id}` answers for the node-claimed owner.** The brain's user table holds no row for a node identity, so the owner got a 404. When the table has no row and the id is the owner's (its `wa_id`, or its fedID when bound), the answer now comes from `ciris_server.owner_record()` (CIRISServer 0.5.234). It uses only that record's fields. The role maps to permissions through the auth service's own mapping, and every other field keeps its schema default. `GET /v1/users` lists the owner when the table does not. If the record can't be read, both routes answer 503, not 404. A server older than 0.5.234, a node with no ROOT, fold off, or an owner with no `oauth_provider` (the record doesn't give its `auth_type`) still answer 404.
+
 ## [2.16.3-stable] - 2026-10-22
 
 ### Substrate

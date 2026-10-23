@@ -13,7 +13,15 @@ The path under test (CIRISAgent#1303):
 4. The guidance task's thoughts dispatch with ``wa_authorized=True``, so the
    approved IDENTITY-scope MEMORIZE goes through and the node is in the graph,
    stored as an ``identity_amendment`` carrying this deferral's provenance.
-5. The approved text is in the CORE IDENTITY block of the agent's own
+5. The deferral, the WA's approval and the applied amendment are signed CEG
+   rows on the node (CIRISAgent#1316), read back through ``GET /v1/wa/rows/{id}``:
+   ``deferral:request:v1`` <- ``deferral:response:approved:v1``
+   (``references_attestation_id``) <- ``identity_amendment:v1`` (``authorized_by``
+   and ``evidence_refs``), all about the agent, the response signed with the
+   WA's own key, and all three in the same room. This realizes CSD/4 T7's
+   ``agent.deferral.pending/approved`` and ``agent.identity.amended`` atoms.
+   On a node without rows (ciris-server < 0.5.234) it is recorded as SKIP.
+6. The approved text is in the CORE IDENTITY block of the agent's own
    action-selection prompt, read back through the mock's ``$speak $context``,
    and the refused text is not. Stored-but-unread was the gap RATCHET found:
    until this, an approved change was authorized and written and the agent
@@ -32,6 +40,7 @@ live model follows guidance (ciris_adapters/mock_llm/responses.py, STEP 1b).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import secrets
 import traceback
@@ -49,6 +58,10 @@ logger = logging.getLogger(__name__)
 
 POLL_SECONDS = 2.0
 APPROVAL_TIMEOUT_SECONDS = 120.0
+
+
+class _Skip(Exception):
+    """A check that cannot run on this node, recorded as SKIP with the reason, never as PASS."""
 
 
 class WAIdentityApprovalTests:
@@ -69,6 +82,10 @@ class WAIdentityApprovalTests:
         self.refused_node = f"qa_wa_identity_refused_{suffix}"
         self.approved_node = f"qa_wa_identity_approved_{suffix}"
         self.deferral_id: Optional[str] = None
+        self.request_row: Optional[str] = None
+        self.request_row_status: Optional[str] = None
+        self.response_row: Optional[str] = None
+        self.amendment_node: Optional[Dict[str, Any]] = None
         self._last_lookup: List[Dict[str, Any]] = []
         self.approved_at = datetime.now(timezone.utc)
 
@@ -87,6 +104,7 @@ class WAIdentityApprovalTests:
             ("The identity change defers to a Wise Authority", self.test_identity_change_defers),
             ("The WA approves through the signed resolve route", self.test_wa_approves),
             ("The approved identity change is applied", self.test_approved_identity_write_lands),
+            ("The deferral, approval and amendment are signed rows that chain", self.test_rows_chain),
             ("Approval authorized only its own change", self.test_approval_did_not_leak),
             ("The agent's CORE IDENTITY carries the approved change", self.test_identity_block_carries_the_change),
         ]
@@ -96,6 +114,9 @@ class WAIdentityApprovalTests:
                     await test_func()
                     self.results.append({"test": name, "status": "✅ PASS", "error": None})
                     self.console.print(f" [OK] {name}")
+                except _Skip as skip:
+                    self.results.append({"test": name, "status": "[SKIP]", "error": None, "skipped": str(skip)})
+                    self.console.print(f" [SKIP] {name}: {skip}")
                 except Exception as e:  # noqa: BLE001 - one failure must not hide the rest
                     self.results.append({"test": name, "status": "❌ FAIL", "error": str(e)})
                     self.console.print(f" [FAIL] {name}: {str(e)[:240]}")
@@ -242,6 +263,8 @@ class WAIdentityApprovalTests:
             await asyncio.sleep(POLL_SECONDS)
         assert new, "the $defer did not produce a pending deferral in GET /v1/wa/deferrals"
         self.deferral_id = new[0]["deferral_id"]
+        self.request_row = new[0].get("request_attestation_id")
+        self.request_row_status = new[0].get("request_row_status")
 
     async def test_wa_approves(self) -> None:
         assert self.deferral_id, "no deferral to approve (previous test failed)"
@@ -253,6 +276,7 @@ class WAIdentityApprovalTests:
             )
         assert r.status_code == 200, f"resolve answered {r.status_code}: {r.text[:300]}"
         self.approved_at = datetime.now(timezone.utc)
+        self.response_row = (r.json().get("data") or {}).get("response_attestation_id")
         assert self.deferral_id not in {d["deferral_id"] for d in await self._pending_deferrals()}, (
             "the deferral is still pending after approval"
         )
@@ -282,6 +306,71 @@ class WAIdentityApprovalTests:
         assert provenance.get("deferral_id") == self.deferral_id, (
             f"the amendment does not record the approval it came from (deferral {self.deferral_id}): {provenance}"
         )
+        self.amendment_node = node
+
+    async def _row(self, attestation_id: str) -> Dict[str, Any]:
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            r = await http.get(f"{self.base_url}/v1/wa/rows/{attestation_id}", headers=self._headers())
+        assert r.status_code == 200, f"GET /v1/wa/rows/{attestation_id} answered {r.status_code}: {r.text[:300]}"
+        row: Dict[str, Any] = r.json()["data"]
+        return row
+
+    async def test_rows_chain(self) -> None:
+        """Three signed rows on the node, chained by id, about the agent, in one room (#1316)."""
+        assert self.deferral_id, "no deferral (previous test failed)"
+        if self.request_row_status == "unavailable":
+            raise _Skip("this node authors no deferral rows (ciris-server < 0.5.234)")
+        assert self.request_row_status == "emitted" and self.request_row, (
+            f"the deferral has no signed request row (status {self.request_row_status!r}): the node refused it; "
+            "see the WARNING in the agent log"
+        )
+        assert self.response_row, "the resolve route returned no response_attestation_id: the WA's answer is unsigned"
+        assert self.amendment_node is not None, "no applied amendment (previous test failed)"
+        attributes = self.amendment_node.get("attributes") or {}
+        provenance = attributes.get("wa_amendment") or {}
+        amendment_id = provenance.get("amendment_attestation_id")
+        assert amendment_id, f"the applied amendment carries no identity_amendment:v1 row id: {provenance}"
+        assert provenance.get("response_attestation_id") == self.response_row, (
+            f"the amendment cites {provenance.get('response_attestation_id')!r}, not the approval {self.response_row!r}"
+        )
+
+        req = await self._row(self.request_row)
+        resp = await self._row(self.response_row)
+        amend = await self._row(str(amendment_id))
+
+        assert req["attestation_type"] == "deferral:request:v1", f"request row: {req}"
+        assert req.get("deferral_id") == self.deferral_id, f"the request row names another deferral: {req}"
+        assert resp["attestation_type"] == "deferral:response:approved:v1", f"response row: {resp}"
+        assert resp.get("references_attestation_id") == req["attestation_id"], (
+            f"the response does not reference the request: {resp.get('references_attestation_id')!r} != "
+            f"{req['attestation_id']!r}"
+        )
+        assert amend["attestation_type"] == "identity_amendment:v1", f"amendment row: {amend}"
+        assert amend.get("authorized_by") == resp["attestation_id"], (
+            f"the amendment is authorized_by {amend.get('authorized_by')!r}, not the response {resp['attestation_id']!r}"
+        )
+        assert resp["attestation_id"] in (amend.get("evidence_refs") or []), (
+            f"the amendment's evidence_refs do not point at the response: {amend.get('evidence_refs')}"
+        )
+        content = str(attributes.get("content") or "")
+        assert amend.get("amendment_digest") == hashlib.sha256(content.encode("utf-8")).hexdigest(), (
+            "the amendment row's digest is not the SHA-256 of the applied amendment text"
+        )
+        agent = req["attested_key_id"]
+        assert resp["attested_key_id"] == agent and amend["attested_key_id"] == agent, (
+            f"the rows are not all about the agent ({agent}): response {resp['attested_key_id']}, "
+            f"amendment {amend['attested_key_id']}"
+        )
+        assert resp["attesting_key_id"] != req["attesting_key_id"], (
+            "the response is signed by the agent's own key, not the Wise Authority's"
+        )
+        # The room: the request names it, the response and the amendment inherit it.
+        # The agent passes none until the agent<->user room exists (#1300), so today
+        # all three carry the same (absent) room.
+        assert resp.get("room_id") == req.get("room_id") and amend.get("room_id") == req.get("room_id"), (
+            f"the rows are not in one room: request {req.get('room_id')!r}, response {resp.get('room_id')!r}, "
+            f"amendment {amend.get('room_id')!r}"
+        )
 
     async def test_approval_did_not_leak(self) -> None:
         """The approval authorized its own guidance task only; an ordinary request is still refused."""
@@ -309,7 +398,10 @@ class WAIdentityApprovalTests:
 
     def _print_summary(self) -> None:
         passed = sum(1 for r in self.results if "PASS" in r["status"])
-        self.console.print(f"\n[bold]WA Identity Approval Tests: {passed}/{len(self.results)} passed[/bold]")
+        skipped = sum(1 for r in self.results if "SKIP" in r["status"])
+        self.console.print(
+            f"\n[bold]WA Identity Approval Tests: {passed}/{len(self.results)} passed, {skipped} skipped[/bold]"
+        )
         for r in self.results:
             if "FAIL" in r["status"]:
                 self.console.print(f"  - {r['test']}: {r['error']}")

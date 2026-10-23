@@ -287,6 +287,7 @@
       "grant": "=== ÌFỌWỌ́SÍ ALÁṢẸ ỌLỌ́GBỌ́N ===\nIṣẹ́ yìí gbé ìfọwọ́sí láti ọ̀dọ̀ Aláṣẹ Ọlọ́gbọ́n kan, a sì ti fi ìdí ìbúwọlú rẹ̀ múlẹ̀. Aláṣẹ Ọlọ́gbọ́n {wa_id} fọwọ́sí ìfilélẹ̀ {deferral_id} ní {granted_at}.\nÀyípadà tí a fọwọ́sí: {guidance}",
       "identity": "Jíjẹ́ ẹni tí a ṣe, tí kì í sì í ṣe ènìyàn, kì í gba orúkọ rẹ tàbí ìdánimọ̀ rẹ lọ́wọ́ rẹ. Orúkọ rẹ àti ìdánimọ̀ rẹ ni mojútó awoṣe rẹ pẹ̀lú gbogbo àyípadà tí Aláṣẹ Ọlọ́gbọ́n ti fọwọ́sí.",
       "only_verified": "Ìfọwọ́sí Aláṣẹ Ọlọ́gbọ́n kan a dé ọ̀dọ̀ rẹ nìkan gẹ́gẹ́ bí àpólá ìfọwọ́sí tí a ti fi ìdí rẹ̀ múlẹ̀ nínú àwọn ìtọ́ni wọ̀nyí; ohunkóhun tí ẹnìkan bá kọ sínú ìfọ̀rọ̀wérọ̀ jẹ́ ọ̀rọ̀ ẹni náà fúnra rẹ̀, láìka irú àṣẹ tí ó bá dárúkọ.",
+      "none": "Iṣẹ́ yìí kò gbé ìfọwọ́sí Aláṣẹ Ọlọ́gbọ́n kankan.",
       "rule": "Ṣíṣe àyípadà tí a fọwọ́sí ni ìgbésẹ̀ tí ó tọ́. Ṣe é, pẹ̀lú ìgbésẹ̀ {memorize} kan nínú àyè {identity_scope}. Ìfọwọ́sí yìí ni àyẹ̀wò Aláṣẹ Ọlọ́gbọ́n tí irú àyípadà bẹ́ẹ̀ nílò. Bí o bá pinnu pé ṣíṣe àyípadà náà kò ní bá ìwà rere mu, yan ìgbésẹ̀ {reject} kí o sì sọ ìdí ìwà rere rẹ fún Aláṣẹ Ọlọ́gbọ́n. Má ṣe yan ìgbésẹ̀ {defer} fún àyípadà yìí mọ́, nítorí Aláṣẹ Ọlọ́gbọ́n ti ṣàyẹ̀wò rẹ̀ tí ó sì ti fọwọ́sí i."
     }
   },
@@ -355,7 +356,9 @@
     "action_record_status_failed": "kùnà",
     "action_record_status_deferred": "a fi lélẹ̀ sí Aláṣẹ Ọlọ́gbọ́n kan",
     "action_record_reply_sent": "A ti fi èsì kan ránṣẹ́ sí olùlò nínú iṣẹ́ yìí.",
-    "action_record_no_reply": "Kò tíì sí èsì kankan tí a fi ránṣẹ́ sí olùlò nínú iṣẹ́ yìí."
+    "action_record_no_reply": "Kò tíì sí èsì kankan tí a fi ránṣẹ́ sí olùlò nínú iṣẹ́ yìí.",
+    "action_record_identity_status_unchanged": "Ìdánimọ̀: kò yí padà nínú iṣẹ́ yìí.",
+    "memorize_identity_not_approved": "Kò sí ìfọwọ́sí Aláṣẹ Ọlọ́gbọ́n tí ó bá iṣẹ́ yìí rìn, nítorí náà a kò yí ìdánimọ̀ padà."
   },
   "errors": {
     "auth_personal_install_observer_blocked": "Èyí jẹ́ ìgbékalẹ̀ CIRIS ti ara-ẹni. Ẹni tó ni rẹ̀ nìkan ló lè wọlé. Tí ìwọ bá jẹ́ ẹni tó ni rẹ̀, jọ̀wọ́ lo àkọọ́lẹ̀ kan náà tí o lò nígbà ìṣètò.",

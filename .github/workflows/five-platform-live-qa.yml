@@ -1108,6 +1108,110 @@ jobs:
           done
           exit $overall
 
+      # CROSS-PLATFORM CHAT, AFTER TRACE CONFIRMATION (Eric, 2026-10-25: "add
+      # cross-platform chat to the five platform runner ... add a stage post trace
+      # confirmation"). Two real users, one on Linux and one on Windows, added
+      # each other as contacts and could never chat, and nothing here had ever
+      # made two nodes talk: every platform ran the flow alone.
+      #
+      # THE PAIR: linux <-> android, on this ONE runner. The loop above runs them
+      # one after the other, and android's teardown killed the linux backend (it
+      # frees :8080/:4242/:4243 on the host). Android's node lives INSIDE the
+      # emulator, so it is still up after its leg; only its host-side forwards sit
+      # on ports the linux node needs. So: move android's API forward to :18080,
+      # drop its :4243/:8091 forwards, prove the host ports free, and boot the
+      # linux backend again from its own home ($RUNNER_TEMP/ciris-linux: same
+      # owner, same fedID, same node key, already announced). Two nodes, each
+      # owned by its own setup-created person, both talking through the live
+      # canonical. macOS+iOS cannot do this: the simulator shares the host's
+      # loopback, so both nodes would want the same :4242/:4243.
+      #
+      # The stage itself is tools/qa_runner/cross_platform_chat.py (unit-tested
+      # against a fake two-node network); this step is only the bring-up.
+      # ENFORCED: mutual add, pair room, a message each way. REPORTED, NOT
+      # ENFORCED: whether android could see linux's request before adding back
+      # (the known "incoming request has no reader" gap).
+      #
+      # NO `${{ }}` IN THIS BODY (one expression, 21000-char cap): inputs reach it
+      # as env. `shell: bash` is -eo pipefail, so -e is dropped explicitly and
+      # every result-recording command is guarded.
+      - name: Cross-platform chat (linux <-> android, through the live canonical)
+        id: xchat
+        if: ${{ !cancelled() && contains(matrix.platforms, 'android') }}
+        timeout-minutes: 40
+        shell: bash
+        env:
+          REQUESTED: ${{ inputs.platforms || 'all' }}
+        run: |
+          set +e
+          set -uo pipefail
+          out=artifacts/cross-chat
+          mkdir -p "$out/logs"
+          not_run() {
+            printf '{"ran":false,"ok":false,"reason":"%s"}\n' "$1" > "$out/result.json"
+          }
+          for plat in linux android; do
+            if [ "$REQUESTED" != "all" ] && ! echo " $REQUESTED " | grep -q " $plat "; then
+              echo "::notice::cross-platform chat SKIPPED: $plat is not in the requested subset ($REQUESTED)"
+              not_run "$plat not requested"; exit 0
+            fi
+          done
+          # POST TRACE CONFIRMATION: both legs must have reached it. A leg that did
+          # not has already failed the job with its own reason -- one fault, one red.
+          for plat in linux android; do
+            if [ ! -f "artifacts/chat-$plat.json" ]; then
+              echo "::warning::cross-platform chat NOT RUN: the $plat leg never reached its trace confirmation (no artifacts/chat-$plat.json); that leg's own failure is the finding"
+              not_run "$plat leg did not reach trace confirmation"; exit 0
+            fi
+            echo "$plat leg: $(cat "artifacts/chat-$plat.json")"
+          done
+
+          ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+          for port in 8080 4243 8091; do "$ADB" forward --remove "tcp:$port" >/dev/null 2>&1; done
+          if ! "$ADB" forward tcp:18080 tcp:8080; then
+            echo "::error::cross-platform chat: could not forward host:18080 to the emulator's :8080"
+            not_run "adb forward 18080 failed"; exit 1
+          fi
+          # The app is normally still running; if a teardown stopped it, start it
+          # again -- its backend boots from its own home inside the device.
+          if ! curl -sf -m 10 http://127.0.0.1:18080/v1/system/health >/dev/null; then
+            echo "android backend not answering on :18080 -- starting the app again"
+            "$ADB" shell am start -n ai.ciris.mobile.debug/ai.ciris.mobile.MainActivity >/dev/null 2>&1
+          fi
+
+          if ! python3 tools/dev/free_ports.py 8080 4242 4243 --timeout 30 --label cross-chat; then
+            echo "::error::cross-platform chat: host :8080/:4242/:4243 still held -- the linux node cannot boot"
+            not_run "host ports held"; exit 1
+          fi
+          # Same command, cwd and agent id as the harness's ServerManager; NOT first-run.
+          CIRIS_HOME="${RUNNER_TEMP}/ciris-linux" CIRIS_AGENT_ID=qa-runner-ciris-agent \
+            nohup python main.py --adapter api --port 8080 > "$out/linux-backend.log" 2>&1 < /dev/null &
+          linux_pid=$!
+          echo "linux backend restarted from ${RUNNER_TEMP}/ciris-linux (pid $linux_pid)"
+
+          rc=0
+          python -m tools.qa_runner.cross_platform_chat run \
+            --node linux=http://127.0.0.1:8080 --node android=http://127.0.0.1:18080 \
+            --username qaadmin --password "qa_test_password_12345" \
+            --out "$out/result.json" --summary "${GITHUB_STEP_SUMMARY:-/dev/null}" || rc=$?
+
+          # Both nodes' own logs, whatever happened.
+          cp -r "${RUNNER_TEMP}/ciris-linux/logs" "$out/logs/linux" 2>/dev/null
+          mkdir -p "$out/logs/android"
+          for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
+            case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "$out/logs/android/$f" 2>/dev/null ;; esac
+          done
+          if [ "$rc" != 0 ]; then
+            echo "::group::cross-platform chat -- node log lines (contacts_chat / handshake / link_seal_refused / rooting)"
+            python -m tools.qa_runner.cross_platform_chat scan \
+              --logs "linux=$out/logs/linux" --logs "linux-stdout=$out/linux-backend.log" \
+              --logs "android=$out/logs/android" --out "$out/scan.txt"
+            echo "::endgroup::"
+          fi
+          kill "$linux_pid" 2>/dev/null
+          "$ADB" forward --remove tcp:18080 >/dev/null 2>&1
+          exit "$rc"
+
       - name: Collect artifacts
         if: always()
         shell: bash

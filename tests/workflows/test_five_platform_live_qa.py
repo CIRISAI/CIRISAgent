@@ -517,3 +517,44 @@ def test_the_trace_gate_polls_across_replication_rounds(raw: str) -> None:
     assert m, "the trace gate has no wait window"
     assert 60 <= int(m.group(1)) <= 180, f"--wait-secs {m.group(1)} is not ~three replication rounds"
     assert "--poll-secs" in invocation
+
+
+def _workflow() -> dict:
+    import yaml
+
+    return yaml.safe_load(
+        (pathlib.Path(__file__).resolve().parents[2] / ".github/workflows/five-platform-live-qa.yml").read_text()
+    )
+
+
+def test_cross_platform_chat_runs_after_trace_confirmation_on_the_linux_android_runner() -> None:
+    """Eric 2026-10-25: a cross-platform chat stage, post trace confirmation, using
+    two of the existing platforms through the live canonical."""
+    steps = _workflow()["jobs"]["live-qa"]["steps"]
+    names = [s.get("name", "") for s in steps]
+    flow = next(i for i, n in enumerate(names) if n.startswith("Run the shared flow"))
+    xchat = next(i for i, n in enumerate(names) if n.startswith("Cross-platform chat"))
+    collect = names.index("Collect artifacts")
+    assert flow < xchat < collect, "the chat stage must follow the trace gate and precede collection"
+    step = steps[xchat]
+    assert "contains(matrix.platforms, 'android')" in step["if"] and "!cancelled()" in step["if"]
+    body = step["run"]
+    assert "${{" not in body, "a run body with ${{ }} is one expression capped at 21000 chars"
+    assert "set +e" in body, "shell: bash implies -e; result-recording must not abort the step"
+    assert "tools.qa_runner.cross_platform_chat run" in body
+    assert "--node linux=" in body and "--node android=" in body
+    # Both legs must have reached the trace confirmation before it runs.
+    assert "chat-$plat.json" in body
+    # The linux node is restarted from ITS OWN home, never a fresh first run.
+    assert 'CIRIS_HOME="${RUNNER_TEMP}/ciris-linux"' in body
+    assert "CIRIS_FORCE_FIRST_RUN" not in body
+    # Android's host forwards are moved off the ports the linux node binds.
+    assert "forward tcp:18080 tcp:8080" in body
+    assert "free_ports.py 8080 4242 4243" in body
+    # A failure is enforced, and the node logs are scanned.
+    assert 'exit "$rc"' in body and "cross_platform_chat scan" in body
+
+
+def test_no_job_level_if_reads_matrix() -> None:
+    for name, job in _workflow()["jobs"].items():
+        assert "matrix." not in str(job.get("if", "")), f"job {name}: matrix is not available in a job-level if"

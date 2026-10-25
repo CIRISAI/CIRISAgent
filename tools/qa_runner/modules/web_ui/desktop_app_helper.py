@@ -447,7 +447,10 @@ class DesktopAppHelper:
         inputs in quick succession can leave the first two applied to nothing
         -- every call acknowledged, the wizard refusing to advance because a
         required field is empty (five-platform run 33708152999, you_step).
-        Desktop applies input synchronously and never shows this.
+        Desktop races too through client 0.5.231 (CIRISClient#240: its /input
+        answers after a fixed 100 ms), and its setup fields expose no text, so
+        there this read-back is unverifiable and the caller's settle time is
+        what protects the next input.
 
         So read the field back. The client's tree exposes each element's text;
         wait for it to equal what was typed. A field that exposes no text at

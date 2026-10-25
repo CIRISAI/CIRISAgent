@@ -125,8 +125,10 @@ def test_mobile_settles_between_inputs_and_desktop_does_not() -> None:
 
     assert _input_settle_for("android") >= 2.0
     assert _input_settle_for("ios") >= 2.0
+    # Desktop races too through client 0.5.231 (CIRISClient#240): /input answers
+    # after a fixed 100 ms, and run 40192130788 lost the YOU step's username.
     for desktop in ("desktop", "linux", "macos", "windows"):
-        assert _input_settle_for(desktop) == 0.0, f"{desktop} applies input synchronously"
+        assert _input_settle_for(desktop) >= 0.5, f"{desktop} /input is not synchronous (CIRISClient#240)"
 
 
 def test_the_settle_is_actually_waited(fake) -> None:

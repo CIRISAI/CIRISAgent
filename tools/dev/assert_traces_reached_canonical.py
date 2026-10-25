@@ -189,7 +189,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--wait-secs",
-        type=int,
+        type=float,
         default=0,
         help=(
             "Re-read the logs until the required rung appears, up to this many "
@@ -199,11 +199,41 @@ def main() -> int:
             "behaviour for offline log analysis."
         ),
     )
+    ap.add_argument(
+        "--poll-secs",
+        type=float,
+        default=10.0,
+        help="Seconds between reads while waiting (default 10).",
+    )
+    ap.add_argument(
+        "--receipt-timeout",
+        type=float,
+        default=30.0,
+        help=(
+            "Per-request timeout for the receipt's login and read (default 30s). A read "
+            "that times out is 'could not read the receipt, retry', never a verdict."
+        ),
+    )
     args = ap.parse_args()
 
     deadline = time.monotonic() + max(0, args.wait_secs)
     last_receipt_print = ""
     args.authored_seen = None
+    # THE LAST THING A CANONICAL ACTUALLY SAID, and why the latest read failed.
+    #
+    # Delivery to the canonical takes 9-32 s, set by its ~30 s replication round,
+    # so a healthy run routinely reads `held: false` once or twice before it reads
+    # `true`. Run 40091023664 (2026-10-24) read false, false, and then its third
+    # read hit a LOCAL :8080 login timeout; the old loop treated "could not ask"
+    # as "this wheel has no receipt", fell back to the log ladder, and reported
+    # "the node exposes no receipt (CIRISServer#518) ... regression" for a node
+    # whose receipt it had just read twice. The retry the next day passed.
+    #
+    # So: a failed READ is retried, and never becomes a verdict of its own. Only
+    # an answer the receipt actually gave (0/1/4/5) is a verdict; once one has
+    # been seen, the ladder can never take over the answer.
+    last_verdict: Optional[int] = None
+    unread_reason: Optional[str] = None
     while True:
         rc = None
         if args.receipt_url:
@@ -214,13 +244,20 @@ def main() -> int:
             rc, shown = _ask_receipt(args, quiet_if_same_as=last_receipt_print)
             if shown:
                 last_receipt_print = shown
-            if rc is not None and rc not in (1, AUTHORED_NONE):
-                # 0 and RECEIPT_UNKNOWN are both settled: the first is the answer
-                # we wanted, the second cannot become knowable by re-reading a log.
-                # Only 1 (a canonical answered and does not hold it) and
-                # AUTHORED_NONE (nothing sealed YET) are worth waiting on,
-                # because sealing and delivery are both asynchronous.
-                return rc
+            if rc is None and last_verdict is not None:
+                # The receipt answered earlier in this run, so the route EXISTS:
+                # a later "unavailable" is a read that failed, not an older wheel.
+                rc = RECEIPT_UNREAD
+            if rc == RECEIPT_UNREAD:
+                unread_reason = getattr(args, "unread_reason", None) or "the receipt could not be read"
+            elif rc is not None:
+                last_verdict = rc
+                if rc == 0:
+                    return 0
+                # 1 (a canonical answered and does not hold it YET), 4 (not
+                # established: a canonical unreachable or partial) and 5 (nothing
+                # sealed YET) can all change on the next replication round, so
+                # all three are polled to the deadline rather than returned.
         if rc is None:
             rc = _evaluate(args)
             if getattr(args, "require_authored", False) and not args.authored_seen:
@@ -228,32 +265,52 @@ def main() -> int:
                 # sealed anything, so a fallback can never satisfy the authored
                 # rung on its own.
                 rc = AUTHORED_NONE
-        # 3 IS TERMINAL, LIKE 0. Waiting exists because delivery is
-        # ASYNCHRONOUS — a rung that has not appeared yet may appear. But 3 says
-        # the substrate exposes no replication counter AT ALL (CIRISServer#518),
-        # which is a property of the running wheel, not a race: it cannot become
-        # observable without replacing the process. Re-reading for the workflow's
-        # full 240s reprinted the identical verdict for four minutes per
-        # platform, eight per two-platform runner, to reach the conclusion the
-        # first read had already established.
-        #
-        # 1 and 2 keep retrying: those CAN change while we wait.
-        if rc in (0, 3) or time.monotonic() >= deadline:
-            if rc == AUTHORED_NONE and args.authored_seen is None:
-                print("FAIL (authored): the receipt never reported this node's authored count, so")
-                print("      authored > 0 is UNPROVEN — and an unproven enforced rung fails.")
-            if rc == 1 and args.receipt_url:
-                # THE RECEIPT IS THE VERDICT; THE LADDER IS THE DIAGNOSIS. A
-                # canonical saying "I hold nothing of yours" settles WHETHER
-                # traces landed and says nothing about WHY — that lives in this
-                # node's own probe: rooted? KEX resolved? Without this, the first
-                # real negative shipped a verdict and no cause, and the cause had
-                # to be dug out of the artifacts by hand.
-                print()
-                print("DIAGNOSIS — this node's own account of which gate stopped it:")
-                _evaluate(args)
-            return rc
-        time.sleep(10)
+            # 3 IS TERMINAL, LIKE 0. Waiting exists because delivery is
+            # ASYNCHRONOUS — a rung that has not appeared yet may appear. But 3
+            # says the substrate exposes no replication counter AT ALL
+            # (CIRISServer#518), which is a property of the running wheel, not a
+            # race. It is only reachable here, on the ladder, which only answers
+            # when the receipt route itself is absent (503/404 before any
+            # receipt answered) — never because a read timed out.
+            if rc in (0, 3):
+                return rc
+        if time.monotonic() >= deadline:
+            return _final(args, rc, last_verdict, unread_reason)
+        time.sleep(max(0.0, min(args.poll_secs, deadline - time.monotonic())))
+
+
+def _final(args, rc: Optional[int], last_verdict: Optional[int], unread_reason: Optional[str]) -> int:
+    """The verdict at the deadline: the last thing the receipt SAID, else why it could not be read."""
+    if rc == RECEIPT_UNREAD:
+        if last_verdict is None:
+            print(f"UNKNOWN: could not read the receipt before the deadline ({unread_reason}).")
+            print("         This is a LOCAL read failure (the node's own API did not answer the")
+            print("         gate). The receipt route exists; it is not a missing instrument")
+            print("         and not a delivery failure. Re-run, and read the node's own log for why")
+            print("         its API was slow to answer.")
+            return RECEIPT_UNKNOWN
+        print(f"  (the final read failed: {unread_reason}; the verdict is the last receipt that answered)")
+        rc = last_verdict
+    if rc == AUTHORED_NONE and args.authored_seen is None:
+        print("FAIL (authored): the receipt never reported this node's authored count, so")
+        print("      authored > 0 is UNPROVEN — and an unproven enforced rung fails.")
+    if rc == 1 and args.receipt_url:
+        # THE RECEIPT IS THE VERDICT; THE LADDER IS THE DIAGNOSIS. A
+        # canonical saying "I hold nothing of yours" settles WHETHER
+        # traces landed and says nothing about WHY — that lives in this
+        # node's own probe: rooted? KEX resolved? Without this, the first
+        # real negative shipped a verdict and no cause, and the cause had
+        # to be dug out of the artifacts by hand.
+        print()
+        print("DIAGNOSIS — this node's own account of which gate stopped it:")
+        _evaluate(args)
+    return rc
+
+
+#: Not an exit code: "the receipt could not be READ this time" (local login
+#: timeout, :8080 refused, a 5xx). Retried until the deadline; if nothing ever
+#: answered it exits RECEIPT_UNKNOWN, saying it was a local read failure.
+RECEIPT_UNREAD = -1
 
 
 #: Exit 4 — the receipt could not be established. NOT a delivery failure.
@@ -330,6 +387,18 @@ def _strip_read_at(text: str) -> str:
     return _re.sub(r'"read_at":"[^"]*"', '"read_at":"-"', text)
 
 
+#: HTTP statuses that mean the receipt ROUTE does not exist on this wheel. The
+#: only answers that hand the question to the log ladder.
+_ROUTE_ABSENT = (404, 501, 503)
+
+
+def _unread(args, reason: str) -> int:
+    """A read that failed locally: say so, remember why, and ask to be retried."""
+    args.unread_reason = reason
+    print(f"  receipt: could not read the receipt ({reason}) — will retry; this is not a verdict")
+    return RECEIPT_UNREAD
+
+
 def _ask_receipt_impl(args) -> Optional[int]:
     """The body of _ask_receipt, printing to stdout as it goes."""
     import json as _json
@@ -337,6 +406,7 @@ def _ask_receipt_impl(args) -> Optional[int]:
     import urllib.request
 
     base = args.receipt_url.rstrip("/")
+    timeout = float(getattr(args, "receipt_timeout", None) or 30.0)
     token = None
     if args.receipt_username and args.receipt_password:
         try:
@@ -344,30 +414,30 @@ def _ask_receipt_impl(args) -> Optional[int]:
             req = urllib.request.Request(
                 f"{base}/v1/auth/login", data=body, headers={"Content-Type": "application/json"}
             )
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 token = _json.loads(resp.read()).get("access_token")
         except Exception as exc:  # noqa: BLE001
-            # Same phrase as every other fall-back below, on purpose: the
-            # operator is being told the same thing — the receipt could not be
-            # asked, so the ladder answers instead.
-            print(f"  receipt: could not authenticate against {base} ({exc}) — falling back to the ladder")
-            return None
+            # NOT A FALL-BACK. A login that timed out says the LOCAL API was slow
+            # to answer this gate; it says nothing about whether the receipt
+            # exists. Falling back to the ladder here is what turned a :8080
+            # login timeout into "no receipt (CIRISServer#518)" in run
+            # 40091023664. Retry instead.
+            return _unread(args, f"could not authenticate against {base} ({exc})")
 
     req = urllib.request.Request(f"{base}/v1/system/runtime/delivery-receipt")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = _json.loads(resp.read())
     except urllib.error.HTTPError as exc:
-        if exc.code == 503:
-            print("  receipt: unavailable on this wheel (ciris-server < 0.5.208) — falling back to the ladder")
+        if exc.code in _ROUTE_ABSENT:
+            # The ROUTE is absent: an older wheel. Only this falls back.
+            print(f"  receipt: unavailable on this wheel (HTTP {exc.code}; ciris-server < 0.5.208) — falling back to the ladder")
             return None
-        print(f"  receipt: HTTP {exc.code} from {base} — falling back to the ladder")
-        return None
+        return _unread(args, f"HTTP {exc.code} from {base}")
     except Exception as exc:  # noqa: BLE001
-        print(f"  receipt: {base} unreachable ({exc}) — falling back to the ladder")
-        return None
+        return _unread(args, f"{base} did not answer ({exc})")
 
     data = payload.get("data") or {}
     verdict = data.get("held_by_every_answering_canonical")

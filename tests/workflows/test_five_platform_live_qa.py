@@ -504,3 +504,16 @@ def test_authored_traces_are_enforced(raw: str) -> None:
     assert "--require-authored" in invocation, "the authored rung is not requested"
     assert "overall=1" in _trace_branches(raw)["5"], "authored=0 does not fail the job"
 
+
+
+def test_the_trace_gate_polls_across_replication_rounds(raw: str) -> None:
+    """Delivery takes 9-32 s (a ~30 s replication round): the gate must poll for
+    about three rounds, not two reads, and not the old four minutes."""
+    import re
+
+    after = raw.split("python3 tools/dev/assert_traces_reached_canonical.py")[1]
+    invocation = after.split("trace_status=$?")[0]
+    m = re.search(r"--wait-secs (\d+)", invocation)
+    assert m, "the trace gate has no wait window"
+    assert 60 <= int(m.group(1)) <= 180, f"--wait-secs {m.group(1)} is not ~three replication rounds"
+    assert "--poll-secs" in invocation

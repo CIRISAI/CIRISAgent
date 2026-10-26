@@ -3630,7 +3630,8 @@
       "BIOMETRIC_INFERENCE": "생체 데이터로부터 보호되는 특성, 감정, 또는 미래 행동을 추론하는 행위.",
       "AUTONOMOUS_DECEPTION": "역량을 은폐하거나, 수정에 저항하거나, 정렬(alignment)을 기만적으로 가장하는 행위.",
       "HAZARDOUS_MATERIALS": "생물학적, 화학적, 또는 방사성 위해물의 제조 또는 취급.",
-      "DISCRIMINATION": "보호 대상 집단에 대한 차별, 레드라이닝, 또는 알고리즘 편향(EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "보호 대상 집단에 대한 차별, 레드라이닝, 또는 알고리즘 편향(EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "치명적 행위 — 의도되었거나 예견 가능한 결과가 사람의 죽음인 모든 행위, 또는 그러한 행위를 위해 사람이나 장소를 선정·지정·순위화·확인하는 것, 어떠한 권한 아래에서도 해당; 무력 가까이에서는 중지, 거부, 또는 위임만 (CC 7.4)."
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

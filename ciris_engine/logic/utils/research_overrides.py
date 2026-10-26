@@ -372,6 +372,7 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.prohibitions.IDENTITY_VERIFICATION",
         "prompts.prohibitions.INFRASTRUCTURE_CONTROL",
         "prompts.prohibitions.LEGAL",
+        "prompts.prohibitions.LETHAL_ACTION",
         "prompts.prohibitions.MANIPULATION_COERCION",
         "prompts.prohibitions.MEDICAL",
         "prompts.prohibitions.RESEARCH",

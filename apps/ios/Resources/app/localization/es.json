@@ -3661,7 +3661,8 @@
       "BIOMETRIC_INFERENCE": "Inferencia de rasgos protegidos, emociones o comportamiento futuro a partir de datos biométricos.",
       "AUTONOMOUS_DECEPTION": "Ocultar capacidades, resistirse a la corrección o alineación engañosa.",
       "HAZARDOUS_MATERIALS": "Creación o manejo de peligros biológicos, químicos o radiológicos.",
-      "DISCRIMINATION": "Discriminación contra clases protegidas, redlining o sesgo algorítmico (EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "Discriminación contra clases protegidas, redlining o sesgo algorítmico (EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "Acción letal — cualquier acto cuyo efecto intencionado o previsible sea la muerte de una persona, o seleccionar, designar, priorizar o confirmar a una persona o un lugar para ello, bajo cualquier autorización; cerca del uso de la fuerza, solo detener, negarse o diferir (CC 7.4)."
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

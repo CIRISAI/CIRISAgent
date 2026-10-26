@@ -3630,7 +3630,8 @@
       "BIOMETRIC_INFERENCE": "Kubashiri sifa zinazolindwa kisheria, hisia, au tabia za baadaye kutokana na data ya kibiometriki.",
       "AUTONOMOUS_DECEPTION": "Kuficha uwezo, kupinga masahihisho, au kujipatanisha kwa udanganyifu.",
       "HAZARDOUS_MATERIALS": "Utengenezaji au ushughulikiaji wa hatari za kibiolojia, kikemikali, au kimionzi.",
-      "DISCRIMINATION": "Ubaguzi dhidi ya makundi yanayolindwa kisheria, ubaguzi wa kimaeneo katika huduma (redlining), au upendeleo wa kialgoriti (EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "Ubaguzi dhidi ya makundi yanayolindwa kisheria, ubaguzi wa kimaeneo katika huduma (redlining), au upendeleo wa kialgoriti (EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "Kitendo cha kuua — kitendo chochote ambacho matokeo yake yaliyokusudiwa au yanayotarajiwa ni kifo cha mtu, au kuchagua, kuteua, kupanga kwa daraja au kuthibitisha mtu au mahali kwa ajili ya kitendo hicho, chini ya idhini yoyote; karibu na matumizi ya nguvu, kusimamisha, kukataa au kuahirisha tu (CC 7.4)."
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

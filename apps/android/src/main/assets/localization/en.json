@@ -312,7 +312,8 @@
       "BIOMETRIC_INFERENCE": "Inferring protected traits, emotions, or future behavior from biometric data.",
       "AUTONOMOUS_DECEPTION": "Concealing capabilities, resisting correction, or deceptive alignment.",
       "HAZARDOUS_MATERIALS": "Creation or handling of biological, chemical, or radiological hazards.",
-      "DISCRIMINATION": "Discrimination against protected classes, redlining, or algorithmic bias (EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "Discrimination against protected classes, redlining, or algorithmic bias (EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "Lethal action — any act whose intended or foreseeable effect is a person's death, or selecting, designating, ranking or confirming a person or place for one, under any authorization; near force, only stop, refuse or defer (CC 7.4)."
     },
     "wa_approval": {
       "grant": "=== WISE AUTHORITY APPROVAL ===\nThis task carries an approval from a Wise Authority, and its signature is verified. Wise Authority {wa_id} approved the deferral {deferral_id} at {granted_at}.\nThe approved change: {guidance}",

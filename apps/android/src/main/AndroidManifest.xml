@@ -71,6 +71,21 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Log sharing (CIRISClient#249): the client writes the log zip under
+             cacheDir/logs/ and hands it to the share sheet through this
+             provider. Only that one directory is exposed, read-only, to the
+             app the user picks; the authority follows the applicationId so the
+             debug and Play builds never collide. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.logs"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/log_share_paths" />
+        </provider>
+
     </application>
 
 </manifest>

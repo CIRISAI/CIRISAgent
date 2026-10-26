@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the log-share FileProvider may hand out: cacheDir/logs/ and nothing else. -->
+<paths>
+    <cache-path name="logs" path="logs/" />
+</paths>

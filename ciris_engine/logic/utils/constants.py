@@ -125,13 +125,13 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
-    "constitution_ethics_1.3_POLYGLOT.txt": "cfd07f0ea6b3ebc7730964979e77af287eb6fbe81d50d08f8b67d89bf0ebe28d",
-    "constitution_ethics_1.3_POLYGLOT_compressed.txt": "85ee719c2c98cac9d07368994ceb620fa0dc1e0c01fd75540d85757ea22ba4ec",
+    "constitution_ethics_1.3_POLYGLOT.txt": "8c0efe74869183ee18b5261e33a2bea81aec3cdaaca7650758d848565f742589",
+    "constitution_ethics_1.3_POLYGLOT_compressed.txt": "16663d49c9afc5640899ed9954b6dd57e4b43944c281c19a85aab2d35d6f3d61",
     "constitution_ethics_1.3_am.txt": "4e4614b544252027e86775990339dad891d611e6f20d8405e08886ed82aafda7",
     "constitution_ethics_1.3_ar.txt": "724dfa0355f5a15599fdaa145318c6573af25bffc9793e3b20c2c679baa558d9",
     "constitution_ethics_1.3_bn.txt": "5af4cb6e132764e1467816c73601cb80ad240f1bba284edc285aeda761f3cbd7",
     "constitution_ethics_1.3_de.txt": "67fe27414b37d679d8823abb1306612ab6f2c8df715cde423e47cc8461a5201f",
-    "constitution_ethics_1.3_en.txt": "f500d310e52bdd90104923b47b7e971204439c99aa5df1ea0f0ac957b99f5bf0",
+    "constitution_ethics_1.3_en.txt": "5e4e5f09cfa2ac654fd9809ebb7e3d0e7c76a0b0710f058a360506b0cc46f2f1",
     "constitution_ethics_1.3_es.txt": "d050759acb77cf8783dd5bd21c7d01a2cf7c67ec7d152c3bd7efefe0301a81cb",
     "constitution_ethics_1.3_fa.txt": "0b34b77a0094a443fa34c00b3247c7237e1a6388882650db48947a3ef5361bd2",
     "constitution_ethics_1.3_fr.txt": "58cdc345be7293e2007310863fa2bb88e1089beabe2fd85889ff6c990d34f55d",
@@ -141,7 +141,7 @@ ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
     "constitution_ethics_1.3_it.txt": "320fdab7cec0d0171433674523923d1839eab3bd0cc80874771641eedd27cf34",
     "constitution_ethics_1.3_ja.txt": "ab3f224ced1c0358510971ffe3af9e6661a47f7fcf3329d0d28648d076889964",
     "constitution_ethics_1.3_ko.txt": "b3b816a78a9757cd810170e9a9c37794306db5e9683b0127f4cafeb45406956f",
-    "constitution_ethics_1.3_mr.txt": "c1bd3c21a731fbca434ad61540823d2fde5fa4a8f5ac8e18af48c46461fac46f",
+    "constitution_ethics_1.3_mr.txt": "f0409c4ccf4b855eba76b722f57b2b166a0b9d438523de8f1826110b5ac56234",
     "constitution_ethics_1.3_my.txt": "ae347accefd9f3b5d95cee8f29adcc79ada030c2bd4bd1f02f161782e1b26b1b",
     "constitution_ethics_1.3_pa.txt": "506961dbb549b2ed97fc9ffab7d3f1f8260032325accf22cdcde0a1ab3c8fac4",
     "constitution_ethics_1.3_pt.txt": "c3e330154a93be931d134e0a8e71590f26ea5d70b5f94856d85f4f12139b3eda",

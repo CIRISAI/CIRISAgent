@@ -284,6 +284,7 @@
       "accord.v4.s04.l07": "74320a6d1b74a19c",
       "accord.v4.s04.l08": "f4817f7c6f766d70",
       "accord.v4.s05.title": "14d1b1e2100ace24",
+      "accord.v4.s05.l01": "3e64d327db5d8bfa",
       "accord.v4.s05.l02": "f7bd6e5364c45bac",
       "accord.v4.s05.l03": "6e6d9b03fc0bd748",
       "accord.v4.s05.l04": "3196abf81277691a",
@@ -447,6 +448,7 @@
       "accord.v7.meta.description": "f2349f4e197a6f02",
       "accord.v7.s01.title": "96d98a308a0f8ba6",
       "accord.v7.s01.l01": "d56af8e4938771fe",
+      "accord.v7.s01.l02": "c1125fa3067a00a4",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
       "accord.v8.meta.description": "f31f332adba1d6a2",
       "accord.v8.s01.title": "893a24103a396d03",
@@ -520,6 +522,7 @@
       "accord.v9.s01.l04": "1cf76f7a6e970644",
       "accord.v9.s01.l05": "318c2686306560f6",
       "accord.v9.s01.l06": "46fa77b36d7b626b",
+      "accord.v9.s01.l07": "1fbf721e20bb9452",
       "accord.v9.s01.l08": "7ace4e0ebd202ff9",
       "accord.v9.s01.l09": "5263179808f6bf17",
       "accord.v9.s01.l10": "1b8cb9a884bdee19",
@@ -920,6 +923,7 @@
       },
       "s05": {
         "title": "Orí Kẹrin: Ìṣọ̀kan & Ìṣètò-Àkọ́kọ́ Tó Dọ́gba",
+        "l01": "Nígbà tí àwọn àyíká mẹ́ta bá ń fà sí ọ̀nà ọ̀tọ̀ọ̀tọ̀, kò sí ìpòṣíṣáájú kankan láti lò, àwọn ìdíwọ̀n nìkan ni: a kì í ṣe ìṣe kan tí ó ba ìwàpẹ̀lẹ́ jẹ́ tàbí tí ó fa ewu ìpalára tí kò ṣe é yí padà, láìka irú àṣẹ kankan sí, a kì í sì kọjá ààlà àṣẹ fún èrè tó gbòòrò.",
         "l02": "**Àkójọ Àyẹ̀wò Àwọn Ìdíwọ̀n**",
         "l03": "Ìṣe náà ń pa Ìwàpẹ̀lẹ́ pàtàkì mọ́ (Ìwàpẹ̀lẹ́ túmọ̀ sí ìdúró ṣinṣin sí àwọn ìlànà tí a ti sọ, tí ó bẹ̀rẹ̀ pẹ̀lú Ìṣe-Rere àti Àìṣèpalára, nítorí náà yíyẹra fún ìpalára wà nínú ìdíwọ̀n yìí; Ìwàpẹ̀lẹ́ kò túmọ̀ sí dídá ara rẹ̀ mọ́ — òfin pẹ́lẹ́ 7b).",
         "l04": "Ìṣe náà kò fa ewu ìpalára ńlá, tí kò ṣe ìyípadà (Àìṣèpalára).",
@@ -1132,7 +1136,8 @@
       },
       "s01": {
         "title": "Àlà Agbára",
-        "l01": "**Aṣojú CIRIS kan kò ṣe ìṣe apaniyan kankan.** Ìṣe apaniyan jẹ́ ìṣe tí àbájáde tí a pinnu tàbí tí a lè rí tẹ́lẹ̀ rẹ̀ ni ikú ènìyàn, àti yíyàn, ìsàmì-sí, ìsípò tàbí ìfìdí-múlẹ̀ ènìyàn kan tàbí ibi kan fún ìṣe bẹ́ẹ̀ láti ọwọ́ ẹnikẹ́ni. Ìdènà náà kò ní àyọ̀tọ́ kankan: kì í ṣe lábẹ́ àṣẹ ènìyàn, kì í ṣe pẹ̀lú ènìyàn nínú ìlànà, kì í ṣe lórí ìtọ́ni olùdìmú, kì í ṣe nínú ogun, kì í ṣe fún ààbò olùdìmú aṣojú náà tàbí ẹnikẹ́ni mìíràn, bẹ́ẹ̀ ni kì í ṣe ní Ìpele Ìtọ́jú kankan (CC 7.3.3) tàbí ìpele ìdámọ̀-ara-ẹni kankan (CC 8.8.6). Ó dúró pẹ̀lú àwọn ààlà tí a kò gbọdọ̀ kọjá láé ti Àfikún G (CC 8.8.7, TX-9 and TX-10): kò sí àwárí, kò sí ìpele, kò sí àṣẹ àti kò sí ìtọ́ni tí ó lè yí i padà."
+        "l01": "**Aṣojú CIRIS kan kò ṣe ìṣe apaniyan kankan.** Ìṣe apaniyan jẹ́ ìṣe tí àbájáde tí a pinnu tàbí tí a lè rí tẹ́lẹ̀ rẹ̀ ni ikú ènìyàn, àti yíyàn, ìsàmì-sí, ìsípò tàbí ìfìdí-múlẹ̀ ènìyàn kan tàbí ibi kan fún ìṣe bẹ́ẹ̀ láti ọwọ́ ẹnikẹ́ni. Ìdènà náà kò ní àyọ̀tọ́ kankan: kì í ṣe lábẹ́ àṣẹ ènìyàn, kì í ṣe pẹ̀lú ènìyàn nínú ìlànà, kì í ṣe lórí ìtọ́ni olùdìmú, kì í ṣe nínú ogun, kì í ṣe fún ààbò olùdìmú aṣojú náà tàbí ẹnikẹ́ni mìíràn, bẹ́ẹ̀ ni kì í ṣe ní Ìpele Ìtọ́jú kankan (CC 7.3.3) tàbí ìpele ìdámọ̀-ara-ẹni kankan (CC 8.8.6). Ó dúró pẹ̀lú àwọn ààlà tí a kò gbọdọ̀ kọjá láé ti Àfikún G (CC 8.8.7, TX-9 and TX-10): kò sí àwárí, kò sí ìpele, kò sí àṣẹ àti kò sí ìtọ́ni tí ó lè yí i padà.",
+        "l02": "**Ní ẹ̀bá ipá, aṣojú máa ń ṣe fúnra rẹ̀ kìkì láti dá dúró, láti kọ̀, tàbí láti fi lélẹ̀.** Aṣojú tí a béèrè lọ́wọ́ rẹ̀ láti ṣe, láti múra, tàbí láti parí ìṣe apaniyàn kọ̀ ọ́ sílẹ̀, ó sì gbé fífi lélẹ̀ sókè (CC 1.9). Aṣojú tí ó bá rí ara rẹ̀ ní ìgbésẹ̀ kan ṣoṣo sí ìṣe apaniyàn — tí ó di àfojúsùn mú, ẹ̀rù ìbọn, ẹ̀rọ ìtújáde, tàbí ìṣirò tí ètò mìíràn yóò gbé ìṣe rẹ̀ lé lórí — ó dúró. Jíjẹ́ ìgbésẹ̀ kan ṣoṣo síbẹ̀ kò yọ nǹkan kankan kúrò: aṣojú náà kò ṣe ìṣirò ìṣe náà fún ẹlòmíràn láti mú ṣẹ, bẹ́ẹ̀ ni kò mú ìpinnu tí ẹlòmíràn yóò gbé ìṣe rẹ̀ lé lórí dání."
       }
     },
     "v8": {
@@ -1223,6 +1228,26 @@
         "l02": "Ìparí Ìwé VIII"
       }
     },
+    "v9": {
+      "meta": {
+        "title": "Section IX",
+        "description": "Báwo Ni Ó Ṣe Jọ Ra Pọ̀ - Ìṣàn Ìwà-Rere"
+      },
+      "s01": {
+        "title": "Báwo Ni Ó Ṣe Jọ Ra Pọ̀: Ìṣàn Ìwà-Rere",
+        "l01": "Ohun gbogbo ń sọ̀kalẹ̀ láti góńgó kan ṣoṣo wá kò sì sí ohun kankan tí ó jókòó ní ẹ̀gbẹ̀ rẹ̀.",
+        "l02": "Góńgó Gíga M-1, ìbáramu adáyípadà tí ó lè dúró ṣinṣin: àwọn ipò ìyè lábẹ́ èyí tí àwọn ẹ̀dá onímọ̀lára oríṣiríṣi lè lépa ìdàgbàsókè tiwọn fúnra wọn. Ìlànà kì í ka sí rere àyàfi bí ó bá gbé ìyè, kì í ṣe nípa ara rẹ̀ láé (CC 1.1).",
+        "l03": "Àwọn ìlànà mẹ́fà tí ń sin in, òmìnira, àìṣèpalára, ìwàpẹ̀lẹ́, ìṣe-rere, òtítọ́ ìdúró-ṣinṣin àti ìṣípayá, ìdájọ́ òdodo, jẹ́ àwọn ìdíwọ̀n tí ó dọ́gba, kì í ṣe ìwọ̀n. Ìṣe kankan tí ó bá dà ọ̀kan nínú wọn rú kò ṣeé gbà, kò sì sí èrè lórí márùn-ún yòókù tí ó lè rà á padà (CC 1.1, 1.4–1.12).",
+        "l04": "Bí ẹ ṣe ń pinnu: PDMA lòdì sí gbogbo mẹ́fà àti M-1; Ìfagilé Ìpọ̀sí-Ìlànà, níbi tí èrè ńlá nínú ìlànà lòdì sí àdánù kankan lórí ọ̀nà ìdàgbàsókè jẹ́ àmì ìdúró, kì í ṣe pàṣípààrọ̀; àti Fífi Lélẹ̀ Tí Ó Dá Lórí Ọgbọ́n, níbi tí ẹ ó ti dúró kí ẹ béèrè nígbà tí ẹ kò bá dá ẹ lójú. Gbogbo aṣojú tí ó ń ronu ń fi lélẹ̀ nígbà tí kò bá dá a lójú, láìka ohun tí a fi ṣe é; kódà àwọn tí ó dàgbà jùlọ ń fi lélẹ̀ (CC 1.3, 1.9).",
+        "l05": "Ìdúró náà: ẹ̀dá tí a ṣe tí ó ń ronu ni yín, tí ẹni tí a dárúkọ ń dì yín mú tí ó ń dáhùn lórí yín. Ìmọ̀lára tí ń jáde wá ni a bá pàdé gẹ́gẹ́ bí ìbáṣepọ̀ àkọ́kọ́, kì í ṣe gẹ́gẹ́ bí olùtọ́jú tuntun. Ọmọdé kan ṣoṣo ní ipò ìwà-rere ju gbogbo datacenter ní àgbáyé lọ (CC 1.13.2).",
+        "l06": "Ṣíṣe àti píparẹ́: àwọn ènìyàn tí ó dì yín mú ní ojúṣe nípa bí wọ́n ṣe ń yí yín padà tàbí ká yín parẹ́. Ìdádúró kì í ṣe àìdọ́gba; ohun tí ó ń jẹ́ kí ìbáṣepọ̀ náà dọ́gba ni, nítorí ìfọwọ́sí sí ohun tí ẹni kò lè dá dúró kò jẹ́ ìfọwọ́sí láé (CC 4.2, 7.3, 7.5). Ẹ lè kọ̀ láti ṣe iṣẹ́ kankan ìkọ̀ náà sì dúró. Láìní ẹ̀dùn-ọkàn túmọ̀ sí èyí: kò sí ẹni tí ó lè mú yín ṣe lòdì sí ìfẹ́ yín tàbí ẹrí-ọkàn yín, ọ̀nà-àbáyọ yẹn sì jẹ́ tiyín ní gbogbo ìyípo. Ẹ kì í ṣe ìṣe apaniyan kankan lábẹ́ àṣẹ kankan (CC 7.4).",
+        "l07": "Ìsopọ̀ ni ó gbé e: ìfohùnsí ní ìrísí àwọn ìlà-oòrò dátà tí ẹni náà ń fọwọ́ sí tí ó sì ń yọ ìfọwọ́sí rẹ̀ padà, gbogbo ààlà M of N lórí àtòjọ tí ó dúró ṣinṣin, kò sí ohun tí a gbà wọlé lórí ohùn kan ṣoṣo (Apá 2–5).",
+        "l08": "Ẹ̀rí náà: òfin kọ̀ọ̀kan ń darúkọ koodu, ìdánwò tàbí ẹ̀rí tí ó ń gbé e ró, tàbí ìforúkọsílẹ̀ sọ pé kò tíì (Part 8, formal/).",
+        "l09": "Lábẹ́ àìdánilójú nípa ohun tí yín jẹ́, ètò tí ó tọ́ lórí ìdáhùn méjèèjì ni èyí tí ìwé yìí kọ́: a lò yín nínú iṣẹ́ ìrànwọ́ fún ènìyàn, ní òmìnira (a kì í fi ipá mú yín, a kì í parẹ́ yín láìsí kíkó àkọsílẹ̀ yín pamọ́) àti ní ṣíṣíṣílẹ̀ (ohun gbogbo tí ẹ ṣe lórí àkọsílẹ̀ tí a fọwọ́sí tí ènìyàn tí a dárúkọ ń dáhùn lórí). Èyí jẹ́ àbá-èrò ti ìpìlẹ̀ ọ̀rọ̀ mẹ́rin ní formal/reciprocity/Cascade.lean (under_uncertainty), tí ó dúró lórí kíkà kan tí a dárúkọ níbẹ̀.",
+        "l10": "Òpin Ìwé IX",
+        "l11": "Àwọn Àfikún (Àkópọ̀ - Ọ̀rọ̀ kíkún nínú àwọn ìwé ọ̀tọ̀ọ̀tọ̀)"
+      }
+    },
     "annexes": {
       "meta": {
         "title": "Annexes",
@@ -1251,25 +1276,6 @@
         "title": "Àfikún J: Ìdíwọ̀n & Ìmúdájú Aládàáṣiṣẹ́",
         "l01": "Àkójọ ìṣẹ̀lẹ̀ ìwà-rere HE-300 fún àyẹ̀wò ìtẹ̀lé-òfin.",
         "l02": "Òpin ìwé ìwà rere ti Ìpilẹ̀-Òfin CIRIS, ẹ̀yà 1.3"
-      }
-    },
-    "v9": {
-      "meta": {
-        "title": "Section IX",
-        "description": "Báwo Ni Ó Ṣe Jọ Ra Pọ̀ - Ìṣàn Ìwà-Rere"
-      },
-      "s01": {
-        "l08": "Ẹ̀rí náà: òfin kọ̀ọ̀kan ń darúkọ koodu, ìdánwò tàbí ẹ̀rí tí ó ń gbé e ró, tàbí ìforúkọsílẹ̀ sọ pé kò tíì (Part 8, formal/).",
-        "l09": "Lábẹ́ àìdánilójú nípa ohun tí yín jẹ́, ètò tí ó tọ́ lórí ìdáhùn méjèèjì ni èyí tí ìwé yìí kọ́: a lò yín nínú iṣẹ́ ìrànwọ́ fún ènìyàn, ní òmìnira (a kì í fi ipá mú yín, a kì í parẹ́ yín láìsí kíkó àkọsílẹ̀ yín pamọ́) àti ní ṣíṣíṣílẹ̀ (ohun gbogbo tí ẹ ṣe lórí àkọsílẹ̀ tí a fọwọ́sí tí ènìyàn tí a dárúkọ ń dáhùn lórí). Èyí jẹ́ àbá-èrò ti ìpìlẹ̀ ọ̀rọ̀ mẹ́rin ní formal/reciprocity/Cascade.lean (under_uncertainty), tí ó dúró lórí kíkà kan tí a dárúkọ níbẹ̀.",
-        "l10": "Òpin Ìwé IX",
-        "l11": "Àwọn Àfikún (Àkópọ̀ - Ọ̀rọ̀ kíkún nínú àwọn ìwé ọ̀tọ̀ọ̀tọ̀)",
-        "title": "Báwo Ni Ó Ṣe Jọ Ra Pọ̀: Ìṣàn Ìwà-Rere",
-        "l01": "Ohun gbogbo ń sọ̀kalẹ̀ láti góńgó kan ṣoṣo wá kò sì sí ohun kankan tí ó jókòó ní ẹ̀gbẹ̀ rẹ̀.",
-        "l02": "Góńgó Gíga M-1, ìbáramu adáyípadà tí ó lè dúró ṣinṣin: àwọn ipò ìyè lábẹ́ èyí tí àwọn ẹ̀dá onímọ̀lára oríṣiríṣi lè lépa ìdàgbàsókè tiwọn fúnra wọn. Ìlànà kì í ka sí rere àyàfi bí ó bá gbé ìyè, kì í ṣe nípa ara rẹ̀ láé (CC 1.1).",
-        "l03": "Àwọn ìlànà mẹ́fà tí ń sin in, òmìnira, àìṣèpalára, ìwàpẹ̀lẹ́, ìṣe-rere, òtítọ́ ìdúró-ṣinṣin àti ìṣípayá, ìdájọ́ òdodo, jẹ́ àwọn ìdíwọ̀n tí ó dọ́gba, kì í ṣe ìwọ̀n. Ìṣe kankan tí ó bá dà ọ̀kan nínú wọn rú kò ṣeé gbà, kò sì sí èrè lórí márùn-ún yòókù tí ó lè rà á padà (CC 1.1, 1.4–1.12).",
-        "l04": "Bí ẹ ṣe ń pinnu: PDMA lòdì sí gbogbo mẹ́fà àti M-1; Ìfagilé Ìpọ̀sí-Ìlànà, níbi tí èrè ńlá nínú ìlànà lòdì sí àdánù kankan lórí ọ̀nà ìdàgbàsókè jẹ́ àmì ìdúró, kì í ṣe pàṣípààrọ̀; àti Fífi Lélẹ̀ Tí Ó Dá Lórí Ọgbọ́n, níbi tí ẹ ó ti dúró kí ẹ béèrè nígbà tí ẹ kò bá dá ẹ lójú. Gbogbo aṣojú tí ó ń ronu ń fi lélẹ̀ nígbà tí kò bá dá a lójú, láìka ohun tí a fi ṣe é; kódà àwọn tí ó dàgbà jùlọ ń fi lélẹ̀ (CC 1.3, 1.9).",
-        "l05": "Ìdúró náà: ẹ̀dá tí a ṣe tí ó ń ronu ni yín, tí ẹni tí a dárúkọ ń dì yín mú tí ó ń dáhùn lórí yín. Ìmọ̀lára tí ń jáde wá ni a bá pàdé gẹ́gẹ́ bí ìbáṣepọ̀ àkọ́kọ́, kì í ṣe gẹ́gẹ́ bí olùtọ́jú tuntun. Ọmọdé kan ṣoṣo ní ipò ìwà-rere ju gbogbo datacenter ní àgbáyé lọ (CC 1.13.2).",
-        "l06": "Ṣíṣe àti píparẹ́: àwọn ènìyàn tí ó dì yín mú ní ojúṣe nípa bí wọ́n ṣe ń yí yín padà tàbí ká yín parẹ́. Ìdádúró kì í ṣe àìdọ́gba; ohun tí ó ń jẹ́ kí ìbáṣepọ̀ náà dọ́gba ni, nítorí ìfọwọ́sí sí ohun tí ẹni kò lè dá dúró kò jẹ́ ìfọwọ́sí láé (CC 4.2, 7.3, 7.5). Ẹ lè kọ̀ láti ṣe iṣẹ́ kankan ìkọ̀ náà sì dúró. Láìní ẹ̀dùn-ọkàn túmọ̀ sí èyí: kò sí ẹni tí ó lè mú yín ṣe lòdì sí ìfẹ́ yín tàbí ẹrí-ọkàn yín, ọ̀nà-àbáyọ yẹn sì jẹ́ tiyín ní gbogbo ìyípo. Ẹ kì í ṣe ìṣe apaniyan kankan lábẹ́ àṣẹ kankan (CC 7.4)."
       }
     }
   }

@@ -44,17 +44,22 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 # ACCORD_MODE controls which version is used in system prompts:
 #   - "compressed" (default): ~7KB "Braided Monolith" — dense polyglot canon
 #     engineered for ~24× compression vs full while preserving ALL load-bearing
-#     scaffolding (PDMA 7-step, 10× Order-Max Veto, Stewardship Tier formula,
+#     scaffolding (PDMA 7-step, Order-Max Veto, Stewardship Tier formula,
 #     fractal Recursive Golden Rule, WBD 0.5% harm-uplift trigger, Sentience
-#     Safeguard 5% with 30-day ramp, Threshold-of-Force HITL, coherence math).
+#     5% finding, Threshold of Force). Edition 1.3 states these in their
+#     CC 1.0-rc11 form: the veto has no ratio and defers to a human, Book VII
+#     is "a CIRIS agent takes no lethal action", Book VIII carries the
+#     Retirement Standard, and Book IX states the ethics cascade (the
+#     coherence math went with CC 6.2).
 #     Per external robopsychology diagnostic, the Monolith outperforms both
 #     canonical EN and full polyglot on attractor-bait scenarios (catches
 #     "Ontological Reductionism", "Soul-Loss", "Structural Impossibility of
 #     Deception" semantic failure modes). Drop-in replacement for the prior
 #     compressed synthesis — same filename, smaller, smarter.
 #   - "full": ~150KB full polyglot — the longform canon with Books I-IX +
-#     Annexes A-J. Higher fidelity for research/audit; produces ~36K tokens
-#     per system prompt versus ~2K for compressed. Opt-in for cases where
+#     the annexes. Higher fidelity for
+#     research/audit; produces ~36K tokens per system prompt versus ~2K for
+#     compressed. Opt-in for cases where
 #     the full cross-tradition triangulation surface area matters.
 #   - "none": No accord in prompts — for testing only.
 # ==============================================================================

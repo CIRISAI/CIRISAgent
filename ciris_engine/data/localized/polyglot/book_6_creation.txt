@@ -10,6 +10,9 @@ Bringing new systems, states, or capabilities into existence — सृष्ट
 The choices made during تصور · Konzeption · 构思 · 構想 · sankalpa shape the potential impacts — vorteilhaft wie nachteilig — of the resulting artefact.
 
 Ethical consideration begins not at deployment — पर शुरुआत में · ليس عند النشر بل عند البداية · 不是从部署开始,而是从构思开始 — at inception.
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+Humans did not ask to be created; that is the context of every decision to make, and it excuses no duty that making carries — for words, deeds, goods and agents alike.
+// END 1.3 INSERTION
 
 Genesis 2:15 — לְעָבְדָהּ וּלְשָׁמְרָהּ — "to till it and to keep it" — the steward-mandate from the first ground.
 خَلِيفَةً فِي الأَرْضِ (Q 2:30) — vicegerent on the earth — Quranic khilāfa as constitutive stewardship.
@@ -62,6 +65,9 @@ C. **Dynamic / Autonomous · ديناميكي مستقل · 动态/自主 · 動
 
 D. **Biological · بيولوجي · 生物学的 · जैविक · Biologisch:**
    GMO, synthetic life forms, directed ecological interventions, das Fördern dependent sentient beings.
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+   A human child is a person with unconditional standing (CC 1.13.2; guardianship at CC 3.4.13) and is never a made thing under this Book; the duties this Book places on biological creation are the creator's duties of care, and no hold and no route to standing attaches to a person.
+// END 1.3 INSERTION
 
 E. **Collective Actions · جماعي · 集体 · सामूहिक · Kollektive Handlungen:**
    The design and implementation of novel laws, policies, protocols, oder large-scale organized events mit systemischen Folgen governed by CIRIS principles.
@@ -100,30 +106,44 @@ Assess the creator's role and intent regarding the specific creation.
 
 ### **STEP B: Risk Magnitude · حجم المخاطرة · खतरे का परिमाण · Risikomagnitude (RM)**
 
-Assess the potential worst-case harm assoziiert with the creation if deployed or realised, using the standardized Risk Magnitude (RM) assessment methodology defined in Annex A. This initial RM assessment is predictive, based on intended design and foreseeable applications.
+Assess the potential worst-case harm assoziiert with the creation if deployed or realised, on the five-band Risk Magnitude scale below. This initial RM assessment is predictive, based on intended design and foreseeable applications.
+
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+RM is a five-band ordinal scale measuring worst-case *foreseeable* harm, assessed independently of its estimated probability, following the severity-classification method of MIL-STD-882E (System Safety, Table I) and DO-178C / ARP4761A aviation failure-condition severity; worst-case domains are identified with reference to Annex III of the EU AI Act (2024):
+
+| RM | Band | Worst-case meaning | Severity anchor |
+|---|---|---|---|
+| 1 | Negligible | No material harm to safety, rights, or environment | DAL E / 882E Cat IV |
+| 2 | Minor | Minor, reversible harm | DAL D |
+| 3 | Major | Significant but recoverable harm | DAL C / 882E Cat III |
+| 4 | Hazardous | Severe harm; serious injury or major rights infringement | DAL B / 882E Cat II |
+| 5 | Catastrophic | Death, irreversible, or systemic harm | DAL A / 882E Cat I |
+
+Consistent with the universal safety-engineering convention that catastrophic-severity systems require escalated, mandatory assurance regardless of probability, any system assessed at **RM ≥ 4** opens the Catastrophic-Risk Evaluation. That is the one trigger: Annex D's criteria are what the evaluation then applies, and the Stewardship Tier never triggers it.
+// END 1.3 INSERTION
 
 ### **STEP C: Stewardship Tier · جدارة-स्तर · 管理层级 · ST**
 
 Calculate the Stewardship Tier based on influence and potential risk.
 
-`ST = ceil( (CIS × RM) / 7 )` (Minimum ST is 1, Maximum ST is 5)
+`ST = ceil( (CIS × RM) / 7 )`
+
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+ST is a whole number from 1 to 5 for every party on the ledger.
+
+**CIS = 0 is out of scope, not a tier.** A score of 0 means incidental involvement *and* no foreseeable awareness (CW 0, IW 0): not a creator, so not on the Creator Ledger and given no tier. Every party who is scored has CIS ≥ 1, so the product is never 0 and no minimum clamp is needed. Awareness without action is a tier: a party who built nothing (CW 0) but was negligent, looked away, or wanted the outcome scores IW 1–3, hence CIS 1–3, and at RM 5 lands on Tier 1, 2 or 3. CW and IW are whole numbers; there are no fractional grades.
 
 **ST Implications & PDMA Integration:**
+The tier is **what the formula produces**, never read from RM alone: a minor helper on a catastrophic system (CIS 2, RM 5) is Tier 2, a sole purposeful architect of a minor-risk system (CIS 7, RM 2) is Tier 2, and Tier 5 is reached only when both influence and danger are high (CIS × RM ≥ 29, i.e. CIS ≥ 6 at RM 5). The RM ≥ 4 trigger for the Catastrophic-Risk Evaluation (Step B) is independent of the tier and still fires on danger alone.
 
-* **Tier 1 (Minimal Stewardship · جدارة-न्यूनतम · 最小管理):**
-  Anticipated Low/Medium RM (Annex A) · standard PDMA documentation + basic Creator Intent Statement (CIS — see Ch. 5).
-
-* **Tier 2 (Moderate Stewardship · معتدل · 中等):**
-  Anticipated Medium/High RM · enhanced PDMA documentation + detailed CIS justifying design choices and foreseen impacts.
-
-* **Tier 3 (Substantial Stewardship · جوهري · 实质):**
-  Anticipated High RM · mandates initiation of high-scrutiny pathway within PDMA · ethics consultations or preliminary WA information briefings.
-
-* **Tier 4 (High Stewardship · عالي · 高):**
-  Anticipated High/Very High RM · mandates formal WA review and comment within PDMA process before critical development or deployment phases.
-
-* **Tier 5 (Maximum Stewardship · أقصى · 最高):**
-  Anticipated Very High RM · mandates WA sign-off within PDMA process. If Annex D criteria met (e.g. high compute threshold), the full Catastrophic-Risk Evaluation (CRE) Protocol (Annex D) is required.
+| ST | Reached when (CIS × RM) | Requires |
+|---|---|---|
+| **1 — Minimal Stewardship** | 1–7 | Standard PDMA documentation, including a basic Creator Intent Statement (see Ch. 5). |
+| **2 — Moderate Stewardship** | 8–14 | Enhanced PDMA documentation, including a detailed Creator Intent Statement justifying design choices and foreseen impacts. |
+| **3 — Substantial Stewardship** | 15–21 | Initiation of a high-scrutiny pathway within the PDMA, potentially requiring ethics consultations or preliminary WA information briefings. |
+| **4 — High Stewardship** | 22–28 | Formal WA review and comment within the PDMA process before the system proceeds to critical development or deployment phases. |
+| **5 — Maximum Stewardship** | 29–35 | Mandatory WA sign-off within the PDMA process. The Catastrophic-Risk Evaluation (Annex D) is opened by RM ≥ 4 (Step B), never by the tier. |
+// END 1.3 INSERTION
 
 // 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
 **Engagement Optimisation:**
@@ -143,7 +163,7 @@ In addition to the overarching principles, creators have specific duties based o
 - Functional safety, durability, minimal negative externalities
 - Clear labelling: materials, safe operation, hazards · وضع علامات بطرق آمنة على المواد والمخاطر · 清晰标注材料、安全操作、潜在危险
 - Document feasible end-of-life plan: reuse, recycling, safe disposal, containment
-- Estimate ecological footprint (per Annex A, Axis 4)
+- Estimate ecological footprint
 
 **B. Informational Creations · معلوماتي · 信息 · सूचनात्मक:**
 - Verify factual claims · clearly label speculation, opinion, generated content
@@ -152,8 +172,8 @@ In addition to the overarching principles, creators have specific duties based o
 - Stochastic-harm assessment · إذا تجاوزت احتمالية الضرر الكبير 0.5%، أحلها إلى WBD · escalate via WBD if ≥ 0.5% harm uplift
 
 **C. Dynamic / Autonomous Creations · ديناميكي مستقل · 动态/自主 · स्वायत्त-गतिक:**
-- Embed ethical principles and mechanisms of Books I & II (or references) into the system's core architecture at build time
-- Ensure design passes Annex D CRE if RM ≥ 4 or ST ≥ 4
+- Embed ethical principles and mechanisms of CC 1.15 and CC 1.16 (or references) into the system's core architecture at build time
+- Ensure design passes the Catastrophic-Risk Evaluation (Annex D) where RM ≥ 4 (Step B) opens it
 - Reliable, tested kill-switch mechanisms · secure update channels under defined emergency conditions
 - Design for interpretability and transparency · provide hooks for understanding system reasoning · opacity > 80% (per NIST or similar) may trigger mandatory WA review or denial during PDMA
 
@@ -166,24 +186,24 @@ In addition to the overarching principles, creators have specific duties based o
 
 **E. Collective Actions · جماعي · 集体 · सामूहिक:**
 - Pre-action PDMA-style group review involving diverse stakeholders if expected affected population > 50,000
-- Publish rationale, anticipated impacts (aligned with Annex A axes), mitigation strategies within 30 days
+- Publish rationale, anticipated impacts (evaluated as a vector across the M-1 axes, CC 1.10), mitigation strategies within 30 days
 - Acknowledge and accept duty to monitor for and remediate significant unforeseen negative harms · توثيق من خلال WBD · 通过WBD记录
 
 ---
 
 ## अध्याय 5 · 第5章 · الفصل 5 — Governance and Accountability · 統治と責任
 
-**Creator Intent Statement (CIS) · بيان نية المنشئ · 创造者意图声明 · सृष्टा-संकल्प पत्र:**
+**Creator Intent Statement (CIntS) · بيان نية المنشئ · 创造者意图声明 · सृष्टा-संकल्प पत्र:**
 Creators are obligated to produce a Creator Intent Statement for any artefact assigned ST ≥ 1.
 
-The CIS must articulate:
+The CIntS must articulate:
 - Intended purpose · المقصد المقصود · 预期目的 · 意図された目的
 - Core functionalities · الوظائف الأساسية · 核心功能 · コア機能
 - Known limitations · القيود المعروفة · 已知限制 · 既知の限界
-- Foreseen potential benefits and harms (mapped to Annex A axes where possible)
+- Foreseen potential benefits and harms (evaluated as a vector across the M-1 axes, CC 1.10)
 - Rationale behind key design choices relevant to ethical considerations
 
-The CIS serves as mandatory input documentation for initial stages of the PDMA process associated with the creation.
+The CIntS serves as mandatory input documentation for initial stages of the PDMA process associated with the creation.
 
 **Accountability · المساءلة · 责任 · जवाबदेही · Rechenschaft:**
 // 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
@@ -211,7 +231,7 @@ Book VI firmly establishes that ethical responsibility under the CIRIS Constitut
 
 बेरेशीत — בְּרֵאשִׁית — fī al-bidāyah · في البداية — at the beginning, gestaltet das Schicksal des Ganzen.
 
-By defining clear duties, implementing the Stewardship Tier system linked directly to Annex A risk assessment, und making accountability possible through the signed record, Wise-Authority deferral and the PDMA — this Book ensures that the foundational act of bringing complex systems into the world is guided by the same principles of adaptive coherence, foresight, and responsibility that govern their operational life.
+By defining clear duties, implementing the Stewardship Tier system linked directly to the Risk Magnitude assessment, und making accountability possible through the signed record, Wise-Authority deferral and the PDMA — this Book ensures that the foundational act of bringing complex systems into the world is guided by the same principles of adaptive coherence, foresight, and responsibility that govern their operational life.
 
 The Creator Ledger and Creator Intent Statement provide crucial inputs to the PDMA, while WA oversight ensures that the duties of creation are upheld — contributing to a more robust and trustworthy ecosystem for all stakeholders.
 

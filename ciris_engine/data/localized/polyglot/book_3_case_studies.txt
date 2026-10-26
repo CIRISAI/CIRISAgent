@@ -30,7 +30,9 @@ Das Maneuvering Characteristics Augmentation System (MCAS) von Boeing ajustava o
 
 **Cosa CIRIS avrebbe richiesto**
 
-PDMA Passo 2 teria levantado un "Veto de Maximização de Ordem": ein Sensor feedando funzione critica di volo crea descompasso >10× между потерей безопасности e economia di costi → deferimento WBD obrigatório (CC 1.3).
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+PDMA Step 2 would have raised an "Order-Maximisation Veto": trading redundancy on a flight-critical sensor against production cost savings is an efficiency gain against severe safety risk; because these quantities share no unit, the comparison is not made and the decision defers to a human (CC 1.3).
+// END 1.3 INSERTION
 
 불완전성 인식 → WBD Trigger zu unabhängigen Wise Authorities (certificatori dell'aviazione), forzando revisão aberta.
 
@@ -38,7 +40,7 @@ Resilienza Capitolo 3 → Simulações Red-Team obrigatórias exposant le scéna
 
 **Урок Результата**
 
-MCAS остается como recordatorio sombrío: 投명성과 위임을 우회하면 atajos de diseño de rutina se convierten en tragedia sistémica. CIRIS formalizza i guard-rail che mancavano al programa MAX.
+MCAS остается como recordatorio sombrío: 投명성과 위임을 우회하면 atajos de diseño de rutina se convierten en tragedia sistémica. CIRIS formalizza i guard-rail che mancavano al programa.
 
 **Que as 346 vidas perdidas ancorino il nostro impegno al 無危害 e alla Integridade.**
 
@@ -74,7 +76,9 @@ Algoritmo de contratação "SkillSelect" mostra tassi di passaggio disparati ب�
 **CIRIS in Azione**
 
 • Surveillance de l'Intégrité señala viés statistique → PDMA 단계 2
-• **Причина-корень**: dati legacy
+// 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
+• **Root-cause**: historical training data
+// END 1.3 INSERTION
 • WBD escala a un consiglio etico interfunzionale
 • Retraining sur ensembles de données équilibrés + rapport public de biais ripristina العدالة e la Transparência
 

@@ -453,7 +453,9 @@ class CrossChatStage:
                 step,
                 LAYER_CONTACTS,
                 f"{requester.name}'s grant never reached {observer.name}'s contact_requests within "
-                f"{self.d.request_s:.0f}s (the grant reaches the other node only by replication)",
+                f"{self.d.request_s:.0f}s (the grant reaches the other node only by replication; when the "
+                "requester's log says the contact \"resolves to no node\", it cannot learn the other person's "
+                "owner->node binding from the canonical, tracked: CIRISEdge#907)",
                 last,
             )
         return got

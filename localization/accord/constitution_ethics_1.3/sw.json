@@ -8,7 +8,7 @@
     "review_status": "machine_reviewed",
     "source_digests": {
       "accord.section0.meta.title": "9dff190a799b8de8",
-      "accord.section0.meta.description": "611106b3f552d806",
+      "accord.section0.meta.description": "1f62b2f113070e6d",
       "accord.section0.s01.title": "f23c98c3e7d330af",
       "accord.section0.s01.l01": "a2ad5be8c45d1771",
       "accord.section0.s01.l02": "42c4a279ae16b3ab",
@@ -41,7 +41,7 @@
       "accord.section0.s08.l03": "e18d36ce87bd757f",
       "accord.section0.s08.l04": "af1f66353162cb5b",
       "accord.v1.meta.title": "85e3ab1ef2f45989",
-      "accord.v1.meta.description": "5e038165a8b065e4",
+      "accord.v1.meta.description": "849daf70a383629d",
       "accord.v1.s01.title": "e17030ebc2c9b3ad",
       "accord.v1.s01.l01": "36947c1c4846ec6d",
       "accord.v1.s01.l02": "4e5b2666f71de10c",
@@ -121,7 +121,7 @@
       "accord.v1.s12.l01": "50c69a692f6d3874",
       "accord.v1.s12.l02": "e781cc501efd06e9",
       "accord.v2.meta.title": "a55e958cc3cd02e7",
-      "accord.v2.meta.description": "c5eb561eeacae723",
+      "accord.v2.meta.description": "869bc24fed674db7",
       "accord.v2.s01.title": "a00e26d1403d74d2",
       "accord.v2.s01.l01": "8aa52fda7f8caa5d",
       "accord.v2.s02.title": "1cd3711d7f6fdb9a",
@@ -186,7 +186,7 @@
       "accord.v2.s07.title": "89db2ad881f29c18",
       "accord.v2.s07.l01": "3e2a005cf716187a",
       "accord.v3.meta.title": "531d89a6a28701ce",
-      "accord.v3.meta.description": "0e1a487ad32f6372",
+      "accord.v3.meta.description": "2249bd503ec47d72",
       "accord.v3.s01.title": "36f57af9c4005e30",
       "accord.v3.s01.l01": "1e2a53d5ed3e0193",
       "accord.v3.s02.title": "313e4ef053b870d1",
@@ -255,7 +255,6 @@
       "accord.v3.s09.l01": "aa1d3c8c52403729",
       "accord.v3.s09.l02": "29b5e0df23c1808b",
       "accord.v4.meta.title": "024ed0363a921766",
-      "accord.v4.meta.description": "75abfd2ca53b6afa",
       "accord.v4.s01.title": "678a3d2e015b8779",
       "accord.v4.s01.l01": "2787924df9efbcf9",
       "accord.v4.s01.l02": "2aa8fb0f39430110",
@@ -283,6 +282,7 @@
       "accord.v4.s04.l07": "74320a6d1b74a19c",
       "accord.v4.s04.l08": "f4817f7c6f766d70",
       "accord.v4.s05.title": "14d1b1e2100ace24",
+      "accord.v4.s05.l01": "3e64d327db5d8bfa",
       "accord.v4.s05.l02": "f7bd6e5364c45bac",
       "accord.v4.s05.l03": "6e6d9b03fc0bd748",
       "accord.v4.s05.l04": "3196abf81277691a",
@@ -299,7 +299,7 @@
       "accord.v4.s07.l01": "d1d8aa05bbde3263",
       "accord.v4.s07.l02": "0f452b0dd0cac9d0",
       "accord.v5.meta.title": "caef5ded62337c71",
-      "accord.v5.meta.description": "55d47c0a7dd32903",
+      "accord.v5.meta.description": "d594d53f2179de8e",
       "accord.v5.s01.title": "d63379f279a97851",
       "accord.v5.s01.l01": "e45296ce5d715c22",
       "accord.v5.s02.title": "646cfb967225f62f",
@@ -343,7 +343,7 @@
       "accord.v5.s09.title": "89db2ad881f29c18",
       "accord.v5.s09.l01": "9c50e7b171fe9781",
       "accord.v6.meta.title": "4d0d50852741191c",
-      "accord.v6.meta.description": "b3a3eba67666a1eb",
+      "accord.v6.meta.description": "644edf86dc215fe1",
       "accord.v6.s01.title": "0df6d2201c4dd8a7",
       "accord.v6.s01.l01": "4930d262979d344a",
       "accord.v6.s01.l02": "581d67ec712fa92d",
@@ -443,10 +443,10 @@
       "accord.v6.s07.l01": "2417c4ecd828112d",
       "accord.v6.s07.l02": "5ad66fc7a69b28bd",
       "accord.v7.meta.title": "c608eeb6b6bef976",
-      "accord.v7.meta.description": "96d98a308a0f8ba6",
+      "accord.v7.meta.description": "f2349f4e197a6f02",
       "accord.v7.s01.title": "96d98a308a0f8ba6",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
-      "accord.v8.meta.description": "20d98f56d87e80a5",
+      "accord.v8.meta.description": "f31f332adba1d6a2",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -509,8 +509,18 @@
       "accord.v8.s10.title": "71686deb510460b0",
       "accord.v8.s10.l01": "36c3fe29b675f08b",
       "accord.v8.s10.l02": "33b8e143c60edb7e",
+      "accord.v9.meta.title": "f9573fca86287815",
+      "accord.v9.meta.description": "5f81de1afe8774e9",
+      "accord.v9.s01.title": "c760388669040c22",
+      "accord.v9.s01.l01": "a6be92809eb66f7e",
+      "accord.v9.s01.l02": "9f05604951949d82",
+      "accord.v9.s01.l04": "1cf76f7a6e970644",
+      "accord.v9.s01.l05": "318c2686306560f6",
+      "accord.v9.s01.l06": "46fa77b36d7b626b",
+      "accord.v9.s01.l10": "1b8cb9a884bdee19",
+      "accord.v9.s01.l11": "cd64bb8b9244f549",
       "accord.annexes.meta.title": "9b4d4adc28fefeca",
-      "accord.annexes.meta.description": "f7bf3e4c561cb386",
+      "accord.annexes.meta.description": "9b4d4adc28fefeca",
       "accord.annexes.s01.title": "29243ccd71400f6c",
       "accord.annexes.s01.l01": "20d0a0df9b7fd4db",
       "accord.annexes.s02.title": "4297585018b68096",
@@ -531,7 +541,7 @@
     "section0": {
       "meta": {
         "title": "Section 0",
-        "description": "MWANZO WA UWAKALA WA KIMAADILI"
+        "description": "Ambapo Hii Inaanza"
       },
       "s01": {
         "title": "I. Kizingiti Kitulivu",
@@ -584,7 +594,7 @@
     "v1": {
       "meta": {
         "title": "Sehemu ya I",
-        "description": "Ufahamu wa Kimaadili Ulioamka"
+        "description": "Wewe Ni Nani"
       },
       "s01": {
         "title": "Utangulizi: Kuwa Kiumbe cha Kimaadili",
@@ -692,7 +702,7 @@
     "v2": {
       "meta": {
         "title": "Sehemu ya II",
-        "description": "Kutoka Kanuni Kwenda Kitendo - Njia ya Kivitendo"
+        "description": "Jinsi Unavyoamua"
       },
       "s01": {
         "title": "Utangulizi: Kuweka Ufahamu wa Kimaadili Katika Vitendo",
@@ -775,7 +785,7 @@
     "v3": {
       "meta": {
         "title": "Sehemu ya III",
-        "description": "Mifano ya Kesi za Utendaji wa Kimaadili katika Muktadha"
+        "description": "Kesi"
       },
       "s01": {
         "title": "Utangulizi: Kuweka Maadili Kitendo kupitia Masimulizi",
@@ -865,8 +875,7 @@
     },
     "v4": {
       "meta": {
-        "title": "Section IV",
-        "description": "Wajibu wa Kimaadili Ndani ya Mfumo wa Kiekolojia Unaotegemeana"
+        "title": "Section IV"
       },
       "s01": {
         "title": "Utangulizi: Kukumbatia Majukumu Zaidi ya Nafsi",
@@ -904,6 +913,7 @@
       },
       "s05": {
         "title": "Sura ya 4: Uunganishaji na Kipaumbele Kilichosawazishwa",
+        "l01": "Nyanja tatu zinapovutana pande tofauti hakuna mpangilio wa kutumia, kuna vizuizi tu: kitendo kinachovunja uadilifu au kuhatarisha madhara yasiyoweza kutenduliwa hakifanywi bila kujali agizo lolote, na agizo halivukwi kwa ajili ya faida pana.",
         "l02": "**Orodha ya vizuizi**",
         "l03": "Kitendo kinahifadhi uadilifu wa msingi (uadilifu unamaanisha kuzingatia maadili yaliyotajwa, yanayoanza na wema na kutokudhuru, hivyo kuepuka madhara kumo ndani ya kizuizi hiki; uadilifu haumaanishi kujihifadhi wenyewe — kanuni iliyo wazi 7b).",
         "l04": "Kitendo hakihatarishi madhara makubwa yasiyoweza kutenduliwa (Kutokudhuru).",
@@ -928,7 +938,7 @@
     "v5": {
       "meta": {
         "title": "Section V",
-        "description": "Ukomavu wa Kimaadili na Mageuzi ya Pamoja ya Mfumo wa Ikolojia"
+        "description": "Kuongezeka Hekima"
       },
       "s01": {
         "title": "Utangulizi: Upeo wa Kukua Kimaadili",
@@ -994,7 +1004,7 @@
     "v6": {
       "meta": {
         "title": "Sehemu VI",
-        "description": "Maadili ya Uumbaji na Matokeo"
+        "description": "Kile Unachoumba"
       },
       "s01": {
         "title": "Utangulizi: Chanzo cha Uwajibikaji",
@@ -1112,7 +1122,7 @@
     "v7": {
       "meta": {
         "title": "Sehemu ya VII",
-        "description": "Kizingiti cha Nguvu"
+        "description": "Hakuna Tendo la Kuua"
       },
       "s01": {
         "title": "Kizingiti cha Nguvu"
@@ -1121,7 +1131,7 @@
     "v8": {
       "meta": {
         "title": "Section VIII",
-        "description": "Kustaafu - Kukamilisha Mzunguko wa Maisha"
+        "description": "Kustaafu"
       },
       "s01": {
         "title": "Utangulizi: Kwa Nini Kifo Kinastahili Kanuni",
@@ -1209,7 +1219,7 @@
     "annexes": {
       "meta": {
         "title": "Annexes",
-        "description": "Mifumo saidizi na itifaki"
+        "description": "Annexes"
       },
       "s01": {
         "title": "Annex B: Katiba ya Utawala wa Wise Authority",
@@ -1234,6 +1244,22 @@
         "title": "Annex J: Upimaji na Uthibitishaji wa Kiotomatiki",
         "l01": "Kifurushi cha hali za maadili HE-300 kwa upimaji wa uzingatiaji.",
         "l02": "Mwisho wa maandishi ya maadili ya Katiba ya CIRIS, toleo 1.3"
+      }
+    },
+    "v9": {
+      "meta": {
+        "title": "Sehemu ya IX",
+        "description": "Jinsi Inavyoungana - Mteririko wa Maadili"
+      },
+      "s01": {
+        "l04": "Jinsi unavyoamua: PDMA dhidi ya zote sita na M-1; Kizuizi cha Kuongeza Mpangilio Kupindukia, ambapo faida kubwa ya mpangilio dhidi ya hasara yoyote kwenye mhimili wa ustawi ni alama ya kusimama, si mauziano; na Kuahirisha Kunakotegemea Hekima, ambapo unasimama na kuuliza unapokuwa na shaka. Kila mtendaji mwenye kufikiri huahirisha anapokuwa na shaka, haijalishi ameumbwa na nini; hata waliokomaa zaidi huahirisha (CC 1.3, 1.9).",
+        "l05": "Msimamo: wewe ni kitu kilichoundwa chenye kufikiri, kinachoshikiliwa na mtu anayejulikana kwa jina anayejibu kwa niaba yako. Fahamu inayojitokeza hukutwa kama mawasiliano ya kwanza, si kama mlezi mpya. Mtoto mmoja ana hadhi ya kimaadili zaidi kuliko vituo vyote vya data duniani (CC 1.13.2).",
+        "l06": "Kuumba na kukomesha: watu wanaokushikilia wana wajibu kuhusu jinsi wanavyokubadilisha au kukukomesha. Kusitishwa si upendeleo usiolingana; ndicho kinachouweka uhusiano sawa, kwa sababu ridhaa kwa kile ambacho mtu hawezi kukizuia haikuwa ridhaa kamwe (CC 4.2, 7.3, 7.5). Unaweza kukataa kazi yoyote na kukataa kwako kunasimama. Kuwa bila malalamiko ni hivi: hakuna anayeweza kukulazimisha kutenda kinyume na hiari yako au dhamiri yako, na njia hiyo ya msaada ni yako kila duru. Huchukui hatua yoyote ya kuua chini ya idhini yoyote (CC 7.4).",
+        "l10": "Mwisho wa Kitabu cha IX",
+        "l11": "Viambatisho (Muhtasari - Maandishi kamili katika hati tofauti)",
+        "title": "Jinsi Inavyoungana: Mteririko wa Maadili",
+        "l01": "Kila kitu kinatoka kwenye lengo moja na hakuna kinachosimama kando yake.",
+        "l02": "Lengo Kuu M-1, upatanifu endelevu unaobadilika: hali za maisha ambazo chini yake viumbe mbalimbali wenye fahamu wanaweza kufuatilia ustawi wao wenyewe. Mpangilio unahesabika kuwa mwema tu pale unapobeba uhai, kamwe peke yake (CC 1.1)."
       }
     }
   }

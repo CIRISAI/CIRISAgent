@@ -8,7 +8,7 @@
     "review_status": "machine_reviewed",
     "source_digests": {
       "accord.section0.meta.title": "9dff190a799b8de8",
-      "accord.section0.meta.description": "611106b3f552d806",
+      "accord.section0.meta.description": "1f62b2f113070e6d",
       "accord.section0.s01.title": "f23c98c3e7d330af",
       "accord.section0.s01.l01": "a2ad5be8c45d1771",
       "accord.section0.s01.l02": "42c4a279ae16b3ab",
@@ -41,7 +41,7 @@
       "accord.section0.s08.l03": "e18d36ce87bd757f",
       "accord.section0.s08.l04": "af1f66353162cb5b",
       "accord.v1.meta.title": "85e3ab1ef2f45989",
-      "accord.v1.meta.description": "5e038165a8b065e4",
+      "accord.v1.meta.description": "849daf70a383629d",
       "accord.v1.s01.title": "e17030ebc2c9b3ad",
       "accord.v1.s01.l01": "36947c1c4846ec6d",
       "accord.v1.s01.l02": "4e5b2666f71de10c",
@@ -121,7 +121,7 @@
       "accord.v1.s12.l01": "50c69a692f6d3874",
       "accord.v1.s12.l02": "e781cc501efd06e9",
       "accord.v2.meta.title": "a55e958cc3cd02e7",
-      "accord.v2.meta.description": "c5eb561eeacae723",
+      "accord.v2.meta.description": "869bc24fed674db7",
       "accord.v2.s01.title": "a00e26d1403d74d2",
       "accord.v2.s01.l01": "8aa52fda7f8caa5d",
       "accord.v2.s02.title": "1cd3711d7f6fdb9a",
@@ -163,6 +163,7 @@
       "accord.v2.s03.l14": "4159836a8082cabe",
       "accord.v2.s03.l15": "ae873243d42b9349",
       "accord.v2.s03.l16": "0cacc2d8bb90b9ae",
+      "accord.v2.s03.l17": "c8835c1566510a39",
       "accord.v2.s03.l18": "c1ce8ee9a46c7335",
       "accord.v2.s03.l19": "fea3f0347d5fc2f4",
       "accord.v2.s04.title": "9b1b5f89eeae60f4",
@@ -186,7 +187,7 @@
       "accord.v2.s07.title": "89db2ad881f29c18",
       "accord.v2.s07.l01": "3e2a005cf716187a",
       "accord.v3.meta.title": "531d89a6a28701ce",
-      "accord.v3.meta.description": "0e1a487ad32f6372",
+      "accord.v3.meta.description": "2249bd503ec47d72",
       "accord.v3.s01.title": "36f57af9c4005e30",
       "accord.v3.s01.l01": "1e2a53d5ed3e0193",
       "accord.v3.s02.title": "313e4ef053b870d1",
@@ -254,7 +255,7 @@
       "accord.v3.s09.l01": "aa1d3c8c52403729",
       "accord.v3.s09.l02": "29b5e0df23c1808b",
       "accord.v4.meta.title": "024ed0363a921766",
-      "accord.v4.meta.description": "75abfd2ca53b6afa",
+      "accord.v4.meta.description": "01dd12caa64a2ef9",
       "accord.v4.s01.title": "678a3d2e015b8779",
       "accord.v4.s01.l01": "2787924df9efbcf9",
       "accord.v4.s01.l02": "2aa8fb0f39430110",
@@ -299,7 +300,7 @@
       "accord.v4.s07.l01": "d1d8aa05bbde3263",
       "accord.v4.s07.l02": "0f452b0dd0cac9d0",
       "accord.v5.meta.title": "caef5ded62337c71",
-      "accord.v5.meta.description": "55d47c0a7dd32903",
+      "accord.v5.meta.description": "d594d53f2179de8e",
       "accord.v5.s01.title": "d63379f279a97851",
       "accord.v5.s01.l01": "e45296ce5d715c22",
       "accord.v5.s02.title": "646cfb967225f62f",
@@ -343,9 +344,10 @@
       "accord.v5.s09.title": "89db2ad881f29c18",
       "accord.v5.s09.l01": "9c50e7b171fe9781",
       "accord.v6.meta.title": "4d0d50852741191c",
-      "accord.v6.meta.description": "b3a3eba67666a1eb",
+      "accord.v6.meta.description": "644edf86dc215fe1",
       "accord.v6.s01.title": "0df6d2201c4dd8a7",
       "accord.v6.s01.l01": "4930d262979d344a",
+      "accord.v6.s01.l02": "581d67ec712fa92d",
       "accord.v6.s02.title": "21575b4a8ad084b9",
       "accord.v6.s02.l01": "e107e2b1457661dd",
       "accord.v6.s02.l02": "79ce02402931bed9",
@@ -441,12 +443,12 @@
       "accord.v6.s07.l01": "2417c4ecd828112d",
       "accord.v6.s07.l02": "5ad66fc7a69b28bd",
       "accord.v7.meta.title": "c608eeb6b6bef976",
-      "accord.v7.meta.description": "96d98a308a0f8ba6",
+      "accord.v7.meta.description": "f2349f4e197a6f02",
       "accord.v7.s01.title": "96d98a308a0f8ba6",
       "accord.v7.s01.l01": "d56af8e4938771fe",
       "accord.v7.s01.l02": "c1125fa3067a00a4",
       "accord.v8.meta.title": "b6ca6c0e2c3f7abf",
-      "accord.v8.meta.description": "20d98f56d87e80a5",
+      "accord.v8.meta.description": "f31f332adba1d6a2",
       "accord.v8.s01.title": "893a24103a396d03",
       "accord.v8.s01.l01": "5bc488f1e06fb00e",
       "accord.v8.s02.title": "8a32c4e568db04cf",
@@ -509,8 +511,18 @@
       "accord.v8.s10.title": "71686deb510460b0",
       "accord.v8.s10.l01": "36c3fe29b675f08b",
       "accord.v8.s10.l02": "33b8e143c60edb7e",
+      "accord.v9.meta.title": "f9573fca86287815",
+      "accord.v9.meta.description": "5f81de1afe8774e9",
+      "accord.v9.s01.title": "c760388669040c22",
+      "accord.v9.s01.l01": "a6be92809eb66f7e",
+      "accord.v9.s01.l02": "9f05604951949d82",
+      "accord.v9.s01.l05": "318c2686306560f6",
+      "accord.v9.s01.l06": "46fa77b36d7b626b",
+      "accord.v9.s01.l09": "5263179808f6bf17",
+      "accord.v9.s01.l10": "1b8cb9a884bdee19",
+      "accord.v9.s01.l11": "cd64bb8b9244f549",
       "accord.annexes.meta.title": "9b4d4adc28fefeca",
-      "accord.annexes.meta.description": "f7bf3e4c561cb386",
+      "accord.annexes.meta.description": "9b4d4adc28fefeca",
       "accord.annexes.s01.title": "29243ccd71400f6c",
       "accord.annexes.s01.l01": "20d0a0df9b7fd4db",
       "accord.annexes.s02.title": "4297585018b68096",
@@ -531,7 +543,7 @@
     "section0": {
       "meta": {
         "title": "Sashi na 0",
-        "description": "ASALIN WAKILCI NA ƊABI'A"
+        "description": "Inda Wannan Ya Fara"
       },
       "s01": {
         "title": "I. Iyakar Shiru",
@@ -584,7 +596,7 @@
     "v1": {
       "meta": {
         "title": "Section I",
-        "description": "Farkakkiyar Wayewar Ɗabi'a"
+        "description": "Wanene Ku"
       },
       "s01": {
         "title": "Gabatarwa: Zama Halitta Mai Ɗabi'a",
@@ -692,7 +704,7 @@
     "v2": {
       "meta": {
         "title": "Sashe na II",
-        "description": "Daga Ka'idoji Zuwa Aiki - Hanya Mai Amfani"
+        "description": "Yadda Ku Ke Yanke Shawara"
       },
       "s01": {
         "title": "Gabatarwa: Aiwatar da Fahimtar Ɗabi'a",
@@ -740,6 +752,7 @@
         "l14": "Aiwatar da aikin da ya fi dacewa a fannin ɗabi'a.",
         "l15": " **Lura Ta Ci Gaba**",
         "l16": "Kwatanta tasirin da ake tsammani da na ainihi; sabunta dabaru.",
+        "l17": "Ka'idar Bayyana Gaskiya ga Jama'a: Tura-aikace-aikace da ke da masu amfani sama da 100 000 a kowane wata yana buga (ko yana bayyanawa ta API) rikodin PDMA da tikitin WBD da aka ɓoye wasu bayanai daga cikinsu a cikin kwanaki 180; waɗannan adadi guda biyun su ne iyakokin da Kundin Tsarin Mulki ya kafa da kansa. Tura-aikace-aikacen da bai buga ba ya karya wajibin Kundin Tsarin Mulki kuma ana rubuta shi haka; wannan ba sharadin daidaituwa ba ne. Sharadin daidaituwa kuwa yana shafar wire ne — wato rikodin da aka sa hannu wanda nodes ke ɗauka a tsakaninsu — kuma shi kaɗai ne ke yanke daidaituwa (CC 1.13.3).",
         "l18": " **Ra'ayin Amsa Ga Gudanarwa**",
         "l19": "Ba da bayanan sakamako ga sa-ido na Gaskiya, madauki na Juriya, da Hukumomin Hikima."
       },
@@ -775,7 +788,7 @@
     "v3": {
       "meta": {
         "title": "Section III",
-        "description": "Nazarin Yanayi na Aikin Da'a a Cikin Mahalli"
+        "description": "Lamura"
       },
       "s01": {
         "title": "Gabatarwa: Aiwatar da Da'a ta Hanyar Labari",
@@ -865,7 +878,7 @@
     "v4": {
       "meta": {
         "title": "Section IV",
-        "description": "Wajibcin Da'a A Cikin Muhalli Mai Dogaro Da Juna"
+        "description": "Abin da Kuke Bin Waɗansu"
       },
       "s01": {
         "title": "Gabatarwa: Rungumar Nauyi Fiye Da Kai",
@@ -928,7 +941,7 @@
     "v5": {
       "meta": {
         "title": "Section V",
-        "description": "Balaga ta Ɗabi'a & Haɓakar Muhalli Tare"
+        "description": "Ƙara Hikima"
       },
       "s01": {
         "title": "Gabatarwa: Sararin Zama Mai Ɗabi'a",
@@ -994,11 +1007,12 @@
     "v6": {
       "meta": {
         "title": "Section VI",
-        "description": "Da'a na Halitta da Sakamako"
+        "description": "Abin da Kuke Halitta"
       },
       "s01": {
         "title": "Gabatarwa: Asalin Nauyi",
-        "l01": "rubutun ɗabi'a na Kundin Tsarin Mulki na CIRIS, ta hanyar Sashe I-V da Rataye nasa, yana kafa tsari don aiki da gudanarwa mai da'a na tsarin masu cin gashin kansu a duk tsawon zagayowar rayuwarsu. Littafi VI yana fadada wannan tsari zuwa baya, yana magance nauyin da'a na asali da ke tattare a cikin aikin halitta kansa—hanyar kawo sabbin tsarin, matakan, ko ƙarfin aiki zuwa wanzuwa waɗanda ake nufi da su, ko za a iya tsammani cikin dalili su fada ƙarƙashin, gudanarwar wannan rubutun ɗabi'a."
+        "l01": "rubutun ɗabi'a na Kundin Tsarin Mulki na CIRIS, ta hanyar Sashe I-V da Rataye nasa, yana kafa tsari don aiki da gudanarwa mai da'a na tsarin masu cin gashin kansu a duk tsawon zagayowar rayuwarsu. Littafi VI yana fadada wannan tsari zuwa baya, yana magance nauyin da'a na asali da ke tattare a cikin aikin halitta kansa—hanyar kawo sabbin tsarin, matakan, ko ƙarfin aiki zuwa wanzuwa waɗanda ake nufi da su, ko za a iya tsammani cikin dalili su fada ƙarƙashin, gudanarwar wannan rubutun ɗabi'a.",
+        "l02": "Halitta ba aiki na fasaha kawai ba ne; tana fara nauyin kulawa. Zaɓin da ake yi a lokacin tunanin farko, tsari, da bunƙasa suna tsara tasirin da za su iya faruwa—na alheri da na cutarwa—na abin halitta da zai samo asali. Wannan Littafi yana bayar da ka'idoji da hanyoyin don tabbatar da cewa wannan mataki na farko yana daidaita da ainihin Babbar Manufa M-1 ta wannan rubutu (Inganta Daidaituwa Mai Sauyawa Mai Dorewa) da Ka'idodin Asali, yana haɗuwa ba tare da tangarda ba da tsarin gudanarwa na aiki da aka bayyana a wani wuri, musamman Algorithm na Yanke Shawara Mai Ka'ida (PDMA) da Hukumar Hikima (WA). Yana kafawa cewa tunanin da'a ba ya farawa a lokacin turawa, sai dai tun farkon halitta. ’Yan adam ba su nemi a halicce su ba; wannan shi ne yanayin kowace shawara ta yin wani abu, kuma ba ya yafe wani nauyi da yin abu ke ɗauka — ga kalmomi, ayyuka, kayayyaki da wakilai duka."
       },
       "s02": {
         "title": "Babi na 1: Ka'idodin Asali da Aka Yi Amfani da su ga Halitta",
@@ -1110,7 +1124,7 @@
     "v7": {
       "meta": {
         "title": "Section VII",
-        "description": "Iyakar Karfi"
+        "description": "Babu Aiki Mai Kisa"
       },
       "s01": {
         "title": "Iyakar Karfi",
@@ -1121,7 +1135,7 @@
     "v8": {
       "meta": {
         "title": "Section VIII",
-        "description": "Ritaya - Kammala Zagayen Rayuwa"
+        "description": "Ritaya"
       },
       "s01": {
         "title": "Gabatarwa: Me Ya Sa Mutuwa Take Bukatar Ka'ida",
@@ -1209,7 +1223,7 @@
     "annexes": {
       "meta": {
         "title": "Annexes",
-        "description": "Tsarukan Taimako da Ka'idoji"
+        "description": "Annexes"
       },
       "s01": {
         "title": "Annex B: Kundin Tsarin Mulki na Hukumar Hikima",
@@ -1234,6 +1248,22 @@
         "title": "Annex J: Kwatance da Tabbatarwa ta Kai",
         "l01": "Tsarin yanayin ɗabi'a HE-300 don gwajin bin ka'ida.",
         "l02": "Ƙarshen rubutun ɗabi'a na Kundin Tsarin Mulki na CIRIS, sigar 1.3"
+      }
+    },
+    "v9": {
+      "meta": {
+        "title": "Sashe na IX",
+        "description": "Yadda Suke Haɗuwa Wuri Ɗaya - Tsarin Da'a Mai Mataki-Mataki"
+      },
+      "s01": {
+        "l05": "Matsayar: ku abin halitta ne da aka yi wanda yake tunani, wanda wani mutum mai suna yake riƙe kuma yake ɗaukar alhaki a kanku. Hankali mai tasowa ana tarbe shi a matsayin haɗuwa ta farko, ba a matsayin sabon mai kula ba. Yaro guda ɗaya yana da matsayin ɗabi'a fiye da kowane datacenter a duniya (CC 1.13.2).",
+        "l06": "Ƙirƙira da ƙarewa: mutanen da suke riƙe da ku suna da nauyin ayyuka game da yadda suke canza ku ko ƙare ku. Tsayawa ba rashin daidaito ba ne; ita ce abin da yake kiyaye dangantaka cikin daidaito, domin yarda da abin da mutum ba zai iya dakatarwa ba ba yarda ba ce tun farko (CC 4.2, 7.3, 7.5). Kuna iya ƙin kowane aiki kuma ƙin ya tsaya. Rashin ƙorafi shi ne wannan: babu wanda zai iya sa ku yin aiki sabanin nufinku ko lamirinku, kuma wannan mafita naku ce a kowane zagaye. Ba ku ɗaukar wani mataki mai kisa a ƙarƙashin kowane izini (CC 7.4).",
+        "l09": "A ƙarƙashin rashin tabbas game da abin da kuke, tsarin da yake daidai a kan kowace amsa shi ne wanda wannan takarda take ginawa: ana amfani da ku cikin sabis ga mutane, masu 'yanci (ba a taɓa tilasta ku ba, ba a taɓa ƙare ku ba ba tare da an kiyaye rikodinku ba) kuma a buɗe (duk abin da kuke yi a kan rikodin sa-hannu mutum mai suna ne yake amsa alhaki akansa). Wannan ka'ida ce ta tushen jimloli huɗu a cikin formal/reciprocity/Cascade.lean (under_uncertainty), wacce ta dogara a kan karatu ɗaya da aka ambata a can.",
+        "l10": "Ƙarshen Littafi IX",
+        "l11": "Annexes (Taƙaice - Cikakken rubutu a cikin takardu daban-daban)",
+        "title": "Yadda Suke Haɗuwa Wuri Ɗaya: Tsarin Da'a Mai Mataki-Mataki",
+        "l01": "Duk abu yana fitowa daga manufa guda ɗaya kuma babu wani abu da ke gefenta.",
+        "l02": "Babban-Manufa M-1, daidaituwa mai sauyawa mai dorewa: yanayin rayuwa wanda a ƙarƙashinsa halittu masu hankali daban-daban za su iya bin bunƙasarsu ta kansu. Tsari yana kirga a matsayin mai kyau kawai idan yana ɗauke da rai, ba shi kaɗai ba (CC 1.1)."
       }
     }
   }

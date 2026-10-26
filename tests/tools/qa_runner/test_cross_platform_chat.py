@@ -3,7 +3,10 @@
 The fake models only what the stage depends on, in the server's own shapes
 (CIRISServer src/contacts_chat.rs, membership_invites.rs, self_devices.rs):
 a code add that answers 202 contacts.awaiting_key_body until the key body
-"arrives", a pair room only the Creator may found, an invite that reaches the
+"arrives", an incoming contact request that reaches the other side's
+contact_requests after a replication delay and carries its own `accept`
+(0.5.237, FSD/MEMBERSHIP_INVITES.md §8), `mutual` on contact rows, a pair room
+only the Creator may found, an invite that reaches the
 Joiner's /v1/self/invites after a delay, seating after the accept, and messages
 that reach the other side after a delay. Each knob that breaks one of those is
 a negative test: the stage must fail at that step, and name that layer.
@@ -51,13 +54,19 @@ class FakeNet:
     seat_delay_s: float = 15.0
     message_delay_s: float = 12.0
     message_delivered: bool = True
-    #: The FIXED server: B can see A's incoming request before adding back.
-    incoming_requests_visible: bool = False
+    request_delay_s: float = 30.0
+    requests_delivered: bool = True
+    #: A node before 0.5.237: /v1/self/invites has no contact_requests at all.
+    has_requests_field: bool = True
+    #: A broken accept that points somewhere other than POST /v1/contacts.
+    accept_path: str = "/v1/contacts"
+    mutual_reported: bool = True
     #: A broken server that echoes the receiver's copy as its own (mine=True).
     receiver_sees_mine: bool = False
     # state
     contacts: Dict[str, set] = field(default_factory=dict)
     pending: Dict[Tuple[str, str], float] = field(default_factory=dict)
+    added_at: Dict[Tuple[str, str], float] = field(default_factory=dict)
     room: Optional[str] = None
     invite_at: Optional[float] = None
     accepted_at: Optional[float] = None
@@ -98,13 +107,14 @@ class FakeTransport:
             started = n.pending.setdefault((me, target), now)
             if n.key_body_arrives and now >= started + n.key_body_delay_s:
                 mine.add(n.fed[target])
+                n.added_at[(me, target)] = now
                 return xc.HttpResult(200, {"key_id": n.fed[target]})
             return xc.HttpResult(202, {"reason_id": "contacts.awaiting_key_body", "converges_on_its_own": True})
         if path == "/v1/contacts":
-            listed = set(n.contacts.get(me, set()))
-            if n.incoming_requests_visible and n.fed[me] in n.contacts.get(other, set()):
-                listed.add(n.fed[other])
-            return xc.HttpResult(200, {"contacts": [{"key_id": k} for k in sorted(listed)], "total": len(listed)})
+            listed = sorted(n.contacts.get(me, set()))
+            rows = [{"key_id": k, "mutual": n.mutual_reported and self._replicated(n.node_of_fed(k), me)}
+                    for k in listed]
+            return xc.HttpResult(200, {"contacts": rows, "total": len(rows)})
         if path == "/v1/chat" and method == "POST":
             peer = str(body["key_id"])
             if peer not in n.contacts.get(me, set()):
@@ -122,7 +132,15 @@ class FakeTransport:
                 if n.accepted_at is None:
                     invites.append({"proposal_id": "prop-1", "group_id": n.room, "is_pair_room": True,
                                     "proposer_key_id": n.fed[other]})
-            return xc.HttpResult(200, {"invitee_key_id": n.fed[me], "invites": invites})
+            out = {"invitee_key_id": n.fed[me], "invites": invites}
+            if n.has_requests_field:
+                out["contact_requests"] = [
+                    {"kind": "contact", "requester_key_id": n.fed[other], "requester_label": n.fed[other].split("-")[0],
+                     "grant_attestation_id": f"grant-{other}",
+                     "accept": {"method": "POST", "path": n.accept_path, "body": {"key_id": n.fed[other]}}}
+                ] if (n.requests_delivered and self._replicated(other, me)
+                      and n.fed[other] not in n.contacts.get(me, set())) else []
+            return xc.HttpResult(200, out)
         if path == "/v1/self/invites/prop-1/accept":
             n.accepted_at = now
             return xc.HttpResult(200, {"state": "accepted", "proposal_id": "prop-1"})
@@ -142,6 +160,15 @@ class FakeTransport:
                                  "mine": n.receiver_sees_mine})
             return xc.HttpResult(200, {"messages": rows, "ready": True, "total": len(rows)})
         return xc.HttpResult(404, {"detail": f"fake has no {method} {path}"})
+
+
+def _replicated(self, adder: str, to: str) -> bool:
+    """`adder`'s grant naming `to` has replicated to `to`'s node."""
+    at = self.net.added_at.get((adder, to))
+    return at is not None and self.net.clock.now() >= at + self.net.request_delay_s
+
+
+FakeTransport._replicated = _replicated  # type: ignore[attr-defined]
 
 
 def _stage(**knobs) -> Tuple[xc.CrossChatStage, FakeNet, List[str]]:
@@ -165,7 +192,8 @@ def test_mutual_add_room_and_messages_pass():
     assert rep.failed_step is None
     assert [s.step for s in rep.steps] == [
         "ready:linux", "ready:android", "code:linux", "code:android",
-        "add:linux->android", "add:android->linux", "room", "messages",
+        "add:linux->android", "request:android<-linux", "accept:android->linux",
+        "cleared:android", "mutual:linux", "room", "messages",
     ]
     assert all(s.ok for s in rep.steps)
     # The 202 ladder was walked, not skipped.
@@ -215,32 +243,47 @@ def test_negative_an_add_whose_key_body_never_arrives_fails_at_contacts():
     assert "awaiting_key_body" in _step(rep, "add:linux->android").detail
 
 
-def test_one_sided_request_is_reported_as_the_known_gap_and_not_enforced():
-    stage, _, out = _stage()
-    rep = stage.run()
-    assert rep.ok
-    o = rep.one_sided
-    assert o is not None and o.checked
-    assert o.observer == "android" and o.requester == "linux"
-    assert o.visible is False, "today's server: an incoming request has no reader"
-    assert "KNOWN GAP" in o.note
-    assert any("REPORTED, NOT ENFORCED" in line and "could NOT see" in line for line in out)
-
-
-def test_one_sided_request_visible_once_the_gap_is_fixed_and_still_passes():
-    stage, _, out = _stage(incoming_requests_visible=True)
-    rep = stage.run()
-    assert rep.ok
-    assert rep.one_sided is not None and rep.one_sided.visible is True
-    assert rep.one_sided.where and "GET /v1/contacts" in rep.one_sided.where[0]
-    assert any("COULD see" in line for line in out)
-
-
-def test_one_sided_is_checked_before_b_adds_back():
+def test_b_answers_with_the_requests_own_accept_by_fed_id_not_the_code():
     stage, net, _ = _stage()
-    stage.run()
+    rep = stage.run()
+    assert rep.ok, rep.to_json()
+    assert rep.request is not None and rep.request["requester_key_id"] == "alice-aaaa"
+    assert "label 'alice'" in _step(rep, "request:android<-linux").detail
+    # B's add went in after B read the request, and B never needed A's code.
     first_b_add = net.calls.index("android POST /v1/contacts")
     assert "android GET /v1/self/invites" in net.calls[:first_b_add]
+    assert "mutual: true" in _step(rep, "mutual:linux").detail
+
+
+def test_negative_a_node_without_contact_requests_fails_at_request():
+    """A pre-0.5.237 node: the request has no reader, and the stage says why."""
+    stage, _, _ = _stage(has_requests_field=False)
+    rep = stage.run()
+    assert not rep.ok
+    assert rep.failed_step == "request:android<-linux" and rep.failed_layer == "contacts"
+    assert "predates ciris-server 0.5.237" in _step(rep, "request:android<-linux").detail
+    assert _step(rep, "request:android<-linux").elapsed_s < xc.Deadlines().poll_s, "structural: no need to wait"
+
+
+def test_negative_a_request_that_never_replicates_fails_at_request():
+    stage, _, _ = _stage(requests_delivered=False)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "request:android<-linux"
+    assert "only by replication" in _step(rep, "request:android<-linux").detail
+    assert "accept:android->linux" not in [s.step for s in rep.steps]
+
+
+def test_negative_an_accept_that_is_not_the_add_route_fails_at_accept():
+    stage, _, _ = _stage(accept_path="/v1/self/invites/x/accept")
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "accept:android->linux"
+
+
+def test_negative_a_row_that_never_turns_mutual_fails_at_mutual():
+    stage, _, _ = _stage(mutual_reported=False)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "mutual:linux"
+    assert "mutual=False" in " ".join(_step(rep, "mutual:linux").evidence)
 
 
 def test_every_step_is_bounded():
@@ -259,13 +302,13 @@ def test_annotations_name_the_step_layer_and_the_gap(capsys):
     xc._annotate(stage.run())
     out = capsys.readouterr().out
     assert "::error::cross-platform chat FAILED at step 'room' [layer: room]" in out
-    assert "REPORTED, NOT ENFORCED" in out and "KNOWN GAP" in out
+    assert "REPORTED, NOT ENFORCED" not in out
 
 
 def test_report_json_round_trips():
     stage, _, _ = _stage()
     data = json.loads(stage.run().to_json())
-    assert data["ok"] is True and data["one_sided"]["visible"] is False
+    assert data["ok"] is True and data["request"]["grant_attestation_id"] == "grant-linux"
     assert data["fed_ids"] == {"linux": "alice-aaaa", "android": "bob-bbbb"}
 
 
@@ -322,8 +365,8 @@ def test_cli_scan_writes_its_output(tmp_path: Path, capsys):
     assert "accepted the pair room" in out.read_text()
 
 
-def test_summary_names_the_failing_step_and_the_gap():
+def test_summary_names_the_failing_step():
     stage, _, _ = _stage(message_delivered=False)
     md = xc.summary_markdown(stage.run())
     assert "FAIL at `messages` [message]" in md
-    assert "Reported, not enforced" in md and "not visible" in md
+    assert "| request:android<-linux | ok |" in md

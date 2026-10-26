@@ -1128,9 +1128,9 @@ jobs:
       #
       # The stage itself is tools/qa_runner/cross_platform_chat.py (unit-tested
       # against a fake two-node network); this step is only the bring-up.
-      # ENFORCED: mutual add, pair room, a message each way. REPORTED, NOT
-      # ENFORCED: whether android could see linux's request before adding back
-      # (the known "incoming request has no reader" gap).
+      # ENFORCED: linux adds android; android sees it in contact_requests and
+      # answers with the request's own accept (server 0.5.237, #818); the
+      # request clears; linux's row turns mutual; pair room; a message each way.
       #
       # NO `${{ }}` IN THIS BODY (one expression, 21000-char cap): inputs reach it
       # as env. `shell: bash` is -eo pipefail, so -e is dropped explicitly and

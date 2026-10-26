@@ -13,10 +13,16 @@ WHAT IS ENFORCED (a fresh pair of nodes must do all of it):
 
   codes     each side reads its own contact code     GET  /v1/self/contact-code
   add a->b  A adds B by code, converges              POST /v1/contacts {"key_id": <code>}
-  add b->a  B adds A by code, converges                (202 contacts.awaiting_key_body
+                                                       (202 contacts.awaiting_key_body
                                                         while the key body is pulled over
                                                         the mesh, then listed by
                                                         GET /v1/contacts)
+  request   B sees A's request before adding back    GET  /v1/self/invites
+                                                       -> contact_requests[] naming A
+  accept    B accepts it with the entry's own        POST /v1/contacts {"key_id": <A's fedID>}
+            `accept` call, converges                   (the request's `accept`, server 0.5.237)
+  cleared   the request leaves B's list              GET  /v1/self/invites
+  mutual    A's row for B turns mutual               GET  /v1/contacts -> mutual: true
   room      the Creator (lexicographically smaller   POST /v1/chat {"key_id": <fedID>}
             fedID, edge PairRole) opens the pair
             room; the Joiner sees the invite and     GET  /v1/self/invites
@@ -25,12 +31,10 @@ WHAT IS ENFORCED (a fresh pair of nodes must do all of it):
   messages  one message each way; each side reads   POST /v1/chat/{cid}/messages {"body"}
             the other's, opened                      GET  /v1/chat/{cid}/messages
 
-WHAT IS REPORTED, NOT ENFORCED: whether B could see A's request BEFORE B added A
-back. Today an incoming contact request has no reader: "add contact" writes only
-the adder's own consent grant, GET /v1/contacts lists only grants the owner
-authored, and the pair invite exists only once the Creator holds the other as a
-contact. The expected answer is "not visible"; it is printed as a KNOWN GAP so the
-day the server and client fix it, the report changes on its own.
+The request steps are the reader ciris-server 0.5.237 added (#818,
+FSD/MEMBERSHIP_INVITES.md §8): before it, "add contact" wrote only the adder's
+own grant and the other person never saw anything, so two people had to add
+each other blind. A node without `contact_requests` fails `request` and says so.
 
 Every step has its own bounded deadline sized to the canonical's ~30 s
 replication round (90-180 s, never more), and a failure names the step and the
@@ -149,7 +153,10 @@ class Deadlines:
     ready_s: float = 180.0
     code_s: float = 120.0
     add_s: float = 180.0
-    one_sided_s: float = 75.0
+    #: A's grant reaches B only by replication: one round, sometimes two.
+    request_s: float = 180.0
+    #: B's grant reaches A the same way before A's row reads mutual.
+    mutual_s: float = 180.0
     invite_s: float = 180.0
     room_open_s: float = 180.0
     send_s: float = 120.0
@@ -184,25 +191,6 @@ class StepResult:
 
 
 @dataclass
-class OneSidedReport:
-    """REPORTED, NOT ENFORCED: did B see A's request before B added A back?"""
-
-    observer: str
-    requester: str
-    checked: bool = False
-    visible: Optional[bool] = None
-    where: List[str] = field(default_factory=list)
-    window_s: float = 0.0
-    note: str = (
-        "KNOWN GAP: an incoming contact request has no reader. 'Add contact' writes only the "
-        "adder's own consent:replication:v1 grant, GET /v1/contacts lists only grants the owner "
-        "authored, and the pair-room invite is sent only by POST /v1/chat from the Creator once it "
-        "already holds the other as a contact. Expected today: not visible. Tracks the server + "
-        "client fix; not enforced."
-    )
-
-
-@dataclass
 class StageReport:
     pair: List[str]
     ok: bool = False
@@ -213,7 +201,8 @@ class StageReport:
     fed_ids: Dict[str, Optional[str]] = field(default_factory=dict)
     community_id: Optional[str] = None
     steps: List[StepResult] = field(default_factory=list)
-    one_sided: Optional[OneSidedReport] = None
+    #: The request entry B saw for A, as the node served it.
+    request: Optional[JsonObject] = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True)
@@ -244,6 +233,19 @@ def pending_invites(body: Any) -> List[JsonObject]:
     p = _payload(body)
     rows = p.get("invites") if isinstance(p, dict) else None
     return [r for r in rows or [] if isinstance(r, dict)]
+
+
+def contact_requests(body: Any) -> Optional[List[JsonObject]]:
+    """`contact_requests` from /v1/self/invites; None when the node has no such field (pre-0.5.237)."""
+    p = _payload(body)
+    if not isinstance(p, dict) or "contact_requests" not in p:
+        return None
+    return [r for r in p.get("contact_requests") or [] if isinstance(r, dict)]
+
+
+def contact_row(body: Any, key_id: Optional[str]) -> Optional[JsonObject]:
+    rows = _payload(body).get("contacts") if isinstance(_payload(body), dict) else None
+    return next((r for r in rows or [] if isinstance(r, dict) and r.get("key_id") == key_id), None)
 
 
 def chat_messages(body: Any) -> List[JsonObject]:
@@ -380,9 +382,10 @@ class CrossChatStage:
             )
         return got
 
-    def add(self, adder: Node, target: Node) -> str:
-        step = f"add:{adder.name}->{target.name}"
-        code, target_fed = target.code, target.fed_id
+    def add(self, adder: Node, target: Node, key_id: Optional[str] = None, step: Optional[str] = None) -> str:
+        """Add `target` by its code, or by `key_id` (a request's `accept` names the fedID)."""
+        step = step or f"add:{adder.name}->{target.name}"
+        code, target_fed = key_id or target.code, target.fed_id
         assert code and target_fed
         trail: List[str] = []
         state = {"awaiting": False}
@@ -414,29 +417,102 @@ class CrossChatStage:
             raise self._fail(step, LAYER_CONTACTS, f"{why} within {self.d.add_s:.0f}s", trail[-6:])
         return got
 
-    def one_sided(self, observer: Node, requester: Node) -> OneSidedReport:
-        """REPORTED, NOT ENFORCED: can `observer` see `requester`'s add before adding back?"""
-        rep = OneSidedReport(observer=observer.name, requester=requester.name, window_s=self.d.one_sided_s)
+    def request_seen(self, observer: Node, requester: Node) -> str:
+        """`observer` sees `requester`'s add as a contact request before adding back."""
+        step = f"request:{observer.name}<-{requester.name}"
+        last: List[str] = []
 
         def attempt(_: int) -> Optional[str]:
-            contacts = self._call(observer, "GET", "/v1/contacts")
-            if contacts.ok and requester.fed_id in contact_key_ids(contacts.body):
-                rep.where.append("GET /v1/contacts lists the requester")
-            invites = self._call(observer, "GET", "/v1/self/invites")
-            if invites.ok:
-                for inv in pending_invites(invites.body):
-                    # The requester's own key, or ANY pair-room invite: before a
-                    # mutual add nothing else could be inviting this person.
-                    if inv.get("is_pair_room") is True or (
-                        requester.fed_id and str(inv.get("proposer_key_id") or "") == requester.fed_id
-                    ):
-                        rep.where.append(f"GET /v1/self/invites holds {inv.get('proposal_id')}")
-            rep.checked = rep.checked or contacts.ok or invites.ok
-            return "visible" if rep.where else None
+            r = self._call(observer, "GET", "/v1/self/invites")
+            if not r.ok:
+                last[:] = [f"GET /v1/self/invites -> {r.brief()}"]
+                return None
+            reqs = contact_requests(r.body)
+            if reqs is None:
+                raise self._fail(
+                    step,
+                    LAYER_CONTACTS,
+                    f"{observer.name}'s /v1/self/invites has no contact_requests: the node predates "
+                    "ciris-server 0.5.237 (#818), so an incoming request has no reader",
+                )
+            for entry in reqs:
+                if entry.get("requester_key_id") == requester.fed_id:
+                    self.report.request = entry
+                    return (
+                        f"{requester.name}'s request (grant {entry.get('grant_attestation_id')}, "
+                        f"label {entry.get('requester_label')!r}) is in {observer.name}'s contact_requests"
+                    )
+            last[:] = [f"contact_requests holds {[e.get('requester_key_id') for e in reqs]}"]
+            return None
 
-        got = self._poll(self.d.one_sided_s, attempt)
-        rep.visible = bool(got) if rep.checked else None
-        return rep
+        got = self._poll(self.d.request_s, attempt)
+        if got is None:
+            raise self._fail(
+                step,
+                LAYER_CONTACTS,
+                f"{requester.name}'s grant never reached {observer.name}'s contact_requests within "
+                f"{self.d.request_s:.0f}s (the grant reaches the other node only by replication)",
+                last,
+            )
+        return got
+
+    def accept_request(self, observer: Node, requester: Node) -> str:
+        """Answer the request the way a client does: run the entry's own `accept` call."""
+        step = f"accept:{observer.name}->{requester.name}"
+        entry = self.report.request or {}
+        acc = entry.get("accept") if isinstance(entry.get("accept"), dict) else {}
+        body = acc.get("body") if isinstance(acc.get("body"), dict) else {}
+        if acc.get("method") != "POST" or acc.get("path") != "/v1/contacts" or body.get("key_id") != requester.fed_id:
+            raise self._fail(
+                step,
+                LAYER_CONTACTS,
+                f"the request's accept is not POST /v1/contacts {{key_id: {requester.fed_id}}}: {json.dumps(acc)[:200]}",
+            )
+        return self.add(observer, requester, key_id=str(body["key_id"]), step=step)
+
+    def request_cleared(self, observer: Node, requester: Node) -> str:
+        """Once added back, the request is answered and leaves the list."""
+
+        def attempt(_: int) -> Optional[str]:
+            r = self._call(observer, "GET", "/v1/self/invites")
+            reqs = contact_requests(r.body) if r.ok else None
+            if reqs is not None and not any(e.get("requester_key_id") == requester.fed_id for e in reqs):
+                return f"{requester.name}'s request is gone from {observer.name}'s contact_requests"
+            return None
+
+        got = self._poll(self.d.send_s, attempt)
+        if got is None:
+            raise self._fail(
+                f"cleared:{observer.name}",
+                LAYER_CONTACTS,
+                f"{observer.name} added {requester.name} back but the request is still listed after "
+                f"{self.d.send_s:.0f}s",
+            )
+        return got
+
+    def mutual(self, requester: Node, observer: Node) -> str:
+        """The requester's own row for the other person turns `mutual` once they added back."""
+        seen: List[str] = []
+
+        def attempt(_: int) -> Optional[str]:
+            r = self._call(requester, "GET", "/v1/contacts")
+            row = contact_row(r.body, observer.fed_id) if r.ok else None
+            if row is not None:
+                seen[:] = [f"row for {observer.name}: mutual={row.get('mutual')!r}"]
+                if row.get("mutual") is True:
+                    return f"{requester.name}'s row for {observer.name} reads mutual: true"
+            return None
+
+        got = self._poll(self.d.mutual_s, attempt)
+        if got is None:
+            raise self._fail(
+                f"mutual:{requester.name}",
+                LAYER_CONTACTS,
+                f"{observer.name} added {requester.name} back but {requester.name}'s row never read mutual "
+                f"within {self.d.mutual_s:.0f}s",
+                seen,
+            )
+        return got
 
     def open_room(self, creator: Node, joiner: Node) -> str:
         step = "room"
@@ -575,21 +651,17 @@ class CrossChatStage:
             rep.steps.append(StepResult("codes", False, LAYER_CONTACTS, f"both nodes report one fedID {a.fed_id}"))
             return self._finish()
 
-        if not self._step(f"add:{a.name}->{b.name}", LAYER_CONTACTS, lambda: self.add(a, b)).ok:
-            return self._finish()
-        # BEFORE B adds back: the known gap, reported.
-        rep.one_sided = self.one_sided(b, a)
-        self.log(
-            f"[cross-chat] one-sided request (REPORTED, NOT ENFORCED): {b.name} "
-            + (
-                "COULD see" if rep.one_sided.visible else "could NOT see" if rep.one_sided.visible is False else "could not be asked about"
-            )
-            + f" {a.name}'s request before adding back"
-            + (f" via {'; '.join(rep.one_sided.where)}" if rep.one_sided.where else "")
-        )
-        self.log(f"[cross-chat]   {rep.one_sided.note}")
-        if not self._step(f"add:{b.name}->{a.name}", LAYER_CONTACTS, lambda: self.add(b, a)).ok:
-            return self._finish()
+        # A adds B; B sees it as a request and answers it, as a person would.
+        contacts: List[Tuple[str, Callable[[], str]]] = [
+            (f"add:{a.name}->{b.name}", lambda: self.add(a, b)),
+            (f"request:{b.name}<-{a.name}", lambda: self.request_seen(b, a)),
+            (f"accept:{b.name}->{a.name}", lambda: self.accept_request(b, a)),
+            (f"cleared:{b.name}", lambda: self.request_cleared(b, a)),
+            (f"mutual:{a.name}", lambda: self.mutual(a, b)),
+        ]
+        for name, fn in contacts:
+            if not self._step(name, LAYER_CONTACTS, fn).ok:
+                return self._finish()
 
         creator, joiner = creator_of(a, b)
         rep.creator, rep.joiner = creator.name, joiner.name
@@ -646,25 +718,20 @@ def _parse_node(spec: str, username: str, password: str, timeout_s: float) -> No
 def _annotate(rep: StageReport) -> None:
     """GitHub annotations: the enforced verdict and the reported gap, each said once."""
     if rep.ok:
-        print(f"::notice::cross-platform chat PASSED ({' <-> '.join(rep.pair)}): mutual add, pair room, a message each way")
+        print(
+            f"::notice::cross-platform chat PASSED ({' <-> '.join(rep.pair)}): add, request seen and accepted, "
+            "mutual, pair room, a message each way"
+        )
     else:
         step = next((s for s in rep.steps if s.step == rep.failed_step), None)
         print(
             f"::error::cross-platform chat FAILED at step '{rep.failed_step}' [layer: {rep.failed_layer}]: "
             f"{step.detail if step else ''}"
         )
-    o = rep.one_sided
-    if o is not None:
-        verdict = {True: "VISIBLE", False: "NOT visible", None: "not observable"}[o.visible]
-        print(
-            f"::notice::cross-platform chat — one-sided contact request (REPORTED, NOT ENFORCED): "
-            f"{o.observer} saw {o.requester}'s request before adding back: {verdict}. KNOWN GAP "
-            f"(expected today: NOT visible) — an incoming contact request has no reader yet."
-        )
 
 
 def summary_markdown(rep: StageReport) -> str:
-    """The job-summary block: one row per step, then the reported-not-enforced gap."""
+    """The job-summary block: one row per step."""
     lines = [
         f"### Cross-platform chat ({' <-> '.join(rep.pair)}, through the live canonical): "
         + ("PASS" if rep.ok else f"FAIL at `{rep.failed_step}` [{rep.failed_layer}]"),
@@ -675,14 +742,6 @@ def summary_markdown(rep: StageReport) -> str:
     for st in rep.steps:
         detail = st.detail.replace("|", "/")[:240]
         lines.append(f"| {st.step} | {'ok' if st.ok else 'FAIL'} | {st.layer} | {st.elapsed_s:.0f} | {detail} |")
-    o = rep.one_sided
-    if o is not None:
-        verdict = {True: "VISIBLE", False: "not visible", None: "not observable"}[o.visible]
-        lines += [
-            "",
-            f"**Reported, not enforced** - {o.observer} saw {o.requester}'s contact request before "
-            f"adding back: **{verdict}** (expected today: not visible). {o.note}",
-        ]
     return "\n".join(lines) + "\n"
 
 

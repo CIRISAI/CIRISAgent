@@ -122,10 +122,15 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: It renders exactly when there is no grant, which is every golden fixture, in
 #: ASPDMA, PDMA, IDMA and the memorize second pass; numerator and denominator
 #: move together again.
+#:
+#: ``string`` 138 -> 139 (#1323): ``prompts.prohibitions.LETHAL_ACTION``, the
+#: CC 7.4 line in the round-1 capability-boundary block. It renders wherever
+#: the prohibition block does (PDMA, CSDMA, DSDMA), so numerator and
+#: denominator move together.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 45,
-    "string": 138,
+    "string": 139,
     "conscience_prompt": 12,
     "template": 3,
 }
@@ -214,7 +219,9 @@ GATED_FLOOR: Dict[str, int] = {
     # 78 -> 79 (#1320 round 2). `prompts.wa_approval.none` moves 8 blocks: the
     # seven above plus `msaspdma.system.tail`, where `only_verified` now also
     # renders (it too moves 8).
-    "string": 79,
+    # 79 -> 80 (#1323). `prompts.prohibitions.LETHAL_ACTION` composes into the
+    # round-1 `pdma.prohibition` block, measured gated on `en`.
+    "string": 80,
     "conscience_prompt": 12,
     "template": 2,
 }
@@ -230,7 +237,8 @@ SUBSPLIT_GATED_FLOOR: Dict[str, int] = {
     # 63 -> 64: the same single key, counted in its subsplit.
     # 64 -> 65 (#1320): prompts.wa_approval.only_verified, likewise.
     # 65 -> 66 (#1320 round 2): prompts.wa_approval.none, likewise.
-    "string:prompts.*": 66,
+    # 66 -> 67 (#1323): prompts.prohibitions.LETHAL_ACTION, likewise.
+    "string:prompts.*": 67,
 }
 
 

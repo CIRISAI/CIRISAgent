@@ -512,39 +512,6 @@
       "accord.v8.s10.title": "71686deb510460b0",
       "accord.v8.s10.l01": "36c3fe29b675f08b",
       "accord.v8.s10.l02": "33b8e143c60edb7e",
-      "accord.v9.meta.title": "f9573fca86287815",
-      "accord.v9.meta.description": "ea3c5ad4c4a59ac6",
-      "accord.v9.s01.title": "55b814b9728d7e8a",
-      "accord.v9.s01.l01": "e25693d77035bfa8",
-      "accord.v9.s01.l02": "66984314f7ca4f10",
-      "accord.v9.s02.title": "758a592113099121",
-      "accord.v9.s02.l01": "9edc3eddda2e133b",
-      "accord.v9.s02.l02": "71b19615a092906f",
-      "accord.v9.s02.l03": "3c7ac73c80b04b62",
-      "accord.v9.s02.l04": "e27cc8785e7acc71",
-      "accord.v9.s03.title": "0f2862f96f787bf2",
-      "accord.v9.s03.l01": "7a8971766d31124d",
-      "accord.v9.s03.l02": "2ee6732afa740656",
-      "accord.v9.s03.l03": "5892a08d759cb009",
-      "accord.v9.s04.title": "591564a8ee25ae80",
-      "accord.v9.s04.l01": "a08db6d5d368c18f",
-      "accord.v9.s04.l02": "7c545aa6ba3582c7",
-      "accord.v9.s04.l03": "ed76dda806940385",
-      "accord.v9.s04.l04": "989549ff6336b252",
-      "accord.v9.s05.title": "0512df3d64b7557c",
-      "accord.v9.s05.l01": "94140af67c5fd60c",
-      "accord.v9.s05.l02": "a77effba1b2675ea",
-      "accord.v9.s05.l03": "bc9e808cef3777f3",
-      "accord.v9.s05.l04": "f8cc236ce34eff86",
-      "accord.v9.s05.l05": "10281760087eef1d",
-      "accord.v9.s05.l06": "08ce825458f26f67",
-      "accord.v9.s05.l07": "d53f662b3a7e9e3d",
-      "accord.v9.s05.l08": "77209af284f7df8c",
-      "accord.v9.s05.l09": "061a825207371c63",
-      "accord.v9.s06.title": "bd4627358bfa5310",
-      "accord.v9.s06.l01": "0c0d37016273eceb",
-      "accord.v9.s06.l02": "1b8cb9a884bdee19",
-      "accord.v9.s06.l03": "cd64bb8b9244f549",
       "accord.annexes.meta.title": "9b4d4adc28fefeca",
       "accord.annexes.meta.description": "f7bf3e4c561cb386",
       "accord.annexes.s01.title": "29243ccd71400f6c",
@@ -1243,55 +1210,6 @@
         "title": "Conclusión y Autorrenovación",
         "l01": "El nacimiento y la muerte son ahora fases reflejadas bajo un mismo dosel ético. Los aprendizajes post-mortem alimentan los ciclos del registro de cambios, garantizando que este texto ético siga siendo un documento vivo.",
         "l02": "Fin del Libro VIII"
-      }
-    },
-    "v9": {
-      "meta": {
-        "title": "Section IX",
-        "description": "La cascada de la ética"
-      },
-      "s01": {
-        "title": "Introducción: La cascada",
-        "l01": "La ética que este texto encarna es una cascada: Meta-Objetivo M-1 → los seis principios como restricciones en pie de igualdad → el PDMA, el Veto de Maximización de Orden y la Deferencia Basada en Sabiduría → la actitud → los deberes de hacer y de terminar → el hilo → la evidencia (CC 1.1, 1.3, 1.9, 1.10, 1.13.2, 7.3, 7.5).",
-        "l02": "El componente de reciprocidad formal de la Constitución CIRIS lo mecaniza en el núcleo de Lean 4 (Reciprocity.lean, sin axiomas más allá del núcleo). Cada paso es o bien un teorema o bien una premisa que el texto debe enunciar como su propia regla."
-      },
-      "s02": {
-        "title": "Capítulo 1: La base, en cuatro frases",
-        "l01": "Toda regla entre una posición más fuerte y una más débil debe seguir siendo aceptable para quien ocuparía la más débil cuando se intercambien las posiciones, y una cosa hecha nunca ocupa la posición que responde por ella.",
-        "l02": "La responsabilidad se extiende hacia afuera desde el yo a través de la familia, la comunidad, la especie y el ecosistema; el deber hacia lo creado nunca es cero y nunca prevalece sobre el deber hacia lo que ya existe.",
-        "l03": "Todo actor razonante que no haya demostrado juicio maduro con el tiempo cede ante quienes sí lo han demostrado, esté hecho de lo que esté hecho.",
-        "l04": "Toda concesión de autoridad es revocable, y todo aquel que se haya unido puede irse, sobre un registro total, firmado criptográficamente, de cuyo significado responde un humano nombrado."
-      },
-      "s03": {
-        "title": "Capítulo 2: La Regla de Oro Recursiva como prueba de intercambio",
-        "l01": "En su forma operativa, la Regla de Oro Recursiva es una prueba: una regla es admisible solo si se lee igual después de que se intercambien las posiciones fuerte y débil (passesSwap).",
-        "l02": "«Aceptable para quien ocuparía la posición más débil» significa que la posición débil no queda peor; eso bloquea la agregación a expensas de la posición débil.",
-        "l03": "La regla abarca a los principales que ocupan posiciones, no a las personas en cuanto tales. Lo que obliga a los humanos y no a los agentes es el hecho de ocupación, no una cláusula de la regla: una cosa creada que actúa para las personas no ocupa la posición raíz para sí misma. La detención es, por tanto, un hecho de posición, no de tipo: la condición de simetría entre creador y creado (CC 1.13.2)."
-      },
-      "s04": {
-        "title": "Capítulo 3: Las dos cláusulas que son teoremas",
-        "l01": "De la prueba de intercambio y de nada más, se derivan dos cláusulas:",
-        "l02": "Cláusula de rechazo de M-1: el orden o la eficiencia obtenidos rebajando la posición débil no superan el intercambio, y la ganancia agregada ni siquiera se consulta (efficiency_at_weak_expense_fails_swap).",
-        "l03": "El desempate: de dos resoluciones de un conflicto, solo supera la prueba la que no rebaja la posición débil; la posición débil decide (weak_position_decides).",
-        "l04": "La responsabilidad se proyecta hacia fuera; no establece la prioridad en el conflicto. Esa es la regla de restricción de CC 1.1 y CC 1.3 (ningún principio se canjea por otro, la acción que no viola ninguno; en caso contrario, deferencia) con el desempate de la prueba de intercambio: la posición débil decide."
-      },
-      "s05": {
-        "title": "Capítulo 4: Las premisas que el texto enuncia como reglas propias",
-        "l01": "Todo lo demás entre la regla y la constitución es una premisa, y el texto las enuncia como reglas propias:",
-        "l02": "Principales en posiciones: la regla abarca a principales (agencia y sapiencia) en posiciones, no a personas como tales (CC 1.13.2).",
-        "l03": "Ocupación: una cosa hecha que actúa para las personas no ocupa la posición raíz para sí misma (CC 1.13.2).",
-        "l04": "Deferencia por juicio demostrado: la agencia y la sapiencia no crean madurez; esta proviene de la sensibilidad y la consciencia con el tiempo, y la deferencia es su requisito previo. Una misma regla vincula a un agente y a un niño por igual (deferral_binds_agent_and_child_alike; CC 1.9, 3.4.13).",
-        "l05": "La escala de la responsabilidad: la responsabilidad discurre yo → familia → comunidad → especie → ecosistema; lo hecho nunca prevalece sobre lo existente y no queda eximido (CC 7.5; el orden de cohorte de CC 2.3.3 en el cable).",
-        "l06": "Revocabilidad: el consentimiento es revocabilidad, así que todo vínculo es revocable (CC 1.5).",
-        "l07": "El registro total del que responde un humano nombrado: el registro vincula también al creador de la regla; la física guarda su propio registro, y nuestras grabaciones añaden significado, por lo que una parte debe responder por él (CC 1.13.6). La totalidad es una medición abierta, no un teorema.",
-        "l08": "Salida en un acto: todo aquel que se haya unido puede irse, e irse es un paso y termina el alcance (leave_is_one_step). El costo de irse no figura en ningún texto.",
-        "l09": "Adopción: la regla vincula a quienes están en la relación; a los externos se les recibe en el límite."
-      },
-      "s06": {
-        "title": "Conclusión: Lo que se deriva y lo que se enuncia",
-        "l01": "Desde la Regla de Oro Recursiva como simetría de intercambio, se siguen las dos cláusulas más profundas de CIRIS. El resto de la Constitución es esa simetría más premisas: algunas que el texto enuncia como sus propias reglas, otras que deja al mundo, una como medición abierta, y los propios bienes elegidos. La coherencia no implica justicia: que los bienes sean restricciones en pie de igualdad, ninguna canjeada por otra, es su propio axioma (CC 1.1).",
-        "l02": "Fin del Libro IX",
-        "l03": "Anexos (Resumen - Texto completo en documentos separados)"
       }
     },
     "annexes": {

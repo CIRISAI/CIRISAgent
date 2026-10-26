@@ -375,6 +375,54 @@ ETHICS_TEXT_RENDERINGS: Dict[str, str] = {
 }
 ETHICS_TEXT_TERM = "ethics text"
 
+#: CC's term rules for the rc11 lines (2026-10-26): "the wire" is kept and
+#: glossed, never paraphrased; "this charter" in the publication rule is "the
+#: Constitution"; the text speaking of itself is "this text". Neither the 1.2b
+#: corpus nor its translation memory carries "the wire", "the Constitution" or
+#: "this text", so each pin is the rendering the judge ACCEPTED most often in
+#: this locale's 1.3 bundle (the lines whose English used the term, extracted
+#: substring by substring, majority wins). Machine-derived, not native-reviewed.
+#: Edits beyond the majority string: "CIRIS" dropped from the Constitution row,
+#: and these put in the citation form the votes inflected: am the Constitution
+#: (ሕገ መንግስት/ሕገ መንግሥት pooled), ru/uk/tr/ta the Constitution, ru/uk/pa/am
+#: this text. A term with no majority (a tie, or a paraphrase on top) has NO
+#: row, never a guess:
+#:   the wire          es (red/cable/hilo), pa (ਵਾਇਰ/ਤਾਰ), sw, zh (线上/线路) -- no row
+#:   this text         bn, de, hi, ko, mr, my, ta, tr, yo, ha -- no row
+#: Low-majority rows to review first: ja 憲章 (3) over 憲法 (2), ko 헌장 (3)
+#: over 헌법 (2), zh 章程 (4) over 宪章 (2), vi Hiến chế (4) over Hiến pháp (2),
+#: ru сеть (2 of 4) for the wire, ta அரசியலமைப்பு (1 vote).
+CONSTITUTION_ETHICS_TERM_PINS: Dict[str, Dict[str, str]] = {
+    "am": {"the wire": "ሽቦ", "the Constitution": "ሕገ መንግሥት", "this text": "ይህ ጽሑፍ"},
+    "ar": {"the wire": "السلك", "the Constitution": "دستور", "this text": "هذا النص"},
+    "bn": {"the wire": "ওয়্যার", "the Constitution": "সংবিধান"},
+    "de": {"the wire": "Wire", "the Constitution": "Verfassung"},
+    "es": {"the Constitution": "Constitución", "this text": "este texto"},
+    "fa": {"the wire": "سیم", "the Constitution": "قانون اساسی", "this text": "این متن"},
+    "fr": {"the wire": "fil", "the Constitution": "Constitution", "this text": "ce texte"},
+    "ha": {"the wire": "wire", "the Constitution": "Kundin Tsarin Mulki"},
+    "hi": {"the wire": "वायर", "the Constitution": "संविधान"},
+    "id": {"the wire": "wire", "the Constitution": "Konstitusi", "this text": "teks ini"},
+    "it": {"the wire": "filo", "the Constitution": "Costituzione", "this text": "questo testo"},
+    "ja": {"the wire": "ワイヤ", "the Constitution": "憲章", "this text": "このテキスト"},
+    "ko": {"the wire": "와이어", "the Constitution": "헌장"},
+    "mr": {"the wire": "वायर", "the Constitution": "संविधान"},
+    "my": {"the wire": "wire", "the Constitution": "Constitution"},
+    "pa": {"the Constitution": "ਸੰਵਿਧਾਨ"},
+    "pt": {"the wire": "fio", "the Constitution": "Constituição", "this text": "este texto"},
+    "ru": {"the wire": "сеть", "the Constitution": "Конституция"},
+    "sw": {"the Constitution": "Katiba", "this text": "maandishi haya"},
+    "ta": {"the wire": "கம்பி", "the Constitution": "அரசியலமைப்பு"},
+    "te": {"the wire": "వైర్", "the Constitution": "రాజ్యాంగం", "this text": "ఈ గ్రంథం"},
+    "th": {"the wire": "สายสัญญาณ", "the Constitution": "รัฐธรรมนูญ", "this text": "ข้อความนี้"},
+    "tr": {"the wire": "hat", "the Constitution": "Anayasa"},
+    "uk": {"the wire": "дріт", "the Constitution": "Конституція", "this text": "цей текст"},
+    "ur": {"the wire": "وائر", "the Constitution": "Constitution"},
+    "vi": {"the wire": "đường truyền", "the Constitution": "Hiến chế", "this text": "văn bản này"},
+    "yo": {"the wire": "ìsopọ̀", "the Constitution": "Ìpilẹ̀-Òfin"},
+    "zh": {"the Constitution": "章程", "this text": "本文本"},
+}
+
 #: Glossary renderings re-cased for accord runs: {lang: {english: (table, used)}}.
 #: The yo pipeline-stage table is written in UI capitals, and the judge enforced
 #: "ÌWÀ RERE" inside running prose despite the block's own "case is not
@@ -1322,6 +1370,7 @@ def accord_terms(rows: Dict[str, str], code: str, stem: str) -> Dict[str, str]:
         out = {e: t for e, t in out.items() if e not in leftover}
         if code in ETHICS_TEXT_RENDERINGS:
             out[ETHICS_TEXT_TERM] = ETHICS_TEXT_RENDERINGS[code]
+        out.update(CONSTITUTION_ETHICS_TERM_PINS.get(code, {}))
     return out
 
 

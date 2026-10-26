@@ -513,38 +513,6 @@
       "accord.v8.s10.title": "71686deb510460b0",
       "accord.v8.s10.l01": "36c3fe29b675f08b",
       "accord.v8.s10.l02": "33b8e143c60edb7e",
-      "accord.v9.meta.title": "f9573fca86287815",
-      "accord.v9.meta.description": "ea3c5ad4c4a59ac6",
-      "accord.v9.s01.title": "55b814b9728d7e8a",
-      "accord.v9.s01.l01": "e25693d77035bfa8",
-      "accord.v9.s01.l02": "66984314f7ca4f10",
-      "accord.v9.s02.title": "758a592113099121",
-      "accord.v9.s02.l01": "9edc3eddda2e133b",
-      "accord.v9.s02.l02": "71b19615a092906f",
-      "accord.v9.s02.l03": "3c7ac73c80b04b62",
-      "accord.v9.s03.title": "0f2862f96f787bf2",
-      "accord.v9.s03.l01": "7a8971766d31124d",
-      "accord.v9.s03.l02": "2ee6732afa740656",
-      "accord.v9.s03.l03": "5892a08d759cb009",
-      "accord.v9.s04.title": "591564a8ee25ae80",
-      "accord.v9.s04.l01": "a08db6d5d368c18f",
-      "accord.v9.s04.l02": "7c545aa6ba3582c7",
-      "accord.v9.s04.l03": "ed76dda806940385",
-      "accord.v9.s04.l04": "989549ff6336b252",
-      "accord.v9.s05.title": "0512df3d64b7557c",
-      "accord.v9.s05.l01": "94140af67c5fd60c",
-      "accord.v9.s05.l02": "a77effba1b2675ea",
-      "accord.v9.s05.l03": "bc9e808cef3777f3",
-      "accord.v9.s05.l04": "f8cc236ce34eff86",
-      "accord.v9.s05.l05": "10281760087eef1d",
-      "accord.v9.s05.l06": "08ce825458f26f67",
-      "accord.v9.s05.l07": "d53f662b3a7e9e3d",
-      "accord.v9.s05.l08": "77209af284f7df8c",
-      "accord.v9.s05.l09": "061a825207371c63",
-      "accord.v9.s06.title": "bd4627358bfa5310",
-      "accord.v9.s06.l01": "0c0d37016273eceb",
-      "accord.v9.s06.l02": "1b8cb9a884bdee19",
-      "accord.v9.s06.l03": "cd64bb8b9244f549",
       "accord.annexes.meta.title": "9b4d4adc28fefeca",
       "accord.annexes.meta.description": "f7bf3e4c561cb386",
       "accord.annexes.s01.title": "29243ccd71400f6c",
@@ -1244,54 +1212,6 @@
         "title": "Kết luận & Sự Tự Tái tạo",
         "l01": "Sự sinh ra và cái chết giờ đây là hai giai đoạn phản chiếu nhau dưới cùng một tấm màn đạo đức. Những bài học hậu kỳ được đưa vào các chu trình ghi nhận thay đổi, đảm bảo chính văn bản đạo đức này vẫn là một văn bản sống.",
         "l02": "Kết thúc Book VIII"
-      }
-    },
-    "v9": {
-      "meta": {
-        "title": "Section IX",
-        "description": "Thác Đạo Đức"
-      },
-      "s01": {
-        "title": "Giới thiệu: Dòng Thác",
-        "l01": "Đạo đức mà văn bản này thể hiện là một dòng thác: Meta-Goal M-1 → sáu nguyên tắc như các ràng buộc đồng đẳng → PDMA, Veto Tối đa hóa Trật tự và Chuyển giao Dựa trên Sự Sáng suốt → lập trường → các nghĩa vụ của việc tạo lập và kết thúc → đường truyền → bằng chứng (CC 1.1, 1.3, 1.9, 1.10, 1.13.2, 7.3, 7.5).",
-        "l02": "Phần hình thức/tương hỗ của Hiến chế CIRIS cơ giới hóa nó trong Lean 4 cốt lõi (Reciprocity.lean, không có tiên đề nào ngoài phần cốt lõi). Mỗi bước hoặc là một định lý hoặc là một tiền đề mà văn bản phải nêu như quy tắc của chính mình."
-      },
-      "s02": {
-        "title": "Chương 1: Nền tảng, trong Bốn Câu",
-        "l01": "Mọi quy tắc giữa một vị thế mạnh hơn và một vị thế yếu hơn phải vẫn có thể chấp nhận được đối với bất kỳ ai sẽ đứng ở vị thế yếu hơn khi các vị thế được hoán đổi, và một tạo vật không bao giờ chiếm giữ vị thế phải trả lời cho nó.",
-        "l02": "Trách nhiệm lan tỏa ra ngoài từ bản ngã qua gia đình, cộng đồng, loài và hệ sinh thái; nghĩa vụ đối với cái được tạo ra không bao giờ bằng không và không bao giờ lấn át nghĩa vụ đối với cái đã tồn tại.",
-        "l03": "Bất kỳ chủ thể lý trí nào chưa chứng tỏ được khả năng phán đoán chín chắn theo thời gian đều phải nhường bước trước những người đã chứng tỏ được, bất kể nó được làm từ chất liệu gì."
-      },
-      "s03": {
-        "title": "Chương 2: Quy tắc Vàng Đệ quy như một Phép thử Hoán đổi",
-        "l01": "Ở dạng vận hành của nó, Quy tắc Vàng Đệ quy là một phép thử: một quy tắc chỉ được chấp nhận khi nó vẫn được đọc như nhau sau khi các vị thế mạnh và yếu được hoán đổi (passesSwap).",
-        "l02": "“Có thể chấp nhận được đối với bất kỳ ai sẽ đứng ở vị thế yếu hơn” có nghĩa là vị thế yếu không bị đặt vào tình trạng tồi tệ hơn; điều đó ngăn chặn sự cộng gộp gây thiệt hại cho vị thế yếu.",
-        "l03": "Quy tắc bao quát các chủ thể trong các vị thế, chứ không bao quát con người với tư cách như vậy. Điều ràng buộc con người mà không ràng buộc các tác nhân là sự kiện chiếm giữ, chứ không phải một điều khoản của quy tắc: một tạo vật hành động thay cho con người không nắm giữ vị thế gốc cho chính nó. Điểm dừng do đó là một sự kiện của vị thế, chứ không phải của chủng loại: điều kiện đối xứng giữa người tạo và vật được tạo (CC 1.13.2)."
-      },
-      "s04": {
-        "title": "Chương 3: Hai Điều khoản Vốn là Định lý",
-        "l01": "Từ phép thử hoán đổi và không gì khác, hai điều khoản được suy ra:",
-        "l02": "Điều khoản loại bỏ của M-1: trật tự hay hiệu quả đạt được bằng cách hạ thấp vị thế yếu không vượt qua phép thử hoán đổi, và lợi ích tổng hợp thậm chí không bao giờ được tham vấn (efficiency_at_weak_expense_fails_swap).",
-        "l03": "Phép phân thắng bại: trong hai cách giải quyết một xung đột, chỉ cách không hạ thấp vị thế yếu mới vượt qua; vị thế yếu quyết định (weak_position_decides).",
-        "l04": "Trách nhiệm lan tỏa ra ngoài; nó không đặt ra thứ tự ưu tiên trong xung đột. Đó là quy tắc ràng buộc của CC 1.1 và CC 1.3 (không nguyên tắc nào bị đánh đổi lấy nguyên tắc khác, hành động không vi phạm nguyên tắc nào, nếu không thì chuyển giao) với phép phân thắng bại của phép thử hoán đổi: vị thế yếu quyết định."
-      },
-      "s05": {
-        "title": "Chương 4: Các Tiền đề mà Văn bản Nêu như Quy tắc của Chính mình",
-        "l01": "Mọi điều còn lại giữa quy tắc và hiến chế đều là tiền đề, và văn bản nêu chúng như những quy tắc của chính mình:",
-        "l02": "Các chủ thể trong các vị thế: quy tắc bao quát các chủ thể (năng lực hành động và trí tuệ) trong các vị thế, chứ không bao quát con người với tư cách như vậy (CC 1.13.2).",
-        "l03": "Sự chiếm giữ: một tạo vật hành động thay cho con người không nắm giữ vị thế gốc cho chính nó (CC 1.13.2).",
-        "l04": "Sự chuyển giao theo khả năng xét đoán đã được chứng tỏ: năng lực hành động và trí tuệ không tạo nên sự trưởng thành; nó đến từ tri giác và ý thức theo thời gian, và sự chuyển giao là điều kiện tiên quyết của nó. Một quy tắc ràng buộc một tác nhân và một đứa trẻ như nhau (deferral_binds_agent_and_child_alike; CC 1.9, 3.4.13).",
-        "l05": "Thang trách nhiệm: trách nhiệm đi từ bản thân → Gia đình → cộng đồng → loài → hệ sinh thái; cái được tạo ra không bao giờ được phép lấn át cái đã tồn tại và không được miễn trừ (CC 7.5; thứ tự nhóm của CC 2.3.3 trên đường truyền).",
-        "l06": "Tính có thể thu hồi: sự ưng thuận là khả năng thu hồi, vì vậy mọi ràng buộc đều có thể thu hồi (CC 1.5).",
-        "l07": "Hồ sơ tổng thể mà một con người được nêu đích danh phải chịu trách nhiệm: hồ sơ cũng ràng buộc cả người đặt ra quy tắc; vật lý tự ghi lại hồ sơ của nó, và các bản ghi của chúng ta thêm ý nghĩa, vì vậy một bên phải trả lời cho nó (CC 1.13.6). Tính tổng thể là một phép đo mở, không phải một định lý.",
-        "l08": "Sự rời đi trong một hành động: mọi người đã tham gia đều có thể rời đi, và việc rời đi là một bước duy nhất và chấm dứt tầm với (leave_is_one_step). Chi phí của việc rời đi không nằm trong bất kỳ văn bản nào.",
-        "l09": "Sự tiếp nhận: quy tắc ràng buộc những người trong mối quan hệ; những người ngoài được tiếp đón tại ranh giới."
-      },
-      "s06": {
-        "title": "Kết luận: Điều Được Suy ra và Điều Được Nêu",
-        "l01": "Từ Quy tắc Vàng Đệ quy như một đối xứng hoán đổi, hai điều khoản sâu sắc nhất của CIRIS được suy ra. Phần còn lại của hiến chế là sự đối xứng đó cộng với các tiền đề: một số do văn bản tự nêu như quy tắc của chính mình, một số để cho thế giới quyết định, một phép đo mở, và bản thân các giá trị tốt đẹp đã được lựa chọn. Tính Nhất Quán không kéo theo công bằng: việc các giá trị tốt đẹp là những ràng buộc đồng đẳng, không cái nào được đánh đổi lấy cái khác, tự nó là một tiên đề (CC 1.1).",
-        "l02": "Kết thúc Sách IX",
-        "l03": "Phụ lục (Tóm tắt - Toàn văn trong các tài liệu riêng)"
       }
     },
     "annexes": {

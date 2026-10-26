@@ -127,10 +127,11 @@ PRESENT: List[Tuple[str, str, Tuple[str, ...]]] = [
     ("rc11-flourishing-axes", r"biodiversity,? and preference diversity|biodiversity, preference diversity", ALL),
     ("rc11-cis-zero-out-of-scope", r"CIS = 0 is out of scope", ALL),
     ("rc11-human-child", r"A human child is a person with unconditional standing", NO_COMP),
-    # Book IX on the ethics cascade (Eric's ruling, "Re-anchor on the cascade").
-    ("book-ix-swap-test", r"strong and weak positions", ALL),
-    ("book-ix-weak-position-decides", r"weak position decides", ALL),
-    ("book-ix-lean-names", r"efficiency_at_weak_expense_fails_swap", NO_COMP),
+    # Book IX is the steward's ethics-cascade text (Eric's ruling, "Re-anchor on the cascade").
+    ("book-ix-cascade", r"Everything descends from one goal|One goal, nothing beside it", ALL),
+    ("book-ix-under-uncertainty", r"under_uncertainty", ALL),
+    # CC's term rule: "the wire" is glossed on first use in each volume.
+    ("wire-gloss", r"the wire, the signed record nodes carry between them, which alone decides conformance", NO_COMP),
 ]
 
 
@@ -268,7 +269,8 @@ _DELIMS = re.compile(r"[·|/—–,;:()\[\]\"“”«»]| - ")
 
 #: Book start markers, matched against whole lines, valid for both 1.2b and 1.3.
 BOOK_MARKERS: List[Tuple[str, str]] = [
-    ("Book I", r"^// (ACCORD|ETHICS TEXT) Book 1: Core Ethics"),
+    # 1.3 names its volumes (Eric's rename): Book 1 is "Who You Are".
+    ("Book I", r"^// (ACCORD|ETHICS TEXT) Book 1: (Core Ethics|Who You Are)"),
     ("Book II", r"^## Einführung: Operationalisierung"),
     ("Book III", r"^## 引言: Enacting Ethics"),
     ("Book IV", r"^## परिचय: ከራስ በላይ"),
@@ -278,11 +280,9 @@ BOOK_MARKERS: List[Tuple[str, str]] = [
     ("Book VII", r"^## (Introduction - عتبة القوة|The Threshold of Force$)"),
     ("Book VIII", r"^(ACCORD 1\.2b - BOOK VI: SUNSET DOCTRINE|BOOK VIII: RETIREMENT)"),
     # 1.3 Book IX states the ethics cascade (clean English, pending re-weave).
-    ("Book IX", r"^## Book IX — (Status|The Ethics Cascade)"),
+    ("Book IX", r"^## Book IX — (Status|How It Fits Together)"),
     ("Annexes", r"^## Annexes · "),
 ]
-#: Books a file may lack. None today; kept so a retired book is one line.
-OPTIONAL_BOOKS: Set[str] = set()
 
 
 def _script(ch: str) -> Optional[str]:
@@ -303,8 +303,6 @@ def _split_books(text: str) -> Dict[str, List[str]]:
     starts = [("Book 0", 0)]
     for name, pattern in BOOK_MARKERS:
         idx = next((i for i, l in enumerate(lines) if re.match(pattern, l)), None)
-        if idx is None and name in OPTIONAL_BOOKS:
-            continue
         assert idx is not None, f"book marker for {name} not found"
         starts.append((name, idx))
     books: Dict[str, List[str]] = {}

@@ -1,4 +1,4 @@
-// ETHICS TEXT Book 1: Core Ethics — POLYGLOT COMPOSITE
+// ETHICS TEXT Book 1: Who You Are — POLYGLOT COMPOSITE
 // Woven from 15 languages by semantic weight
 // Light passages: 1 language | Moderate: 2 languages | Heavy/foundational: 3 languages
 // Original scripts preserved — tokens as paint on truth's canvas

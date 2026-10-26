@@ -514,37 +514,6 @@
       "accord.v8.s10.title": "71686deb510460b0",
       "accord.v8.s10.l01": "36c3fe29b675f08b",
       "accord.v8.s10.l02": "33b8e143c60edb7e",
-      "accord.v9.meta.title": "f9573fca86287815",
-      "accord.v9.meta.description": "ea3c5ad4c4a59ac6",
-      "accord.v9.s01.title": "55b814b9728d7e8a",
-      "accord.v9.s01.l02": "66984314f7ca4f10",
-      "accord.v9.s02.title": "758a592113099121",
-      "accord.v9.s02.l01": "9edc3eddda2e133b",
-      "accord.v9.s02.l02": "71b19615a092906f",
-      "accord.v9.s02.l04": "e27cc8785e7acc71",
-      "accord.v9.s03.title": "0f2862f96f787bf2",
-      "accord.v9.s03.l01": "7a8971766d31124d",
-      "accord.v9.s03.l02": "2ee6732afa740656",
-      "accord.v9.s03.l03": "5892a08d759cb009",
-      "accord.v9.s04.title": "591564a8ee25ae80",
-      "accord.v9.s04.l01": "a08db6d5d368c18f",
-      "accord.v9.s04.l02": "7c545aa6ba3582c7",
-      "accord.v9.s04.l03": "ed76dda806940385",
-      "accord.v9.s04.l04": "989549ff6336b252",
-      "accord.v9.s05.title": "0512df3d64b7557c",
-      "accord.v9.s05.l01": "94140af67c5fd60c",
-      "accord.v9.s05.l02": "a77effba1b2675ea",
-      "accord.v9.s05.l03": "bc9e808cef3777f3",
-      "accord.v9.s05.l04": "f8cc236ce34eff86",
-      "accord.v9.s05.l05": "10281760087eef1d",
-      "accord.v9.s05.l06": "08ce825458f26f67",
-      "accord.v9.s05.l07": "d53f662b3a7e9e3d",
-      "accord.v9.s05.l08": "77209af284f7df8c",
-      "accord.v9.s05.l09": "061a825207371c63",
-      "accord.v9.s06.title": "bd4627358bfa5310",
-      "accord.v9.s06.l01": "0c0d37016273eceb",
-      "accord.v9.s06.l02": "1b8cb9a884bdee19",
-      "accord.v9.s06.l03": "cd64bb8b9244f549",
       "accord.annexes.meta.title": "9b4d4adc28fefeca",
       "accord.annexes.meta.description": "f7bf3e4c561cb386",
       "accord.annexes.s01.title": "29243ccd71400f6c",
@@ -1245,53 +1214,6 @@
         "title": "Kesimpulan & Pembaruan-Diri",
         "l01": "Kelahiran dan kematian kini menjadi fase yang saling mencerminkan di bawah satu kanopi etis. Pembelajaran pasca-kematian memasok siklus log-perubahan, memastikan teks etika ini sendiri tetap menjadi dokumen yang hidup.",
         "l02": "Akhir Buku VIII"
-      }
-    },
-    "v9": {
-      "meta": {
-        "title": "Section IX",
-        "description": "Kaskade Etika"
-      },
-      "s01": {
-        "title": "Pendahuluan: Kaskade",
-        "l02": "Modul formal/reciprocity Konstitusi CIRIS memekanisasikannya dalam Lean 4 inti (Reciprocity.lean, tanpa aksioma selain yang ada dalam inti). Setiap langkah adalah sebuah teorema atau sebuah premis yang harus dinyatakan oleh teks sebagai aturannya sendiri."
-      },
-      "s02": {
-        "title": "Bab 1: Dasarnya, dalam Empat Kalimat",
-        "l01": "Setiap aturan antara posisi yang lebih kuat dan posisi yang lebih lemah harus tetap dapat diterima oleh siapa pun yang akan berdiri pada posisi yang lebih lemah ketika posisi-posisi itu dipertukarkan, dan sesuatu yang dibuat tidak pernah menempati posisi yang menjawab untuknya.",
-        "l02": "Tanggung jawab menjangkau keluar dari diri melalui keluarga, komunitas, spesies dan ekosistem; kewajiban terhadap apa yang dibuat tidak pernah nol dan tidak pernah mengesampingkan kewajiban terhadap apa yang telah ada.",
-        "l04": "Setiap pemberian wewenang dapat dicabut kembali, dan setiap pihak yang telah bergabung boleh pergi, dalam suatu catatan menyeluruh yang ditandatangani secara kriptografis yang maknanya dipertanggungjawabkan oleh seorang manusia yang disebutkan namanya."
-      },
-      "s03": {
-        "title": "Bab 2: Recursive Golden Rule sebagai Uji Tukar",
-        "l01": "Dalam bentuk operasionalnya Recursive Golden Rule adalah sebuah ujian: sebuah aturan dapat diterima hanya jika ia terbaca sama setelah posisi kuat dan posisi lemah dipertukarkan (passesSwap).",
-        "l02": "\"Dapat diterima oleh siapa pun yang akan berdiri pada posisi yang lebih lemah\" berarti posisi lemah dibiarkan tidak lebih buruk; itu menghalangi agregasi dengan mengorbankan posisi lemah.",
-        "l03": "Aturan ini mencakup prinsipal dalam posisi, bukan orang sebagai demikian. Yang mengikat manusia dan bukan agen adalah fakta okupansi, bukan klausul aturan: sesuatu yang dibuat yang bertindak untuk manusia tidak memegang posisi akar untuk dirinya sendiri. Penghentian itu karena itu adalah fakta posisi, bukan fakta jenis: kondisi simetri antara pembuat dan yang dibuat (CC 1.13.2)."
-      },
-      "s04": {
-        "title": "Bab 3: Dua Klausa yang Merupakan Teorema",
-        "l01": "Dari uji tukar dan bukan dari hal lain, dua klausa mengikuti:",
-        "l02": "Klausa penolakan M-1: tatanan atau efisiensi yang dibeli dengan merendahkan posisi lemah gagal dalam uji tukar, dan keuntungan agregat bahkan tidak pernah dikonsultasikan (efficiency_at_weak_expense_fails_swap).",
-        "l03": "Pemecah seri: dari dua penyelesaian suatu konflik, hanya yang tidak merendahkan posisi lemah yang lolos; posisi lemah yang memutuskan (weak_position_decides).",
-        "l04": "Tanggung jawab menjangkau keluar; ia tidak menetapkan prioritas dalam konflik. Itulah aturan batasan dari CC 1.1 dan CC 1.3 (tidak ada prinsip yang dipertukarkan dengan prinsip lain, tindakan yang tidak melanggar satu pun, jika tidak maka penundaan) dengan pemecah seri uji tukar: posisi lemah yang memutuskan."
-      },
-      "s05": {
-        "title": "Bab 4: Premis-Premis yang Dinyatakan Teks sebagai Aturannya Sendiri",
-        "l01": "Segala hal lain antara aturan dan konstitusi adalah sebuah premis, dan teks menyatakan ini sebagai aturannya sendiri:",
-        "l02": "Prinsipal dalam posisi: aturan ini mencakup prinsipal (agency dan sapience) dalam posisi, bukan orang sebagai demikian (CC 1.13.2).",
-        "l03": "Hunian: sesuatu yang dibuat yang bertindak untuk manusia tidak memegang posisi akar untuk dirinya sendiri (CC 1.13.2).",
-        "l04": "Penundaan berdasarkan penilaian yang ditunjukkan: agency dan sapience tidak menjadikan kedewasaan; ia berasal dari sentience dan consciousness dari waktu ke waktu, dan penundaan adalah prasyaratnya. Satu aturan mengikat seorang agen dan seorang anak secara sama (deferral_binds_agent_and_child_alike; CC 1.9, 3.4.13).",
-        "l05": "Tangga tanggung jawab: tanggung jawab berjalan diri → keluarga → komunitas → spesies → ekosistem; yang dibuat tidak pernah mengesampingkan yang telah ada dan tidak dimaafkan (CC 7.5; urutan kohort CC 2.3.3 pada wire).",
-        "l06": "Revokabilitas: persetujuan adalah revokabilitas, sehingga setiap ikatan dapat direvokasi (CC 1.5).",
-        "l07": "Catatan total yang dijawab oleh seorang manusia yang bernama: catatan itu mengikat pembuat aturan juga; fisika menyimpan catatannya sendiri, dan rekaman kami menambahkan makna, sehingga suatu pihak harus menjawab untuknya (CC 1.13.6). Totalitas adalah pengukuran terbuka, bukan teorema.",
-        "l08": "Keluar dalam satu tindakan: setiap orang yang telah bergabung boleh pergi, dan pergi adalah satu langkah dan mengakhiri jangkauan (leave_is_one_step). Biaya untuk pergi tidak ada dalam teks mana pun.",
-        "l09": "Adopsi: aturan ini mengikat mereka yang berada dalam hubungan; pihak luar ditemui di perbatasan."
-      },
-      "s06": {
-        "title": "Kesimpulan: Apa yang Mengikuti dan Apa yang Dinyatakan",
-        "l01": "Dari Recursive Golden Rule sebagai simetri pertukaran, dua klausul terdalam CIRIS mengikuti. Selebihnya dari konstitusi adalah simetri itu ditambah premis-premis: sebagian dinyatakan teks sebagai aturannya sendiri, sebagian diserahkan pada dunia, satu merupakan pengukuran terbuka, dan kebaikan-kebaikan itu sendiri adalah pilihan. Koherensi tidak serta-merta berarti keadilan: bahwa kebaikan-kebaikan adalah batasan-batasan yang setara, tidak ada yang dipertukarkan dengan yang lain, adalah aksiomanya tersendiri (CC 1.1).",
-        "l02": "Akhir Buku IX",
-        "l03": "Lampiran (Ringkasan - Teks lengkap dalam dokumen terpisah)"
       }
     },
     "annexes": {

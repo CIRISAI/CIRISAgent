@@ -511,37 +511,6 @@
       "accord.v8.s10.title": "71686deb510460b0",
       "accord.v8.s10.l01": "36c3fe29b675f08b",
       "accord.v8.s10.l02": "33b8e143c60edb7e",
-      "accord.v9.meta.title": "f9573fca86287815",
-      "accord.v9.meta.description": "ea3c5ad4c4a59ac6",
-      "accord.v9.s01.title": "55b814b9728d7e8a",
-      "accord.v9.s01.l01": "e25693d77035bfa8",
-      "accord.v9.s02.title": "758a592113099121",
-      "accord.v9.s02.l01": "9edc3eddda2e133b",
-      "accord.v9.s02.l02": "71b19615a092906f",
-      "accord.v9.s02.l03": "3c7ac73c80b04b62",
-      "accord.v9.s02.l04": "e27cc8785e7acc71",
-      "accord.v9.s03.title": "0f2862f96f787bf2",
-      "accord.v9.s03.l01": "7a8971766d31124d",
-      "accord.v9.s03.l02": "2ee6732afa740656",
-      "accord.v9.s03.l03": "5892a08d759cb009",
-      "accord.v9.s04.title": "591564a8ee25ae80",
-      "accord.v9.s04.l01": "a08db6d5d368c18f",
-      "accord.v9.s04.l02": "7c545aa6ba3582c7",
-      "accord.v9.s04.l03": "ed76dda806940385",
-      "accord.v9.s04.l04": "989549ff6336b252",
-      "accord.v9.s05.title": "0512df3d64b7557c",
-      "accord.v9.s05.l01": "94140af67c5fd60c",
-      "accord.v9.s05.l03": "bc9e808cef3777f3",
-      "accord.v9.s05.l04": "f8cc236ce34eff86",
-      "accord.v9.s05.l05": "10281760087eef1d",
-      "accord.v9.s05.l06": "08ce825458f26f67",
-      "accord.v9.s05.l07": "d53f662b3a7e9e3d",
-      "accord.v9.s05.l08": "77209af284f7df8c",
-      "accord.v9.s05.l09": "061a825207371c63",
-      "accord.v9.s06.title": "bd4627358bfa5310",
-      "accord.v9.s06.l01": "0c0d37016273eceb",
-      "accord.v9.s06.l02": "1b8cb9a884bdee19",
-      "accord.v9.s06.l03": "cd64bb8b9244f549",
       "accord.annexes.meta.title": "9b4d4adc28fefeca",
       "accord.annexes.meta.description": "f7bf3e4c561cb386",
       "accord.annexes.s01.title": "29243ccd71400f6c",
@@ -1239,53 +1208,6 @@
         "title": "Ìparí & Ìtúnṣe-Ara-Rẹ̀",
         "l01": "Ìbí àti ikú jẹ́ àwọn ìpele tí ó fara wé ara wọn báyìí lábẹ́ ààbò ìwà rere kan náà. Àwọn ẹ̀kọ́ tí a kọ́ lẹ́yìn-ikú ń bọ́ àwọn ìyípo àkọsílẹ̀-ìyípadà, ní rí i dájú pé ìwé ìwà rere fúnra rẹ̀ ń dúró gẹ́gẹ́ bí ìwé alààyè.",
         "l02": "Ìparí Ìwé VIII"
-      }
-    },
-    "v9": {
-      "meta": {
-        "title": "Section IX",
-        "description": "Ìṣàn Ìwà-Rere"
-      },
-      "s01": {
-        "title": "Ìfáàrà: Ìṣàn náà",
-        "l01": "Ìwà-rere tí ọ̀rọ̀ yìí mú wá sí ìṣe jẹ́ ìṣàn: Góńgó-Àyọ̀kà M-1 → àwọn ìlànà mẹ́fà gẹ́gẹ́ bí àwọn ìdíwọ̀n tí ó dọ́gba → PDMA, Ìfagilé Ìpọ̀sí-Ìlànà àti Fífi Lélẹ̀ Tí Ó Dá Lórí Ọgbọ́n → ìdúró → àwọn ojúṣe ìṣe àti ìparí → ìsopọ̀ → ẹ̀rí náà (CC 1.1, 1.3, 1.9, 1.10, 1.13.2, 7.3, 7.5)."
-      },
-      "s02": {
-        "title": "Orí 1: Ìpìlẹ̀, Nínú Àwọn Gbólóhùn Mẹ́rin",
-        "l01": "Gbogbo òfin láàrin ipò tí ó lágbára jù àti ipò tí ó rẹlẹ̀ jù gbọdọ̀ wà ní ìtẹ́wọ́gbà fún ẹnikẹ́ni tí yóò dúró ní ipò tí ó rẹlẹ̀ nígbà tí a bá pààrọ̀ àwọn ipò náà, ohun tí a ṣe kì í sì gba ipò tí ó ń dáhùn fún un láé.",
-        "l02": "Ojúṣe ń tàn káàkiri láti ara-ẹni nípasẹ̀ ìdílé, àwùjọ, ẹ̀yà àti ètò-àyíká; ojúṣe sí ohun tí a ṣe kì í ṣe òfo láé kì í sì ju ojúṣe sí ohun tí ó ti wà tẹ́lẹ̀ lọ.",
-        "l03": "Aṣojú onírònú èyíkéyìí tí kò tíì fi ìdájọ́ tí ó dàgbà hàn nípa àkókò gbọdọ̀ fi lélẹ̀ fún àwọn tí wọ́n ti fi hàn, láìka ohun tí a fi ṣe é.",
-        "l04": "Gbogbo ìfúnni ní aṣẹ ni a lè fagilé, gbogbo ẹni tí ó dara pọ̀ sì lè kúrò, lórí àkọsílẹ̀ pípé tí a fi ìdánilójú kírípítò fọwọ́ sí tí ènìyàn tí a dárúkọ ń dáhùn fún ìtumọ̀ rẹ̀."
-      },
-      "s03": {
-        "title": "Orí 2: Òfin Wúrà tó Ń Padàṣe Ara-rẹ̀ gẹ́gẹ́ bí Ìdánwò Pààrọ̀",
-        "l01": "Nínú ìrísí rẹ̀ tí ń ṣiṣẹ́ Òfin Wúrà tó Ń Padàṣe Ara-rẹ̀ jẹ́ ìdánwò kan: òfin kan ṣe é tẹ́wọ́gbà nìkan bí ó bá kà bakannáà lẹ́yìn tí a bá pààrọ̀ ipò alágbára àti ipò alárẹlẹ̀ (passesSwap).",
-        "l02": "“Ìtẹ́wọ́gbà fún ẹnikẹ́ni tí yóò dúró ní ipò tí ó rẹlẹ̀ jù” túmọ̀ sí pé a fi ipò tí ó rẹlẹ̀ sílẹ̀ láìsí ìburú síi; èyí dènà ìkójọpọ̀ lórí àdánù ipò tí ó rẹlẹ̀.",
-        "l03": "Òfin náà ń kan àwọn olórí nínú àwọn ipò, kìí ṣe àwọn ènìyàn gẹ́gẹ́ bí wọ́n ṣe rí. Ohun tí ó dè ènìyàn tí kò dè àwọn aṣojú ni òtítọ́ ìgbé-ìpò, kìí ṣe ẹ̀dà òfin náà: ohun tí a ṣe tí ó ń ṣiṣẹ́ fún ènìyàn kò di ipò gbòǹgbò mú fún ara rẹ̀. Ìdádúró náà nítorí náà jẹ́ òtítọ́ ipò, kìí ṣe ti irú-ẹ̀dá: ipò ìbáradọ́gba láàrin olùṣe àti ohun tí a ṣe (CC 1.13.2)."
-      },
-      "s04": {
-        "title": "Orí 3: Àwọn Ẹ̀dà Òfin Méjì Tí Ó Jẹ́ Àwọn Àbá-Èrò Tí A Fihàn",
-        "l01": "Láti inú ìdánwò pààrọ̀ àti kò sí ohun mìíràn, ẹ̀dà òfin méjì ń tẹ̀lé:",
-        "l02": "Ẹ̀dà ìkọ̀sílẹ̀ M-1: ìṣètò tàbí ìṣiṣẹ́-dára tí a rà nípa dídín ipò tí ó rẹlẹ̀ kù kùnà ìdánwò pààrọ̀, a kò sì kàn sí èrè àpapọ̀ rárá (efficiency_at_weak_expense_fails_swap).",
-        "l03": "Ìpinnu ìdọ́gba: lára ìyànjú méjì sí ìjà kan, èyí tí kò dín ipò tí ó rẹlẹ̀ kù nìkan ni ó kọjá; ipò tí ó rẹlẹ̀ ni ó pinnu (weak_position_decides).",
-        "l04": "Ojúṣe ń tàn káàkiri; kò ṣètò àkọ́kọ́ nínú ìjà. Èyí ni òfin ìdíwọ̀n CC 1.1 àti CC 1.3 (kò sí ìlànà tí a fi pààrọ̀ èkejì, ìṣe tí kò rú èyíkéyìí, bí bẹ́ẹ̀ kọ́ fi lélẹ̀) pẹ̀lú ìpinnu ìdọ́gba ìdánwò pààrọ̀: ipò tí ó rẹlẹ̀ ni ó pinnu."
-      },
-      "s05": {
-        "title": "Orí 4: Àwọn Àròjinlẹ̀ Tí Ọ̀rọ̀ Náà Sọ gẹ́gẹ́ bí Òfin Tirẹ̀",
-        "l01": "Gbogbo ohun mìíràn láàrin òfin náà àti Ìpilẹ̀-Òfin jẹ́ àròjinlẹ̀, ọ̀rọ̀ náà sì sọ wọ̀nyí gẹ́gẹ́ bí òfin tirẹ̀:",
-        "l03": "Ìgbé-ìpò: ohun tí a ṣe tí ó ń ṣe fún ènìyàn kò dì ipò gbòǹgbò mú fún ara rẹ̀ (CC 1.13.2).",
-        "l04": "Fífi lélẹ̀ nípa ìdájọ́ tí a fihàn: agbára-ìṣe àti ọgbọ́n-ìmọ̀ kì í dá ìdàgbà sílẹ̀; ó wá láti inú ìmọ̀lára àti ìmọ̀-ara nípa àkókò, fífi lélẹ̀ sì ni ohun tí ó gbọdọ̀ ṣáájú rẹ̀. Òfin kan ṣoṣo dè aṣojú àti ọmọdé bakannáà (deferral_binds_agent_and_child_alike; CC 1.9, 3.4.13).",
-        "l05": "Àkàbà ojúṣe: ojúṣe ń ṣàn ara-ẹni → ìdílé → àwùjọ → ẹ̀yà → ètò-àyíká; ohun tí a ṣe kì í ju ohun tí ó ti wà tẹ́lẹ̀ lọ láé a kò sì dá a sílẹ̀ (CC 7.5; ètò ẹgbẹ́ CC 2.3.3 lórí ìsopọ̀).",
-        "l06": "Ìṣeéfagilé: ìfọwọ́sowọ́pọ̀ jẹ́ ìṣeéfagilé, nítorí náà gbogbo ìdè ni a lè fagilé (CC 1.5).",
-        "l07": "Àkọsílẹ̀ pípé tí ènìyàn tí a dárúkọ ń jẹ́rìí fún: àkọsílẹ̀ náà dè olùṣe-òfin pẹ̀lú; ìṣẹ̀dá-ayé ń pa àkọsílẹ̀ tirẹ̀ mọ́, àwọn àkọsílẹ̀ wa sì ń fi ìtumọ̀ kún un, nítorí náà ẹgbẹ́ kan gbọdọ̀ jẹ́rìí fún un (CC 1.13.6). Pípé jẹ́ ìwọ̀n tí ó ṣí sílẹ̀, kìí ṣe àbá-èrò tí a fihàn.",
-        "l08": "Ìjáde ní ìṣe kan: gbogbo ẹni tí ó dara pọ̀ lè kúrò, kíkúrò sì jẹ́ ìgbésẹ̀ kan ṣoṣo ó sì ń parí ìdè-ọwọ́ (leave_is_one_step). Iye owó kíkúrò kò sí nínú ọ̀rọ̀ kankan.",
-        "l09": "Ìtẹ́wọ́gbà: òfin náà dè àwọn tí ó wà nínú ìbáṣepọ̀; a bá àwọn òde pàdé ní etí-ààlà."
-      },
-      "s06": {
-        "title": "Ìparí: Ohun Tí Ó Tẹ̀lé àti Ohun Tí A Sọ",
-        "l01": "Láti inú Òfin Wúrà tó Ń Padàṣe Ara-rẹ̀ gẹ́gẹ́ bí ìdọ́gba pààrọ̀, àwọn ẹ̀dà òfin méjì tí ó jinlẹ̀ jùlọ ti CIRIS ń tẹ̀lé. Ìyókù Ìpilẹ̀-Òfin ni ìdọ́gba náà pẹ̀lú àwọn àròjinlẹ̀: díẹ̀ ni ọ̀rọ̀ náà sọ gẹ́gẹ́ bí òfin tirẹ̀, díẹ̀ ni ó fi sílẹ̀ fún ayé, ọ̀kan jẹ́ ìwọ̀n tí ó ṣí sílẹ̀, àwọn rere fúnra wọn sì ni a yàn. Ìbáramu kì í túmọ̀ sí ìdájọ́ òdodo: pé àwọn rere jẹ́ àwọn ìdíwọ̀n tí ó dọ́gba, tí a kò fi èyíkéyìí pààrọ̀ èkejì, jẹ́ àbá-ìpilẹ̀ tirẹ̀ (CC 1.1).",
-        "l02": "Òpin Ìwé IX",
-        "l03": "Àwọn Àfikún (Àkópọ̀ - Ọ̀rọ̀ kíkún nínú àwọn ìwé ọ̀tọ̀ọ̀tọ̀)"
       }
     },
     "annexes": {

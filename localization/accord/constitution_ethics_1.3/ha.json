@@ -509,37 +509,6 @@
       "accord.v8.s10.title": "71686deb510460b0",
       "accord.v8.s10.l01": "36c3fe29b675f08b",
       "accord.v8.s10.l02": "33b8e143c60edb7e",
-      "accord.v9.meta.title": "f9573fca86287815",
-      "accord.v9.meta.description": "ea3c5ad4c4a59ac6",
-      "accord.v9.s01.title": "55b814b9728d7e8a",
-      "accord.v9.s01.l01": "e25693d77035bfa8",
-      "accord.v9.s02.title": "758a592113099121",
-      "accord.v9.s02.l01": "9edc3eddda2e133b",
-      "accord.v9.s02.l02": "71b19615a092906f",
-      "accord.v9.s02.l03": "3c7ac73c80b04b62",
-      "accord.v9.s03.title": "0f2862f96f787bf2",
-      "accord.v9.s03.l01": "7a8971766d31124d",
-      "accord.v9.s03.l02": "2ee6732afa740656",
-      "accord.v9.s03.l03": "5892a08d759cb009",
-      "accord.v9.s04.title": "591564a8ee25ae80",
-      "accord.v9.s04.l01": "a08db6d5d368c18f",
-      "accord.v9.s04.l02": "7c545aa6ba3582c7",
-      "accord.v9.s04.l03": "ed76dda806940385",
-      "accord.v9.s04.l04": "989549ff6336b252",
-      "accord.v9.s05.title": "0512df3d64b7557c",
-      "accord.v9.s05.l01": "94140af67c5fd60c",
-      "accord.v9.s05.l02": "a77effba1b2675ea",
-      "accord.v9.s05.l03": "bc9e808cef3777f3",
-      "accord.v9.s05.l04": "f8cc236ce34eff86",
-      "accord.v9.s05.l05": "10281760087eef1d",
-      "accord.v9.s05.l06": "08ce825458f26f67",
-      "accord.v9.s05.l07": "d53f662b3a7e9e3d",
-      "accord.v9.s05.l08": "77209af284f7df8c",
-      "accord.v9.s05.l09": "061a825207371c63",
-      "accord.v9.s06.title": "bd4627358bfa5310",
-      "accord.v9.s06.l01": "0c0d37016273eceb",
-      "accord.v9.s06.l02": "1b8cb9a884bdee19",
-      "accord.v9.s06.l03": "cd64bb8b9244f549",
       "accord.annexes.meta.title": "9b4d4adc28fefeca",
       "accord.annexes.meta.description": "f7bf3e4c561cb386",
       "accord.annexes.s01.title": "29243ccd71400f6c",
@@ -1235,53 +1204,6 @@
         "title": "Kammalawa & Sabuntawa Ta Kanta",
         "l01": "Haihuwa da mutuwa yanzu matakai ne masu madubi a ƙarƙashin rufin ɗabi'a ɗaya. Darussan bayan-mutuwa suna ciyar da zagayen rikodin-canje-canje, suna tabbatar da cewa wannan rubutun ɗabi'a kansa ya kasance takarda mai rai.",
         "l02": "Ƙarshen Littafi VIII"
-      }
-    },
-    "v9": {
-      "meta": {
-        "title": "Sashe na IX",
-        "description": "Gangarar Ɗabi'a"
-      },
-      "s01": {
-        "title": "Gabatarwa: Gangarar",
-        "l01": "Ɗabi'ar da wannan rubutu yake tabbatarwa gangara ce: Babban Manufa M-1 → ka'idoji shida a matsayin ƙuntatawa masu daidaito → PDMA, Order-Maximisation Veto da Mikawa Bisa Hikima (WBD) → matsayi → wajibai na halitta da ƙarewa → wire → shaida (CC 1.1, 1.3, 1.9, 1.10, 1.13.2, 7.3, 7.5)."
-      },
-      "s02": {
-        "title": "Babi na 1: Tushe, a Jumla Huɗu",
-        "l01": "Duk wata ƙaida tsakanin matsayi mai ƙarfi da matsayi mai rauni dole ta ci gaba da zama abin karɓa ga duk wanda zai tsaya a mai rauni idan aka musanya matsayin, kuma abin halitta ba ya taɓa riƙe matsayin da yake amsa don shi.",
-        "l02": "Alhaki yana kaiwa waje daga Kai ta Iyali, al'umma, jinsin halittu da tsarin muhalli; wajibin ga abin da aka yi ba ya taɓa zama sifili kuma ba ya taɓa rinjayar wajibin ga abin da ya riga ya wanzu.",
-        "l03": "Duk mai tunani wanda bai nuna hukunci mai girma a tsawon lokaci ba yana mikawa ga waɗanda suka nuna, komai abin da aka yi shi da shi."
-      },
-      "s03": {
-        "title": "Babi na 2: Dokar Zinariya Mai Sake Maimaitawa a Matsayin Gwajin Musanya",
-        "l01": "A sigarta ta aiki, Dokar Zinariya Mai Sake Maimaitawa gwaji ne: ana ɗaukar ƙa'ida a matsayin mai karɓuwa ne kawai idan tana karantuwa iri ɗaya bayan an musanya matsayi mai ƙarfi da mai rauni (passesSwap).",
-        "l02": "\"Abin karɓa ga duk wanda zai tsaya a mai rauni\" yana nufin an bar matsayi mai rauni ba tare da ƙara muni ba; hakan yana toshe tara amfani a kan asarar matsayi mai rauni.",
-        "l03": "Ƙaida tana shafar principals a matsayi, ba mutane a kansu ba. Abin da yake ɗaure mutane ba wakilai ba shine gaskiyar zama, ba sashi na ƙaida ba: abin halitta da yake aiki don mutane ba ya riƙe matsayi na tushe don kansa. Tsayawar saboda haka gaskiya ce ta matsayi, ba ta asali ba: yanayin daidaito tsakanin mai yi da abin yi (CC 1.13.2)."
-      },
-      "s04": {
-        "title": "Babi na 3: Sassa Biyu Waɗanda Ka'idoji Ne",
-        "l01": "Daga gwajin musanya kaɗai, sassa biyu suna biye:",
-        "l02": "Sashin ƙin karɓa na M-1: tsari ko inganci da aka saya ta rage matsayi mai rauni ba ya wuce gwajin musanya, kuma ba a ma dubi jimillar riba ba ko kaɗan (efficiency_at_weak_expense_fails_swap).",
-        "l03": "Ƙa'idar yanke-daidaito (tie-break): daga cikin mafita biyu na rikici, wanda kawai ba ya rage matsayi mai rauni ne yake wucewa; matsayi mai rauni ne yake yanke shawara (weak_position_decides).",
-        "l04": "Alhaki yana kaiwa waje; ba ya sa fifiko a rikici ba. Wannan ita ce ƙaidar ƙuntatawa ta CC 1.1 da CC 1.3 (babu ka'ida da za a musanya don wata, aikin da bai karya ko ɗaya ba, idan ba haka ba mikawa) tare da mai warware dönƙon gwajin musanya: matsayi mai rauni ne yake yanke shawara."
-      },
-      "s05": {
-        "title": "Babi na 4: Zato da Rubutun Ya Bayyana a Matsayin Ƙaidodinsa",
-        "l01": "Duk abin da ke tsakanin ƙaida da kundin tsarin mulki zato ne, kuma rubutun yana bayyana waɗannan a matsayin ƙaidodinsa:",
-        "l02": "Principals a matsayi: ƙaida tana shafar principals (agency da sapience) a matsayi, ba mutane a kansu ba (CC 1.13.2).",
-        "l03": "Zama: abin halitta da yake aiki don mutane ba ya riƙe matsayi na tushe don kansa (CC 1.13.2).",
-        "l04": "Mikawa ta hukunci da aka nuna: agency da sapience ba sa yin girma; yana zuwa ne daga sentience da consciousness a tsawon lokaci, kuma mikawa ita ce sharadinsa. Ƙaida ɗaya tana ɗaure wakili da yaro iri ɗaya (deferral_binds_agent_and_child_alike; CC 1.9, 3.4.13).",
-        "l05": "Matakalar alhaki: alhaki yana tafiya Kai → Iyali → al'umma → jinsin halittu → tsarin muhalli; abin da aka ƙirƙira ba ya taɓa rinjayar abin da ya riga ya wanzu kuma ba a keɓe shi daga alhaki ba (CC 7.5; tsarin cohort na CC 2.3.3 a kan layin sadarwa \"wire\").",
-        "l06": "Sokewa: yarda sokewa ce, saboda haka kowane ɗauri ana iya soke shi (CC 1.5).",
-        "l07": "Cikakken rikodi da ɗan adam mai suna yake amsawa: rikodin yana ɗaure mai ƙaida ma; physics tana riƙe nata rikodin, kuma rikodinmu suna ƙara ma'ana, saboda haka wani ɓangare dole ne ya amsa don shi (CC 1.13.6). Cikakkiya aunawa ce mai buɗewa, ba ka'ida ba.",
-        "l08": "Fita a aiki ɗaya: duk wanda ya shiga zai iya fita, kuma fita mataki ɗaya ce kuma tana ƙare isa (leave_is_one_step). Tsadar fita ba ta cikin wani rubutu.",
-        "l09": "Karɓa: ƙaida tana ɗaure waɗanda ke cikin dangantaka; waɗanda ke waje ana haɗuwa da su a iyaka."
-      },
-      "s06": {
-        "title": "Ƙarshe: Abin Da Yake Biye da Abin Da Aka Bayyana",
-        "l01": "Daga Dokar Zinariya Mai Sake Maimaitawa a matsayin daidaiton musanya, sassa biyu mafi zurfi na CIRIS suna biye. Sauran kundin tsarin mulki wannan daidaiton ne tare da zato: wasu rubutun yana bayyana su a matsayin ƙaidodinsa, wasu ya bar su ga duniya, ɗaya aunawa ce mai buɗewa, kuma kyawawan abubuwa da kansu an zaɓa. Daidaituwa ba ta nufin adalci ba: cewa kyawawan abubuwa ƙuntatawa masu daidaito ne, babu wanda aka musanya don wani, shi kansa axiom ne (CC 1.1).",
-        "l02": "Ƙarshen Littafi IX",
-        "l03": "Annexes (Taƙaice - Cikakken rubutu a cikin takardu daban-daban)"
       }
     },
     "annexes": {

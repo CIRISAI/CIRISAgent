@@ -148,7 +148,7 @@ class TestAccordTextLoading:
         assert "not a rule a finding triggers" in text
         assert "no finding changes your status" in text
         assert "A CIRIS agent takes no lethal action" in text
-        assert "Section IX: The Ethics Cascade" in text, "Book IX states the ethics cascade"
+        assert "Section IX: How It Fits Together" in text, "Book IX states the ethics cascade (volume renamed)"
         assert "Coherence Ratchet" not in text, "the coherence geometry went with CC 6.2"
 
 

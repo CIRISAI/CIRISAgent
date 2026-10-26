@@ -410,7 +410,9 @@ class CrossChatStage:
         got = self._poll(self.d.add_s, attempt)
         if got is None:
             why = (
-                "stuck in 202 contacts.awaiting_key_body: the target's key body never arrived over the mesh"
+                "stuck in 202 contacts.awaiting_key_body: the target's key body never arrived over the mesh "
+                "(a deep edge_recovery_queue on the node's KEY FETCH STALLED line is the starved missing-signer "
+                "queue, tracked: CIRISEdge#904)"
                 if state["awaiting"]
                 else "the add never succeeded"
             )

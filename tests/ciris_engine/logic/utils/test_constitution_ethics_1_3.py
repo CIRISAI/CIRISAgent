@@ -131,6 +131,7 @@ PRESENT: List[Tuple[str, str, Tuple[str, ...]]] = [
     ("book-ix-cascade", r"Everything descends from one goal|One goal, nothing beside it", ALL),
     ("book-ix-under-uncertainty", r"under_uncertainty", ALL),
     # CC's term rule: "the wire" is glossed on first use in each volume.
+    # Book IX is exempt: it is the steward's text verbatim, and the cascade summary.
     ("wire-gloss", r"the wire, the signed record nodes carry between them, which alone decides conformance", NO_COMP),
 ]
 

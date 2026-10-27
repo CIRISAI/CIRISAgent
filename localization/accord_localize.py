@@ -429,20 +429,17 @@ CONSTITUTION_ETHICS_TERM_PINS: Dict[str, Dict[str, str]] = {
 }
 
 #: Term rules sent with every constitution_ethics request, as glossary prose
-#: (the translator and the judge both read it). CC rc12 (CIRISConstitution
-#: @ bb726ff): the English canon keeps "the wire"; a translation renders its
-#: meaning. "standing" per CC 1.13.2 / 7.3.
+#: (the translator and the judge both read it). The plain-English master
+#: (translation_master) carries the meaning of "the wire" and "standing"; this
+#: keeps only the check that "the wire" is never rendered as a cable word or a
+#: loanword.
 CONSTITUTION_ETHICS_TERM_RULES: List[Tuple[str, str]] = [
     (
         "Constitution ethics term rules",
-        '- "the wire" is a fixed term of the English source. Render it by its MEANING: "the signed '
-        'records that nodes exchange" (or this language\'s closest natural form of that meaning). '
-        "Never use a word for a cable, wire, line, thread, network or channel, and never a loanword or "
-        'transliteration of "wire". Use one rendering consistently throughout the text.\n'
-        '- "standing" (as in "unconditional standing", "a person\'s standing") means a participant\'s '
-        "place under the guarantees: what the rules owe them. It does not mean legitimacy, a legal right, "
-        "rank or social status. Use one rendering consistently throughout the text. The adjective in "
-        '"a standing roster" or "a standing class" means permanent and is not this term.',
+        '- Where the source says "the signed records nodes exchange", the English canon says "the wire". '
+        "Render that meaning. Treat as a terminology error any word for a cable, wire, line, thread, network "
+        'or channel, or a loanword or transliteration of "wire", except where the source itself names the '
+        "English term *the wire*.",
     ),
 ]
 
@@ -579,6 +576,51 @@ def locale_meta(localized: Path, lang: str) -> Dict[str, Any]:
     return meta
 
 
+#: THE PLAIN-ENGLISH MASTER (Eric's ruling on #1325, "Plain-English master").
+#: The shipped canon keeps CC's terms; a translation is made from, and judged
+#: against, a copy in which two terms of art are replaced by their meaning, so
+#: the translator and the judge read the same meaning on both sides. Mechanical
+#: substitutions only, applied in order; nothing else in a line changes.
+#:
+#: "the wire" -> "the signed records nodes exchange" (CC 1.13.3), inflected in
+#: place: "on the wire" -> "in ...", "its wire behaviour" -> "its behaviour in
+#: ...", and a verb right after it (optionally after "alone") agrees with the
+#: plural. Book II's definition sentence becomes a sentence about the English
+#: term, the one place *the wire* is kept, as a quoted label.
+#:
+#: "standing" is substituted only where it is the person's standing under the
+#: guarantees (Book VI bucket D, CC 1.13.2 / 7.3): "unconditional standing",
+#: "a person's standing". Untouched: the adjective ("standing roster", "standing
+#: class", "standing obligations"), "moral standing", and "standing (a say in
+#: decisions)" / "Care is not standing", which the text glosses itself as a say
+#: in decisions.
+_WIRE = "the signed records nodes exchange"
+_WIRE_VERBS = {"decides": "decide", "judges": "judge", "checks": "check", "enforces": "enforce", "carries": "carry"}
+MASTER_SUBSTITUTIONS: Tuple[Tuple[str, str], ...] = (
+    (r"In this text, \*the wire\* means", "In this text, the English term *the wire* means"),
+    (r"\bon the wire\b", "in " + _WIRE),
+    (r"\bits wire behaviour\b", "its behaviour in " + _WIRE),
+    (r"(?<!\*)\bthe wire\b(?!\*)", _WIRE),
+    (r"^The wire\b", _WIRE[0].upper() + _WIRE[1:]),
+    (r"\ba person with unconditional standing\b", "a person with an unconditional place under the guarantees"),
+    (r"\ba person's standing\b", "a person's place under the guarantees"),
+)
+
+
+def translation_master(text: str) -> str:
+    """The plain-English master of one canon segment (see MASTER_SUBSTITUTIONS)."""
+    out = text
+    for pattern, repl in MASTER_SUBSTITUTIONS:
+        out = re.sub(pattern, repl, out, flags=re.M)
+    verbs = "|".join(_WIRE_VERBS)
+    return re.sub(
+        rf"({re.escape(_WIRE)}(?: alone)?) ({verbs})\b",
+        lambda m: f"{m.group(1)} {_WIRE_VERBS[m.group(2)]}",
+        out,
+        flags=re.I,
+    )
+
+
 def label_locale(text: str, version: str, stem: str = DEFAULT_STEM) -> str:
     """Insert the provenance label after the leading ``//`` preamble block."""
     lines = text.split("\n")
@@ -620,7 +662,13 @@ class Stage:
         self.doc = seg.parse(self.source_text)
         if seg.reassemble(self.doc) != self.source_text:  # pragma: no cover - the parser's contract
             raise SystemExit("[refuse] the segmenter does not round-trip this source; refusing to stage it")
-        self.en: Dict[str, str] = self.doc.segments()
+        #: The shipped English, segment by segment.
+        self.canon: Dict[str, str] = self.doc.segments()
+        #: What the lanes translate FROM and the judge reviews against, and what
+        #: the digests key off: the canon, or its plain-English master.
+        self.en: Dict[str, str] = (
+            {k: translation_master(v) for k, v in self.canon.items()} if self.stem == "constitution_ethics" else self.canon
+        )
         self.slots: Dict[str, seg.Slot] = {s.key: s for s in self.doc.slots}
         self.digests = {k: seg.source_digest(v) for k, v in self.en.items()}
         self.languages = [lang for lang in agent_languages(localized) if lang != "en"]

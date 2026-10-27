@@ -81,6 +81,24 @@ class HttpResult:
     def reason_id(self) -> str:
         return str(self.body.get("reason_id") or "") if isinstance(self.body, dict) else ""
 
+    @property
+    def error_text(self) -> str:
+        """The node's own words for a refusal: `error`, `detail` or `message`, trimmed."""
+        if not isinstance(self.body, dict):
+            return str(self.body)[:240] if self.body else (self.error or "")
+        for k in ("error", "detail", "message"):
+            v = self.body.get(k)
+            if isinstance(v, str) and v:
+                return v[:240]
+        return ""
+
+    def trail(self, label: str) -> str:
+        """One evidence line: the call, its status, reason id and the node's own reason."""
+        if self.status == 0:
+            return f"{label} -> no answer ({self.error})"
+        why = f": {self.error_text}" if not self.ok and self.error_text else ""
+        return f"{label} -> {self.status} {self.reason_id}{why}".rstrip()
+
     def brief(self) -> str:
         if self.status == 0:
             return f"no answer ({self.error})"
@@ -188,6 +206,8 @@ class StepResult:
     elapsed_s: float = 0.0
     enforced: bool = True
     evidence: List[str] = field(default_factory=list)
+    #: Known causes matched against this step's detail and evidence (KNOWN_CAUSES).
+    diagnosis: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -212,6 +232,89 @@ class StepFailed(Exception):
     def __init__(self, result: StepResult) -> None:
         super().__init__(result.detail)
         self.result = result
+
+
+# ── Known causes ────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Cause:
+    """A failure seen before: how it shows, what it means, where to look, where it is tracked."""
+
+    pattern: str
+    meaning: str
+    look: str
+    tracked: str = ""
+
+    def matches(self, text: str) -> bool:
+        return re.search(self.pattern, text) is not None
+
+    def line(self) -> str:
+        tail = f" (tracked: {self.tracked})" if self.tracked else ""
+        return f"{self.meaning} — look at: {self.look}{tail}"
+
+
+#: Every cross-node failure this stage has met, in the node's own words. A new
+#: failure that matches none of these is printed as UNKNOWN: add it here once it
+#: is understood, so the next run names it.
+KNOWN_CAUSES: Tuple[Cause, ...] = (
+    Cause(r"awaiting_key_body|KEY FETCH STALLED",
+          "the contact's key body never arrived; the key Pull is starved or unanswered",
+          "the requester's STALLED line (edge_recovery_queue, direct_pull_peers, direct_pull_failed)",
+          "CIRISEdge#904; server >= 0.5.238 pulls directly"),
+    Cause(r"resolves to no node|CONTACT UNRESOLVED|no transport destination",
+          "the requester holds the person but not their owner->node binding, so nothing can be addressed to them",
+          "CONTACT UNRESOLVED fields (code_nodes, code_node_keys_missing, pulled_from, pull_failed)",
+          "CIRISEdge#907; canonical >= 0.5.239, server >= 0.5.240"),
+    Cause(r"attested_key_id \S+ resolves as neither",
+          "an owner-binding was refused because the node key it names is not held yet",
+          "whether the node key was pulled before the binding",
+          "server >= 0.5.240 pulls node keys first"),
+    Cause(r"subject Pull refused",
+          "a peer refused a subject Pull: the canonical cannot serve announced owner-bindings",
+          "the canonical's version",
+          "CIRISEdge#907"),
+    Cause(r"membership_founding_member_unsigned",
+          "the pair room's founding record was not signed by the founder's own identity",
+          "which key signed the membership (the owner's pen, not the agent or node key)",
+          "server >= 0.5.241"),
+    Cause(r"chat\.delegation_denied",
+          "a delegated session tried to open or join a chat; chat requires the owner's own session",
+          "which session the harness logged in with"),
+    Cause(r"chat\.author_signer_unavailable",
+          "the owner's signing pen could not be opened on this node",
+          "the node log line beside the refusal, which says why"),
+    Cause(r"chat\.not_a_contact",
+          "POST /v1/chat before both sides hold each other as contacts",
+          "the add/accept/mutual steps above"),
+    Cause(r"community_create_failed",
+          "the node could not found the pair room",
+          "the node log 'open_pair_room' line for the persist refusal"),
+    Cause(r"recipient_not_in_send_set",
+          "a directed row is withheld because its recipient's node is not a peer this round",
+          "whether the contact RESOLVED to a node first"),
+    Cause(r"link_seal_refused|handshake cannot complete",
+          "the transport could not seal a link to the other node",
+          "both nodes' KEX/handshake lines"),
+    Cause(r"federation_attester_key_unknown|parked \d+ row",
+          "a row arrived before the Key that verifies it (ordering, normally transient)",
+          "whether it is re-offered after the Key lands"),
+    Cause(r"inbox full|backpressure",
+          "replication frames were dropped under backpressure",
+          "EdgeMetrics.replication_inbound_backpressure_drops"),
+    Cause(r"unopened|cannot be opened|decrypt",
+          "a message row arrived but could not be opened (room key not held by the reader)",
+          "the reader's room-key / seating lines"),
+    Cause(r"no answer \(|ConnectError|ECONNREFUSED",
+          "the node's API did not answer at all",
+          "the node's backend log for a crash or a port not bound"),
+)
+
+
+def diagnose(texts: Iterable[str]) -> List[str]:
+    """The known causes behind these texts, each once, in catalog order."""
+    blob = "\n".join(texts)
+    return [c.line() for c in KNOWN_CAUSES if c.matches(blob)]
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -314,7 +417,12 @@ class CrossChatStage:
         except StepFailed as exc:
             result = exc.result
             result.elapsed_s = round(self.clock.now() - started, 1)
+            result.diagnosis = diagnose([result.detail, *result.evidence])
             self.log(f"[cross-chat] {name}: FAILED [{result.layer}] after {result.elapsed_s:.0f}s: {result.detail}")
+            for line in result.evidence[-6:]:
+                self.log(f"[cross-chat]   trail: {line}")
+            for line in result.diagnosis or ["UNKNOWN — no known cause matched; read the node logs (scan) and add it to KNOWN_CAUSES"]:
+                self.log(f"[cross-chat]   likely: {line}")
         self.report.steps.append(result)
         return result
 
@@ -393,7 +501,7 @@ class CrossChatStage:
         def attempt(i: int) -> Optional[str]:
             if i == 0 or (state["awaiting"] and i % self.d.repost_every == 0) or not state["awaiting"]:
                 r = self._call(adder, "POST", "/v1/contacts", {"key_id": code})
-                trail.append(f"POST /v1/contacts -> {r.status} {r.reason_id}".rstrip())
+                trail.append(r.trail("POST /v1/contacts"))
                 if r.status == 200:
                     return f"added ({'after awaiting the key body' if state['awaiting'] else 'immediately'})"
                 if r.status == 202:
@@ -527,7 +635,7 @@ class CrossChatStage:
 
         def found(_: int) -> Optional[str]:
             r = self._call(creator, "POST", "/v1/chat", {"key_id": joiner_fed})
-            trail.append(f"creator POST /v1/chat -> {r.status} {r.reason_id}".rstrip())
+            trail.append(r.trail("creator POST /v1/chat"))
             p = _payload(r.body)
             if r.ok and isinstance(p, dict) and p.get("community_id"):
                 opened[:] = [p]
@@ -561,7 +669,7 @@ class CrossChatStage:
                 trail[-6:],
             )
         acc = self._call(joiner, "POST", f"/v1/self/invites/{proposal[0]}/accept")
-        trail.append(f"joiner accept {proposal[0]} -> {acc.status} {acc.reason_id}".rstrip())
+        trail.append(acc.trail(f"joiner accept {proposal[0]}"))
         if not acc.ok:
             raise self._fail(step, LAYER_ROOM, f"the Joiner could not accept the invite: {acc.brief()}", trail[-6:])
 
@@ -636,6 +744,94 @@ class CrossChatStage:
                 )
         return "one message each way, each read and opened by the other side"
 
+    def reopen(self, creator: Node, joiner: Node, cid: str) -> str:
+        """Opening a chat that exists returns the SAME room, from either side: no new room, no 5xx."""
+        step = "reopen"
+        trail: List[str] = []
+        for who in (creator, joiner):
+            other = joiner if who is creator else creator
+            r = self._call(who, "POST", "/v1/chat", {"key_id": str(other.fed_id)})
+            trail.append(r.trail(f"{who.name} POST /v1/chat (again)"))
+            p = _payload(r.body)
+            if not (r.ok and isinstance(p, dict)):
+                raise self._fail(step, LAYER_ROOM, f"{who.name} could not re-open the existing chat: {r.brief()}", trail)
+            if str(p.get("community_id")) != cid:
+                raise self._fail(
+                    step,
+                    LAYER_ROOM,
+                    f"{who.name}'s re-open answered room {p.get('community_id')!r}, not the existing {cid}: "
+                    "a second room for the same pair",
+                    trail,
+                )
+        return f"both sides re-opened {cid} and got the same room"
+
+    def conversation(self, a: Node, b: Node, cid: str) -> str:
+        """A real conversation: more turns, awkward text, every message intact on both sides, in order."""
+        step = "conversation"
+        texts = [
+            (a, f"turn 3 {self.nonce} unicode: naïve café — 你好 — Привет — नमस्ते — 🙂"),
+            (b, f"turn 4 {self.nonce} rtl: مرحبا بالعالم · שלום עולם"),
+            (a, f"turn 5 {self.nonce} long: " + ("lorem ipsum dolor sit amet " * 70).strip()),
+            (b, f"turn 6 {self.nonce} symbols: <tag> & \"quotes\" 'apos' \\ backslash {{braces}} 100%"),
+        ]
+        for src, text in texts:
+            last: List[HttpResult] = []
+
+            def send(_: int, src: Node = src, text: str = text) -> Optional[str]:
+                r = self._call(src, "POST", f"/v1/chat/{cid}/messages", {"body": text})
+                last[:] = [r]
+                if r.ok:
+                    return "sent"
+                if 400 <= r.status < 500:
+                    raise self._fail(step, LAYER_MESSAGE, f"{src.name} could not send turn: {r.brief()}", [r.trail("send")])
+                return None
+
+            if self._poll(self.d.send_s, send) is None:
+                raise self._fail(step, LAYER_MESSAGE, f"{src.name} could not send a turn within {self.d.send_s:.0f}s",
+                                 [last[0].trail("send")] if last else [])
+
+        mine = [t for _, t in texts]
+        problems: Dict[str, str] = {}
+
+        def all_arrived(_: int) -> Optional[str]:
+            problems.clear()
+            for reader in (a, b):
+                r = self._call(reader, "GET", f"/v1/chat/{cid}/messages")
+                rows = [m for m in (chat_messages(r.body) if r.ok else []) if self.nonce in str(m.get("body") or "")]
+                bodies = [str(m.get("body")) for m in rows if str(m.get("body")) in mine]
+                missing = [t[:24] for t in mine if t not in bodies]
+                dupes = sorted({t[:24] for t in bodies if bodies.count(t) > 1})
+                wrong_owner = [
+                    str(m.get("body"))[:24]
+                    for m in rows
+                    if str(m.get("body")) in mine
+                    and m.get("mine") is not (next(s_ for s_, t in texts if t == m.get("body")) is reader)
+                ]
+                order = [mine.index(t) for t in bodies if t in mine]
+                ordered = order == sorted(order) or order == sorted(order, reverse=True)
+                if missing:
+                    problems[reader.name] = f"missing {missing}"
+                elif dupes:
+                    problems[reader.name] = f"duplicated {dupes}"
+                elif wrong_owner:
+                    problems[reader.name] = f"mine flag wrong on {wrong_owner}"
+                elif not ordered:
+                    problems[reader.name] = f"out of order {order}"
+            return None if problems else "ok"
+
+        if self._poll(self.d.receive_s, all_arrived) is None:
+            raise self._fail(
+                step,
+                LAYER_MESSAGE,
+                "the conversation did not arrive intact on both sides within "
+                f"{self.d.receive_s:.0f}s: " + "; ".join(f"{k}: {v}" for k, v in problems.items()),
+                [f"{k}: {v}" for k, v in problems.items()],
+            )
+        return (
+            f"{len(texts)} more turns (unicode, RTL, {len(texts[2][1])}-char, symbols) arrived byte-exact on both "
+            "sides, once each, in order, with the right mine flags"
+        )
+
     # -- the whole stage --
 
     def run(self) -> StageReport:
@@ -674,14 +870,20 @@ class CrossChatStage:
             return self._finish()
         assert rep.community_id
         cid = rep.community_id
-        if not self._step("messages", LAYER_MESSAGE, lambda: self.exchange(a, b, cid)).ok:
-            return self._finish()
+        chat: List[Tuple[str, str, Callable[[], str]]] = [
+            ("messages", LAYER_MESSAGE, lambda: self.exchange(a, b, cid)),
+            ("reopen", LAYER_ROOM, lambda: self.reopen(creator, joiner, cid)),
+            ("conversation", LAYER_MESSAGE, lambda: self.conversation(a, b, cid)),
+        ]
+        for name, layer, fn in chat:
+            if not self._step(name, layer, fn).ok:
+                return self._finish()
         return self._finish()
 
     def _finish(self) -> StageReport:
         rep = self.report
         failed = [s for s in rep.steps if not s.ok and s.enforced]
-        rep.ok = not failed and any(s.step == "messages" and s.ok for s in rep.steps)
+        rep.ok = not failed and any(s.step == "conversation" and s.ok for s in rep.steps)
         if failed:
             rep.failed_step, rep.failed_layer = failed[0].step, failed[0].layer
         return rep
@@ -690,7 +892,11 @@ class CrossChatStage:
 # ── Log scan ────────────────────────────────────────────────────────────────
 
 #: What explains a cross-node failure, in the node's own words.
-SCAN_PATTERN = re.compile(r"contacts_chat|contacts: |chat: |membership: |handshake|link_seal_refused|rooting|ROOTED|did not root")
+SCAN_PATTERN = re.compile(
+    r"contacts_chat|contacts: |chat: |membership: |handshake|link_seal_refused|rooting|ROOTED|did not root"
+    r"|open_pair_room|request FAILED \(5xx\)|envelope REFUSED|subject Pull|CONTACT (UN)?RESOLVED"
+    r"|KEY FETCH STALLED|recipient_not_in_send_set|refused \("
+)
 
 
 def scan_logs(paths: Iterable[Path], tail: int = 40) -> List[str]:
@@ -724,7 +930,7 @@ def _annotate(rep: StageReport) -> None:
     if rep.ok:
         print(
             f"::notice::cross-platform chat PASSED ({' <-> '.join(rep.pair)}): add, request seen and accepted, "
-            "mutual, pair room, a message each way"
+            "mutual, pair room, a message each way, re-open, a 4-turn conversation intact on both sides"
         )
     else:
         step = next((s for s in rep.steps if s.step == rep.failed_step), None)
@@ -732,6 +938,8 @@ def _annotate(rep: StageReport) -> None:
             f"::error::cross-platform chat FAILED at step '{rep.failed_step}' [layer: {rep.failed_layer}]: "
             f"{step.detail if step else ''}"
         )
+        for line in (step.diagnosis if step else []) or ["UNKNOWN cause — see the node-log scan below"]:
+            print(f"::warning::cross-platform chat — likely cause: {line}")
 
 
 def summary_markdown(rep: StageReport) -> str:
@@ -746,6 +954,11 @@ def summary_markdown(rep: StageReport) -> str:
     for st in rep.steps:
         detail = st.detail.replace("|", "/")[:240]
         lines.append(f"| {st.step} | {'ok' if st.ok else 'FAIL'} | {st.layer} | {st.elapsed_s:.0f} | {detail} |")
+    failed = next((st for st in rep.steps if st.step == rep.failed_step), None)
+    if failed is not None:
+        lines += ["", f"**Why `{failed.step}` failed**", ""]
+        lines += [f"- trail: `{e[:200]}`" for e in failed.evidence[-6:]]
+        lines += [f"- likely: {d}" for d in failed.diagnosis] or ["- likely: UNKNOWN — read the node-log scan"]
     return "\n".join(lines) + "\n"
 
 
@@ -764,16 +977,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     scan.add_argument("--logs", action="append", required=True, help="NAME=PATH (file or directory)")
     scan.add_argument("--tail", type=int, default=40)
     scan.add_argument("--out", type=Path, default=None)
+    scan.add_argument("--summary", type=Path, default=None, help="append the likely causes (GITHUB_STEP_SUMMARY)")
     args = ap.parse_args(argv)
 
     if args.cmd == "scan":
         lines: List[str] = []
+        all_causes: List[str] = []
         for spec in args.logs:
             name, _, path = spec.partition("=")
             hits = scan_logs([Path(path)], args.tail)
             lines.append(f"── {name} ({path}): {len(hits)} relevant line(s), last {args.tail} ──")
             lines.extend(f"  {h}" for h in hits)
+            causes = diagnose(hits)
+            lines.append(f"  likely causes from {name}'s log:")
+            lines.extend(f"    - {c}" for c in causes or ["none known — add the new failure to KNOWN_CAUSES"])
+            all_causes.extend(c for c in causes if c not in all_causes)
         text = "\n".join(lines)
+        if args.summary:
+            try:
+                with open(args.summary, "a", encoding="utf-8") as fh:
+                    fh.write("\n**Node logs: likely causes**\n\n" + "\n".join(f"- {c}" for c in all_causes or ["none known"]) + "\n")
+            except OSError as exc:
+                print(f"(could not write the summary to {args.summary}: {exc})")
         print(text)
         if args.out:
             args.out.parent.mkdir(parents=True, exist_ok=True)

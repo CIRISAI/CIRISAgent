@@ -61,6 +61,16 @@ class FakeNet:
     #: A broken accept that points somewhere other than POST /v1/contacts.
     accept_path: str = "/v1/contacts"
     mutual_reported: bool = True
+    #: A broken server whose second POST /v1/chat founds a NEW room for the same pair.
+    reopen_new_room: bool = False
+    #: Message faults, applied to turns whose body contains this marker.
+    drop_marker: Optional[str] = None
+    duplicate_marker: Optional[str] = None
+    #: A broken server that loses non-ASCII text on the way through.
+    mangle_unicode: bool = False
+    #: A broken server that tells the receiver a message is theirs (mine=True).
+    flip_mine_marker: Optional[str] = None
+    room_posts: int = 0
     #: A broken server that echoes the receiver's copy as its own (mine=True).
     receiver_sees_mine: bool = False
     # state
@@ -124,6 +134,10 @@ class FakeTransport:
                 return xc.HttpResult(200, {"community_id": cid, "state": "awaiting_invitation"})
             if n.room is None:
                 n.room, n.invite_at = cid, now + n.invite_delay_s
+            elif n.seated():
+                n.room_posts += 1
+                if n.reopen_new_room:
+                    return xc.HttpResult(200, {"community_id": cid + "-second", "state": "invited"})
             state = "open" if n.seated() else "accepted" if n.accepted_at is not None else "invited"
             return xc.HttpResult(200, {"community_id": cid, "state": state})
         if path == "/v1/self/invites":
@@ -148,16 +162,24 @@ class FakeTransport:
             if not n.seated():
                 return xc.HttpResult(200, {"messages": [{"kind": "system", "body": "Waiting"}], "ready": False})
             if method == "POST":
+                text = str(body["body"])
+                if n.mangle_unicode:
+                    text = text.encode("ascii", "replace").decode()
                 att = f"att-{len(n.messages)}"
-                n.messages.append(Msg(att, me, str(body["body"]), now + n.message_delay_s))
+                if n.drop_marker and n.drop_marker in text:
+                    return xc.HttpResult(200, {"attestation_id": att, "message": {"body": text}})
+                n.messages.append(Msg(att, me, text, now + n.message_delay_s))
+                if n.duplicate_marker and n.duplicate_marker in text:
+                    n.messages.append(Msg(att + "b", me, text, now + n.message_delay_s))
                 return xc.HttpResult(200, {"attestation_id": att, "message": {"body": body["body"]}})
             rows = []
             for m in n.messages:
                 if m.author == me:
                     rows.append({"attestation_id": m.att, "kind": "message", "body": m.body, "mine": True})
                 elif n.message_delivered and now >= m.delivered_at:
+                    flip = bool(n.flip_mine_marker and n.flip_mine_marker in m.body)
                     rows.append({"attestation_id": m.att, "kind": "message", "body": m.body,
-                                 "mine": n.receiver_sees_mine})
+                                 "mine": n.receiver_sees_mine or flip})
             return xc.HttpResult(200, {"messages": rows, "ready": True, "total": len(rows)})
         return xc.HttpResult(404, {"detail": f"fake has no {method} {path}"})
 
@@ -193,7 +215,7 @@ def test_mutual_add_room_and_messages_pass():
     assert [s.step for s in rep.steps] == [
         "ready:linux", "ready:android", "code:linux", "code:android",
         "add:linux->android", "request:android<-linux", "accept:android->linux",
-        "cleared:android", "mutual:linux", "room", "messages",
+        "cleared:android", "mutual:linux", "room", "messages", "reopen", "conversation",
     ]
     assert all(s.ok for s in rep.steps)
     # The 202 ladder was walked, not skipped.
@@ -370,3 +392,104 @@ def test_summary_names_the_failing_step():
     md = xc.summary_markdown(stage.run())
     assert "FAIL at `messages` [message]" in md
     assert "| request:android<-linux | ok |" in md
+
+
+# ── reopen + conversation ───────────────────────────────────────────────────
+
+
+def test_reopening_returns_the_same_room_from_both_sides():
+    stage, net, _ = _stage()
+    rep = stage.run()
+    assert rep.ok, rep.to_json()
+    assert "same room" in _step(rep, "reopen").detail
+    assert net.room_posts >= 1
+
+
+def test_negative_a_second_room_for_the_same_pair_fails_reopen():
+    stage, _, _ = _stage(reopen_new_room=True)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "reopen"
+    assert "a second room for the same pair" in _step(rep, "reopen").detail
+
+
+def test_the_conversation_carries_unicode_rtl_long_and_symbols_intact():
+    stage, net, _ = _stage()
+    rep = stage.run()
+    assert rep.ok
+    bodies = [m.body for m in net.messages]
+    assert any("你好" in b and "🙂" in b for b in bodies)
+    assert any("مرحبا" in b for b in bodies)
+    assert any(len(b) > 1500 for b in bodies)
+    assert any('"quotes"' in b and "\\" in b for b in bodies)
+
+
+@pytest.mark.parametrize(
+    "knob, why",
+    [
+        ({"drop_marker": "turn 4"}, "missing"),
+        ({"duplicate_marker": "turn 5"}, "duplicated"),
+        ({"mangle_unicode": True}, "missing"),
+        ({"flip_mine_marker": "turn 3"}, "mine flag wrong"),
+    ],
+)
+def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
+    stage, _, _ = _stage(**knob)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "conversation", rep.to_json()
+    assert why in _step(rep, "conversation").detail
+
+
+# ── diagnosis ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "text, expect",
+    [
+        ("POST /v1/contacts -> 202 contacts.awaiting_key_body", "CIRISEdge#904"),
+        ("contacts: CONTACT UNRESOLVED — the person is a contact", "CIRISEdge#907"),
+        ("attested_key_id ciris-node-bootstrap-5pl5kvavvi resolves as neither a registered", "node keys first"),
+        ("refused (membership_founding_member_unsigned): nobody joins", "founding record"),
+        ("creator POST /v1/chat -> 403 chat.delegation_denied: delegated", "owner's own session"),
+        ("creator POST /v1/chat -> 403 chat.author_signer_unavailable", "pen"),
+    ],
+)
+def test_known_failures_are_named_with_where_to_look(text, expect):
+    found = xc.diagnose([text])
+    assert found and expect in found[0], found
+
+
+def test_an_unknown_failure_is_said_to_be_unknown(capsys):
+    assert xc.diagnose(["something nobody has seen"]) == []
+    stage, _, out = _stage(invite_delivered=False)
+    rep = stage.run()
+    assert _step(rep, "room").diagnosis == [] and any("UNKNOWN" in line for line in out)
+
+
+def test_a_failed_step_carries_its_diagnosis_into_the_report_and_summary():
+    stage, _, _ = _stage(key_body_arrives=False)
+    rep = stage.run()
+    st = _step(rep, "add:linux->android")
+    assert any("CIRISEdge#904" in d for d in st.diagnosis)
+    md = xc.summary_markdown(rep)
+    assert "**Why `add:linux->android` failed**" in md and "likely:" in md and "CIRISEdge#904" in md
+    assert "CIRISEdge#904" in json.loads(rep.to_json())["steps"][-1]["diagnosis"][0]
+
+
+def test_the_trail_carries_the_nodes_own_error_text():
+    r = xc.HttpResult(500, {"reason_id": "chat.community_create_failed", "error": "open_pair_room: refused (x)"})
+    assert r.trail("creator POST /v1/chat") == (
+        "creator POST /v1/chat -> 500 chat.community_create_failed: open_pair_room: refused (x)"
+    )
+    assert xc.HttpResult(200, {"error": "ignored on success"}).trail("x") == "x -> 200"
+
+
+def test_scan_names_likely_causes_from_node_logs(tmp_path: Path):
+    (tmp_path / "ciris-server.log").write_text(
+        "WARN contacts: CONTACT UNRESOLVED — the person is a contact but resolves to no node here\n"
+        "WARN open_pair_room: found room x: membership refused (membership_founding_member_unsigned)\n"
+    )
+    out, summary = tmp_path / "scan.txt", tmp_path / "summary.md"
+    assert xc.main(["scan", "--logs", f"linux={tmp_path}", "--out", str(out), "--summary", str(summary)]) == 0
+    text = out.read_text()
+    assert "likely causes from linux's log" in text and "CIRISEdge#907" in text and "founding record" in text
+    assert "CIRISEdge#907" in summary.read_text()

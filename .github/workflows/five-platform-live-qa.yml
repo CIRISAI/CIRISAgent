@@ -1130,7 +1130,10 @@ jobs:
       # against a fake two-node network); this step is only the bring-up.
       # ENFORCED: linux adds android; android sees it in contact_requests and
       # answers with the request's own accept (server 0.5.237, #818); the
-      # request clears; linux's row turns mutual; pair room; a message each way.
+      # request clears; linux's row turns mutual; pair room; a message each way;
+      # re-opening returns the same room from both sides; a 4-turn conversation
+      # (unicode, RTL, long, symbols) arrives intact, once, in order, with the
+      # right mine flags. A failure names its likely cause (KNOWN_CAUSES).
       #
       # NO `${{ }}` IN THIS BODY (one expression, 21000-char cap): inputs reach it
       # as env. `shell: bash` is -eo pipefail, so -e is dropped explicitly and
@@ -1205,7 +1208,7 @@ jobs:
             echo "::group::cross-platform chat -- node log lines (contacts_chat / handshake / link_seal_refused / rooting)"
             python -m tools.qa_runner.cross_platform_chat scan \
               --logs "linux=$out/logs/linux" --logs "linux-stdout=$out/linux-backend.log" \
-              --logs "android=$out/logs/android" --out "$out/scan.txt"
+              --logs "android=$out/logs/android" --out "$out/scan.txt" --summary "${GITHUB_STEP_SUMMARY:-/dev/null}"
             echo "::endgroup::"
           fi
           kill "$linux_pid" 2>/dev/null

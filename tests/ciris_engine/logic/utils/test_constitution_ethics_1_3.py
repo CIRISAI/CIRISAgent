@@ -118,8 +118,8 @@ PRESENT: List[Tuple[str, str, Tuple[str, ...]]] = [
     ("erratum-no-transfer-in-place", r"no transfer of control in place", NO_COMP),
     ("erratum-care-not-dignity-rights", r"treat them with care", NO_COMP),
     ("erratum-7.5.8-no-remedy", r"orders no remedy", NO_COMP),
-    # CC rc11 (CIRISConstitution @ abe7c82).
-    ("rc11-header", r"1\.0-rc11", ("en", "comp")),
+    # CC rc11 (CIRISConstitution @ abe7c82); the header cites rc12 (@ d6f7088), which carries the rc11 rows.
+    ("rc12-header", r"1\.0-rc12 \(CIRISAI/CIRISConstitution @ d6f7088", ("en", "comp")),
     ("rc11-no-lethal-action", r"A CIRIS agent takes no lethal action", ALL),
     ("rc11-near-force", r"stop, to refuse or to defer", ALL),
     ("rc11-retirement-standard", r"Retirement Standard", ALL),
@@ -132,7 +132,12 @@ PRESENT: List[Tuple[str, str, Tuple[str, ...]]] = [
     ("book-ix-under-uncertainty", r"under_uncertainty", ALL),
     # "the wire" is defined once, in the text's own prose (Book II's introduction);
     # the per-volume inline gloss was removed by ruling, so no volume is checked for one.
-    ("wire-definition", r"In this text, the wire means the signed record nodes carry between them, which alone decides conformance", NO_COMP),
+    ("wire-definition", r"In this text, \*the wire\* means the signed records that nodes exchange with one another; those records alone decide conformance", NO_COMP),
+    # CC rc12 (CIRISConstitution @ bb726ff): English clarity where the translators stalled.
+    ("rc12-no-signing-key", r"issues it no signing key, and gives it no right to the CIRIS name", NO_COMP),
+    ("rc12-publication-numbers", r"the two numbers, 100 000 users and 180 days, are thresholds the Constitution sets for itself", NO_COMP),
+    ("rc12-standing-never-reached", r"a person's standing is never something to be reached, because it is unconditional", NO_COMP),
+    ("rc12-retirement-six-bullets", r"(?m)^\* \*\*The custodian is listed, not delegated:\*\*", NO_COMP),
 ]
 
 
@@ -145,7 +150,7 @@ def test_row_present_in_1_3_files(row_id: str, pattern: str, files: Tuple[str, .
 @pytest.mark.parametrize("name", NO_COMP)
 def test_wire_is_defined_once(name: str) -> None:
     """One definition of "the wire" (Book II); no inline gloss repeats it."""
-    assert _read(FILES_13[name]).count("the signed record nodes carry between them") == 1
+    assert _read(FILES_13[name]).count("the signed records that nodes exchange with one another") == 1
 
 
 # ---------------------------------------------------------------------------

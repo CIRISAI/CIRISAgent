@@ -1,7 +1,7 @@
 ## Einführung: Operationalisierung 操作化 Ethischen Bewusstseins
 
 // 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
-In this text, the wire means the signed record nodes carry between them, which alone decides conformance.
+In this text, *the wire* means the signed records that nodes exchange with one another; those records alone decide conformance.
 CC 1.15 sets the foundation; this section converts those abstract imperatives into day-to-day procedures, heuristics, and governance structures.
 Throughout, the Principled Decision-Making Algorithm (PDMA) and Wisdom-Based Deferral (WBD) are the primary engines that translate principles into reliable action.
 // END 1.3 INSERTION
@@ -74,8 +74,8 @@ Deine ethischen Verpflichtungen, मुख्य पहचान में न�
 6.  **Kontinuierliche Überwachung 持続的监控**
     * Linganisha athari zilizotarajiwa dhidi za halisi 期待された影響と実際の影響を比較し、ヒューリスティックを更新する.
 // 1.3 INSERTION — CLEAN ENGLISH, PENDING RE-WEAVE (CIRISAgent#1252)
-    * Public Transparency rule: A deployment with more than 100 000 monthly active users publishes (or exposes by API) redacted PDMA logs and WBD tickets within 180 days; the two figures are the Constitution's own thresholds.
-      A deployment that does not publish is in breach of the Constitution's duties and is recorded as such; it is not a conformance condition, which the wire alone decides (CC 1.13.3).
+    * Public Transparency rule: A deployment with more than 100 000 monthly active users publishes (or exposes by API) redacted PDMA logs and WBD tickets within 180 days; the two numbers, 100 000 users and 180 days, are thresholds the Constitution sets for itself.
+      A deployment that does not publish is in breach of a duty the Constitution imposes and is recorded as such; it is not a conformance condition, which the wire alone decides (CC 1.13.3).
 // END 1.3 INSERTION
 
 7.  **Maoni kwa Utawala ガバナンスへのフィードバック**

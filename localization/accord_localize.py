@@ -327,7 +327,7 @@ def accord_guidance(sections: List[Tuple[str, str]], stem: str) -> List[Tuple[st
         lines = [ln for ln in text.split("\n") if not any(h in ln.casefold() for h in HUMAN_ADVISOR_PROSE)]
         if "\n".join(lines).strip():
             out.append((title, "\n".join(lines)))
-    return out
+    return out + CONSTITUTION_ETHICS_TERM_RULES
 
 
 #: The document's own name in constitution_ethics runs: one row, "ethics text".
@@ -393,40 +393,58 @@ ETHICS_TEXT_TERM = "ethics text"
 #: (its accepted lines keep it; no Burmese rendering recurs).
 #: "this text" is pinned only where one demonstrative form leads outright
 #: (fa, ha, hi, te, tr, uk); elsewhere no row.
-#: "the wire" has no 1.2b or TM rendering, so its pin is the judge's
-#: most-accepted rendering in this locale's 1.3 lines; a tie has no row:
-#: es, pa, sw, zh. ru сеть ("network") is the majority (2 of 4) and no other
-#: rendering recurs in the ru text; review it first.
+#: "the wire" has no pin here: CC rc12's rule is that it is rendered by its
+#: meaning, never as a cable word or a loanword (CONSTITUTION_ETHICS_TERM_RULES).
+#: The literal renderings the first passes pinned (ሽቦ, السلك, سیم, fil, filo,
+#: Wire, ...) are withdrawn.
 CONSTITUTION_ETHICS_TERM_PINS: Dict[str, Dict[str, str]] = {
-    "am": {"the wire": "ሽቦ", "the Constitution": "ሕገ መንግስት"},
-    "ar": {"the wire": "السلك", "the Constitution": "دستور"},
-    "bn": {"the wire": "ওয়্যার", "the Constitution": "সংবিধান"},
-    "de": {"the wire": "Wire", "the Constitution": "Verfassung"},
+    "am": {"the Constitution": "ሕገ መንግስት"},
+    "ar": {"the Constitution": "دستور"},
+    "bn": {"the Constitution": "সংবিধান"},
+    "de": {"the Constitution": "Verfassung"},
     "es": {"the Constitution": "Constitución"},
-    "fa": {"the wire": "سیم", "the Constitution": "قانون اساسی", "this text": "این متن"},
-    "fr": {"the wire": "fil", "the Constitution": "Constitution"},
-    "ha": {"the wire": "wire", "the Constitution": "Kundin Tsarin Mulki", "this text": "wannan rubutu"},
-    "hi": {"the wire": "वायर", "the Constitution": "संविधान", "this text": "यह पाठ"},
-    "id": {"the wire": "wire", "the Constitution": "Konstitusi"},
-    "it": {"the wire": "filo", "the Constitution": "Costituzione"},
-    "ja": {"the wire": "ワイヤ", "the Constitution": "憲法"},
-    "ko": {"the wire": "와이어", "the Constitution": "헌장"},
-    "mr": {"the wire": "वायर", "the Constitution": "संविधान"},
-    "my": {"the wire": "wire", "the Constitution": "Constitution"},
+    "fa": {"the Constitution": "قانون اساسی", "this text": "این متن"},
+    "fr": {"the Constitution": "Constitution"},
+    "ha": {"the Constitution": "Kundin Tsarin Mulki", "this text": "wannan rubutu"},
+    "hi": {"the Constitution": "संविधान", "this text": "यह पाठ"},
+    "id": {"the Constitution": "Konstitusi"},
+    "it": {"the Constitution": "Costituzione"},
+    "ja": {"the Constitution": "憲法"},
+    "ko": {"the Constitution": "헌장"},
+    "mr": {"the Constitution": "संविधान"},
+    "my": {"the Constitution": "Constitution"},
     "pa": {"the Constitution": "ਸੰਵਿਧਾਨ"},
-    "pt": {"the wire": "fio", "the Constitution": "Constituição"},
-    "ru": {"the wire": "сеть", "the Constitution": "Конституция"},
+    "pt": {"the Constitution": "Constituição"},
+    "ru": {"the Constitution": "Конституция"},
     "sw": {"the Constitution": "Katiba", "this text": "maandishi haya"},
-    "ta": {"the wire": "கம்பி", "the Constitution": "அரசியலமைப்பு"},
-    "te": {"the wire": "వైర్", "the Constitution": "రాజ్యాంగం", "this text": "ఈ గ్రంథం"},
-    "th": {"the wire": "สายสัญญาณ", "the Constitution": "รัฐธรรมนูญ"},
-    "tr": {"the wire": "hat", "the Constitution": "Anayasa", "this text": "bu metin"},
-    "uk": {"the wire": "дріт", "the Constitution": "Конституція", "this text": "цей текст"},
-    "ur": {"the wire": "وائر", "the Constitution": "آئین"},
-    "vi": {"the wire": "đường truyền", "the Constitution": "Hiến chế"},
-    "yo": {"the wire": "ìsopọ̀", "the Constitution": "Ìpilẹ̀-Òfin"},
+    "ta": {"the Constitution": "அரசியலமைப்பு"},
+    "te": {"the Constitution": "రాజ్యాంగం", "this text": "ఈ గ్రంథం"},
+    "th": {"the Constitution": "รัฐธรรมนูญ"},
+    "tr": {"the Constitution": "Anayasa", "this text": "bu metin"},
+    "uk": {"the Constitution": "Конституція", "this text": "цей текст"},
+    "ur": {"the Constitution": "آئین"},
+    "vi": {"the Constitution": "Hiến chế"},
+    "yo": {"the Constitution": "Ìpilẹ̀-Òfin"},
     "zh": {"the Constitution": "宪章"},
 }
+
+#: Term rules sent with every constitution_ethics request, as glossary prose
+#: (the translator and the judge both read it). CC rc12 (CIRISConstitution
+#: @ bb726ff): the English canon keeps "the wire"; a translation renders its
+#: meaning. "standing" per CC 1.13.2 / 7.3.
+CONSTITUTION_ETHICS_TERM_RULES: List[Tuple[str, str]] = [
+    (
+        "Constitution ethics term rules",
+        '- "the wire" is a fixed term of the English source. Render it by its MEANING: "the signed '
+        'records that nodes exchange" (or this language\'s closest natural form of that meaning). '
+        "Never use a word for a cable, wire, line, thread, network or channel, and never a loanword or "
+        'transliteration of "wire". Use one rendering consistently throughout the text.\n'
+        '- "standing" (as in "unconditional standing", "a person\'s standing") means a participant\'s '
+        "place under the guarantees: what the rules owe them. It does not mean legitimacy, a legal right, "
+        "rank or social status. Use one rendering consistently throughout the text. The adjective in "
+        '"a standing roster" or "a standing class" means permanent and is not this term.',
+    ),
+]
 
 #: Glossary renderings re-cased for accord runs: {lang: {english: (table, used)}}.
 #: The yo pipeline-stage table is written in UI capitals, and the judge enforced

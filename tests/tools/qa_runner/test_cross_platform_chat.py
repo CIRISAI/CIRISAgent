@@ -451,7 +451,7 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
         ("refused (membership_founding_member_unsigned): nobody joins", "founding record"),
         ("creator POST /v1/chat -> 403 chat.delegation_denied: delegated", "owner's own session"),
         ("creator POST /v1/chat -> 403 chat.author_signer_unavailable", "pen"),
-        ('invitee_nodes=["ciris-node-bootstrap-uewp47am66: No(NotInAudience)"]', "not a member until it accepts"),
+        ('invitee_nodes=["ciris-node-bootstrap-uewp47am66: No(NotInAudience)"]', "no principal on the creator"),
     ],
 )
 def test_known_failures_are_named_with_where_to_look(text, expect):

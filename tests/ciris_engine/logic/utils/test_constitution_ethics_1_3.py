@@ -130,9 +130,9 @@ PRESENT: List[Tuple[str, str, Tuple[str, ...]]] = [
     # Book IX is the steward's ethics-cascade text (Eric's ruling, "Re-anchor on the cascade").
     ("book-ix-cascade", r"Everything descends from one goal|One goal, nothing beside it", ALL),
     ("book-ix-under-uncertainty", r"under_uncertainty", ALL),
-    # CC's term rule: "the wire" is glossed on first use in each volume.
-    # Book IX is exempt: it is the steward's text verbatim, and the cascade summary.
-    ("wire-gloss", r"the wire, the signed record nodes carry between them, which alone decides conformance", NO_COMP),
+    # "the wire" is defined once, in the text's own prose (Book II's introduction);
+    # the per-volume inline gloss was removed by ruling, so no volume is checked for one.
+    ("wire-definition", r"In this text, the wire means the signed record nodes carry between them, which alone decides conformance", NO_COMP),
 ]
 
 
@@ -140,6 +140,12 @@ PRESENT: List[Tuple[str, str, Tuple[str, ...]]] = [
 def test_row_present_in_1_3_files(row_id: str, pattern: str, files: Tuple[str, ...]) -> None:
     missing = [name for name in files if not re.search(pattern, _read(FILES_13[name]), re.IGNORECASE)]
     assert not missing, f"{row_id}: /{pattern}/ not found in {missing}"
+
+
+@pytest.mark.parametrize("name", NO_COMP)
+def test_wire_is_defined_once(name: str) -> None:
+    """One definition of "the wire" (Book II); no inline gloss repeats it."""
+    assert _read(FILES_13[name]).count("the signed record nodes carry between them") == 1
 
 
 # ---------------------------------------------------------------------------

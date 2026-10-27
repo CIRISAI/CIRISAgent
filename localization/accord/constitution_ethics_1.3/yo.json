@@ -123,7 +123,7 @@
       "accord.v2.meta.title": "a55e958cc3cd02e7",
       "accord.v2.meta.description": "869bc24fed674db7",
       "accord.v2.s01.title": "a00e26d1403d74d2",
-      "accord.v2.s01.l01": "8aa52fda7f8caa5d",
+      "accord.v2.s01.l02": "8aa52fda7f8caa5d",
       "accord.v2.s02.title": "1cd3711d7f6fdb9a",
       "accord.v2.s02.l01": "fa1ee4677ae3f7c7",
       "accord.v2.s02.l02": "a52d6020fd0a3cd9",
@@ -163,7 +163,7 @@
       "accord.v2.s03.l14": "4159836a8082cabe",
       "accord.v2.s03.l15": "ae873243d42b9349",
       "accord.v2.s03.l16": "0cacc2d8bb90b9ae",
-      "accord.v2.s03.l17": "c8835c1566510a39",
+      "accord.v2.s03.l17": "d24c509d0f62abfc",
       "accord.v2.s03.l18": "c1ce8ee9a46c7335",
       "accord.v2.s03.l19": "fea3f0347d5fc2f4",
       "accord.v2.s04.title": "9b1b5f89eeae60f4",
@@ -714,7 +714,7 @@
       },
       "s01": {
         "title": "Ọ̀rọ̀-ìṣáájú: Mímú Ìmọ̀ Ìṣèwà Sí Iṣẹ́",
-        "l01": "CC 1.15 gbé ìpìlẹ̀ kalẹ̀; apá yìí yí àwọn àṣẹ onígbèégbèé wọ̀nyẹn padà sí àwọn ìlànà-iṣẹ́ ojoojúmọ́, àwọn ìlànà-àṣàyàn (heuristics), àti àwọn ìhun-ìṣàkóso. Ní gbogbo rẹ̀, Algorítìmù Ìpinnu-Ṣíṣe Onípìlẹ̀ (PDMA) àti Fífi Lélẹ̀ Tí Ó Dá Lórí Ọgbọ́n (WBD) ni àwọn ẹ̀rọ pàtàkì tí ń yí àwọn ìlànà padà sí ìṣe tí ó dúró ṣinṣin."
+        "l02": "CC 1.15 gbé ìpìlẹ̀ kalẹ̀; apá yìí yí àwọn àṣẹ onígbèégbèé wọ̀nyẹn padà sí àwọn ìlànà-iṣẹ́ ojoojúmọ́, àwọn ìlànà-àṣàyàn (heuristics), àti àwọn ìhun-ìṣàkóso. Ní gbogbo rẹ̀, Algorítìmù Ìpinnu-Ṣíṣe Onípìlẹ̀ (PDMA) àti Fífi Lélẹ̀ Tí Ó Dá Lórí Ọgbọ́n (WBD) ni àwọn ẹ̀rọ pàtàkì tí ń yí àwọn ìlànà padà sí ìṣe tí ó dúró ṣinṣin."
       },
       "s02": {
         "title": "Àwọn Ìlànà Sí Ìṣe - Ṣíṣe Àpèjúwe Àwọn Ìṣe Ìṣèwà Ní Kedere",
@@ -758,7 +758,7 @@
         "l14": "Ṣe àmúlò ìṣe tí ó dára jùlọ ní ti ìṣèwà.",
         "l15": " **Ìṣọ́ Tẹ̀síwájú**",
         "l16": "Fiwé àwọn ìpa tí a retí àti àwọn tí ó ṣẹlẹ̀ ní tòótọ́; ṣe ìmúdójú-ìwọ̀n àwọn ìlànà-àṣàyàn.",
-        "l17": "Òfin Ìṣípayá Gbogbogbò: Ìṣàmúlò tí ó ní àwọn olùmúlò tó ń ṣiṣẹ́ ju 100 000 lọ lóṣooṣù ń tẹ̀ jáde (tàbí fi hàn nípasẹ̀ API) àwọn àkọsílẹ̀ PDMA àti àwọn tíkẹ́ẹ̀tì WBD tí a ti yọ apá kan kúrò láàrín ọjọ́ 180; àwọn nọ́mbà méjèèjì ni ààlà Ìpilẹ̀-Òfin fúnra rẹ̀. Ìṣàmúlò tí kò tẹ̀ jáde ń rú àwọn ojúṣe Ìpilẹ̀-Òfin, a sì ṣàkọsílẹ̀ rẹ̀ gẹ́gẹ́ bẹ́ẹ̀; kì í ṣe ohun tí a fi ń pinnu ìbámu, èyí tí ó jẹ́ ti ìsopọ̀, àkọsílẹ̀ tí a fọwọ́sí tí àwọn node ń gbé láàrín ara wọn, èyí nìkan ni ó pinnu ìbámu (CC 1.13.3).",
+        "l17": "Òfin Ìṣípayá Gbogbogbò: Ìṣàmúlò kan tí ó ní àwọn olùmúlò tó ń ṣiṣẹ́ ju 100,000 lọ lóṣooṣù gbọdọ̀ tẹ̀ jáde (tàbí fi hàn nípasẹ̀ API) àwọn àkọsílẹ̀ PDMA àti àwọn tíkẹ́ẹ̀tì WBD tí a ti yọ apá kan kúrò, láàrín ọjọ́ 180; àwọn nọ́mbà méjèèjì jẹ́ ààlà Ìpilẹ̀-Òfin fúnra rẹ̀. Ìṣàmúlò tí kò tẹ̀ jáde rú àwọn ojúṣe Ìpilẹ̀-Òfin, a sì ṣàkọsílẹ̀ rẹ̀ gẹ́gẹ́ bẹ́ẹ̀; kì í ṣe ààlà ìbámu, ìsopọ̀ nìkan ni ó pinnu ìbámu (CC 1.13.3).",
         "l18": " **Ìdáhùn Padà Sí Ìṣàkóso**",
         "l19": "Fi dátà àbájáde ránṣẹ́ sí ìṣọ́ra-Ìwàpẹ̀lẹ́, àwọn ìyípo Ìfaradà, àti àwọn Aláṣẹ Ọlọ́gbọ́n."
       },

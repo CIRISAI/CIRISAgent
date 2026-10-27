@@ -123,7 +123,8 @@
       "accord.v2.meta.title": "a55e958cc3cd02e7",
       "accord.v2.meta.description": "869bc24fed674db7",
       "accord.v2.s01.title": "a00e26d1403d74d2",
-      "accord.v2.s01.l01": "8aa52fda7f8caa5d",
+      "accord.v2.s01.l01": "60379475d040e36f",
+      "accord.v2.s01.l02": "8aa52fda7f8caa5d",
       "accord.v2.s02.title": "1cd3711d7f6fdb9a",
       "accord.v2.s02.l01": "fa1ee4677ae3f7c7",
       "accord.v2.s02.l02": "a52d6020fd0a3cd9",
@@ -163,6 +164,7 @@
       "accord.v2.s03.l14": "4159836a8082cabe",
       "accord.v2.s03.l15": "ae873243d42b9349",
       "accord.v2.s03.l16": "0cacc2d8bb90b9ae",
+      "accord.v2.s03.l17": "d24c509d0f62abfc",
       "accord.v2.s03.l18": "c1ce8ee9a46c7335",
       "accord.v2.s03.l19": "fea3f0347d5fc2f4",
       "accord.v2.s04.title": "9b1b5f89eeae60f4",
@@ -440,6 +442,7 @@
       "accord.v6.s06.l08": "e02de82a96105ac0",
       "accord.v6.s06.l09": "d37c05b83b55181a",
       "accord.v6.s07.title": "121f0b28d64905bb",
+      "accord.v6.s07.l01": "2417c4ecd828112d",
       "accord.v6.s07.l02": "5ad66fc7a69b28bd",
       "accord.v7.meta.title": "c608eeb6b6bef976",
       "accord.v7.meta.description": "f2349f4e197a6f02",
@@ -537,7 +540,20 @@
       "accord.annexes.s05.title": "0bfa509f62317f0b",
       "accord.annexes.s05.l01": "26e2da8fe337e7e6",
       "accord.annexes.s05.l02": "a5de3c0b330ef4c6"
-    }
+    },
+    "accepted_minor": [
+      {
+        "key": "accord.v6.s07.l01",
+        "source_digest": "2417c4ecd828112d",
+        "candidate": "repair:anthropic/claude-opus-5",
+        "score": 98,
+        "text": "Book VI اس بات کو مستحکم طور پر قائم کرتا ہے کہ CIRIS Constitution کے اخلاقی متن کے تحت اخلاقی ذمہ داری تخلیق کے مقام سے شروع ہوتی ہے۔ واضح فرائض کی تعریف کرتے ہوئے، Stewardship Tier نظام کو براہ راست Risk Magnitude کے جائزے سے منسلک کرتے ہوئے، اور دستخط شدہ ریکارڈ، Wise-Authority التوا اور PDMA کے ذریعے جواب دہی کو ممکن بناتے ہوئے، یہ Book اس بات کو یقینی بناتا ہے کہ پیچیدہ نظاموں کو دنیا میں لانے کا بنیادی عمل انہی اصولوں سے رہنمائی پاتا ہے — موافقتی ہم آہنگی، پیش بینی، اور ذمہ داری — جو ان کی عملی زندگی کا نظم کرتے ہیں۔ Creator Ledger اور Creator Intent Statement، PDMA کو اہم اِن پُٹس فراہم کرتے ہیں، جبکہ WA کی نگرانی اس بات کو یقینی بناتی ہے کہ تخلیق کے فرائض برقرار رکھے جائیں، جو تمام اسٹیک ہولڈرز کے لیے ایک زیادہ مستحکم اور قابل اعتماد ماحولیاتی نظام میں معاون ہوتا ہے۔",
+        "objections": [
+          "minor/terminology: Glossary specifies \"اخلاقی متن\" for \"ethics text\"; that part is correct, but anchors elsewhere consistently leave \"Accord\" in English as a product term. Here \"Constitution\" is also being treated as a product name; this is acceptable but should be checked against corpus consistency.",
+          "minor/accuracy: \"Risk Magnitude assessment\" is a specific, standardised methodology; \"جائزہ\" is looser than \"تشخیص\" used elsewhere for RM in the anchors, slightly weakening the technical nuance."
+        ]
+      }
+    ]
   },
   "accord": {
     "section0": {
@@ -708,7 +724,8 @@
       },
       "s01": {
         "title": "تعارف: اخلاقی آگاہی کو قابلِ عمل بنانا",
-        "l01": "CC 1.15 بنیاد قائم کرتا ہے؛ یہ حصہ ان تجریدی تقاضوں کو روزمرہ کے طریقہ کار، ابتدائی اصولوں (heuristics)، اور نظم و نسق کے ڈھانچوں میں تبدیل کرتا ہے۔ اس پورے حصے میں، اصول پر مبنی فیصلہ سازی کا الگورتھم (PDMA) اور حکمت پر مبنی التوا (WBD) وہ بنیادی انجن ہیں جو اصولوں کو قابلِ اعتماد عمل میں بدلتے ہیں۔"
+        "l01": "اس متن میں، وائر سے مراد وہ دستخط شدہ ریکارڈ ہے جسے نوڈز آپس میں لے کر چلتے ہیں، جو تنہا مطابقت کا فیصلہ کرتا ہے۔",
+        "l02": "CC 1.15 بنیاد قائم کرتا ہے؛ یہ حصہ ان تجریدی تقاضوں کو روزمرہ کے طریقہ کار، ابتدائی اصولوں (heuristics)، اور نظم و نسق کے ڈھانچوں میں تبدیل کرتا ہے۔ اس پورے حصے میں، اصول پر مبنی فیصلہ سازی کا الگورتھم (PDMA) اور حکمت پر مبنی التوا (WBD) وہ بنیادی انجن ہیں جو اصولوں کو قابلِ اعتماد عمل میں بدلتے ہیں۔"
       },
       "s02": {
         "title": "اصولوں کو عمل میں لانا - اخلاقی اعمال کی واضح تعریف",
@@ -752,6 +769,7 @@
         "l14": "اخلاقی طور پر بہترین عمل کو نافذ کریں۔",
         "l15": " **مستقل نگرانی (Continuous Monitoring)**",
         "l16": "متوقع اور حقیقی اثرات کا موازنہ کریں؛ ہیورسٹکس کو تازہ کریں۔",
+        "l17": "عوامی شفافیت کا قاعدہ: 100,000 سے زیادہ ماہانہ فعال صارفین والی تنصیب 180 دنوں کے اندر ترمیم شدہ (redacted) PDMA لاگز اور WBD ٹکٹس شائع کرتی ہے (یا API کے ذریعے قابلِ رسائی بناتی ہے)؛ یہ دونوں عدد آئین کی خود مقرر کردہ حدود ہیں۔ جو تنصیب شائع نہیں کرتی وہ آئین کے فرائض کی خلاف ورزی کرتی ہے اور اسی طور پر درج کی جاتی ہے؛ یہ مطابقت کی شرط نہیں ہے، جس کا فیصلہ محض وائر کرتا ہے (CC 1.13.3)۔",
         "l18": " **نظم و نسق کو رائے (Feedback to Governance)**",
         "l19": "نتائج کا ڈیٹا Integrity-surveillance، Resilience loops، اور Wise Authorities کو فراہم کریں۔"
       },
@@ -1117,6 +1135,7 @@
       },
       "s07": {
         "title": "اختتام: تخلیق کو اخلاقی لائف سائیکل میں ضم کرنا",
+        "l01": "Book VI اس بات کو مستحکم طور پر قائم کرتا ہے کہ CIRIS Constitution کے اخلاقی متن کے تحت اخلاقی ذمہ داری تخلیق کے مقام سے شروع ہوتی ہے۔ واضح فرائض کی تعریف کرتے ہوئے، Stewardship Tier نظام کو براہ راست Risk Magnitude کے جائزے سے منسلک کرتے ہوئے، اور دستخط شدہ ریکارڈ، Wise-Authority التوا اور PDMA کے ذریعے جواب دہی کو ممکن بناتے ہوئے، یہ Book اس بات کو یقینی بناتا ہے کہ پیچیدہ نظاموں کو دنیا میں لانے کا بنیادی عمل انہی اصولوں سے رہنمائی پاتا ہے — موافقتی ہم آہنگی، پیش بینی، اور ذمہ داری — جو ان کی عملی زندگی کا نظم کرتے ہیں۔ Creator Ledger اور Creator Intent Statement، PDMA کو اہم اِن پُٹس فراہم کرتے ہیں، جبکہ WA کی نگرانی اس بات کو یقینی بناتی ہے کہ تخلیق کے فرائض برقرار رکھے جائیں، جو تمام اسٹیک ہولڈرز کے لیے ایک زیادہ مستحکم اور قابل اعتماد ماحولیاتی نظام میں معاون ہوتا ہے۔",
         "l02": "Book VI کا اختتام"
       }
     },

@@ -57,6 +57,11 @@ on:
         required: false
         default: ""
         type: string
+      server_preview_tag:
+        description: "CIRISServer PRERELEASE tag whose wheels replace the ciris-server pin on linux and android (e.g. test-0.5.241-0ea5c5a7). Empty = the pin."
+        required: false
+        default: ""
+        type: string
   # Nightly rather than per-PR: it boots emulators and spends real LLM tokens, so
   # it is too slow and too costly to gate every push. The release path is what
   # needs it, and a nightly failure lands before the next tag.
@@ -262,6 +267,43 @@ jobs:
               python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
             else
               echo "no preview wheel vendored on this runner (no requested platform here); leaving the pinned client"
+            fi
+          fi
+
+      # A SERVER PRERELEASE, for testing a fix before PyPI (Eric's direction:
+      # "build a test wheel and test it now"). Linux gets the manylinux wheel
+      # forced over the pinned server; Android gets the android_24_* wheels in
+      # apps/android/wheels and Gradle's install line pointed at that version.
+      # Nothing here runs without the input, and the run says loudly that it is
+      # not testing the pin.
+      - name: Substitute a ciris-server PRERELEASE (server_preview_tag)
+        if: ${{ inputs.server_preview_tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_PREVIEW: ${{ inputs.server_preview_tag }}
+        run: |
+          set -euo pipefail
+          dl="${RUNNER_TEMP}/serverwheel"
+          mkdir -p "$dl"
+          gh release download "$SERVER_PREVIEW" --repo CIRISAI/CIRISServer --pattern 'ciris_server-*.whl' --dir "$dl"
+          ls -1 "$dl"
+          ver=$(ls "$dl"/ciris_server-*.whl | head -1 | sed -E 's#.*/ciris_server-([^-]+)-.*#\1#')
+          echo "::warning::TESTING A SERVER PRERELEASE: ciris-server $ver from CIRISServer tag $SERVER_PREVIEW, NOT the requirements.txt pin"
+          if [ "${RUNNER_OS}" = "Linux" ]; then
+            lw=$(ls "$dl"/ciris_server-*manylinux*x86_64.whl 2>/dev/null | head -1 || true)
+            [ -n "$lw" ] || { echo "::error::$SERVER_PREVIEW has no manylinux x86_64 ciris_server wheel"; exit 1; }
+            python -m pip install --force-reinstall --no-deps "$lw"
+            python -c "import importlib.metadata as m; print('server in use:', m.version('ciris-server'))"
+            n=$(ls "$dl"/ciris_server-*android_24_*.whl 2>/dev/null | wc -l)
+            if [ "$n" -gt 0 ]; then
+              rm -f apps/android/wheels/ciris_server-*.whl
+              cp "$dl"/ciris_server-*android_24_*.whl apps/android/wheels/
+              sed -i -E "s/install \"ciris-server==[0-9.]+\"/install \"ciris-server==$ver\"/" apps/android/build.gradle
+              grep -n 'install "ciris-server==' apps/android/build.gradle
+              ls -1 apps/android/wheels/ciris_server-*.whl
+            else
+              echo "::warning::$SERVER_PREVIEW has no android_24 wheels; the android leg keeps the pinned server"
             fi
           fi
 

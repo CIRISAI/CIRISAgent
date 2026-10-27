@@ -315,6 +315,49 @@ def test_units_scope_a_run_and_stay_diff_driven(monkeypatch: pytest.MonkeyPatch,
                  "--units", "nope", "--lane", "translate"])  # fmt: skip
 
 
+def test_accept_minor_takes_only_lines_whose_objections_are_all_minor(
+    monkeypatch: pytest.MonkeyPatch, tree: Dict[str, Path]
+) -> None:
+    minor = "accord.section0.s01.l01"
+    major = "accord.section0.s01.l02"
+    unrated = "accord.section0.s01.l03"
+    verdicts = {
+        minor: [{"category": "terminology", "severity": "minor", "span": "x", "note": "prefer y"}],
+        major: [{"category": "accuracy", "severity": "major", "span": "x", "note": "meaning changed"}],
+        unrated: [{"category": "terminology", "span": "x", "note": "no severity given"}],
+    }
+
+    class Judged(FakeModel):
+        def __call__(self, model: str, system: str, messages: List[Dict[str, Any]], *, batch: bool = False) -> Any:
+            reply = super().__call__(model, system, messages, batch=batch)
+            if system != self.L.SYSTEM_REVIEW:
+                return reply
+            found = json.loads(reply.text)
+            return self.L.Reply(json.dumps({k: verdicts.get(k, v) for k, v in found.items()}), 10, 10)
+
+    monkeypatch.setitem(globals(), "FakeModel", Judged)
+    log = tree["stage"].parent / "candidates.jsonl"
+    out = _run(
+        monkeypatch, tree, "--units", "section0", "--lane", "translate", "--lang", "yo", "--candidate-log", str(log)
+    )
+    assert out["rc"] == 1, "the three judged lines are withheld by the lane"
+    flat = AL.flatten(json.loads((tree["stage"] / "yo.json").read_text(encoding="utf-8")))
+    assert not {minor, major, unrated} & set(flat)
+
+    base = ["--version", "1.2b", "--stage-dir", str(tree["stage"]), "--localized-dir", str(tree["loc"])]
+    assert AL.main([*base, "--accept-minor", str(log)]) == 0
+    doc = json.loads((tree["stage"] / "yo.json").read_text(encoding="utf-8"))
+    flat = AL.flatten(doc)
+    assert minor in flat and major not in flat and unrated not in flat
+    [entry] = doc["_meta"][AL.ACCEPTED_MINOR]
+    assert entry["key"] == minor and entry["text"] == flat[minor]
+    assert entry["objections"] == ["minor/terminology: prefer y"]
+    assert doc["_meta"]["review_status"] == "machine_reviewed"
+    # The record survives the next staging, as long as the line is unchanged.
+    AL.Stage("1.2b", stage_dir=tree["stage"], localized=tree["loc"]).build()
+    assert json.loads((tree["stage"] / "yo.json").read_text(encoding="utf-8"))["_meta"][AL.ACCEPTED_MINOR] == [entry]
+
+
 def test_glossary_does_not_retire_the_documents_own_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     stage = AL.Stage("1.2b", stage_dir=tmp_path / "stage")
     stage.build()

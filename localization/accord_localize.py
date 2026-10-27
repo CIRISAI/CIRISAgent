@@ -128,6 +128,12 @@ ACCORD_MAX_ANCHOR_BLOCK_CHARS = 24000
 #: put a different line under an old key.
 SAME_KEY_MIN_SIMILARITY = 0.3
 
+#: ``_meta`` field recording each withheld line accepted under ``--accept-minor``.
+ACCEPTED_MINOR = "accepted_minor"
+#: The one MQM severity ``--accept-minor`` accepts. A finding with any other
+#: severity, or none, keeps its line withheld.
+MINOR_SEVERITY = "minor"
+
 #: localize.py flags under which a run must not write anything.
 READ_ONLY_FLAGS = ("--check", "--dry-run", "--glossary-report")
 
@@ -621,6 +627,7 @@ class Stage:
         write_json(self.dir / "manifest.json", manifest)
         stats: Dict[str, Dict[str, int]] = {}
         for lang in self.languages:
+            accepted = self._accepted_minor(lang)
             values, origin = self._seed(lang)
             meta = locale_meta(self.localized, lang)
             meta.update(
@@ -631,11 +638,22 @@ class Stage:
                     "source_digests": {k: self.digests[k] for k in self.en if k in values},
                 }
             )
+            kept = [e for e in accepted if values.get(e["key"]) == e["text"]]
+            if kept:
+                meta[ACCEPTED_MINOR] = kept
             doc: Dict[str, Any] = {"_meta": meta}
             doc.update(nest({k: values[k] for k in self.en if k in values}))
             write_json(self.dir / f"{lang}.json", doc)
             stats[lang] = {"present": len(values), "total": len(self.en), **origin}
         return stats
+
+    def _accepted_minor(self, lang: str) -> List[Dict[str, Any]]:
+        """The bundle's accepted-minor record, for lines whose English is unchanged."""
+        bundle = self.dir / f"{lang}.json"
+        if not bundle.is_file():
+            return []
+        entries: List[Dict[str, Any]] = read_json(bundle).get("_meta", {}).get(ACCEPTED_MINOR, [])
+        return [e for e in entries if self.digests.get(e.get("key", "")) == e.get("source_digest")]
 
     def _clean(self, lang: str, values: Dict[str, str]) -> Dict[str, str]:
         return {
@@ -1346,6 +1364,8 @@ class Context:
 
     keys: Optional[Set[str]] = None  # the unit being run (None = all)
     lang: Optional[str] = None  # the language being drafted or repaired
+    stage: str = "draft"  # what produced the strings now under review
+    candidate_log: Optional[Path] = None  # --candidate-log: every reviewed string, with its verdict
 
 
 def accord_terms(rows: Dict[str, str], code: str, stem: str) -> Dict[str, str]:
@@ -1490,16 +1510,43 @@ def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
             return upstream_translate_lane(lang, *args, **kwargs)
         finally:
             Context.lang = None
+            Context.stage = "draft"
 
-    def repair_once(lang: str, *args: Any, **kwargs: Any) -> Any:
+    def repair_once(lang: str, model: str, *args: Any, **kwargs: Any) -> Any:
         Context.lang = lang
+        Context.stage = f"repair:{model}"
         try:
-            return upstream_repair_once(lang, *args, **kwargs)
+            return upstream_repair_once(lang, model, *args, **kwargs)
         finally:
             Context.lang = None
 
     setattr(L, "translate_lane", translate_lane)
     setattr(L, "_repair_once", repair_once)
+
+    # Every string the judge reviews, with the judge's findings as returned.
+    # The vendored lane keeps only the last verdict and drops a rejected
+    # string's text, so without this record a withheld key has no candidate to
+    # accept under --accept-minor.
+    upstream_evaluate = L.evaluate_lane
+
+    def evaluate_lane(lang: str, values: Dict[str, str], *args: Any, **kwargs: Any) -> Any:
+        findings: Dict[str, List[Dict[str, Any]]] = upstream_evaluate(lang, values, *args, **kwargs)
+        if Context.candidate_log is not None:
+            with Context.candidate_log.open("a", encoding="utf-8") as fh:
+                for key in sorted(findings):
+                    row = {
+                        "lang": lang,
+                        "key": key,
+                        "source_digest": stage.digests.get(key),
+                        "stage": Context.stage,
+                        "candidate": values.get(key),
+                        "findings": findings[key],
+                        "score": L.mqm_score(findings[key]),
+                    }
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return findings
+
+    setattr(L, "evaluate_lane", evaluate_lane)
 
     upstream_structural = L.structural_problems
 
@@ -1527,6 +1574,75 @@ def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
         return en_flat, {lang: ks for lang, ks in missing.items() if ks}
 
     setattr(L, "missing_by_language", missing_by_language)
+
+
+def _all_minor(findings: Any) -> bool:
+    return (
+        isinstance(findings, list)
+        and bool(findings)
+        and all(isinstance(e, dict) and e.get("severity") == MINOR_SEVERITY for e in findings)
+    )
+
+
+def accept_minor(stage: Stage, logs: Sequence[Path]) -> Dict[str, List[Dict[str, Any]]]:
+    """Fill each withheld line with its best reviewed candidate whose objections are all minor.
+
+    Ruling on #1325: a line still withheld after its pass takes the
+    highest-scoring judge-reviewed candidate (``--candidate-log``) when every
+    objection the judge raised is MQM severity ``minor``. A ``major`` or
+    ``critical`` objection, or one with no severity, keeps it withheld. The
+    severities are the judge's own, read from the log; nothing is inferred.
+    Each acceptance is recorded in the bundle's ``_meta`` (key, candidate,
+    objections verbatim) so a native audit can find it. Calls no model.
+    """
+    best: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for path in logs:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            key, lang, text = row.get("key", ""), row.get("lang", ""), row.get("candidate")
+            if key not in stage.slots or row.get("source_digest") != stage.digests[key] or not isinstance(text, str):
+                continue
+            if not _all_minor(row.get("findings")) or seg.passage_problems(stage.slots[key], text, lang):
+                continue
+            prev = best.get((lang, key))
+            if prev is None or row["score"] >= prev["score"]:  # a tie goes to the later, higher rung
+                best[(lang, key)] = row
+    accepted: Dict[str, List[Dict[str, Any]]] = {}
+    for lang in stage.languages:
+        bundle = stage.dir / f"{lang}.json"
+        if not bundle.is_file():
+            continue
+        doc = read_json(bundle)
+        values = flatten(doc)
+        meta = doc.setdefault("_meta", {})
+        add = {k: best[(lang, k)] for k in stage.en if not values.get(k, "").strip() and (lang, k) in best}
+        if not add:
+            continue
+        values.update({k: str(row["candidate"]) for k, row in add.items()})
+        digests: Dict[str, str] = meta.get("source_digests", {})
+        digests.update({k: stage.digests[k] for k in add})
+        meta["source_digests"] = {k: digests[k] for k in stage.en if k in digests}
+        entries = [e for e in meta.get(ACCEPTED_MINOR, []) if e.get("key") not in add]
+        for k, row in add.items():
+            entries.append(
+                {
+                    "key": k,
+                    "source_digest": stage.digests[k],
+                    "candidate": row["stage"],
+                    "score": row["score"],
+                    "text": row["candidate"],
+                    "objections": [
+                        f"{e.get('severity')}/{e.get('category')}: {e.get('note', '')}" for e in row["findings"]
+                    ],
+                }
+            )
+        order = {k: i for i, k in enumerate(stage.en)}
+        meta[ACCEPTED_MINOR] = sorted(entries, key=lambda e: order.get(e["key"], len(order)))
+        out: Dict[str, Any] = {"_meta": meta}
+        out.update(nest({k: values[k] for k in stage.en if k in values}))
+        write_json(bundle, out)
+        accepted[lang] = [e for e in meta[ACCEPTED_MINOR] if e["key"] in add]
+    return accepted
 
 
 def units_of(stage: Stage) -> Dict[str, Set[str]]:
@@ -1628,6 +1744,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--segments", action="store_true", help="print the segment plan and run size, then exit")
     ap.add_argument("--verify", action="store_true", help="offline gate over the staged bundles and files")
     ap.add_argument("--no-reassemble", action="store_true", help="do not write accord files after the run")
+    ap.add_argument(
+        "--candidate-log",
+        type=Path,
+        default=None,
+        metavar="JSONL",
+        help="append every reviewed string, with the judge's findings, to this file",
+    )
+    ap.add_argument(
+        "--accept-minor",
+        action="append",
+        type=Path,
+        default=[],
+        metavar="JSONL",
+        help="fill withheld lines from a --candidate-log whose objections are all minor, then reassemble; "
+        "calls no model (repeatable)",
+    )
     args, rest = ap.parse_known_args(argv)
     refuse_batch_mode(rest)
 
@@ -1664,6 +1796,15 @@ def _main(args: argparse.Namespace, rest: List[str], stage: Stage) -> int:
         print("[OK] accord bundles verify" if not problems else f"{len(problems)} problem(s)")
         return 1 if problems else 0
 
+    if args.accept_minor:
+        for lang, entries in sorted(accept_minor(stage, args.accept_minor).items()):
+            for e in entries:
+                why = "; ".join(e["objections"])
+                print(f"[accept-minor] {lang} {e['key']} ({e['candidate']}, MQM {e['score']}): {why}")
+        for lang, status in sorted(stage.finalize(write_files=not args.no_reassemble).items()):
+            print(f"[accord] {lang}: {status}")
+        return 0
+
     units = units_of(stage)
     wanted = args.units.split()
     unknown = [u for u in wanted if u not in units]
@@ -1683,6 +1824,7 @@ def _main(args: argparse.Namespace, rest: List[str], stage: Stage) -> int:
 
     L = import_localize(stage.dir)
     install(L, stage, tms)
+    Context.candidate_log = args.candidate_log
 
     passthrough = list(rest)
     if any(flag in passthrough for flag in ("--check", "--glossary-report")):

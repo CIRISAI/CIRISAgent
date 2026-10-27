@@ -51,7 +51,10 @@ def test_the_model_dropdown_is_polled_not_slept() -> None:
 
     src = inspect.getsource(m.DesktopAppTestRunner)
     i = src.index('self.helper.click("input_llm_model")')
-    after = src[i:i + 900]
+    after = src[i:i + 1600]
     assert 'startswith("menu_model_")' in after
     assert "while time.time() < _deadline" in after, "must poll for the menu items"
+    # Run 40503540610: at 8 s the tree still offered 0 items. The poll waits
+    # for the REQUESTED model's own item, not for the first item of any kind.
+    assert "want in menu" in after, "must wait for the requested model, not any item"
     assert "await asyncio.sleep(0.6)\n" not in after, "the fixed sleep is the bug"

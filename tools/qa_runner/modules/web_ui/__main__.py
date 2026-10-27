@@ -790,10 +790,15 @@ class DesktopAppTestRunner:
                     # client's own log said "Listed 425 models from live". The list
                     # is there; the tree just had not caught up yet.
                     menu: list = []
-                    _deadline = time.time() + 8.0
+                    # Wait for the REQUESTED model, not just any item: run
+                    # 40503540610 read "0 offered" at 8s while the failure dump,
+                    # moments later, listed the whole menu. With no pin, any item
+                    # will do.
+                    want = f"menu_model_{model_tag}" if model_tag else None
+                    _deadline = time.time() + 25.0
                     while time.time() < _deadline:
                         menu = sorted(t for t in await _tags() if t.startswith("menu_model_"))
-                        if menu:
+                        if (want in menu) if want else bool(menu):
                             break
                         await asyncio.sleep(0.25)
                     if model_tag and f"menu_model_{model_tag}" in menu:

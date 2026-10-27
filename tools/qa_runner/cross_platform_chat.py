@@ -290,6 +290,11 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
     Cause(r"community_create_failed",
           "the node could not found the pair room",
           "the node log 'open_pair_room' line for the persist refusal"),
+    Cause(r"NotInAudience|recipient is not in the row's audience",
+          "the pair-room invitation (membership:proposal:v1, community cohort) is withheld from the invitee: "
+          "a room's audience is its members' nodes, and the invitee is not a member until it accepts",
+          "the creator's 'chat: pair room invitation' line (invitee_nodes verdict) and the bridge's withheld lines",
+          "test-0.5.241-15213d72 diagnosis, run 40585063240"),
     Cause(r"recipient_not_in_send_set",
           "a directed row is withheld because its recipient's node is not a peer this round",
           "whether the contact RESOLVED to a node first"),

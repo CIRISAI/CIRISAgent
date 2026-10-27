@@ -62,6 +62,11 @@ on:
         required: false
         default: ""
         type: string
+      chat_rust_log:
+        description: "RUST_LOG for the linux node the cross-platform chat stage restarts (e.g. info,ciris_edge::replication::bridge=debug). Empty = the node's default filter."
+        required: false
+        default: ""
+        type: string
   # Nightly rather than per-PR: it boots emulators and spends real LLM tokens, so
   # it is too slow and too costly to gate every push. The release path is what
   # needs it, and a nightly failure lands before the next tag.
@@ -1187,6 +1192,7 @@ jobs:
         shell: bash
         env:
           REQUESTED: ${{ inputs.platforms || 'all' }}
+          CHAT_RUST_LOG: ${{ inputs.chat_rust_log }}
         run: |
           set +e
           set -uo pipefail
@@ -1229,6 +1235,11 @@ jobs:
             not_run "host ports held"; exit 1
           fi
           # Same command, cwd and agent id as the harness's ServerManager; NOT first-run.
+          # A diagnostic filter for this one node, when the dispatch asks for it.
+          if [ -n "${CHAT_RUST_LOG:-}" ]; then
+            export RUST_LOG="$CHAT_RUST_LOG"
+            echo "::notice::cross-platform chat: linux node RUST_LOG=$RUST_LOG"
+          fi
           CIRIS_HOME="${RUNNER_TEMP}/ciris-linux" CIRIS_AGENT_ID=qa-runner-ciris-agent \
             nohup python main.py --adapter api --port 8080 > "$out/linux-backend.log" 2>&1 < /dev/null &
           linux_pid=$!

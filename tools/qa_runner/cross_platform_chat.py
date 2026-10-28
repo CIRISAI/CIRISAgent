@@ -331,6 +331,11 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "and the message cannot be sealed",
           "the 'key-grant rows for this axis could not be emitted' line: its minter_key_id names the agent key",
           "run 40725151503; server fix: mint under the person pen, like room creation in 0.5.241"),
+    Cause(r"NotGranted|unknown_signer",
+          "the joiner refuses the creator's key_grant set: it lacks the creator's AGENT Key row or the agent-signed "
+          "occurrence (device_class agent) that makes the agent its owner's occurrence",
+          "the joiner's NotGranted / unknown_signer lines and the signer they name (the creator's agent key)",
+          "server test build 7 (9ec58fd0) publishes the agent's own occurrence"),
     Cause(r"recipient_not_in_send_set",
           "a directed row is withheld because its recipient's node is not a peer this round",
           "whether the contact RESOLVED to a node first"),

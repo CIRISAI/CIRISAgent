@@ -464,6 +464,7 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
             "refused: caller's identity is not a member of any community containing the emitter's identity)\"",
             "minted under the AGENT key",
         ),
+        ("key_grant set refused: NotGranted signer=qa-runner-ciris-agent-x", "agent-signed occurrence"),
     ],
 )
 def test_known_failures_are_named_with_where_to_look(text, expect):

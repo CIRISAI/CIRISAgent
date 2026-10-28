@@ -26,4 +26,8 @@ RUN set -e; w=$(ls /serverwheel/ciris_server-*manylinux*x86_64.whl 2>/dev/null |
     python -c "import importlib.metadata as m; print('ciris-server', m.version('ciris-server'))"
 
 COPY . /app
+# The agent writes beside its checkout (e.g. `.ciris_keys` in its cwd), as a CI
+# leg does from its writable checkout; the container runs as the host user so
+# the homes stay readable on the host.
+RUN chmod -R a+rwX /app
 CMD ["python", "-m", "tools.qa_runner.local_mesh.node_bootstrap"]

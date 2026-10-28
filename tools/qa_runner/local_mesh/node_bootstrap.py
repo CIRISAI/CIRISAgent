@@ -65,9 +65,15 @@ def _backend_env() -> Dict[str, str]:
     return env
 
 
+#: The backend process, so a wait can stop the moment it exits.
+_BACKEND: Optional[subprocess.Popen] = None
+
+
 async def _wait_health(client: httpx.AsyncClient, timeout_s: float) -> bool:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
+        if _BACKEND is not None and _BACKEND.poll() is not None:
+            raise RuntimeError(f"the backend exited (rc={_BACKEND.returncode}) before it answered; see its log")
         try:
             if (await client.get(f"{BRAIN}/v1/system/health", timeout=5.0)).status_code == 200:
                 return True
@@ -158,7 +164,8 @@ def main() -> int:
     fresh = not marker.exists()
 
     launched_at = time.time()
-    backend = subprocess.Popen(_backend_cmd(), env=_backend_env(), cwd="/app")
+    global _BACKEND
+    backend = _BACKEND = subprocess.Popen(_backend_cmd(), env=_backend_env(), cwd="/app")
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: backend.terminate())
 

@@ -325,6 +325,12 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "placed as a member's node, or the nodes share no root (root acceptances not served)",
           "persist may_receive_group_plane and edge's #907 Pull contents",
           "persist 59.1.1; edge #907"),
+    Cause(r"chat\.emit_failed|caller's identity is not a member of any community containing the emitter",
+          "the room is Ready but sending fails: the message's KeyGrant epoch is minted under the AGENT key, which is "
+          "not a room member (members are the owners' person keys), so persist's write-path cohort_scope refuses it "
+          "and the message cannot be sealed",
+          "the 'key-grant rows for this axis could not be emitted' line: its minter_key_id names the agent key",
+          "run 40725151503; server fix: mint under the person pen, like room creation in 0.5.241"),
     Cause(r"recipient_not_in_send_set",
           "a directed row is withheld because its recipient's node is not a peer this round",
           "whether the contact RESOLVED to a node first"),

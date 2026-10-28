@@ -457,6 +457,13 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
         ('dimension="chat:key_package:v1" audience="community" site="advertise"', "never published"),
         ('attestation_id="chat-6196d615" dimension="chat:welcome:v1" audience="self" site="advertise"', "ignores the supersedes placement"),
         ("android GET /v1/chat/x/messages -> 500 chat.room_key_failed: join", "joining the room with it failed"),
+        (
+            "linux could not send into chat:pair:v1:5a84 within 120s: HTTP 500 {\"error\": \"chat_message_attestation_in: "
+            "seal chat content: substrate: attestation emission failed: key_grant rows for Epoch { minter_key_id: "
+            "\\\"qa-runner-ciris-agent-5fdww2ppsb\\\", epoch: 0 } could not be emitted (write-path cohort_scope "
+            "refused: caller's identity is not a member of any community containing the emitter's identity)\"",
+            "minted under the AGENT key",
+        ),
     ],
 )
 def test_known_failures_are_named_with_where_to_look(text, expect):

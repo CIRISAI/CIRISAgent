@@ -304,6 +304,11 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "the creator's 'membership-plane row withheld' lines toward the joiner's node, and 'no mutual trust root' "
           "on either side",
           "run 40619472028; persist 59.1.1 + edge #907 follow-up"),
+    Cause(r"chat:welcome:v1\" audience=\"self\"|shared=Placed",
+          "the Welcome was placed in the room but its content row is withheld at self scope: edge's advertise "
+          "ignores the supersedes placement, so the joiner gets the placement and never the Welcome",
+          "the creator's 'withheld … dimension=\"chat:welcome:v1\" audience=\"self\"' lines toward the joiner's node",
+          "run 40649680281; edge share/advertise fix"),
     Cause(r"chat:key_package:v1\" audience=\"community\"|our KeyPackage is published, and the creator's Welcome",
           "the joiner's KeyPackage is withheld from the creator's node: a community row reaches a member's node only "
           "as their DEVICE, which needs an occurrence the NODE signed, and the split-home node's own agreement was "

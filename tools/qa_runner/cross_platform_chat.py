@@ -296,6 +296,12 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "(the invitee-signed login-ceremony row resolves nothing under persist #932)",
           "the creator's 'chat: pair room invitation' line (invitee_nodes verdict) and the bridge's withheld lines",
           "run 40585063240; persist or server fix pending"),
+    Cause(r"room not keyed|never became ready on both sides|THIS node has not announced",
+          "the room was accepted but never keyed: the joiner's KeyPackage never reached the creator, because the "
+          "joiner cannot place the creator's node in the room's audience",
+          "the joiner's withholds toward the creator's node and whether the joiner ever logged 'contact RESOLVED' "
+          "for the creator (an accept-path contact may never pull the creator's owner-binding)",
+          "run 40619472028; server/persist fix pending"),
     Cause(r"recipient_not_in_send_set",
           "a directed row is withheld because its recipient's node is not a peer this round",
           "whether the contact RESOLVED to a node first"),

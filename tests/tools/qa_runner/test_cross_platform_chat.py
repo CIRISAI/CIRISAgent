@@ -456,6 +456,7 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
         ("membership-plane row withheld — neither a member's node, a live invitee's node", "share no root"),
         ('dimension="chat:key_package:v1" audience="community" site="advertise"', "never published"),
         ('attestation_id="chat-6196d615" dimension="chat:welcome:v1" audience="self" site="advertise"', "ignores the supersedes placement"),
+        ("android GET /v1/chat/x/messages -> 500 chat.room_key_failed: join", "joining the room with it failed"),
     ],
 )
 def test_known_failures_are_named_with_where_to_look(text, expect):

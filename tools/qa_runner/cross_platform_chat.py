@@ -304,6 +304,10 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "the creator's 'membership-plane row withheld' lines toward the joiner's node, and 'no mutual trust root' "
           "on either side",
           "run 40619472028; persist 59.1.1 + edge #907 follow-up"),
+    Cause(r"chat\.room_key_failed|Welcome is HERE but joining with it FAILED",
+          "the joiner holds the creator's Welcome but joining the room with it failed",
+          "the joiner's 'joining with it FAILED' line, which carries the CohortGroup::join error",
+          "server build 6 logs it"),
     Cause(r"chat:welcome:v1\" audience=\"self\"|shared=Placed",
           "the Welcome was placed in the room but its content row is withheld at self scope: edge's advertise "
           "ignores the supersedes placement, so the joiner gets the placement and never the Welcome",

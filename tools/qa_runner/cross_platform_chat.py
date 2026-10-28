@@ -336,6 +336,12 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "node's room ROSTER fold does not count it as an active member occurrence (it was never seated)",
           "the joiner's 'key_grant refused (signer_not_active_member)' line and the creator's 'agent agreed' line",
           "run 40737033001; server/persist roster seating of the agent occurrence"),
+    Cause(r"unopened_reasons=\{\"not_granted\"|\"not_granted\": \d",
+          "the body was fetched but cannot be opened: no key wrap matches it. Seen when a blob fetched after the "
+          "epoch's key_grant is bound to the AUTHOR's person key instead of the epoch minter's node key",
+          "the reader's federation_community_blob_epoch.minter_key_id for the unopened blob vs the "
+          "dek_member_grants minter",
+          "local mesh on server build 12"),
     Cause(r"scope-address table refused the room|is not in the roster for group \"cohort:",
           "the room's scope-address install is refused: it checks THIS node as the agent key, while the roster holds "
           "the node keys, so the room is never installed and every holder is dropped",

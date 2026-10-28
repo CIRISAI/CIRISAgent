@@ -17,7 +17,8 @@
 #   MESH_OUT     where homes, logs, DBs and the report land (default: a new dir
 #                under ${TMPDIR:-/tmp})
 #   MESH_KEEP=1  leave both containers running afterwards (for poking at them)
-#   RUST_LOG     passed to both nodes (e.g. info,ciris_edge::blob_swarm=debug)
+#   RUST_LOG     passed to both nodes (default info,ciris_edge::replication::bridge=debug,
+#                which the canonical-holds-nothing check below reads)
 #   MESH_REUSE=1 keep MESH_OUT's homes: restart the same two nodes, skip setup
 #   SERVER_WHEEL a locally built manylinux x86_64 ciris_server wheel to use
 #                instead of a prerelease download (wins over the tag)
@@ -74,7 +75,7 @@ for i in 0 1; do
   rm -f "$out/$n/mesh_failed.txt" "$out/$n/mesh_restarted.txt"
   docker run -d --name "ciris-$n" --user "$(id -u):$(id -g)" \
     -e HOME=/mesh/home -e CIRIS_HOME=/mesh/home/ciris -e MESH_LABEL="qa-node-$(date +%s)$i" \
-    -e RUST_LOG="${RUST_LOG:-}" -v "$key_file:/run/mesh/llm_key:ro" \
+    -e RUST_LOG="${RUST_LOG:-info,ciris_edge::replication::bridge=debug}" -v "$key_file:/run/mesh/llm_key:ro" \
     -e MESH_LLM_MODEL="${MESH_LLM_MODEL:-google/gemma-4-31B-it}" \
     -e MESH_LLM_BASE_URL="${MESH_LLM_BASE_URL:-https://api.together.xyz/v1}" \
     -e MESH_LLM_PROVIDER="${MESH_LLM_PROVIDER:-openai}" \
@@ -124,6 +125,24 @@ rc=0
     --username qaadmin --password qa_test_password_12345 --out "$out/result.json" ) || rc=$?
 
 for n in "${names[@]}"; do docker logs "ciris-$n" > "$out/$n/container.log" 2>&1; done
+
+# THE CANONICAL HOLDS NOTHING OF A ROOM. It may forward sealed frames; it must
+# never be offered a room's rows. Every room-plane row toward the canonical must
+# read "withheld" in the bridge's debug lines; one that does not fails the run.
+canon=0
+for n in "${names[@]}"; do
+  leaked=$(sed 's/\x1b\[[0-9;]*m//g' "$out/$n/ciris/logs/"ciris-server.log.* 2>/dev/null \
+    | grep 'peer="ciris-canonical-' | grep -E 'chat:pair:v1|dimension="(chat|membership|key_grant|custody):' \
+    | grep -vc 'withheld')
+  withheld=$(sed 's/\x1b\[[0-9;]*m//g' "$out/$n/ciris/logs/"ciris-server.log.* 2>/dev/null \
+    | grep 'peer="ciris-canonical-' | grep -E 'dimension="(chat|membership|key_grant|custody):' | grep -c 'withheld')
+  say "$n → canonical: room-plane rows withheld=$withheld, not withheld=$leaked"
+  [ "$leaked" = 0 ] || canon=1
+done
+if [ "$canon" != 0 ]; then
+  say "FAIL: a room-plane row toward the canonical was not withheld (see the lines above)"
+  [ "$rc" = 0 ] && rc=3
+fi
 if [ "$rc" != 0 ]; then
   ( cd "$repo" && python3 -m tools.qa_runner.cross_platform_chat scan \
       --logs "${names[0]}=$out/${names[0]}/ciris/logs" --logs "${names[1]}=$out/${names[1]}/ciris/logs" \

@@ -481,6 +481,7 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
             'is not in the roster for group "cohort:chat:pair:v1:bda5"',
             "checks THIS node as the agent key",
         ),
+        ('chat: transcript room=chat:pair:v1:012e unopened=2 unopened_reasons={"not_granted": 2}', "no key wrap matches"),
         (
             "android never read linux's message within 180s (row a67b present but unopened: not_fetched not held: 1b0e)",
             "no holds_bytes claim",

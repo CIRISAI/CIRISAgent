@@ -336,6 +336,11 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "node's room ROSTER fold does not count it as an active member occurrence (it was never seated)",
           "the joiner's 'key_grant refused (signer_not_active_member)' line and the creator's 'agent agreed' line",
           "run 40737033001; server/persist roster seating of the agent occurrence"),
+    Cause(r"NO scope address table is installed|no address for this content's scope",
+          "the reader's blob puller has no scope address table, so it cannot route to any holder of room content "
+          "(the federation address is refused for cohort content) and drops every holder",
+          "the reader's 'blob holder DROPPED from the swarm candidate set' and 'scope routing failed' lines",
+          "local mesh on server build 9; CIRISEdge#499 scope address table install"),
     Cause(r"SenderNotApprovedForTier",
           "the reader's blob puller refuses the message body: its sender-approval axis rates the sender's node "
           "VerifiedOnly, below the tier cohort (room) content needs, and the refusal is not retried",

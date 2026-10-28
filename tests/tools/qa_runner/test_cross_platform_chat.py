@@ -472,6 +472,11 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
             "VerifiedOnly",
         ),
         (
+            "blob scope routing: content is scoped to 'cohort' group 'chat:pair:v1:546f' but NO scope address table "
+            "is installed — no derived address exists",
+            "no scope address table",
+        ),
+        (
             "android never read linux's message within 180s (row a67b present but unopened: not_fetched not held: 1b0e)",
             "no holds_bytes claim",
         ),

@@ -336,6 +336,11 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "node's room ROSTER fold does not count it as an active member occurrence (it was never seated)",
           "the joiner's 'key_grant refused (signer_not_active_member)' line and the creator's 'agent agreed' line",
           "run 40737033001; server/persist roster seating of the agent occurrence"),
+    Cause(r"scope-address table refused the room|is not in the roster for group \"cohort:",
+          "the room's scope-address install is refused: it checks THIS node as the agent key, while the roster holds "
+          "the node keys, so the room is never installed and every holder is dropped",
+          "the 'scope-address table refused the room … this node (<agent key>) is not in the roster' line",
+          "local mesh on server build 10; scope lifecycle needs the wire node key"),
     Cause(r"NO scope address table is installed|no address for this content's scope",
           "the reader's blob puller has no scope address table, so it cannot route to any holder of room content "
           "(the federation address is refused for cohort content) and drops every holder",

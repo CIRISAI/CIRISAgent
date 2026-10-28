@@ -477,6 +477,11 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
             "no scope address table",
         ),
         (
+            'chat: the scope-address table refused the room verb="install" error=this node (qa-runner-ciris-agent-x) '
+            'is not in the roster for group "cohort:chat:pair:v1:bda5"',
+            "checks THIS node as the agent key",
+        ),
+        (
             "android never read linux's message within 180s (row a67b present but unopened: not_fetched not held: 1b0e)",
             "no holds_bytes claim",
         ),

@@ -498,3 +498,25 @@ def test_scan_names_likely_causes_from_node_logs(tmp_path: Path):
     text = out.read_text()
     assert "likely causes from linux's log" in text and "CIRISEdge#907" in text and "founding record" in text
     assert "CIRISEdge#907" in summary.read_text()
+
+
+def test_a_room_that_never_keys_records_what_each_side_said():
+    """The node's own words for 'not ready' are the evidence; the trail keeps each side's last read."""
+
+    class NeverSeats(FakeTransport):
+        def request(self, method, path, body=None, token=None):
+            if self.net.room and path == f"/v1/chat/{self.net.room}/messages":
+                return xc.HttpResult(200, {"messages": [{"kind": "system", "body": f"{self.name}: waiting for the key"}],
+                                           "ready": False, "state": "joining"})
+            return super().request(method, path, body, token)
+
+    clock = FakeClock()
+    net = FakeNet(clock=clock, fed={"linux": "alice-aaaa", "android": "bob-bbbb"})
+    a = xc.Node("linux", NeverSeats(net, "linux"), "u", "p")
+    b = xc.Node("android", NeverSeats(net, "android"), "u", "p")
+    rep = xc.CrossChatStage(a, b, clock=clock, log=lambda _: None).run()
+    assert rep.failed_step == "room"
+    ev = " ".join(_step(rep, "room").evidence)
+    for side in ("linux", "android"):
+        assert f"{side} GET /v1/chat/" in ev and "ready=False" in ev and '"state": "joining"' in ev
+        assert f"{side}: waiting for the key" in ev

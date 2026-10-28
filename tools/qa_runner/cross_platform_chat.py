@@ -388,6 +388,20 @@ def chat_messages(body: Any) -> List[JsonObject]:
     return [r for r in rows or [] if isinstance(r, dict)]
 
 
+def room_view(r: "HttpResult") -> str:
+    """What one side says about the room, compactly: status, ready, every top-level field but the
+    message list, and the bodies of any system lines (the node's own 'waiting for ...' notes)."""
+    if not r.ok:
+        return r.trail("read")
+    p = _payload(r.body)
+    if not isinstance(p, dict):
+        return f"{r.status} (non-object body)"
+    fields = {k: v for k, v in p.items() if k != "messages"}
+    system = [str(m.get("body"))[:120] for m in chat_messages(r.body) if m.get("kind") == "system"]
+    out = f"{r.status} ready={p.get('ready')!r} {json.dumps(fields, sort_keys=True, default=str)[:300]}"
+    return out + (f" system={system[:3]}" if system else "")
+
+
 def room_ready(body: Any) -> bool:
     p = _payload(body)
     return isinstance(p, dict) and p.get("ready") is True
@@ -704,11 +718,20 @@ class CrossChatStage:
         if not acc.ok:
             raise self._fail(step, LAYER_ROOM, f"the Joiner could not accept the invite: {acc.brief()}", trail[-6:])
 
+        last_read: Dict[str, str] = {}
+
         def both_ready(_: int) -> Optional[str]:
             states = []
             for n in (creator, joiner):
                 r = self._call(n, "GET", f"/v1/chat/{cid}/messages")
-                states.append(room_ready(r.body) if r.ok else False)
+                ready = room_ready(r.body) if r.ok else False
+                states.append(ready)
+                view = room_view(r)
+                # Record each side's state when it CHANGES, so the trail shows
+                # the sequence (waiting -> keyed) without a line per poll.
+                if last_read.get(n.name) != view:
+                    trail.append(f"{n.name} GET /v1/chat/{cid}/messages -> {view}")
+                    last_read[n.name] = view
             return "both sides report the room ready" if all(states) else None
 
         if self._poll(self.d.room_open_s, both_ready) is None:
@@ -717,7 +740,7 @@ class CrossChatStage:
                 LAYER_ROOM,
                 f"the invite was accepted but the room never became ready on both sides within "
                 f"{self.d.room_open_s:.0f}s (the Creator's node must seat the Joiner, then key the room)",
-                trail[-6:],
+                trail[-12:],
             )
         return f"room {cid}: invited, accepted ({proposal[0]}), ready on both sides"
 

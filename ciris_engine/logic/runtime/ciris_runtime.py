@@ -98,6 +98,10 @@ class CIRISRuntime(ServicePropertyMixin):
     Implements the RuntimeInterface protocol.
     """
 
+    # Boot-scoped first-run latch (set in __init__/initialize; see __init__).
+    _boot_first_run: Optional[bool] = None
+    _boot_finished: Optional[asyncio.Event] = None
+
     def __new__(cls, *args: Any, **kwargs: Any) -> "CIRISRuntime":
         """Custom __new__ to handle CI environment issues."""
         instance = object.__new__(cls)
@@ -161,6 +165,15 @@ class CIRISRuntime(ServicePropertyMixin):
 
         # Runtime state
         self._initialized = False
+        # ONE first-run answer per boot. is_first_run() re-reads the config on
+        # every call, and setup/complete writes it while this boot may still be
+        # starting: steps after that point took the configured path while the
+        # resume did the same work again -- a second AgentProcessorTask, whose
+        # instant "already running" return ended every adapter's lifecycle,
+        # the API on :8080 with them. Latched in initialize(), cleared by the
+        # resume once the boot has finished.
+        self._boot_first_run: Optional[bool] = None
+        self._boot_finished: Optional[asyncio.Event] = None
         self._shutdown_manager = get_shutdown_manager()
         self._shutdown_event: Optional[asyncio.Event] = None
         self._shutdown_reason: Optional[str] = None
@@ -392,6 +405,10 @@ class CIRISRuntime(ServicePropertyMixin):
         if self._initialized:
             return
 
+        from ciris_engine.logic.setup.first_run import is_first_run as _is_first_run
+
+        self._boot_first_run = _is_first_run()
+        self._boot_finished = asyncio.Event()
         logger.info("Initializing CIRIS Runtime...")
 
         try:
@@ -446,18 +463,21 @@ class CIRISRuntime(ServicePropertyMixin):
                 raise RuntimeError("Initialization sequence failed - check logs for details")
 
             self._initialized = True
+            self._mark_boot_finished()
             agent_name = self.agent_identity.agent_id if self.agent_identity else "NO_IDENTITY"
             logger.info(f"CIRIS Runtime initialized successfully with identity '{agent_name}'")
 
         except asyncio.TimeoutError as e:
             logger.critical(f"Runtime initialization TIMED OUT: {e}", exc_info=True)
             self._initialized = False
+            self._mark_boot_finished()
             raise
         except Exception as e:
             logger.critical(f"Runtime initialization failed: {e}", exc_info=True)
             if "maintenance" in str(e).lower():
                 logger.critical("Database maintenance failure during initialization - system cannot start safely")
             self._initialized = False
+            self._mark_boot_finished()
             raise
 
     async def _initialize_identity(self) -> None:
@@ -465,14 +485,12 @@ class CIRISRuntime(ServicePropertyMixin):
 
         If --identity-update flag is set, refresh identity from template after normal init.
         """
-        from ciris_engine.logic.setup.first_run import is_first_run
-
         config = self._ensure_config()
         if not self.time_service:
             raise RuntimeError("TimeService not available for IdentityManager")
         self.identity_manager = IdentityManager(config, self.time_service)
 
-        if is_first_run():
+        if self._first_run_this_boot():
             logger.info("First-run mode: Skipping identity seeding (will seed after setup wizard)")
             return
 
@@ -804,13 +822,11 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _verify_identity_integrity(self) -> bool:
         """Verify identity was properly established."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
         if not self.identity_manager:
             logger.error("Identity manager not initialized")
             return False
 
-        if is_first_run():
+        if self._first_run_this_boot():
             logger.info("First-run mode: Identity manager created (identity will be seeded after setup)")
             return True
 
@@ -827,11 +843,9 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _initialize_services(self) -> None:
         """Initialize all remaining core services."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
         config = self._ensure_config()
 
-        if is_first_run():
+        if self._first_run_this_boot():
             logger.info("First-run mode: Skipping core service initialization (setup wizard only)")
             return
 
@@ -855,9 +869,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _verify_core_services(self) -> bool:
         """Verify all core services are operational."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
-        if is_first_run():
+        if self._first_run_this_boot():
             logger.info("First-run mode: Core services verification skipped")
             return True
 
@@ -865,9 +877,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _initialize_maintenance_service(self) -> None:
         """Initialize the maintenance service and perform startup cleanup."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
-        if is_first_run():
+        if self._first_run_this_boot():
             logger.info("First-run mode: Skipping maintenance service initialization")
             return
 
@@ -943,9 +953,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _start_adapters(self) -> None:
         """Start all adapters."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
-        if is_first_run():
+        if self._first_run_this_boot():
             await self._start_adapters_first_run()
         else:
             await asyncio.gather(*(self._start_single_adapter(adapter) for adapter in self.adapters))
@@ -1022,9 +1030,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _final_verification(self) -> None:
         """Perform final system verification."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
-        if is_first_run():
+        if self._first_run_this_boot():
             logger.info("First-run mode: Skipping final verification (waiting for setup wizard)")
             logger.info("=" * 60)
             logger.info("CIRIS Agent First-Run Mode Active")
@@ -1106,9 +1112,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _register_adapter_services(self) -> None:
         """Register services provided by the loaded adapters."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
-        if is_first_run():
+        if self._first_run_this_boot():
             logger.info("First-run mode: Skipping adapter service registration")
             return
 
@@ -1260,9 +1264,7 @@ class CIRISRuntime(ServicePropertyMixin):
             )
 
         if not self.llm_service:
-            from ciris_engine.logic.setup.first_run import is_first_run
-
-            if is_first_run():
+            if self._first_run_this_boot():
                 logger.info("[_build_components] First-run setup mode - LLM not yet configured")
                 logger.info("[_build_components] Setup wizard will guide LLM configuration")
             else:
@@ -1290,8 +1292,6 @@ class CIRISRuntime(ServicePropertyMixin):
 
     async def _start_adapter_connections(self) -> None:
         """Start adapter connections and wait for them to be ready."""
-        from ciris_engine.logic.setup.first_run import is_first_run
-
         from .ciris_runtime_helpers import (
             create_adapter_lifecycle_tasks,
             log_adapter_configuration_details,
@@ -1301,7 +1301,7 @@ class CIRISRuntime(ServicePropertyMixin):
 
         log_adapter_configuration_details(self.adapters)
 
-        first_run = is_first_run()
+        first_run = self._first_run_this_boot()
         if first_run:
             logger.info("")
             logger.info("=" * 70)
@@ -1427,8 +1427,30 @@ class CIRISRuntime(ServicePropertyMixin):
         """
         await auto_enable_environment_adapters_for_resume(self)
 
+    def _first_run_this_boot(self) -> bool:
+        """This boot's first-run answer: the latch while the boot runs, else live."""
+        if self._boot_first_run is not None:
+            return self._boot_first_run
+        from ciris_engine.logic.setup.first_run import is_first_run
+
+        return is_first_run()
+
+    def _mark_boot_finished(self) -> None:
+        if self._boot_finished is not None:
+            self._boot_finished.set()
+
     async def resume_from_first_run(self) -> None:
         """Resume initialization after setup wizard completes."""
+        # The wizard's API answers before the boot that serves it has finished,
+        # so setup can complete mid-boot. Resume only once the boot is done
+        # (it ran every step as first-run), then drop the latch.
+        if self._boot_finished is not None and not self._boot_finished.is_set():
+            logger.info("[RESUME] setup completed while this boot is still starting; waiting for it to finish")
+            try:
+                await asyncio.wait_for(self._boot_finished.wait(), timeout=600.0)
+            except asyncio.TimeoutError:
+                logger.error("[RESUME] the boot did not finish within 600s; resuming anyway")
+        self._boot_first_run = None
         self._resume_in_progress = True
         self._resume_started_at = time.time()
         logger.info(f"[RESUME] Started at {self._resume_started_at:.3f}, _resume_in_progress=True")

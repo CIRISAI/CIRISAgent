@@ -454,6 +454,7 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
         ('invitee_nodes=["ciris-node-bootstrap-uewp47am66: No(NotInAudience)"]', "no principal on the creator"),
         ("the invite was accepted but the room never became ready on both sides within 180s", "joiner not seated"),
         ("membership-plane row withheld — neither a member's node, a live invitee's node", "share no root"),
+        ('dimension="chat:key_package:v1" audience="community" site="advertise"', "never published"),
     ],
 )
 def test_known_failures_are_named_with_where_to_look(text, expect):

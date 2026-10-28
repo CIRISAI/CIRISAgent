@@ -304,6 +304,13 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "the creator's 'membership-plane row withheld' lines toward the joiner's node, and 'no mutual trust root' "
           "on either side",
           "run 40619472028; persist 59.1.1 + edge #907 follow-up"),
+    Cause(r"chat:key_package:v1\" audience=\"community\"|our KeyPackage is published, and the creator's Welcome",
+          "the joiner's KeyPackage is withheld from the creator's node: a community row reaches a member's node only "
+          "as their DEVICE, which needs an occurrence the NODE signed, and the split-home node's own agreement was "
+          "never published",
+          "the creator's 'split home: the node agreed, in its own hand' line, and whether the joiner holds a "
+          "node-signed occurrence for the creator's node",
+          "run 40638164116; server agreement-publish fix"),
     Cause(r"neither a member's node, a live invitee's node|no mutual trust root",
           "a membership-plane row or identifier lookup is refused between the two nodes: the receiver is not "
           "placed as a member's node, or the nodes share no root (root acceptances not served)",

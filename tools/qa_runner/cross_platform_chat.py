@@ -331,6 +331,17 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "and the message cannot be sealed",
           "the 'key-grant rows for this axis could not be emitted' line: its minter_key_id names the agent key",
           "run 40725151503; server fix: mint under the person pen, like room creation in 0.5.241"),
+    Cause(r"signer_not_active_member",
+          "the joiner refuses the creator's agent-minted key_grant set: the agent resolves to its owner, but this "
+          "node's room ROSTER fold does not count it as an active member occurrence (it was never seated)",
+          "the joiner's 'key_grant refused (signer_not_active_member)' line and the creator's 'agent agreed' line",
+          "run 40737033001; server/persist roster seating of the agent occurrence"),
+    Cause(r"unopened: not_fetched|not_fetched not held|NoHolders",
+          "the message row arrived but its body blob did not: no holds_bytes claim from the sender's node reached "
+          "the reader, so the puller found no holder",
+          "the reader's 'blob_swarm::pull … outcome=NoHolders' lines and the sender's 'withheld … audience="
+          "\"community\"' lines toward the reader's node",
+          "run 40737033001"),
     Cause(r"NotGranted|unknown_signer",
           "the joiner refuses the creator's key_grant set: it lacks the creator's AGENT Key row or the agent-signed "
           "occurrence (device_class agent) that makes the agent its owner's occurrence",

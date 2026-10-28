@@ -336,6 +336,12 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "node's room ROSTER fold does not count it as an active member occurrence (it was never seated)",
           "the joiner's 'key_grant refused (signer_not_active_member)' line and the creator's 'agent agreed' line",
           "run 40737033001; server/persist roster seating of the agent occurrence"),
+    Cause(r"SenderNotApprovedForTier",
+          "the reader's blob puller refuses the message body: its sender-approval axis rates the sender's node "
+          "VerifiedOnly, below the tier cohort (room) content needs, and the refusal is not retried",
+          "the reader's 'blob_swarm::pull … outcome=Refused(\"axis 1: SenderNotApprovedForTier' line, and "
+          "'Attributed but not Rooted' between the two nodes",
+          "run 40751735986; edge blob_swarm sender approval"),
     Cause(r"unopened: not_fetched|not_fetched not held|NoHolders",
           "the message row arrived but its body blob did not: no holds_bytes claim from the sender's node reached "
           "the reader, so the puller found no holder",

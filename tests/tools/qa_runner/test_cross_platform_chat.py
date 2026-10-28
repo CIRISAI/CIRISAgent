@@ -467,6 +467,11 @@ def test_negative_a_broken_conversation_fails_naming_what_broke(knob, why):
         ("key_grant set refused: NotGranted signer=qa-runner-ciris-agent-x", "agent-signed occurrence"),
         ("key_grant refused (signer_not_active_member): signer \"qa-runner-ciris-agent-x\"", "never seated"),
         (
+            'pull blob=5382 outcome=Refused("axis 1: SenderNotApprovedForTier { content_kind: \\"cohort\\", '
+            'sender: VerifiedOnly }")',
+            "VerifiedOnly",
+        ),
+        (
             "android never read linux's message within 180s (row a67b present but unopened: not_fetched not held: 1b0e)",
             "no holds_bytes claim",
         ),

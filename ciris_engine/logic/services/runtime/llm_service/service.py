@@ -2185,7 +2185,17 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             #   reasoning_effort="low"      -> accepted, 40 tokens -> 6
             # So "low" is the real floor on this provider. CIRIS does its own
             # reasoning in the DMA pipeline; we want the model's kept minimal.
-            if any(t in model for t in ("gpt-oss", "qwen", "deepseek", "reason")):
+            #
+            # THE ENUM IS PER MODEL, NOT PER PROVIDER. The gpt-oss measurement
+            # above is not Groq's enum, it is gpt-oss's. qwen3.6 on Groq takes
+            # only `none|default`, and "low" is a hard 400:
+            #   `reasoning_effort` must be one of `none` or `default`
+            # seen on prod echo-speculative-4fc6ru (2.16.5, qwen/qwen3.6-27b
+            # as the secondary). Every secondary call failed, 2.9.38 did not.
+            # For qwen, "none" is the floor and actually turns thinking off.
+            if "qwen" in model:
+                return {"reasoning_effort": "none"}
+            if any(t in model for t in ("gpt-oss", "deepseek", "reason")):
                 return {"reasoning_effort": "low"}
             return {}
 

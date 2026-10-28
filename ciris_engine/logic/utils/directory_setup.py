@@ -184,11 +184,41 @@ def check_disk_space(path: Path, required_mb: int = 50) -> Tuple[bool, float]:
         return False, 0.0
 
 
-def _check_disk_space_or_fail(base_dir: Path, fail_fast: bool) -> None:
-    """Check disk space and fail if insufficient."""
-    has_space, available_mb = check_disk_space(base_dir)
+def home_usage_mb(base_dir: Path) -> float:
+    """How much CIRIS's own home occupies, in MB (0.0 when it cannot be read)."""
+    total = 0
+    try:
+        for root, _dirs, files in os.walk(base_dir):
+            for name in files:
+                try:
+                    total += os.lstat(os.path.join(root, name)).st_size
+                except OSError:
+                    continue
+    except OSError:
+        return 0.0
+    return total / (1024 * 1024)
+
+
+def _check_disk_space_or_fail(base_dir: Path, fail_fast: bool, required_mb: int = 50) -> None:
+    """Check disk space and fail if insufficient.
+
+    Prints a `[FATAL_CODE] disk_space ...` line on stdout first: the mobile
+    client reads its key=value tokens to say, in the user's language, that the
+    phone is out of storage and how much of it CIRIS holds. The `[FATAL_EXIT]`
+    line that ends the startup screen's wait comes from the caller, which only
+    sees this as an exception -- so the runtime calls with fail_fast=False.
+    """
+    has_space, available_mb = check_disk_space(base_dir, required_mb)
     if not has_space:
-        error_msg = f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM 50MB REQUIRED - EXITING"
+        ciris_mb = home_usage_mb(base_dir)
+        print(
+            f"[FATAL_CODE] disk_space free_mb={available_mb:.1f} required_mb={required_mb} ciris_mb={ciris_mb:.1f}",
+            flush=True,
+        )
+        error_msg = (
+            f"INSUFFICIENT DISK SPACE: Only {available_mb:.1f}MB available. MINIMUM {required_mb}MB REQUIRED - "
+            f"EXITING (CIRIS's own data under {base_dir} uses {ciris_mb:.1f}MB)"
+        )
         print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
         if fail_fast:
             sys.exit(1)

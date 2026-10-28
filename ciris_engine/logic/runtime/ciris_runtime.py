@@ -412,7 +412,10 @@ class CIRISRuntime(ServicePropertyMixin):
                     validate_directories()
                 else:
                     logger.info("Development environment - setting up directories...")
-                    setup_application_directories(essential_config=self.essential_config)
+                    # fail_fast=False: a SystemExit here skipped every handler above
+                    # it, so the mobile shell never printed [FATAL_EXIT] and the
+                    # startup screen only gave up at its 180 s timeout.
+                    setup_application_directories(essential_config=self.essential_config, fail_fast=False)
 
             except DirectorySetupError as e:
                 logger.critical(f"DIRECTORY SETUP FAILED: {e}")

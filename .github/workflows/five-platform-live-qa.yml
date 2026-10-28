@@ -1257,6 +1257,20 @@ jobs:
           for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
             case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "$out/logs/android/$f" 2>/dev/null ;; esac
           done
+          # Both nodes' stores AFTER the stage, with their WAL: the per-leg
+          # db-<plat>.db snapshots are taken before this stage runs, so they
+          # cannot answer "did the joiner ever hold the creator's binding".
+          mkdir -p "$out/db"
+          for ext in "" -wal -shm; do
+            cp "${RUNNER_TEMP}/ciris-linux/data/ciris_engine.db$ext" "$out/db/linux-ciris_engine.db$ext" 2>/dev/null || true
+          done
+          remote=$("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r' || true)
+          if [ -n "$remote" ]; then
+            for ext in "" -wal -shm; do
+              "$ADB" exec-out run-as ai.ciris.mobile.debug cat "$remote$ext" > "$out/db/android-ciris_engine.db$ext" 2>/dev/null || rm -f "$out/db/android-ciris_engine.db$ext"
+            done
+          fi
+          ls -la "$out/db" || true
           if [ "$rc" != 0 ]; then
             echo "::group::cross-platform chat -- node log lines (contacts_chat / handshake / link_seal_refused / rooting)"
             python -m tools.qa_runner.cross_platform_chat scan \

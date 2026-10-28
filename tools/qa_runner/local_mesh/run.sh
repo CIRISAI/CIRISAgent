@@ -83,6 +83,27 @@ for i in 0 1; do
   say "$n ready: $(tr -d '\n ' < "$home/mesh_ready.json" | cut -c1-200)"
 done
 
+# A fresh node is restarted from its own home before the stage, as the gate
+# restarts the linux backend: same owner, same fedID, same keys, NOT first run.
+# It also keeps the stage clear of the in-process first-run resume, which can
+# end the API adapter when setup completes during the agent's own startup.
+if [ "${MESH_REUSE:-0}" != 1 ]; then
+  for n in "${names[@]}"; do
+    rm -f "$out/$n/ciris/mesh_restarted.txt"
+    docker restart -t 30 "ciris-$n" >/dev/null || { say "could not restart $n"; exit 2; }
+  done
+  for n in "${names[@]}"; do
+    deadline=$((SECONDS + 300))
+    until [ -f "$out/$n/ciris/mesh_restarted.txt" ]; do
+      [ "$(docker inspect -f '{{.State.Running}}' "ciris-$n" 2>/dev/null)" = true ] \
+        || { say "$n died on restart"; docker logs --tail 40 "ciris-$n"; exit 2; }
+      [ $SECONDS -lt $deadline ] || { say "$n not back within 300s"; docker logs --tail 40 "ciris-$n"; exit 2; }
+      sleep 3
+    done
+    say "$n restarted from its home"
+  done
+fi
+
 # ── The stage ────────────────────────────────────────────────────────────────
 rc=0
 ( cd "$repo" && python3 -m tools.qa_runner.cross_platform_chat run \

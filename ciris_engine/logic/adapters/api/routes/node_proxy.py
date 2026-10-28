@@ -118,7 +118,14 @@ NODE_OWNED_PREFIXES = (
 
 #: A forwardable path segment. Deliberately strict: the set a REST route needs
 #: and nothing else.
-_SAFE_PATH = re.compile(r"^[A-Za-z0-9._~/-]*$")
+#:
+#: `:` is in that set. Chat room ids are `chat:pair:v1:<hex>`, so without it
+#: every `/v1/chat/<room>/...` read on this port answered 404 "Not Found"
+#: while the node had the room keyed and Ready (gate run 40703589749). A colon
+#: is an ordinary pchar (RFC 3986 §3.3); it can only be read as a scheme in the
+#: FIRST segment of a relative reference, and the outbound URL is always the
+#: absolute `http://127.0.0.1:<port>/v1/...`, so it never is.
+_SAFE_PATH = re.compile(r"^[A-Za-z0-9._~/:-]*$")
 
 
 def _forwardable_headers(items: Iterable[Tuple[str, str]]) -> Dict[str, str]:
@@ -203,7 +210,7 @@ def _safe_forward_path(path: str) -> Optional[str]:
         return None
     if path.startswith("/") or ".." in path.split("/"):
         return None
-    return quote(path, safe="/")
+    return quote(path, safe="/:")
 
 
 @router.api_route(

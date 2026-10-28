@@ -49,9 +49,25 @@ def _log(msg: str) -> None:
 
 
 def _backend_cmd() -> List[str]:
-    # --mock-llm is requested explicitly: the mesh exercises person-to-person
-    # chat between nodes, which never reaches the agent's LLM.
-    return [sys.executable, "main.py", "--adapter", "api", "--port", "8080", "--mock-llm"]
+    # A REAL provider, as the gate's chat legs have. Not --mock-llm: a mock agent
+    # is refused the trace ship grant by design, and that grant is the node's
+    # consent:replication to the canonical -- without it the node has no consent
+    # peer and cannot Pull a contact's key. Person-to-person chat itself never
+    # reaches the LLM.
+    return [sys.executable, "main.py", "--adapter", "api", "--port", "8080"]
+
+
+def _llm() -> Dict[str, str]:
+    """The provider the owner gives the wizard, from a key FILE (never env or argv)."""
+    key_file = Path(os.environ.get("MESH_LLM_KEY_FILE", "/run/mesh/llm_key"))
+    if not key_file.is_file():
+        raise RuntimeError(f"no LLM key at {key_file}: run.sh mounts MESH_LLM_KEY_FILE there")
+    return {
+        "llm_provider": os.environ.get("MESH_LLM_PROVIDER", "openai"),
+        "llm_api_key": key_file.read_text().strip(),
+        "llm_model": os.environ.get("MESH_LLM_MODEL", "google/gemma-4-31B-it"),
+        "llm_base_url": os.environ.get("MESH_LLM_BASE_URL", "https://api.together.xyz/v1"),
+    }
 
 
 def _backend_env() -> Dict[str, str]:
@@ -121,9 +137,7 @@ async def first_run(username: str, password: str, label: str, launched_at: float
         r = await client.post(
             f"{BRAIN}/v1/setup/complete",
             json={
-                "llm_provider": "openai",
-                "llm_api_key": "test-key-for-qa",
-                "llm_model": "gpt-4",
+                **_llm(),
                 "template_id": "default",
                 # "Send traces: yes", as the gate's wizard answers. That grant is
                 # also the node's consent:replication to the canonical; without

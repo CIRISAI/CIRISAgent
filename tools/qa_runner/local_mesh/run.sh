@@ -19,6 +19,8 @@
 #   MESH_KEEP=1  leave both containers running afterwards (for poking at them)
 #   RUST_LOG     passed to both nodes (e.g. info,ciris_edge::blob_swarm=debug)
 #   MESH_REUSE=1 keep MESH_OUT's homes: restart the same two nodes, skip setup
+#   MESH_LLM_KEY_FILE  the agents' LLM key, mounted read-only (default ~/.together_key)
+#   MESH_LLM_MODEL / MESH_LLM_BASE_URL / MESH_LLM_PROVIDER  default Together gemma-4-31B-it
 #
 # Exit status is the stage's: 0 only when every enforced step passed.
 set -uo pipefail
@@ -32,6 +34,9 @@ names=(mesh-a mesh-b)
 ports=(18081 18082)
 
 say() { printf '[local-mesh] %s\n' "$*"; }
+
+key_file="${MESH_LLM_KEY_FILE:-$HOME/.together_key}"
+[ -r "$key_file" ] || { say "no readable LLM key at $key_file (set MESH_LLM_KEY_FILE)"; exit 2; }
 
 # ── Image: the committed tree (git archive), plus the prerelease wheel ───────
 ctx=$(mktemp -d "${TMPDIR:-/tmp}/ciris-local-mesh-ctx-XXXXXX")
@@ -56,7 +61,10 @@ for i in 0 1; do
   rm -f "$out/$n/mesh_failed.txt" "$out/$n/mesh_restarted.txt"
   docker run -d --name "ciris-$n" --user "$(id -u):$(id -g)" \
     -e HOME=/mesh/home -e CIRIS_HOME=/mesh/home/ciris -e MESH_LABEL="qa-node-$(date +%s)$i" \
-    -e RUST_LOG="${RUST_LOG:-}" \
+    -e RUST_LOG="${RUST_LOG:-}" -v "$key_file:/run/mesh/llm_key:ro" \
+    -e MESH_LLM_MODEL="${MESH_LLM_MODEL:-google/gemma-4-31B-it}" \
+    -e MESH_LLM_BASE_URL="${MESH_LLM_BASE_URL:-https://api.together.xyz/v1}" \
+    -e MESH_LLM_PROVIDER="${MESH_LLM_PROVIDER:-openai}" \
     -v "$out/$n:/mesh/home" -p "127.0.0.1:${ports[$i]}:8080" "$image" >/dev/null \
     || { say "could not start $n"; exit 2; }
   say "$n up on :${ports[$i]} (home $out/$n)"

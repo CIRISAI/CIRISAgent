@@ -12,13 +12,15 @@
 #
 #   SERVER_PRERELEASE_TAG  CIRISServer prerelease whose manylinux wheel replaces
 #                          the requirements.txt pin (e.g. test-0.5.241-0180f918).
-#                          Empty = the pin.
+#                          Empty = the pin (or SERVER_WHEEL).
 # Environment:
 #   MESH_OUT     where homes, logs, DBs and the report land (default: a new dir
 #                under ${TMPDIR:-/tmp})
 #   MESH_KEEP=1  leave both containers running afterwards (for poking at them)
 #   RUST_LOG     passed to both nodes (e.g. info,ciris_edge::blob_swarm=debug)
 #   MESH_REUSE=1 keep MESH_OUT's homes: restart the same two nodes, skip setup
+#   SERVER_WHEEL a locally built manylinux x86_64 ciris_server wheel to use
+#                instead of a prerelease download (wins over the tag)
 #   MESH_LLM_KEY_FILE  the agents' LLM key, mounted read-only (default ~/.together_key)
 #   MESH_LLM_MODEL / MESH_LLM_BASE_URL / MESH_LLM_PROVIDER  default Together gemma-4-31B-it
 #
@@ -30,6 +32,14 @@ tag="${1:-}"
 out="${MESH_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/ciris-local-mesh-XXXXXX")}"
 mkdir -p "$out"
 image="ciris-local-mesh:${tag:-pin}"
+if [ -n "${SERVER_WHEEL:-}" ]; then
+  [ -r "$SERVER_WHEEL" ] || { printf '[local-mesh] SERVER_WHEEL not readable: %s\n' "$SERVER_WHEEL"; exit 2; }
+  case "$(basename "$SERVER_WHEEL")" in
+    ciris_server-*x86_64.whl) ;;
+    *) printf '[local-mesh] SERVER_WHEEL must be a ciris_server x86_64 wheel: %s\n' "$SERVER_WHEEL"; exit 2 ;;
+  esac
+  image="ciris-local-mesh:local-$(sha256sum "$SERVER_WHEEL" | cut -c1-12)"
+fi
 names=(mesh-a mesh-b)
 ports=(18081 18082)
 
@@ -43,7 +53,10 @@ ctx=$(mktemp -d "${TMPDIR:-/tmp}/ciris-local-mesh-ctx-XXXXXX")
 trap 'rm -rf "$ctx"' EXIT
 git -C "$repo" archive HEAD | tar -x -C "$ctx"
 mkdir -p "$ctx/serverwheel"
-if [ -n "$tag" ]; then
+if [ -n "${SERVER_WHEEL:-}" ]; then
+  cp "$SERVER_WHEEL" "$ctx/serverwheel/"
+  say "server wheel (local): $(basename "$SERVER_WHEEL") sha256 $(sha256sum "$SERVER_WHEEL" | cut -c1-16)"
+elif [ -n "$tag" ]; then
   gh release download "$tag" --repo CIRISAI/CIRISServer --pattern 'ciris_server-*manylinux*x86_64.whl' \
     --dir "$ctx/serverwheel" || { say "no manylinux x86_64 wheel on $tag"; exit 2; }
   say "server prerelease: $(ls "$ctx/serverwheel")"

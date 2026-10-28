@@ -21,7 +21,7 @@ RUN pip install -q -r requirements.txt && pip install -q requests httpx
 # A server PRERELEASE replaces the requirements.txt pin when serverwheel/ holds
 # one (run.sh downloads it); an empty directory keeps the pin.
 COPY serverwheel/ /serverwheel/
-RUN set -e; w=$(ls /serverwheel/ciris_server-*manylinux*x86_64.whl 2>/dev/null | head -1 || true); \
+RUN set -e; w=$(ls /serverwheel/ciris_server-*x86_64.whl 2>/dev/null | head -1 || true); \
     if [ -n "$w" ]; then pip install -q --force-reinstall --no-deps "$w"; fi; \
     python -c "import importlib.metadata as m; print('ciris-server', m.version('ciris-server'))"
 

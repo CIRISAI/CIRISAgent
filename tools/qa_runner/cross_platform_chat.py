@@ -297,11 +297,18 @@ KNOWN_CAUSES: Tuple[Cause, ...] = (
           "the creator's 'chat: pair room invitation' line (invitee_nodes verdict) and the bridge's withheld lines",
           "run 40585063240; persist or server fix pending"),
     Cause(r"room not keyed|never became ready on both sides|THIS node has not announced",
-          "the room was accepted but never keyed: the joiner's KeyPackage never reached the creator, because the "
-          "joiner cannot place the creator's node in the room's audience",
-          "the joiner's withholds toward the creator's node and whether the joiner ever logged 'contact RESOLVED' "
-          "for the creator (an accept-path contact may never pull the creator's owner-binding)",
-          "run 40619472028; server/persist fix pending"),
+          "joiner not seated: the creator withholds the room record from the joiner's node (persist "
+          "may_receive_group_plane drops the owner of an unagreed occurrence), so the joiner never publishes its "
+          "KeyPackage; also, a #907 Pull that serves the owner-binding without its root acceptances leaves "
+          "'no mutual trust root' between the nodes",
+          "the creator's 'membership-plane row withheld' lines toward the joiner's node, and 'no mutual trust root' "
+          "on either side",
+          "run 40619472028; persist 59.1.1 + edge #907 follow-up"),
+    Cause(r"neither a member's node, a live invitee's node|no mutual trust root",
+          "a membership-plane row or identifier lookup is refused between the two nodes: the receiver is not "
+          "placed as a member's node, or the nodes share no root (root acceptances not served)",
+          "persist may_receive_group_plane and edge's #907 Pull contents",
+          "persist 59.1.1; edge #907"),
     Cause(r"recipient_not_in_send_set",
           "a directed row is withheld because its recipient's node is not a peer this round",
           "whether the contact RESOLVED to a node first"),

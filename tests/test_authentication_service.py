@@ -734,76 +734,65 @@ class TestAuthenticationServiceIntegration:
         )
         await service._store_wa_certificate(root_wa)
 
-        # Now bootstrap should create system WA
+        # Bootstrap no longer mints a local "CIRIS System Authority": system tasks
+        # are the agent's work and the agent signs them with its own key.
         await service.bootstrap_if_needed()
 
-        # Check system WA was created
-        system_wa = await service._get_system_wa()
-        assert system_wa is not None
-        assert system_wa.name == "CIRIS System Authority"
-        assert system_wa.role == WARole.AUTHORITY
-        assert system_wa.parent_wa_id == root_wa.wa_id
+        all_was = await service.list_was(active_only=True)
+        assert not any(w.name == "CIRIS System Authority" for w in all_was)
 
     @pytest.mark.asyncio
-    async def test_task_signing_and_verification(self, auth_service):
-        """Test task signing and verification functionality."""
-        # Bootstrap to create system WA
-        await auth_service.bootstrap_if_needed()
+    async def test_system_tasks_are_signed_and_verified_as_the_agent(self, auth_service, monkeypatch):
+        """Tasks are the agent's work: signed with the engine's local key, verified fail-closed."""
+        import base64 as _b64
 
-        # Get system WA
-        system_wa_id = await auth_service.get_system_wa_id()
-        if not system_wa_id:
-            # Create system WA manually for test
-            private_key, public_key = auth_service.generate_keypair()
-            system_wa = WACertificate(
-                wa_id="wa-2025-07-14-SYSTM1",
-                name="CIRIS System Authority",
-                role=WARole.AUTHORITY,
-                pubkey=auth_service._encode_public_key(public_key),
-                jwt_kid="system-kid",
-                scopes_json='["system.task.create", "system.task.sign"]',
-                created_at=datetime.now(timezone.utc),
-            )
-            await auth_service._store_wa_certificate(system_wa)
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-            # Store private key
-            key_path = auth_service.key_dir / "system_wa.key"
-            key_path.write_bytes(private_key)
-            key_path.chmod(0o600)
-
-            system_wa_id = system_wa.wa_id
-
-        # Create mock task
+        from ciris_engine.logic.persistence.models import graph as graph_mod
         from ciris_engine.schemas.runtime.models import Task, TaskStatus
 
-        mock_task = Task(
-            task_id="test-task-001",
+        sk = Ed25519PrivateKey.generate()
+        pub_b64 = _b64.b64encode(sk.public_key().public_bytes_raw()).decode()
+
+        class _Engine:
+            def local_derived_key_id(self):
+                return "qa-runner-ciris-agent-test"
+
+            def local_sign_hybrid(self, data):
+                return {"classical_sig": sk.sign(data), "pqc_sig": None}
+
+            def wa_cert_get(self, *_a, **_k):
+                return None  # the signer is no WA: verification takes the agent-key path
+
+            def verify_hybrid(self, data, sig_b64, pqc_sig, ed_pub_b64, pqc_pub, policy):
+                Ed25519PublicKey.from_public_bytes(_b64.b64decode(ed_pub_b64)).verify(_b64.b64decode(sig_b64), data)
+
+        monkeypatch.setattr(graph_mod, "get_persist_engine", lambda: _Engine())
+        monkeypatch.setattr(
+            type(auth_service),
+            "_signing_pubkeys",
+            staticmethod(lambda engine, key_id: (pub_b64, None) if key_id == "qa-runner-ciris-agent-test" else None),
+        )
+
+        task = Task(
+            task_id="WAKEUP_test",
             channel_id="test_channel",
-            description="Test task for signing",
+            description="Wakeup",
             status=TaskStatus.PENDING,
             priority=1,
             created_at=datetime.now(timezone.utc).isoformat(),
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
+        task.signed_by, task.signature, task.signed_at = await auth_service.sign_system_task(task)
+        assert task.signed_by == "qa-runner-ciris-agent-test"
+        assert await auth_service.verify_task_signature(task) is True
 
-        # Sign task
-        signature, signed_at = await auth_service.sign_task(mock_task, system_wa_id)
-        assert signature is not None
-        assert signed_at is not None
+        task.description = "Tampered description"
+        assert await auth_service.verify_task_signature(task) is False
 
-        # Update task with signature
-        mock_task.signed_by = system_wa_id
-        mock_task.signature = signature
-        mock_task.signed_at = signed_at
-
-        # Verify signature
-        is_valid = await auth_service.verify_task_signature(mock_task)
-        assert is_valid is True
-
-        # Tamper with task and verify it fails
-        mock_task.description = "Tampered description"
-        is_valid = await auth_service.verify_task_signature(mock_task)
-        assert is_valid is False
+        task.description = "Wakeup"
+        task.signed_by = "someone-else"
+        assert await auth_service.verify_task_signature(task) is False, "an unresolvable signer fails closed"
 
 
 class TestAuthenticationServiceErrorHandling:

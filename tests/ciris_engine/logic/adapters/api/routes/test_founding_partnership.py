@@ -304,7 +304,6 @@ class TestFoundingPartnershipInSetupFlow:
         mock_auth_instance.start = _async_noop
         mock_auth_instance.stop = _async_noop
         mock_auth_instance.list_was = _async_empty_list
-        mock_auth_instance.ensure_system_wa_exists = _async_system_wa
         return mock_auth_instance
 
     @pytest.mark.asyncio
@@ -376,7 +375,3 @@ async def _async_noop(*args, **kwargs):
 
 async def _async_empty_list(*args, **kwargs):
     return []
-
-
-async def _async_system_wa(*args, **kwargs):
-    return "wa-system-001"

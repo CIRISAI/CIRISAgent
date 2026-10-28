@@ -619,18 +619,11 @@ async def add_system_task(
     task: Task,
     auth_service: Optional["AuthenticationServiceProtocol"] = None,
 ) -> str:
-    """Add a system task with automatic signing by the system WA."""
+    """Add a system task, signed by the agent: tasks are the agent's work."""
     if auth_service:
         try:
-            system_wa_id = await auth_service.get_system_wa_id()
-            if system_wa_id:
-                signature, signed_at = await auth_service.sign_task(task, system_wa_id)
-                task.signed_by = system_wa_id
-                task.signature = signature
-                task.signed_at = signed_at
-                logger.info(f"Signed system task {task.task_id} with system WA {system_wa_id}")
-            else:
-                logger.warning("No system WA available for signing task")
+            task.signed_by, task.signature, task.signed_at = await auth_service.sign_system_task(task)
+            logger.info(f"Signed system task {task.task_id} as the agent ({task.signed_by})")
         except Exception as e:
             logger.error(f"Failed to sign system task: {e}")
     return add_task(task)

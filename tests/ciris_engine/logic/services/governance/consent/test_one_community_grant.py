@@ -221,3 +221,39 @@ def test_unreadable_consent_state_mints_nothing(corpus: FakeCorpus, monkeypatch:
     for _ in range(3):
         opt_in(TraceConsentSource.DELIVERY_PROBE)
     assert corpus.rows == []
+
+
+class TestOwnerAuthoredCrossing:
+    """On a split home the agent-signed crossing is refused at every peer ("no owner
+    binding over <agent key>"): traces consent is the OWNER's act. A server with
+    `ciris_server.author_community_trust()` writes it under the owner's pen, and
+    then that is the only crossing the agent makes."""
+
+    def test_the_owner_door_is_the_crossing_and_the_local_row_stays(self, corpus: FakeCorpus, monkeypatch) -> None:
+        calls = []
+        monkeypatch.setattr(att, "_owner_authored_door", lambda: (lambda: calls.append(1) or "owner-grant-1"))
+        granted = opt_in(TraceConsentSource.SETUP_WIZARD)
+        assert granted == "owner-grant-1"
+        assert calls == [1]
+        assert len(corpus.minted_grants()) == 1, "the local capture row is still written, once"
+        assert corpus.crossing_attempts == 0, "no agent-signed crossing when the owner door exists"
+
+    def test_no_owner_pen_defers_and_never_falls_back_to_the_agent_key(
+        self, corpus: FakeCorpus, monkeypatch, caplog
+    ) -> None:
+        monkeypatch.setattr(att, "_owner_authored_door", lambda: (lambda: None))
+        caplog.set_level(logging.INFO)
+        local = opt_in(TraceConsentSource.SETUP_WIZARD)
+        assert local and local != "owner-grant-1"
+        assert corpus.crossing_attempts == 0
+        assert any("DEFERRED" in r.getMessage() for r in caplog.records)
+
+    def test_a_failing_door_keeps_the_local_row_and_says_why(self, corpus: FakeCorpus, monkeypatch, caplog) -> None:
+        def boom():
+            raise RuntimeError("pen locked")
+
+        monkeypatch.setattr(att, "_owner_authored_door", lambda: boom)
+        caplog.set_level(logging.WARNING)
+        assert opt_in(TraceConsentSource.SETUP_WIZARD)
+        assert corpus.crossing_attempts == 0
+        assert any("pen locked" in r.getMessage() for r in caplog.records)

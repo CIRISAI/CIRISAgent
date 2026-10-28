@@ -44,7 +44,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -772,6 +772,24 @@ def _directed_at(row: "dict[str, object]", community: str) -> bool:
     return isinstance(claim, dict) and claim.get("user_id") == community
 
 
+def _owner_authored_door() -> Optional[Callable[[], Optional[str]]]:
+    """The node's owner-authored community_trust door, when this server has it.
+
+    ``ciris_server.author_community_trust()`` writes the CC 3.3.1 form: attested
+    by this NODE, subjects [node, owner, agent], federation scope, signed by the
+    OWNER's pen. It returns None when the pen is not reachable and never
+    machine-writes. Consent to share traces is the owner's act, so on a server
+    that has the door it is the only crossing: the agent-signed crossing below is
+    refused on every split home ("no owner binding over <agent key>").
+    """
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except ImportError:
+        return None
+    door = getattr(ciris_server, "author_community_trust", None)
+    return door if callable(door) else None
+
+
 def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:
     """Cross the directed grant to the community, once per (grant, attempt) per process.
 
@@ -783,6 +801,18 @@ def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:
     when one was placed (CIRISAgent#1144), else the local row's.
     """
     _crossing_attempted.add((attestation_id, attempt))
+    door = _owner_authored_door()
+    if door is not None:
+        try:
+            authored = door()
+        except Exception as exc:  # noqa: BLE001 - the local row stands; name why the owner's grant did not
+            logger.warning("consent-CEG: owner-authored community_trust failed (non-fatal): %s", exc)
+            return attestation_id
+        if not authored:
+            _log_grant_decision("owner-authored community_trust DEFERRED: the owner's pen is not reachable")
+            return attestation_id
+        _log_grant_decision(f"owner-authored community_trust {authored} (local grant {attestation_id})")
+        return str(authored)
     try:
         outcome, placed = cross_to_mesh(engine, attestation_id, label="directed grant")
         _log_crossing(

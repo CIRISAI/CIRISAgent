@@ -5,7 +5,7 @@ home it boots the agent in first-run mode and then, in the wizard's order:
 
   1. mint the owner's federation ID     POST <brain>/v1/self/identity
   2. claim the node with its PIN         POST <node>/v1/setup/claim-remote
-  3. complete setup                      POST <brain>/v1/setup/complete
+  3. complete setup, sending traces      POST <brain>/v1/setup/complete
   4. log in as the owner, and announce   POST <node>/v1/federation/announce
 
 then writes `<home>/mesh_ready.json` and keeps the backend running. On a home
@@ -125,7 +125,11 @@ async def first_run(username: str, password: str, label: str, launched_at: float
                 "llm_api_key": "test-key-for-qa",
                 "llm_model": "gpt-4",
                 "template_id": "default",
-                "enabled_adapters": ["api"],
+                # "Send traces: yes", as the gate's wizard answers. That grant is
+                # also the node's consent:replication to the canonical; without
+                # it the node has no consent peer and cannot Pull a contact's key.
+                "enabled_adapters": ["api", "ciris_accord_metrics"],
+                "trace_analyze": False,
                 "adapter_config": {},
                 "admin_username": username,
                 "admin_password": password,

@@ -58,10 +58,13 @@ published, not "offered".
 The family's polarity is `signed` (from rc14; rc13 is positive-only). Rows are
 written with the signed score from the first one, so none needs re-signing when
 rc14 lands. A capture scores
-`1.0`. An interpret scores `2·(pass ratio) − 1`: `−1` when every criterion failed,
-`+1` when every criterion passed; the pass ratio reads back as `(score + 1) / 2`.
-Until the rc14 pin lands, an interpret whose every criterion failed is HELD, not
-posted, not refused and not given an epsilon score; its dimension string does
+`1.0`. An interpret scores `(2·passed − total) / total`, computed as one division
+so the signer and the registry's recomputation agree to the bit (`2·(passed/total) − 1`
+can differ by one ulp): `−1` when every criterion failed, `+1` when every
+criterion passed; the pass ratio reads back as `(score + 1) / 2`.
+Until the rc14 pin lands, an interpret with a negative score (fewer than half the
+criteria passed, all-fail included) is HELD: not posted, not refused, and not
+clamped or given an epsilon score; its dimension string does
 not change, so it is posted unchanged once the polarity flips.
 
 Example wire dimension:
@@ -191,7 +194,8 @@ keep citing them, and the rows carry the run ids.
   keeps its name until the rename lands, then writes `manifest.json`; a
   `tools/verify_safety_evidence.py` performs §5 offline; `qa_reports/` evidence is
   removed after back-signing.
-- **CIRISVerify** (CIRISVerify#322): a `ciris-build-sign evidence` subcommand
+- **CIRISVerify** (CIRISVerify#322, implemented in PR #323, not yet tagged): a
+  `ciris-build-sign evidence` subcommand
   that signs the `scores` Contribution envelope (dimension, `evidence_refs`,
   `score`, `cohort_scope`, `asserted_at`) with the same key material and ids as
   the build manifest, and the offline verifier of §5; both in `ciris-verify-core`

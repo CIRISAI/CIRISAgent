@@ -46,9 +46,21 @@ evidence:safety_battery:{kind}:{cell}:{prefix}:v1
   at the agent's door.
 - `:v1` is the version segment (CC 3.1.7 R3).
 
+CC generalized the family to `evidence:{suite}:{kind}:{cell}:{prefix}:v1`, with
+`{suite}` a closed vocabulary whose first member is `safety_battery`; the
+dimension strings above are unchanged by that.
+
 Each row is a `scores` Contribution at `cohort_scope: federation` (public commons
-evidence, replication audience public), with `evidence_refs: [<blob sha256>]`.
-`score` is `1.0` for a capture and the judged pass ratio for an interpret.
+evidence, replication audience public), with `evidence_refs: [<manifest sha256>]`.
+It is a self-report (CC 3.4.5.1): it confers no standing by itself and is
+published, not "offered".
+
+The family's polarity is `signed` (rc14; rc13 is positive-only). A capture scores
+`1.0`. An interpret scores `2·(pass ratio) − 1`: `−1` when every criterion failed,
+`+1` when every criterion passed; the pass ratio reads back as `(score + 1) / 2`.
+Until the rc14 pin lands, an interpret whose every criterion failed is HELD, not
+posted, not refused and not given an epsilon score; its dimension string does
+not change, so it is posted unchanged once the polarity flips.
 
 Example wire dimension:
 
@@ -89,11 +101,51 @@ key and keeps producing unsigned artifacts as today. The sync job:
 1. lists the live `safety-battery.yml` artifacts, as the harvester does now;
 2. for each bundle not yet published, downloads it and recomputes every hash the
    manifest binds, refusing a bundle whose bytes do not match its manifest;
-3. builds the blob and the row, signs the row over its envelope with
-   `ciris-build-sign sign --primitive safety_evidence`, and posts both to the
-   registry slice;
+3. builds the blob and the row, signs the row over its envelope with the
+   `ciris-build-sign evidence` subcommand (CIRISVerify#322), and posts both to the
+   registry slice (§4.1);
 4. records the registry's answer in the job summary; a refusal is a red run with
    the refusal token, and the next scheduled run retries it.
+
+### 4.1 The registry door (CIRISRegistry#151)
+
+`POST /v1/evidence/safety_battery`, JSON:
+
+- `contribution.signed_envelope`: the persist-stamped envelope
+  (`stamp_and_canonicalize`, with its `row` mirror) carrying `dimension`, `score`,
+  `delegation_scope: "infra:attest"`, `evidence` and `evidence_refs:
+  [manifest_sha256]`; `contribution.ed25519_signature_base64` and
+  `contribution.mldsa65_signature_base64` over its JCS bytes, by
+  `agent-steward-2026`. This is the shape verify's
+  `sign_build_manifest_contribution` produces for builds, with the evidence
+  dimension.
+- `dimension` and `score` as in §2.
+- `evidence`: `suite`, `kind`, `cell` (`^[a-z]{2,3}_[a-z_]+$`), `prefix`,
+  `agent_version`, `rubric {id, version, sha256}`, and for an interpret `judge
+  {model, prompt_sha256}` and `capture_prefix` (equal to `prefix`); `ci_provenance`
+  (the ORIGINAL run, opaque), `captured_at` (RFC 3339), `manifest_hash` (64 hex),
+  `manifest_size`.
+- `manifest_base64`: the bundle manifest's bytes, at most 1 MiB. An interpret
+  manifest carries `capture_manifest_sha256` and a `verdicts_summary` with
+  `pass_ratio`, or `passed`/`total`, or `passed` and `failed`.
+- `pipeline_record` (the signer's `SignedKeyRecord`) on first contact, and
+  `pipeline_grant` (`delegates_to(root → agent-steward-2026, infra:attest)`) when
+  the node has not seen it.
+
+201 returns `attestation_id`, `dimension`, `manifest_sha256`, `signer_key_id`,
+`standing`, `newly_stored` (and `root_key_id`, `grant_attestation_id` when
+relevant). Refusals store nothing; the sync job records the token in its summary
+and retries on the next run: `namespace_vocab_value_unregistered`,
+`manifest_too_large`, `contribution_malformed`, `dimension_mismatch`,
+`evidence_kind_invalid`, `evidence_cell_invalid`, `evidence_prefix_mismatch`,
+`evidence_score_invalid`, `evidence_capture_link_missing`,
+`manifest_size_mismatch`, `manifest_hash_mismatch`, `unknown_pipeline`,
+`signature_invalid`, `pipeline_not_blessed`, `substrate_error`.
+
+Reads: `GET /v1/evidence/safety_battery?cell=&kind=&agent_version=&rubric=&since=`,
+`GET /v1/evidence/safety_battery/{manifest_hash}`, and
+`GET /v1/evidence/safety_battery/blob/{manifest_hash}` (`evidence_not_found`,
+`manifest_not_held`).
 
 Domain separation is the `dimension` inside the signed envelope: an evidence row
 cannot verify as a build row, nor the reverse. The distinct primitive in
@@ -147,7 +199,11 @@ keep citing them, and the rows carry the run ids.
 
 ## 8. Order of work
 
-0. **The vendored CC registry.** Admission checks the dimension against the CC
+0. **The vendored CC registry.** The registry reports that persist v59.1 admits
+   this dimension today (its gate refuses only reserved and closed stems, shown by
+   a test), which would take the persist re-vendor off the critical path; persist
+   reported that shipped persist vendors CC 1.0-rc9. Until the two agree on a
+   first admitted test row, the plan below stands. Admission checks the dimension against the CC
    registry persist vendors (verify does no admission check). Shipped persist
    (v60.1.0) vendors CC 1.0-rc9; rc12 is staged on a branch; rc13, which carries
    this family, is untagged. Persist vendors tagged CC only, on its v61 head

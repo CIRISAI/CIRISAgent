@@ -12,10 +12,14 @@ import os
 import sqlite3
 import subprocess
 import sys
+import random
 import time
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 
 def format_size(size: float) -> str:
@@ -173,22 +177,122 @@ async def complete_setup(base_url: str, port: int, homes: Optional[List[Optional
         return False
 
 
+#: Back-pressure defaults. The workflow's 20-minute job budget has to hold two
+#: agent boots, a 100-message and a 1000-message run, an idle window and the
+#: composition probe, so the workflow passes tighter overall deadlines; these
+#: defaults are for a local run.
+DEFAULT_PER_MESSAGE_DEADLINE_S = 180.0  # six 30 s SHED windows for one message
+DEFAULT_OVERALL_DEADLINE_S = 900.0
+#: 423 (node unclaimed / constitutional halt) is retried this long after the
+#: burst starts — the claim or halt latch can lag the boot — then it is fatal.
+DEFAULT_LOCKED_GRACE_S = 30.0
+DEFAULT_MIN_SUCCESS_RATE = 0.99
+#: Wait used for a 503/429 that names no Retry-After anywhere.
+DEFAULT_RETRY_AFTER_S = 2.0
+#: Wait between 423 retries inside the startup grace window.
+LOCKED_RETRY_S = 2.0
+#: Attempts for any other failure (5xx without Retry-After semantics, 4xx,
+#: transport exceptions, 200 without a task id).
+OTHER_FAILURE_ATTEMPTS = 3
+
+BACKPRESSURE_STATUSES = (429, 503)
+
+
+@dataclass
+class SendResult:
+    """What one burst did: outcomes per message plus why the agent pushed back."""
+
+    success: int = 0
+    failed: int = 0
+    elapsed: float = 0.0
+    task_ids: List[str] = field(default_factory=list)
+    #: Final reason for each message that was NOT accepted → count.
+    failure_reasons: Counter[str] = field(default_factory=Counter)
+    #: Every non-accepted response or exception seen, retried or not → count.
+    response_reasons: Counter[str] = field(default_factory=Counter)
+    #: 503 resource_shed refusals seen (each attempt counts once).
+    shed_refusals: int = 0
+    #: Resource names the agent cited in its SHED refusals → count.
+    shed_resources: Counter[str] = field(default_factory=Counter)
+    #: Seconds spent sleeping on Retry-After (header, body or default), summed over workers.
+    retry_after_wait_total: float = 0.0
+    retries: int = 0
+    #: Set when a non-retryable condition (423 past the grace window) stopped the burst.
+    aborted: Optional[str] = None
+
+
+def _detail(body: Any) -> Dict[str, Any]:
+    """The refusal detail: FastAPI nests HTTPException dicts under "detail"; middleware does not."""
+    if not isinstance(body, dict):
+        return {}
+    nested = body.get("detail")
+    return nested if isinstance(nested, dict) else body
+
+
+def _response_body(response: Any) -> Any:
+    try:
+        return response.json()
+    except Exception:
+        return None
+
+
+def parse_retry_after(response: Any, body: Any, now_epoch: Optional[float] = None) -> Optional[float]:
+    """Seconds the agent asked us to wait: Retry-After header, else the body, else None.
+
+    The header may be delta-seconds or an HTTP-date (RFC 9110 §10.2.3). In the
+    body, SHED refusals say ``retry_after_seconds`` and the rate limiter says
+    ``retry_after``.
+    """
+    header = response.headers.get("Retry-After")
+    if header:
+        header = header.strip()
+        try:
+            return max(0.0, float(header))
+        except ValueError:
+            try:
+                when = parsedate_to_datetime(header)
+                now = now_epoch if now_epoch is not None else time.time()
+                return max(0.0, float(when.timestamp()) - now)
+            except (TypeError, ValueError, IndexError):
+                pass
+    for source in (_detail(body), body if isinstance(body, dict) else {}):
+        for key in ("retry_after_seconds", "retry_after"):
+            value = source.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return max(0.0, float(value))
+    return None
+
+
+def _refusal_reason(status: int, body: Any) -> str:
+    error = _detail(body).get("error")
+    return f"http_{status}_{error}" if isinstance(error, str) and error else f"http_{status}"
+
+
 async def send_messages(
     base_url: str,
     messages: int,
     token: str,
     concurrency: int,
     process_tasks: bool,
-) -> tuple[int, int, float, list[str], dict[str, int]]:
-    """Submit messages concurrently, optionally forcing full task processing.
+    *,
+    per_message_deadline: float = DEFAULT_PER_MESSAGE_DEADLINE_S,
+    overall_deadline: float = DEFAULT_OVERALL_DEADLINE_S,
+    locked_grace: float = DEFAULT_LOCKED_GRACE_S,
+    transport: Optional[Any] = None,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    clock: Callable[[], float] = time.monotonic,
+    rng: Callable[[], float] = random.random,
+) -> SendResult:
+    """Submit messages concurrently, yielding to the agent's back-pressure.
 
-    Returns (success, failed, elapsed, task_ids, failure_reasons).
-    failure_reasons is a count of (status_code or exception_type) → count
-    so a CI summary can show *why* messages failed instead of just the
-    aggregate count.
+    503 (SHED) and 429 (rate limit) are the agent saying "not now": the worker
+    waits out Retry-After plus jitter and resubmits the SAME message until it
+    is accepted or its per-message deadline, or the overall deadline, passes.
+    423 (node unclaimed / halt) is retried for ``locked_grace`` seconds after
+    the burst starts, then stops the burst. Anything else gets a small bounded
+    retry. ``transport``/``sleep``/``clock``/``rng`` exist so tests can drive
+    this without a server or real time.
     """
-    from collections import Counter
-
     import httpx
 
     queue: asyncio.Queue[int] = asyncio.Queue()
@@ -196,12 +300,11 @@ async def send_messages(
         queue.put_nowait(i)
 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    success = 0
-    failed = 0
-    task_ids: list[str] = []
-    failure_reasons: Counter[str] = Counter()
+    result = SendResult()
     counter_lock = asyncio.Lock()
-    start = time.time()
+    start = clock()
+    overall_end = start + overall_deadline
+    endpoint = "/v1/agent/interact" if process_tasks else "/v1/agent/message"
 
     limits = httpx.Limits(max_keepalive_connections=max(20, concurrency * 2), max_connections=max(40, concurrency * 4))
     # Read budget: process_tasks=True waits for a full DMA pipeline + SPEAK
@@ -218,61 +321,122 @@ async def send_messages(
         else httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=10.0)
     )
 
+    async def wait(seconds: float, honour: bool) -> None:
+        if seconds <= 0:
+            return
+        await sleep(seconds)
+        async with counter_lock:
+            result.retries += 1
+            if honour:
+                result.retry_after_wait_total += seconds
+
+    async def submit_one(client: Any, idx: int, worker_id: int) -> tuple[bool, str]:
+        payload = {
+            "message": f"Memory benchmark message {idx + 1} of {messages}",
+            "context": {"channel_id": f"memory_benchmark_w{worker_id}_m{idx}"},
+        }
+        message_end = min(clock() + per_message_deadline, overall_end)
+        other_failures = 0
+        reason = "no_attempts"
+        while True:
+            if result.aborted:
+                return False, f"aborted:{result.aborted}"
+            honour = False
+            try:
+                response = await client.post(f"{base_url}{endpoint}", json=payload, headers=headers)
+            except Exception as e:
+                reason = f"exc_{type(e).__name__}"
+                response = None
+
+            if response is not None and response.status_code == 200:
+                response_json = _response_body(response)
+                if process_tasks:
+                    return True, "ok"
+                data = response_json if isinstance(response_json, dict) else {}
+                inner = data.get("data")
+                task_id = data.get("task_id") or (inner.get("task_id") if isinstance(inner, dict) else None)
+                if isinstance(task_id, str) and task_id:
+                    async with counter_lock:
+                        result.task_ids.append(task_id)
+                    return True, "ok"
+                reason = "200_no_task_id"
+
+            delay: float
+            if response is not None and response.status_code in BACKPRESSURE_STATUSES:
+                body = _response_body(response)
+                reason = _refusal_reason(response.status_code, body)
+                detail = _detail(body)
+                if response.status_code == 503 and detail.get("error") == "resource_shed":
+                    shed = detail.get("resources")
+                    async with counter_lock:
+                        result.shed_refusals += 1
+                        for name in shed if isinstance(shed, list) else []:
+                            result.shed_resources[str(name)] += 1
+                retry_after = parse_retry_after(response, body)
+                base = DEFAULT_RETRY_AFTER_S if retry_after is None else retry_after
+                # Jitter keeps 20 workers that were refused together from all
+                # coming back in the same instant.
+                delay = base + rng() * max(0.5, 0.2 * base)
+                honour = True
+            elif response is not None and response.status_code == 423:
+                reason = _refusal_reason(423, _response_body(response))
+                if clock() - start > locked_grace:
+                    async with counter_lock:
+                        result.response_reasons[reason] += 1
+                        if not result.aborted:
+                            result.aborted = reason
+                    return False, reason
+                delay = LOCKED_RETRY_S
+            else:
+                if response is not None and reason != "200_no_task_id":
+                    reason = _refusal_reason(response.status_code, _response_body(response))
+                other_failures += 1
+                if other_failures >= OTHER_FAILURE_ATTEMPTS:
+                    async with counter_lock:
+                        result.response_reasons[reason] += 1
+                    return False, reason
+                delay = 0.15 * other_failures
+
+            async with counter_lock:
+                result.response_reasons[reason] += 1
+            # Honouring Retry-After means not coming back early: a wait that
+            # would end past the deadline is a give-up, not a shortened wait.
+            if clock() + delay > message_end:
+                which = "overall" if message_end >= overall_end else "message"
+                return False, f"deadline_{which}:{reason}"
+            await wait(delay, honour)
+
     async def worker(worker_id: int) -> None:
-        nonlocal success, failed
-        async with httpx.AsyncClient(timeout=client_timeout, limits=limits) as client:
+        async with httpx.AsyncClient(timeout=client_timeout, limits=limits, transport=transport) as client:
             while True:
                 try:
                     idx = queue.get_nowait()
                 except asyncio.QueueEmpty:
                     return
-
-                payload = {
-                    "message": f"Memory benchmark message {idx + 1} of {messages}",
-                    "context": {"channel_id": f"memory_benchmark_w{worker_id}_m{idx}"},
-                }
-
-                accepted = False
-                last_reason = "no_attempts"
-                for attempt in range(3):
-                    endpoint = "/v1/agent/interact" if process_tasks else "/v1/agent/message"
-                    try:
-                        response = await client.post(f"{base_url}{endpoint}", json=payload, headers=headers)
-                        if response.status_code == 200:
-                            response_json = response.json()
-                            if process_tasks:
-                                accepted = True
-                            else:
-                                task_id = response_json.get("task_id") or response_json.get("data", {}).get("task_id")
-                                accepted = bool(task_id)
-                                if accepted and isinstance(task_id, str):
-                                    async with counter_lock:
-                                        task_ids.append(task_id)
-                            if accepted:
-                                break
-                            last_reason = "200_no_task_id"
-                        else:
-                            last_reason = f"http_{response.status_code}"
-                    except Exception as e:
-                        last_reason = f"exc_{type(e).__name__}"
-                    await asyncio.sleep(0.15 * (attempt + 1))
+                if result.aborted:
+                    accepted, reason = False, f"aborted:{result.aborted}"
+                elif clock() >= overall_end:
+                    accepted, reason = False, "deadline_overall:not_started"
+                else:
+                    accepted, reason = await submit_one(client, idx, worker_id)
 
                 async with counter_lock:
                     if accepted:
-                        success += 1
+                        result.success += 1
                     else:
-                        failed += 1
-                        failure_reasons[last_reason] += 1
+                        result.failed += 1
+                        result.failure_reasons[reason] += 1
+                    done = result.success + result.failed
 
-                if (idx + 1) % 100 == 0:
-                    print(f"  Submitted {idx + 1}/{messages} messages...")
+                if done % 100 == 0:
+                    print(f"  Submitted {done}/{messages} messages ({result.success} accepted)...")
 
                 queue.task_done()
 
     workers = [asyncio.create_task(worker(i)) for i in range(max(1, concurrency))]
     await asyncio.gather(*workers)
-    elapsed = time.time() - start
-    return success, failed, elapsed, task_ids, dict(failure_reasons)
+    result.elapsed = clock() - start
+    return result
 
 
 def _extract_task_ids_from_payload(payload_text: str) -> set[str]:
@@ -387,6 +551,63 @@ def dump_composition(pid: int, json_path: Optional[str] = None) -> None:
         print(f"  composition failed: {exc}")
 
 
+def report_results(
+    *,
+    messages: int,
+    adapter: str,
+    concurrency: int,
+    initial_mem: int,
+    final_mem: int,
+    peak_mem: int,
+    send: SendResult,
+    processed: int,
+    min_success_rate: float = DEFAULT_MIN_SUCCESS_RATE,
+) -> int:
+    """Print the results banner; return the exit code (non-zero below ``min_success_rate``).
+
+    ``processed`` is what the run actually got the agent to do: accepted
+    submissions, or with --verify-audit the ones the audit trail shows done.
+    Growth is reported per processed message, because growth divided by
+    messages *submitted* reads as a tiny per-message cost exactly when the
+    agent refused most of them.
+    """
+    print("\n" + "=" * 70)
+    print("MEMORY BENCHMARK RESULTS")
+    print("=" * 70)
+    growth = final_mem - initial_mem
+
+    print(f"  Messages:       {messages}")
+    print(f"  Processed:      {processed}")
+    print(f"  Initial:        {format_size(initial_mem)}")
+    print(f"  Final:          {format_size(final_mem)}")
+    print(f"  Peak:           {format_size(peak_mem)}")
+    print(f"  Growth:         {format_size(growth)}")
+    if growth > 0:
+        if processed > 0:
+            print(f"  Per Processed:  {format_size(growth / processed)}  (growth / {processed} processed)")
+        else:
+            print("  Per Processed:  n/a (nothing processed)")
+        if messages > 0:
+            print(f"  Per Submitted:  {format_size(growth / messages)}  (growth / {messages} submitted)")
+
+    rate = processed / messages if messages > 0 else 0.0
+    print(f"\n  Adapter:        {adapter}")
+    print("  Mock LLM:       True")
+    print(f"  Concurrency:    {concurrency}")
+    print(f"  Success Rate:   {processed}/{messages} ({100 * rate:.1f}%, gate >= {100 * min_success_rate:.1f}%)")
+    print(f"  Failures:       {messages - processed}")
+    shed_names = ", ".join(f"{name}×{count}" for name, count in send.shed_resources.most_common())
+    print(f"  Shed refusals:  {send.shed_refusals}" + (f" ({shed_names})" if shed_names else ""))
+    print(f"  Retry-After waits (total s): {send.retry_after_wait_total:.1f}")
+    print(f"  Retries:        {send.retries}")
+    if send.aborted:
+        print(f"  Aborted:        {send.aborted}")
+    passed = messages > 0 and rate >= min_success_rate
+    print(f"  Result:         {'PASS' if passed else 'FAIL'}")
+    print("=" * 70)
+    return 0 if passed else 1
+
+
 def main(
     messages: int = 100,
     adapter: str = "api",
@@ -396,6 +617,10 @@ def main(
     idle_seconds: int = 0,
     composition: bool = False,
     composition_json: Optional[str] = None,
+    per_message_deadline: float = DEFAULT_PER_MESSAGE_DEADLINE_S,
+    overall_deadline: float = DEFAULT_OVERALL_DEADLINE_S,
+    locked_grace: float = DEFAULT_LOCKED_GRACE_S,
+    min_success_rate: float = DEFAULT_MIN_SUCCESS_RATE,
 ) -> int:
     """Run memory benchmark with N messages."""
     print("=" * 70)
@@ -484,21 +709,37 @@ def main(
     benchmark_start_time = datetime.now(timezone.utc).isoformat()
     print(f"\n[4/4] Sending {messages} messages (concurrency={concurrency})...")
     samples = []
-    success = 0
-    failed = 0
-    failure_reasons: dict[str, int] = {}
+    send = SendResult()
+    processed = 0
     try:
-        success, failed, elapsed, task_ids, failure_reasons = asyncio.run(
-            send_messages(base_url, messages, token, concurrency, process_tasks=verify_audit)
+        send = asyncio.run(
+            send_messages(
+                base_url,
+                messages,
+                token,
+                concurrency,
+                process_tasks=verify_audit,
+                per_message_deadline=per_message_deadline,
+                overall_deadline=overall_deadline,
+                locked_grace=locked_grace,
+            )
         )
-        print(f"  Submitted {success}/{messages} messages in {elapsed:.1f}s")
-        if failure_reasons:
-            print(f"  Failure breakdown ({failed} total):")
-            for reason, count in sorted(failure_reasons.items(), key=lambda x: -x[1]):
+        success = send.success
+        processed = success
+        print(f"  Submitted {success}/{messages} messages in {send.elapsed:.1f}s")
+        if send.failure_reasons:
+            print(f"  Failure breakdown ({send.failed} total):")
+            for reason, count in send.failure_reasons.most_common():
+                print(f"    {count:>4}× {reason}")
+        if send.response_reasons:
+            print("  Refusals/errors seen (every attempt, incl. retried):")
+            for reason, count in send.response_reasons.most_common():
                 print(f"    {count:>4}× {reason}")
 
         if verify_audit and success > 0:
-            verified, task_complete_count, speak_count = verify_task_processing(task_ids, success, benchmark_start_time)
+            verified, task_complete_count, speak_count = verify_task_processing(
+                send.task_ids, success, benchmark_start_time
+            )
             if verified:
                 print(
                     f"  Audit verification: TASK_COMPLETE={task_complete_count}, SPEAK={speak_count} "
@@ -509,7 +750,7 @@ def main(
                     "  ERROR: Not all submitted tasks reached SPEAK/TASK_COMPLETE in audit trail "
                     f"(TASK_COMPLETE={task_complete_count}, SPEAK={speak_count}, expected={success})"
                 )
-                failed += success
+                processed = min(success, task_complete_count, speak_count)
 
         for _ in range(5):
             mem = get_children_memory(pid)
@@ -557,29 +798,19 @@ def main(
         print("\nShutting down server...")
         shutdown_process()
 
-    print("\n" + "=" * 70)
-    print("MEMORY BENCHMARK RESULTS")
-    print("=" * 70)
     final_mem = samples[-1] if samples else 0
     peak_mem = max(samples) if samples else 0
-
-    print(f"  Messages:       {messages}")
-    print(f"  Initial:        {format_size(initial_mem)}")
-    print(f"  Final:          {format_size(final_mem)}")
-    print(f"  Peak:           {format_size(peak_mem)}")
-    print(f"  Growth:         {format_size(final_mem - initial_mem)}")
-    if messages > 0 and final_mem > initial_mem:
-        per_msg = (final_mem - initial_mem) / messages
-        print(f"  Per Message:    {format_size(per_msg)}")
-
-    print(f"\n  Adapter:        {adapter}")
-    print("  Mock LLM:       True")
-    print(f"  Concurrency:    {concurrency}")
-    print(f"  Success Rate:   {success}/{messages} ({100 * success / messages:.1f}%)")
-    print(f"  Failures:       {failed}")
-    print("=" * 70)
-
-    return 0 if success == messages else 1
+    return report_results(
+        messages=messages,
+        adapter=adapter,
+        concurrency=concurrency,
+        initial_mem=initial_mem,
+        final_mem=final_mem,
+        peak_mem=peak_mem,
+        send=send,
+        processed=processed,
+        min_success_rate=min_success_rate,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -631,6 +862,42 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Write the composition report here as JSON",
     )
+    parser.add_argument(
+        "--per-message-deadline",
+        type=float,
+        default=DEFAULT_PER_MESSAGE_DEADLINE_S,
+        help=(
+            "Seconds one message may keep being resubmitted under 503/429 back-pressure "
+            f"before it counts as failed (default: {DEFAULT_PER_MESSAGE_DEADLINE_S:g})"
+        ),
+    )
+    parser.add_argument(
+        "--overall-deadline",
+        type=float,
+        default=DEFAULT_OVERALL_DEADLINE_S,
+        help=(
+            "Seconds the whole submission burst may take; messages not accepted by then "
+            f"count as failed (default: {DEFAULT_OVERALL_DEADLINE_S:g})"
+        ),
+    )
+    parser.add_argument(
+        "--locked-grace",
+        type=float,
+        default=DEFAULT_LOCKED_GRACE_S,
+        help=(
+            "Seconds after the burst starts during which 423 (node unclaimed / halt) is "
+            f"retried; after that it stops the run (default: {DEFAULT_LOCKED_GRACE_S:g})"
+        ),
+    )
+    parser.add_argument(
+        "--min-success-rate",
+        type=float,
+        default=DEFAULT_MIN_SUCCESS_RATE,
+        help=(
+            "Exit non-zero when processed/messages is below this fraction "
+            f"(default: {DEFAULT_MIN_SUCCESS_RATE:g})"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -646,5 +913,9 @@ if __name__ == "__main__":
             idle_seconds=max(0, args.idle_seconds),
             composition=args.composition,
             composition_json=args.composition_json,
+            per_message_deadline=max(0.0, args.per_message_deadline),
+            overall_deadline=max(0.0, args.overall_deadline),
+            locked_grace=max(0.0, args.locked_grace),
+            min_success_rate=min(1.0, max(0.0, args.min_success_rate)),
         )
     )

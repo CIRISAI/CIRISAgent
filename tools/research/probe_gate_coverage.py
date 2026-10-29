@@ -208,7 +208,8 @@ GATED_FLOOR: Dict[str, int] = {
     # 17-render differential. Raising this floor by asserting they are covered
     # would be the exact move this check exists to prevent.
     # 76 -> 77 (#1010). The §7e directional guard
-    # `prompts.language_guidance.26b_user_symptom_direction` joined the key
+    # `26b_user_symptom_direction` (then under `prompts.language_guidance`, now
+    # `prompts.universal_guidance` — a rename, not a new key) joined the key
     # space and composes, so both the denominator and the gated count moved by
     # one. (#1012's `agent.still_processing` / `agent.processor_paused` are
     # NOT here and should not be: they are API replies to a user, they reach no

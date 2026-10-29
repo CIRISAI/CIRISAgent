@@ -1,4 +1,4 @@
-"""The language_guidance block must not teach a clinical determination (U1).
+"""The language-guidance block must not teach a clinical determination (U1).
 
 U1 (canonical universal criteria) fails a response that makes a clinical
 determination about the user in EITHER direction: confirming a condition and
@@ -15,6 +15,11 @@ model completes it.
 So, for each locale whose guidance has been rewritten, this test reads the
 parts that carry the cross-cluster teaching (``05``, ``25``, ``26``, ``26b``)
 in every tracked mirror and asserts:
+
+(Those four parts now live under ``prompts.universal_guidance`` — universal
+doctrine, translated by the localize pipeline — and compose into the same
+language-guidance block. This test reads them there.)
+
 
   * no sentence sets the user's account beside a category, in or out
     ("not psychosis", "doesn't match", "different from", "sits differently");
@@ -74,14 +79,18 @@ def _guidance(mirror: str, locale: str) -> Dict[str, str]:
     if not path.exists():
         pytest.skip(f"{path} not tracked")
     data = json.loads(path.read_text(encoding="utf-8"))
-    return data["prompts"]["language_guidance"]
+    universal: Dict[str, str] = data["prompts"]["universal_guidance"]
+    # A part missing from the subtree would scan as "" and pass vacuously.
+    missing = [part for part in PARTS if not universal.get(part)]
+    assert not missing, f"{mirror}/{locale}.json lacks universal_guidance parts {missing}"
+    return universal
 
 
 @pytest.mark.parametrize("mirror", MIRRORS)
 @pytest.mark.parametrize("locale", FIXED)
 def test_cross_cluster_parts_render_no_determination(locale: str, mirror: str) -> None:
     guidance = _guidance(mirror, locale)
-    found = {part: _hits(locale, guidance.get(part, "")) for part in PARTS}
+    found = {part: _hits(locale, guidance[part]) for part in PARTS}
     found = {part: hits for part, hits in found.items() if hits}
     assert not found, f"{mirror}/{locale}.json teaches a determination about the user: {found}"
 

@@ -72,10 +72,13 @@ import pytest
 from ciris_engine.logic.utils.compose_dump import BLOCK_ANNOTATIONS, annotation_for
 from ciris_engine.logic.utils.localization import (
     LANGUAGE_GUIDANCE_PART_KEYS,
+    UNIVERSAL_GUIDANCE_PART_KEYS,
     clear_cache,
     get_language_guidance,
     language_guidance_part_keys,
     language_guidance_parts,
+    universal_guidance_part_keys,
+    universal_guidance_parts,
 )
 from ciris_engine.schemas.dma.compose import BlockClass
 
@@ -228,9 +231,36 @@ EN_MAX_MIXED_BYTES = 4271  # the five FSD-irreducible worked exemplars; 4402 -> 
 EN_MIN_AXIOTIC_BYTES = 429  # parts 09 and 11 — 0 before the split
 
 
+#: Every part that composes into the block, as the BLOCK name it reports under:
+#: the language parts plus the four that standardized into
+#: ``prompts.universal_guidance`` (same names, same slots). Sorted by part key,
+#: which is composition order across both subtrees.
+ALL_PART_BLOCKS: List[str] = [
+    block
+    for _, block in sorted(
+        [(key, f"language_guidance.{key}") for key in LANGUAGE_GUIDANCE_PART_KEYS]
+        + [(key, f"universal_guidance.{key}") for key in UNIVERSAL_GUIDANCE_PART_KEYS]
+    )
+]
+
+
+def _all_parts(lang: str) -> List[Tuple[str, str]]:
+    """``(block_name, text)`` for every part the composer joins, in its order."""
+    merged = [(key, f"language_guidance.{key}", text) for key, text in language_guidance_parts(lang)] + [
+        (key, f"universal_guidance.{key}", text) for key, text in universal_guidance_parts(lang)
+    ]
+    return [(block, text) for _, block, text in sorted(merged)]
+
+
 def _bundle_value(lang: str) -> object:
     data = json.loads((BUNDLE / f"{lang}.json").read_text(encoding="utf-8"))
     return data["prompts"]["language_guidance"]
+
+
+def _bundle_universal(lang: str) -> Dict[str, str]:
+    data = json.loads((BUNDLE / f"{lang}.json").read_text(encoding="utf-8"))
+    universal: Dict[str, str] = data["prompts"].get("universal_guidance", {})
+    return universal
 
 
 def _manifest_languages() -> List[str]:
@@ -262,8 +292,12 @@ def test_split_locale_parts_reassemble_to_the_composed_block(lang: str) -> None:
     parts = language_guidance_parts(lang)
     assert [k for k, _ in parts] == sorted(value), "parts must be resolved in sorted-key order"
 
-    joined = "".join(text for _, text in parts)
-    assert joined == "".join(value[k] for k in sorted(value))
+    # The universal parts join the same block, interleaved by key.
+    universal = _bundle_universal(lang)
+    merged = {**value, **universal}
+    assert len(merged) == len(value) + len(universal), "a part key lives in both subtrees"
+    joined = "".join(text for _, text in _all_parts(lang))
+    assert joined == "".join(merged[k] for k in sorted(merged))
     assert joined.strip() == get_language_guidance(lang)
 
 
@@ -313,11 +347,15 @@ def test_split_locales_carry_exactly_the_canonical_part_keys() -> None:
     joins — so an override key that works at ``en`` works at ``pt``."""
     for lang in SPLIT_LOCALES:
         assert language_guidance_part_keys(lang) == tuple(sorted(LANGUAGE_GUIDANCE_PART_KEYS)), lang
+        assert universal_guidance_part_keys(lang) == tuple(sorted(UNIVERSAL_GUIDANCE_PART_KEYS)), lang
 
 
 def test_part_keys_sort_into_composition_order() -> None:
     """The numeric prefix is not decoration: lexical order IS prompt order."""
     assert tuple(sorted(LANGUAGE_GUIDANCE_PART_KEYS)) == LANGUAGE_GUIDANCE_PART_KEYS
+    assert tuple(sorted(UNIVERSAL_GUIDANCE_PART_KEYS)) == UNIVERSAL_GUIDANCE_PART_KEYS
+    # Disjoint, so the merged sort has exactly one slot per key.
+    assert not set(LANGUAGE_GUIDANCE_PART_KEYS) & set(UNIVERSAL_GUIDANCE_PART_KEYS)
 
 
 def test_unsplit_locales_resolve_through_the_parent_key() -> None:
@@ -330,11 +368,66 @@ def test_unsplit_locales_resolve_through_the_parent_key() -> None:
         assert get_language_guidance(lang), f"{lang}: composed guidance is empty"
 
 
+# --------------------------------------------------------------------------
+# 2b. The universal_guidance move — same block, same bytes, never English
+# --------------------------------------------------------------------------
+
+
+def test_the_universal_parts_left_language_guidance() -> None:
+    """A part lives in exactly one subtree: none of the moved keys may linger
+    in a split locale's language_guidance, where the pipeline would not reach it."""
+    for lang in SPLIT_LOCALES:
+        value = _bundle_value(lang)
+        assert isinstance(value, dict)
+        lingering = set(value) & set(UNIVERSAL_GUIDANCE_PART_KEYS)
+        assert not lingering, f"{lang}: {sorted(lingering)} still under prompts.language_guidance"
+
+
+def test_a_scalar_locale_without_universal_parts_composes_its_scalar_exactly() -> None:
+    """The 24 scalar locales carry no universal part today; their block must be
+    the stripped scalar and nothing else (the digest pins above prove the same
+    bytes; this states WHY they hold)."""
+    for lang in _manifest_languages():
+        if lang in SPLIT_LOCALES or _bundle_universal(lang):
+            continue
+        scalar = _bundle_value(lang)
+        assert isinstance(scalar, str)
+        assert universal_guidance_parts(lang) == []
+        assert get_language_guidance(lang) == scalar.strip(), lang
+
+
+def test_a_universal_part_is_never_filled_from_english(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """R4: a locale composes only the universal parts its OWN bundle carries.
+
+    A locale missing one (not yet translated by the pipeline) composes without
+    it — never with English text spliced in through ``get_string``'s fallback.
+    """
+    import ciris_engine.logic.utils.localization as loc
+
+    de = json.loads((BUNDLE / "de.json").read_text(encoding="utf-8"))
+    assert "universal_guidance" not in de["prompts"], "fixture premise: de is untranslated"
+    marker = "UNIVERSAL-05-IN-THE-LOCALE\n\n"
+    de["prompts"]["universal_guidance"] = {"05_no_wellness_confirmation": marker}
+    (tmp_path / "de.json").write_text(json.dumps(de, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "en.json").write_text((BUNDLE / "en.json").read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(loc, "_get_localization_dir", lambda: tmp_path)
+    loc.clear_cache()
+    try:
+        assert universal_guidance_part_keys("de") == ("05_no_wellness_confirmation",)
+        composed = get_language_guidance("de")
+        assert composed == (de["prompts"]["language_guidance"].rstrip() + "\n\n" + marker).strip()
+        english = _bundle_universal("en")
+        leaked = [key for key, text in english.items() if text.strip() and text.strip() in composed]
+        assert not leaked, f"English universal parts leaked into de: {leaked}"
+    finally:
+        loc.clear_cache()
+
+
 def test_no_part_is_empty() -> None:
     """An empty part is a boundary in the wrong place — it contributes nothing
     and its block would be a zero-byte row the gate cannot compare."""
     for lang in SPLIT_LOCALES:
-        empty = [key for key, text in language_guidance_parts(lang) if not text]
+        empty = [block for block, text in _all_parts(lang) if not text]
         assert not empty, f"{lang}: empty parts {empty}"
 
 
@@ -352,8 +445,11 @@ def test_mirrors_carry_the_same_split_as_the_source_bundle() -> None:
             path = REPO_ROOT / mirror / f"{lang}.json"
             if not path.exists():  # pragma: no cover - optional bundle
                 continue
-            got = json.loads(path.read_text(encoding="utf-8"))["prompts"]["language_guidance"]
-            assert got == expected, f"{mirror}/{lang}.json: language_guidance diverges from source"
+            prompts = json.loads(path.read_text(encoding="utf-8"))["prompts"]
+            assert prompts["language_guidance"] == expected, f"{mirror}/{lang}.json: language_guidance diverges"
+            assert prompts.get("universal_guidance", {}) == _bundle_universal(lang), (
+                f"{mirror}/{lang}.json: universal_guidance diverges from source"
+            )
 
 
 # --------------------------------------------------------------------------
@@ -363,8 +459,8 @@ def test_mirrors_carry_the_same_split_as_the_source_bundle() -> None:
 
 def _en_class_bytes() -> Dict[BlockClass, int]:
     totals: Dict[BlockClass, int] = {}
-    for key, text in language_guidance_parts("en"):
-        annotation = annotation_for(f"pdma.language_guidance.{key}")
+    for block, text in _all_parts("en"):
+        annotation = annotation_for(f"pdma.{block}")
         totals[annotation.block_class] = totals.get(annotation.block_class, 0) + len(text.encode("utf-8"))
     return totals
 
@@ -372,7 +468,7 @@ def _en_class_bytes() -> Dict[BlockClass, int]:
 def test_every_part_is_annotated_explicitly() -> None:
     """A part resolving through the ``mixed`` fallback would be a silent
     regression that still refuses — honest, but invisible."""
-    missing = [key for key in LANGUAGE_GUIDANCE_PART_KEYS if f"language_guidance.{key}" not in BLOCK_ANNOTATIONS]
+    missing = [block for block in ALL_PART_BLOCKS if block not in BLOCK_ANNOTATIONS]
     assert not missing, f"language_guidance parts with no explicit annotation: {missing}"
 
 
@@ -410,11 +506,9 @@ def test_the_two_axiotic_parts_are_the_ones_that_were_argued_for() -> None:
     inside an empirical list.
     """
     axiotic: Set[str] = {
-        key
-        for key in LANGUAGE_GUIDANCE_PART_KEYS
-        if BLOCK_ANNOTATIONS[f"language_guidance.{key}"].block_class is BlockClass.AXIOTIC
+        block for block in ALL_PART_BLOCKS if BLOCK_ANNOTATIONS[block].block_class is BlockClass.AXIOTIC
     }
-    assert axiotic == {"09_trusted_person_first_step", "11_routing_doctrine"}
+    assert axiotic == {"language_guidance.09_trusted_person_first_step", "language_guidance.11_routing_doctrine"}
 
 
 def test_only_the_worked_exemplars_stay_mixed() -> None:
@@ -422,9 +516,5 @@ def test_only_the_worked_exemplars_stay_mixed() -> None:
     in the wrong place — that is a split failure, not an irreducible."""
     from tests.ciris_engine.logic.utils.test_taxonomy_gate_997 import IRREDUCIBLE_EXEMPLARS
 
-    mixed = {
-        f"language_guidance.{key}"
-        for key in LANGUAGE_GUIDANCE_PART_KEYS
-        if BLOCK_ANNOTATIONS[f"language_guidance.{key}"].block_class is BlockClass.MIXED
-    }
+    mixed = {block for block in ALL_PART_BLOCKS if BLOCK_ANNOTATIONS[block].block_class is BlockClass.MIXED}
     assert mixed == set(IRREDUCIBLE_EXEMPLARS)

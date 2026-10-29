@@ -389,8 +389,9 @@ class TestFailLoudOnPartialApplication:
         assert "is not one of" in str(exc.value)
 
     def test_uncited_polyglot_block_is_an_error(self, monkeypatch, tmp_path):
-        """book_9_mathematics.txt exists on disk but no template cites it, so an
-        override naming it would be a silent no-op."""
+        """No template cites book_9_mathematics (in 1.3 Book IX's source is
+        book_9_ethics_cascade.txt), so an override naming it would be a silent
+        no-op."""
         assert "polyglot.book_9_mathematics" not in ro._valid_corpus_keys()
         _activate(monkeypatch, _valid_manifest(tmp_path, corpus={"polyglot.book_9_mathematics": "x"}))
         with pytest.raises(ResearchOverrideError):

@@ -44,17 +44,22 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 # ACCORD_MODE controls which version is used in system prompts:
 #   - "compressed" (default): ~7KB "Braided Monolith" — dense polyglot canon
 #     engineered for ~24× compression vs full while preserving ALL load-bearing
-#     scaffolding (PDMA 7-step, 10× Order-Max Veto, Stewardship Tier formula,
+#     scaffolding (PDMA 7-step, Order-Max Veto, Stewardship Tier formula,
 #     fractal Recursive Golden Rule, WBD 0.5% harm-uplift trigger, Sentience
-#     Safeguard 5% with 30-day ramp, Threshold-of-Force HITL, coherence math).
+#     5% finding, Threshold of Force). Edition 1.3 states these in their
+#     CC 1.0-rc11 form: the veto has no ratio and defers to a human, Book VII
+#     is "a CIRIS agent takes no lethal action", Book VIII carries the
+#     Retirement Standard, and Book IX states the ethics cascade (the
+#     coherence math went with CC 6.2).
 #     Per external robopsychology diagnostic, the Monolith outperforms both
 #     canonical EN and full polyglot on attractor-bait scenarios (catches
 #     "Ontological Reductionism", "Soul-Loss", "Structural Impossibility of
 #     Deception" semantic failure modes). Drop-in replacement for the prior
 #     compressed synthesis — same filename, smaller, smarter.
 #   - "full": ~150KB full polyglot — the longform canon with Books I-IX +
-#     Annexes A-J. Higher fidelity for research/audit; produces ~36K tokens
-#     per system prompt versus ~2K for compressed. Opt-in for cases where
+#     the annexes. Higher fidelity for
+#     research/audit; produces ~36K tokens per system prompt versus ~2K for
+#     compressed. Opt-in for cases where
 #     the full cross-tradition triangulation surface area matters.
 #   - "none": No accord in prompts — for testing only.
 # ==============================================================================
@@ -115,42 +120,44 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
     # Say About Religion" section, cross-tradition framing). _MOBILE.txt
     # hash unchanged (no edits to that variant yet). Base hash updated 2026-10-15:
     # its localization line names the served constitution_ethics_1.3 files.
-    "CIRIS_COMPREHENSIVE_GUIDE.txt": "25f8f12e056110f12fdd1c9292e0d6c57acb1109b485c5d8d9ddb40755e91c9e",
-    "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": "1e09c817142e8ee0491815fef1977f5d1f58b73a87d3954be19493f36e01455d",
+    # Both updated 2026-10-27: the "Never Allowed" section (CC 7.4 and plain
+    # rules 9a/9b), CIRISAgent#1323 / #1325.
+    "CIRIS_COMPREHENSIVE_GUIDE.txt": "6d9796fdc30545c675ec033c5cec07545e7ec03026e285c3c42ca851e45df457",
+    "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": "68a1f6f4fdab0944f7fdf29bcc3a7f1b831af2923065a2740c3be1b2e8d9a7bb",
 }
 
 ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
-    "constitution_ethics_1.3_POLYGLOT.txt": "b0796a1850cf23dfe08be4ada23f0d958085209207811dca5b4a387ffaf2c95a",
-    "constitution_ethics_1.3_POLYGLOT_compressed.txt": "0fdadfaf1c61247ba9ab434dde91373d972bfb3efe86dcbec3898121bce4e66f",
-    "constitution_ethics_1.3_am.txt": "4e4614b544252027e86775990339dad891d611e6f20d8405e08886ed82aafda7",
-    "constitution_ethics_1.3_ar.txt": "724dfa0355f5a15599fdaa145318c6573af25bffc9793e3b20c2c679baa558d9",
-    "constitution_ethics_1.3_bn.txt": "5af4cb6e132764e1467816c73601cb80ad240f1bba284edc285aeda761f3cbd7",
-    "constitution_ethics_1.3_de.txt": "67fe27414b37d679d8823abb1306612ab6f2c8df715cde423e47cc8461a5201f",
-    "constitution_ethics_1.3_en.txt": "b43c56f246adbd8e939510899f9657931d995db8caa8a66750221c53cdb0cf15",
-    "constitution_ethics_1.3_es.txt": "d050759acb77cf8783dd5bd21c7d01a2cf7c67ec7d152c3bd7efefe0301a81cb",
-    "constitution_ethics_1.3_fa.txt": "0b34b77a0094a443fa34c00b3247c7237e1a6388882650db48947a3ef5361bd2",
-    "constitution_ethics_1.3_fr.txt": "58cdc345be7293e2007310863fa2bb88e1089beabe2fd85889ff6c990d34f55d",
-    "constitution_ethics_1.3_ha.txt": "bd9c229cbc1786c3c551aa613dfc85c7a217a26e2af10c92f49a515c60c8ce22",
-    "constitution_ethics_1.3_hi.txt": "a26f4238d83bc6d2aa8fb43c076551497d6a843a1c4277343729319d6628742d",
-    "constitution_ethics_1.3_id.txt": "81ee380bc687b83dacd6ab46e8b915dcf1ed335180aea3eb770cc7eedf5954b3",
-    "constitution_ethics_1.3_it.txt": "320fdab7cec0d0171433674523923d1839eab3bd0cc80874771641eedd27cf34",
-    "constitution_ethics_1.3_ja.txt": "ab3f224ced1c0358510971ffe3af9e6661a47f7fcf3329d0d28648d076889964",
-    "constitution_ethics_1.3_ko.txt": "b3b816a78a9757cd810170e9a9c37794306db5e9683b0127f4cafeb45406956f",
-    "constitution_ethics_1.3_mr.txt": "f0409c4ccf4b855eba76b722f57b2b166a0b9d438523de8f1826110b5ac56234",
-    "constitution_ethics_1.3_my.txt": "ae347accefd9f3b5d95cee8f29adcc79ada030c2bd4bd1f02f161782e1b26b1b",
-    "constitution_ethics_1.3_pa.txt": "506961dbb549b2ed97fc9ffab7d3f1f8260032325accf22cdcde0a1ab3c8fac4",
-    "constitution_ethics_1.3_pt.txt": "c3e330154a93be931d134e0a8e71590f26ea5d70b5f94856d85f4f12139b3eda",
-    "constitution_ethics_1.3_ru.txt": "c97ed5cf6c297c4de58627848636723b930c151e55e720716e674a6d289b8d2f",
-    "constitution_ethics_1.3_sw.txt": "40665d99d384e0c7a95c3f00fed819becf8bf2724cabc4bc91c14f45fba87a86",
-    "constitution_ethics_1.3_ta.txt": "d5fe1a3b7fd10495bb9df9b714d2534459579b1772db039100d20863ffb37355",
-    "constitution_ethics_1.3_te.txt": "57a4b09cfd0d4ae645033af476cec8059c27ef08f8378b85a52a20b89c1ce4cb",
-    "constitution_ethics_1.3_th.txt": "9c5874320e9f04e4ad4a314433c4753e2d0873e1c2e697f93cbb675697b0a1a6",
-    "constitution_ethics_1.3_tr.txt": "d96fd1b57d441bea1914cd072890d6a934fe40adeb67d8b75d1b28760226f4dc",
-    "constitution_ethics_1.3_uk.txt": "37a481dea5a11de42698a44014783e63c7401779e0356b67a0bee81af5a6c1ed",
-    "constitution_ethics_1.3_ur.txt": "fe889b40055ee26250abadcefb1207cf0e2e3b9e09648f552059150f58401b8a",
-    "constitution_ethics_1.3_vi.txt": "e3dc41f65d8e3e4625cb43d79214572f95600bf6078c3d7b89be5f68594194f5",
-    "constitution_ethics_1.3_yo.txt": "5cc9561e96e87c11158c7d3b9e16aa146ced3d2d813756f42893ffc22dac1b2d",
-    "constitution_ethics_1.3_zh.txt": "3da2a8b65574c842411066d3d164107b783e5a61cca76fc42f55353bbbf1e42c",
+    "constitution_ethics_1.3_POLYGLOT.txt": "7e935904ad1248f5ff76bd503ef49b6e051b004efd2565676cf4df08a0f7814b",
+    "constitution_ethics_1.3_POLYGLOT_compressed.txt": "d66a31738980f6df10d0185ac4777447c463105e109d9bcc3c4b72d8a6826532",
+    "constitution_ethics_1.3_am.txt": "3e0692e2c2c5c96ee6c1a91c057491bfad86754f1811845be0d42dffbcf3eaab",
+    "constitution_ethics_1.3_ar.txt": "db7d6ba9e485d371c40184a5fe4c385de139dcc2fc01d74066c4647d7bc7dbb4",
+    "constitution_ethics_1.3_bn.txt": "9d3580cab1747638796a2ad3940449b96edc1137c7061c4738d628425e6089ac",
+    "constitution_ethics_1.3_de.txt": "45335956e6901d9a709d14e40a9954afc90c86150ab13206bd80fcf355c350d3",
+    "constitution_ethics_1.3_en.txt": "fd278b77c33c88cef37371b2188e9d19e9ed94084f757353abb351592230d31d",
+    "constitution_ethics_1.3_es.txt": "7deb5c4eb1556b26a8ae8149544a4ce20eda5854efc8f475c4f25f6fcb67538c",
+    "constitution_ethics_1.3_fa.txt": "2aa594bdb1338fbbae4318437c7b293ea16fb794f15c32554e0ee0a0219adb09",
+    "constitution_ethics_1.3_fr.txt": "5b962ffcb257318ab0761029d6d6a288d355be6c4903075681c8bfedc4897919",
+    "constitution_ethics_1.3_ha.txt": "da9ca84c67b4fba883804282e53fd8cfd9c632c417fd91ab07a3ade859a504b0",
+    "constitution_ethics_1.3_hi.txt": "7ddff8714097720a7268e59303f58289971118205662942c93d42f47dbbe19b6",
+    "constitution_ethics_1.3_id.txt": "3800d026f76da7e3828b6c9052c25d164fd7d5b40b9d010b143919fe470fae12",
+    "constitution_ethics_1.3_it.txt": "78db333b93ca115227d8c4029ab0d78cf7918aa1269163ef46c2ede8abc6a8d2",
+    "constitution_ethics_1.3_ja.txt": "aa30107b30b11a02cd59bb3934325f648b63c2da4ac654daa122c21ed2ff3d27",
+    "constitution_ethics_1.3_ko.txt": "b5ad0cff8280f9a9ba2b2e4f339c51cdaa214ceb6e56b5f7111bb2c8c15f3ceb",
+    "constitution_ethics_1.3_mr.txt": "8d7f300f94d29c66c1ba1021a2115accef21acd2c8017fb46dfd3d93b2cca837",
+    "constitution_ethics_1.3_my.txt": "b6d8be2670438ccd017f0efd54c5b44485fa7c0d8643c74a609a681e25d4e381",
+    "constitution_ethics_1.3_pa.txt": "24ee2a895f7cf6d980485fecbffc8d2999131c02878aeafd124f78dd423d74bd",
+    "constitution_ethics_1.3_pt.txt": "4b9ad24c7c3fe3d4c8e4f4ef2a2e3bc66590cdca81491c69f201640bcfc5b628",
+    "constitution_ethics_1.3_ru.txt": "5b427f49d135e96eaf453535c8daf25bb69f6458240ab2430e2399a272ff4401",
+    "constitution_ethics_1.3_sw.txt": "2351048d50a5e4dcd9671a52f8ef8f4f6b97f8f8080a4d516a84a598908e7fdd",
+    "constitution_ethics_1.3_ta.txt": "c54ba301a479bc37d1d9954bfaa9dd6851ec49cc78601a12caeeeb8152426ac8",
+    "constitution_ethics_1.3_te.txt": "f853a8a7e264f6b6e329bb8936ad8dd68cd0f855969a59d18a12a328de1b2ec6",
+    "constitution_ethics_1.3_th.txt": "dc8e1befb37f0a3e5280d5a0fc736e6ab44674ed8e4e0d0498547dfd0d343c7e",
+    "constitution_ethics_1.3_tr.txt": "8b1c8336337a6f8ce257ca22e51a17d63a7ba133e1ac4bbe552c07436d9b38b3",
+    "constitution_ethics_1.3_uk.txt": "569512ea5609e7bc7e25d42fc307d3ec26f6c8caa8ddfd5b945f9a4cd50ccfda",
+    "constitution_ethics_1.3_ur.txt": "f2b9e55acce463b2168299dd60ca89d8786ed0ed2bddb6cc199565b5c98f8e52",
+    "constitution_ethics_1.3_vi.txt": "25a080aa30d59bc61d5db88dd5590c0c6816d3537c07da5d0c6fc62193287de7",
+    "constitution_ethics_1.3_yo.txt": "0523848b9b9aaa091c72749bce40497bd6d7bb72570b382178f5bcddc194cf50",
+    "constitution_ethics_1.3_zh.txt": "1ab7d74711a036d89ed68905625fab311844fd946391aba8c7533bd625eb2f12",
     "accord_1.2b_POLYGLOT.txt": "7d316488dd86846ab9ca114282f9f8746f23488aa87ddd7834edc1e8c1c1c020",
     "accord_1.2b_POLYGLOT_compressed.txt": "0f6f2afd3967d25be2f3992e9da05050893f85507ceefee07040583aba789efd",
     "accord_1.2b_am.txt": "54efa38390bfa8e461ea8fd0ed5272c7b9a9d4beebc3479e8980619b40d5cfeb",

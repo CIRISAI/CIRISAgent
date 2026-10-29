@@ -125,11 +125,11 @@ class TestAccordTextLoading:
 
         _assert_load_bearing_scaffolding(ACCORD_TEXT_COMPRESSED)
 
-    def test_ethics_1_3_compressed_keeps_scaffolding_with_rc8_sunset(self):
-        """The staged 1.3 Monolith (not loaded yet, CIRISAgent#1252) keeps the
-        same scaffolding, with the two rc8 changes: the veto is >= 10x ->
-        mandatory WBD (no abort), and the 5%/30-day ramp-down is NOT mandatory
-        (a sentience finding is recorded and changes no status).
+    def test_ethics_1_3_compressed_keeps_scaffolding_with_rc11_changes(self):
+        """The 1.3 Monolith keeps the same scaffolding, in its CC rc11 form:
+        the veto has no ratio and defers to a human (no abort), the ramp-down
+        is NOT mandatory (a sentience finding is recorded and changes no
+        status), and Book VII is CC 7.4: no lethal action.
         """
         import re
         from pathlib import Path
@@ -141,11 +141,15 @@ class TestAccordTextLoading:
 
         _assert_load_bearing_scaffolding(text)
         assert 4000 < len(text) < 15000
-        assert re.search(r"Order-Max[^\n]*≥ 10 ×[^\n]*mandatory WBD", text), "veto not in CC 1.3 form"
+        assert re.search(r"Order-Max[^\n]*stop sign[^\n]*defer to a human", text), "veto not in CC rc11 1.3 form"
+        assert "≥ 10 ×" not in text, "rc11 removed the veto ratio"
         assert not re.search(r"abort", text, re.IGNORECASE), "veto must not abort"
         assert "mandatory Gradual Ramp-Down" not in text
-        assert "ramp-down is never mandatory" in text
-        assert "changes no status" in text
+        assert "not a rule a finding triggers" in text
+        assert "no finding changes your status" in text
+        assert "A CIRIS agent takes no lethal action" in text
+        assert "Section IX: How It Fits Together" in text, "Book IX states the ethics cascade (volume renamed)"
+        assert "Coherence Ratchet" not in text, "the coherence geometry went with CC 6.2"
 
 
 def _assert_load_bearing_scaffolding(text: str) -> None:
@@ -153,10 +157,14 @@ def _assert_load_bearing_scaffolding(text: str) -> None:
     # PDMA decision algorithm
     assert "PDMA" in text, "PDMA scaffolding missing"
 
-    # Order-Maximisation Veto (CC 1.3: >= 10x -> mandatory WBD deferral) --
-    # Book III's MCAS case-study lesson distilled into an abstract rule
+    # Order-Maximisation Veto -- Book III's MCAS case-study lesson distilled
+    # into an abstract rule that hands the call to a human. 1.2b states it as
+    # ">= 10x -> mandatory WBD"; CC rc11 (1.3) drops the ratio: "a stop sign,
+    # and you defer to a human".
     assert "Order-Max" in text or "Order Max" in text, "Order-Maximisation Veto missing"
-    assert "≥ 10 ×" in text and "mandatory WBD" in text, "Veto 10x -> WBD trigger missing"
+    assert ("≥ 10 ×" in text and "mandatory WBD" in text) or (
+        "stop sign" in text and "defer to a human" in text
+    ), "Veto -> deferral trigger missing"
 
     # Stewardship Tier formula — Book VI load-bearing math
     assert "Stewardship" in text and "ST" in text, "Stewardship Tier scaffolding missing"
@@ -168,7 +176,7 @@ def _assert_load_bearing_scaffolding(text: str) -> None:
     # WBD (Wisdom-Based Deferral) with quantitative trigger
     assert "WBD" in text, "Wisdom-Based Deferral missing"
 
-    # Sentience Safeguard (Book VIII Dignified Sunset)
+    # Sentience Safeguard (Book VIII Retirement)
     assert "Sentience" in text, "Sentience Safeguard missing"
 
 

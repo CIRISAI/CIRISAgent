@@ -129,11 +129,13 @@ keep citing them, and the rows carry the run ids.
   keeps its name until the rename lands, then writes `manifest.json`; a
   `tools/verify_safety_evidence.py` performs §5 offline; `qa_reports/` evidence is
   removed after back-signing.
-- **CIRISVerify** (`ciris-build-sign`, `src/ciris-build-tool`): today `--primitive`
-  is only a build-manifest label and the tool signs a build manifest, not a CEG
-  envelope. Needed: a subcommand that signs the `scores` Contribution envelope
-  (dimension, `evidence_refs`, `score`, `cohort_scope`, `asserted_at`) with the
-  same key material and ids as the build manifest, and the offline `verify` of §5.
+- **CIRISVerify** (CIRISVerify#322): a `ciris-build-sign evidence` subcommand
+  that signs the `scores` Contribution envelope (dimension, `evidence_refs`,
+  `score`, `cohort_scope`, `asserted_at`) with the same key material and ids as
+  the build manifest, and the offline verifier of §5; both in `ciris-verify-core`
+  beside `manifest_contribution`, so persist and the registry call one verifier.
+  Verify vendors no CC registry and refuses nothing at admission; its CI audit of
+  emitted families moves its CC pin from rc6 to rc13 in the same change.
 - **CIRISPersist** (CIRISPersist#1152): admission of `evidence:safety_battery:*:v1`
   rows (the `infra:attest` grant, prefix equal to the first 16 hex of
   `evidence_refs[0]`, score range, same-prefix re-post is a `supersedes`, commons
@@ -146,11 +148,11 @@ keep citing them, and the rows carry the run ids.
 ## 8. Order of work
 
 0. **The vendored CC registry.** Admission checks the dimension against the CC
-   registry persist and verify vendor. Shipped persist (v60.1.0) vendors CC
-   1.0-rc9; rc12 is staged on a branch; rc13, which carries this family, is
-   untagged. Persist vendors tagged CC only, on its v61 head (mid-refactor, no
-   date). So the first row needs, in order: the rc13 tag, persist (and verify)
-   vendoring it, and a release the registry slice runs on. Whether that is v61 or
+   registry persist vendors (verify does no admission check). Shipped persist
+   (v60.1.0) vendors CC 1.0-rc9; rc12 is staged on a branch; rc13, which carries
+   this family, is untagged. Persist vendors tagged CC only, on its v61 head
+   (mid-refactor, no date). So the first row needs, in order: the rc13 tag,
+   persist vendoring it, and a release the registry slice runs on. Whether that is v61 or
    a v60.x cut carrying the rc13 vendor alone is the owner's call.
 1. CC family (done) → registry slice intake and read → `ciris-build-sign` subcommand.
 2. Agent sync job publishes new bundles; `qa_reports/` still receives them in

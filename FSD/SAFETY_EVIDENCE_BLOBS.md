@@ -199,19 +199,16 @@ keep citing them, and the rows carry the run ids.
 
 ## 8. Order of work
 
-0. **The vendored CC registry.** The registry reports that persist v59.1 admits
-   this dimension today (its gate refuses only reserved and closed stems, shown by
-   a test), which would take the persist re-vendor off the critical path; persist
-   reported that shipped persist vendors CC 1.0-rc9. Until the two agree on a
-   first admitted test row, the plan below stands. Admission checks the dimension against the CC
-   registry persist vendors (verify does no admission check). Shipped persist
-   (v60.1.0) vendors CC 1.0-rc9; rc12 is staged on a branch; rc13, which carries
-   this family, is untagged. Persist vendors tagged CC only, on its v61 head
-   (mid-refactor, no date). So the first row needs, in order: the rc13 tag,
-   persist vendoring it, and a release the registry slice runs on. The owner ruled
-   (2026-10-29) that there is no v60.x cut for this: CIRISPersist#1152 lands with
-   persist v61.0.0 on the rc13 vendor, after the rc13 tag. The first row is planned
-   against v61.
+0. **Admission on persist.** Shipped persist (v59.1.x, v60.1.0) admits an
+   `evidence:safety_battery:*:v1` scores row today: its family gate refuses only
+   governed and reserved stems and closed-leaf families, and `evidence:` is none of
+   them (confirmed against `check_namespace_family_registered` and the registry's
+   `write_through_persist` test on the v59.1.0 tag). The first row does not wait for
+   v61 or for an rc13 vendor. What persist v61 adds (CIRISPersist#1152) is
+   enforcement of the family's own rules at persist's door: the prefix equal to the
+   first 16 hex of `evidence_refs[0]`, the score range, and the `infra:attest`
+   authority. Until then the registry slice's door is the only place those rules
+   are enforced, and a row reaching a node by anti-entropy is stored unchecked.
 1. CC family (done) → registry slice intake and read → `ciris-build-sign` subcommand.
 2. Agent sync job publishes new bundles; `qa_reports/` still receives them in
    parallel for one cycle so the two can be compared.

@@ -5,6 +5,39 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.0-stable] - 2026-10-29
+
+### Chat
+
+- **Live chat between two people's nodes works end to end, through the live canonical.** A contact added from a federation code completes once their key arrives. The request reaches the other person, who accepts it from their own requests list; both sides then read the contact as mutual, open the same pair room, and exchange messages, including unicode, right-to-left, long and symbol text, byte-exact, once each and in order. The room reopens to the same room on both sides. Message bodies are sealed under the room's key and fetched from the sender's node; the canonical forwards sealed frames and holds no row or blob of any room.
+- **Chat room paths reach the node through the agent's port.** Room ids carry colons (`chat:pair:v1:…`), which the agent's node proxy refused, so every `/v1/chat/<room>/…` request on :8080 answered 404.
+- Chat currently travels two hops through the canonical. Collapsing to a direct link between room peers when one is reachable follows in the next release (CIRISEdge#915).
+
+### Substrate
+
+- **ciris-server 0.5.241** (edge v43.2.2, persist v59.1.1). On a split home the node key, not the agent key, mints room epochs and signs their key grants, holding claims and room co-scrubs. The agent's own Edge is armed for blob routing and serving. Scope addresses install under the node key, the receiving node accepts envelopes addressed to its advertised node key, and a body fetched after its epoch's key grant binds to the sealing node. `ciris_server.author_community_trust()` writes the traces-consent grant with the owner's pen.
+- **ciris-client 0.5.234.** Logs download and share; the login screen re-probes the local node instead of probing once (fixes login stuck on some 32-bit Android phones).
+
+### Agent
+
+- **System tasks are signed by the agent.** WAKEUP, DREAM and the shared SHUTDOWN are signed with the agent's own key, under the owner's delegation to the agent. The local "CIRIS System Authority" certificate is retired; since the owner holds ROOT on the node, it could not be created on any split install and system tasks were added unsigned.
+- **Traces consent is the owner's act.** On a server that has `author_community_trust()`, the traces grant crosses to the community signed by the owner's pen on the node, and is deferred, never re-signed with the agent key, when the pen is not reachable. The local capture grant and the revoke path are unchanged.
+- **Setup that completes during the agent's own startup no longer ends the API.** The boot keeps one first-run answer, and the post-setup resume waits for the boot to finish. Before, a setup completed within a few seconds of boot started a second agent processor, and every adapter (the API on :8080 among them) shut down.
+- **Out of storage says so at once.** Startup no longer exits the process on low disk; it raises, so the mobile shell reports `[FATAL_EXIT]` immediately, and it prints `[FATAL_CODE] disk_space free_mb=… required_mb=… ciris_mb=…` for the client to show in the user's language with how much space CIRIS itself uses. The startup screen used to wait 180 s and show only a timeout.
+- **A node owner is never handed TEMPORARY consent at interact,** and the 14-day notice no longer appears for the owner.
+- **`GET /v1/telemetry/logs/download`** returns the agent's and the node's logs as one redacted zip. Android shares it through a FileProvider.
+- **Groq:** qwen models get `reasoning_effort: none`; Groq rejected `low` for them with a 400.
+
+### Ethics
+
+- **constitution_ethics 1.3 to CC 1.0-rc12**, English canon plus polyglot and Monolith texts, with all 28 translations complete. The template manifest is re-signed.
+- **LETHAL_ACTION** is a never-allowed category (CC 7.4).
+
+### Quality
+
+- **The cross-platform chat stage tests chat for real** in the five-platform gate (linux and android through the live canonical) and names the likely cause of each failure from a catalog of known causes.
+- **A local live-mesh harness** (`tools/qa_runner/local_mesh/run.sh`) runs the same stage on one machine: two agent-and-node containers on the live canonical, claimed and announced as the wizard does, against a released or a locally built server wheel. A run fails if any room row is offered to the canonical.
+
 ## [2.16.5-stable] - 2026-10-23
 
 ### Substrate

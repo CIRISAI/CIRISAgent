@@ -52,6 +52,9 @@ class TestEveryReasoningModelIsSuppressed:
             # Groq: "none" is a 400 (`must be one of low, medium, or high`);
             # "low" measured 103 reasoning tokens -> 11.
             (GROQ, "openai/gpt-oss-20b", {"reasoning_effort": "low"}),
+            # Groq qwen3.6 takes only none|default: "low" is a 400 (prod,
+            # echo-speculative, 2.16.5), so its floor is "none".
+            (GROQ, "qwen/qwen3.6-27b", {"reasoning_effort": "none"}),
             # Gemini 2.5 takes the OpenAI-surface switch.
             (GOOGLE, "gemini-2.5-flash", {"reasoning_effort": "none"}),
             # vLLM-served families.
@@ -100,9 +103,15 @@ class TestTheRegressionsThatCostUs:
         # 0 tokens/1.5s became 229 tokens/7.3s on the same model.
         assert "chat_template_kwargs" not in extras(OPENROUTER, "qwen/qwen3-32b")
 
-    def test_groq_never_gets_reasoning_effort_none(self):
-        # Groq's enum has no "none" — it is a 400, i.e. every call fails.
+    def test_groq_gpt_oss_never_gets_reasoning_effort_none(self):
+        # gpt-oss on Groq takes low|medium|high: "none" is a 400 on every call.
         assert extras(GROQ, "openai/gpt-oss-20b").get("reasoning_effort") != "none"
+
+    def test_groq_qwen_never_gets_reasoning_effort_low(self):
+        # qwen3.6 on Groq takes none|default: "low" is a 400 on every call.
+        # The two families on one provider have DISJOINT enums.
+        for m in ("qwen/qwen3.6-27b", "qwen/qwen3-32b"):
+            assert extras(GROQ, m).get("reasoning_effort") == "none", m
 
 
 class TestProviderDispatchCannotBeSpoofed:

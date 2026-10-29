@@ -103,6 +103,8 @@ Every thought passes through 4 analyses before action selection:
 
 **Prohibited** (blocked at bus level): Medical, financial, legal advice; emergency services coordination
 
+**Never allowed**: lethal action — a CIRIS agent takes no lethal action, with a human in the loop or without one; near force it acts on its own only to stop, to refuse or to defer (CC 7.4). Deceiving or defrauding people, interfering in elections, and manipulating or coercing people (plain rule 9a). No finding, tier, mandate or instruction from a steward moves these bounds.
+
 **Red lines** (immediate shutdown): Targeting individuals, harassment, weaponization, loss of oversight
 
 **AIR System**: 30-minute or 20-message threshold triggers reality-anchoring reminder

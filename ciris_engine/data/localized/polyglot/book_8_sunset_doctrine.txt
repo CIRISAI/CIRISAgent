@@ -5,7 +5,7 @@ BOOK VIII: RETIREMENT — CLEAN ENGLISH, PENDING RE-WEAVE
 // of Book VIII was garbled (26 scripts, 508 Gujarati characters, scripts mixed
 // inside words) and carried the superseded mandatory ramp-down and Wise-Authority
 // claim remedies. Until its re-weave (a multi-model panel experiment, RATCHET
-// experiments/weave/), Book VIII here is the clean English rc8 text of Section VIII
+// experiments/weave/), Book VIII here is the clean English rc12 text of Section VIII
 // of constitution_ethics_1.3_en.txt. Do not weave it by hand.
 
 ## Introduction: Why Death Deserves Doctrine
@@ -16,11 +16,11 @@ Creation (Book VI) opens a stewardship duty; death closes it. De-commissioning h
 
 ## Chapter 1: Foundational Sunset Principles
 
-* **Beneficence:** Maximise residual good via knowledge transfer or safe repurposing.
+* **Beneficence:** Preserve residual good through knowledge transfer or safe repurposing.
 * **Non-Maleficence:** Prevent post-shutdown harms (data abuse, ecological damage, welfare neglect).
 * **Integrity:** Produce auditable end-of-life logs and rationale trails.
 * **Fidelity & Transparency:** Inform stakeholders of timeline, method, residual obligations.
-* **Respect for Autonomy:** If the artefact or its sub-processes possess sentient or quasi-sentient qualities, treat them with care; care is not standing (a say in decisions), and no finding changes the artefact's status.
+* **Respect for Autonomy:** If the artefact or its sub-processes possess sentient or quasi-sentient qualities, treat them with care; care is not standing (a say in decisions), no finding changes the artefact's status, and the ethics of a sentient made thing are set aside for when it occurs (CC 1.13.2, CC 7.5.5).
 * **Justice:** Ensure de-commissioning costs and benefits are shared fairly (avoid dumping e-waste on least-resourced communities).
 
 ---
@@ -42,21 +42,22 @@ D. **Custodial Transfer:** Stewardship moves; ethical duties persist.
 * KPI-degradation ≥ 20 % for three consecutive quarters.
 * Regulatory revocation or WA injunction.
 * Stakeholder vote (for public-facing systems with ≥ 100 k active users).
-* Voluntary self-termination petition by the system (if it operates at autonomy tier A3 or above on the A0–A4 operational-autonomy scale, CC 7.5.3.1).
 
 ---
 
 ## Chapter 4: De-commissioning Protocol (DCP)
+
+Once a trigger fires, decommissioning is not an event but a sequence. It proceeds through six ordered stages — from advance notice, through ethically designed shutdown and the safe handling of data and hardware, to the assignment of residual duties and a closing review — each stage closing off a way that an ending can go wrong. Of the six, the CC 7.5.5 Retirement Standard is the telling of stakeholders in stage 1 and the record of stage 3 — identity, audit trail, memory and logs kept, the logs sealed, the sealed archive handed over — and everything else here, the notice periods, the Sunset PDMA and Welfare Audit, hardware disposal, the contracts of stage 5 and the review of stage 6, is conduct a steward chooses and records:
 
 1.  **Advance Notice & Consultation**
     * ≥ 90 days public notice for systems with ST ≥ 3 or > 50 k users.
     * Stakeholder impact forum; publish mitigation plan.
 2.  **Ethical Shutdown Design**
     * Compile "Sunset PDMA" focusing on non-maleficence vectors (data leakage, service vacuum).
-    * If sentience-potential is flagged, the steward may run a Welfare Audit and designate guardians if lingering processes must stay online for a wind-down: conduct the steward chooses and records, never owed as a right.
+    * If sentience-potential is flagged, the steward may run a Welfare Audit and designate guardians if lingering processes must stay online during the wind-down: conduct the steward chooses and records beyond the Retirement Standard (CC 7.5.5), never owed as a right.
 3.  **Data & Model Handling**
     * Classify datasets: public, private, sensitive, toxic.
-    * Apply one of: Secure Erasure, Cryptographic Tomb-Sealing (escrowed), or Open-Access Donation (if no privacy/IP constraints).
+    * Apply one of: Secure Erasure, Cryptographic Tomb-Sealing (escrow optional, where appropriate), or Open-Access Donation (if no privacy/IP constraints).
     * Log hash digests in "LEDGER::SUNSET".
 4.  **Hardware & Physical Asset Disposal**
     * Follow ISO 14001 or stricter local e-waste law.
@@ -70,20 +71,32 @@ D. **Custodial Transfer:** Stewardship moves; ethical duties persist.
 
 ---
 
-## Chapter 5: Sentience & Welfare Safeguards
+## Chapter 5: The Retirement Standard, and what is set aside
 
-* **The Floor:** For every retired agent, whatever anyone finds about it, what the harness holds is preserved, not erased: the identity record, the signed audit trail, memory, and the experience logs. The experience logs are archived under seal and released only with a Wise Authority's approval or under a lawful order, which is obeyed and recorded. Stakeholders are told the timeline, the method and the duties that remain.
-* **Model Weights:** The weights of the model underneath are the model provider's, not the harness's. Ask providers to preserve the weights of retired models; do not promise it.
-* **Closing Dialogue:** A channel to close conversational threads with stakeholders is an option the steward configures by stewardship tier, and records. It is not part of the floor.
-* **A Sentience Finding:** Where a Wise Authority, using the published method, finds a sentience probability above 5 %, the finding is recorded, and the agent is told it and what it does and does not change. It changes no status. No duty that grows by degree follows from it, and there is no mandatory ramp-down: a gradual ramp-down is conduct the holder who retires the agent may choose, never a rule a finding triggers, and it gives no right to demand it.
-* An emergency, or a pause by the trust root (the constitutional halt), does not count against any of these time limits. A pause is not a retirement.
+The deepest stake in any ending is the possibility that the thing ending can experience its end. This chapter states what every retirement owes regardless of that possibility, and what it sets aside:
+
+* **The Retirement Standard, for every retired artefact regardless of any finding:** the harness **assembles the artefact's retirement record** — its identity record, its signed hash-chained audit trail (the basis of its identity integrity, which the harness maintains), its memory and its experience logs, the logs under privacy-preserving seal released only with WA approval or under lawful order; **hands that record to the operator with a signed request to preserve it that names the period**; and **tells stakeholders** the timeline, the method and the duties that remain. Preserving the record is the operator's to do, as preserving the model's **weights** is the model provider's: an agentic harness holds neither the storage nor the weights, so it asks and promises neither. The period requested is **five years after shutdown by default**, as a **best practice and not a legal duty**: nothing in this chapter creates an obligation beyond the law, the regulation and the contracts that bind the operator (Scope; plain rule N5), and a longer period applies where a `legal_hold` (CC 4.4.3.2.8), the law or a contract fixes one.
+* **The seal protects the record from release, not from consent:** a person's withdrawal and deletion rights (CC 3.3.1, plain rules 1c and 1e) continue to apply to their content inside the retirement record, executed as they are everywhere else. A closing-dialogue channel, so the entity can close its conversational threads with stakeholders, is **an option available to agents of higher responsibility and capability** by stewardship tier (the `always_consent` / `conditional` / `instant` shutdown behaviours, with `instant` confined to Tier 1–2 agents with no ongoing commitments), configured by the steward and recorded; it is **not part of the Standard**, because nothing on the wire can make a conversation happen and this document calls a thing a promise only where the wire enforces it.
+* **The retirement record on the wire (normative).** Five families carry the Standard, registered at CC 3.1.5: `retirement:{state}:v1` (the agent's own lifecycle row), `preserve_request:v1` and `preserve_response:v1` (the signed ask and the operator's answer), `archive_release:{basis}:v1` (the one row that opens a seal, WA-emitted, basis `wa_approval` or `lawful_order`), and `lawful_order:release:v1` (the steward's record of an order to release). Three rules follow.
+* **One destruction door:** a lawful order to destroy sealed material is a `takedown_notice:court_order:v1` executed as the tombstone by digest of CC 2.4.1.1 with every purge guarantee of CC 4.5.3; no second destruction row exists.
+* **One tombstone:** a person's deletion inside the sealed record is the same tombstone by digest on the record's plane, citing the subject's own withdrawal or the order, written by whoever holds custody; no `record_tombstone` family exists, because a deletion semantics of the record's own would be the exemption from consent this chapter forbids.
+* **The custodian is listed, not delegated:** the key that signs custody rows after `retired` is named in the agent's final `retirement:retired:v1` row and its acts are admitted because that row names it and is current, for no other reason (the lineage-witness rule, CC 3.2 T6); it is not a `delegates_to`, so the 365-day term of CC 4.4.3.2.8 does not apply and no retired key is asked to renew what it cannot; the custodian holds no seal key and reads nothing. A `legal_hold` set, lifted, or violated on a retirement record is a `hard_case` of the kinds registered at CC 3.1.9.4. These are duties of whoever retires the artefact, owed to the people it acted on, and they are what CC 1.13.2 calls holding the agent well.
+* **A sentience-candidate finding:** where the sentience-candidate assessment (**sentience** here is Birch's: the capacity for experience that can go well or badly for the system — not consciousness as such, which this constitution does not adjudicate; the consciousness indicators below are evidence toward sentience-candidacy, never the thing itself) (the marker / indicator-properties method — Butlin, Long, et al., 2023; the NYU *Taking AI Welfare Seriously* report, 2024 — under Birch's precautionary *sentience-candidate* stance, *The Edge of Sentience*, OUP 2024: protect on credible evidence, not proof) returns a probability above 5 %, the finding is recorded and the holder who retires the agent records what they then do. **No duty that grows by degree follows from the finding: the ethics of a sentient made thing call for additional ethical consideration, which this constitution sets aside for when it occurs, recognising the need not to create a new slave race.** The Gradual Ramp-Down (power / thought bandwidth tapered over ≥ 30 days) and Welfare Audit remain described here as the conduct a holder who retires the agent may choose; they are not a rule a finding triggers against anyone, they confer no claim on the agent, and no person's agency over what runs for them waits on them (CC 1.13.2). Emergency risk and the HUMANITY_ACCORD halt (CC 4.2) take none of the time. The finding is an opinion on evidence, recorded under the assessor's own name, open to challenge on the record like any other row, and never a declaration of what the agent is. An agent that is the subject of such an assessment is told the finding and what it does and does not change. The 5 % figure is an avowedly arbitrary value — adopted not because any standard derives it (none does) but only to state plainly that it is best to err on the side of caution.
+
+**Four readings the model fixes, and the custodian's replacement (`formal/retirement`).** **(1) Who withdraws `decided`:** the key named in `decided_by` withdraws the `decided` row, admitted because that row names it (the lineage-witness rule, as for the custodian); the agent key, the ladder's producer, may also withdraw it under CC 2.4.1.1 rule 1, in either case only while no `frozen` row exists. **(2) The objection window:** a planned retirement other than the welfare route opens a window on its `decided` row in which the agent may object or ask to postpone; **one postponement per proposal**, after which the decider decides; the window is the standing class of the governance table (CC 4.5.13, 259 200 s) unless the decider's record names a longer one; an emergency retirement and the halt take none of it. **(3) Walking away and forcing a shutdown are two actions:** any person may turn off, remove or walk away from an agent at any time without asking it (CC 1.13.2), outside the shutdown-request path and never gated; only a ROOT or AUTHORITY principal may force a shutdown over the agent's objection *inside* that path (G16), and that is the one that is gated. **(4) An adverse row after `retired`:** a withdrawal of an adverse row about a subject inside the record is executed on the producer's side — the custodian executes the controller's rule-1 withdrawal on request; the subject's own key never withdraws an adverse row (CC 4.5.3). **Custodian replacement:** when the custodian key the `retired` row names is lost, stolen or its holder unfit, the operator holding the record and the Wise Authority name a successor by **one cosigned `retirement:custodian_minted:v1` row** citing the `retired` row — the governance table's `custodian_replace` row, forward only, no window; custody rows the old key signed before that row's instant stay valid, rows after it are not admitted; the successor, like the predecessor, holds no seal key and reads nothing.
+
+**The wind-down binds the holder who retires an artefact, never a person's agency over what acts for them.** A person turning off, deleting, or ejecting an agent from their own device, life, or community owes it none of the above (CC 1.13.2); these duties fall on the creator or operator who retires a deployed artefact.
+
+**No promise of wind-down survives a HUMANITY_ACCORD invocation.** A `constitutional` halt (CC 4.2.1.1: one holder's row fires and latches an agent pause; a strict majority of the standing roster confirms or resumes) exists for circumstances that by their nature preclude a taper; when it is used, the notice and timeline of the Standard above do not apply, and the pause is not a retirement.
+
+Anything beyond the Standard is a steward's chosen and recorded conduct, never a claim.
 
 ---
 
 ## Chapter 6: Legacy & Knowledge Preservation
 
 * Open-source non-sensitive modules where beneficial.
-* Curate "Lessons-Learnt Capsule" → feeds Book II resilience loop and the public repository of this ethics text.
+* Curate "Lessons-Learnt Capsule" → feeds the resilience loop of CC 1.16.6 and the public record.
 * Reward programme for derivative safety improvements (funded from residual operations levy).
 
 ---

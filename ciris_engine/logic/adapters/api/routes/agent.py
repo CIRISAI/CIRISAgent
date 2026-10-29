@@ -459,6 +459,53 @@ async def _create_interaction_message(
     return message_id, channel_id, msg
 
 
+async def _is_node_owner(user_id: str) -> bool:
+    """Whether `user_id` is this node's owner. A failed read is "not known to be", never "yes"."""
+    try:
+        from ciris_engine.logic.utils.node_ownership import read_owner_record
+
+        record = await read_owner_record()
+    except Exception as e:  # noqa: BLE001 - an unread owner is not an owner
+        logger.debug(f"Could not read the node owner for consent: {e}")
+        return False
+    return record is not None and record.wa_id == user_id
+
+
+#: The reason interact writes on the automatic first-interaction grant.
+_DEFAULT_TEMPORARY_REASON = "Default TEMPORARY consent on first interaction"
+
+
+async def _owner_chose_consent(consent_manager: Any, user_id: str) -> bool:
+    """Whether any consent change for `user_id` is something other than the automatic first-interact grant."""
+    trail = getattr(consent_manager, "get_audit_trail", None)
+    if not callable(trail):
+        return False
+    try:
+        entries = await trail(user_id)
+    except Exception as e:  # noqa: BLE001 - unreadable history: assume the owner chose, change nothing
+        logger.debug(f"Could not read the consent history for {user_id}: {e}")
+        return True
+    return any(e.reason != _DEFAULT_TEMPORARY_REASON for e in entries)
+
+
+async def _found_owner_partnership(consent_manager: Any, user_id: str, why: str) -> None:
+    """The owner's founding PARTNERED record, written as setup writes it.
+
+    EVERY NODE IS CLAIMED, and claiming a node establishes the partnership with
+    its agent by the same act. A node owner must never be told "we forget about
+    you in 14 days". Setup writes this record, and the boot migration backfills
+    the owners it can see; any path that reaches the first interact without it
+    (a node claimed from the owner's other device, for one) lands here.
+    """
+    from ciris_engine.logic.adapters.api.routes.setup.complete import _create_founding_partnership
+
+    await asyncio.to_thread(_create_founding_partnership, user_id)
+    invalidate = getattr(consent_manager, "invalidate_cached", None)
+    if callable(invalidate):
+        invalidate(user_id)
+    logger.info(f"Consent: the node owner {user_id} {why}; wrote the founding PARTNERED record")
+
+
 async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: Request) -> str:
     """Handle consent checking and creation for user, return consent notice if applicable."""
     try:
@@ -477,15 +524,27 @@ async def _handle_consent_for_user(auth: AuthContext, channel_id: str, request: 
 
         # Check if user has consent
         try:
-            await consent_manager.get_consent(auth.user_id)
+            existing = await consent_manager.get_consent(auth.user_id)
+            if (
+                existing.stream == ConsentStream.TEMPORARY
+                and await _is_node_owner(auth.user_id)
+                and not await _owner_chose_consent(consent_manager, auth.user_id)
+            ):
+                # An owner's first interact on a path that skipped the founding
+                # record minted this TEMPORARY row; repair it to the partnership.
+                # A TEMPORARY the owner chose through /v1/consent stays theirs.
+                await _found_owner_partnership(consent_manager, auth.user_id, "held a TEMPORARY consent")
             return ""  # User already has consent
         except ConsentNotFoundError:
+            if await _is_node_owner(auth.user_id):
+                await _found_owner_partnership(consent_manager, auth.user_id, "had no consent record")
+                return ""
             # First interaction - create default TEMPORARY consent
             consent_req = ConsentRequest(
                 user_id=auth.user_id,
                 stream=ConsentStream.TEMPORARY,
                 categories=[],
-                reason="Default TEMPORARY consent on first interaction",
+                reason=_DEFAULT_TEMPORARY_REASON,
             )
             await consent_manager.grant_consent(consent_req, channel_id=channel_id)
 

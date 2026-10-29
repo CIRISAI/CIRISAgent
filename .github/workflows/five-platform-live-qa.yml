@@ -57,6 +57,16 @@ on:
         required: false
         default: ""
         type: string
+      server_preview_tag:
+        description: "CIRISServer PRERELEASE tag whose wheels replace the ciris-server pin on linux and android (e.g. test-0.5.241-0ea5c5a7). Empty = the pin."
+        required: false
+        default: ""
+        type: string
+      chat_rust_log:
+        description: "RUST_LOG for the linux node the cross-platform chat stage restarts (e.g. info,ciris_edge::replication::bridge=debug). Empty = the node's default filter."
+        required: false
+        default: ""
+        type: string
   # Nightly rather than per-PR: it boots emulators and spends real LLM tokens, so
   # it is too slow and too costly to gate every push. The release path is what
   # needs it, and a nightly failure lands before the next tag.
@@ -262,6 +272,42 @@ jobs:
               python -c "import ciris_client, importlib.metadata as m; print('client in use:', m.version('ciris-client'))"
             else
               echo "no preview wheel vendored on this runner (no requested platform here); leaving the pinned client"
+            fi
+          fi
+
+      # A SERVER PRERELEASE, for testing a fix before it is on PyPI. Linux gets the manylinux wheel
+      # forced over the pinned server; Android gets the android_24_* wheels in
+      # apps/android/wheels and Gradle's install line pointed at that version.
+      # Nothing here runs without the input, and the run says loudly that it is
+      # not testing the pin.
+      - name: Substitute a ciris-server PRERELEASE (server_preview_tag)
+        if: ${{ inputs.server_preview_tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_PREVIEW: ${{ inputs.server_preview_tag }}
+        run: |
+          set -euo pipefail
+          dl="${RUNNER_TEMP}/serverwheel"
+          mkdir -p "$dl"
+          gh release download "$SERVER_PREVIEW" --repo CIRISAI/CIRISServer --pattern 'ciris_server-*.whl' --dir "$dl"
+          ls -1 "$dl"
+          ver=$(ls "$dl"/ciris_server-*.whl | head -1 | sed -E 's#.*/ciris_server-([^-]+)-.*#\1#')
+          echo "::warning::TESTING A SERVER PRERELEASE: ciris-server $ver from CIRISServer tag $SERVER_PREVIEW, NOT the requirements.txt pin"
+          if [ "${RUNNER_OS}" = "Linux" ]; then
+            lw=$(ls "$dl"/ciris_server-*manylinux*x86_64.whl 2>/dev/null | head -1 || true)
+            [ -n "$lw" ] || { echo "::error::$SERVER_PREVIEW has no manylinux x86_64 ciris_server wheel"; exit 1; }
+            python -m pip install --force-reinstall --no-deps "$lw"
+            python -c "import importlib.metadata as m; print('server in use:', m.version('ciris-server'))"
+            n=$(ls "$dl"/ciris_server-*android_24_*.whl 2>/dev/null | wc -l)
+            if [ "$n" -gt 0 ]; then
+              rm -f apps/android/wheels/ciris_server-*.whl
+              cp "$dl"/ciris_server-*android_24_*.whl apps/android/wheels/
+              sed -i -E "s/install \"ciris-server==[0-9.]+\"/install \"ciris-server==$ver\"/" apps/android/build.gradle
+              grep -n 'install "ciris-server==' apps/android/build.gradle
+              ls -1 apps/android/wheels/ciris_server-*.whl
+            else
+              echo "::warning::$SERVER_PREVIEW has no android_24 wheels; the android leg keeps the pinned server"
             fi
           fi
 
@@ -1023,9 +1069,15 @@ jobs:
               ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
               [ -x "$ADB" ] && "$ADB" forward tcp:8080 tcp:8080 >/dev/null 2>&1 || true
             fi
+            # POLL ACROSS THREE REPLICATION ROUNDS. Delivery to the canonical takes
+            # 9-32 s (its replication round is ~30 s), so `held: false` on the first
+            # read or two is the normal case. The gate reads every 10 s until the
+            # receipt says held, for up to 90 s, and a read that fails LOCALLY (a
+            # :8080 login timeout, run 40091023664) is retried -- it is never
+            # scored as "no receipt (CIRISServer#518)".
             set +e
             python3 tools/dev/assert_traces_reached_canonical.py \
-              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 240 \
+              "$CIRIS_HOME/logs" artifacts/cmdlogs --require replication --wait-secs 90 --poll-secs 10 \
               --receipt-url "$receipt_base" \
               --receipt-username qaadmin --receipt-password "qa_test_password_12345" \
               --receipt-raw-out "artifacts/receipt-$plat.json" \
@@ -1048,12 +1100,12 @@ jobs:
               2) trace_rc=1; traces_json=false; overall=1
                  echo "::error::$plat trace delivery could not be checked: none of the agent's log paths exist" ;;
               3) trace_rc=1; traces_json=false; overall=1
-                 echo "::error::$plat trace delivery NOT OBSERVABLE on this substrate: the node exposes no receipt (CIRISServer#518). On ciris-server >= 0.5.232 that is a regression, not a skip" ;;
+                 echo "::error::$plat trace delivery NOT OBSERVABLE on this substrate: the receipt route is absent (503/404 on every read) and the log ladder has no replication counter (CIRISServer#518). On ciris-server >= 0.5.232 that is a regression, not a skip" ;;
               4) trace_rc=1; traces_json=false; overall=1
                  # UNKNOWN IS NOT ZERO, AND IT IS NOT A PASS EITHER. It means the
                  # canonical was unreachable / unverified / partial. The job cannot
                  # certify delivery it could not see, so it fails, and says which.
-                 echo "::error::$plat canonical RECEIPT NOT ESTABLISHED (unknown, not zero): see the per-canonical reasons above; delivery was not certified" ;;
+                 echo "::error::$plat canonical RECEIPT NOT ESTABLISHED (unknown, not zero): either the canonical could not be asked (per-canonical reasons above) or this node's own API never answered the gate's read (LOCAL read failure); delivery was not certified" ;;
               5) trace_rc=1; traces_json=false; overall=1
                  # THE NODE SEALED NOTHING. From 2026-10-09 to 10-14 every platform
                  # authored 0 traces (a mock-LLM latch set by adapter discovery in a
@@ -1101,6 +1153,133 @@ jobs:
             echo "::endgroup::"
           done
           exit $overall
+
+      # CROSS-PLATFORM CHAT, AFTER TRACE CONFIRMATION (Eric, 2026-10-25: "add
+      # cross-platform chat to the five platform runner ... add a stage post trace
+      # confirmation"). Two real users, one on Linux and one on Windows, added
+      # each other as contacts and could never chat, and nothing here had ever
+      # made two nodes talk: every platform ran the flow alone.
+      #
+      # THE PAIR: linux <-> android, on this ONE runner. The loop above runs them
+      # one after the other, and android's teardown killed the linux backend (it
+      # frees :8080/:4242/:4243 on the host). Android's node lives INSIDE the
+      # emulator, so it is still up after its leg; only its host-side forwards sit
+      # on ports the linux node needs. So: move android's API forward to :18080,
+      # drop its :4243/:8091 forwards, prove the host ports free, and boot the
+      # linux backend again from its own home ($RUNNER_TEMP/ciris-linux: same
+      # owner, same fedID, same node key, already announced). Two nodes, each
+      # owned by its own setup-created person, both talking through the live
+      # canonical. macOS+iOS cannot do this: the simulator shares the host's
+      # loopback, so both nodes would want the same :4242/:4243.
+      #
+      # The stage itself is tools/qa_runner/cross_platform_chat.py (unit-tested
+      # against a fake two-node network); this step is only the bring-up.
+      # ENFORCED: linux adds android; android sees it in contact_requests and
+      # answers with the request's own accept (server 0.5.237, #818); the
+      # request clears; linux's row turns mutual; pair room; a message each way;
+      # re-opening returns the same room from both sides; a 4-turn conversation
+      # (unicode, RTL, long, symbols) arrives intact, once, in order, with the
+      # right mine flags. A failure names its likely cause (KNOWN_CAUSES).
+      #
+      # NO `${{ }}` IN THIS BODY (one expression, 21000-char cap): inputs reach it
+      # as env. `shell: bash` is -eo pipefail, so -e is dropped explicitly and
+      # every result-recording command is guarded.
+      - name: Cross-platform chat (linux <-> android, through the live canonical)
+        id: xchat
+        if: ${{ !cancelled() && contains(matrix.platforms, 'android') }}
+        timeout-minutes: 40
+        shell: bash
+        env:
+          REQUESTED: ${{ inputs.platforms || 'all' }}
+          CHAT_RUST_LOG: ${{ inputs.chat_rust_log }}
+        run: |
+          set +e
+          set -uo pipefail
+          out=artifacts/cross-chat
+          mkdir -p "$out/logs"
+          not_run() {
+            printf '{"ran":false,"ok":false,"reason":"%s"}\n' "$1" > "$out/result.json"
+          }
+          for plat in linux android; do
+            if [ "$REQUESTED" != "all" ] && ! echo " $REQUESTED " | grep -q " $plat "; then
+              echo "::notice::cross-platform chat SKIPPED: $plat is not in the requested subset ($REQUESTED)"
+              not_run "$plat not requested"; exit 0
+            fi
+          done
+          # POST TRACE CONFIRMATION: both legs must have reached it. A leg that did
+          # not has already failed the job with its own reason -- one fault, one red.
+          for plat in linux android; do
+            if [ ! -f "artifacts/chat-$plat.json" ]; then
+              echo "::warning::cross-platform chat NOT RUN: the $plat leg never reached its trace confirmation (no artifacts/chat-$plat.json); that leg's own failure is the finding"
+              not_run "$plat leg did not reach trace confirmation"; exit 0
+            fi
+            echo "$plat leg: $(cat "artifacts/chat-$plat.json")"
+          done
+
+          ADB=$(command -v adb 2>/dev/null || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb")
+          for port in 8080 4243 8091; do "$ADB" forward --remove "tcp:$port" >/dev/null 2>&1; done
+          if ! "$ADB" forward tcp:18080 tcp:8080; then
+            echo "::error::cross-platform chat: could not forward host:18080 to the emulator's :8080"
+            not_run "adb forward 18080 failed"; exit 1
+          fi
+          # The app is normally still running; if a teardown stopped it, start it
+          # again -- its backend boots from its own home inside the device.
+          if ! curl -sf -m 10 http://127.0.0.1:18080/v1/system/health >/dev/null; then
+            echo "android backend not answering on :18080 -- starting the app again"
+            "$ADB" shell am start -n ai.ciris.mobile.debug/ai.ciris.mobile.MainActivity >/dev/null 2>&1
+          fi
+
+          if ! python3 tools/dev/free_ports.py 8080 4242 4243 --timeout 30 --label cross-chat; then
+            echo "::error::cross-platform chat: host :8080/:4242/:4243 still held -- the linux node cannot boot"
+            not_run "host ports held"; exit 1
+          fi
+          # Same command, cwd and agent id as the harness's ServerManager; NOT first-run.
+          # A diagnostic filter for this one node, when the dispatch asks for it.
+          if [ -n "${CHAT_RUST_LOG:-}" ]; then
+            export RUST_LOG="$CHAT_RUST_LOG"
+            echo "::notice::cross-platform chat: linux node RUST_LOG=$RUST_LOG"
+          fi
+          CIRIS_HOME="${RUNNER_TEMP}/ciris-linux" CIRIS_AGENT_ID=qa-runner-ciris-agent \
+            nohup python main.py --adapter api --port 8080 > "$out/linux-backend.log" 2>&1 < /dev/null &
+          linux_pid=$!
+          echo "linux backend restarted from ${RUNNER_TEMP}/ciris-linux (pid $linux_pid)"
+
+          rc=0
+          python -m tools.qa_runner.cross_platform_chat run \
+            --node linux=http://127.0.0.1:8080 --node android=http://127.0.0.1:18080 \
+            --username qaadmin --password "qa_test_password_12345" \
+            --out "$out/result.json" --summary "${GITHUB_STEP_SUMMARY:-/dev/null}" || rc=$?
+
+          # Both nodes' own logs, whatever happened.
+          cp -r "${RUNNER_TEMP}/ciris-linux/logs" "$out/logs/linux" 2>/dev/null
+          mkdir -p "$out/logs/android"
+          for f in $("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'ls files/ciris/logs 2>/dev/null' 2>/dev/null | tr -d '\r'); do
+            case "$f" in *.log|*.log.*) "$ADB" exec-out run-as ai.ciris.mobile.debug cat "files/ciris/logs/$f" > "$out/logs/android/$f" 2>/dev/null ;; esac
+          done
+          # Both nodes' stores AFTER the stage, with their WAL: the per-leg
+          # db-<plat>.db snapshots are taken before this stage runs, so they
+          # cannot answer "did the joiner ever hold the creator's binding".
+          mkdir -p "$out/db"
+          for ext in "" -wal -shm; do
+            cp "${RUNNER_TEMP}/ciris-linux/data/ciris_engine.db$ext" "$out/db/linux-ciris_engine.db$ext" 2>/dev/null || true
+          done
+          remote=$("$ADB" exec-out run-as ai.ciris.mobile.debug sh -c 'find . -name ciris_engine.db 2>/dev/null | head -1' 2>/dev/null | tr -d '\r' || true)
+          if [ -n "$remote" ]; then
+            for ext in "" -wal -shm; do
+              "$ADB" exec-out run-as ai.ciris.mobile.debug cat "$remote$ext" > "$out/db/android-ciris_engine.db$ext" 2>/dev/null || rm -f "$out/db/android-ciris_engine.db$ext"
+            done
+          fi
+          ls -la "$out/db" || true
+          if [ "$rc" != 0 ]; then
+            echo "::group::cross-platform chat -- node log lines (contacts_chat / handshake / link_seal_refused / rooting)"
+            python -m tools.qa_runner.cross_platform_chat scan \
+              --logs "linux=$out/logs/linux" --logs "linux-stdout=$out/linux-backend.log" \
+              --logs "android=$out/logs/android" --out "$out/scan.txt" --summary "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            echo "::endgroup::"
+          fi
+          kill "$linux_pid" 2>/dev/null
+          "$ADB" forward --remove tcp:18080 >/dev/null 2>&1
+          exit "$rc"
 
       - name: Collect artifacts
         if: always()

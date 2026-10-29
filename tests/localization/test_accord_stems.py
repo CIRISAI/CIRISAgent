@@ -205,7 +205,9 @@ def test_real_1_3_round_trips_and_most_lines_have_an_exact_tm_anchor() -> None:
     tm = AL.build_tm(LOCALIZED, "1.2b", "yo", "accord")
     tm_text = {e for e, _ in tm.values()}
     covered = sum(1 for v in doc.segments().values() if v in tm_text)
-    assert covered / len(doc.slots) > 0.85
+    # rc11 replaced Books VII and IX whole and rewrote much of VI and VIII, so
+    # 85 % cannot hold: measured 403 of 538 lines (74.9 %) at rc11; > 85 % at rc8.
+    assert covered / len(doc.slots) > 0.7
 
 
 # ── the glossary an ethics-text run sends ────────────────────────────────────

@@ -159,6 +159,14 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
 
         logger.debug(f"Extended TEMPORARY expiry for {user_id} to {new_expiry.isoformat()}")
 
+    def invalidate_cached(self, user_id: str) -> None:
+        """Drop `user_id`'s cached status, so the next read comes from the graph.
+
+        For a writer that changed the consent node directly (the founding
+        partnership written for a node owner), not through this service.
+        """
+        self._consent_cache.pop(user_id, None)
+
     def _check_cached_expiry(self, user_id: str, cached: ConsentStatus) -> None:
         """Check if cached consent has expired and remove if so."""
         if cached.stream == ConsentStream.TEMPORARY and cached.expires_at:

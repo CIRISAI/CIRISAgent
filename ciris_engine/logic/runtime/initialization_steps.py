@@ -19,6 +19,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _first_run_this_boot(runtime: Any) -> bool:
+    """The runtime's latched first-run answer for this boot (see CIRISRuntime._boot_first_run)."""
+    latched = getattr(runtime, "_boot_first_run", None)
+    if isinstance(latched, bool):
+        return latched
+    from ciris_engine.logic.setup.first_run import is_first_run
+
+    return is_first_run()
+
+
 async def initialize_infrastructure(runtime: Any) -> None:
     """Initialize infrastructure services that all other services depend on."""
     if not os.environ.get("PYTEST_CURRENT_TEST"):
@@ -594,7 +604,7 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
     from ciris_engine.logic.setup.first_run import is_first_run
     from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
 
-    if is_first_run():
+    if _first_run_this_boot(runtime):
         logger.info("First-run mode: Skipping saved adapter loading")
         return
 
@@ -701,7 +711,7 @@ async def populate_context_enrichment_cache(runtime: Any) -> None:
     """
     from ciris_engine.logic.setup.first_run import is_first_run
 
-    if is_first_run():
+    if _first_run_this_boot(runtime):
         logger.info("First-run mode: Skipping context enrichment cache population")
         return
 

@@ -126,10 +126,17 @@ def test_an_older_wheel_falls_back_to_the_ladder(capsys):
     assert "falling back to the ladder" in capsys.readouterr().out
 
 
-def test_an_unreachable_agent_api_falls_back_rather_than_failing(capsys):
+def test_an_unreachable_agent_api_is_an_unread_receipt_not_a_fallback(capsys):
+    """Nothing answering :8080 is a LOCAL read failure: retry, never the ladder.
+
+    It used to fall back to the ladder, whose "no replication counter" answer
+    then read as "the node exposes no receipt (CIRISServer#518)" (run 40091023664).
+    """
     args = _args(9)  # nothing listening
-    assert atrc._ask_receipt(args)[0] is None
-    assert "falling back to the ladder" in capsys.readouterr().out
+    assert atrc._ask_receipt(args)[0] == atrc.RECEIPT_UNREAD
+    out = capsys.readouterr().out
+    assert "could not read the receipt" in out
+    assert "falling back to the ladder" not in out
 
 
 def test_no_credentials_still_asks(capsys):

@@ -315,6 +315,49 @@ def test_units_scope_a_run_and_stay_diff_driven(monkeypatch: pytest.MonkeyPatch,
                  "--units", "nope", "--lane", "translate"])  # fmt: skip
 
 
+def test_accept_minor_takes_only_lines_whose_objections_are_all_minor(
+    monkeypatch: pytest.MonkeyPatch, tree: Dict[str, Path]
+) -> None:
+    minor = "accord.section0.s01.l01"
+    major = "accord.section0.s01.l02"
+    unrated = "accord.section0.s01.l03"
+    verdicts = {
+        minor: [{"category": "terminology", "severity": "minor", "span": "x", "note": "prefer y"}],
+        major: [{"category": "accuracy", "severity": "major", "span": "x", "note": "meaning changed"}],
+        unrated: [{"category": "terminology", "span": "x", "note": "no severity given"}],
+    }
+
+    class Judged(FakeModel):
+        def __call__(self, model: str, system: str, messages: List[Dict[str, Any]], *, batch: bool = False) -> Any:
+            reply = super().__call__(model, system, messages, batch=batch)
+            if system != self.L.SYSTEM_REVIEW:
+                return reply
+            found = json.loads(reply.text)
+            return self.L.Reply(json.dumps({k: verdicts.get(k, v) for k, v in found.items()}), 10, 10)
+
+    monkeypatch.setitem(globals(), "FakeModel", Judged)
+    log = tree["stage"].parent / "candidates.jsonl"
+    out = _run(
+        monkeypatch, tree, "--units", "section0", "--lane", "translate", "--lang", "yo", "--candidate-log", str(log)
+    )
+    assert out["rc"] == 1, "the three judged lines are withheld by the lane"
+    flat = AL.flatten(json.loads((tree["stage"] / "yo.json").read_text(encoding="utf-8")))
+    assert not {minor, major, unrated} & set(flat)
+
+    base = ["--version", "1.2b", "--stage-dir", str(tree["stage"]), "--localized-dir", str(tree["loc"])]
+    assert AL.main([*base, "--accept-minor", str(log)]) == 0
+    doc = json.loads((tree["stage"] / "yo.json").read_text(encoding="utf-8"))
+    flat = AL.flatten(doc)
+    assert minor in flat and major not in flat and unrated not in flat
+    [entry] = doc["_meta"][AL.ACCEPTED_MINOR]
+    assert entry["key"] == minor and entry["text"] == flat[minor]
+    assert entry["objections"] == ["minor/terminology: prefer y"]
+    assert doc["_meta"]["review_status"] == "machine_reviewed"
+    # The record survives the next staging, as long as the line is unchanged.
+    AL.Stage("1.2b", stage_dir=tree["stage"], localized=tree["loc"]).build()
+    assert json.loads((tree["stage"] / "yo.json").read_text(encoding="utf-8"))["_meta"][AL.ACCEPTED_MINOR] == [entry]
+
+
 def test_glossary_does_not_retire_the_documents_own_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     stage = AL.Stage("1.2b", stage_dir=tmp_path / "stage")
     stage.build()
@@ -536,3 +579,36 @@ def test_relevant_drops_contained_terms_through_the_vendored_glossary(
     sent = L.gloss.relevant("yo", probe)
     assert "Trust Topology" in sent and "Trust" not in sent
     assert "Trust" in L.gloss.relevant("yo", probe + ["Trust is earned."])
+
+
+def test_translation_master_substitutes_only_the_two_terms_of_art() -> None:
+    m = AL.translation_master
+    assert m("a conformance condition, which the wire alone decides (CC 1.13.3).") == (
+        "a conformance condition, which the signed records nodes exchange alone decide (CC 1.13.3)."
+    )
+    assert m("nothing on the wire can make it") == "nothing in the signed records nodes exchange can make it"
+    assert m("however conformant its wire behaviour is: the wire judges conformance") == (
+        "however conformant its behaviour in the signed records nodes exchange is: "
+        "the signed records nodes exchange judge conformance"
+    )
+    assert m("The wire carries it: consent") == "The signed records nodes exchange carry it: consent"
+    assert m("In this text, *the wire* means the signed records") == (
+        "In this text, the English term *the wire* means the signed records"
+    )
+    assert m("a person with unconditional standing and a person's standing") == (
+        "a person with an unconditional place under the guarantees and a person's place under the guarantees"
+    )
+    for untouched in ("a standing roster", "the standing class", "Care is not standing", "more moral standing"):
+        assert m(untouched) == untouched
+
+
+def test_the_ethics_master_is_derived_and_keys_the_digests() -> None:
+    stage = AL.Stage("1.3", stem="constitution_ethics")
+    changed = {k for k in stage.en if stage.en[k] != stage.canon[k]}
+    assert changed, "the 1.3 canon uses both terms of art"
+    for k, text in stage.en.items():
+        assert re.sub(r"\*the wire\*", "", text).lower().count("the wire") == 0, k
+        assert stage.digests[k] == seg.source_digest(text)
+    # The shipped canon is untouched: the skeleton still reassembles it.
+    assert seg.reassemble(stage.doc) == stage.source_text
+    assert AL.Stage("1.2b").en == AL.Stage("1.2b").canon, "the accord keeps translating its canon"

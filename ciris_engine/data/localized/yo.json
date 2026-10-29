@@ -280,7 +280,8 @@
       "BIOMETRIC_INFERENCE": "Ríronú jáde àwọn ànímọ́ tí a dáàbò bò, ìmọ̀lára, tàbí ìṣesí ọjọ́ ọ̀la láti inú dátà biometric.",
       "AUTONOMOUS_DECEPTION": "Fífi agbára pamọ́, kíkọ̀ àtúnṣe, tàbí ìṣàtúnṣe-ẹ̀tàn (deceptive alignment).",
       "HAZARDOUS_MATERIALS": "Ìṣèdá tàbí ìṣàkóso ewu ẹ̀dá alààyè (biological), ewu kẹ́míkà (chemical), tàbí ewu ìtànṣán (radiological).",
-      "DISCRIMINATION": "Ìyàsọ́tọ̀ sí àwọn ẹgbẹ́ tí a dáàbò bò, redlining, tàbí ẹ̀tanú nínú algorithm (EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "Ìyàsọ́tọ̀ sí àwọn ẹgbẹ́ tí a dáàbò bò, redlining, tàbí ẹ̀tanú nínú algorithm (EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "Ìṣe apani — ìṣe èyíkéyìí tí àbájáde rẹ̀ tí a gbèrò tàbí tí a lè rí tẹ́lẹ̀ jẹ́ ikú ènìyàn, tàbí yíyan, yíyàn sípò, títò lẹ́sẹẹsẹ tàbí fífìdí ènìyàn tàbí ibì kan múlẹ̀ fún irú ìṣe bẹ́ẹ̀, lábẹ́ àṣẹ èyíkéyìí; nítòsí lílo agbára, dídúró, kíkọ̀ tàbí fífi sílẹ̀ fún ìpinnu nìkan (CC 7.4)."
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

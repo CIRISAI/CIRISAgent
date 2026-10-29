@@ -103,7 +103,6 @@ def _auth_service_mock() -> MagicMock:
     auth = AsyncMock()
     auth.get_wa_by_oauth.return_value = None
     auth.list_was.return_value = []
-    auth.ensure_system_wa_exists.return_value = "wa-system-001"
     minted = MagicMock()
     minted.wa_id = "wa-2026-10-16-MINTED"
     auth.create_wa.return_value = minted

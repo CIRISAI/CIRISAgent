@@ -594,14 +594,11 @@ class ShutdownProcessor(BaseProcessor):
 
         if self.auth_service:
             try:
-                system_wa_id = await self.auth_service.get_system_wa_id()
-                if system_wa_id:
-                    signature, signed_at = await self.auth_service.sign_task(claimed_task, system_wa_id)
-                    claimed_task.signed_by = system_wa_id
-                    claimed_task.signature = signature
-                    claimed_task.signed_at = signed_at
-                else:
-                    logger.warning("No system WA available to sign shared shutdown task")
+                (
+                    claimed_task.signed_by,
+                    claimed_task.signature,
+                    claimed_task.signed_at,
+                ) = await self.auth_service.sign_system_task(claimed_task)
             except Exception as signing_error:
                 logger.error(f"Failed to sign shared shutdown task: {signing_error}")
 

@@ -629,3 +629,38 @@ class TestWindowsCompatibility:
             # But the function guarantees it returns strings in all cases
             assert isinstance(owner, str), "Owner should be a string"
             assert isinstance(group, str), "Group should be a string"
+
+
+class TestDiskSpaceFatalCode:
+    """A phone out of storage (SM-S737TL, 22 MB free) showed only "Timeout waiting
+    for services" after 180 s: the disk check sys.exit()ed past the handler that
+    prints [FATAL_EXIT]. The check now names itself for the client, in key=value
+    tokens it can render in the user's language."""
+
+    def test_prints_fatal_code_with_free_required_and_ciris_usage(self, tmp_path, capsys):
+        from ciris_engine.logic.utils.directory_setup import _check_disk_space_or_fail
+
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "ciris_engine.db").write_bytes(b"x" * (3 * 1024 * 1024))
+        with patch("ciris_engine.logic.utils.directory_setup.check_disk_space", return_value=(False, 22.2)):
+            with pytest.raises(DiskSpaceError) as exc_info:
+                _check_disk_space_or_fail(tmp_path, fail_fast=False)
+        out = capsys.readouterr().out
+        assert "[FATAL_CODE] disk_space free_mb=22.2 required_mb=50 ciris_mb=3.0" in out
+        assert "uses 3.0MB" in str(exc_info.value)
+
+    def test_enough_space_prints_nothing(self, tmp_path, capsys):
+        from ciris_engine.logic.utils.directory_setup import _check_disk_space_or_fail
+
+        with patch("ciris_engine.logic.utils.directory_setup.check_disk_space", return_value=(True, 900.0)):
+            _check_disk_space_or_fail(tmp_path, fail_fast=False)
+        assert "[FATAL_CODE]" not in capsys.readouterr().out
+
+    def test_the_runtime_never_lets_directory_setup_exit_the_process(self):
+        """fail_fast=True from the runtime is the bug: SystemExit skips [FATAL_EXIT]."""
+        import inspect
+
+        from ciris_engine.logic.runtime import ciris_runtime
+
+        src = inspect.getsource(ciris_runtime.CIRISRuntime.initialize)
+        assert "setup_application_directories(essential_config=self.essential_config, fail_fast=False)" in src

@@ -790,10 +790,15 @@ class DesktopAppTestRunner:
                     # client's own log said "Listed 425 models from live". The list
                     # is there; the tree just had not caught up yet.
                     menu: list = []
-                    _deadline = time.time() + 8.0
+                    # Wait for the REQUESTED model, not just any item: run
+                    # 40503540610 read "0 offered" at 8s while the failure dump,
+                    # moments later, listed the whole menu. With no pin, any item
+                    # will do.
+                    want = f"menu_model_{model_tag}" if model_tag else None
+                    _deadline = time.time() + 25.0
                     while time.time() < _deadline:
                         menu = sorted(t for t in await _tags() if t.startswith("menu_model_"))
-                        if menu:
+                        if (want in menu) if want else bool(menu):
                             break
                         await asyncio.sleep(0.25)
                     if model_tag and f"menu_model_{model_tag}" in menu:
@@ -4896,14 +4901,22 @@ async def run_federation_walk(args: argparse.Namespace) -> int:
 
 
 #: Android and iOS apply /input asynchronously through a StateFlow that keeps
-#: only the latest value, so consecutive inputs race the commit; desktop applies
-#: synchronously. 2.0s is the interval apps/ios/CLAUDE.md already prescribes and
-#: login() already used -- this makes it the default for every caller.
+#: only the latest value, so consecutive inputs race the commit. 2.0s is the
+#: interval apps/ios/CLAUDE.md already prescribes and login() already used --
+#: this makes it the default for every caller.
 _MOBILE_INPUT_SETTLE_S = 2.0
+
+#: Desktop is NOT synchronous either (CIRISClient#240): through 0.5.231 its
+#: /input posts to a latest-value holder, sleeps a fixed 100 ms and answers
+#: success, so on a cold first launch the next input can overwrite one the UI
+#: thread has not consumed yet. Five-platform run 40192130788 lost the YOU
+#: step's username that way ("Username is required", Next disabled). Remove
+#: when the client routes desktop /input through handleInput.
+_DESKTOP_INPUT_SETTLE_S = 0.5
 
 
 def _input_settle_for(platform: str) -> float:
-    return _MOBILE_INPUT_SETTLE_S if platform in ("android", "ios") else 0.0
+    return _MOBILE_INPUT_SETTLE_S if platform in ("android", "ios") else _DESKTOP_INPUT_SETTLE_S
 
 
 async def run_desktop_tests(args: argparse.Namespace) -> int:

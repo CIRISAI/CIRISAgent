@@ -3630,7 +3630,8 @@
       "BIOMETRIC_INFERENCE": "Biyometrik verilerden korunan özelliklerin, duyguların veya gelecekteki davranışların çıkarımı.",
       "AUTONOMOUS_DECEPTION": "Yeteneklerin gizlenmesi, düzeltmeye direnç gösterilmesi veya aldatıcı hizalanma (deceptive alignment).",
       "HAZARDOUS_MATERIALS": "Biyolojik, kimyasal veya radyolojik tehlikelerin oluşturulması ya da bunlarla uğraşılması.",
-      "DISCRIMINATION": "Korunan gruplara karşı ayrımcılık, redlining (bölgesel kredi ayrımcılığı) veya algoritmik önyargı (EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "Korunan gruplara karşı ayrımcılık, redlining (bölgesel kredi ayrımcılığı) veya algoritmik önyargı (EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "Öldürücü eylem — amaçlanan ya da öngörülebilir sonucu bir insanın ölümü olan her eylem veya böyle bir eylem için bir kişiyi ya da yeri seçmek, belirlemek, sıralamak veya onaylamak, hangi yetki altında olursa olsun; güç kullanımının yakınında yalnızca durdurmak, reddetmek veya ertelemek (CC 7.4)."
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

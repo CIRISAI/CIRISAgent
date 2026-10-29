@@ -64,7 +64,6 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 # Key file names
-SYSTEM_WA_KEY_FILENAME = "system_wa.key"
 
 
 # End-to-end budget for startup attestation, measured from when the
@@ -1346,132 +1345,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
     # Additional helper methods
 
-    async def _get_system_wa(self) -> Optional[WACertificate]:
-        """Get the system WA certificate if it exists."""
-        was = await self._list_all_was()
-        for wa in was:
-            if wa.role == WARole.AUTHORITY and wa.name == "CIRIS System Authority":
-                return wa
-        return None
-
-    async def get_system_wa_id(self) -> Optional[str]:
-        """Get the system WA ID for signing system tasks."""
-        system_wa = await self._get_system_wa()
-        return system_wa.wa_id if system_wa else None
-
-    async def ensure_system_wa_exists(self) -> Optional[str]:
-        """Ensure the system WA exists, creating it if a ROOT WA is available.
-
-        This should be called after creating a ROOT WA during setup to ensure
-        the system WA is immediately available for signing system tasks.
-
-        Returns:
-            The system WA ID if it exists or was created, None if no ROOT WA exists.
-        """
-        # Check if system WA already exists
-        system_wa = await self._get_system_wa()
-        if system_wa:
-            return system_wa.wa_id
-
-        # Find a ROOT WA to use as parent
-        for wa in await self._list_all_was():
-            if wa.role == WARole.ROOT:
-                # Create system WA as child of root
-                new_system_wa = await self._create_system_wa_certificate(wa.wa_id)
-                logger.info(f"[OK] Created system WA {new_system_wa.wa_id} as child of ROOT {wa.wa_id}")
-                return new_system_wa.wa_id
-
-        logger.warning("Cannot create system WA - no ROOT WA found")
-        return None
-
-    async def _create_system_wa_certificate(self, parent_wa_id: str) -> WACertificate:
-        """Create the system WA certificate as a child of the root certificate.
-
-        This certificate is used to sign system-generated tasks like WAKEUP and DREAM.
-        It respects the authority of the root certificate holder.
-        """
-        # Generate keypair for system WA
-        private_key, public_key = self.generate_keypair()
-
-        # Store the private key securely (file fallback)
-        system_key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
-        system_key_path.write_bytes(private_key)
-        system_key_path.chmod(0o600)
-
-        # Create the system WA certificate
-        timestamp = self._get_current_time()
-        wa_id = self._generate_wa_id(timestamp)
-        jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
-
-        # Create data to sign - the certificate attributes
-        cert_data = {
-            "wa_id": wa_id,
-            "name": "CIRIS System Authority",
-            "role": WARole.AUTHORITY.value,
-            "pubkey": self._encode_public_key(public_key),
-            "parent_wa_id": parent_wa_id,
-            "created_at": timestamp.isoformat(),
-        }
-
-        # Sign with the system's private key (self-signed for now)
-        # In production, this would be signed by the parent's private key
-        signature_data = json.dumps(cert_data, sort_keys=True, separators=(",", ":"))
-        parent_signature = self.sign_data(signature_data.encode("utf-8"), private_key)
-
-        # Create the certificate
-        system_wa = WACertificate(
-            wa_id=wa_id,
-            name="CIRIS System Authority",
-            role=WARole.AUTHORITY,
-            pubkey=self._encode_public_key(public_key),
-            jwt_kid=jwt_kid,
-            parent_wa_id=parent_wa_id,
-            parent_signature=parent_signature,
-            scopes_json=json.dumps(
-                [
-                    "system.task.create",
-                    "system.task.sign",
-                    "system.wakeup",
-                    "system.dream",
-                    "system.shutdown",
-                    "memory.read",
-                    "memory.write",
-                ]
-            ),
-            created_at=timestamp,
-        )
-
-        # Store in database
-        await self._store_wa_certificate(system_wa)
-
-        # Also store in CIRISVerify for TPM/Keystore protection
-        try:
-            if has_verifier():
-                verifier = get_verifier()
-                verifier.store_named_key(wa_id, private_key)
-                logger.info(f"Stored System WA key in CIRISVerify: {wa_id}")
-        except Exception as e:
-            logger.warning(f"Could not store System WA key in CIRISVerify: {e}")
-
-        logger.info(f"Created system WA certificate: {wa_id} (child of {parent_wa_id})")
-
-        return system_wa
-
-    async def sign_task(self, task: "Task", wa_id: str) -> Tuple[str, str]:
-        """Sign a task with a WA's private key.
-
-        Uses CIRISVerify named keys for TPM/Keystore-protected signing.
-        Falls back to file-based keys for System WA (backward compat).
-
-        Returns:
-            Tuple of (signature, signed_at timestamp)
-        """
-        # Get the WA certificate
-        wa = await self.get_wa(wa_id)
-        if not wa:
-            raise ValueError(f"WA {wa_id} not found")
-
-        # Create canonical representation of task for signing
+    @staticmethod
+    def _task_canonical_bytes(task: "Task") -> bytes:
+        """Sorted compact JSON of the fields a task signature commits to."""
         task_data = {
             "task_id": task.task_id,
             "description": task.description,
@@ -1481,8 +1357,44 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             "parent_task_id": task.parent_task_id,
             "context": task.context.model_dump() if task.context else None,
         }
-        canonical_json = json.dumps(task_data, sort_keys=True, separators=(",", ":"))
-        data_bytes = canonical_json.encode("utf-8")
+        return json.dumps(task_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    async def sign_system_task(self, task: "Task") -> Tuple[str, str, str]:
+        """Sign a system task (WAKEUP, DREAM, shared SHUTDOWN) as the AGENT.
+
+        Tasks are the agent's work, so the agent signs them with its own key --
+        the persist engine's local signer, as deferral resolutions are signed.
+        The authority is the owner's delegation to the agent, held on the node;
+        there is no local "CIRIS System Authority" certificate and no local ROOT
+        to parent one (the owner's ROOT lives with the owner on the node).
+
+        Returns ``(signing_key_id, signature_b64, signed_at)``. Raises when the
+        engine cannot sign: an unsigned task must not read as signed.
+        """
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.utils import substrate_signing
+
+        engine = get_persist_engine()
+        if engine is None:
+            raise RuntimeError("persist engine not initialized — cannot sign system task")
+        signing_key_id = str(engine.local_derived_key_id())
+        signature = substrate_signing.sign_classical(engine, self._task_canonical_bytes(task))
+        return signing_key_id, base64.b64encode(signature).decode("ascii"), self._get_current_time().isoformat()
+
+    async def sign_task(self, task: "Task", wa_id: str) -> Tuple[str, str]:
+        """Sign a task with a WA's private key.
+
+        Uses CIRISVerify named keys for TPM/Keystore-protected signing.
+
+        Returns:
+            Tuple of (signature, signed_at timestamp)
+        """
+        # Get the WA certificate
+        wa = await self.get_wa(wa_id)
+        if not wa:
+            raise ValueError(f"WA {wa_id} not found")
+
+        data_bytes = self._task_canonical_bytes(task)
 
         # Try CIRISVerify named key first (TPM/Keystore protected)
         if has_verifier():
@@ -1496,23 +1408,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             except Exception as e:
                 logger.debug(f"CIRISVerify signing failed for {wa_id}: {e}")
 
-        # Fallback to file-based key for System WA
-        if wa.name == "CIRIS System Authority":
-            key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
-            if not key_path.exists():
-                raise ValueError("System WA private key not found")
-            private_key = key_path.read_bytes()
-            signature = self.sign_data(data_bytes, private_key)
-            signed_at = self._get_current_time().isoformat()
-            return signature, signed_at
-
         raise ValueError(f"No signing key available for WA {wa_id}")
 
     async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
         """Sign arbitrary data with a WA's private key.
 
         Uses CIRISVerify named keys for TPM/Keystore-protected signing.
-        Falls back to file-based keys for System WA.
 
         Args:
             wa_id: The WA ID to sign with
@@ -1538,14 +1439,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                     return base64.b64encode(signature_bytes).decode()
             except Exception as e:
                 logger.debug(f"CIRISVerify signing failed for {wa_id}: {e}")
-
-        # Fallback to file-based key for System WA
-        if wa.name == "CIRIS System Authority":
-            key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
-            if not key_path.exists():
-                raise ValueError("System WA private key not found")
-            private_key = key_path.read_bytes()
-            return self.sign_data(data, private_key)
 
         raise ValueError(f"No signing key available for WA {wa_id}")
 
@@ -1778,26 +1671,30 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if not task.signed_by or not task.signature or not task.signed_at:
             return False
 
-        # Get the WA that signed it
+        canonical = self._task_canonical_bytes(task)
+
+        # A WA-signed task (and system tasks a pre-#1287 install signed with its
+        # local System Authority cert) verifies against that WA's key.
         wa = await self.get_wa(task.signed_by)
-        if not wa:
+        if wa:
+            return self._verify_signature(canonical, task.signature, wa.pubkey)
+
+        # Otherwise it is agent-signed (sign_system_task): resolve the key the way
+        # deferral resolutions are resolved. Fails closed.
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+
+        engine = get_persist_engine()
+        if engine is None:
             return False
-
-        # Recreate the canonical representation
-        task_data = {
-            "task_id": task.task_id,
-            "description": task.description,
-            "status": task.status.value if hasattr(task.status, "value") else str(task.status),
-            "priority": task.priority,
-            "created_at": task.created_at,
-            "parent_task_id": task.parent_task_id,
-            "context": task.context.model_dump() if task.context else None,
-        }
-
-        canonical_json = json.dumps(task_data, sort_keys=True, separators=(",", ":"))
-
-        # Verify the signature
-        return self._verify_signature(canonical_json.encode("utf-8"), task.signature, wa.pubkey)
+        pubkeys = self._signing_pubkeys(engine, task.signed_by)
+        if pubkeys is None:
+            return False
+        try:
+            engine.verify_hybrid(canonical, task.signature, None, pubkeys[0], None, "ed25519_fallback")
+        except Exception as exc:
+            logger.warning("System task %s failed signature verification: %s", task.task_id, exc)
+            return False
+        return True
 
     @staticmethod
     def _holds_deferral_jurisdiction(scopes: List[str]) -> bool:
@@ -1878,22 +1775,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 await self._store_wa_certificate(root_wa)
 
                 logger.info(f"Loaded root WA certificate: {root_wa.wa_id}")
-
-        # Check if system WA exists, create if not (whether we just loaded root or not)
-        system_wa = await self._get_system_wa()
-        if not system_wa:
-            # Find the root certificate
-            found_root_wa: Optional[WACertificate] = None
-            for wa in await self._list_all_was():
-                if wa.role == WARole.ROOT:
-                    found_root_wa = wa
-                    break
-
-            if found_root_wa:
-                # Create system WA certificate as child of root
-                await self._create_system_wa_certificate(found_root_wa.wa_id)
-            else:
-                logger.warning("No root WA certificate found - cannot create system WA")
 
         # Certificates minted before the scope grammar existed would be refused
         # every domain-tagged deferral by the F1 gate. Restore the breadth they
@@ -2079,8 +1960,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """Migrate existing WA signing keys to CIRISVerify.
 
         This handles the transition to TPM/Keystore protected keys:
-        1. System WA: migrate from file if exists
-        2. User WAs (admin, etc.): rotate keys since old keys were discarded
+        User WAs (admin, etc.): rotate keys since old keys were discarded
            (no prior signatures exist, so rotation is safe)
         """
         if not has_verifier():
@@ -2090,21 +1970,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         try:
             verifier = get_verifier()
 
-            # 1. Migrate System WA key if it exists on disk but not in CIRISVerify
-            system_key_path = self.key_dir / SYSTEM_WA_KEY_FILENAME
-            if system_key_path.exists():
-                system_wa = await self._get_system_wa()
-                if system_wa and not verifier.has_named_key(system_wa.wa_id):
-                    private_key = system_key_path.read_bytes()
-                    verifier.store_named_key(system_wa.wa_id, private_key)
-                    logger.info(f"Migrated System WA key to CIRISVerify: {system_wa.wa_id}")
-
-            # 2. Auto-rotate keys for user WAs that don't have keys in CIRISVerify
+            # Auto-rotate keys for user WAs that don't have keys in CIRISVerify
             # Since prior releases discarded private keys, nothing was ever signed,
             # so we can safely generate new keys without breaking anything.
             all_was = await self._list_all_was(active_only=True)
             for wa in all_was:
-                # Skip System WA (handled above via file migration) and default admin
+                # Skip a legacy System Authority cert (pre-#1287 installs; system tasks
+                # are now agent-signed) and the default admin
                 # Only migrate actual user WAs created during setup (the responsible human)
                 if wa.name in ("CIRIS System Authority", "admin"):
                     # Clean up any erroneously stored admin keys from prior versions

@@ -1463,6 +1463,42 @@ async def get_system_logs(
     )
 
 
+@router.get("/logs/download", response_model=None, responses=RESPONSES_500_503)
+async def download_logs(
+    auth: AuthAdminDep,
+    tail_kib: int = Query(2048, ge=1, le=8192, description="Per-file tail in KiB"),
+) -> Response:
+    """
+    The agent's and the node's log files, as one zip.
+
+    Each log under CIRIS_HOME/logs (the agent's and the node's ciris-server.log)
+    as a redacted tail, plus MANIFEST.txt. Owner only: raw files carry more than
+    the parsed entries /logs returns.
+    """
+    from ciris_engine.constants import CIRIS_VERSION
+    from ciris_engine.logic.utils.path_resolution import get_logs_dir
+
+    from .telemetry_logs_download import build_log_bundle
+
+    versions = {"agent version": CIRIS_VERSION}
+    try:
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        versions["server version"] = str(getattr(ciris_server, "__version__", "unknown"))
+    except ImportError:
+        versions["server version"] = "not installed"
+    bundle = build_log_bundle(get_logs_dir(), tail_kib=tail_kib, versions=versions)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return Response(
+        content=bundle.data,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="ciris-logs-{stamp}.zip"',
+            "X-CIRIS-Log-Files": str(len(bundle.files)),
+        },
+    )
+
+
 async def _query_metrics(telemetry_service: Any, query: TelemetryQuery) -> List[QueryResult]:
     """Query metrics data."""
     results: List[QueryResult] = []

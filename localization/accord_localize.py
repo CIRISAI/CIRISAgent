@@ -128,6 +128,12 @@ ACCORD_MAX_ANCHOR_BLOCK_CHARS = 24000
 #: put a different line under an old key.
 SAME_KEY_MIN_SIMILARITY = 0.3
 
+#: ``_meta`` field recording each withheld line accepted under ``--accept-minor``.
+ACCEPTED_MINOR = "accepted_minor"
+#: The one MQM severity ``--accept-minor`` accepts. A finding with any other
+#: severity, or none, keeps its line withheld.
+MINOR_SEVERITY = "minor"
+
 #: localize.py flags under which a run must not write anything.
 READ_ONLY_FLAGS = ("--check", "--dry-run", "--glossary-report")
 
@@ -321,7 +327,7 @@ def accord_guidance(sections: List[Tuple[str, str]], stem: str) -> List[Tuple[st
         lines = [ln for ln in text.split("\n") if not any(h in ln.casefold() for h in HUMAN_ADVISOR_PROSE)]
         if "\n".join(lines).strip():
             out.append((title, "\n".join(lines)))
-    return out
+    return out + CONSTITUTION_ETHICS_TERM_RULES
 
 
 #: The document's own name in constitution_ethics runs: one row, "ethics text".
@@ -374,6 +380,68 @@ ETHICS_TEXT_RENDERINGS: Dict[str, str] = {
     "zh": "伦理文本",
 }
 ETHICS_TEXT_TERM = "ethics text"
+
+#: CC's term rules for the rc11 lines (2026-10-26): "the wire" is kept and
+#: glossed, never paraphrased; "this charter" in the publication rule is "the
+#: Constitution"; the text speaking of itself is "this text".
+#: "the Constitution" is a proper name, so its pin is this locale's ESTABLISHED
+#: rendering of "CIRIS Constitution": the most frequent across every line of
+#: its 1.3 bundle and its rc8 shipped text that names it (substring extracted
+#: line by line, citation form, CIRIS dropped). Counts are in the PR. Two
+#: departures from the plain majority: zh 宪章 (4) over 章程 (7), which means
+#: bylaws; ja 憲法 over 憲章 on a 5-5 tie. my keeps the English "Constitution"
+#: (its accepted lines keep it; no Burmese rendering recurs).
+#: "this text" is pinned only where one demonstrative form leads outright
+#: (fa, ha, hi, te, tr, uk); elsewhere no row.
+#: "the wire" has no pin here: CC rc12's rule is that it is rendered by its
+#: meaning, never as a cable word or a loanword (CONSTITUTION_ETHICS_TERM_RULES).
+#: The literal renderings the first passes pinned (ሽቦ, السلك, سیم, fil, filo,
+#: Wire, ...) are withdrawn.
+CONSTITUTION_ETHICS_TERM_PINS: Dict[str, Dict[str, str]] = {
+    "am": {"the Constitution": "ሕገ መንግስት"},
+    "ar": {"the Constitution": "دستور"},
+    "bn": {"the Constitution": "সংবিধান"},
+    "de": {"the Constitution": "Verfassung"},
+    "es": {"the Constitution": "Constitución"},
+    "fa": {"the Constitution": "قانون اساسی", "this text": "این متن"},
+    "fr": {"the Constitution": "Constitution"},
+    "ha": {"the Constitution": "Kundin Tsarin Mulki", "this text": "wannan rubutu"},
+    "hi": {"the Constitution": "संविधान", "this text": "यह पाठ"},
+    "id": {"the Constitution": "Konstitusi"},
+    "it": {"the Constitution": "Costituzione"},
+    "ja": {"the Constitution": "憲法"},
+    "ko": {"the Constitution": "헌장"},
+    "mr": {"the Constitution": "संविधान"},
+    "my": {"the Constitution": "Constitution"},
+    "pa": {"the Constitution": "ਸੰਵਿਧਾਨ"},
+    "pt": {"the Constitution": "Constituição"},
+    "ru": {"the Constitution": "Конституция"},
+    "sw": {"the Constitution": "Katiba", "this text": "maandishi haya"},
+    "ta": {"the Constitution": "அரசியலமைப்பு"},
+    "te": {"the Constitution": "రాజ్యాంగం", "this text": "ఈ గ్రంథం"},
+    "th": {"the Constitution": "รัฐธรรมนูญ"},
+    "tr": {"the Constitution": "Anayasa", "this text": "bu metin"},
+    "uk": {"the Constitution": "Конституція", "this text": "цей текст"},
+    "ur": {"the Constitution": "آئین"},
+    "vi": {"the Constitution": "Hiến chế"},
+    "yo": {"the Constitution": "Ìpilẹ̀-Òfin"},
+    "zh": {"the Constitution": "宪章"},
+}
+
+#: Term rules sent with every constitution_ethics request, as glossary prose
+#: (the translator and the judge both read it). The plain-English master
+#: (translation_master) carries the meaning of "the wire" and "standing"; this
+#: keeps only the check that "the wire" is never rendered as a cable word or a
+#: loanword.
+CONSTITUTION_ETHICS_TERM_RULES: List[Tuple[str, str]] = [
+    (
+        "Constitution ethics term rules",
+        '- Where the source says "the signed records nodes exchange", the English canon says "the wire". '
+        "Render that meaning. Treat as a terminology error any word for a cable, wire, line, thread, network "
+        'or channel, or a loanword or transliteration of "wire", except where the source itself names the '
+        "English term *the wire*.",
+    ),
+]
 
 #: Glossary renderings re-cased for accord runs: {lang: {english: (table, used)}}.
 #: The yo pipeline-stage table is written in UI capitals, and the judge enforced
@@ -508,6 +576,51 @@ def locale_meta(localized: Path, lang: str) -> Dict[str, Any]:
     return meta
 
 
+#: THE PLAIN-ENGLISH MASTER (Eric's ruling on #1325, "Plain-English master").
+#: The shipped canon keeps CC's terms; a translation is made from, and judged
+#: against, a copy in which two terms of art are replaced by their meaning, so
+#: the translator and the judge read the same meaning on both sides. Mechanical
+#: substitutions only, applied in order; nothing else in a line changes.
+#:
+#: "the wire" -> "the signed records nodes exchange" (CC 1.13.3), inflected in
+#: place: "on the wire" -> "in ...", "its wire behaviour" -> "its behaviour in
+#: ...", and a verb right after it (optionally after "alone") agrees with the
+#: plural. Book II's definition sentence becomes a sentence about the English
+#: term, the one place *the wire* is kept, as a quoted label.
+#:
+#: "standing" is substituted only where it is the person's standing under the
+#: guarantees (Book VI bucket D, CC 1.13.2 / 7.3): "unconditional standing",
+#: "a person's standing". Untouched: the adjective ("standing roster", "standing
+#: class", "standing obligations"), "moral standing", and "standing (a say in
+#: decisions)" / "Care is not standing", which the text glosses itself as a say
+#: in decisions.
+_WIRE = "the signed records nodes exchange"
+_WIRE_VERBS = {"decides": "decide", "judges": "judge", "checks": "check", "enforces": "enforce", "carries": "carry"}
+MASTER_SUBSTITUTIONS: Tuple[Tuple[str, str], ...] = (
+    (r"In this text, \*the wire\* means", "In this text, the English term *the wire* means"),
+    (r"\bon the wire\b", "in " + _WIRE),
+    (r"\bits wire behaviour\b", "its behaviour in " + _WIRE),
+    (r"(?<!\*)\bthe wire\b(?!\*)", _WIRE),
+    (r"^The wire\b", _WIRE[0].upper() + _WIRE[1:]),
+    (r"\ba person with unconditional standing\b", "a person with an unconditional place under the guarantees"),
+    (r"\ba person's standing\b", "a person's place under the guarantees"),
+)
+
+
+def translation_master(text: str) -> str:
+    """The plain-English master of one canon segment (see MASTER_SUBSTITUTIONS)."""
+    out = text
+    for pattern, repl in MASTER_SUBSTITUTIONS:
+        out = re.sub(pattern, repl, out, flags=re.M)
+    verbs = "|".join(_WIRE_VERBS)
+    return re.sub(
+        rf"({re.escape(_WIRE)}(?: alone)?) ({verbs})\b",
+        lambda m: f"{m.group(1)} {_WIRE_VERBS[m.group(2)]}",
+        out,
+        flags=re.I,
+    )
+
+
 def label_locale(text: str, version: str, stem: str = DEFAULT_STEM) -> str:
     """Insert the provenance label after the leading ``//`` preamble block."""
     lines = text.split("\n")
@@ -549,7 +662,13 @@ class Stage:
         self.doc = seg.parse(self.source_text)
         if seg.reassemble(self.doc) != self.source_text:  # pragma: no cover - the parser's contract
             raise SystemExit("[refuse] the segmenter does not round-trip this source; refusing to stage it")
-        self.en: Dict[str, str] = self.doc.segments()
+        #: The shipped English, segment by segment.
+        self.canon: Dict[str, str] = self.doc.segments()
+        #: What the lanes translate FROM and the judge reviews against, and what
+        #: the digests key off: the canon, or its plain-English master.
+        self.en: Dict[str, str] = (
+            {k: translation_master(v) for k, v in self.canon.items()} if self.stem == "constitution_ethics" else self.canon
+        )
         self.slots: Dict[str, seg.Slot] = {s.key: s for s in self.doc.slots}
         self.digests = {k: seg.source_digest(v) for k, v in self.en.items()}
         self.languages = [lang for lang in agent_languages(localized) if lang != "en"]
@@ -574,6 +693,7 @@ class Stage:
         write_json(self.dir / "manifest.json", manifest)
         stats: Dict[str, Dict[str, int]] = {}
         for lang in self.languages:
+            accepted = self._accepted_minor(lang)
             values, origin = self._seed(lang)
             meta = locale_meta(self.localized, lang)
             meta.update(
@@ -584,11 +704,22 @@ class Stage:
                     "source_digests": {k: self.digests[k] for k in self.en if k in values},
                 }
             )
+            kept = [e for e in accepted if values.get(e["key"]) == e["text"]]
+            if kept:
+                meta[ACCEPTED_MINOR] = kept
             doc: Dict[str, Any] = {"_meta": meta}
             doc.update(nest({k: values[k] for k in self.en if k in values}))
             write_json(self.dir / f"{lang}.json", doc)
             stats[lang] = {"present": len(values), "total": len(self.en), **origin}
         return stats
+
+    def _accepted_minor(self, lang: str) -> List[Dict[str, Any]]:
+        """The bundle's accepted-minor record, for lines whose English is unchanged."""
+        bundle = self.dir / f"{lang}.json"
+        if not bundle.is_file():
+            return []
+        entries: List[Dict[str, Any]] = read_json(bundle).get("_meta", {}).get(ACCEPTED_MINOR, [])
+        return [e for e in entries if self.digests.get(e.get("key", "")) == e.get("source_digest")]
 
     def _clean(self, lang: str, values: Dict[str, str]) -> Dict[str, str]:
         return {
@@ -1299,6 +1430,8 @@ class Context:
 
     keys: Optional[Set[str]] = None  # the unit being run (None = all)
     lang: Optional[str] = None  # the language being drafted or repaired
+    stage: str = "draft"  # what produced the strings now under review
+    candidate_log: Optional[Path] = None  # --candidate-log: every reviewed string, with its verdict
 
 
 def accord_terms(rows: Dict[str, str], code: str, stem: str) -> Dict[str, str]:
@@ -1322,6 +1455,7 @@ def accord_terms(rows: Dict[str, str], code: str, stem: str) -> Dict[str, str]:
         out = {e: t for e, t in out.items() if e not in leftover}
         if code in ETHICS_TEXT_RENDERINGS:
             out[ETHICS_TEXT_TERM] = ETHICS_TEXT_RENDERINGS[code]
+        out.update(CONSTITUTION_ETHICS_TERM_PINS.get(code, {}))
     return out
 
 
@@ -1442,16 +1576,43 @@ def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
             return upstream_translate_lane(lang, *args, **kwargs)
         finally:
             Context.lang = None
+            Context.stage = "draft"
 
-    def repair_once(lang: str, *args: Any, **kwargs: Any) -> Any:
+    def repair_once(lang: str, model: str, *args: Any, **kwargs: Any) -> Any:
         Context.lang = lang
+        Context.stage = f"repair:{model}"
         try:
-            return upstream_repair_once(lang, *args, **kwargs)
+            return upstream_repair_once(lang, model, *args, **kwargs)
         finally:
             Context.lang = None
 
     setattr(L, "translate_lane", translate_lane)
     setattr(L, "_repair_once", repair_once)
+
+    # Every string the judge reviews, with the judge's findings as returned.
+    # The vendored lane keeps only the last verdict and drops a rejected
+    # string's text, so without this record a withheld key has no candidate to
+    # accept under --accept-minor.
+    upstream_evaluate = L.evaluate_lane
+
+    def evaluate_lane(lang: str, values: Dict[str, str], *args: Any, **kwargs: Any) -> Any:
+        findings: Dict[str, List[Dict[str, Any]]] = upstream_evaluate(lang, values, *args, **kwargs)
+        if Context.candidate_log is not None:
+            with Context.candidate_log.open("a", encoding="utf-8") as fh:
+                for key in sorted(findings):
+                    row = {
+                        "lang": lang,
+                        "key": key,
+                        "source_digest": stage.digests.get(key),
+                        "stage": Context.stage,
+                        "candidate": values.get(key),
+                        "findings": findings[key],
+                        "score": L.mqm_score(findings[key]),
+                    }
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return findings
+
+    setattr(L, "evaluate_lane", evaluate_lane)
 
     upstream_structural = L.structural_problems
 
@@ -1479,6 +1640,75 @@ def install(L: ModuleType, stage: Stage, tms: Dict[str, TM]) -> None:
         return en_flat, {lang: ks for lang, ks in missing.items() if ks}
 
     setattr(L, "missing_by_language", missing_by_language)
+
+
+def _all_minor(findings: Any) -> bool:
+    return (
+        isinstance(findings, list)
+        and bool(findings)
+        and all(isinstance(e, dict) and e.get("severity") == MINOR_SEVERITY for e in findings)
+    )
+
+
+def accept_minor(stage: Stage, logs: Sequence[Path]) -> Dict[str, List[Dict[str, Any]]]:
+    """Fill each withheld line with its best reviewed candidate whose objections are all minor.
+
+    Ruling on #1325: a line still withheld after its pass takes the
+    highest-scoring judge-reviewed candidate (``--candidate-log``) when every
+    objection the judge raised is MQM severity ``minor``. A ``major`` or
+    ``critical`` objection, or one with no severity, keeps it withheld. The
+    severities are the judge's own, read from the log; nothing is inferred.
+    Each acceptance is recorded in the bundle's ``_meta`` (key, candidate,
+    objections verbatim) so a native audit can find it. Calls no model.
+    """
+    best: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for path in logs:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            key, lang, text = row.get("key", ""), row.get("lang", ""), row.get("candidate")
+            if key not in stage.slots or row.get("source_digest") != stage.digests[key] or not isinstance(text, str):
+                continue
+            if not _all_minor(row.get("findings")) or seg.passage_problems(stage.slots[key], text, lang):
+                continue
+            prev = best.get((lang, key))
+            if prev is None or row["score"] >= prev["score"]:  # a tie goes to the later, higher rung
+                best[(lang, key)] = row
+    accepted: Dict[str, List[Dict[str, Any]]] = {}
+    for lang in stage.languages:
+        bundle = stage.dir / f"{lang}.json"
+        if not bundle.is_file():
+            continue
+        doc = read_json(bundle)
+        values = flatten(doc)
+        meta = doc.setdefault("_meta", {})
+        add = {k: best[(lang, k)] for k in stage.en if not values.get(k, "").strip() and (lang, k) in best}
+        if not add:
+            continue
+        values.update({k: str(row["candidate"]) for k, row in add.items()})
+        digests: Dict[str, str] = meta.get("source_digests", {})
+        digests.update({k: stage.digests[k] for k in add})
+        meta["source_digests"] = {k: digests[k] for k in stage.en if k in digests}
+        entries = [e for e in meta.get(ACCEPTED_MINOR, []) if e.get("key") not in add]
+        for k, row in add.items():
+            entries.append(
+                {
+                    "key": k,
+                    "source_digest": stage.digests[k],
+                    "candidate": row["stage"],
+                    "score": row["score"],
+                    "text": row["candidate"],
+                    "objections": [
+                        f"{e.get('severity')}/{e.get('category')}: {e.get('note', '')}" for e in row["findings"]
+                    ],
+                }
+            )
+        order = {k: i for i, k in enumerate(stage.en)}
+        meta[ACCEPTED_MINOR] = sorted(entries, key=lambda e: order.get(e["key"], len(order)))
+        out: Dict[str, Any] = {"_meta": meta}
+        out.update(nest({k: values[k] for k in stage.en if k in values}))
+        write_json(bundle, out)
+        accepted[lang] = [e for e in meta[ACCEPTED_MINOR] if e["key"] in add]
+    return accepted
 
 
 def units_of(stage: Stage) -> Dict[str, Set[str]]:
@@ -1580,6 +1810,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--segments", action="store_true", help="print the segment plan and run size, then exit")
     ap.add_argument("--verify", action="store_true", help="offline gate over the staged bundles and files")
     ap.add_argument("--no-reassemble", action="store_true", help="do not write accord files after the run")
+    ap.add_argument(
+        "--candidate-log",
+        type=Path,
+        default=None,
+        metavar="JSONL",
+        help="append every reviewed string, with the judge's findings, to this file",
+    )
+    ap.add_argument(
+        "--accept-minor",
+        action="append",
+        type=Path,
+        default=[],
+        metavar="JSONL",
+        help="fill withheld lines from a --candidate-log whose objections are all minor, then reassemble; "
+        "calls no model (repeatable)",
+    )
     args, rest = ap.parse_known_args(argv)
     refuse_batch_mode(rest)
 
@@ -1616,6 +1862,15 @@ def _main(args: argparse.Namespace, rest: List[str], stage: Stage) -> int:
         print("[OK] accord bundles verify" if not problems else f"{len(problems)} problem(s)")
         return 1 if problems else 0
 
+    if args.accept_minor:
+        for lang, entries in sorted(accept_minor(stage, args.accept_minor).items()):
+            for e in entries:
+                why = "; ".join(e["objections"])
+                print(f"[accept-minor] {lang} {e['key']} ({e['candidate']}, MQM {e['score']}): {why}")
+        for lang, status in sorted(stage.finalize(write_files=not args.no_reassemble).items()):
+            print(f"[accord] {lang}: {status}")
+        return 0
+
     units = units_of(stage)
     wanted = args.units.split()
     unknown = [u for u in wanted if u not in units]
@@ -1635,6 +1890,7 @@ def _main(args: argparse.Namespace, rest: List[str], stage: Stage) -> int:
 
     L = import_localize(stage.dir)
     install(L, stage, tms)
+    Context.candidate_log = args.candidate_log
 
     passthrough = list(rest)
     if any(flag in passthrough for flag in ("--check", "--glossary-report")):

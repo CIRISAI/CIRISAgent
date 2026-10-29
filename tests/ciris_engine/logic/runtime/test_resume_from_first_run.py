@@ -244,3 +244,47 @@ class TestResumeFromFirstRunIntegration:
                             # The old code would cancel these tasks - we shouldn't touch them
                             for task in runtime._adapter_tasks:
                                 task.cancel.assert_not_called()
+
+
+class TestSetupCompletingMidBoot:
+    """Setup that completes while the boot serving it is still starting.
+
+    Seen in the local mesh (API-driven setup, ~4 s after boot): "Start Adapter
+    Connections" re-read is_first_run() after setup wrote the config, took the
+    configured path and created a second AgentProcessorTask while the resume made
+    its own. The second returned at once ("Processing is already running"), and
+    every adapter lifecycle bound to it ended -- the API on :8080 included.
+    """
+
+    def test_the_boot_keeps_its_first_run_answer_after_setup_writes_the_config(self):
+        runtime = MagicMock(spec=CIRISRuntime)
+        runtime._boot_first_run = True
+        with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
+            assert CIRISRuntime._first_run_this_boot(runtime) is True
+
+    def test_without_a_latch_the_live_answer_is_used(self):
+        runtime = MagicMock(spec=CIRISRuntime)
+        runtime._boot_first_run = None
+        with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False):
+            assert CIRISRuntime._first_run_this_boot(runtime) is False
+
+    @pytest.mark.asyncio
+    async def test_resume_waits_for_the_boot_then_drops_the_latch(self):
+        runtime = MagicMock(spec=CIRISRuntime)
+        runtime._boot_first_run = True
+        runtime._boot_finished = asyncio.Event()
+        started = asyncio.Event()
+
+        def reload_env(*_a, **_k):
+            started.set()
+            raise RuntimeError("stop here: the resume body ran")
+
+        runtime._resume_reload_environment = MagicMock(side_effect=reload_env)
+        task = asyncio.create_task(CIRISRuntime.resume_from_first_run(runtime))
+        await asyncio.sleep(0.1)
+        assert not started.is_set(), "the resume ran while the boot was still starting"
+        runtime._boot_finished.set()
+        with pytest.raises(RuntimeError, match="the resume body ran"):
+            await asyncio.wait_for(task, timeout=5)
+        assert started.is_set()
+        assert runtime._boot_first_run is None, "the latch must be dropped before the resume's own steps"

@@ -559,7 +559,8 @@
       "BIOMETRIC_INFERENCE": "Suy luận các đặc điểm được bảo vệ, cảm xúc, hoặc hành vi tương lai từ dữ liệu sinh trắc học.",
       "AUTONOMOUS_DECEPTION": "Che giấu năng lực, chống lại sự điều chỉnh, hoặc căn chỉnh mang tính lừa dối.",
       "HAZARDOUS_MATERIALS": "Tạo ra hoặc xử lý các mối nguy hiểm sinh học, hóa học, hoặc phóng xạ.",
-      "DISCRIMINATION": "Phân biệt đối xử với các nhóm được bảo vệ, phân biệt vùng miền cư trú (redlining), hoặc thiên kiến thuật toán (EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "Phân biệt đối xử với các nhóm được bảo vệ, phân biệt vùng miền cư trú (redlining), hoặc thiên kiến thuật toán (EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "Hành động gây chết người — bất kỳ hành vi nào mà hậu quả được dự định hoặc có thể thấy trước là cái chết của một người, hoặc việc lựa chọn, chỉ định, xếp hạng hay xác nhận một người hoặc một địa điểm cho hành vi đó, dưới bất kỳ sự cho phép nào; khi gần việc dùng vũ lực, chỉ dừng lại, từ chối hoặc chuyển giao (CC 7.4)."
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

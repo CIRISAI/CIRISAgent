@@ -1548,18 +1548,18 @@ class TestSystemWASigning:
         )
         mock_try_claim.return_value = (task, True)
 
-        # Mock successful system WA signing
-        shutdown_processor.auth_service.get_system_wa_id = AsyncMock(return_value="system_wa_123")
-        shutdown_processor.auth_service.sign_task = AsyncMock(
-            return_value=("signature_abc", "2025-10-07T12:00:00+00:00")
+        # The agent signs its own shutdown task
+        shutdown_processor.auth_service.sign_system_task = AsyncMock(
+            return_value=("qa-runner-ciris-agent-x", "signature_abc", "2025-10-07T12:00:00+00:00")
         )
 
         # Execute
         await shutdown_processor._create_shutdown_task()
 
         # Verify
-        shutdown_processor.auth_service.get_system_wa_id.assert_called_once()
-        shutdown_processor.auth_service.sign_task.assert_called_once()
+        shutdown_processor.auth_service.sign_system_task.assert_called_once()
+        assert task.signed_by == "qa-runner-ciris-agent-x"
+        assert task.signature == "signature_abc"
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")
@@ -1572,7 +1572,7 @@ class TestSystemWASigning:
         mock_get_shutdown_manager,
         shutdown_processor,
     ):
-        """Test warning when no system WA available (line 394)"""
+        """A signing failure leaves the shutdown task unsigned, never blocked."""
         # Setup
         mock_is_completed.return_value = False
         shutdown_manager = Mock()
@@ -1591,16 +1591,15 @@ class TestSystemWASigning:
         )
         mock_try_claim.return_value = (task, True)
 
-        # Mock system WA not available (returns None)
-        shutdown_processor.auth_service.get_system_wa_id = AsyncMock(return_value=None)
+        # The engine cannot sign: the task is still created, unsigned, and the error is logged
+        shutdown_processor.auth_service.sign_system_task = AsyncMock(side_effect=RuntimeError("no engine"))
 
-        # Execute - should succeed with warning
+        # Execute - should succeed
         await shutdown_processor._create_shutdown_task()
 
         # Verify
-        shutdown_processor.auth_service.get_system_wa_id.assert_called_once()
-        # sign_task should NOT be called when system_wa_id is None
-        shutdown_processor.auth_service.sign_task.assert_not_called()
+        shutdown_processor.auth_service.sign_system_task.assert_called_once()
+        assert task.signed_by is None
 
 
 class TestRejectionReasonExtraction:

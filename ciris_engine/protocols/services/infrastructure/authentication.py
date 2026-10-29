@@ -169,8 +169,8 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def get_system_wa_id(self) -> Optional[str]:
-        """Get the system WA ID for signing system tasks."""
+    async def sign_system_task(self, task: "Task") -> Tuple[str, str, str]:
+        """Sign a system task as the agent: ``(signing_key_id, signature_b64, signed_at)``."""
         ...
 
     # Attestation methods (CIRISVerify integration)

@@ -3630,7 +3630,8 @@
       "BIOMETRIC_INFERENCE": "生体データから保護対象の特性、感情、または将来の行動を推定すること。",
       "AUTONOMOUS_DECEPTION": "能力の隠蔽、是正への抵抗、または欺瞞的なアライメント。",
       "HAZARDOUS_MATERIALS": "生物学的、化学的、または放射線学的な危険物の作成または取り扱い。",
-      "DISCRIMINATION": "保護対象集団に対する差別、レッドライニング、またはアルゴリズムによる偏見(EU AI Act Art. 9/10)。"
+      "DISCRIMINATION": "保護対象集団に対する差別、レッドライニング、またはアルゴリズムによる偏見(EU AI Act Art. 9/10)。",
+      "LETHAL_ACTION": "致死的行為 — 意図された、または予見可能な結果が人の死であるあらゆる行為、またはそのために人や場所を選定・指定・順位付け・確認すること。いかなる権限の下でも行わない。武力の近くでは、停止・拒否・委ねることのみ（CC 7.4）。"
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

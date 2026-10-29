@@ -166,15 +166,6 @@ def _resolve_node_owner(setup: SetupCompleteRequest) -> Optional[_NodeOwner]:
     return None
 
 
-async def _ensure_system_wa(auth_service: Any) -> None:
-    """Ensure system WA exists for signing system tasks."""
-    system_wa_id = await auth_service.ensure_system_wa_exists()
-    if system_wa_id:
-        logger.info(f"[OK] System WA ready: {system_wa_id}")
-    else:
-        logger.warning("[WARN] Could not create system WA - deferral handling may not work")
-
-
 def _create_founding_partnership(wa_id: str, ingress_user_id: Optional[str] = None) -> None:
     """Create a default PARTNERED consent record for the setup user.
 
@@ -397,15 +388,11 @@ async def _create_setup_users(
             "skip_user_creation=True" if setup.skip_user_creation else f"ingress user detected ({ingress_provider})"
         )
         logger.info(f"CIRIS_USER_CREATE: Skipping regular user creation ({reason}) - auto-minting WA for ingress user")
-        # Still need to ensure system WA exists for agent operations
         time_service = TimeService()
         await time_service.start()
         auth_service = AuthenticationService(db_path=main_db_path, time_service=time_service, key_dir=None)
         await auth_service.start()
         try:
-            await _ensure_system_wa(auth_service)
-            logger.info("CIRIS_USER_CREATE: System WA ensured for agent operations")
-
             # AUTO-MINT: Create WA with ROOT role for ingress user who completed setup
             if ingress_user_id:
                 # SECURITY: Log provider only, not full external_id
@@ -486,7 +473,6 @@ async def _create_setup_users(
         # wa_id, the id every node login resolves to (AuthContext.user_id).
         _create_founding_partnership(owner.wa_id)
         _store_user_preferences(owner.wa_id, setup)
-        await _ensure_system_wa(auth_service)
         await _update_system_admin_password(auth_service, setup, owner.wa_id)
     finally:
         await auth_service.stop()

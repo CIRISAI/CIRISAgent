@@ -30,6 +30,9 @@ from ciris_engine.logic.adapters.api.routes.node_proxy import _is_node_owned, _s
         "self/identity",
         "accord/canonical/servers",
         "federation/keys/abc-123_x.y~z",
+        # Room ids carry colons; refusing them 404'd every room read on :8080.
+        "chat/chat:pair:v1:52719a32516dc2618328280cf0d36753707c23a711aa0cc8540fdf1e3d9d4bba/messages",
+        "chat/chat:pair:v1:abc/accept",
     ],
 )
 def test_ordinary_routes_forward_unchanged(path: str) -> None:
@@ -53,6 +56,8 @@ def test_ordinary_routes_forward_unchanged(path: str) -> None:
         ("setup/<script>", "angle brackets"),
         ("setup/x@evil.com", "authority-shaped content"),
         ("setup/x\x00y", "NUL"),
+        ("chat/chat:pair:v1:abc/../../admin", "traversal behind a colon-bearing room id"),
+        ("chat/chat:pair%3Av1", "a pre-encoded colon is still an encoded byte"),
     ],
 )
 def test_dangerous_paths_are_refused(path: str, why: str) -> None:
@@ -192,6 +197,15 @@ class TestUnmatchedPathsReachTheNode:
         r = client.get(f"/v1/{path}")
         assert r.status_code == 200 and r.json() == {"from": "node"}
         assert seen == [("GET", f"http://127.0.0.1:4243/v1/{path}")]
+
+    def test_a_chat_room_read_reaches_the_node(self, monkeypatch):
+        """The cross-chat stage read rooms through :8080 and got 404 on both sides
+        while the node logged the room Ready -- the colon was refused here."""
+        client, seen = self._client(monkeypatch, node_status=200)
+        room = "chat:pair:v1:52719a32516dc2618328280cf0d36753707c23a711aa0cc8540fdf1e3d9d4bba"
+        r = client.get(f"/v1/chat/{room}/messages")
+        assert r.status_code == 200 and r.json() == {"from": "node"}
+        assert seen == [("GET", f"http://127.0.0.1:4243/v1/chat/{room}/messages")]
 
     def test_the_nodes_own_404_comes_back_as_404(self, monkeypatch):
         client, _ = self._client(monkeypatch, node_status=404)

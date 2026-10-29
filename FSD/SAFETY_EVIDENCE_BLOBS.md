@@ -152,8 +152,10 @@ keep citing them, and the rows carry the run ids.
    (v60.1.0) vendors CC 1.0-rc9; rc12 is staged on a branch; rc13, which carries
    this family, is untagged. Persist vendors tagged CC only, on its v61 head
    (mid-refactor, no date). So the first row needs, in order: the rc13 tag,
-   persist vendoring it, and a release the registry slice runs on. Whether that is v61 or
-   a v60.x cut carrying the rc13 vendor alone is the owner's call.
+   persist vendoring it, and a release the registry slice runs on. The owner ruled
+   (2026-10-29) that there is no v60.x cut for this: CIRISPersist#1152 lands with
+   persist v61.0.0 on the rc13 vendor, after the rc13 tag. The first row is planned
+   against v61.
 1. CC family (done) → registry slice intake and read → `ciris-build-sign` subcommand.
 2. Agent sync job publishes new bundles; `qa_reports/` still receives them in
    parallel for one cycle so the two can be compared.

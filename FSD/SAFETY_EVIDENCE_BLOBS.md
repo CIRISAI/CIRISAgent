@@ -177,16 +177,22 @@ directly with the steward in this session.
 - **Offered against (worker side).** An evidence row MAY name a
   `goal:{scale}`, `approach:{goal_id}` or `method:{approach_id}:{rung}` row in
   `references_attestation_id`. It is optional, because not every piece of work
-  is offered against a Goal. The door checks that the referenced row exists, is
-  in one of the three families and is not withdrawn; a superseded row resolves
-  to its successor.
+  is offered against a Goal. The id must be UUID-shaped, or the door refuses it
+  with `contribution_malformed`. The door then refuses
+  `evidence_reference_not_found`, `evidence_reference_not_a_goal` or
+  `evidence_reference_withdrawn`; a superseded target resolves to its successor
+  (CIRISRegistry#151, b101707).
 - **Counts as progress (Goal side).** This is authoritative, and lives in a
   `progress_measure:{method_id}` row. Its `evidence_refs[]` cite the evidence
   rows or blobs by hash. It also carries `tracks[]` (the cells and criteria
   counted), `computation` (how pass ratios aggregate), `validity_window` and
   `goodhart_resistance` (the Annex J held-out / adversarial-flip discipline).
-  Readers show the two joins separately: `offered_against` and `counted_by` on
-  reads, and `GET /v1/goals/{id}/evidence`.
+  Readers show the two joins separately. Evidence reads carry
+  `offered_against {attestation_id (resolved), family, dimension, as_stated}` and
+  `counted_by [progress_measure attestation ids]`. They can be queried as
+  `GET /v1/evidence/safety_battery?offered_against=<id>`, and
+  `GET /v1/goals/{attestation_id}/evidence?suite=safety_battery` returns the
+  evidence the Goal's progress measures cite.
 - **Placement for this battery.**
   - "Demonstrate the viability of ethical AI solutions" is `goal:species`.
   - "Meet mhGAP guidelines in all supported languages so as to support mental
@@ -198,7 +204,12 @@ directly with the steward in this session.
 - **Who declares.** Any key may declare a Goal row. CIRIS's own are rows by
   `ciris-canonical`, cosigned under its founder quorum (the same as its
   licences), with the declarer's `meta_dimension` + `meta_rationale` as
-  MetaGoalAlignment and no cosign by others.
+  MetaGoalAlignment and no cosign by others. Sign the Goal rows with
+  `meta_dimension`, `meta_rationale`, the goal text and the canonical text in the
+  body from the start. Persist v60.0.0 adds an admission gate for `goal:{scale}`
+  rows (`check_goal_row_admission`: `goal_meta_alignment_malformed`,
+  `goal_body_malformed`) that v59.1.0, the Server 0.5.240 pin, lacks; rows signed
+  that way admit identically on both.
 - **Sync job.** Once the goal, approach and method rows are signed, the sync job
   sets `references_attestation_id` to the language method's attestation id.
   Until then it posts rows without a reference and re-emits them later as a

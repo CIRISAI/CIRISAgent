@@ -399,12 +399,18 @@ class TestGetAPIDocumentHelper:
         # Reset singleton for test
         import ciris_engine.logic.adapters.api.api_document as module
 
+        saved = module._api_document_helper
         module._api_document_helper = None
-
-        with patch.object(module, "DocumentParser"):
-            helper1 = get_api_document_helper()
-            helper2 = get_api_document_helper()
-            assert helper1 is helper2
+        try:
+            with patch.object(module, "DocumentParser"):
+                helper1 = get_api_document_helper()
+                helper2 = get_api_document_helper()
+                assert helper1 is helper2
+        finally:
+            # The singleton built here holds a MOCK parser. Left in place it
+            # outlives the patch, and every later test in this worker that
+            # parses a document (test_api_attachments) gets MagicMock text.
+            module._api_document_helper = saved
 
 
 class TestDocumentPayloadSchema:

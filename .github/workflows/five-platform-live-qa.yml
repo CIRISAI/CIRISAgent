@@ -275,8 +275,7 @@ jobs:
             fi
           fi
 
-      # A SERVER PRERELEASE, for testing a fix before PyPI (Eric's direction:
-      # "build a test wheel and test it now"). Linux gets the manylinux wheel
+      # A SERVER PRERELEASE, for testing a fix before it is on PyPI. Linux gets the manylinux wheel
       # forced over the pinned server; Android gets the android_24_* wheels in
       # apps/android/wheels and Gradle's install line pointed at that version.
       # Nothing here runs without the input, and the run says loudly that it is

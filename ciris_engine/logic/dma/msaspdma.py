@@ -249,6 +249,13 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         lang_guidance = get_language_guidance(self.prompt_loader.language)
         if lang_guidance:
             messages.append({"role": "system", "content": lang_guidance})
+        # Crisis resources ride directly after language guidance (#1248) — the
+        # locale's verified numbers, from the one composer every DMA shares.
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+
+        _crisis_block = get_crisis_resources_system_block(self.prompt_loader.language)
+        if _crisis_block:
+            messages.append({"role": "system", "content": _crisis_block})
         messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": user_message})
         return messages

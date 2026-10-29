@@ -1,13 +1,16 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'am'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "am",
   "needs_verified_entries": true,
   "verification_notes": "Ethiopia emergency numbers verified May 2026 (see per-entry notes). No single national mental-health hotline exists for Ethiopia as of the corpus cut; am-locale crisis routing guidance lives in the am primer Section 6. findahelpline.com has no Ethiopia country page (404 as of 2026-08-02), so the global directory URL is used. still needs_verified_entries: a dedicated mental-health line, if one emerges, must be human-verified before entry.",
+  "language_countries": [
+    "et"
+  ],
   "resources": {
     "ethiopia_ambulance": {
       "id": "ethiopia_ambulance",

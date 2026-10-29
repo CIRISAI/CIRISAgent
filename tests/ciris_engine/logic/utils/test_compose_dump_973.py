@@ -102,6 +102,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         assert by_step[step] == [
             "accord",
             *LANGUAGE_GUIDANCE_BLOCKS,
+            "crisis",  # #1248: crisis block directly after language guidance
             "prohibition",
             "csdma_common_sense.system_guidance_header",
             "system.join1",
@@ -116,6 +117,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     assert by_step["pdma"] == [
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
+        "crisis",  # #1248: crisis block directly after language guidance
         "prohibition",
         "pdma_ethical.system_guidance_header",
         "pdma_ethical.system_guidance_header.slots",
@@ -128,6 +130,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     assert by_step["idma"] == [  # no prohibition (#910)
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
+        "crisis",  # #1248: crisis block directly after language guidance
         "idma.system_guidance_header",
         "system.join1",
         "idma.evaluation_steps",
@@ -144,6 +147,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     assert by_step["dsdma"] == [
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
+        "crisis",  # #1248: crisis block directly after language guidance
         "prohibition",
         "system.head",
         "dsdma_base.response_format",
@@ -163,6 +167,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
             "thought_type",
             "accord",
             *LANGUAGE_GUIDANCE_BLOCKS,
+            "crisis",  # #1248: crisis block directly after language guidance
             # #1007 — was one opaque `system_message`; the composer's own field
             # boundaries are now visible, so the axiotic sentence is reachable.
             "system.head",
@@ -184,6 +189,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     assert by_step["dsaspdma"] == [
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
+        "crisis",  # #1248: crisis block directly after language guidance
         "dsaspdma.system_guidance_header",
         "system.join1",
         "dsaspdma.evaluation_steps",
@@ -198,6 +204,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     assert by_step["tsaspdma"] == [
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
+        "crisis",  # #1248: crisis block directly after language guidance
         "tsaspdma.system_guidance_header",
         "system.join1",
         "tsaspdma.evaluation_steps",
@@ -211,6 +218,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
     assert by_step["tsaspdma_correction"] == [
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
+        "crisis",  # #1248: crisis block directly after language guidance
         "tsaspdma.system_guidance_header",
         "system.join1",
         "tsaspdma.evaluation_steps",

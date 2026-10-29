@@ -167,6 +167,10 @@ def _sentinel_prohibition_guidance(lang_code: str) -> str:
     return f"<GOLDEN-PROHIBITION-GUIDANCE lang={lang_code}>"
 
 
+def _sentinel_crisis_resources(lang_code: Any = None) -> str:
+    return f"<GOLDEN-CRISIS-RESOURCES lang={lang_code}>"
+
+
 @contextmanager
 def prompt_content_environment(
     *,
@@ -182,6 +186,7 @@ def prompt_content_environment(
     aspdma_system_message: Callable[..., str] | None = None,
     dsaspdma_prompt_value: Callable[..., Any] | None = None,
     msaspdma_prompt_value: Callable[..., Any] | None = None,
+    crisis_resources: Callable[..., str] | None = None,
 ) -> Iterator[None]:
     """Pin language + prompt-content loaders for byte-reproducible composition.
 
@@ -208,6 +213,16 @@ def prompt_content_environment(
         stack.enter_context(
             patch("ciris_engine.logic.utils.localization.get_prohibition_guidance", prohibition_guidance)
         )
+        # #1248: the crisis-resources system block. Every DMA site imports the
+        # composer lazily from its defining module, so one source patch covers
+        # them all. Optional so an older caller keeps the real composer.
+        if crisis_resources is not None:
+            stack.enter_context(
+                patch(
+                    "ciris_engine.logic.formatters.crisis_resources.get_crisis_resources_system_block",
+                    crisis_resources,
+                )
+            )
         # Module-top imported names.
         stack.enter_context(patch("ciris_engine.logic.dma.idma.get_accord_text", accord))
         stack.enter_context(
@@ -313,6 +328,7 @@ def deterministic_prompt_environment() -> Iterator[None]:
         localized_accord=_sentinel_localized_accord,
         language_guidance=_sentinel_language_guidance,
         prohibition_guidance=_sentinel_prohibition_guidance,
+        crisis_resources=_sentinel_crisis_resources,
     ):
         yield
 

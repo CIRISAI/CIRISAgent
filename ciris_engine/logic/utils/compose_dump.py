@@ -281,9 +281,10 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # sourced from PROHIBITED_CAPABILITIES — deontic.
     "prohibition": BlockAnnotation(_C.DEONTIC, None),
     # Crisis resources: static world-facts (numbers, URLs) — empirical (#971
-    # landed the breadcrumb in formatters/crisis_resources.py). NOT reachable
-    # as a discrete block today: it rides interpolated inside dsdma.system.
-    # This entry activates when #974 routes it discretely.
+    # landed the breadcrumb in formatters/crisis_resources.py). A discrete
+    # system message since #1248, right after language guidance at every site
+    # that carries it (PDMA/CSDMA/DSDMA/ASPDMA/TSASPDMA/DSASPDMA/MSASPDMA/IDMA),
+    # recorded by `_RoutedRecorder.crisis_resources`.
     "crisis": BlockAnnotation(_C.EMPIRICAL, None),
     # ---- named residue: the bytes no field render explains ------------------
     # `format_system_prompt_blocks` wraps a composed system message in identity
@@ -932,6 +933,9 @@ class _RoutedRecorder:
         self._real_localized: Callable[..., str] = _constants.get_localized_accord_text
         self._real_language_guidance: Callable[[str], str] = _localization.get_language_guidance
         self._real_prohibition: Callable[[str], str] = _localization.get_prohibition_guidance
+        from ciris_engine.logic.formatters import crisis_resources as _crisis_resources
+
+        self._real_crisis_resources: Callable[..., str] = _crisis_resources.get_crisis_resources_system_block
         self._real_user_message: Callable[..., str] = DMAPromptLoader.get_user_message
         self._real_conscience_system: Callable[..., str] = ConsciencePromptLoader.get_system_prompt
         self._real_conscience_user: Callable[..., str] = ConsciencePromptLoader.get_user_prompt
@@ -1010,6 +1014,21 @@ class _RoutedRecorder:
         return self._register(
             self._real_prohibition(lang_code), "prohibition", "string:prompts.prohibitions"
         )
+
+    def crisis_resources(self, lang_code: Optional[str] = None) -> str:
+        """Recording pass-through around ``get_crisis_resources_system_block`` (#1248).
+
+        The crisis block is its own system message at every language-guidance
+        site, so it is a discrete routed block (``crisis``, EMPIRICAL) rather
+        than bytes interpolated inside ``dsdma.system``. Sourced to the corpus
+        file it is rendered from. It is NOT in a research-override namespace:
+        crisis world-facts HOLD by construction, no manifest can reach them.
+        """
+        from ciris_engine.schemas.resources.crisis import load_crisis_registry
+
+        value = self._real_crisis_resources(lang_code)
+        locale = load_crisis_registry(lang_code).locale
+        return self._register(value, "crisis", f"corpus:crisis_resources_{locale}")
 
     def user_message(self, loader: object, template_data: object, **kwargs: object) -> str:
         """Recording pass-through around ``DMAPromptLoader.get_user_message`` (#974).
@@ -1449,6 +1468,7 @@ def compose_dump_rows(
             localized_accord=recorder.localized_accord,
             language_guidance=recorder.language_guidance,
             prohibition_guidance=recorder.prohibition_guidance,
+            crisis_resources=recorder.crisis_resources,
             user_message=_user_message_seam,
             conscience_system_prompt=_conscience_system_seam,
             conscience_user_prompt=_conscience_user_seam,

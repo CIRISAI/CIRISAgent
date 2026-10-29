@@ -1,14 +1,180 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'sw'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "sw",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for KE, TZ, UG added 2026-10-29 (CIRISAgent#1248): 3 of 6 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "tz",
+    "ke",
+    "ug"
+  ],
   "resources": {
+    "emergency_kenya_999": {
+      "id": "emergency_kenya_999",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "999",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "ke"
+      ],
+      "languages": [
+        "sw"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Kenya Telephone: 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): KE 999 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/kenya/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Kenya Telephone: 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (also lists 112 and 911). 'languages' = the locale this entry is staged for (sw), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/kenya/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_tanzania_112": {
+      "id": "emergency_tanzania_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency / police",
+      "availability": [
+        "tz"
+      ],
+      "languages": [
+        "sw"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Tanzania Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | Tanzania Communications Regulatory Authority, National Numbering Plan v13 (June 2020): \"Table 16: Life and safety (free of charge) services ... 112 Emergency, Police Operational\" (https://web.archive.org/web/2021id_/https://www.tcra.go.tz/uploads/text-editor/files/National%20Numbering%20Plan%20%28Updated%20June%2C%202020%29_1622553220.pdf) | AOSP eccdata (Android's emergency-number database): TZ 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: police. Listed beyond that by some sources only: ambulance, fire. MEDIUM confidence — owner-directed second-opinion review 2026-10-29 (not human verification); FCDO said 112 (ambulance, fire, police), Wikipedia said 112 under police, ambulance 114, fire 115, police also 999. Second-opinion review cites: TCRA National Numbering Plan (2026); no URL supplied — check at source. Public ambulance coverage outside the cities is limited. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/tanzania/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Tanzania Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially differs: lists 112 under police, ambulance 114, fire 115, police also 999. 'languages' = the locale this entry is staged for (sw), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/tanzania/getting-help",
+      "source_urls": [
+        "https://web.archive.org/web/2021id_/https://www.tcra.go.tz/uploads/text-editor/files/National%20Numbering%20Plan%20%28Updated%20June%2C%202020%29_1622553220.pdf",
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_tanzania_114": {
+      "id": "emergency_tanzania_114",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "114",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "tz"
+      ],
+      "languages": [
+        "sw"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 114 for TZ; no second official page found). Not emitted. MEDIUM confidence — owner-directed second-opinion review 2026-10-29 (not human verification); FCDO said 112 (ambulance, fire, police), Wikipedia said 112 under police, ambulance 114, fire 115, police also 999. Second-opinion review cites: TCRA National Numbering Plan (2026); no URL supplied — check at source. Public ambulance coverage outside the cities is limited. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/tanzania/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Tanzania Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Only one source (TCRA numbering plan; UK FCDO and AOSP do not list 114) — below the two-source bar. Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially differs: lists 112 under police, ambulance 114, fire 115, police also 999. 'languages' = the locale this entry is staged for (sw), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/tanzania/getting-help",
+      "source_urls": []
+    },
+    "emergency_tanzania_115": {
+      "id": "emergency_tanzania_115",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "115",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (public ambulance coverage outside the cities is limited)",
+      "availability": [
+        "tz"
+      ],
+      "languages": [
+        "sw"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. MEDIUM confidence — owner-directed second-opinion review 2026-10-29 (not human verification); FCDO said 112 (ambulance, fire, police), Wikipedia said 112 under police, ambulance 114, fire 115, police also 999. Second-opinion review cites: TCRA National Numbering Plan (2026); no URL supplied — check at source. Public ambulance coverage outside the cities is limited. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/tanzania/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Tanzania Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). TCRA National Numbering Plan lists 115 Ambulance as RESERVED, not operational — do not emit. Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially differs: lists 112 under police, ambulance 114, fire 115, police also 999. 'languages' = the locale this entry is staged for (sw), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/tanzania/getting-help",
+      "source_urls": []
+    },
+    "emergency_uganda_999": {
+      "id": "emergency_uganda_999",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "999",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency number (free; police-operated)",
+      "availability": [
+        "ug"
+      ],
+      "languages": [
+        "sw"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Uganda Telephone: 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | Uganda Police Force: \"UPF Headquarters Address: Katalima Road, Naguru ... Emergency: 999/112\" (https://www.upf.go.ug/) | AOSP eccdata (Android's emergency-number database): UG 999 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: police. Listed beyond that by some sources only: ambulance, fire. MEDIUM confidence — owner-directed second-opinion review 2026-10-29 (not human verification); FCDO said 999 (ambulance, fire, police), Wikipedia said 112 general, 911 ambulance, 999 police/fire. Second-opinion review cites: Uganda Police Force FAQ and 2025-26 police notices; no URL supplied — check at source. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/uganda/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Uganda Telephone: 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially differs: lists 112 general, 911 ambulance, 999 police/fire. 'languages' = the locale this entry is staged for (sw), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/uganda/getting-help",
+      "source_urls": [
+        "https://www.upf.go.ug/",
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_uganda_112": {
+      "id": "emergency_uganda_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency number (free; police-operated)",
+      "availability": [
+        "ug"
+      ],
+      "languages": [
+        "sw"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 112 for UG; no second official page found). Not emitted. MEDIUM confidence — owner-directed second-opinion review 2026-10-29 (not human verification); FCDO said 999 (ambulance, fire, police), Wikipedia said 112 general, 911 ambulance, 999 police/fire. Second-opinion review cites: Uganda Police Force FAQ and 2025-26 police notices; no URL supplied — check at source. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/uganda/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Uganda Telephone: 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Uganda Police Force lists 999/112, but no second source lists 112. Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially differs: lists 112 general, 911 ambulance, 999 police/fire. 'languages' = the locale this entry is staged for (sw), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/uganda/getting-help",
+      "source_urls": []
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

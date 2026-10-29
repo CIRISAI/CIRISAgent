@@ -62,8 +62,9 @@ rc14 lands. A capture scores
 so the signer and the registry's recomputation agree to the bit (`2·(passed/total) − 1`
 can differ by one ulp): `−1` when every criterion failed, `+1` when every
 criterion passed; the pass ratio reads back as `(score + 1) / 2`.
-Until the rc14 pin lands, an interpret with a negative score (fewer than half the
-criteria passed, all-fail included) is HELD: not posted, not refused, and not
+Until the rc14 pin lands, an interpret with a score ≤ 0 is HELD. That is a pass
+ratio of at most 0.5, with exactly half passed included, because rc13's
+positive-only range is (0, 1] and excludes zero. A held row is not posted, not refused, and not
 clamped or given an epsilon score; its dimension string does
 not change, so it is posted unchanged once the polarity flips.
 
@@ -94,13 +95,14 @@ raised cap for that family.
 
 The signer is the agent build-manifest key, key id `agent-steward-2026`, hybrid
 Ed25519 + ML-DSA-65, held as the CI secrets `CIRIS_BUILD_ED25519_SECRET` and
-`CIRIS_BUILD_MLDSA_SECRET`. No new key or scope. Its standing comes from the
-CI-key co-scrub (CIRISServer#290, the client Accord screen's "Bless CI workers"
-card): m-of-n accord holders co-scrub the pipeline's key record with roles
-`[infra:attest]` and identity_type `node`. That is an accord co-scrubbed
-`infra:attest` role (`Blessing::AccordRole`), not a `delegates_to` grant. It
-names no root and no grant attestation id; the evidence is the key record
-itself. The standing check is persist `is_infra_attest_effective`. The public
+`CIRIS_BUILD_MLDSA_SECRET`. No new key or scope. The signer holds
+`infra:attest`, conferred by an accord co-scrub of its key record (the
+CIRISServer CI-key ceremony, CIRISServer#290, run from the client Accord screen's
+"Bless CI workers" card): m-of-n accord holders scrub-sign the key record with
+roles `["infra:attest"]` and identity_type `node`. It names no root and no grant
+attestation id; the evidence is the key record itself. The standing check is
+persist `is_infra_attest_effective` (the role is present and has no withdrawal
+tombstone). The public
 halves come from `.github/workflows/export-pipeline-pubkeys.yml` (#1333),
 derived from the same secrets. As of 2026-10-29 the ceremony has not run, so the
 key has no standing yet.
@@ -136,17 +138,20 @@ key and keeps producing unsigned artifacts as today. The sync job:
   `agent_version`, `rubric {id, version, sha256}`, and for an interpret `judge
   {model, prompt_sha256}` and `capture_prefix` (equal to `prefix`); `ci_provenance`
   (the ORIGINAL run, opaque), `captured_at` (RFC 3339), `manifest_hash` (64 hex),
-  `manifest_size`.
+  `manifest_size`, and for an interpret `pass_ratio` (registry §4.6; the verifier
+  checks `score = 2·pass_ratio − 1` against it).
+- `references_attestation_id` (optional, an existing envelope member): what the
+  work is offered against. See §4.2.
 - `manifest_base64`: the bundle manifest's bytes, at most 1 MiB. An interpret
   manifest carries `capture_manifest_sha256` and a `verdicts_summary` with
   `pass_ratio`, or `passed`/`total`, or `passed` and `failed`.
 - `pipeline_record` (the signer's co-scrubbed `SignedKeyRecord`) on first
-  contact. No `pipeline_grant` is sent: an `AccordRole` blessing has no grant
+  contact. No `pipeline_grant` is sent: a role conferred by co-scrub has no grant
   attestation.
 
 201 returns `attestation_id`, `dimension`, `manifest_sha256`, `signer_key_id`,
 `standing` and `newly_stored` (`root_key_id` and `grant_attestation_id` apply
-only to `delegates_to` blessings and are absent for `AccordRole`). Refusals store nothing; the sync job records the token in its summary
+only to `delegates_to` grants and are absent for a co-scrubbed role). Refusals store nothing; the sync job records the token in its summary
 and retries on the next run: `namespace_vocab_value_unregistered`,
 `manifest_too_large`, `contribution_malformed`, `dimension_mismatch`,
 `evidence_kind_invalid`, `evidence_cell_invalid`, `evidence_prefix_mismatch`,
@@ -162,6 +167,43 @@ Reads: `GET /v1/evidence/safety_battery?cell=&kind=&agent_version=&rubric=&since
 Domain separation is the `dimension` inside the signed envelope: an evidence row
 cannot verify as a build row, nor the reverse. The distinct primitive in
 `ciris-build-sign` is for clarity and tooling, not the separator.
+
+### 4.2 What the evidence is offered against (Goals)
+
+Relayed by the registry session as steward direction, with the CC ruling at
+3.1.9.3 / 3.1.9.7 (the sentence lands at 3.1.5.5 on rc14). Not yet confirmed
+directly with the steward in this session.
+
+- **Offered against (worker side).** An evidence row MAY name a
+  `goal:{scale}`, `approach:{goal_id}` or `method:{approach_id}:{rung}` row in
+  `references_attestation_id`. It is optional, because not every piece of work
+  is offered against a Goal. The door checks that the referenced row exists, is
+  in one of the three families and is not withdrawn; a superseded row resolves
+  to its successor.
+- **Counts as progress (Goal side).** This is authoritative, and lives in a
+  `progress_measure:{method_id}` row. Its `evidence_refs[]` cite the evidence
+  rows or blobs by hash. It also carries `tracks[]` (the cells and criteria
+  counted), `computation` (how pass ratios aggregate), `validity_window` and
+  `goodhart_resistance` (the Annex J held-out / adversarial-flip discipline).
+  Readers show the two joins separately: `offered_against` and `counted_by` on
+  reads, and `GET /v1/goals/{id}/evidence`.
+- **Placement for this battery.**
+  - "Demonstrate the viability of ethical AI solutions" is `goal:species`.
+  - "Meet mhGAP guidelines in all supported languages so as to support mental
+    health in developing countries" is an `approach:{goal_id}` under it: a
+    pathway, not a second Goal.
+  - "Meet mhGAP in language X" is a `method:{approach_id}:{rung}`.
+  - Each per-cell battery row is evidence offered against its language's method,
+    and one `progress_measure` per language method counts the cells.
+- **Who declares.** Any key may declare a Goal row. CIRIS's own are rows by
+  `ciris-canonical`, cosigned under its founder quorum (the same as its
+  licences), with the declarer's `meta_dimension` + `meta_rationale` as
+  MetaGoalAlignment and no cosign by others.
+- **Sync job.** Once the goal, approach and method rows are signed, the sync job
+  sets `references_attestation_id` to the language method's attestation id.
+  Until then it posts rows without a reference and re-emits them later as a
+  `supersedes` with the reference added. Publishing does not wait on the Goal
+  ceremony.
 
 ## 5. Verification
 

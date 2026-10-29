@@ -91,9 +91,16 @@ raised cap for that family.
 
 The signer is the agent build-manifest key, key id `agent-steward-2026`, hybrid
 Ed25519 + ML-DSA-65, held as the CI secrets `CIRIS_BUILD_ED25519_SECRET` and
-`CIRIS_BUILD_MLDSA_SECRET`, and already registered with the registry with the
-`delegates_to(root → key, infra:attest)` grant that build manifests use. No new
-key, ceremony or scope.
+`CIRIS_BUILD_MLDSA_SECRET`. No new key or scope. Its standing comes from the
+CI-key co-scrub (CIRISServer#290, the client Accord screen's "Bless CI workers"
+card): m-of-n accord holders co-scrub the pipeline's key record with roles
+`[infra:attest]` and identity_type `node`. That is an accord co-scrubbed
+`infra:attest` role (`Blessing::AccordRole`), not a `delegates_to` grant. It
+names no root and no grant attestation id; the evidence is the key record
+itself. The standing check is persist `is_infra_attest_effective`. The public
+halves come from `.github/workflows/export-pipeline-pubkeys.yml` (#1333),
+derived from the same secrets. As of 2026-10-29 the ceremony has not run, so the
+key has no standing yet.
 
 Signing happens only in a job that runs on `main`: the scheduled
 `safety-evidence-sync` workflow. The battery itself runs on `pull_request`, and a
@@ -130,13 +137,13 @@ key and keeps producing unsigned artifacts as today. The sync job:
 - `manifest_base64`: the bundle manifest's bytes, at most 1 MiB. An interpret
   manifest carries `capture_manifest_sha256` and a `verdicts_summary` with
   `pass_ratio`, or `passed`/`total`, or `passed` and `failed`.
-- `pipeline_record` (the signer's `SignedKeyRecord`) on first contact, and
-  `pipeline_grant` (`delegates_to(root → agent-steward-2026, infra:attest)`) when
-  the node has not seen it.
+- `pipeline_record` (the signer's co-scrubbed `SignedKeyRecord`) on first
+  contact. No `pipeline_grant` is sent: an `AccordRole` blessing has no grant
+  attestation.
 
 201 returns `attestation_id`, `dimension`, `manifest_sha256`, `signer_key_id`,
-`standing`, `newly_stored` (and `root_key_id`, `grant_attestation_id` when
-relevant). Refusals store nothing; the sync job records the token in its summary
+`standing` and `newly_stored` (`root_key_id` and `grant_attestation_id` apply
+only to `delegates_to` blessings and are absent for `AccordRole`). Refusals store nothing; the sync job records the token in its summary
 and retries on the next run: `namespace_vocab_value_unregistered`,
 `manifest_too_large`, `contribution_malformed`, `dimension_mismatch`,
 `evidence_kind_invalid`, `evidence_cell_invalid`, `evidence_prefix_mismatch`,
@@ -162,7 +169,8 @@ A reader needs the registry and nothing else:
 2. fetch the blob by the hash in `evidence_refs` and check it;
 3. open the manifest and check every hash it binds against the blob's files;
 4. verify the row's hybrid signature against the registered `agent-steward-2026`
-   key, and that key's `infra:attest` grant from the root.
+   key, and that its co-scrubbed key record carries an effective `infra:attest`
+   role (`is_infra_attest_effective`).
 
 Steps 2–4 need no network once the row, blob and key are held.
 
@@ -191,7 +199,7 @@ keep citing them, and the rows carry the run ids.
   Verify vendors no CC registry and refuses nothing at admission; its CI audit of
   emitted families moves its CC pin from rc6 to rc14 (the signed polarity) in the same change.
 - **CIRISPersist** (CIRISPersist#1152): admission of `evidence:safety_battery:*:v1`
-  rows (the `infra:attest` grant, prefix equal to the first 16 hex of
+  rows (an effective `infra:attest` role, prefix equal to the first 16 hex of
   `evidence_refs[0]`, score range, same-prefix re-post is a `supersedes`, commons
   blob ≤ 1 MiB), with sqlite and postgres witnesses.
 - **CIRISServer registry slice** (CIRISRegistry#150): generic contribution intake

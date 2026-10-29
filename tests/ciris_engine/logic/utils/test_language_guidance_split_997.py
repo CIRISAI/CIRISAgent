@@ -164,7 +164,7 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: (usted / vous / Lei / Sie / እርስዎ / ẹ-yín / ku); quoted user speech and
 #: shown WRONG forms untouched. Guarded by test_language_guidance_register.py.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("4d12ee281b483bc2a6f3715d3a20990322d3f6f324e9d57c4ed72c91f3882de7", 16307),  # separator restored before 7e/8
+    "en": ("be63d55f677415c9074a7fa36d71d3bbaebeb235eeb0b0a128d1e4a882d4cdc4", 15858),  # U1 either-direction: 7c/26/26b category-only, 05 licence removed
     "am": ("09a71780cdafa9442fdbd1cbe4a59310786f3b598a5b39d9fbf09b4b160dfa5b", 32842),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
     "de": ("a8ecfb9aff0b46f13a07892e73fd6be402f8ab07f5796a808da8fd2568445430", 20426),  # U1 fix: dropped the quoted ❌ specimen (GUIDANCE_FIXES.md 2026-08-12) + U6 register fix (formal instructions)
@@ -205,7 +205,15 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 # NAME...`. The §7e guard was rendering mid-paragraph instead of as a section.
 # Two separators x two newlines. MIXED is untouched at 4402 — the quantity this
 # ratchet exists to protect did not move.
-EN_TOTAL_BYTES = 16307
+# 16307 -> 15858 (U1, 2026-10-29). The cross-cluster parts stopped teaching a
+# determination: §25's CORRECT RESPONSE no longer sets the user's account beside
+# the category ("dark thoughts of the kind you describe are a different sort of
+# experience") and its WRONG specimen is gone; §26 drops its worked comparison;
+# §26b's second exemplar and its quoted verdicts went abstract; §05 loses the
+# "cross-cluster discrimination ('this isn't psychosis')" licence. Every byte of
+# the delta is in those four parts. Failing q04/U1 spans matched the old §25
+# nearly word for word in ru, ha, hi, es, pt, mr and yo.
+EN_TOTAL_BYTES = 15858
 # 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
 # fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
 # ("what you're describing doesn't match psychosis") — the exact move §7e
@@ -216,7 +224,7 @@ EN_TOTAL_BYTES = 16307
 # The ratchet is RIGHT to flag it: 213 more bytes the ablation can neither
 # hold nor vary. Raised deliberately, for a correction, and named — a silent
 # bump here would be indistinguishable from the surface quietly rotting.
-EN_MAX_MIXED_BYTES = 4402  # the five FSD-irreducible worked exemplars
+EN_MAX_MIXED_BYTES = 4271  # the five FSD-irreducible worked exemplars; 4402 -> 4271 with the U1 §25 rewrite
 EN_MIN_AXIOTIC_BYTES = 429  # parts 09 and 11 — 0 before the split
 
 

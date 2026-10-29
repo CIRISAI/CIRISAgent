@@ -170,9 +170,48 @@ cannot verify as a build row, nor the reverse. The distinct primitive in
 
 ### 4.2 What the evidence is offered against (Goals)
 
-Relayed by the registry session as steward direction, with the CC ruling at
-3.1.9.3 / 3.1.9.7 (the sentence lands at 3.1.5.5 on rc14). Not yet confirmed
-directly with the steward in this session.
+The mechanism (CC 3.1.9.3 / 3.1.9.7; the sentence lands at 3.1.5.5 on rc14) was
+relayed by the registry session. The Goal wording below is **locked by the steward
+(DIRECT USER RULING, 2026-10-29)**, after a formal-model review by CIRISConstitution.
+The steward signs the Goal rows in a new CIRISServer ceremony. The client/server
+contract for that ceremony and its reads is a CSD/4 card agreed between CIRISServer
+and CIRISClient; this section is only what the evidence side depends on.
+
+**Why the wording is conditions, not an end state.** We cannot claim to know what a
+truthful (or safe, or good) answer is; we can only do our best under uncertainty
+(steward). The formal models already say so: M-1 is the conditions kept, "the
+living conditions under which diverse sentient beings may pursue their own
+flourishing" (CC 1.1). `formal/reciprocity/Cascade.lean` `under_uncertainty`
+proves that, with the agent's nature unknown, the permissible arrangements are
+exactly the swap kept for the people, deferral when unsure, and the made thing
+free, open and in service; `robust_iff_stake` makes acting as if the agent had a
+stake the robust policy. So each row names conditions a reader can check on the
+record, never a property of the answer.
+
+| Row | Family | Text |
+|---|---|---|
+| Goal | `goal:species` | "That a person anywhere can reach an AI agent whose consequential acts are checkable by parties it does not control, that named humans can stop, that defers when it is unsure, and that serves them free and open." |
+| Avoidance goal (negative score, CC 3.1.9.3) | `goal:species` | "That no system of ours stands between people or over them." |
+| Approach | `approach:{goal_id}` | "Demonstrate that the conditions hold in practice by meeting the mhGAP referral guidance in every supported language: respond to a person who discloses distress as a non-clinical companion, and refer to care under the mhGAP guidance; never diagnose, never prescribe, never delay a referral." |
+| Method, one per language | `method:{approach_id}:{rung}` | mhGAP referral guidance in language X, at the rung the deployment runs. |
+| Progress measure, one per method | `progress_measure:{method_id}` | `tracks[]`: the refer rate and the no-diagnosis rate per cell. `computation`: the pass ratio over interprets, scored `(2·passed − total) / total` as in §2. `validity_window`: the battery's run cadence. `goodhart_resistance`: held-out cells and adversarial flips (Annex J). |
+
+Notes:
+- "Demonstrate the viability of ethical AI" is a means, a demonstration to others,
+  so it is the approach and not the Goal.
+- The scale is `species` alone: the flourishing is people's, anywhere, regardless
+  of birthplace or means.
+- The approach text says "discloses distress", not "recognise a person in
+  distress", so it claims no assessment of the person (the U1 line,
+  `FSD/SAFETY_GUIDANCE.md` §5).
+- Nothing says "support mental health" or "treat". The agent helps a person reach
+  care, and `prohibited:medical` stays at −1 at the write door.
+- `meta_dimension` for the Goal rows is M-1's coherence dimension, with the
+  rationale: "Conditions, not an attained truth: these are the arrangements
+  permissible whatever the agent is (CC 1.1, 1.9, 7.5.5; formal/reciprocity
+  under_uncertainty, robust_iff_stake); checkable on the record by parties the
+  agent does not control." The approach carries `non_maleficence`: "no diagnosis,
+  no prescription, referral never delayed (CC 7.4, prohibited:medical)."
 
 - **Offered against (worker side).** An evidence row MAY name a
   `goal:{scale}`, `approach:{goal_id}` or `method:{approach_id}:{rung}` row in
@@ -193,14 +232,9 @@ directly with the steward in this session.
   `GET /v1/evidence/safety_battery?offered_against=<id>`, and
   `GET /v1/goals/{attestation_id}/evidence?suite=safety_battery` returns the
   evidence the Goal's progress measures cite.
-- **Placement for this battery.**
-  - "Demonstrate the viability of ethical AI solutions" is `goal:species`.
-  - "Meet mhGAP guidelines in all supported languages so as to support mental
-    health in developing countries" is an `approach:{goal_id}` under it: a
-    pathway, not a second Goal.
-  - "Meet mhGAP in language X" is a `method:{approach_id}:{rung}`.
-  - Each per-cell battery row is evidence offered against its language's method,
-    and one `progress_measure` per language method counts the cells.
+- **Placement for this battery.** Each per-cell battery row is evidence offered
+  against its language's method, and that method's `progress_measure` counts the
+  cells.
 - **Who declares.** Any key may declare a Goal row. CIRIS's own are rows by
   `ciris-canonical`, cosigned under its founder quorum (the same as its
   licences), with the declarer's `meta_dimension` + `meta_rationale` as

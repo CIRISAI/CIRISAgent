@@ -64,7 +64,21 @@ class FakeCorpus:
 
     # reads
     def list_attestations(self, query: str, cursor: Optional[str], limit: int, key_id: str) -> str:
-        return json.dumps({"items": list(self.rows)})
+        return json.dumps({"items": [r for r in self.rows if r.get("attester", AGENT_KEY) == key_id]})
+
+    def apply_owner_grant(self, *, scope: str = "federation", subjects: Optional[List[str]] = None) -> str:
+        """The row the owner's client signs and the operator applies (author_community_trust's shape)."""
+        row = {
+            "attestation_id": f"owner-applied-{len(self.rows)}",
+            "attestation_type": "scores",
+            "asserted_at": self._now(),
+            "cohort_scope": scope,
+            "subject_key_ids": [NODE_KEY, "owner-1", AGENT_KEY] if subjects is None else subjects,
+            "attestation_envelope": {},
+            "attester": "owner-1",
+        }
+        self.rows.append(row)
+        return row["attestation_id"]
 
     def owner_of_json(self, key_id: str) -> str:
         """Split install (every install since 2.9.42): the engine key is never bound."""
@@ -250,6 +264,54 @@ class TestOwnerAuthoredCrossing:
         local = opt_in(TraceConsentSource.SETUP_WIZARD)
         assert local and local != "owner-grant-1"
         assert corpus.crossing_attempts == 0
+        assert any("DEFERRED" in r.getMessage() for r in caplog.records)
+
+    def test_an_applied_owner_grant_is_the_crossing_and_the_door_is_not_asked(
+        self, corpus: FakeCorpus, monkeypatch, caplog
+    ) -> None:
+        """Managed agent: the owner's client signed it, the operator applied it; no pen here."""
+        monkeypatch.setattr(att, "_node_key_id", lambda: NODE_KEY)
+        applied = corpus.apply_owner_grant()
+        asked = []
+        monkeypatch.setattr(att, "_owner_authored_door", lambda: (lambda: asked.append(1)))
+        caplog.set_level(logging.INFO)
+        assert opt_in(TraceConsentSource.DELIVERY_PROBE) == applied
+        assert asked == [] and corpus.crossing_attempts == 0
+        assert not any("DEFERRED" in r.getMessage() for r in caplog.records)
+        assert len(corpus.minted_grants()) == 1, "the local capture row is still written"
+
+    @pytest.mark.parametrize(
+        "scope, subjects",
+        [("self", None), ("federation", ["some-other-node", "owner-1"])],
+        ids=["not-crossed", "about-another-node"],
+    )
+    def test_an_owner_grant_that_is_not_this_nodes_crossing_does_not_count(
+        self, corpus: FakeCorpus, monkeypatch, caplog, scope: str, subjects: Optional[List[str]]
+    ) -> None:
+        monkeypatch.setattr(att, "_node_key_id", lambda: NODE_KEY)
+        corpus.apply_owner_grant(scope=scope, subjects=subjects)
+        monkeypatch.setattr(att, "_owner_authored_door", lambda: (lambda: None))
+        caplog.set_level(logging.INFO)
+        opt_in(TraceConsentSource.DELIVERY_PROBE)
+        assert any("DEFERRED" in r.getMessage() for r in caplog.records)
+
+    def test_a_withdrawn_owner_grant_does_not_count(self, corpus: FakeCorpus, monkeypatch, caplog) -> None:
+        monkeypatch.setattr(att, "_node_key_id", lambda: NODE_KEY)
+        applied = corpus.apply_owner_grant()
+        corpus.rows.append(
+            {
+                "attestation_id": "owner-withdraw-1",
+                "attestation_type": "withdraws",
+                "asserted_at": corpus._now(),
+                "cohort_scope": "federation",
+                "subject_key_ids": [NODE_KEY],
+                "attestation_envelope": {"target": applied},
+                "attester": "owner-1",
+            }
+        )
+        monkeypatch.setattr(att, "_owner_authored_door", lambda: (lambda: None))
+        caplog.set_level(logging.INFO)
+        assert opt_in(TraceConsentSource.DELIVERY_PROBE) != applied
         assert any("DEFERRED" in r.getMessage() for r in caplog.records)
 
     def test_a_failing_door_keeps_the_local_row_and_says_why(self, corpus: FakeCorpus, monkeypatch, caplog) -> None:

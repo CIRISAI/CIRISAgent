@@ -790,6 +790,44 @@ def _owner_authored_door() -> Optional[Callable[[], Optional[str]]]:
     return door if callable(door) else None
 
 
+def _node_key_id() -> Optional[str]:
+    from ciris_engine.logic.runtime.edge_runtime import get_node_key_id
+
+    return get_node_key_id()
+
+
+def _applied_owner_grant(engine: object) -> Optional[str]:
+    """An owner-authored community_trust grant about this node already in force, or None.
+
+    On a managed agent the owner's pen is never on the host: the owner's client signs
+    the grant and the operator applies it to the node. Once it is there the crossing
+    is done, and the fold must not keep reporting the pen as unreachable. The row is
+    the one ``author_community_trust`` builds: attested by the owner, federation
+    scope, naming this node. Can't read ⇒ None, so the caller falls through to the
+    door exactly as before.
+    """
+    try:
+        import json as _json
+
+        node = _node_key_id()
+        owner_of_json = getattr(engine, "owner_of_json", None)
+        if not node or owner_of_json is None:
+            return None
+        owner = _json.loads(owner_of_json(node))
+        if not isinstance(owner, str) or not owner:
+            return None
+        grant = _in_force_grant(_community_trust_rows(engine, owner))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-CEG: applied owner grant lookup failed: %s", exc)
+        return None
+    if grant is None or grant.get("cohort_scope") != _CROSSING_TARGET_FEDERATION:
+        return None
+    subjects = grant.get("subject_key_ids")
+    if not isinstance(subjects, list) or node not in subjects:
+        return None
+    return str(grant.get("attestation_id"))
+
+
 def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:
     """Cross the directed grant to the community, once per (grant, attempt) per process.
 
@@ -801,6 +839,10 @@ def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:
     when one was placed (CIRISAgent#1144), else the local row's.
     """
     _crossing_attempted.add((attestation_id, attempt))
+    applied = _applied_owner_grant(engine)
+    if applied is not None:
+        _log_grant_decision(f"owner-authored community_trust {applied} in force (local grant {attestation_id})")
+        return applied
     door = _owner_authored_door()
     if door is not None:
         try:

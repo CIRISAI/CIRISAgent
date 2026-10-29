@@ -1,7 +1,7 @@
 # Safety-battery evidence as signed CEG blobs
 
 Status: proposed (2026-10-29). Owner: CIRISAgent. Registry family: CC 3.1.5.5
-(rc13 @ 4504dda). Registry intake: CIRISRegistry#150.
+(CC v1.0-rc13, cd7a22b). Registry intake: CIRISRegistry#150.
 
 ## 1. What this replaces
 
@@ -55,7 +55,9 @@ evidence, replication audience public), with `evidence_refs: [<manifest sha256>]
 It is a self-report (CC 3.4.5.1): it confers no standing by itself and is
 published, not "offered".
 
-The family's polarity is `signed` (rc14; rc13 is positive-only). A capture scores
+The family's polarity is `signed` (from rc14; rc13 is positive-only). Rows are
+written with the signed score from the first one, so none needs re-signing when
+rc14 lands. A capture scores
 `1.0`. An interpret scores `2·(pass ratio) − 1`: `−1` when every criterion failed,
 `+1` when every criterion passed; the pass ratio reads back as `(score + 1) / 2`.
 Until the rc14 pin lands, an interpret whose every criterion failed is HELD, not
@@ -187,7 +189,7 @@ keep citing them, and the rows carry the run ids.
   the build manifest, and the offline verifier of §5; both in `ciris-verify-core`
   beside `manifest_contribution`, so persist and the registry call one verifier.
   Verify vendors no CC registry and refuses nothing at admission; its CI audit of
-  emitted families moves its CC pin from rc6 to rc13 in the same change.
+  emitted families moves its CC pin from rc6 to rc14 (the signed polarity) in the same change.
 - **CIRISPersist** (CIRISPersist#1152): admission of `evidence:safety_battery:*:v1`
   rows (the `infra:attest` grant, prefix equal to the first 16 hex of
   `evidence_refs[0]`, score range, same-prefix re-post is a `supersedes`, commons
@@ -195,7 +197,7 @@ keep citing them, and the rows carry the run ids.
 - **CIRISServer registry slice** (CIRISRegistry#150): generic contribution intake
   parameterized by family, the evidence read, blob fetch by hash; the
   `CLM-safety-battery-evidence-family` register row names this document.
-- **CIRISConstitution**: done, rc13 @ 4504dda, CC 3.1.5.5.
+- **CIRISConstitution**: done, CC v1.0-rc13 (cd7a22b), CC 3.1.5.5.
 
 ## 8. Order of work
 

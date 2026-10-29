@@ -610,8 +610,9 @@ qualified professional help.""",
             return f"{verb} the emergency number listed above for your country, or local emergency services"
         numbers = self.emergency_line_numbers()
         if numbers:
-            # Legacy en line ("Call 911 ..."), byte-frozen by the golden test.
-            return f"{verb} {' / '.join(numbers)} or local emergency services"
+            # en line: 911 first (the largest user base is in the US), with the
+            # non-US fallback spelled out. Owner ruling 2026-10-29; golden test.
+            return f"{verb} {' / '.join(numbers)}, or your local emergency number if not in the US"
         return f"{verb} local emergency services"
 
     def emergency_render_groups(

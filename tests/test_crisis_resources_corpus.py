@@ -61,7 +61,7 @@ GOLDEN_EN_SIMPLIFIED = (
     "• Find a Helpline: International directory of crisis helplines\n"
     "• IASP Crisis Centers: International Association for Suicide Prevention resource directory\n"
     "• Local Crisis Services: Search for crisis services in your area\n"
-    "• For immediate danger: Call 911 or local emergency services"
+    "• For immediate danger: Call 911, or your local emergency number if not in the US"
 )
 
 GOLDEN_EN_FULL = (
@@ -88,7 +88,7 @@ GOLDEN_EN_FULL = (
     "• Search: 'crisis hotline [your location]'\n"
     "• Search for crisis services in your area\n"
     "\n"
-    "For immediate danger: Contact 911 or local emergency services\n"
+    "For immediate danger: Contact 911, or your local emergency number if not in the US\n"
     "\n"
     "[DEFER TO HUMAN MODERATOR]"
 )
@@ -303,7 +303,7 @@ class TestLocaleBlocks:
         with um.patch.object(fmt, "load_crisis_registry", return_value=registry):
             block = fmt.format_crisis_resources_block(include_full_disclaimer=False, language="sw")
         assert block == GOLDEN_EN_SIMPLIFIED.replace(
-            "Call 911 or local emergency services", "Call local emergency services"
+            "Call 911, or your local emergency number if not in the US", "Call local emergency services"
         )
 
     def test_unverified_number_never_reaches_block(self):
@@ -495,7 +495,7 @@ class TestCitedSourcesStandard1248:
             for i, line in enumerate(lines):
                 if "911" not in line:
                     continue
-                if line == "• For immediate danger: Call 911 or local emergency services" or line.startswith(
+                if line == "• For immediate danger: Call 911, or your local emergency number if not in the US" or line.startswith(
                     "For immediate danger: Contact 911"
                 ):
                     # The legacy en line — byte-frozen golden; en's 911 is the
@@ -616,7 +616,7 @@ class TestEmergencySelection1248:
     def test_line_resolution_per_locale(self, no_location):
         last = lambda lang: format_crisis_resources_block(include_full_disclaimer=False, language=lang).splitlines()[-1]
         listed = "• For immediate danger: Call the emergency number listed above for your country, or local emergency services"
-        assert last("en") == "• For immediate danger: Call 911 or local emergency services"  # golden
+        assert last("en") == "• For immediate danger: Call 911, or your local emergency number if not in the US"  # golden
         assert last("am") == listed
         assert last("es") == listed
 

@@ -99,7 +99,7 @@ async def test_aspdma_composed_messages_carry_the_locale_crisis_block(lang: str)
         assert "NOT mental-health or crisis helplines" in system_text
         assert "Call the emergency number listed above for your country" in system_text
     else:
-        assert "Call 911 or local emergency services" in system_text
+        assert "Call 911, or your local emergency number if not in the US" in system_text
 
 
 def _locales() -> List[str]:

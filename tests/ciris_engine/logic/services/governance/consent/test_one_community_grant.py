@@ -323,3 +323,22 @@ class TestOwnerAuthoredCrossing:
         assert opt_in(TraceConsentSource.SETUP_WIZARD)
         assert corpus.crossing_attempts == 0
         assert any("pen locked" in r.getMessage() for r in caplog.records)
+
+
+def test_in_force_reads_a_standing_grant_and_not_a_withdrawn_one(corpus: FakeCorpus) -> None:
+    assert att.community_grant_in_force() is None
+    opt_in(TraceConsentSource.SETUP_WIZARD)
+    granted = att.community_grant_in_force()
+    assert granted is not None
+    corpus.rows.append(
+        {
+            "attestation_id": "withdraw-1",
+            "attestation_type": "withdraws",
+            "asserted_at": corpus._now(),
+            "cohort_scope": "self",
+            "subject_key_ids": [],
+            "attestation_envelope": {"target": granted},
+        }
+    )
+    assert att.community_grant_in_force() is None
+    assert att.current_community_grant_id() is not None, "the revocation target is still found"

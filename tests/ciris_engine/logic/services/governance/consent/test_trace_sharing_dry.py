@@ -70,6 +70,27 @@ def test_no_opt_in_authors_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     assert called == [], "nothing may be authored without the owner's opt-in"
 
 
+def test_a_grant_in_force_is_the_opt_in_after_the_migration_purged_the_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The legacy migration turns the env var into a grant, then purges the var. The
+    node fold and the delivery probe run after it and must still read the owner's yes."""
+    from ciris_engine.logic.services.governance.consent import attestation
+
+    monkeypatch.delenv(trace_sharing.OPT_IN_ENV_VAR, raising=False)
+    monkeypatch.setattr(attestation, "community_grant_in_force", lambda: "grant-1")
+    assert trace_sharing.owner_opted_into_trace_sharing() is True
+
+
+def test_no_env_and_no_grant_in_force_is_still_no(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Withdrawn, recanted, unreadable or never granted: all read as no."""
+    from ciris_engine.logic.services.governance.consent import attestation
+
+    monkeypatch.delenv(trace_sharing.OPT_IN_ENV_VAR, raising=False)
+    monkeypatch.setattr(attestation, "community_grant_in_force", lambda: None)
+    assert trace_sharing.owner_opted_into_trace_sharing() is False
+
+
 #: Session-less authors. These previously each carried their OWN read of the
 #: opt-in signal, which is how one could fail-closed while another fails-open.
 #: They must now gate purely through the handle.

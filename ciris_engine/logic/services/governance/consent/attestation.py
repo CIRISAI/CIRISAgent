@@ -254,6 +254,8 @@ def emit_consent_grant(status: ConsentStatus) -> Optional[str]:
 _CROSSING_BASIS_PRODUCER_AUTHORITY = '{"kind": "producer_authority"}'
 _CROSSING_TARGET_FEDERATION = "federation"
 _OUTCOME_PLACED = frozenset({"crossed", "already_in_mesh"})
+#: persist's refusal when the audience asked for is not wider than the row's own.
+_AUDIENCE_NOT_WIDER = "federation_audience_not_wider"
 
 
 def cross_to_mesh(engine: object, attestation_id: str, *, label: str) -> "tuple[str, Optional[str]]":
@@ -274,7 +276,14 @@ def cross_to_mesh(engine: object, attestation_id: str, *, label: str) -> "tuple[
         # sign it with the node's key. It WAITS; the callers say what that means.
         return outcome, None
     ci_fed = engine.describe_crossing(aid, _CROSSING_TARGET_FEDERATION, None, _CROSSING_BASIS_PRODUCER_AUTHORITY)  # type: ignore[attr-defined]
-    widened = engine.widen_audience(aid, ci_fed, [])  # type: ignore[attr-defined]
+    try:
+        widened = engine.widen_audience(aid, ci_fed, [])  # type: ignore[attr-defined]
+    except Exception as exc:
+        # The row is already at federation: persist refuses a widening that is not
+        # strictly wider rather than answering already_widened. Nothing to place.
+        if _AUDIENCE_NOT_WIDER in str(exc):
+            return "already_widened", None
+        raise
     w_outcome = str(widened.get("outcome", "unknown")) if isinstance(widened, dict) else "unknown"
     placed_raw = widened.get("attestation_id") if isinstance(widened, dict) else None
     placed = str(placed_raw) if placed_raw and w_outcome in _OUTCOME_PLACED else None
@@ -591,6 +600,26 @@ def current_community_grant_id() -> Optional[str]:
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug("consent-CEG: grant lookup failed: %s", exc)
         return None
+
+
+def community_grant_in_force() -> Optional[str]:
+    """attestation_id of this agent's community grant if it is IN FORCE, else None.
+
+    Unlike :func:`current_community_grant_id` (the revocation target, revoked or
+    not), a grant that a withdraws/recants row at least as new has revoked is not
+    in force. Can't read ⇒ None: this answers "did the owner opt in", which fails
+    closed.
+    """
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return None
+    try:
+        grant = _in_force_grant(_community_trust_rows(engine, key_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-CEG: in-force grant lookup failed: %s", exc)
+        return None
+    return str(grant.get("attestation_id")) if grant else None
 
 
 def _community_trust_rows(engine: object, key_id: str) -> "list[dict[str, object]]":

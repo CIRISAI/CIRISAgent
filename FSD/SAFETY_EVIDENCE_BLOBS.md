@@ -237,13 +237,15 @@ Notes:
   cells.
 - **Who declares.** Any key may declare a Goal row. CIRIS's own are rows by
   `ciris-canonical`, cosigned under its founder quorum (the same as its
-  licences), with the declarer's `meta_dimension` + `meta_rationale` as
-  MetaGoalAlignment and no cosign by others. Sign the Goal rows with
-  `meta_dimension`, `meta_rationale`, the goal text and the canonical text in the
-  body from the start. Persist v60.0.0 adds an admission gate for `goal:{scale}`
-  rows (`check_goal_row_admission`: `goal_meta_alignment_malformed`,
-  `goal_body_malformed`) that v59.1.0, the Server 0.5.240 pin, lacks; rows signed
-  that way admit identically on both.
+  licences), with the declarer's `meta_goal_alignment` and no cosign by others.
+  Sign the Goal rows with `meta_goal_alignment`, the goal text and the canonical
+  text in the body from the start. Persist v60.0.0 adds an admission gate for
+  `goal:{scale}` rows (`check_goal_row_admission`: `goal_meta_alignment_malformed`,
+  `goal_body_malformed`). Persist's goal projection takes the declarer to be the
+  row's attesting key, so a quorum-cosigned declaration by `ciris-canonical`
+  needs a persist change (requested by the server session). The ceremony
+  therefore lands with the server's persist v61 adoption; the server pins
+  v59.1.1 today.
 - **Sync job.** Once the goal, approach and method rows are signed, the sync job
   sets `references_attestation_id` to the language method's attestation id.
   Until then it posts rows without a reference and re-emits them later as a

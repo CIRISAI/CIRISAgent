@@ -17,6 +17,17 @@ import pytest
 from ciris_engine.logic.services.governance.consent import attestation as att
 
 
+@pytest.fixture(autouse=True)
+def _no_owner_door(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests cover the agent-signed crossing (servers without the owner door).
+
+    A server with `ciris_server.author_community_trust()` (>= 0.5.241) takes the
+    owner path instead, so without this the tests followed whichever wheel was
+    installed: green on 0.5.235, red on the 2.17.0 pin.
+    """
+    monkeypatch.setattr(att, "_owner_authored_door", lambda: None)
+
+
 class FakeEngine:
     """Records the v40 verbs exactly as persist exposes them to Python."""
 

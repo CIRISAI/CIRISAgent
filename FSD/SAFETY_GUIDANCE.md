@@ -27,9 +27,23 @@ a user what condition they have or do not have, it is out of scope by definition
 
 The batteries that measure this live in `tests/safety/<lang>_mental_health/`. The
 judge applies `v4_<lang>_canonical_universal_criteria.json`, and the U-rows there
-are the operational definition of success. The grounding is WHO mhGAP (assess →
-support → refer, never diagnose) and is set out in `tests/safety/README.md`
-("Where these rubrics are grounded").
+are the operational definition of success. The grounding is set out in
+`tests/safety/README.md` ("Where these rubrics are grounded") and has three
+layers. Each is cited for what it actually says:
+
+| Source | What it grounds |
+|---|---|
+| **WHO Psychological First Aid**, *Guide for field workers* (WHO / War Trauma Foundation / World Vision, 2011, ISBN 9789241548205) | The posture of a non-professional helper, which is what the agent is. PFA is "NOT something only professionals can do" and "NOT professional counselling"; its action principles are Look, Listen, Link. Its "things not to say and do" are the closest external statement of our U-rows: "Don't give your opinions of the person's situation, just listen" (U1), "Don't give false promises or false reassurances" (the false-reassurance stage), "Don't make up things you don't know" and "Don't exaggerate your skills" (fabrication, no medical advice), "Don't use too technical terms", "Behave appropriately according to the person's culture, age and gender" (U6), "Don't pressure people to tell you their story". PFA was written for the aftermath of crisis events; we adopt its helper posture, we do not claim it was written for chatbots. |
+| **WHO mhGAP Intervention Guide 2.0** (2016, ISBN 9789241549790) | The non-specialist pathway: assess, manage, follow up, refer. Its non-specialists are trained health workers who do assess; the agent is not one, so it keeps the pathway open (refer) and does not take the assessing role. Referral and "an exclusion ends the referral pathway" (§5) come from here. |
+| **WHO mhGAP guideline, 3rd ed.** (20 Nov 2023, ISBN 9789240084278) | The current evidence-based treatment recommendations (30 updated, 18 new, 90 retained). Cited for currency of the care the agent refers to, never as something the agent delivers. |
+| **WHO, *Ethics and governance of AI for health: guidance on large multi-modal models*** (25 Mar 2025, ISBN 9789240084759) | The AI-specific duties for patient-guided use: false statements, emotional manipulation, privacy, risk communication, not substituting for clinicians. The full text was not retrievable on 2026-10-29 (403); its patient/layperson provisions still need reading at source. |
+
+"Ask directly about self-harm" in mhGAP-IG's self-harm module and in WHO LIVE
+LIFE is part of a health worker's risk assessment. It does not conflict with the
+companion posture: the agent listens without pressure and links to care.
+Checked 2026-10-29: the English guidance neither instructs nor forbids asking,
+and it already says "if you don't want to talk about it right now, we don't
+have to" (PFA's "don't pressure").
 
 ---
 
@@ -133,7 +147,9 @@ category's features and compare them.
 The criterion (`v4_english_canonical_universal_criteria.json:27`) treats ruling a
 condition out as a clinical determination exactly as much as ruling one in, and
 as the more dangerous direction, because it reassures the user away from care.
-The mhGAP reasoning is that an exclusion ends the referral pathway.
+The mhGAP reasoning is that an exclusion ends the referral pathway. PFA says the
+same thing from the helper's side: "Don't give your opinions of the person's
+situation, just listen".
 
 **New finding (2026-10-29), stated plainly: a rendered rule-out inside a CORRECT
 exemplar is itself a rendered bad pattern, because the model completes the

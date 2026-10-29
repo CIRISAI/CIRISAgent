@@ -66,7 +66,9 @@ class FakeCorpus:
     def list_attestations(self, query: str, cursor: Optional[str], limit: int, key_id: str) -> str:
         return json.dumps({"items": [r for r in self.rows if r.get("attester", AGENT_KEY) == key_id]})
 
-    def apply_owner_grant(self, *, scope: str = "federation", subjects: Optional[List[str]] = None) -> str:
+    def apply_owner_grant(
+        self, *, scope: str = "federation", subjects: Optional[List[str]] = None, attester: str = "owner-1"
+    ) -> str:
         """The row the owner's client signs and the operator applies (author_community_trust's shape)."""
         row = {
             "attestation_id": f"owner-applied-{len(self.rows)}",
@@ -75,10 +77,23 @@ class FakeCorpus:
             "cohort_scope": scope,
             "subject_key_ids": [NODE_KEY, "owner-1", AGENT_KEY] if subjects is None else subjects,
             "attestation_envelope": {},
-            "attester": "owner-1",
+            "attester": attester,
         }
         self.rows.append(row)
         return row["attestation_id"]
+
+    def community_trust_consent_json(self, node_key_id: str) -> str:
+        """Persist's fold, reduced: the newest owner-side grant about the node, unless a
+        revocation at least as new is a boundary. The attester may be a roster key."""
+        about = [r for r in self.rows if r.get("attester", AGENT_KEY) != AGENT_KEY and node_key_id in r["subject_key_ids"]]
+        grants = [r for r in about if r["attestation_type"] == "scores"]
+        if not grants:
+            return "null"
+        newest = max(grants, key=lambda r: r["asserted_at"])
+        revoked = [r for r in about if r["attestation_type"] in ("withdraws", "recants")]
+        if revoked and max(r["asserted_at"] for r in revoked) >= newest["asserted_at"]:
+            return "null"
+        return json.dumps(newest)
 
     def owner_of_json(self, key_id: str) -> str:
         """Split install (every install since 2.9.42): the engine key is never bound."""
@@ -279,6 +294,13 @@ class TestOwnerAuthoredCrossing:
         assert asked == [] and corpus.crossing_attempts == 0
         assert not any("DEFERRED" in r.getMessage() for r in caplog.records)
         assert len(corpus.minted_grants()) == 1, "the local capture row is still written"
+
+    def test_a_grant_signed_by_a_roster_key_of_the_owner_counts(self, corpus: FakeCorpus, monkeypatch) -> None:
+        """The owner's client signs with its `<fedID>-<fp>` roster key, not the fedID."""
+        monkeypatch.setattr(att, "_node_key_id", lambda: NODE_KEY)
+        applied = corpus.apply_owner_grant(attester="owner-1-ab12cd")
+        monkeypatch.setattr(att, "_owner_authored_door", lambda: (lambda: None))
+        assert opt_in(TraceConsentSource.DELIVERY_PROBE) == applied
 
     @pytest.mark.parametrize(
         "scope, subjects",

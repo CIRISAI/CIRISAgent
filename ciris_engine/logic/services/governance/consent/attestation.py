@@ -826,35 +826,34 @@ def _node_key_id() -> Optional[str]:
 
 
 def _applied_owner_grant(engine: object) -> Optional[str]:
-    """An owner-authored community_trust grant about this node already in force, or None.
+    """The owner-authored community_trust grant standing for this node, or None.
 
-    On a managed agent the owner's pen is never on the host: the owner's client signs
-    the grant and the operator applies it to the node. Once it is there the crossing
-    is done, and the fold must not keep reporting the pen as unreachable. The row is
-    the one ``author_community_trust`` builds: attested by the owner, federation
-    scope, naming this node. Can't read ⇒ None, so the caller falls through to the
-    door exactly as before.
+    On a managed agent the owner's pen is never on the host: the owner's device signs
+    the grant (CIRISServer#837 owner-requests round trip) and the node applies it. Once
+    it stands the crossing is done, and the fold must not keep reporting the pen as
+    unreachable.
+
+    Asks persist's own fold (``community_trust_consent_json``, CIRISPersist#946), the
+    predicate the canonical applies. It knows that the attester may be a live roster
+    key of the owner's fedID and not the fedID itself, and that a revocation is a
+    boundary. Only a grant placed at federation counts here, because a local row has
+    not crossed. Can't read ⇒ None, so the caller falls through to the door as before.
     """
     try:
         import json as _json
 
         node = _node_key_id()
-        owner_of_json = getattr(engine, "owner_of_json", None)
-        if not node or owner_of_json is None:
+        standing_json = getattr(engine, "community_trust_consent_json", None)
+        if not node or standing_json is None:
             return None
-        owner = _json.loads(owner_of_json(node))
-        if not isinstance(owner, str) or not owner:
-            return None
-        grant = _in_force_grant(_community_trust_rows(engine, owner))
+        grant = _json.loads(standing_json(node) or "null")
     except Exception as exc:  # noqa: BLE001
-        logger.debug("consent-CEG: applied owner grant lookup failed: %s", exc)
+        logger.debug("consent-CEG: standing owner grant lookup failed: %s", exc)
         return None
-    if grant is None or grant.get("cohort_scope") != _CROSSING_TARGET_FEDERATION:
+    if not isinstance(grant, dict) or grant.get("cohort_scope") != _CROSSING_TARGET_FEDERATION:
         return None
-    subjects = grant.get("subject_key_ids")
-    if not isinstance(subjects, list) or node not in subjects:
-        return None
-    return str(grant.get("attestation_id"))
+    attestation_id = grant.get("attestation_id")
+    return str(attestation_id) if attestation_id else None
 
 
 def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:

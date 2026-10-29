@@ -217,10 +217,11 @@ Notes:
   `goal:{scale}`, `approach:{goal_id}` or `method:{approach_id}:{rung}` row in
   `references_attestation_id`. It is optional, because not every piece of work
   is offered against a Goal. The id must be UUID-shaped, or the door refuses it
-  with `contribution_malformed`. The door then refuses
-  `evidence_reference_not_found`, `evidence_reference_not_a_goal` or
-  `evidence_reference_withdrawn`; a superseded target resolves to its successor
-  (CIRISRegistry#151, b101707).
+  with `contribution_malformed`. Any reference that does not resolve to a live
+  goal, approach or method row (not found, the wrong family, or withdrawn) is
+  refused with the single CC token `evidence_reference_unresolved`; which of the
+  three it was appears only in the error message. A superseded target resolves to
+  its successor (CC 3.1.5.5 at rc14, CIRISConstitution efa0c58; CIRISRegistry#151).
 - **Counts as progress (Goal side).** This is authoritative, and lives in a
   `progress_measure:{method_id}` row. Its `evidence_refs[]` cite the evidence
   rows or blobs by hash. It also carries `tracks[]` (the cells and criteria

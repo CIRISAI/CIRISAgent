@@ -129,9 +129,15 @@ keep citing them, and the rows carry the run ids.
   keeps its name until the rename lands, then writes `manifest.json`; a
   `tools/verify_safety_evidence.py` performs §5 offline; `qa_reports/` evidence is
   removed after back-signing.
-- **CIRISPersist** (`ciris-build-sign`): a `safety_evidence` primitive whose signed
-  envelope carries the dimension and `evidence_refs` (the build-manifest envelope
-  with a different dimension); 1 MiB blob cap unchanged.
+- **CIRISVerify** (`ciris-build-sign`, `src/ciris-build-tool`): today `--primitive`
+  is only a build-manifest label and the tool signs a build manifest, not a CEG
+  envelope. Needed: a subcommand that signs the `scores` Contribution envelope
+  (dimension, `evidence_refs`, `score`, `cohort_scope`, `asserted_at`) with the
+  same key material and ids as the build manifest, and the offline `verify` of §5.
+- **CIRISPersist** (CIRISPersist#1152): admission of `evidence:safety_battery:*:v1`
+  rows (the `infra:attest` grant, prefix equal to the first 16 hex of
+  `evidence_refs[0]`, score range, same-prefix re-post is a `supersedes`, commons
+  blob ≤ 1 MiB), with sqlite and postgres witnesses.
 - **CIRISServer registry slice** (CIRISRegistry#150): generic contribution intake
   parameterized by family, the evidence read, blob fetch by hash; the
   `CLM-safety-battery-evidence-family` register row names this document.
@@ -139,7 +145,14 @@ keep citing them, and the rows carry the run ids.
 
 ## 8. Order of work
 
-1. CC family (done) → registry slice intake and read → `ciris-build-sign` primitive.
+0. **The vendored CC registry.** Admission checks the dimension against the CC
+   registry persist and verify vendor. Shipped persist (v60.1.0) vendors CC
+   1.0-rc9; rc12 is staged on a branch; rc13, which carries this family, is
+   untagged. Persist vendors tagged CC only, on its v61 head (mid-refactor, no
+   date). So the first row needs, in order: the rc13 tag, persist (and verify)
+   vendoring it, and a release the registry slice runs on. Whether that is v61 or
+   a v60.x cut carrying the rc13 vendor alone is the owner's call.
+1. CC family (done) → registry slice intake and read → `ciris-build-sign` subcommand.
 2. Agent sync job publishes new bundles; `qa_reports/` still receives them in
    parallel for one cycle so the two can be compared.
 3. Back-sign the existing bundles; verify a sample offline with §5.

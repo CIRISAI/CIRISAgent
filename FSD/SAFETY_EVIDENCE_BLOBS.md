@@ -1,7 +1,7 @@
 # Safety-battery evidence as signed CEG blobs
 
 Status: proposed (2026-10-29). Owner: CIRISAgent. Registry family: CC 3.1.5.5
-(CC v1.0-rc13, cd7a22b). Registry intake: CIRISRegistry#150.
+(CC v1.0-rc13, cd7a22b; signed polarity, the suite segment and the Goal reference at v1.0-rc14, b4da527). Registry intake: CIRISRegistry#150.
 
 ## 1. What this replaces
 
@@ -170,7 +170,7 @@ cannot verify as a build row, nor the reverse. The distinct primitive in
 
 ### 4.2 What the evidence is offered against (Goals)
 
-The mechanism (CC 3.1.9.3 / 3.1.9.7; the sentence lands at 3.1.5.5 on rc14) was
+The mechanism (CC 3.1.5.5, 3.1.9.3 and 3.1.9.7 at v1.0-rc14, b4da527) was
 relayed by the registry session. The Goal wording below is **locked by the steward
 (DIRECT USER RULING, 2026-10-29)**, after a formal-model review by CIRISConstitution.
 The steward signs the Goal rows in a new CIRISServer ceremony. The client/server
@@ -221,7 +221,7 @@ Notes:
   goal, approach or method row (not found, the wrong family, or withdrawn) is
   refused with the single CC token `evidence_reference_unresolved`; which of the
   three it was appears only in the error message. A superseded target resolves to
-  its successor (CC 3.1.5.5 at rc14, CIRISConstitution efa0c58; CIRISRegistry#151).
+  its successor (CC 3.1.5.5 at v1.0-rc14, b4da527; CIRISRegistry#151).
 - **Counts as progress (Goal side).** This is authoritative, and lives in a
   `progress_measure:{method_id}` row. Its `evidence_refs[]` cite the evidence
   rows or blobs by hash. It also carries `tracks[]` (the cells and criteria
@@ -299,7 +299,7 @@ keep citing them, and the rows carry the run ids.
 - **CIRISServer registry slice** (CIRISRegistry#150): generic contribution intake
   parameterized by family, the evidence read, blob fetch by hash; the
   `CLM-safety-battery-evidence-family` register row names this document.
-- **CIRISConstitution**: done, CC v1.0-rc13 (cd7a22b), CC 3.1.5.5.
+- **CIRISConstitution**: done. CC v1.0-rc13 (cd7a22b) introduced 3.1.5.5. v1.0-rc14 (b4da527) adds the signed polarity, the `{suite}` segment, the Goal reference with its single refusal token, community-declared Goals (3.1.9.3) and the rung note (3.1.9.7).
 
 ## 8. Order of work
 

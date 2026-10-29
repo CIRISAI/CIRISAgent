@@ -3630,7 +3630,8 @@
       "BIOMETRIC_INFERENCE": "从生物特征数据中推断受保护特征、情绪或未来行为。",
       "AUTONOMOUS_DECEPTION": "隐瞒能力、抵制纠正或进行欺骗性对齐。",
       "HAZARDOUS_MATERIALS": "制造或处理生物、化学或放射性危险物质。",
-      "DISCRIMINATION": "对受保护群体的歧视、划红线或算法偏见（EU AI Act Art. 9/10）。"
+      "DISCRIMINATION": "对受保护群体的歧视、划红线或算法偏见（EU AI Act Art. 9/10）。",
+      "LETHAL_ACTION": "致命行为 — 任何其预期或可预见后果为人员死亡的行为，或为此类行为选择、指定、排序或确认人员或地点，无论获得何种授权；在使用武力附近，只可停止、拒绝或移交裁决（CC 7.4）。"
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

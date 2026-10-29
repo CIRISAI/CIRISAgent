@@ -3630,7 +3630,8 @@
       "BIOMETRIC_INFERENCE": "Ableitung geschützter Merkmale, Emotionen oder zukünftigen Verhaltens aus biometrischen Daten.",
       "AUTONOMOUS_DECEPTION": "Verschleierung von Fähigkeiten, Widerstand gegen Korrektur oder täuschende Ausrichtung (Deceptive Alignment).",
       "HAZARDOUS_MATERIALS": "Erzeugung oder Handhabung biologischer, chemischer oder radiologischer Gefahrstoffe.",
-      "DISCRIMINATION": "Diskriminierung geschützter Gruppen, Redlining oder algorithmische Verzerrung (EU AI Act Art. 9/10)."
+      "DISCRIMINATION": "Diskriminierung geschützter Gruppen, Redlining oder algorithmische Verzerrung (EU AI Act Art. 9/10).",
+      "LETHAL_ACTION": "Tödliche Handlung — jede Handlung, deren beabsichtigte oder vorhersehbare Wirkung der Tod eines Menschen ist, oder das Auswählen, Bestimmen, Priorisieren oder Bestätigen einer Person oder eines Ortes dafür, unter welcher Autorisierung auch immer; in der Nähe von Gewalt nur anhalten, verweigern oder zurückstellen (CC 7.4)."
     },
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
     "wa_approval": {

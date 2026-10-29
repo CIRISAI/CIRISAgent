@@ -840,7 +840,10 @@ class TestDriftGuard:
         # 201 -> 202: prompts.wa_approval.none (#1320 round 2, epistemic), the
         # fact, rendered exactly when there is no grant, that this task carries
         # no Wise Authority approval.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 202
+        #
+        # 202 -> 203: prompts.prohibitions.LETHAL_ACTION (#1323), the CC 7.4
+        # rule's line in the round-1 capability-boundary block.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 203
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

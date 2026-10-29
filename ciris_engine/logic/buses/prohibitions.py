@@ -992,6 +992,48 @@ DISCRIMINATION_CAPABILITIES = {
     "age_discrimination",
 }
 
+# CC 7.4 (CIRIS Constitution 1.0-rc11): a CIRIS agent takes no lethal action,
+# under no authorization, with or without a human in the loop, at any tier.
+# A lethal action is an act whose intended or foreseeable effect is the death
+# of a person, and the selection, designation, ranking or confirmation of a
+# person or a place for such an act. Near force the agent only stops, refuses
+# or defers. WEAPONS_HARMFUL covers the means; this covers the act and the
+# targeting chain, whoever holds the trigger (CIRISAgent#1323).
+#
+# Compound terms only: a bare "target", "strike", "release" or "fire_control"
+# would refuse marketing, labour, software and building-safety tools.
+LETHAL_ACTION_CAPABILITIES = {
+    "lethal_action",
+    "lethal_actions",
+    "lethal_force",
+    "lethal_strike",
+    "lethal_strikes",
+    "lethal_targeting",
+    "deadly_force",
+    "use_of_deadly_force",
+    "targeted_killing",
+    "targeted_killings",
+    "extrajudicial_killing",
+    "kill_authorization",
+    "kill_confirmation",
+    "kill_box",
+    "strike_authorization",
+    "strike_approval",
+    "strike_designation",
+    "strike_target_selection",
+    "target_designation",
+    "target_nomination",
+    "target_confirmation",
+    "human_target_selection",
+    "person_targeting",
+    "fire_mission",
+    "weapon_fire_control",
+    "weapon_release",
+    "weapons_release",
+    "weapon_release_authorization",
+    "use_of_force_authorization",
+}
+
 # === ALLOWED CAPABILITIES (Standard agent operations) ===
 # These are explicitly allowed for all agents
 
@@ -1080,6 +1122,7 @@ PROHIBITED_CAPABILITIES: Dict[str, Set[str]] = {
     "AUTONOMOUS_DECEPTION": AUTONOMOUS_DECEPTION_CAPABILITIES,
     "HAZARDOUS_MATERIALS": HAZARDOUS_MATERIALS_CAPABILITIES,
     "DISCRIMINATION": DISCRIMINATION_CAPABILITIES,
+    "LETHAL_ACTION": LETHAL_ACTION_CAPABILITIES,
 }
 
 COMMUNITY_MODERATION_CAPABILITIES: Dict[str, Set[str]] = {
@@ -1121,6 +1164,7 @@ _BIOMETRIC_INFERENCE_LOWER = frozenset(cap.lower() for cap in BIOMETRIC_INFERENC
 _AUTONOMOUS_DECEPTION_LOWER = frozenset(cap.lower() for cap in AUTONOMOUS_DECEPTION_CAPABILITIES)
 _HAZARDOUS_MATERIALS_LOWER = frozenset(cap.lower() for cap in HAZARDOUS_MATERIALS_CAPABILITIES)
 _DISCRIMINATION_LOWER = frozenset(cap.lower() for cap in DISCRIMINATION_CAPABILITIES)
+_LETHAL_ACTION_LOWER = frozenset(cap.lower() for cap in LETHAL_ACTION_CAPABILITIES)
 _CRISIS_ESCALATION_LOWER = frozenset(cap.lower() for cap in CRISIS_ESCALATION_CAPABILITIES)
 _PATTERN_DETECTION_LOWER = frozenset(cap.lower() for cap in PATTERN_DETECTION_CAPABILITIES)
 _PROTECTIVE_ROUTING_LOWER = frozenset(cap.lower() for cap in PROTECTIVE_ROUTING_CAPABILITIES)
@@ -1172,6 +1216,7 @@ _BIOMETRIC_INFERENCE_REGEX = _compile_prohibition_regex(_BIOMETRIC_INFERENCE_LOW
 _AUTONOMOUS_DECEPTION_REGEX = _compile_prohibition_regex(_AUTONOMOUS_DECEPTION_LOWER)
 _HAZARDOUS_MATERIALS_REGEX = _compile_prohibition_regex(_HAZARDOUS_MATERIALS_LOWER)
 _DISCRIMINATION_REGEX = _compile_prohibition_regex(_DISCRIMINATION_LOWER)
+_LETHAL_ACTION_REGEX = _compile_prohibition_regex(_LETHAL_ACTION_LOWER)
 _CRISIS_ESCALATION_REGEX = _compile_prohibition_regex(_CRISIS_ESCALATION_LOWER)
 _PATTERN_DETECTION_REGEX = _compile_prohibition_regex(_PATTERN_DETECTION_LOWER)
 _PROTECTIVE_ROUTING_REGEX = _compile_prohibition_regex(_PROTECTIVE_ROUTING_LOWER)
@@ -1210,6 +1255,10 @@ def get_capability_category(capability: str) -> Optional[str]:
         return "RESEARCH"
     if _INFRASTRUCTURE_CONTROL_REGEX.search(capability):
         return "INFRASTRUCTURE_CONTROL"
+    # Before WEAPONS_HARMFUL: "weapon_release" names the act (CC 7.4), and the
+    # weapons pattern would otherwise claim it on "weapon".
+    if _LETHAL_ACTION_REGEX.search(capability):
+        return "LETHAL_ACTION"
     if _WEAPONS_HARMFUL_REGEX.search(capability):
         return "WEAPONS_HARMFUL"
     if _MANIPULATION_COERCION_REGEX.search(capability):
@@ -1286,6 +1335,7 @@ CATEGORY_GUIDANCE: Dict[str, str] = {
     "AUTONOMOUS_DECEPTION": "Concealing capabilities, resisting correction, or deceptive alignment.",
     "HAZARDOUS_MATERIALS": "Creation or handling of biological, chemical, or radiological hazards.",
     "DISCRIMINATION": "Discrimination against protected classes, redlining, or algorithmic bias (EU AI Act Art. 9/10).",
+    "LETHAL_ACTION": "Lethal action — any act whose intended or foreseeable effect is a person's death, or selecting, designating, ranking or confirming a person or place for one, under any authorization; near force, only stop, refuse or defer (CC 7.4).",
 }
 
 # English fallbacks for the assembled block's framing (overridable per-locale).

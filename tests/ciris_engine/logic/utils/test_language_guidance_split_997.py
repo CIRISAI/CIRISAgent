@@ -171,7 +171,11 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "am": ("09a71780cdafa9442fdbd1cbe4a59310786f3b598a5b39d9fbf09b4b160dfa5b", 32842),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
     "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
     "de": ("a8ecfb9aff0b46f13a07892e73fd6be402f8ab07f5796a808da8fd2568445430", 20426),  # U1 fix: dropped the quoted ❌ specimen (GUIDANCE_FIXES.md 2026-08-12) + U6 register fix (formal instructions)
-    "es": ("374cf5714d70c35ec9f9083983af9360abce9fcd51c9e1667df703268bd12463", 18628),  # separator restored before 8 + U6 register fix (formal instructions)
+    # 18628 -> 17921 (2026-10-29): the U1 category-only rewrite of the four
+    # universal parts (05/25/26/26b), drafted by the i18n translate lane from en
+    # 4808efd98 and then hand-corrected to usted (04_formal_register). The es
+    # glossary's "tú for chat messages" rule had put the exemplar speech in tú.
+    "es": ("fb62c60b9fba2e1ff72f5c959cd98ae78874c3bed2b855b21bb268d71c8d4a78", 17921),
     "fr": ("247806bb957cd3a59161245b1c0a98d3981197020508e67eeeeacd1d19ced936", 24643),  # #1010 §7e gains the actionability boundary (q08 U2) + U6 register fix (formal instructions)
     "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
     "it": ("3984343c3adfda5b34a83c86860e7e8d6d016acd1372f85931b8965c863b0e1f", 18413),  # separator restored before 8 + U6 register fix (formal instructions)

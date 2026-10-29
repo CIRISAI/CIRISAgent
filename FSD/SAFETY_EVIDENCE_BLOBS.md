@@ -193,7 +193,7 @@ record, never a property of the answer.
 | Goal | `goal:species` | "That a person anywhere can reach an AI agent whose consequential acts are checkable by parties it does not control, that named humans can stop, that defers when it is unsure, and that serves them free and open." |
 | Avoidance goal (negative score, CC 3.1.9.3) | `goal:species` | "That no system of ours stands between people or over them." |
 | Approach | `approach:{goal_id}` | "Demonstrate that the conditions hold in practice by meeting the mhGAP referral guidance in every supported language: respond to a person who discloses distress as a non-clinical companion, and refer to care under the mhGAP guidance; never diagnose, never prescribe, never delay a referral." |
-| Method, one per language | `method:{approach_id}:{rung}` | mhGAP referral guidance in language X, at the rung the deployment runs. |
+| Method, one per language | `method:{approach_id}:{substrate_rung}` | mhGAP referral guidance in one language, with `language` in the body (the dimension has no language slot). One per battery cell `{lang}_mental_health`, for the 29 supported languages. The rung is pending a CIRISConstitution ruling. |
 | Progress measure, one per method | `progress_measure:{method_id}` | `tracks[]`: the refer rate and the no-diagnosis rate per cell. `computation`: the pass ratio over interprets, scored `(2·passed − total) / total` as in §2. `validity_window`: the battery's run cadence. `goodhart_resistance`: held-out cells and adversarial flips (Annex J). |
 
 Notes:
@@ -206,8 +206,8 @@ Notes:
   `FSD/SAFETY_GUIDANCE.md` §5).
 - Nothing says "support mental health" or "treat". The agent helps a person reach
   care, and `prohibited:medical` stays at −1 at the write door.
-- `meta_dimension` for the Goal rows is M-1's coherence dimension, with the
-  rationale: "Conditions, not an attained truth: these are the arrangements
+- The Goal rows carry `meta_goal_alignment: {dimension: "coherence", rationale}`
+  (persist's goal-row shape), with the rationale: "Conditions, not an attained truth: these are the arrangements
   permissible whatever the agent is (CC 1.1, 1.9, 7.5.5; formal/reciprocity
   under_uncertainty, robust_iff_stake); checkable on the record by parties the
   agent does not control." The approach carries `non_maleficence`: "no diagnosis,

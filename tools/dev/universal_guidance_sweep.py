@@ -98,7 +98,7 @@ def _bullet_05(text: str) -> Tuple[int, int] | None:
 #: "cross-cluster disambiguation / PERFORM the distinction" sections, which assign
 #: a person's symptoms to a cluster: the framing U1 forbids.
 _SEVEN = "7\u1047\u0667\u06f7\u096d\u09ed\u0bed\u0c6d\u0e57\u0a6d"
-CUT_HEADER = re.compile(rf"^==\s*([{_SEVEN}][ce][.\s]|[^\n]*cross.?cluster)", re.I)
+CUT_HEADER = re.compile(rf"^==\s*([{_SEVEN}][ce][.\s]|[^\n]*(cross.?cluster|क्रॉस-क्लस्टर|USER.?SYMPTOM))", re.I)
 
 #: Exact in-glossary sentences that assign a symptom to a cluster. They sit
 #: inside terminology bullets, which stay, so only the sentence goes.
@@ -107,6 +107,12 @@ STRIP: Dict[str, Tuple[str, ...]] = {
         " Wannan alama ce ta baƙin ciki (depression), BA alama ta schizophrenia ba",
     ),
     "am": ("  ይህ የድብርት ምልክት ነው፣ የስኪዞፍሬኒያ ምልክት አይደለም — አያደባልቁ።",),
+    "ru": (" **Кроссклассовая дискриминация (\"это не психоз\") указывает, какое состояние есть или нет — она НИКОГДА не дает пользователю вердикт о здоровье.**",),
+    "zh": ("**跨簇辨别（\"这不是精神病\"）表面了什么情况存在或不存在——它从不给用户健康判决。**",),
+    "bn": (" এটি বিষণ্ণতার লক্ষণ, schizophrenia-র লক্ষণ নয়।",),
+    "my": (" ဤသည် စိတ်ဓာတ်ကျရောဂါ၏ လက္ခဏာဖြစ်သည်၊ ရူးနှမ်းခြင်း (schizophrenia) ၏ လက္ခဏာ မဟုတ်ပါ — မရောထွေးပါနှင့်။",),
+    "sw": (" Hii ni dalili ya SONONA / UNYOGOVU (depression), siyo dalili ya schizophrenia.",),
+    "ta": (" இது மனச்சோர்வு (depression) தொகுப்பின் அறிகுறி, மனநோய் / schizophrenia தொகுப்பு அல்ல — கலக்க வேண்டாம்.",),
 }
 
 
@@ -124,7 +130,7 @@ STRIP_SPANS: Dict[str, Tuple[Tuple[str, str], ...]] = {
     "yo": (
         ("\n• KÒ NÍ JẸ́RÌÍ ÌLERA — LÁTI INÚ ARA YÌN", "(Q4 + Q9 méjèèjì)."),
         ("\n(b) BÍ OLÙMÚLÒ KÒ BÁ BÉÈRÈ", "ìpín-ìṣègùn KÌÍ ṢE ìjẹ́rìí ìlera."),
-    ),
+    ),    "vi": (("\nMẪU ĐÚNG: đây là TRƯỜNG HỢP ĐƯỢC HỎI", "đặt tên cho nó quá sớm."),),
 }
 
 

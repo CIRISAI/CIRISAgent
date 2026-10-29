@@ -70,6 +70,9 @@ class FakeNet:
     mangle_unicode: bool = False
     #: A broken server that tells the receiver a message is theirs (mine=True).
     flip_mine_marker: Optional[str] = None
+    # Swap the listing positions of two turns, on one reader ("linux"/"android") or "both".
+    swap_pair: Optional[Tuple[str, str]] = None
+    swap_on: str = "both"
     room_posts: int = 0
     #: A broken server that echoes the receiver's copy as its own (mine=True).
     receiver_sees_mine: bool = False
@@ -180,6 +183,10 @@ class FakeTransport:
                     flip = bool(n.flip_mine_marker and n.flip_mine_marker in m.body)
                     rows.append({"attestation_id": m.att, "kind": "message", "body": m.body,
                                  "mine": n.receiver_sees_mine or flip})
+            if n.swap_pair and n.swap_on in (me, "both"):
+                at = [next((i for i, r in enumerate(rows) if mk in str(r["body"])), None) for mk in n.swap_pair]
+                if None not in at:
+                    rows[at[0]], rows[at[1]] = rows[at[1]], rows[at[0]]
             return xc.HttpResult(200, {"messages": rows, "ready": True, "total": len(rows)})
         return xc.HttpResult(404, {"detail": f"fake has no {method} {path}"})
 
@@ -550,3 +557,27 @@ def test_a_room_that_never_keys_records_what_each_side_said():
     for side in ("linux", "android"):
         assert f"{side} GET /v1/chat/" in ev and "ready=False" in ev and '"state": "joining"' in ev
         assert f"{side}: waiting for the key" in ev
+
+
+def test_cross_device_clock_skew_reorders_turns_and_still_passes():
+    """Run 40865537394: the emulator's clock ran ~33 ms behind the runner's, so
+    android's turn 4 sorted before linux's turn 3 on BOTH nodes. Both sides agree
+    and each sender's own turns are in order; across two clocks nothing more is
+    knowable, so that is the property the stage enforces."""
+    stage, _, _ = _stage(swap_pair=("turn 3", "turn 4"), swap_on="both")
+    rep = stage.run()
+    assert rep.ok, rep.to_json()
+
+
+@pytest.mark.parametrize(
+    "knob, why",
+    [
+        ({"swap_pair": ("turn 3", "turn 4"), "swap_on": "linux"}, "differs between"),
+        ({"swap_pair": ("turn 3", "turn 5"), "swap_on": "both"}, "out of order"),
+    ],
+)
+def test_negative_a_disagreeing_or_self_reordered_transcript_fails(knob, why):
+    stage, _, _ = _stage(**knob)
+    rep = stage.run()
+    assert not rep.ok and rep.failed_step == "conversation", rep.to_json()
+    assert why in _step(rep, "conversation").detail

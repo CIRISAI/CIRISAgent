@@ -893,7 +893,26 @@ class CrossChatStage:
                                  [last[0].trail("send")] if last else [])
 
         mine = [t for _, t in texts]
+        author = {t: src.name for src, t in texts}
         problems: Dict[str, str] = {}
+        orders: Dict[str, List[int]] = {}
+
+        def per_author_ordered(order: List[int]) -> bool:
+            """Each sender's own turns in the order they sent them (either listing direction).
+
+            Not the global send order: two devices' clocks disagree by tens of ms
+            (the emulator ran ~33 ms behind the runner, run 40865537394), and turns
+            from different senders sent that close together have no knowable order.
+            """
+            for direction in (1, -1):
+                ok = True
+                for who in {author[mine[i]] for i in order}:
+                    seq = [i for i in order if author[mine[i]] == who]
+                    if seq != sorted(seq, reverse=direction < 0):
+                        ok = False
+                if ok:
+                    return True
+            return False
 
         def all_arrived(_: int) -> Optional[str]:
             problems.clear()
@@ -910,7 +929,8 @@ class CrossChatStage:
                     and m.get("mine") is not (next(s_ for s_, t in texts if t == m.get("body")) is reader)
                 ]
                 order = [mine.index(t) for t in bodies if t in mine]
-                ordered = order == sorted(order) or order == sorted(order, reverse=True)
+                orders[reader.name] = order
+                ordered = per_author_ordered(order)
                 if missing:
                     problems[reader.name] = f"missing {missing}"
                 elif dupes:
@@ -918,7 +938,11 @@ class CrossChatStage:
                 elif wrong_owner:
                     problems[reader.name] = f"mine flag wrong on {wrong_owner}"
                 elif not ordered:
-                    problems[reader.name] = f"out of order {order}"
+                    problems[reader.name] = f"out of order {order} (a sender's own turns are reordered)"
+            if not problems and len(set(map(tuple, orders.values()))) > 1:
+                problems["both"] = "the transcript order differs between the two sides: " + ", ".join(
+                    f"{k} {v}" for k, v in orders.items()
+                )
             return None if problems else "ok"
 
         if self._poll(self.d.receive_s, all_arrived) is None:
@@ -931,7 +955,7 @@ class CrossChatStage:
             )
         return (
             f"{len(texts)} more turns (unicode, RTL, {len(texts[2][1])}-char, symbols) arrived byte-exact on both "
-            "sides, once each, in order, with the right mine flags"
+            "sides, once each, in the same order on both, each sender's turns in send order, with the right mine flags"
         )
 
     # -- the whole stage --

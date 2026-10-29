@@ -99,6 +99,10 @@ def corpus(monkeypatch: pytest.MonkeyPatch) -> FakeCorpus:
     monkeypatch.setattr(att, "_resolve_engine", lambda: eng)
     monkeypatch.setattr(att, "_resolve_attesting_key_id", lambda: AGENT_KEY)
     monkeypatch.setattr(att, "canonical_community_key_id", lambda: CANONICAL)
+    # The agent-signed crossing, independent of the installed server: a server with
+    # the owner door (>= 0.5.241) would otherwise take the owner path in every test
+    # here. TestOwnerAuthoredCrossing sets the door explicitly.
+    monkeypatch.setattr(att, "_owner_authored_door", lambda: None)
     # The ship half is the node's call and has its own tests; keep it out of the count.
     monkeypatch.setattr(trace_sharing, "_author_ship_grant", lambda r, analyze: r.peers_authored.append(CANONICAL))
     monkeypatch.setattr(trace_sharing, "trace_sharing_status", lambda: TraceSharingConsent())

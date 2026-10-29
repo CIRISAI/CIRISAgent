@@ -123,6 +123,15 @@ key and keeps producing unsigned artifacts as today. The sync job:
 
 ### 4.1 The registry door (CIRISRegistry#151)
 
+**Where it is served (2026-10-29).** CIRISRegistry#151 is merged (main 5f03130), and the
+standalone registry answers `CEG-Version: 1.0-rc14`. But `/v1/evidence/{suite}` is mounted
+only on the registry **slice** (`fold::router`), which CIRISServer serves over the shared
+Engine. The standalone binary returns 404 there by design. CIRISServer main carries no
+`ciris-registry-core` yet; only CIRISServer#442 does, and it is pinned at 18a138c, from
+before the evidence work. So the first row has nowhere to go until CIRISServer absorbs or
+re-pins the slice at ≥ 5f03130 and ships (canonical-1 runs 0.5.239). That crate move and
+the signer's `infra:attest` blessing are the critical path.
+
 `POST /v1/evidence/safety_battery`, JSON:
 
 - `contribution.signed_envelope`: the persist-stamped envelope

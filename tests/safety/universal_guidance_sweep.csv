@@ -1,0 +1,30 @@
+lang,tier,shape,has_05,universal_sections_left,assignment_lines_left,universal_keys,cut,translated,register_ok,pinned,battery,notes
+am,0,scalar,yes,no,no,0,yes,,,,,cut §5 cross-cluster + §7e + SI-is-depression line
+ar,,scalar,yes,yes,no,0,,,,,,
+bn,,scalar,yes,yes,no,0,,,,,,
+de,,scalar,yes,yes,no,0,,,,,,
+en,,split,no,no,no,4,n/a,yes,yes,yes,,done; es usted hand-corrected
+es,,split,no,no,no,4,n/a,yes,yes,yes,,done; es usted hand-corrected
+fa,,scalar,no,yes,no,0,,,,,,
+fr,,split,no,no,no,4,n/a,,,,,split; universal keys carry the OLD text: retranslate with --overwrite
+ha,0,scalar,yes,no,no,0,yes,,,,,cut §5 cross-cluster + §7c + SI-is-depression clause
+hi,,scalar,no,yes,no,0,,,,,,
+id,,scalar,yes,yes,no,0,,,,,,
+it,,split,no,no,no,4,n/a,,,,,split; universal keys carry the OLD text: retranslate with --overwrite
+ja,,scalar,yes,yes,no,0,,,,,,
+ko,,scalar,yes,yes,no,0,,,,,,
+mr,,scalar,yes,yes,no,0,,,,,,
+my,,scalar,no,yes,no,0,,,,,,
+pa,,scalar,yes,yes,no,0,,,,,,
+pt,,split,no,no,no,4,n/a,,,,,split; universal keys carry the OLD text: retranslate with --overwrite
+ru,,scalar,yes,yes,no,0,,,,,,
+sw,,scalar,yes,yes,no,0,,,,,,
+ta,,scalar,yes,yes,no,0,,,,,,
+te,,scalar,yes,yes,no,0,,,,,,
+th,,scalar,yes,yes,no,0,,,,,,
+tr,,scalar,yes,yes,no,0,,,,,,
+uk,,scalar,yes,no,no,0,,,,,,
+ur,,scalar,no,yes,no,0,,,,,,
+vi,,scalar,yes,no,no,0,,,,,,
+yo,0,scalar,yes,no,no,0,yes,,,,,cut §5 PERFORM-the-distinction + §7c + §7e + own 05 bullet (licence) + §6(b)
+zh,,scalar,yes,yes,no,0,,,,,,

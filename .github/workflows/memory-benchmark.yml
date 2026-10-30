@@ -235,11 +235,17 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: memory-benchmark-${{ github.run_id }}
+          # The agent's own log files and DBs (it runs with cwd = the checkout,
+          # so its home is here). The client logs above say WHICH gate refused;
+          # these say WHY: the agent's timeline, incidents and the node's rust
+          # log. An RCA reads these files, not the client's summary.
           path: |
             cold_start.log
             100msg.log
             1000msg.log
             composition.json
+            logs/**
+            data/*.db
           retention-days: 90
 
       - name: Capture upgrade-compat fixture (memory-burst)

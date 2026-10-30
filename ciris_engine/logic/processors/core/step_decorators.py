@@ -80,131 +80,22 @@ def _base_data_dict(base_data: BaseStepData) -> JSONDict:
     }
 
 
-async def _query_thought_resources(telemetry_service: Any, thought_id: str, timestamp: datetime) -> JSONDict:
-    """Query telemetry service and aggregate resource usage for a thought.
-
-    Args:
-        telemetry_service: Telemetry service instance
-        thought_id: ID of the thought to query resources for
-        timestamp: End timestamp for the query window
-
-    Returns:
-        Dict with aggregated resource data:
-        - tokens_total: Total tokens used
-        - tokens_input: Input tokens used
-        - tokens_output: Output tokens used
-        - cost_cents: Total cost in USD cents
-        - carbon_grams: Total CO2 emissions in grams
-        - energy_mwh: Total energy in milliwatt-hours
-        - llm_calls: Number of LLM calls
-        - models_used: List of unique models used
-        - api_bases_used: List of unique API base URLs used
-    """
-    if not telemetry_service:
-        logger.debug(f"No telemetry service available to query resources for thought {thought_id}")
-        return {
-            "tokens_total": 0,
-            "tokens_input": 0,
-            "tokens_output": 0,
-            "cost_cents": 0.0,
-            "carbon_grams": 0.0,
-            "energy_mwh": 0.0,
-            "llm_calls": 0,
-            "models_used": [],
-            "api_bases_used": [],
-        }
-
-    try:
-        # Query all metric types with thought_id tag
-        tags = {"thought_id": thought_id}
-
-        # Query each metric type and aggregate
-        tokens_total_data = await telemetry_service.query_metrics(
-            metric_name="llm.tokens.total", tags=tags, end_time=timestamp
-        )
-        tokens_input_data = await telemetry_service.query_metrics(
-            metric_name="llm.tokens.input", tags=tags, end_time=timestamp
-        )
-        tokens_output_data = await telemetry_service.query_metrics(
-            metric_name="llm.tokens.output", tags=tags, end_time=timestamp
-        )
-        cost_data = await telemetry_service.query_metrics(metric_name="llm.cost.cents", tags=tags, end_time=timestamp)
-        carbon_data = await telemetry_service.query_metrics(
-            metric_name="llm.environmental.carbon_grams", tags=tags, end_time=timestamp
-        )
-        energy_data = await telemetry_service.query_metrics(
-            metric_name="llm.environmental.energy_kwh", tags=tags, end_time=timestamp
-        )
-
-        # Aggregate metrics - sum all values
-        tokens_total = sum(m.value for m in tokens_total_data)
-        tokens_input = sum(m.value for m in tokens_input_data)
-        tokens_output = sum(m.value for m in tokens_output_data)
-        cost_cents = sum(m.value for m in cost_data)
-        carbon_grams = sum(m.value for m in carbon_data)
-        # Convert kWh to mWh (1 kWh = 1,000,000 mWh)
-        energy_kwh = sum(m.value for m in energy_data)
-        energy_mwh = energy_kwh * 1_000_000
-        llm_calls = len(tokens_total_data)  # Each LLM call creates one tokens.total metric
-
-        # Extract unique models and api_bases from tags
-        models_used = list({m.tags.get("model", "unknown") for m in tokens_total_data if hasattr(m, "tags")})
-        api_bases_used = list({m.tags.get("api_base", "default") for m in tokens_total_data if hasattr(m, "tags")})
-
-        logger.debug(
-            f"Aggregated resources for thought {thought_id}: "
-            f"{int(tokens_total)} tokens, {llm_calls} calls, {cost_cents:.4f} cents"
-        )
-
-        return {
-            "tokens_total": int(tokens_total),
-            "tokens_input": int(tokens_input),
-            "tokens_output": int(tokens_output),
-            "cost_cents": float(cost_cents),
-            "carbon_grams": float(carbon_grams),
-            "energy_mwh": float(energy_mwh),
-            "llm_calls": llm_calls,
-            "models_used": models_used,
-            "api_bases_used": api_bases_used,
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to query resources for thought {thought_id}: {e}", exc_info=True)
-        # Return zeros on error - don't fail the entire action complete step
-        return {
-            "tokens_total": 0,
-            "tokens_input": 0,
-            "tokens_output": 0,
-            "cost_cents": 0.0,
-            "carbon_grams": 0.0,
-            "energy_mwh": 0.0,
-            "llm_calls": 0,
-            "models_used": [],
-            "api_bases_used": [],
-        }
-
-
 async def _maybe_add_resource_usage(
     step: StepPoint, processor: Any, thought_id: str, end_timestamp: Any, kwargs: JSONDict
 ) -> None:
-    """Helper to add resource usage for ACTION_COMPLETE steps - reduces cognitive complexity."""
+    """Attach the thought's LLM resource totals to an ACTION_COMPLETE step.
+
+    Read from the in-memory per-thought ledger LLMBus fills as each call
+    completes (see thought_resource_ledger). This used to be six telemetry
+    queries per thought, each paging up to 1000 tsdb_data graph nodes out of
+    the substrate on an executor thread; their cost grew with every node the
+    run wrote and starved the default executor under a burst.
+    """
     if step != StepPoint.ACTION_COMPLETE:
         return
+    from ciris_engine.logic.buses.thought_resource_ledger import thought_resource_ledger
 
-    # Get telemetry service from processor
-    telemetry_service = getattr(processor, "telemetry_service", None) or getattr(
-        getattr(processor, "sink", None), "telemetry", None
-    )
-
-    if telemetry_service:
-        # Query resources and add to kwargs for _create_action_complete_data
-        resource_data = await _query_thought_resources(telemetry_service, thought_id, end_timestamp)
-        kwargs["_resource_usage"] = resource_data
-    else:
-        logger.warning(
-            f"No telemetry service available for thought {thought_id} - "
-            f"resource usage will not be recorded in action_complete event"
-        )
+    kwargs["_resource_usage"] = thought_resource_ledger.summary(thought_id)
 
 
 def _resolve_parent_event_for_step(step: StepPoint) -> Optional[Tuple[str, int]]:

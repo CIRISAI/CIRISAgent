@@ -25,6 +25,7 @@ from ciris_engine.logic.processors.support.processing_queue import ProcessingQue
 from ciris_engine.logic.registries.circuit_breaker import CircuitBreakerError
 from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
+from ciris_engine.logic.utils.round_timing import RoundPhase, timed_phase
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions.parameters import DeferParams, MemorizeParams, PonderParams, ToolParams
@@ -222,10 +223,12 @@ class ThoughtProcessor(
         await self._start_round_step(thought_item, context)
 
         # Phase 1: Gather context
-        thought_context = await self._gather_context_step(thought_item, context)
+        with timed_phase(RoundPhase.CONTEXT):
+            thought_context = await self._gather_context_step(thought_item, context)
 
         # Phase 2: DMA analysis
-        dma_results = await self._perform_dmas_step(thought_item, thought_context)
+        with timed_phase(RoundPhase.DMA):
+            dma_results = await self._perform_dmas_step(thought_item, thought_context)
 
         # Check for early DMA result return
         if isinstance(dma_results, ActionSelectionDMAResult):
@@ -297,7 +300,8 @@ class ThoughtProcessor(
     ) -> JSONDict:
         """Execute action selection and conscience validation phases."""
         # Phase 4: PERFORM_ASPDMA - LLM-powered action selection
-        action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
+        with timed_phase(RoundPhase.ASPDMA):
+            action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
         profile_name = self._get_profile_name(thought)
 
         self._log_action_selection_result(action_result, thought)
@@ -307,18 +311,20 @@ class ThoughtProcessor(
         # - Confirm TOOL action (possibly with refined parameters)
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
-        action_result = await self._run_verb_second_pass(thought_item, action_result, thought_context)
+        with timed_phase(RoundPhase.ASPDMA):
+            action_result = await self._run_verb_second_pass(thought_item, action_result, thought_context)
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
-        conscience_result = await self._conscience_execution_step(
-            thought_item, action_result, thought, dma_results, thought_context
-        )
-
-        # Phase 6: Handle conscience overrides (retry logic)
-        if self._should_retry_with_conscience_guidance(conscience_result):
-            action_result, conscience_result = await self._handle_conscience_retry(
-                thought_item, thought, thought_context, dma_results, conscience_result, profile_name
+        with timed_phase(RoundPhase.CONSCIENCE):
+            conscience_result = await self._conscience_execution_step(
+                thought_item, action_result, thought, dma_results, thought_context
             )
+
+            # Phase 6: Handle conscience overrides (retry logic)
+            if self._should_retry_with_conscience_guidance(conscience_result):
+                action_result, conscience_result = await self._handle_conscience_retry(
+                    thought_item, thought, thought_context, dma_results, conscience_result, profile_name
+                )
 
         self._log_final_action_results(action_result, conscience_result, thought)
 

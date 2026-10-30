@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from pydantic import BaseModel
 
 from ciris_engine.logic import persistence
+from ciris_engine.logic.persistence.db.paging import next_page_cursor
 from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.services.memory_service import LocalGraphMemoryService
 from ciris_engine.logic.utils.jsondict_helpers import get_list
@@ -2294,7 +2295,7 @@ async def _collect_cross_channel_messages(user_id: str, channel_id: str) -> List
 
             if len(items) < 200:
                 break
-            next_cursor = parsed.get("cursor")
+            next_cursor = next_page_cursor(parsed)
             if not next_cursor:
                 break
             cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)

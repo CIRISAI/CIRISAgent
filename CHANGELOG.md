@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The PostgreSQL password no longer reaches the logs.** On a Postgres-backed agent the boot check printed the full DSN, password included, to stdout on every start ("Skipping exclusive access check for PostgreSQL: postgresql://user:password@…"). Two more paths did the same: setup logged "Using runtime main database: …", which holds the Postgres DSN when one is configured, and a malformed DSN's parse error quoted it in full before being logged. All three now pass through the existing `_redact_dsn` (`user:***@host`). The guard test that should have caught them only read `logger.*` calls and did not know `db_path` held a DSN; it now also reads `print(...)` and exception messages and treats `db_path` as a DSN, and two behaviour tests pin the boot line and the parse error. SQLite agents were not affected. Operators of Postgres-backed agents should treat the database password as exposed to anyone with access to the container's logs and rotate it.
 
+### Fixed
+
+- **Persist's cursor pages are followed past the first page.** Every persist list page carries its continuation as `next_cursor`, a cursor object. The graph scope walk sent it back wrapped as `{"cursor": …}`, which persist rejects ("ListCursor decode: missing field `version`"), so `get_all_graph_nodes` failed on any scope with more than 100 nodes. The audit listing, the user data export (`my_data`), memory queries and cross-channel history read `page["cursor"]`, a field no persist page has, so they silently stopped after one page. All five now use one helper, `persistence/db/paging.py::next_page_cursor`.
+- **Edges without a weight read correctly.** persist omits `weight` when an edge has none; the agent passed `None` into GraphEdge's float field, and every such edge failed validation (`get_edges_for_node failed`).
+
 ## [2.18.0-stable] - 2026-10-29
 
 ### Safety

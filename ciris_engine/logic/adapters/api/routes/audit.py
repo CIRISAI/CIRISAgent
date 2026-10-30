@@ -18,6 +18,7 @@ from fastapi import Query, Request
 from pydantic import BaseModel, Field, field_serializer
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
+from ciris_engine.logic.persistence.db.paging import next_page_cursor
 from ciris_engine.logic.utils.jsondict_helpers import get_str, get_str_optional
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.schemas.api.audit import AuditContext, EntryVerification
@@ -246,7 +247,7 @@ def _sync_query_sqlite_audit(
                 legacy_rows.append(_persist_audit_row_to_legacy(row))
                 if len(legacy_rows) >= limit:
                     break
-            next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+            next_cursor = next_page_cursor(parsed)
             if not next_cursor or len(items) < page_size:
                 break
             cursor_json = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)

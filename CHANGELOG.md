@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Agent
 
+- **Chat collapses to direct links between room peers (CIRISEdge#915).** The agent's Edge proposes a direct link to its room peers, using the canonical's facilitator (the `ip` dial in the canonical's signed record, served on UDP beside its TCP listener) for NAT traversal. Room steps no longer wait on the canonical's round cadence. `CIRIS_DIRECT_LINK_FACILITATOR` names another facilitator, or `off` keeps every room step on the canonical. Feature-detected on the substrate.
 - **A burst of traffic no longer reads as a halt or an unowned node.** Both gates fail closed, and every request read them separately, so under load the reads timed out together and the agent refused everyone with 423 "accord halt in effect" or "node unclaimed": a denial of service. Concurrent reads now share one read. An owned node stays owned through a failed read; an answered "unowned" is still taken at once. A halt read that times out keeps the last answer for at most 5 s, then fails closed. An answered halt takes effect at once, and boot and invalidation never get the grace.
 - **Managed agents can ship traces once their owner consents (#1334).** An owner-authored community-trust grant applied to the node counts as the crossing (persist's `community_trust_consent_json` fold, which accepts the owner's roster keys). The opt-in survives the legacy migration's purge of the env var, and re-widening a grant that is already at federation reads as already widened, not as a refusal.
 

@@ -86,6 +86,33 @@ def get_federation_alias_for_log() -> str:
         return "<unresolved>"
 
 
+def _direct_link_facilitator(engine: Any) -> Optional[str]:
+    """``host:port`` of the facilitator room peers probe, or None.
+
+    ``CIRIS_DIRECT_LINK_FACILITATOR`` wins: a ``host:port``, or ``off`` / ``0`` /
+    empty to propose no direct links. Otherwise it is the canonical's ``ip``
+    dial from persist's signed canonical records
+    (``engine.canonical_bootstrap_hints()``). A server serves its facilitator on
+    UDP at the same port number as its TCP listener, so that dial is the
+    facilitator's address. Unreadable hints mean no facilitator, never a guess.
+    """
+    override = os.environ.get("CIRIS_DIRECT_LINK_FACILITATOR")
+    if override is not None:
+        value = override.strip()
+        return None if value.lower() in ("", "0", "off", "false", "none", "no") else value
+    try:
+        import json as _json
+
+        hints = _json.loads(engine.canonical_bootstrap_hints() or "[]")
+    except Exception as exc:  # noqa: BLE001 - no hints, no direct links
+        logger.warning("[DIRECT-LINK] canonical hints unreadable (%s); no facilitator", type(exc).__name__)
+        return None
+    for hint in hints if isinstance(hints, list) else []:
+        if isinstance(hint, dict) and hint.get("kind") == "ip" and hint.get("destination"):
+            return str(hint["destination"])
+    return None
+
+
 def initialize_edge_runtime(identity_dir: Path) -> None:
     """Bootstrap the Edge runtime singleton.
 
@@ -394,6 +421,24 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 node_key_id,
                 federation_identity_dir,
             )
+
+        # DIRECT LINKS (CIRISEdge#915, ciris-server 0.5.242 / edge v43.3.0). A room
+        # peer proposes a direct link to its peers, probing the canonical's
+        # facilitator for NAT traversal; servers serve the facilitator and propose
+        # none. Without it every room step is two hops through the canonical at
+        # its round cadence. Feature-detected: an unknown kwarg is a TypeError on
+        # older wheels.
+        if _delivery_on and "direct_link_facilitator" in (getattr(init_edge_runtime, "__text_signature__", "") or ""):
+            facilitator = _direct_link_facilitator(engine)
+            if facilitator:
+                _edge_kwargs["direct_link_facilitator"] = facilitator
+                logger.info(
+                    "[DIRECT-LINK] room peers propose direct links via facilitator %s "
+                    "(CIRIS_DIRECT_LINK_FACILITATOR=off to keep every room step on the canonical)",
+                    facilitator,
+                )
+            else:
+                logger.info("[DIRECT-LINK] no facilitator; room traffic stays on the canonical path")
 
         edge = init_edge_runtime(
             engine,

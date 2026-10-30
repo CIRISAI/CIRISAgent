@@ -943,15 +943,19 @@ def _raise_if_shed(result: Any, message_id: str, request: Request) -> None:
     if getattr(result, "status", None) != MessageHandlingStatus.RESOURCE_SHED:
         return
     _cleanup_interaction_tracking(message_id, request)
+    # From the measured drain rate (bounded 1..SHED_RETRY_AFTER_SECONDS); the
+    # fixed 30 s idled well-behaved clients long after capacity had freed.
+    measured = getattr(result, "retry_after_seconds", None)
+    retry_after = measured if isinstance(measured, int) and measured > 0 else SHED_RETRY_AFTER_SECONDS
     raise HTTPException(
         status_code=503,
-        headers={"Retry-After": str(SHED_RETRY_AFTER_SECONDS)},
+        headers={"Retry-After": str(retry_after)},
         detail={
             "error": "resource_shed",
             "reason": MessageRejectionReason.RESOURCE_SHED.value,
             "message": "The agent is not admitting new work while a resource is under pressure. Retry later.",
             "resources": list(getattr(result, "shed_resources", []) or []),
-            "retry_after_seconds": SHED_RETRY_AFTER_SECONDS,
+            "retry_after_seconds": retry_after,
         },
     )
 

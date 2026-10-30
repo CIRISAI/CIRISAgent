@@ -76,6 +76,9 @@ class MessageHandlingResult(BaseModel):
     shed_resources: List[str] = Field(
         default_factory=list, description="Resources holding admission closed (status RESOURCE_SHED)"
     )
+    retry_after_seconds: Optional[int] = Field(
+        None, description="When to retry a RESOURCE_SHED refusal, from the measured drain rate"
+    )
     accord_forward: Optional[AccordRowForward] = Field(
         None, description="The node's verdict on a forwarded accord row (status ACCORD_ROW_FORWARDED)"
     )

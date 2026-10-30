@@ -139,3 +139,24 @@ async def test_before_the_first_owned_read_and_after_invalidation_a_failed_read_
     assert not (await node_ownership.node_owned(fresh=True)).unclaimed
     node_ownership.invalidate_node_ownership_cache()
     assert (await node_ownership.node_owned(fresh=True)).unclaimed
+
+
+
+
+@pytest.mark.asyncio
+async def test_an_ownership_read_answers_while_the_default_pool_is_full(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Under a burst the default thread pool is busy; the gate read must not queue behind it."""
+    import os
+
+    monkeypatch.setattr(node_ownership, "_read_owner_sync", lambda: _own(NodeOwnershipReading.OWNED))
+    monkeypatch.setattr(node_ownership, "NODE_OWNERSHIP_READ_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(node_fold, "fold_status", lambda: {"folded": True})
+    loop = asyncio.get_running_loop()
+    workers = min(32, (os.cpu_count() or 1) + 4)  # ThreadPoolExecutor's default size
+    blockers = [loop.run_in_executor(None, time.sleep, 0.8) for _ in range(2 * workers)]
+    try:
+        state = await node_ownership.node_owned(fresh=True)
+        assert state.reading == NodeOwnershipReading.OWNED, "the read queued behind the default pool and timed out"
+    finally:
+        await asyncio.gather(*blockers)
+        await loop.shutdown_default_executor()

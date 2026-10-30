@@ -72,6 +72,7 @@ HALT_TRANSIENT_GRACE_SECONDS = 5.0
 
 _TRANSIENT_READINGS = frozenset({AccordHaltReading.NODE_TIMEOUT, AccordHaltReading.NODE_UNREACHABLE})
 
+
 #: How often a held loop re-reads the latch to notice a release or a lapse.
 HALT_HOLD_TICK_SECONDS = 5.0
 
@@ -178,8 +179,8 @@ def parse_halt_status(body: JSONDict) -> AccordHaltState:
     return _closed(AccordHaltReading.NODE_ERROR, f"halt-status carried no usable 'halted' field: {halted!r}")
 
 
-async def _read_from_node() -> AccordHaltState:
-    """One uncached read of the node. Every failure is a halted state, never an exception."""
+def _read_from_node_sync() -> AccordHaltState:
+    """One uncached, blocking read of the node. Every failure is a halted state, never an exception."""
     # Imported here: the runtime package pulls in the whole runtime, and the
     # dispatcher and processors that import this module are part of it.
     from ciris_engine.logic.runtime.node_fold import fold_status
@@ -187,8 +188,8 @@ async def _read_from_node() -> AccordHaltState:
     if fold_status() is None:
         return _closed(AccordHaltReading.NO_NODE, "no node in this deployment (CIRIS_NODE_FOLD=false)")
     try:
-        async with httpx.AsyncClient(timeout=HALT_READ_TIMEOUT_SECONDS) as client:
-            response = await client.get(HALT_STATUS_URL)
+        with httpx.Client(timeout=HALT_READ_TIMEOUT_SECONDS) as client:
+            response = client.get(HALT_STATUS_URL)
     except httpx.TimeoutException as e:
         return _closed(AccordHaltReading.NODE_TIMEOUT, f"{type(e).__name__}: {e}")
     except Exception as e:  # noqa: BLE001 - any failure to read is a halted read
@@ -202,6 +203,17 @@ async def _read_from_node() -> AccordHaltState:
     if not isinstance(body, dict):
         return _closed(AccordHaltReading.NODE_ERROR, "halt-status body is not an object")
     return parse_halt_status(body)
+
+
+async def _read_from_node() -> AccordHaltState:
+    """One uncached read of the node, on the reserved gate-read executor.
+
+    The timeout is the node's alone: a busy event loop or a full default thread
+    pool cannot make the read look like a halt.
+    """
+    from ciris_engine.logic.utils.gate_reads import run_gate_read
+
+    return await run_gate_read(_read_from_node_sync)
 
 
 def _observe(state: AccordHaltState) -> None:

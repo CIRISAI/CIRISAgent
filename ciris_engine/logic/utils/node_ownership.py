@@ -106,7 +106,11 @@ async def _read_from_node() -> NodeOwnership:
     if fold_status() is None:
         return _state(NodeOwnershipReading.NO_NODE, read_error="no node in this deployment (CIRIS_NODE_FOLD=false)")
     try:
-        return await asyncio.wait_for(asyncio.to_thread(_read_owner_sync), timeout=NODE_OWNERSHIP_READ_TIMEOUT_SECONDS)
+        from ciris_engine.logic.utils.gate_reads import run_gate_read
+
+        # The reserved executor, not the default pool: under a burst the default
+        # pool is full and a read queued there timed out as "unclaimed".
+        return await asyncio.wait_for(run_gate_read(_read_owner_sync), timeout=NODE_OWNERSHIP_READ_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         return _state(
             NodeOwnershipReading.READ_TIMEOUT, read_error=f"no answer in {NODE_OWNERSHIP_READ_TIMEOUT_SECONDS}s"

@@ -36,7 +36,7 @@ def node(monkeypatch):
     """A folded node whose halt-status answer each test sets."""
     answer: dict = {}
     monkeypatch.setattr(node_fold, "fold_status", lambda: {"folded": True, "reachable": True})
-    real_client = httpx.AsyncClient
+    real_client = httpx.Client
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert str(request.url) == halt_latch.HALT_STATUS_URL
@@ -47,7 +47,7 @@ def node(monkeypatch):
 
     monkeypatch.setattr(
         halt_latch.httpx,
-        "AsyncClient",
+        "Client",
         lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
     )
     return answer
@@ -158,9 +158,9 @@ async def test_boot_fails_closed(monkeypatch):
     def refuse(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused")
 
-    real_client = httpx.AsyncClient
+    real_client = httpx.Client
     monkeypatch.setattr(
-        halt_latch.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(refuse), **kw)
+        halt_latch.httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(refuse), **kw)
     )
     state = await _read()
     assert state.halted is True

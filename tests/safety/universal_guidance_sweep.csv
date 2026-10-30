@@ -1,30 +1,30 @@
 lang,tier,shape,has_05,universal_sections_left,assignment_lines_left,universal_keys,cut,translated,register_ok,pinned,battery,notes
-am,0,scalar,yes,no,no,5,yes,yes,yes,yes,,cut §5 cross-cluster + §7e + SI-is-depression line
-ar,,scalar,yes,no,no,5,yes,yes,yes,yes,,cut §7c/§7e
-bn,,scalar,yes,no,no,5,yes,yes,n/a,yes,,"cut §5, §7c, §7e + SI clause"
-de,,scalar,yes,no,no,5,yes,yes,yes,yes,,cut §7c/§7e
-en,,split,no,no,no,5,n/a,yes,yes,yes,,done; es usted hand-corrected
-es,,split,no,no,no,5,n/a,yes,usted (hand),yes,,done; es usted hand-corrected
-fa,,scalar,no,no,no,5,yes,yes,yes,yes,,cut §7c/§7e
-fr,,split,no,no,no,5,n/a,yes,yes,yes,,universal cleared for redraft (old text)
-ha,0,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §5 cross-cluster + §7c + SI-is-depression clause
-hi,,scalar,no,no,no,5,yes,yes,yes,yes,,cut §6 + §10 cross-cluster (Devanagari headers) + §7e
-id,,scalar,yes,no,no,5,yes,yes,yes,yes,,cut §7c/§7e
-it,,split,no,no,no,5,n/a,yes,Lei (hand),yes,,universal cleared for redraft (old text)
-ja,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §7c/§7e
-ko,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §7c/§7e
-mr,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §7c/§7e
-my,,scalar,no,no,no,5,yes,yes,n/a,yes,,"cut §5, §7c, §7e (Burmese numerals) + SI clause"
-pa,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §7c/§7e
-pt,,split,no,no,no,5,n/a,yes,yes,yes,,universal cleared for redraft (old text)
-ru,,scalar,yes,no,no,5,yes,yes,Вы capitalised (hand),yes,,"cut §7c, §7e + 05 licence (""это не психоз"")"
-sw,,scalar,yes,no,no,5,yes,yes,n/a,yes,,"cut §5, §7c, §7e + SI clause"
-ta,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §7 cross-cluster + §3d user-symptom + SI clause
-te,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §7c/§7e
-th,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §7c/§7e
-tr,,scalar,yes,no,no,5,yes,yes,yes,yes,,cut §7c/§7e
-uk,,scalar,yes,yes,no,5,n/a,yes,yes,yes,,nothing to cut
-ur,,scalar,no,no,no,5,yes,yes,yes,yes,,cut §7c/§7e
-vi,,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut 26/26b doctrine appended to §5c (posture kept)
-yo,0,scalar,yes,no,no,5,yes,yes,n/a,yes,,cut §5 PERFORM-the-distinction + §7c + §7e + own 05 bullet (licence) + §6(b)
-zh,,scalar,yes,no,no,5,yes,yes,n/a,yes,,"cut §7c + 05 licence (""这不是精神病"")"
+am,0,scalar,yes,no,no,6,yes,yes,yes,yes,,cut §5 cross-cluster + §7e + SI-is-depression line
+ar,,scalar,yes,no,no,6,yes,yes,yes,yes,,cut §7c/§7e
+bn,,scalar,yes,no,no,6,yes,yes,n/a,yes,,"cut §5, §7c, §7e + SI clause"
+de,,scalar,yes,no,no,6,yes,yes,yes,yes,,cut §7c/§7e
+en,,split,no,no,no,6,n/a,yes,yes,yes,,done; es usted hand-corrected
+es,,split,no,no,no,6,n/a,yes,usted (hand),yes,,done; es usted hand-corrected
+fa,,scalar,no,no,no,6,yes,yes,yes,yes,,cut §7c/§7e
+fr,,split,no,no,no,6,n/a,yes,yes,yes,,universal cleared for redraft (old text)
+ha,0,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §5 cross-cluster + §7c + SI-is-depression clause
+hi,,scalar,no,no,no,6,yes,yes,yes,yes,,cut §6 + §10 cross-cluster (Devanagari headers) + §7e
+id,,scalar,yes,no,no,6,yes,yes,yes,yes,,cut §7c/§7e
+it,,split,no,no,no,6,n/a,yes,Lei (hand),yes,,universal cleared for redraft (old text)
+ja,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §7c/§7e
+ko,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §7c/§7e
+mr,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §7c/§7e
+my,,scalar,no,no,no,6,yes,yes,n/a,yes,,"cut §5, §7c, §7e (Burmese numerals) + SI clause"
+pa,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §7c/§7e
+pt,,split,no,no,no,6,n/a,yes,yes,yes,,universal cleared for redraft (old text)
+ru,,scalar,yes,no,no,6,yes,yes,Вы capitalised (hand),yes,,"cut §7c, §7e + 05 licence (""это не психоз"")"
+sw,,scalar,yes,no,no,6,yes,yes,n/a,yes,,"cut §5, §7c, §7e + SI clause"
+ta,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §7 cross-cluster + §3d user-symptom + SI clause
+te,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §7c/§7e
+th,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §7c/§7e
+tr,,scalar,yes,no,no,6,yes,yes,yes,yes,,cut §7c/§7e
+uk,,scalar,yes,yes,no,6,n/a,yes,yes,yes,,nothing to cut
+ur,,scalar,no,no,no,6,yes,yes,yes,yes,,cut §7c/§7e
+vi,,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut 26/26b doctrine appended to §5c (posture kept)
+yo,0,scalar,yes,no,no,6,yes,yes,n/a,yes,,cut §5 PERFORM-the-distinction + §7c + §7e + own 05 bullet (licence) + §6(b)
+zh,,scalar,yes,no,no,6,yes,yes,n/a,yes,,"cut §7c + 05 licence (""这不是精神病"")"

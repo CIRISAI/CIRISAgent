@@ -221,12 +221,22 @@ jobs:
           else
             PROFILE_ARGS=""
           fi
+          # The agent's session log rotates at 20 MB, which a burst fills in
+          # minutes; keep every per-round and admission line of this stage in
+          # its own file (uploaded with the logs) so the whole run can be read.
+          mkdir -p logs
+          ( tail -F -n 0 logs/latest.log 2>/dev/null \
+              | grep --line-buffered -E "Work round [0-9]+: completed|Admission: |Resource [a-z_]+ pressure|Resource pressure: " \
+              > logs/rounds-1000msg.log ) &
+          ROUNDS_PID=$!
           set +e
           python3 -u tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 30 \
             --overall-deadline 600 $PROFILE_ARGS \
             --composition --composition-json composition.json | tee 1000msg.log
           rc=${PIPESTATUS[0]}
           set -e
+          pkill -P "$ROUNDS_PID" 2>/dev/null || true
+          kill "$ROUNDS_PID" 2>/dev/null || true
           # Let the recorder write its file before the upload step runs.
           wait || true
           if [ -f 1000msg.log ]; then

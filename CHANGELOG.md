@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Substrate
 
-- **ciris-server 0.5.242** — PENDING (tag cut, release running).
+- **ciris-server 0.5.242** (edge v43.3.0, persist v59.1.1, verify v20.2.0). Owner requests: the node lists what needs the owner's signature, the owner's device signs it, the node applies it and resumes delivery that was held waiting for its claim (#837). Chat messages can be replaced, withdrawn and recanted, with `/history` and `viewer_ops` (#836). A facilitator runs on every server (#838). A device is released by roster quorum and wipes itself (#839). Owned-node rows carry more detail (#840), and all 7 cohort scopes are handled (#835).
 - **ciris-client 0.5.236.** The startup-failure screen stays in the user's language and shows the agent's cause ("This device is out of storage"). Chat History opens the message lifecycle, and Replace / Withdraw / Recant follow the node's `viewer_ops`.
 
 ### Quality

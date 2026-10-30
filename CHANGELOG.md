@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Persist's cursor pages are followed past the first page.** Every persist list page carries its continuation as `next_cursor`, a cursor object. The graph scope walk sent it back wrapped as `{"cursor": …}`, which persist rejects ("ListCursor decode: missing field `version`"), so `get_all_graph_nodes` failed on any scope with more than 100 nodes. The audit listing, the user data export (`my_data`), memory queries and cross-channel history read `page["cursor"]`, a field no persist page has, so they silently stopped after one page. All five now use one helper, `persistence/db/paging.py::next_page_cursor`.
+- **Saved adapters of a retired type are dropped on restore.** An adapter the agent saved to its graph under a type that no longer exists (`ciris_covenant_metrics`, renamed to `ciris_accord_metrics` in 2.0.2; `sync`, removed) was restored and failed to import on every boot. It is now removed from the graph with a warning naming the replacement. It is not remapped, because the replacement is normally configured already and a second copy would double it.
 - **Edges without a weight read correctly.** persist omits `weight` when an edge has none; the agent passed `None` into GraphEdge's float field, and every such edge failed validation (`get_edges_for_node failed`).
 
 ## [2.18.0-stable] - 2026-10-29

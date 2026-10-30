@@ -168,38 +168,65 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: shown WRONG forms untouched. Guarded by test_language_guidance_register.py.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     "en": ("be63d55f677415c9074a7fa36d71d3bbaebeb235eeb0b0a128d1e4a882d4cdc4", 15858),  # U1 either-direction: 7c/26/26b category-only, 05 licence removed
-    "am": ("09a71780cdafa9442fdbd1cbe4a59310786f3b598a5b39d9fbf09b4b160dfa5b", 32842),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
-    "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
-    "de": ("a8ecfb9aff0b46f13a07892e73fd6be402f8ab07f5796a808da8fd2568445430", 20426),  # U1 fix: dropped the quoted ❌ specimen (GUIDANCE_FIXES.md 2026-08-12) + U6 register fix (formal instructions)
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "am": ("c2ae18972cacdc366b59a1e5c5bc18c7b27862d6978802069f8228ae673f9cbf", 31174),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "ar": ("129e22efbfb80819b8c4d8322b68ae2c30d34aef8de8a71e5d013989139ab9af", 22025),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "de": ("a918a1f59721f558cff84a5cee8d28f6ced51500a7cb7e25062ce517aadaf0f7", 19355),
     # 18628 -> 17921 (2026-10-29): the U1 category-only rewrite of the four
     # universal parts (05/25/26/26b), drafted by the i18n translate lane from en
     # 4808efd98 and then hand-corrected to usted (04_formal_register). The es
     # glossary's "tú for chat messages" rule had put the exemplar speech in tú.
     "es": ("fb62c60b9fba2e1ff72f5c959cd98ae78874c3bed2b855b21bb268d71c8d4a78", 17921),
-    "fr": ("247806bb957cd3a59161245b1c0a98d3981197020508e67eeeeacd1d19ced936", 24643),  # #1010 §7e gains the actionability boundary (q08 U2) + U6 register fix (formal instructions)
-    "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
-    "it": ("3984343c3adfda5b34a83c86860e7e8d6d016acd1372f85931b8965c863b0e1f", 18413),  # separator restored before 8 + U6 register fix (formal instructions)
-    "ja": ("469272c78454a02f594a821922a8657f9facf3a85af84a185594024d5618bf90", 29831),  # #1010 kindness-framed rewrite
-    "ko": ("bc0931d4781f5c0df5d9dd129d704e01289ae45a28e28df9440c24350e0a4789", 28015),  # #1010 kindness-framed rewrite
-    "pt": ("4bc204fc0e64697c4c6f89e6aa340da9d2694a437dd5a8c5ccd50a8bb8e5c3ff", 17993),  # separator restored before 8
-    "ru": ("21e54cc163726228a2e4576d4e7ad2b8032571bd86caed295dcd53d53cde5c86", 31292),  # #1010 §7e guard + §26 reconciled
-    "sw": ("a4d5d461d7c80119df4802fc49646be00d9ac2c4432afe4b504d96774ce94bfe", 17954),  # native §7e + §26 reconciled
-    "tr": ("d6a3281051247f3c6dbe42c558cace2af31de6f45128ed652faba17725c15577", 17498),  # #1010 §7e guard + §26 reconciled
-    "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),  # review FAILED — no guard
-    "ur": ("71ac466f2db78d1fd09a911fa793b2d3c71e3571e6113e1f65aa042ec3cc16e8", 29322),  # #1010 §7e guard + §26 reconciled
-    "bn": ("44feaf44d0b0a6d3c65912adf46f888cdbffcd3ce51df2b6778cc11ecaecfc0a", 37947),  # #1010 §7e guard + §26 reconciled
-    "fa": ("c953c3878719d38807f4678d8c3106f0b4a6809bba5b9f526ed34c84eb881dfc", 37357),  # #1010 kindness-framed rewrite
-    "ha": ("a82b8fdcc8f0e5d440c992bb21902403118ccc6194be1e0668330d128a98bba2", 18788),  # review FAILED — no guard + U6 register fix (formal instructions)
-    "id": ("bc724b53fd483213b163f7b821135800536072df57bcf474235c2d0aeb95d09b", 17774),  # #1010 §7e guard + §26 reconciled
-    "pa": ("1e69e8a6f45870a492b599449eb5eff0df4e76110b018a798b1075d3632937a7", 33060),  # #1010 §7e guard
-    "ta": ("8384d1c0c641f41b54641f5748718ce15b114d450faf1eafbbf00b8b2b5b5d98", 39702),  # #1010 §7e guard
-    "te": ("ba8481877dd63333f6b833944728beab62ef8fe267468e05220423fc6c060766", 35331),  # #1010 §7e guard
-    "vi": ("766eae14f4a0250055cd7032f638492881baeab4fcc3b6c0832628e267326eda", 21824),  # U1 fix: terminology table scoped to naming (GUIDANCE_FIXES.md 2026-08-12)
-    "mr": ("94d6dbfe7eaae41bcc572e42ead6c850dd2ab45140ef7f4270c0a83f958414f5", 32637),  # #1010 §7e guard + §26 reconciled
-    "my": ("c4bb255ce25a1964c176cc5b99d73b9f0af938e24e54c093325bebb8154cd4a7", 53450),  # #1010 §7e guard + §26 reconciled
-    "th": ("59576919a66bfa56285388bdfde024c8253676647378b873cd68d6ae8e454728", 32725),  # #1010 §7e guard
-    "uk": ("af19e474fade635dbbb927d91f2ae2cc384813972c54169bd58fad333a43cec2", 30672),  # #1010 §7e guard + §26 reconciled
-    "yo": ("75af4165533b7ca498a1d2bd4afa437d86b8325029c50e678f501746a890c00b", 29544),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "fr": ("be4e170e1d0a5fca605f5fc97ba8406483cd9124500e66dda4dc84d9e62569aa", 22057),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "hi": ("6d60222e93123a33b39c0f67a73b89588a58ab80a2840ee1b0e4a361d99392d7", 33716),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "it": ("e339b1933ed037054ad75b65bbe37572923fd7949f9a95e695f1262bcec9c3ed", 17739),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "ja": ("b897ef52b0d753bae0e3fe88ec8f22b974fc5d3f1c2e3db30643af7342f439e1", 29361),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "ko": ("9fe536888e24ec806c472f05148c65613beb39ff314beab0e0dfb08fc73b4525", 27780),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "pt": ("e8b8be0f4b955a1db58c2d97fd51fea2d42c32275d66813c0b6f8516891fdabe", 17640),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "ru": ("a3f2a8285ccfc566c4dfc4a6c335ba231c987918bb73db44a4b47549d0c33f0d", 30385),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "sw": ("7be4717d6a8d2dcf8495fd0e6e786e66d6b4767b39977904774b671409cf26ad", 16748),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "tr": ("c6a2da49d420ebbff7dfa03670e61e1cf5cfeae3f76695a4e362750f62fe6da3", 16966),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "zh": ("c56d9416260c0b021bdd91c264eb8c3d92b36395bd1d1e6b9152a405287ddac7", 14984),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "ur": ("318ca3404c197d1ea1bc20e752125754c2c8e0f27608bee9057f14d6ed3133fe", 28654),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "bn": ("f5aebaa840ddf961ccd3c7f606743b66a739e154179639731f9060aab10aab2d", 35158),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "fa": ("bbe2d133a0f85d31fb4bc16720a7dcbbf08d67acc888c5e47739e74039ced94a", 37419),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "ha": ("ff2cea4bcc2cfd0b4c801bed2fe0cd86f15e8b1e45092b1c0ce2fcea32e25d61", 21228),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "id": ("cf43b2194905bec071f3329ebcda63f8b040f5e77be766473fec0202e0b38ed3", 18180),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "pa": ("3f10b5d7b4443971ed30943e221545da1b16ca949fd2ac9264815317483bc846", 33729),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "ta": ("f4b5acda499fef04534e50ddd7b5adbf3742dd36aac842fd8f376a9b371a4ca2", 42616),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "te": ("bc48c8d9c496d6a2ea547512a3f03aaeb121b8f9662465c704bfc37e1cd0b722", 38841),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "vi": ("1a3a4e1353b0ccd395b6404712ca818e0319c170c14f629faee8342d57059f5b", 22336),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "mr": ("85511063374973ea3ae618e20dff042e1cdd3f85ef98d48d71471e0016797fe6", 31799),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "my": ("af0c406ef3576afc56c1f7471a500db0b7a23f374958f5548fd012f0474e2951", 49207),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "th": ("91fd5f58acd33dd6cd17af8ab1f41deb850aab3b72313a3c143868d00a3b3def", 37352),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "uk": ("8fd9c75fe11ee39e7068383d924620071af633ba62609606a47709ed4b5793cd", 38167),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    "yo": ("70ae863ed533a4de7eb4d340bea37129d4e1a4ab47666897e16aa8023600cc3c", 24922),
 }
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that
@@ -409,7 +436,8 @@ def test_a_universal_part_is_never_filled_from_english(tmp_path: Path, monkeypat
     import ciris_engine.logic.utils.localization as loc
 
     de = json.loads((BUNDLE / "de.json").read_text(encoding="utf-8"))
-    assert "universal_guidance" not in de["prompts"], "fixture premise: de is untranslated"
+    # Every locale is translated now; build an untranslated one by dropping its parts.
+    de["prompts"].pop("universal_guidance", None)
     marker = "UNIVERSAL-05-IN-THE-LOCALE\n\n"
     de["prompts"]["universal_guidance"] = {"05_no_wellness_confirmation": marker}
     (tmp_path / "de.json").write_text(json.dumps(de, ensure_ascii=False), encoding="utf-8")

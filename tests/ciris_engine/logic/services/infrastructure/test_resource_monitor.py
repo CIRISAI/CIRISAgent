@@ -212,9 +212,11 @@ async def test_resource_monitor_signal_bus(resource_monitor, signal_bus, monkeyp
 
     await resource_monitor._check_limits()
 
-    # Only memory reclaims; elsewhere the ladder starts acting at THROTTLE
+    # Only memory reclaims; elsewhere the ladder starts acting at THROTTLE --
+    # except where THROTTLE does not relieve the resource: only the work loop
+    # drains active thoughts, so slowing it is not offered (straight to SHED).
     assert [s for s, r in emitted_signals if r == "cpu_percent"] == ["throttle"]
-    assert [s for s, r in emitted_signals if r == "thoughts_active"] == ["throttle", "shed"]
+    assert [s for s, r in emitted_signals if r == "thoughts_active"] == ["shed"]
     assert not [s for s, r in emitted_signals if r == "tokens_hour"]
 
 

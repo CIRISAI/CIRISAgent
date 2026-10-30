@@ -1055,12 +1055,12 @@ class TestUserManagement:
         """Test extracting user IDs from correlation with database exception.
 
         Post-A1 (CIRISAgent#763): patch `get_persist_engine` to return a stub
-        whose `correlation_query` raises; the helper should swallow the
-        exception and leave user_ids empty.
+        whose correlation point read (`correlation_get`) raises; the helper
+        should swallow the exception and leave user_ids empty.
         """
 
         class _RaisingEngine:
-            def correlation_query(self, *args, **kwargs):
+            def correlation_get(self, *args, **kwargs):
                 raise Exception("DB error")
 
         task = Mock()

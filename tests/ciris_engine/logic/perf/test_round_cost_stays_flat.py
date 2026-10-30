@@ -382,9 +382,17 @@ def test_recent_completed_tasks_reads_a_bounded_window(monkeypatch):
 
     engine = _PagingEngine(_task_rows(2000), "task_id")
     monkeypatch.setattr(tasks_model, "_get_engine", lambda: engine)
+    monkeypatch.setattr(tasks_model, "_recent_completed_cache", {})
     recent = tasks_model.get_recent_completed_tasks(limit=10)
     assert [t.task_id for t in recent] == [f"task-{i:05d}" for i in range(1999, 1989, -1)]
     assert engine.pages_served == 1  # negative: all 2000 tasks (10 pages) before
+    # the rest of the round's thoughts are served the same answer
+    for _ in range(48):
+        assert [t.task_id for t in tasks_model.get_recent_completed_tasks(limit=10)] == [t.task_id for t in recent]
+    assert engine.pages_served == 1
+    monkeypatch.setattr(tasks_model.time, "monotonic", lambda: 10**9)  # TTL passed
+    tasks_model.get_recent_completed_tasks(limit=10)
+    assert engine.pages_served == 2
 
 
 def test_channel_history_stops_once_it_has_enough(monkeypatch):

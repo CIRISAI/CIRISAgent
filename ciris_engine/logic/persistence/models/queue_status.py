@@ -14,7 +14,7 @@ from .thoughts import count_thoughts_by_status, get_thoughts_by_status
 #: How long one queue-status answer is reused (seconds); see get_queue_status.
 QUEUE_STATUS_TTL_SECONDS = 2.0
 
-_queue_status_cache: Dict[str, Tuple[float, "QueueStatus"]] = {}
+_queue_status_cache: Dict[int, Tuple[float, "QueueStatus"]] = {}
 
 
 @dataclass
@@ -100,8 +100,13 @@ def get_queue_status() -> QueueStatus:
     QUEUE_STATUS_TTL_SECONDS window the same answer is reused, so a batch of
     fifty thoughts pages it once instead of fifty times.
     """
+    from .graph import get_persist_engine
+
     now = time.monotonic()
-    cached = _queue_status_cache.get("status")
+    # Keyed on the engine: a new engine (tests, a re-initialized store) never
+    # sees another's answer.
+    key = id(get_persist_engine())
+    cached = _queue_status_cache.get(key)
     if cached is not None and now - cached[0] < QUEUE_STATUS_TTL_SECONDS:
         return cached[1]
 
@@ -125,5 +130,5 @@ def get_queue_status() -> QueueStatus:
         total_tasks=total_tasks,
         total_thoughts=total_thoughts,
     )
-    _queue_status_cache["status"] = (now, status)
+    _queue_status_cache[key] = (now, status)
     return status

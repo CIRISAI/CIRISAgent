@@ -11,9 +11,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, cast
 
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -630,7 +631,12 @@ async def add_system_task(
 
 
 #: Newest completed tasks (by creation) searched for the most recently updated.
-RECENT_COMPLETED_WINDOW = 200
+RECENT_COMPLETED_WINDOW = 50
+
+#: One answer serves every thought of a round that asks within this many seconds.
+RECENT_COMPLETED_TTL_SECONDS = 2.0
+
+_recent_completed_cache: Dict[Tuple[int, str, int], Tuple[float, List[Task]]] = {}
 
 
 def get_recent_completed_tasks(
@@ -642,11 +648,19 @@ def get_recent_completed_tasks(
     Runs on every thought's context build. It used to materialize every task
     the occurrence had ever had and filter in Python; now it asks for
     COMPLETED rows and looks only at the newest RECENT_COMPLETED_WINDOW by
-    creation (at least 20x ``limit``). A task created before that window
-    and completed just now is not listed -- the context it feeds is a
-    recent-activity summary, not an audit.
+    creation (at least 5x ``limit``), and one answer serves every caller
+    within RECENT_COMPLETED_TTL_SECONDS (a round's whole batch). A task
+    created before that window and completed just now is not listed -- the
+    context it feeds is a recent-activity summary, not an audit.
     """
-    window = max(RECENT_COMPLETED_WINDOW, limit * 20)
+    now = time.monotonic()
+    # Keyed on the engine too: a new engine (tests, a re-initialized store)
+    # never sees another's answer.
+    key = (id(_get_engine()), occurrence_id, limit)
+    cached = _recent_completed_cache.get(key)
+    if cached is not None and now - cached[0] < RECENT_COMPLETED_TTL_SECONDS:
+        return list(cached[1])
+    window = max(RECENT_COMPLETED_WINDOW, limit * 5)
     rows: List[Dict[str, Any]] = []
     try:
         for page in _task_pages(
@@ -657,7 +671,9 @@ def get_recent_completed_tasks(
                 break
         # Sort the raw rows and build models only for the ones returned.
         rows.sort(key=lambda r: str(r.get("updated_at", "")), reverse=True)
-        return [_persist_row_to_task(row) for row in rows[:limit]]
+        recent = [_persist_row_to_task(row) for row in rows[:limit]]
+        _recent_completed_cache[key] = (now, recent)
+        return list(recent)
     except Exception as e:
         logger.exception(f"Failed to get recent completed tasks for occurrence {occurrence_id}: {e}")
         return []

@@ -73,18 +73,29 @@ def format_user_prompt_blocks(
 
 def append_round1_accord_blocks(messages: List[Any], *, language: str, accord_mode: str) -> None:
     """Append the round-1 parallel-DMA system blocks, in canonical order:
-    ACCORD -> per-language guidance -> prohibition context (#910).
+    ACCORD -> per-language guidance -> crisis resources (#1248) -> prohibition context (#910).
 
     Shared by PDMA/CSDMA/DSDMA (the round-1 DMAs) — NOT ASPDMA/recursive, which
-    carry accord + language guidance but deliberately omit the prohibition block
-    so a named trajectory flows forward via the existing output path rather than
-    being restated at every step. Mutates ``messages`` in place, appending only
-    non-empty blocks (skip empty system messages over the wire).
+    carry accord + language guidance + crisis resources but deliberately omit the
+    prohibition block so a named trajectory flows forward via the existing output
+    path rather than being restated at every step. Mutates ``messages`` in place,
+    appending only non-empty blocks (skip empty system messages over the wire).
+
+    The crisis block sits directly after language guidance at EVERY site that
+    carries language guidance (user ruling, #1248): it is part of the standard
+    system prompt, so the curated, verified numbers are in context wherever a
+    reply is reasoned about — never left for the model to recall.
     """
     # Lazy imports keep the low-level formatters module free of util-layer cycles.
+    from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
     from ciris_engine.logic.utils.constants import get_accord_text
     from ciris_engine.logic.utils.localization import get_language_guidance, get_prohibition_guidance
 
-    for content in (get_accord_text(accord_mode), get_language_guidance(language), get_prohibition_guidance(language)):
+    for content in (
+        get_accord_text(accord_mode),
+        get_language_guidance(language),
+        get_crisis_resources_system_block(language),
+        get_prohibition_guidance(language),
+    ):
         if content:
             messages.append({"role": "system", "content": content})

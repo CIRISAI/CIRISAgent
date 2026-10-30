@@ -1,14 +1,594 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'ar'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "ar",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for EG, SA, MA, IQ, DZ added 2026-10-29 (CIRISAgent#1248): 9 of 22 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "eg",
+    "dz",
+    "iq",
+    "ma",
+    "sa"
+  ],
   "resources": {
+    "emergency_egypt_123": {
+      "id": "emergency_egypt_123",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "123",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "eg"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Egypt Ambulance: 123 Fire: 180 Police: 122 Tourist police: 126\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): EG 123 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/egypt/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Egypt Ambulance: 123 Fire: 180 Police: 122 Tourist police: 126\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (ambulance 123); wikipedia also lists 112 from mobiles, not on FCDO. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/egypt/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_egypt_122": {
+      "id": "emergency_egypt_122",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "122",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "eg"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Egypt Ambulance: 123 Fire: 180 Police: 122 Tourist police: 126\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): EG 122 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/egypt/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Egypt Ambulance: 123 Fire: 180 Police: 122 Tourist police: 126\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (police 122). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/egypt/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_egypt_180": {
+      "id": "emergency_egypt_180",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "180",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "eg"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Egypt Ambulance: 123 Fire: 180 Police: 122 Tourist police: 126\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): EG 180 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/egypt/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Egypt Ambulance: 123 Fire: 180 Police: 122 Tourist police: 126\" (fetched 2026-10-29 via gov.uk content API). Added by the staging pass: the number appears on the cited page but the first research list omitted it. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/egypt/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_saudi_arabia_911": {
+      "id": "emergency_saudi_arabia_911",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number — Makkah, Madinah, Riyadh and Eastern regions only (elsewhere: 998 Civil Defense, 997 ambulance)",
+      "availability": [
+        "sa"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Saudi Arabia Telephone: 911 (ambulance, fire, police) If you do not have a Saudi SIM card, call 112 in an emergency\" (fetched 2026-10-29 via gov.uk content API) | Saudi Press Agency (state news agency) reporting National Center for Security Operations: \"...911 in the regions of Makkah, Madinah, Riyadh, and Eastern during February 2026. This falls within NCSO 911's mandate to receive calls and route them to the relevant security and service agencies within their jurisdictions\" (https://www.spa.gov.sa/en/N2525906). Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/saudi-arabia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Saudi Arabia Telephone: 911 (ambulance, fire, police) If you do not have a Saudi SIM card, call 112 in an emergency\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (911 unified; legacy police 999, ambulance 997, fire 998). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/saudi-arabia/getting-help",
+      "source_urls": [
+        "https://www.spa.gov.sa/en/N2525906",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_saudi_arabia_997": {
+      "id": "emergency_saudi_arabia_997",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "997",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (Saudi Red Crescent)",
+      "availability": [
+        "sa"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: Saudi Press Agency, quoting Saudi Red Crescent Authority: \"The authority emphasized the importance of promptly requesting ambulance services via the emergency number 997 or through the ASEFNI application\" (https://spa.gov.sa/en/N2554935) | AOSP eccdata (Android's emergency-number database): SA 997 types ['AMBULANCE']. Sources agree it reaches: ambulance. Added by the staging pass: the number appears on the cited page but the first research list omitted it. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://spa.gov.sa/en/N2554935",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_saudi_arabia_112": {
+      "id": "emergency_saudi_arabia_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency number for callers without a Saudi SIM card",
+      "availability": [
+        "sa"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 112 for SA; no second official page found). Not emitted. CONFLICT/UNCONFIRMED — check first: wikipedia does not list 112 for Saudi Arabia. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/saudi-arabia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Saudi Arabia Telephone: 911 (ambulance, fire, police) If you do not have a Saudi SIM card, call 112 in an emergency\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia does not list 112 for Saudi Arabia. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/saudi-arabia/getting-help",
+      "source_urls": []
+    },
+    "emergency_saudi_arabia_998": {
+      "id": "emergency_saudi_arabia_998",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "998",
+      "text_number": null,
+      "search_term": null,
+      "description": "Civil Defense (fire and rescue) — the emergency number outside the four 911 regions",
+      "availability": [
+        "sa"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: Saudi Press Agency, quoting Saudi Civil Defense: \"stressing the importance of contacting the competent authorities in emergency situations by calling (911) in the regions of Makkah, Madinah, Riyadh, and the Eastern Region, and (998) in the rest of the Kingdom.\" (https://www.spa.gov.sa/en/N2517952) | AOSP eccdata (Android's emergency-number database): SA 998 types ['FIRE']. Sources agree it reaches: fire. Added by the staging pass: the number appears on the cited page but the first research list omitted it. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.spa.gov.sa/en/N2517952",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt"
+      ]
+    },
+    "emergency_morocco_19": {
+      "id": "emergency_morocco_19",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "19",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (landline)",
+      "availability": [
+        "ma"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance/fire 150, police 190, gendarmerie 177, Wikipedia said police 19, ambulance/fire 15. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/morocco/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 15 for ambulance/fire (150 is believed to be the mobile form). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/morocco/getting-help",
+      "source_urls": []
+    },
+    "emergency_morocco_190": {
+      "id": "emergency_morocco_190",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "190",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (mobile)",
+      "availability": [
+        "ma"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): MA 190 types ['POLICE']. Sources agree it reaches: police. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance/fire 150, police 190, gendarmerie 177, Wikipedia said police 19, ambulance/fire 15. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/morocco/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 15 for ambulance/fire (150 is believed to be the mobile form). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/morocco/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt"
+      ]
+    },
+    "emergency_morocco_15": {
+      "id": "emergency_morocco_15",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "15",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire, civil protection and ambulance (landline)",
+      "availability": [
+        "ma"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance/fire 150, police 190, gendarmerie 177, Wikipedia said police 19, ambulance/fire 15. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/morocco/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 15 for ambulance/fire (150 is believed to be the mobile form). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/morocco/getting-help",
+      "source_urls": []
+    },
+    "emergency_morocco_150": {
+      "id": "emergency_morocco_150",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "150",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire, civil protection and ambulance (mobile)",
+      "availability": [
+        "ma"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): MA 150 types ['AMBULANCE', 'FIRE']. Sources agree it reaches: ambulance, fire. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance/fire 150, police 190, gendarmerie 177, Wikipedia said police 19, ambulance/fire 15. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/morocco/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 15 for ambulance/fire (150 is believed to be the mobile form). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/morocco/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt"
+      ]
+    },
+    "emergency_morocco_141": {
+      "id": "emergency_morocco_141",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "141",
+      "text_number": null,
+      "search_term": null,
+      "description": "SAMU medical emergency",
+      "availability": [
+        "ma"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance/fire 150, police 190, gendarmerie 177, Wikipedia said police 19, ambulance/fire 15. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/morocco/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 15 for ambulance/fire (150 is believed to be the mobile form). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/morocco/getting-help",
+      "source_urls": []
+    },
+    "emergency_morocco_177": {
+      "id": "emergency_morocco_177",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "177",
+      "text_number": null,
+      "search_term": null,
+      "description": "Gendarmerie (rural areas / highways)",
+      "availability": [
+        "ma"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 177 for MA; no second official page found). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance/fire 150, police 190, gendarmerie 177, Wikipedia said police 19, ambulance/fire 15. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/morocco/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Morocco Ambulance: 150 Fire: 150 Police: 190 Gendarmerie (military police): 177\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 15 for ambulance/fire (150 is believed to be the mobile form). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/morocco/getting-help",
+      "source_urls": []
+    },
+    "emergency_iraq_911": {
+      "id": "emergency_iraq_911",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire; 2025 unification)",
+      "availability": [
+        "iq"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 911 for IQ; no second official page found). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 122, fire 115, police 911, Wikipedia said 112 or 911 general, police 104. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/iraq/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Iraq Ambulance: 122 Fire: 115 Police: 911\" (fetched 2026-10-29 via gov.uk content API). No official Iraqi page found (leads only: Shafaq News quoting the MoI 911 directorate, UNHCR help page). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (ambulance 122). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/iraq/getting-help",
+      "source_urls": []
+    },
+    "emergency_iraq_122": {
+      "id": "emergency_iraq_122",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "122",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "iq"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 122 for IQ; no second official page found). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 122, fire 115, police 911, Wikipedia said 112 or 911 general, police 104. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/iraq/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Iraq Ambulance: 122 Fire: 115 Police: 911\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (ambulance 122). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/iraq/getting-help",
+      "source_urls": []
+    },
+    "emergency_iraq_115": {
+      "id": "emergency_iraq_115",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "115",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "iq"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 115 for IQ; no second official page found). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 122, fire 115, police 911, Wikipedia said 112 or 911 general, police 104. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/iraq/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Iraq Ambulance: 122 Fire: 115 Police: 911\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (ambulance 122). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/iraq/getting-help",
+      "source_urls": []
+    },
+    "emergency_iraq_104": {
+      "id": "emergency_iraq_104",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "104",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (legacy; still used in Kurdistan Region)",
+      "availability": [
+        "iq"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 122, fire 115, police 911, Wikipedia said 112 or 911 general, police 104. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/iraq/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Iraq Ambulance: 122 Fire: 115 Police: 911\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (ambulance 122). 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/iraq/getting-help",
+      "source_urls": []
+    },
+    "emergency_algeria_14": {
+      "id": "emergency_algeria_14",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "14",
+      "text_number": null,
+      "search_term": null,
+      "description": "Civil Protection (fire, rescue, medical evacuation)",
+      "availability": [
+        "dz"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 14 for DZ; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 1021, fire 14, police 17 or 1548, Wikipedia said ambulance/fire 14, police 1548. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/algeria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Algeria Ambulance: 1021 Fire: 14 Police: 17 or 1548\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees 14, and lists it for both fire and ambulance. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/algeria/getting-help",
+      "source_urls": []
+    },
+    "emergency_algeria_1021": {
+      "id": "emergency_algeria_1021",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "1021",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance / medical (alternate)",
+      "availability": [
+        "dz"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 1021 for DZ; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 1021, fire 14, police 17 or 1548, Wikipedia said ambulance/fire 14, police 1548. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/algeria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Algeria Ambulance: 1021 Fire: 14 Police: 17 or 1548\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees 14, and lists it for both fire and ambulance. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/algeria/getting-help",
+      "source_urls": []
+    },
+    "emergency_algeria_17": {
+      "id": "emergency_algeria_17",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "17",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "dz"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 17 for DZ; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 1021, fire 14, police 17 or 1548, Wikipedia said ambulance/fire 14, police 1548. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/algeria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Algeria Ambulance: 1021 Fire: 14 Police: 17 or 1548\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees 14, and lists it for both fire and ambulance. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/algeria/getting-help",
+      "source_urls": []
+    },
+    "emergency_algeria_1548": {
+      "id": "emergency_algeria_1548",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "1548",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "dz"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Algeria Ambulance: 1021 Fire: 14 Police: 17 or 1548\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): DZ 1548 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: police. Listed beyond that by some sources only: ambulance, fire. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 1021, fire 14, police 17 or 1548, Wikipedia said ambulance/fire 14, police 1548. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/algeria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Algeria Ambulance: 1021 Fire: 14 Police: 17 or 1548\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees 14, and lists it for both fire and ambulance. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/algeria/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt"
+      ]
+    },
+    "emergency_algeria_1055": {
+      "id": "emergency_algeria_1055",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "1055",
+      "text_number": null,
+      "search_term": null,
+      "description": "Gendarmerie",
+      "availability": [
+        "dz"
+      ],
+      "languages": [
+        "ar"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 1021, fire 14, police 17 or 1548, Wikipedia said ambulance/fire 14, police 1548. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/algeria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Algeria Ambulance: 1021 Fire: 14 Police: 17 or 1548\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees 14, and lists it for both fire and ambulance. 'languages' = the locale this entry is staged for (ar), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/algeria/getting-help",
+      "source_urls": []
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

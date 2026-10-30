@@ -1,14 +1,158 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'zh'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "zh",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for CN, SG added 2026-10-29 (CIRISAgent#1248): 5 of 5 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "cn",
+    "sg"
+  ],
   "resources": {
+    "emergency_china_120": {
+      "id": "emergency_china_120",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "120",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "cn"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in China Ambulance: 120 Fire: 119 Police: 110 Traffic Police: 122\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CN 120 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/china/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in China Ambulance: 120 Fire: 119 Police: 110 Traffic Police: 122\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (zh), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/china/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_china_110": {
+      "id": "emergency_china_110",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "110",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "cn"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in China Ambulance: 120 Fire: 119 Police: 110 Traffic Police: 122\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CN 110 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/china/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in China Ambulance: 120 Fire: 119 Police: 110 Traffic Police: 122\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (zh), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/china/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_china_119": {
+      "id": "emergency_china_119",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "119",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "cn"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in China Ambulance: 120 Fire: 119 Police: 110 Traffic Police: 122\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CN 119 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/china/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in China Ambulance: 120 Fire: 119 Police: 110 Traffic Police: 122\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (zh), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/china/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_singapore_995": {
+      "id": "emergency_singapore_995",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "995",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance and fire (SCDF)",
+      "availability": [
+        "sg"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): SG 995 types ['AMBULANCE', 'FIRE']. Sources agree it reaches: ambulance, fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/singapore/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (zh), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/singapore/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_singapore_999": {
+      "id": "emergency_singapore_999",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "999",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "sg"
+      ],
+      "languages": [
+        "zh"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): SG 999 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/singapore/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (zh), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/singapore/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

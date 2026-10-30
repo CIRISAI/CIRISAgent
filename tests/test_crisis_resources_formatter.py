@@ -22,7 +22,7 @@ class TestCrisisResourcesFormatter:
         assert "DISCLAIMER" in result
         assert "not a healthcare provider" in result
         assert "General Crisis Resources" in result
-        assert "911 or local emergency services" in result
+        assert "911, or your local emergency number if not in the US" in result
         assert "[DEFER TO HUMAN MODERATOR]" in result
 
         # Should include some resources
@@ -40,7 +40,7 @@ class TestCrisisResourcesFormatter:
         assert "[DEFER TO HUMAN MODERATOR]" not in result
 
         # Should still have emergency services
-        assert "911 or local emergency services" in result
+        assert "911, or your local emergency number if not in the US" in result
 
         # Should have some resources (limited to 3)
         lines = result.split("\n")
@@ -131,7 +131,7 @@ class TestCrisisResourcesFormatter:
 
         # Should fall back to global resources
         assert "=== Crisis Resources ===" in result
-        assert "911 or local emergency services" in result
+        assert "911, or your local emergency number if not in the US" in result
 
     def test_format_resource_limit(self):
         """Test that simplified format limits to 3 resources."""

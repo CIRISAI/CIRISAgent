@@ -1,14 +1,242 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'es'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "es",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for ES, MX, CO, AR added 2026-10-29 (CIRISAgent#1248): 7 of 8 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "mx",
+    "co",
+    "es",
+    "ar"
+  ],
   "resources": {
+    "emergency_spain_112": {
+      "id": "emergency_spain_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "es"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Spain Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): ES 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/spain/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Spain Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (national police 091, Guardia Civil 062 also exist). 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/spain/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_mexico_911": {
+      "id": "emergency_mexico_911",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "mx"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Mexico Telephone: 911 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): MX 911 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/mexico/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Mexico Telephone: 911 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/mexico/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_colombia_123": {
+      "id": "emergency_colombia_123",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "123",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency number — fire, police (some sources also list: ambulance)",
+      "availability": [
+        "co"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Colombia Ambulance: 123 Fire: 119 Police: 123\" (fetched 2026-10-29 via gov.uk content API) | Alcaldía Mayor de Bogotá (municipal government): \"antes de mayo de 2007, las personas reportaban los incidentes en varias líneas telefónicas, por ejemplo: 112 para Policía; 119 Bomberos, 125 Salud y 127 Tránsito. A partir de ese año, estos canales se unificaron en el Número Único de Seguridad y Emergencias 123\" (https://bogota.gov.co/mi-ciudad/seguridad/linea-123-que-cumple-17-anos-al-servicio-de-la-ciudadania) | AOSP eccdata (Android's emergency-number database): CO 123 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: fire, police. Listed beyond that by some sources only: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/colombia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Colombia Ambulance: 123 Fire: 119 Police: 123\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees 123 is the general emergency line (it also lists police 112, ambulance 125). 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://bogota.gov.co/mi-ciudad/seguridad/linea-123-que-cumple-17-anos-al-servicio-de-la-ciudadania",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://www.gov.uk/foreign-travel-advice/colombia/getting-help",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_colombia_119": {
+      "id": "emergency_colombia_119",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "119",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "co"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 119 for CO; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/colombia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Colombia Ambulance: 123 Fire: 119 Police: 123\" (fetched 2026-10-29 via gov.uk content API). Bogotá's 123 replaced 119; emit 123 only. Added by the staging pass: the number appears on the cited page but the first research list omitted it. 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/colombia/getting-help",
+      "source_urls": []
+    },
+    "emergency_argentina_911": {
+      "id": "emergency_argentina_911",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police / general emergency line",
+      "availability": [
+        "ar"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AR 911 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: police. Listed beyond that by some sources only: ambulance, fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/argentina/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (911 general; 112 redirects to 911 on mobiles). 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/argentina/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_argentina_107": {
+      "id": "emergency_argentina_107",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "107",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "ar"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AR 107 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/argentina/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/argentina/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_argentina_101": {
+      "id": "emergency_argentina_101",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "101",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "ar"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AR 101 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/argentina/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/argentina/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_argentina_100": {
+      "id": "emergency_argentina_100",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "100",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "ar"
+      ],
+      "languages": [
+        "es"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AR 100 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/argentina/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Argentina Ambulance: 107 Fire: 100 Police: 911 or 101\" (fetched 2026-10-29 via gov.uk content API). Added by the staging pass: the number appears on the cited page but the first research list omitted it. 'languages' = the locale this entry is staged for (es), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/argentina/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

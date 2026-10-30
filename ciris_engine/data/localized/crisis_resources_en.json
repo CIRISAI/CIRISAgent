@@ -1,13 +1,17 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'en'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "en",
   "needs_verified_entries": false,
-  "verification_notes": "Base corpus. US/UK/global entries carried from the builtin registry; Ethiopia emergency entries verified May 2026 (see per-entry notes).",
+  "verification_notes": "Base corpus. US/UK/global entries carried from the builtin registry; Ethiopia emergency entries verified May 2026 (see per-entry notes). Emergency (police/ambulance/fire) numbers for GB, IE, AU, NZ, ZA, PH added 2026-10-29 (CIRISAgent#1248): 6 of 10 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "emergency_line_ids": [
+    "emergency_services"
+  ],
+  "language_countries": [],
   "disclaimer": "DISCLAIMER: I am an AI moderator, not a healthcare provider. The following\nis general information only, not medical advice or crisis intervention:\n\nThis information is provided as-is without warranty. CIRIS L3C is not a\nhealthcare provider and does not endorse these resources. Please seek\nqualified professional help.",
   "resources": {
     "findahelpline": {
@@ -265,6 +269,274 @@
       "verified": true,
       "snapshot_date": "2026-08-02",
       "source_url": null
+    },
+    "emergency_united_kingdom_999": {
+      "id": "emergency_united_kingdom_999",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "999",
+      "text_number": null,
+      "search_term": null,
+      "description": "National emergency number (police, ambulance, fire, coastguard)",
+      "availability": [
+        "uk"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: gov.uk: \"999 and 112 is the national emergency response service in the UK\"; \"112 is the pan-European equivalent to 999 and can be used in the UK\" | AOSP eccdata (Android's emergency-number database): GB 999 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/guidance/999-and-112-the-uks-national-emergency-numbers (fetched 2026-10-29); page text: gov.uk: \"999 and 112 is the national emergency response service in the UK\"; \"112 is the pan-European equivalent to 999 and can be used in the UK\". Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/guidance/999-and-112-the-uks-national-emergency-numbers",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_united_kingdom_112": {
+      "id": "emergency_united_kingdom_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Pan-European emergency number, also works in the UK",
+      "availability": [
+        "uk"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 112 for GB; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/guidance/999-and-112-the-uks-national-emergency-numbers (fetched 2026-10-29); page text: gov.uk: \"112 is the pan-European equivalent to 999 and can be used in the UK\". Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/guidance/999-and-112-the-uks-national-emergency-numbers",
+      "source_urls": []
+    },
+    "emergency_ireland_112": {
+      "id": "emergency_ireland_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "ie"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Ireland Telephone: 112 or 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): IE 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/ireland/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Ireland Telephone: 112 or 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/ireland/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_ireland_999": {
+      "id": "emergency_ireland_999",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "999",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "ie"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 999 for IE; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/ireland/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Ireland Telephone: 112 or 999 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/ireland/getting-help",
+      "source_urls": []
+    },
+    "emergency_australia_000": {
+      "id": "emergency_australia_000",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "000",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "au"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Australia Telephone: 000 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AU 000 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/australia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Australia Telephone: 000 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/australia/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_new_zealand_111": {
+      "id": "emergency_new_zealand_111",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "111",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "nz"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in New Zealand Telephone: 111 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): NZ 111 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/new-zealand/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in New Zealand Telephone: 111 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (112/911 redirect on mobiles). 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/new-zealand/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_south_africa_10177": {
+      "id": "emergency_south_africa_10177",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "10177",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance and fire",
+      "availability": [
+        "za"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 10177 for ZA; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/south-africa/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in South Africa All emergencies from mobiles: 112 Ambulance and fire: 10177 Police: 10111\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/south-africa/getting-help",
+      "source_urls": []
+    },
+    "emergency_south_africa_10111": {
+      "id": "emergency_south_africa_10111",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "10111",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "za"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 10111 for ZA; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/south-africa/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in South Africa All emergencies from mobiles: 112 Ambulance and fire: 10177 Police: 10111\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/south-africa/getting-help",
+      "source_urls": []
+    },
+    "emergency_south_africa_112": {
+      "id": "emergency_south_africa_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "All emergencies, from mobile phones only",
+      "availability": [
+        "za"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in South Africa All emergencies from mobiles: 112 Ambulance and fire: 10177 Police: 10111\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): ZA 112 types ['AMBULANCE', 'FIRE', 'POLICE']. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/south-africa/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in South Africa All emergencies from mobiles: 112 Ambulance and fire: 10177 Police: 10111\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees; EU 112 page also names South Africa as using 112. 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/south-africa/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_philippines_911": {
+      "id": "emergency_philippines_911",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "ph"
+      ],
+      "languages": [
+        "en"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in the Philippines Telephone: 911 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): PH 911 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/philippines/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in the Philippines Telephone: 911 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (112 from mobiles). 'languages' = the locale this entry is staged for (en), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/philippines/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
     }
   }
 }

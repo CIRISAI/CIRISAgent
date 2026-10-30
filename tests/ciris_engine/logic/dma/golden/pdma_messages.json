@@ -8,6 +8,10 @@
     "role": "system"
   },
   {
+    "content": "<GOLDEN-CRISIS-RESOURCES lang=en>",
+    "role": "system"
+  },
+  {
     "content": "<GOLDEN-PROHIBITION-GUIDANCE lang=en>",
     "role": "system"
   },

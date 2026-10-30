@@ -1,14 +1,44 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'yo'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "yo",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for NG added 2026-10-29 (CIRISAgent#1248): 1 of 1 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "ng"
+  ],
   "resources": {
+    "emergency_nigeria_112": {
+      "id": "emergency_nigeria_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "National emergency number (routes to police, fire and other responders)",
+      "availability": [
+        "ng"
+      ],
+      "languages": [
+        "yo"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Nigeria Telephone: 112 (ambulance, fire, police) There is no national ambulance service and hospital-owned services are extremely limited\" (fetched 2026-10-29 via gov.uk content API) | Nigerian Communications Commission: \"The ECC project is the brainchild of NCC to enable easy communication by Nigerians with emergency first responders such as Police, Fire Service, Federal Road Safety Corps, National Orientation Agency (NOA) among others, by dialing the three-digit toll-free Number 112.\" (https://ncc.gov.ng/node/1397). Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/nigeria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Nigeria Telephone: 112 (ambulance, fire, police) There is no national ambulance service and hospital-owned services are extremely limited\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (yo), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/nigeria/getting-help",
+      "source_urls": [
+        "https://ncc.gov.ng/node/1397"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

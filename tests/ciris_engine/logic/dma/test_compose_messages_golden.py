@@ -12,6 +12,12 @@ using the exact fixtures in ``compose_golden.py``. These tests prove:
 
 Any change to composition (block order, separator, interpolation, template
 routing) turns these red.
+
+Deliberate composition changes since capture, each edited into the snapshots by
+inserting exactly one message (never regenerated from the code under test):
+
+- #1248: the crisis-resources system block (``<GOLDEN-CRISIS-RESOURCES lang=..>``
+  sentinel) directly after the language-guidance message in every DMA.
 """
 
 from typing import List, cast

@@ -1,14 +1,634 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'fr'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "fr",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for FR, CA, BE, CI, SN, CD, CM added 2026-10-29 (CIRISAgent#1248): 13 of 23 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "fr",
+    "cd",
+    "cm",
+    "ca",
+    "ci",
+    "be",
+    "sn"
+  ],
   "resources": {
+    "emergency_france_112": {
+      "id": "emergency_france_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "fr"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): FR 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/france/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/france/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_france_15": {
+      "id": "emergency_france_15",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "15",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (SAMU)",
+      "availability": [
+        "fr"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): FR 15 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/france/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/france/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_france_17": {
+      "id": "emergency_france_17",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "17",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "fr"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): FR 17 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/france/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/france/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_france_114": {
+      "id": "emergency_france_114",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "114",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency number for deaf and hard-of-hearing people (SMS, chat, video, fax)",
+      "availability": [
+        "fr"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): FR 114 types ['TYPE_UNSPECIFIED']. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/france/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in France Telephone 112 (ambulance, fire, police) Ambulance: 15 Fire: 18 Police: 17 Deaf and hard of hearing emergency number (SMS, chat, video and fax): 114\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/france/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt"
+      ]
+    },
+    "emergency_canada_911": {
+      "id": "emergency_canada_911",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "ca"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Canada Telephone: 911 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CA 911 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/canada/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Canada Telephone: 911 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/canada/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_belgium_112": {
+      "id": "emergency_belgium_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "be"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Belgium Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): BE 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/belgium/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Belgium Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees; also lists 101 for police. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/belgium/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_cote_d_ivoire_185": {
+      "id": "emergency_cote_d_ivoire_185",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "185",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (SAMU)",
+      "availability": [
+        "ci"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CI 185 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt"
+      ]
+    },
+    "emergency_cote_d_ivoire_110": {
+      "id": "emergency_cote_d_ivoire_110",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "110",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "ci"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 110 for CI; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API). Split from the multi-number listing '110 111 170' (one entry per number). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help",
+      "source_urls": []
+    },
+    "emergency_cote_d_ivoire_111": {
+      "id": "emergency_cote_d_ivoire_111",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "111",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "ci"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 111 for CI; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API). Split from the multi-number listing '110 111 170' (one entry per number). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help",
+      "source_urls": []
+    },
+    "emergency_cote_d_ivoire_170": {
+      "id": "emergency_cote_d_ivoire_170",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "170",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "ci"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CI 170 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API). Split from the multi-number listing '110 111 170' (one entry per number). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_cote_d_ivoire_180": {
+      "id": "emergency_cote_d_ivoire_180",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "180",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "ci"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CI 180 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Côte d'Ivoire Ambulance: 185 Fire: 180 Police: 110, 111 or 170\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cote-d-ivoire/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_senegal_17": {
+      "id": "emergency_senegal_17",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "17",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "sn"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): SN 17 types ['POLICE']. Sources agree it reaches: police. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 15, fire 18, police 17, gendarmerie 123, Wikipedia said ambulance 18, fire 1515. No 112 entry: no Senegalese official source confirms it. The second opinion prefers 1515 over a bare 15; under the 2026-10-29 cited-sources standard 15 is kept (UK FCDO + AOSP agree) and 1515 stays a lead until an official page is found. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/senegal/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 18 for ambulance and 1515 for fire. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/senegal/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_senegal_18": {
+      "id": "emergency_senegal_18",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "18",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "sn"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): SN 18 types ['FIRE']. Sources agree it reaches: fire. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 15, fire 18, police 17, gendarmerie 123, Wikipedia said ambulance 18, fire 1515. No 112 entry: no Senegalese official source confirms it. The second opinion prefers 1515 over a bare 15; under the 2026-10-29 cited-sources standard 15 is kept (UK FCDO + AOSP agree) and 1515 stays a lead until an official page is found. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/senegal/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 18 for ambulance and 1515 for fire. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/senegal/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_senegal_15": {
+      "id": "emergency_senegal_15",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "15",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (SAMU)",
+      "availability": [
+        "sn"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): SN 15 types ['AMBULANCE']. Sources agree it reaches: ambulance. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 15, fire 18, police 17, gendarmerie 123, Wikipedia said ambulance 18, fire 1515. No 112 entry: no Senegalese official source confirms it. The second opinion prefers 1515 over a bare 15; under the 2026-10-29 cited-sources standard 15 is kept (UK FCDO + AOSP agree) and 1515 stays a lead until an official page is found. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/senegal/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 18 for ambulance and 1515 for fire. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/senegal/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt"
+      ]
+    },
+    "emergency_senegal_1515": {
+      "id": "emergency_senegal_1515",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "1515",
+      "text_number": null,
+      "search_term": null,
+      "description": "SAMU medical emergency",
+      "availability": [
+        "sn"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 15, fire 18, police 17, gendarmerie 123, Wikipedia said ambulance 18, fire 1515. Second-opinion review cites: Ministère de la Santé SAMU National page; no URL supplied — check at source. No 112 entry: no Senegalese official source confirms it. The second opinion prefers 1515 over a bare 15; under the 2026-10-29 cited-sources standard 15 is kept (UK FCDO + AOSP agree) and 1515 stays a lead until an official page is found. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/senegal/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 18 for ambulance and 1515 for fire. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/senegal/getting-help",
+      "source_urls": []
+    },
+    "emergency_senegal_123": {
+      "id": "emergency_senegal_123",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "123",
+      "text_number": null,
+      "search_term": null,
+      "description": "Gendarmerie (military police, countryside)",
+      "availability": [
+        "sn"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 123 for SN; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 15, fire 18, police 17, gendarmerie 123, Wikipedia said ambulance 18, fire 1515. No 112 entry: no Senegalese official source confirms it. The second opinion prefers 1515 over a bare 15; under the 2026-10-29 cited-sources standard 15 is kept (UK FCDO + AOSP agree) and 1515 stays a lead until an official page is found. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/senegal/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Senegal Ambulance: 15 Fire: 18 Police: 17 Call 123 for the military police, who may be more responsive if you are in the countryside\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists 18 for ambulance and 1515 for fire. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/senegal/getting-help",
+      "source_urls": []
+    },
+    "emergency_dr_congo_112": {
+      "id": "emergency_dr_congo_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (Kinshasa only)",
+      "availability": [
+        "cd"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: region-only number (not national). Not emitted. CONFLICT/UNCONFIRMED — check first: wikipedia agrees (police 112, citing travel.state.gov). UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/democratic-republic-of-the-congo/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in DRC There is no general emergency medical number in Kinshasa or elsewhere in the Democratic Republic of the Congo (DRC). ... If you are in Kinshasa, you can contact the fire service on 118, and the police on 112.\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (police 112, citing travel.state.gov). 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/democratic-republic-of-the-congo/getting-help",
+      "source_urls": []
+    },
+    "emergency_dr_congo_118": {
+      "id": "emergency_dr_congo_118",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "118",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire (Kinshasa only)",
+      "availability": [
+        "cd"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: region-only number (not national). Not emitted. CONFLICT/UNCONFIRMED — check first: wikipedia agrees. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/democratic-republic-of-the-congo/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in DRC There is no general emergency medical number in Kinshasa or elsewhere in the Democratic Republic of the Congo (DRC). ... If you are in Kinshasa, you can contact the fire service on 118, and the police on 112.\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/democratic-republic-of-the-congo/getting-help",
+      "source_urls": []
+    },
+    "emergency_cameroon_117": {
+      "id": "emergency_cameroon_117",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "117",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "cm"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Cameroon Ambulance: 112 Fire: 119 Police: 117\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CM 117 types ['POLICE']. Sources agree it reaches: police. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 119, police 117, Wikipedia said 112 general, ambulance 119, fire 118. Second-opinion review cites: MINAT useful-numbers page; no URL supplied — check at source. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cameroon/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Cameroon Ambulance: 112 Fire: 119 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general and 119 as ambulance, 118 as fire (conflicts with FCDO). 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cameroon/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_cameroon_1500": {
+      "id": "emergency_cameroon_1500",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "1500",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (reporting line; alternate)",
+      "availability": [
+        "cm"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 119, police 117, Wikipedia said 112 general, ambulance 119, fire 118. Second-opinion review cites: MINAT useful-numbers page; no URL supplied — check at source. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cameroon/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Cameroon Ambulance: 112 Fire: 119 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general and 119 as ambulance, 118 as fire (conflicts with FCDO). 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cameroon/getting-help",
+      "source_urls": []
+    },
+    "emergency_cameroon_119": {
+      "id": "emergency_cameroon_119",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "119",
+      "text_number": null,
+      "search_term": null,
+      "description": "SAMU / ambulance",
+      "availability": [
+        "cm"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 119, police 117, Wikipedia said 112 general, ambulance 119, fire 118. Second-opinion review cites: MINAT useful-numbers page; no URL supplied — check at source. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cameroon/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Cameroon Ambulance: 112 Fire: 119 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general and 119 as ambulance, 118 as fire (conflicts with FCDO). 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cameroon/getting-help",
+      "source_urls": []
+    },
+    "emergency_cameroon_118": {
+      "id": "emergency_cameroon_118",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "118",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "cm"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 119, police 117, Wikipedia said 112 general, ambulance 119, fire 118. Second-opinion review cites: MINAT useful-numbers page; no URL supplied — check at source. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cameroon/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Cameroon Ambulance: 112 Fire: 119 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general and 119 as ambulance, 118 as fire (conflicts with FCDO). 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cameroon/getting-help",
+      "source_urls": []
+    },
+    "emergency_cameroon_112": {
+      "id": "emergency_cameroon_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency number (secondary / mobile)",
+      "availability": [
+        "cm"
+      ],
+      "languages": [
+        "fr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 112 for CM; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 119, police 117, Wikipedia said 112 general, ambulance 119, fire 118. Second-opinion review cites: MINAT useful-numbers page; no URL supplied — check at source. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/cameroon/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Cameroon Ambulance: 112 Fire: 119 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general and 119 as ambulance, 118 as fire (conflicts with FCDO). 'languages' = the locale this entry is staged for (fr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/cameroon/getting-help",
+      "source_urls": []
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

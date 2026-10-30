@@ -29,6 +29,15 @@ from .prompt_loader import DMAPromptLoader, get_prompt_loader, safe_format
 
 logger = logging.getLogger(__name__)
 
+#: What a template's legacy ``{crisis_resources_block}`` slot renders to since
+#: #1248. The block itself is a separate system message (see
+#: ``append_round1_accord_blocks``); this pointer carries no number, so a
+#: template can never re-introduce one out of the gated corpus path.
+DSDMA_CRISIS_BLOCK_POINTER = (
+    "(See the \"=== Crisis Resources ===\" system message: verified resources for this locale. "
+    "Emergency numbers there are general emergency services, not mental-health helplines.)"
+)
+
 
 def _format_domain_specific_knowledge(dsk: Optional[Mapping[str, Any]]) -> str:
     """Render the agent's full ``domain_specific_knowledge`` dict into the
@@ -471,16 +480,13 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         """
         escalation_guidance_block = get_escalation_guidance(0)
 
-        # Import crisis resources formatter
-        from ciris_engine.logic.formatters import format_crisis_resources_block
-
-        # Locale-aware since CIRISAgent#971: the thread's active language selects
-        # the corpus registry (crisis_resources_{lang}.json); en/unknown locales
-        # resolve to the byte-frozen en base block.
-        crisis_resources_block = format_crisis_resources_block(
-            include_full_disclaimer=False,
-            language=self.prompt_loader.language,
-        )
+        # The crisis block is NOT rendered into the template any more (#1248):
+        # it arrives as its own system message right after language guidance,
+        # via append_round1_accord_blocks below — the same block every DMA sees.
+        # A template that still carries a `{crisis_resources_block}` slot (the
+        # echo-speculative identity, under "For Mental Health Concerns:") gets a
+        # number-free pointer to it, so DSDMA never carries the block twice.
+        crisis_resources_block = DSDMA_CRISIS_BLOCK_POINTER
 
         task_history_block = ""
 

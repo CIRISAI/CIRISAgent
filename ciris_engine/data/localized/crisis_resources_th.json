@@ -1,14 +1,104 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'th'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "th",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for TH added 2026-10-29 (CIRISAgent#1248): 3 of 3 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "th"
+  ],
   "resources": {
+    "emergency_thailand_191": {
+      "id": "emergency_thailand_191",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "191",
+      "text_number": null,
+      "search_term": null,
+      "description": "General emergency number",
+      "availability": [
+        "th"
+      ],
+      "languages": [
+        "th"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Thailand Telephone: 191 (ambulance, fire, police) Ambulance: 1669 Fire: 199 Police: 191 Tourist police: 1155\" (fetched 2026-10-29 via gov.uk content API) | Ministry of Foreign Affairs of Thailand: \"General Emergency: 191 Tourist Police Hotline: 1155 Fire and Rescue Department: 199 Emergency Medical Services: 1669 DDPM Hotline: 1784\" (https://www.mfa.go.th/en/content/eq2) | AOSP eccdata (Android's emergency-number database): TH 191 types ['POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/thailand/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Thailand Telephone: 191 (ambulance, fire, police) Ambulance: 1669 Fire: 199 Police: 191 Tourist police: 1155\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (191 police; 191/199/1669 all remain available as of 2026). 'languages' = the locale this entry is staged for (th), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/thailand/getting-help",
+      "source_urls": [
+        "https://www.mfa.go.th/en/content/eq2",
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_thailand_1669": {
+      "id": "emergency_thailand_1669",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "1669",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "th"
+      ],
+      "languages": [
+        "th"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Thailand Telephone: 191 (ambulance, fire, police) Ambulance: 1669 Fire: 199 Police: 191 Tourist police: 1155\" (fetched 2026-10-29 via gov.uk content API) | Ministry of Foreign Affairs of Thailand: \"Emergency Medical Services: 1669\" (https://www.mfa.go.th/en/content/eq2) | AOSP eccdata (Android's emergency-number database): TH 1669 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/thailand/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Thailand Telephone: 191 (ambulance, fire, police) Ambulance: 1669 Fire: 199 Police: 191 Tourist police: 1155\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (th), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/thailand/getting-help",
+      "source_urls": [
+        "https://www.mfa.go.th/en/content/eq2",
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_thailand_199": {
+      "id": "emergency_thailand_199",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "199",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire and rescue",
+      "availability": [
+        "th"
+      ],
+      "languages": [
+        "th"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Thailand Telephone: 191 (ambulance, fire, police) Ambulance: 1669 Fire: 199 Police: 191 Tourist police: 1155\" (fetched 2026-10-29 via gov.uk content API) | Ministry of Foreign Affairs of Thailand: \"Fire and Rescue Department: 199\" (https://www.mfa.go.th/en/content/eq2) | AOSP eccdata (Android's emergency-number database): TH 199 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/thailand/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Thailand Telephone: 191 (ambulance, fire, police) Ambulance: 1669 Fire: 199 Police: 191 Tourist police: 1155\" (fetched 2026-10-29 via gov.uk content API). Added by the staging pass: the number appears on the cited page but the first research list omitted it. 'languages' = the locale this entry is staged for (th), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/thailand/getting-help",
+      "source_urls": [
+        "https://www.mfa.go.th/en/content/eq2",
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

@@ -1,14 +1,413 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'pt'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "pt",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for BR, PT, AO, MZ added 2026-10-29 (CIRISAgent#1248): 6 of 15 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "br",
+    "ao",
+    "mz",
+    "pt"
+  ],
   "resources": {
+    "emergency_brazil_192": {
+      "id": "emergency_brazil_192",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "192",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (SAMU)",
+      "availability": [
+        "br"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Brazil Ambulance: 192 Fire: 193 Police: 190 or 911\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): BR 192 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/brazil/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Brazil Ambulance: 192 Fire: 193 Police: 190 or 911\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/brazil/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_brazil_190": {
+      "id": "emergency_brazil_190",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "190",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "br"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Brazil Ambulance: 192 Fire: 193 Police: 190 or 911\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): BR 190 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/brazil/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Brazil Ambulance: 192 Fire: 193 Police: 190 or 911\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/brazil/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_brazil_911": {
+      "id": "emergency_brazil_911",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "911",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (alternative to 190)",
+      "availability": [
+        "br"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 911 for BR; no second official page found). Not emitted. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/brazil/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Brazil Ambulance: 192 Fire: 193 Police: 190 or 911\" (fetched 2026-10-29 via gov.uk content API). Added by the staging pass: the number appears on the cited page but the first research list omitted it. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/brazil/getting-help",
+      "source_urls": []
+    },
+    "emergency_brazil_193": {
+      "id": "emergency_brazil_193",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "193",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "br"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Brazil Ambulance: 192 Fire: 193 Police: 190 or 911\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): BR 193 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/brazil/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Brazil Ambulance: 192 Fire: 193 Police: 190 or 911\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/brazil/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_portugal_112": {
+      "id": "emergency_portugal_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "pt"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Portugal Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): PT 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/portugal/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Portugal Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/portugal/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_angola_113": {
+      "id": "emergency_angola_113",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "113",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "ao"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 118, police 110, Wikipedia said ambulance 112/116, police 113, fire 115. 111 may not work outside Luanda/Benguela; 113 is being retired in some provinces. Disagrees with FCDO's police 110 / fire 118 (kept as alternates for the check). This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/angola/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Angola Ambulance: 112 Fire: 118 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially agrees (ambulance 112/116). 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/angola/getting-help",
+      "source_urls": []
+    },
+    "emergency_angola_112": {
+      "id": "emergency_angola_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "ao"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Angola Ambulance: 112 Fire: 118 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AO 112 types ['AMBULANCE']. Sources agree it reaches: ambulance. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 118, police 110, Wikipedia said ambulance 112/116, police 113, fire 115. 111 may not work outside Luanda/Benguela; 113 is being retired in some provinces. Disagrees with FCDO's police 110 / fire 118 (kept as alternates for the check). This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/angola/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Angola Ambulance: 112 Fire: 118 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially agrees (ambulance 112/116). 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/angola/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_angola_115": {
+      "id": "emergency_angola_115",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "115",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "ao"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 118, police 110, Wikipedia said ambulance 112/116, police 113, fire 115. 111 may not work outside Luanda/Benguela; 113 is being retired in some provinces. Disagrees with FCDO's police 110 / fire 118 (kept as alternates for the check). This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/angola/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Angola Ambulance: 112 Fire: 118 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially agrees (ambulance 112/116). 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/angola/getting-help",
+      "source_urls": []
+    },
+    "emergency_angola_111": {
+      "id": "emergency_angola_111",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "111",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified public-safety number (CISP; emerging — may not work outside Luanda/Benguela)",
+      "availability": [
+        "ao"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 118, police 110, Wikipedia said ambulance 112/116, police 113, fire 115. 111 may not work outside Luanda/Benguela; 113 is being retired in some provinces. Disagrees with FCDO's police 110 / fire 118 (kept as alternates for the check). This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/angola/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Angola Ambulance: 112 Fire: 118 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially agrees (ambulance 112/116). 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/angola/getting-help",
+      "source_urls": []
+    },
+    "emergency_angola_110": {
+      "id": "emergency_angola_110",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "110",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (per UK FCDO; second opinion gives 113)",
+      "availability": [
+        "ao"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 110 for AO; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 118, police 110, Wikipedia said ambulance 112/116, police 113, fire 115. 111 may not work outside Luanda/Benguela; 113 is being retired in some provinces. Disagrees with FCDO's police 110 / fire 118 (kept as alternates for the check). This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/angola/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Angola Ambulance: 112 Fire: 118 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially agrees (ambulance 112/116). 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/angola/getting-help",
+      "source_urls": []
+    },
+    "emergency_angola_118": {
+      "id": "emergency_angola_118",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "118",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire (per UK FCDO; second opinion gives 115)",
+      "availability": [
+        "ao"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 118 for AO; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said ambulance 112, fire 118, police 110, Wikipedia said ambulance 112/116, police 113, fire 115. 111 may not work outside Luanda/Benguela; 113 is being retired in some provinces. Disagrees with FCDO's police 110 / fire 118 (kept as alternates for the check). This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/angola/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Angola Ambulance: 112 Fire: 118 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia partially agrees (ambulance 112/116). 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/angola/getting-help",
+      "source_urls": []
+    },
+    "emergency_mozambique_119": {
+      "id": "emergency_mozambique_119",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "119",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "mz"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said 112 (ambulance, fire, police); fire 198; ambulance 848888/823388, Wikipedia said police 119, ambulance 117, no 112. Second-opinion review cites: Visit Mozambique and UK FCDO; no URL supplied — check at source. Which services 112 reaches is still unclear. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/mozambique/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Mozambique Call 112 (ambulance, fire, police) If the call does not connect, use the country-based numbers or contact your nearest police station ... Ambulance: 848888 or 823388 Fire: 198 Police: 112\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists police 119, ambulance 117, no 112. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/mozambique/getting-help",
+      "source_urls": []
+    },
+    "emergency_mozambique_117": {
+      "id": "emergency_mozambique_117",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "117",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "mz"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said 112 (ambulance, fire, police); fire 198; ambulance 848888/823388, Wikipedia said police 119, ambulance 117, no 112. Second-opinion review cites: Visit Mozambique and UK FCDO; no URL supplied — check at source. Which services 112 reaches is still unclear. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/mozambique/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Mozambique Call 112 (ambulance, fire, police) If the call does not connect, use the country-based numbers or contact your nearest police station ... Ambulance: 848888 or 823388 Fire: 198 Police: 112\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists police 119, ambulance 117, no 112. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/mozambique/getting-help",
+      "source_urls": []
+    },
+    "emergency_mozambique_198": {
+      "id": "emergency_mozambique_198",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "198",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "mz"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Mozambique Call 112 (ambulance, fire, police) If the call does not connect, use the country-based numbers or contact your nearest police station ... Ambulance: 848888 or 823388 Fire: 198 Police: 112\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): MZ 198 types ['FIRE']. Sources agree it reaches: fire. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said 112 (ambulance, fire, police); fire 198; ambulance 848888/823388, Wikipedia said police 119, ambulance 117, no 112. Second-opinion review cites: Visit Mozambique and UK FCDO; no URL supplied — check at source. Which services 112 reaches is still unclear. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/mozambique/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Mozambique Call 112 (ambulance, fire, police) If the call does not connect, use the country-based numbers or contact your nearest police station ... Ambulance: 848888 or 823388 Fire: 198 Police: 112\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists police 119, ambulance 117, no 112. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/mozambique/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_mozambique_112": {
+      "id": "emergency_mozambique_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police / general emergency (alternate)",
+      "availability": [
+        "mz"
+      ],
+      "languages": [
+        "pt"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 112 for MZ; no second official page found). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said 112 (ambulance, fire, police); fire 198; ambulance 848888/823388, Wikipedia said police 119, ambulance 117, no 112. Second-opinion review cites: Visit Mozambique and UK FCDO; no URL supplied — check at source. Which services 112 reaches is still unclear. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/mozambique/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Mozambique Call 112 (ambulance, fire, police) If the call does not connect, use the country-based numbers or contact your nearest police station ... Ambulance: 848888 or 823388 Fire: 198 Police: 112\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia differs: lists police 119, ambulance 117, no 112. 'languages' = the locale this entry is staged for (pt), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/mozambique/getting-help",
+      "source_urls": []
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

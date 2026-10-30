@@ -114,6 +114,13 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         _lang_guidance = get_language_guidance(self.prompt_loader.language)
         if _lang_guidance:
             messages.append({"role": "system", "content": _lang_guidance})
+        # Crisis resources ride directly after language guidance (#1248) — the
+        # locale's verified numbers, from the one composer every DMA shares.
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+
+        _crisis_block = get_crisis_resources_system_block(self.prompt_loader.language)
+        if _crisis_block:
+            messages.append({"role": "system", "content": _crisis_block})
 
         # Get system message from prompt template
         system_message = self.prompt_loader.get_system_message(

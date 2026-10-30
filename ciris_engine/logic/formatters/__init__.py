@@ -1,6 +1,10 @@
 """Formatters for prompt engineering utilities."""
 
-from .crisis_resources import format_crisis_resources_block, get_crisis_resources_guidance
+from .crisis_resources import (
+    format_crisis_resources_block,
+    get_crisis_resources_guidance,
+    get_crisis_resources_system_block,
+)
 from .escalation import get_escalation_guidance
 from .wa_approval import (
     format_wa_approval_block,
@@ -39,5 +43,6 @@ __all__ = [
     "format_user_prompt_blocks",
     "get_escalation_guidance",
     "format_crisis_resources_block",
+    "get_crisis_resources_system_block",
     "get_crisis_resources_guidance",
 ]

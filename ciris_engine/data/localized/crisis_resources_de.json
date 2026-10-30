@@ -1,14 +1,244 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'de'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "de",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for DE, AT, CH added 2026-10-29 (CIRISAgent#1248): 8 of 8 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "de",
+    "at",
+    "ch"
+  ],
   "resources": {
+    "emergency_germany_112": {
+      "id": "emergency_germany_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (ambulance, fire; EU 112 also reaches police)",
+      "availability": [
+        "de"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Germany Ambulance: 112 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | Ministerium des Inneren, für Digitalisierung und Kommunen Baden-Württemberg: \"FEUERWEHR UND RETTUNGSDIENST Bei Bränden, Unglücksfällen und bei lebensbedrohlichen Verletzungen oder medizinischen Notfällen. 112\" (https://im.baden-wuerttemberg.de/fileadmin/redaktion/m-im/intern/dateien/pdf/MIDK_Flyer_Notfallnummern_A4_p2.pdf) | AOSP eccdata (Android's emergency-number database): DE 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/germany/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Germany Ambulance: 112 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees; EU 112 page confirms 112 works EU-wide. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/germany/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://im.baden-wuerttemberg.de/fileadmin/redaktion/m-im/intern/dateien/pdf/MIDK_Flyer_Notfallnummern_A4_p2.pdf",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_germany_110": {
+      "id": "emergency_germany_110",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "110",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "de"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Germany Ambulance: 112 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | Ministerium des Inneren, für Digitalisierung und Kommunen Baden-Württemberg (Abt. 6 Bevölkerungsschutz): \"Feuerwehr und Rettungsdienst 112 ... Polizei 110\" (https://im.baden-wuerttemberg.de/fileadmin/redaktion/m-im/intern/dateien/pdf/MIDK_Flyer_Notfallnummern_A4_p2.pdf). Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/germany/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Germany Ambulance: 112 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/germany/getting-help",
+      "source_urls": [
+        "https://im.baden-wuerttemberg.de/fileadmin/redaktion/m-im/intern/dateien/pdf/MIDK_Flyer_Notfallnummern_A4_p2.pdf",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_austria_112": {
+      "id": "emergency_austria_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "European unified emergency number",
+      "availability": [
+        "at"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services Austria Ambulance or rescue: 144 Fire: 122 Police: 133 European emergency number: 112\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AT 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/austria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services Austria Ambulance or rescue: 144 Fire: 122 Police: 133 European emergency number: 112\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/austria/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_austria_144": {
+      "id": "emergency_austria_144",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "144",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance / rescue",
+      "availability": [
+        "at"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services Austria Ambulance or rescue: 144 Fire: 122 Police: 133 European emergency number: 112\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AT 144 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/austria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services Austria Ambulance or rescue: 144 Fire: 122 Police: 133 European emergency number: 112\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/austria/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_austria_133": {
+      "id": "emergency_austria_133",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "133",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "at"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services Austria Ambulance or rescue: 144 Fire: 122 Police: 133 European emergency number: 112\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AT 133 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/austria/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services Austria Ambulance or rescue: 144 Fire: 122 Police: 133 European emergency number: 112\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/austria/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_switzerland_112": {
+      "id": "emergency_switzerland_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire)",
+      "availability": [
+        "ch"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Switzerland Telephone: 112 (ambulance, fire, police) Ambulance: 144 Fire: 118 Police: 117\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CH 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/switzerland/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Switzerland Telephone: 112 (ambulance, fire, police) Ambulance: 144 Fire: 118 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 117/144/118 only, but EU 112 page states 112 is used in Switzerland. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/switzerland/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_switzerland_144": {
+      "id": "emergency_switzerland_144",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "144",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "ch"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Switzerland Telephone: 112 (ambulance, fire, police) Ambulance: 144 Fire: 118 Police: 117\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CH 144 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/switzerland/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Switzerland Telephone: 112 (ambulance, fire, police) Ambulance: 144 Fire: 118 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/switzerland/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_switzerland_117": {
+      "id": "emergency_switzerland_117",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "117",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "ch"
+      ],
+      "languages": [
+        "de"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Switzerland Telephone: 112 (ambulance, fire, police) Ambulance: 144 Fire: 118 Police: 117\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): CH 117 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/switzerland/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Switzerland Telephone: 112 (ambulance, fire, police) Ambulance: 144 Fire: 118 Police: 117\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (de), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/switzerland/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

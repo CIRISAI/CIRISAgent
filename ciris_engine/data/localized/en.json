@@ -248,7 +248,7 @@
     },
     "crisis": {
       "resources_header": "Crisis Resources",
-      "emergency_call": "For immediate danger: Call 911 or local emergency services",
+      "emergency_call": "For immediate danger: Call 911, or your local emergency number if not in the US",
       "guidance_header": "Crisis Resource Guidance",
       "guidance_do_not": "DO NOT attempt to provide therapy or medical advice",
       "guidance_do_share": "DO share crisis resources with appropriate disclaimers",

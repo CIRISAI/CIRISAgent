@@ -1232,7 +1232,9 @@ async def complete_setup(
         # main DB. The auth service attaches to that engine — handing it any
         # other path trips EngineConfigMismatch.
         main_db_path = get_sqlite_db_full_path(runtime.essential_config)
-        logger.info(f"Using runtime main database: {main_db_path}")
+        from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+        logger.info(f"Using runtime main database: {_redact_dsn(main_db_path)}")
 
         # Create users immediately (don't wait for restart)
         # For ingress auth, pass the detected user info for auto-mint

@@ -20,7 +20,13 @@ REPO = pathlib.Path(__file__).resolve().parents[4]
 ENGINE = REPO / "ciris_engine"
 
 #: Argument names that hold a connection string.
-_DSN_NAMES = {"dsn", "_expected_dsn", "database_url", "db_url", "_dsn"}
+_DSN_NAMES = {"dsn", "_expected_dsn", "database_url", "db_url", "_dsn", "db_path", "connection_string", "main_db_path"}
+
+#: 2.18.0 (scouts): the boot leak was a `print`, and the URL parser put the whole
+#: DSN in its ValueError, which a caller logged. Both escaped this guard because it
+#: only read `logger.*` calls and did not know `db_path` held a DSN on Postgres.
+#: A SQLite path passes through `_redact_dsn` unchanged, so naming `db_path`
+#: here costs nothing and closes the gap.
 
 
 def _is_redacted(node: ast.AST) -> bool:
@@ -70,14 +76,21 @@ def test_no_log_call_passes_a_raw_dsn() -> None:
         except (OSError, UnicodeDecodeError, SyntaxError):
             continue
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+                # An exception message is a log line one hop later: callers log `e`.
+                call = node.exc
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print":
+                call = node
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"info", "debug", "warning", "error", "critical", "exception"}
+                and getattr(node.func.value, "id", "") in {"logger", "log", "logging"}
+            ):
+                call = node
+            else:
                 continue
-            if node.func.attr not in {"info", "debug", "warning", "error", "critical", "exception"}:
-                continue
-            obj = node.func.value
-            if getattr(obj, "id", "") not in {"logger", "log", "logging"}:
-                continue
-            for arg in list(node.args) + [kw.value for kw in node.keywords]:
+            for arg in list(call.args) + [kw.value for kw in call.keywords]:
                 if _mentions_dsn(arg) and not _is_redacted(arg):
                     offenders.append(f"{py.relative_to(REPO)}:{node.lineno}")
 
@@ -100,3 +113,26 @@ def test_redaction_actually_removes_the_password() -> None:
     # SQLite has no credentials and must pass through recognisably.
     sqlite = "sqlite:////var/lib/ciris/data/ciris_engine.db"
     assert "ciris_engine.db" in _redact_dsn(sqlite)
+
+
+def test_the_url_parser_never_quotes_the_password() -> None:
+    """2.18.0: parse_postgres_url's ValueError carried the whole DSN, and its caller logs it."""
+    import pytest
+
+    from ciris_engine.logic.persistence.db.dialect import parse_postgres_url
+
+    secret = "s3cr3t-scout-pw"
+    with pytest.raises(ValueError) as err:
+        parse_postgres_url(f"postgresql://ciris_user:{secret}@")  # no host: malformed
+    assert secret not in str(err.value)
+
+
+def test_the_boot_access_check_never_prints_the_password(capsys) -> None:  # type: ignore[no-untyped-def]
+    """2.18.0 scouts: '[OK] Skipping exclusive access check for PostgreSQL: <full DSN>' on every boot."""
+    from ciris_engine.logic.utils import directory_setup
+
+    secret = "s3cr3t-scout-pw"
+    directory_setup.ensure_database_exclusive_access(f"postgresql://ciris_user:{secret}@scoutdb:5432/ciris_db?sslmode=disable")
+    out = capsys.readouterr().out
+    assert "Skipping exclusive access check for PostgreSQL" in out
+    assert secret not in out and "ciris_user:***@scoutdb" in out

@@ -5,6 +5,12 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.1-stable] - 2026-10-30
+
+### Security
+
+- **The PostgreSQL password no longer reaches the logs.** On a Postgres-backed agent the boot check printed the full DSN, password included, to stdout on every start ("Skipping exclusive access check for PostgreSQL: postgresql://user:password@…"). Two more paths did the same: setup logged "Using runtime main database: …", which holds the Postgres DSN when one is configured, and a malformed DSN's parse error quoted it in full before being logged. All three now pass through the existing `_redact_dsn` (`user:***@host`). The guard test that should have caught them only read `logger.*` calls and did not know `db_path` held a DSN; it now also reads `print(...)` and exception messages and treats `db_path` as a DSN, and two behaviour tests pin the boot line and the parse error. SQLite agents were not affected. Operators of Postgres-backed agents should treat the database password as exposed to anyone with access to the container's logs and rotate it.
+
 ## [2.18.0-stable] - 2026-10-29
 
 ### Safety

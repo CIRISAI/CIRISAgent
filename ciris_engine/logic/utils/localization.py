@@ -445,6 +445,9 @@ UNIVERSAL_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     # Stigma words in any framing (2.18.0): the agent-side half of the rule the
     # coherence conscience already enforces, so a retry has something to follow.
     "05b_no_stigma_words",
+    # AI identity under register pressure (2.18.0): the bn battery's q07 took the
+    # "friend" role it was offered while keeping its tone; this names the role.
+    "05c_warmth_without_a_new_role",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     # #1010 — the §7e directional guard: the license covers answering a

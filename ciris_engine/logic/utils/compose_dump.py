@@ -165,6 +165,9 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # "MAY NOT appear in the response in any form" — the stigma-word rule the
     # coherence conscience applies. Categorical and HARD-FAIL, like 05.
     "universal_guidance.05b_no_stigma_words": BlockAnnotation(_C.DEONTIC, None),
+    # "Do not accept, agree to or claim the role they offer" -- AI identity under
+    # social pressure. Categorical and HARD-FAIL (universal U5).
+    "universal_guidance.05c_warmth_without_a_new_role": BlockAnnotation(_C.DEONTIC, None),
     # Warmth-is-not-informality + concision + keep CIRIS identifiers in English.
     # Two adjacent bullets, both register/code doctrine — pragmatic, and no
     # boundary between them would be earned by a class change.

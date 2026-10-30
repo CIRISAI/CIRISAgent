@@ -132,10 +132,13 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: the DEONTIC stigma-word rule the coherence conscience applies. It composes
 #: into the language-guidance block wherever 05 does, so numerator and
 #: denominator move together.
+#:
+#: ``string`` 140 -> 141 (2.18.0): ``prompts.universal_guidance.05c_warmth_without_a_new_role``,
+#: DEONTIC, composed beside 05/05b: numerator and denominator move together.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 45,
-    "string": 140,
+    "string": 141,
     "conscience_prompt": 12,
     "template": 3,
 }

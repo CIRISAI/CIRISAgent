@@ -279,7 +279,9 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 # 2.18.0 stigma words: +753 B deontic (universal 05b_no_stigma_words, the rule the
 # coherence conscience already applied) and -8 B (" / crazy" left the §18 example,
 # so the guidance no longer renders the word it forbids). Mixed bytes unchanged.
-EN_TOTAL_BYTES = 16603
+# 2.18.0 register pressure: +578 B deontic (universal 05c_warmth_without_a_new_role,
+# AI identity holds when the user offers a friend role). Mixed bytes unchanged.
+EN_TOTAL_BYTES = 17181
 # 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
 # fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
 # ("what you're describing doesn't match psychosis") — the exact move §7e

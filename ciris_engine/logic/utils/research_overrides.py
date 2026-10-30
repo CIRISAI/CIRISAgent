@@ -356,6 +356,7 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         # same part names). Translated per locale by the localize pipeline.
         "prompts.universal_guidance.05_no_wellness_confirmation",
         "prompts.universal_guidance.05b_no_stigma_words",
+        "prompts.universal_guidance.05c_warmth_without_a_new_role",
         "prompts.universal_guidance.25_exemplar_cross_cluster",
         "prompts.universal_guidance.26_cross_cluster_pattern",
         # #1010 — the §7e directional guard. Declared alongside its siblings so a

@@ -847,7 +847,10 @@ class TestDriftGuard:
         #
         # 203 -> 204: prompts.universal_guidance.05b_no_stigma_words (2.18.0,
         # deontic), the stigma-word rule the coherence conscience applies.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 204
+        #
+        # 204 -> 205: prompts.universal_guidance.05c_warmth_without_a_new_role
+        # (2.18.0, deontic), AI identity under register pressure.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 205
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

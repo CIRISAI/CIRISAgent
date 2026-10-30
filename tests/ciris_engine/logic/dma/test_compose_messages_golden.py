@@ -18,6 +18,10 @@ inserting exactly one message (never regenerated from the code under test):
 
 - #1248: the crisis-resources system block (``<GOLDEN-CRISIS-RESOURCES lang=..>``
   sentinel) directly after the language-guidance message in every DMA.
+- 2.18.0: ASPDMA resolves its accord, guidance and crisis language by the
+  thought's language chain (thought / task, profile, env). The fixture has no
+  profile language, so the accord is now asked for ``en`` (the env) instead of
+  ``None``: one sentinel, ``lang=None`` -> ``lang=en``; the real text is the same.
 """
 
 from typing import List, cast

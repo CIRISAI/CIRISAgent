@@ -362,18 +362,63 @@ def test_count_thoughts_by_status_does_not_build_thought_models(monkeypatch):
     assert thoughts_model.count_thoughts_by_status(ThoughtStatus.COMPLETED) == 200
 
 
-def test_task_by_correlation_id_materializes_only_the_match(monkeypatch):
+class _IndexedEngine(_PagingEngine):
+    """Adds the point read the correlation index confirms hits with."""
+
+    def task_get(self, task_id: str) -> Any:
+        import json
+
+        row = next((r for r in self.rows if r["task_id"] == task_id), None)
+        return json.dumps(row) if row is not None else None
+
+    def insert(self, row: dict) -> None:
+        self.rows.insert(0, row)
+        self.rows.sort(key=lambda r: r["created_at"], reverse=True)
+
+
+def test_task_by_correlation_id_reads_only_new_rows(monkeypatch):
+    import json
+
     from ciris_engine.logic.persistence.models import tasks as tasks_model
 
-    engine = _PagingEngine(_task_rows(450), "task_id")
+    engine = _IndexedEngine(_task_rows(450), "task_id")
     built: List[str] = []
     real = tasks_model._persist_row_to_task
     monkeypatch.setattr(tasks_model, "_get_engine", lambda: engine)
+    monkeypatch.setattr(tasks_model, "_correlation_indexes", {})
     monkeypatch.setattr(tasks_model, "_persist_row_to_task", lambda row: built.append(row["task_id"]) or real(row))
-    found = tasks_model.get_task_by_correlation_id("corr-440")
+
+    found = tasks_model.get_task_by_correlation_id("corr-440")  # first lookup indexes the history once
     assert found is not None and found.task_id == "task-00440"
-    assert built == ["task-00440"]  # negative: every row was built before
-    assert engine.pages_served == 1  # newest first: found on the first page
+    assert built == ["task-00440"]  # only the match is materialized
+    warm_pages = engine.pages_served
+
+    # a new message: a miss, answered from the index plus the one new row
+    assert tasks_model.get_task_by_correlation_id("corr-new") is None
+    assert engine.pages_served - warm_pages == 1  # negative: the old scan paged all 450 rows per lookup
+    new_row = dict(_task_rows(1)[0], task_id="task-new", created_at="2026-10-29T01:00:00Z",
+                   context=json.dumps({"correlation_id": "corr-new"}))
+    engine.insert(new_row)
+    before = engine.pages_served
+    found_new = tasks_model.get_task_by_correlation_id("corr-new")  # written by anyone: still found
+    assert found_new is not None and found_new.task_id == "task-new"
+    assert engine.pages_served - before == 1
+
+
+def test_a_deleted_indexed_task_falls_back_to_the_scan(monkeypatch):
+    import json
+
+    from ciris_engine.logic.persistence.models import tasks as tasks_model
+
+    rows = _task_rows(30)
+    rows.append(dict(rows[5], task_id="task-dup-newer", created_at="2026-10-29T00:59:00Z"))  # same corr-5, newer
+    engine = _IndexedEngine(rows, "task_id")
+    monkeypatch.setattr(tasks_model, "_get_engine", lambda: engine)
+    monkeypatch.setattr(tasks_model, "_correlation_indexes", {})
+    assert tasks_model.get_task_by_correlation_id("corr-5").task_id == "task-dup-newer"  # the newest match
+    engine.rows = [r for r in engine.rows if r["task_id"] != "task-dup-newer"]  # deleted
+    assert tasks_model.get_task_by_correlation_id("corr-5").task_id == "task-00005"  # the older one, via the scan
+    assert tasks_model.get_task_by_correlation_id("corr-5").task_id == "task-00005"  # and re-indexed
     assert tasks_model.get_task_by_correlation_id("corr-none") is None
 
 
@@ -478,3 +523,20 @@ def test_aspdma_schema_is_built_only_where_used(monkeypatch):
     assert gen._generate_schema_for_action(HandlerActionType.SPEAK).startswith("SPEAK:")
     assert gen._generate_schema_for_action(HandlerActionType.TASK_COMPLETE).startswith("TASK_COMPLETE:")
     assert built == []  # negative: computed and discarded for every action before
+
+
+@pytest.mark.asyncio
+async def test_secrets_scan_runs_off_the_loop(monkeypatch):
+    from ciris_engine.logic.secrets import service as secrets_module
+
+    threads: List[str] = []
+
+    class _Engine:
+        def secrets_process_incoming_text(self, text: str, source: str, actor: str) -> str:
+            threads.append(threading.current_thread().name)
+            return '{"filtered_text": "x", "refs": []}'
+
+    monkeypatch.setattr(secrets_module, "_get_engine", lambda: _Engine())
+    svc = secrets_module.SecretsService.__new__(secrets_module.SecretsService)
+    assert await svc.process_incoming_text("hello", "m1") == ("hello", [])
+    assert threads and threads[0] != threading.main_thread().name  # negative: the scan ran on the loop

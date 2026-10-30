@@ -421,6 +421,12 @@ def add_task(task: Task) -> str:
             return _handle_duplicate_task(task)
     try:
         engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        if correlation_id:
+            # Indexed whatever its created_at says (the incremental refresh
+            # only reads rows newer than the newest indexed one).
+            index = _correlation_indexes.get((id(engine), task.agent_occurrence_id))
+            if index is not None:
+                index.by_correlation[correlation_id] = task.task_id
         images_count = len(task.images) if task.images else 0
         if images_count > 0:
             logger.info(
@@ -1153,16 +1159,87 @@ def get_latest_shared_task(task_type: str, within_hours: int = 24) -> Optional[T
     return candidates[0]
 
 
-def get_task_by_correlation_id(correlation_id: str, occurrence_id: str = "default") -> Optional[Task]:
-    """Query for a task by correlation_id (e.g., Reddit post/comment ID)."""
-    # Runs on every add_task. Rows arrive newest first, so the first match is
-    # the newest; only that row is materialized (this used to build a Task
-    # model for every task the occurrence had ever had, per insert).
-    try:
-        for page in _task_pages({"agent_occurrence_id": occurrence_id}):
+class _CorrelationIndex:
+    """correlation_id -> newest task_id for one occurrence, kept current incrementally.
+
+    get_task_by_correlation_id runs on every add_task, and for a new message it
+    is a miss: answered by a scan, that paged and decoded the occurrence's
+    entire task history per inbound message. The substrate's TaskFilter has no
+    correlation field, so the index lives here. Rows arrive newest first; each
+    lookup reads only rows created after the newest one already indexed (one
+    small page in steady state), whoever wrote them. A hit is confirmed with a
+    point read, and if that task is gone the full scan answers instead, so a
+    deleted task never shadows an older one.
+    """
+
+    REFRESH_PAGE = 20
+
+    def __init__(self) -> None:
+        self.by_correlation: Dict[str, str] = {}
+        self.high_water: Optional[str] = None  # created_at of the newest indexed row
+
+    def refresh(self, occurrence_id: str) -> None:
+        newest: Optional[str] = None
+        seen: set[str] = set()
+        page_size = self.REFRESH_PAGE
+        for page in _task_pages({"agent_occurrence_id": occurrence_id}, page_size=page_size):
+            reached_indexed = False
             for row in page:
-                if _row_correlation_id(row, expected=correlation_id) == correlation_id:
-                    return _persist_row_to_task(row)
+                created = str(row.get("created_at", ""))
+                if self.high_water is not None and created < self.high_water:
+                    reached_indexed = True
+                    break
+                if newest is None or created > newest:
+                    newest = created
+                correlation_id = _row_correlation_id(row)
+                if correlation_id and correlation_id not in seen:
+                    seen.add(correlation_id)  # newest first: the first row is the newest
+                    self.by_correlation[correlation_id] = str(row.get("task_id", ""))
+            if reached_indexed:
+                break
+        if newest is not None and (self.high_water is None or newest > self.high_water):
+            self.high_water = newest
+
+
+_correlation_indexes: Dict[Tuple[int, str], _CorrelationIndex] = {}
+
+
+def _scan_for_correlation_id(correlation_id: str, occurrence_id: str) -> Optional[Task]:
+    """The full newest-first scan (index fallback)."""
+    for page in _task_pages({"agent_occurrence_id": occurrence_id}):
+        for row in page:
+            if _row_correlation_id(row, expected=correlation_id) == correlation_id:
+                return _persist_row_to_task(row)
+    return None
+
+
+def get_task_by_correlation_id(correlation_id: str, occurrence_id: str = "default") -> Optional[Task]:
+    """Query for a task by correlation_id (e.g., Reddit post/comment ID); the newest match.
+
+    Served from _CorrelationIndex: rows created since the last lookup are read,
+    the rest is already indexed. Only the matching row is materialized.
+    """
+    try:
+        engine = _get_engine()
+        key = (id(engine), occurrence_id)
+        index = _correlation_indexes.get(key)
+        if index is None:
+            index = _correlation_indexes[key] = _CorrelationIndex()
+        index.refresh(occurrence_id)
+        task_id = index.by_correlation.get(correlation_id)
+        if task_id is None:
+            return None
+        raw = engine.task_get(task_id)
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(row, dict) and _row_correlation_id(row) == correlation_id:
+            return _persist_row_to_task(row)
+        # Deleted (or rewritten) since indexed: a scan answers, and re-indexes
+        # what it finds (an older task with the same correlation id).
+        index.by_correlation.pop(correlation_id, None)
+        older = _scan_for_correlation_id(correlation_id, occurrence_id)
+        if older is not None:
+            index.by_correlation[correlation_id] = older.task_id
+        return older
     except Exception as e:
         logger.exception(f"Failed to get task by correlation_id {correlation_id}: {e}")
     return None

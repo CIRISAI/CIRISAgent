@@ -297,3 +297,64 @@ def test_task_manager_honours_the_limit(monkeypatch):
     assert asked["limit"] == 2
     assert manager.activate_pending_tasks() == 8  # unbounded: the configured max applies
     assert asked["limit"] == 10
+
+
+# --------------------------------------------------------------------------- #
+# THROTTLE rests only as long as brings CPU back under its lift point
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.asyncio
+async def test_cpu_throttle_is_proportional_to_the_overshoot(monitor):
+    from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import (
+        MAX_THROTTLE_EXTRA_SECONDS,
+        MIN_THROTTLE_EXTRA_SECONDS,
+    )
+
+    gate = _gate(monitor)
+    monitor.snapshot.cpu_average_1m = 84  # HIGH; lifts below 75 - 5 = 70
+    await monitor._check_limits()
+    assert gate.throttle_extra_delay(3.0) == 3.0  # no round measured yet: the old doubling
+    gate.note_round(49, 10.0)
+    assert gate.throttle_extra_delay(3.0) == pytest.approx(10.0 * (84 / 70 - 1))  # 2.0 s, not a fixed 3+
+    monitor.snapshot.cpu_average_1m = 100
+    await monitor._check_limits()
+    gate.note_round(49, 60.0)
+    assert gate.throttle_extra_delay(3.0) == MAX_THROTTLE_EXTRA_SECONDS
+    monitor.snapshot.cpu_average_1m = 71  # still HIGH by hysteresis, barely over
+    await monitor._check_limits()
+    gate.note_round(49, 1.0)
+    assert gate.throttle_extra_delay(3.0) == MIN_THROTTLE_EXTRA_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_no_throttle_no_rest(monitor):
+    gate = _gate(monitor)
+    gate.note_round(49, 10.0)
+    assert gate.throttle_extra_delay(3.0) == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# The WORK delay is an idle poll, not a pause under backlog
+# --------------------------------------------------------------------------- #
+
+
+def _work_delay(monitor, last_round_processed: int) -> float:
+    fake = SimpleNamespace(
+        app_config=SimpleNamespace(mock_llm=False),
+        services=SimpleNamespace(resource_monitor=monitor),
+        _last_round_processed=last_round_processed,
+    )
+    return AgentProcessor._calculate_round_delay(fake, AgentState.WORK)
+
+
+def test_no_poll_delay_after_a_round_that_did_work(monitor):
+    assert _work_delay(monitor, 0) == 3.0  # idle: poll interval
+    assert _work_delay(monitor, 49) == 0.0  # backlog: next round at once
+
+
+@pytest.mark.asyncio
+async def test_throttle_still_slows_a_busy_loop(monitor):
+    monitor.snapshot.cpu_average_1m = 84
+    await monitor._check_limits()
+    assert _work_delay(monitor, 49) > 0.0

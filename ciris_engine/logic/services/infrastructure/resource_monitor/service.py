@@ -278,6 +278,8 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         elif current_value >= limit_config.warning:
             self.snapshot.warnings.append(f"{name}: {current_value}/{limit_config.limit}")
 
+        # What a proportional THROTTLE sizes its delay against.
+        self.pressure.note_reading(name, current_value, limit_config.critical - self._hysteresis(limit_config))
         previous = self._levels.get(name, PressureLevel.NORMAL)
         level = self._next_level(limit_config, previous, current_value)
         if level != previous:

@@ -222,7 +222,7 @@ class WorkProcessor(BaseProcessor):
         tasks_activated = get_int(round_metrics, "tasks_activated", 0)
         gate = pressure_gate_of(self.resource_monitor)
         if gate is not None:
-            gate.admission.note_round(thoughts_processed)
+            gate.note_round(thoughts_processed, duration)
         if thoughts_processed > 0 or tasks_activated > 0:
             self._log_round(round_number, thoughts_processed, duration, get_int(round_metrics, "queued", 0))
         else:

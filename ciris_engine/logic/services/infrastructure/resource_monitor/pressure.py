@@ -11,7 +11,8 @@ H3ERE action and none is ever offered to the model as a choice.
 
     ELEVATED -> RECLAIM    memory only (elevated_action): the monitor releases memory via
                            release_memory. Other resources: non-acting WARN at ELEVATED.
-    HIGH     -> THROTTLE   AgentProcessor adds a bounded delay between rounds -- only for
+    HIGH     -> THROTTLE   AgentProcessor adds a delay between rounds sized to bring the
+                           resource back under its lift point (bounded) -- only for
                            resources THROTTLE relieves (`ResourceLimit.throttle_relieves`):
                            CPU, where yielding between rounds frees the CPU. Not for
                            thoughts_active: only the work loop drains active thoughts, so
@@ -96,6 +97,9 @@ LATCHED_ACTIONS: Tuple[ResourceAction, ...] = (ResourceAction.THROTTLE, Resource
 
 #: Upper bound on the extra delay THROTTLE adds to one processing round.
 MAX_THROTTLE_EXTRA_SECONDS = 10.0
+
+#: Lower bound on it while THROTTLE is in force (a token rest, never zero).
+MIN_THROTTLE_EXTRA_SECONDS = 0.25
 
 #: Upper bound on a refusal's Retry-After, and the hint when SHED is held by a
 #: resource with no drain measure (memory).
@@ -275,6 +279,10 @@ class ResourcePressureGate:
         self._shed_rounds = 0
         self._shed_refusals = 0
         self.admission = ThoughtAdmission()
+        # Latest (value, lift threshold) per resource and the last busy round's
+        # length: what sizes a proportional THROTTLE delay.
+        self._readings: Dict[str, Tuple[float, float]] = {}
+        self._last_round_seconds: Optional[float] = None
         for action in LATCHED_ACTIONS:
             signal_bus.register(action.value, self._on_engaged)
             signal_bus.register(lifted_signal(action), self._on_lifted)
@@ -309,16 +317,40 @@ class ResourcePressureGate:
     def is_active(self, action: ResourceAction) -> bool:
         return bool(self._held.get(action))
 
+    def note_reading(self, resource: str, value: float, lift_threshold: float) -> None:
+        """The monitor's latest reading of a resource and the value its HIGH level lifts below."""
+        self._readings[resource] = (value, lift_threshold)
+
+    def note_round(self, thoughts_completed: int, round_seconds: float, now: Optional[float] = None) -> None:
+        """A work round finished: feeds the drain rate and sizes the next THROTTLE delay."""
+        self.admission.note_round(thoughts_completed, now)
+        if thoughts_completed > 0 and round_seconds > 0:
+            self._last_round_seconds = round_seconds
+
     def throttle_extra_delay(self, base_delay: float) -> float:
         """Extra seconds to add to a round under THROTTLE (0.0 when lifted).
 
-        Doubles the round delay, at least one second, never more than
-        MAX_THROTTLE_EXTRA_SECONDS. Counts the round when it applies.
+        Only as much as brings the throttling resource back under the value
+        its HIGH level lifts below: a round that ran busy for T seconds with
+        the resource at `value` gets T * (value / lift - 1) of rest, so its
+        duty cycle drops by that ratio. Bounded to
+        [MIN_THROTTLE_EXTRA_SECONDS, MAX_THROTTLE_EXTRA_SECONDS]. Before a
+        round has been measured (or with no reading) it falls back to doubling
+        the round delay, at least one second. Counts the round when it applies.
         """
-        if not self.is_active(ResourceAction.THROTTLE):
+        holders = self.resources(ResourceAction.THROTTLE)
+        if not holders:
             return 0.0
         self._throttled_rounds += 1
-        return min(max(base_delay, 1.0), MAX_THROTTLE_EXTRA_SECONDS)
+        ratios = [
+            value / lift
+            for value, lift in (self._readings.get(name, (0.0, 0.0)) for name in holders)
+            if lift > 0 and value > 0
+        ]
+        if self._last_round_seconds is None or not ratios:
+            return min(max(base_delay, 1.0), MAX_THROTTLE_EXTRA_SECONDS)
+        extra = self._last_round_seconds * (max(ratios) - 1.0)
+        return min(MAX_THROTTLE_EXTRA_SECONDS, max(MIN_THROTTLE_EXTRA_SECONDS, extra))
 
     def note_shed_round(self) -> None:
         self._shed_rounds += 1

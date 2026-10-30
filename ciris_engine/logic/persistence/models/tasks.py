@@ -660,15 +660,15 @@ def get_recent_completed_tasks(
     context it feeds is a recent-activity summary, not an audit.
     """
     now = time.monotonic()
-    # Keyed on the engine too: a new engine (tests, a re-initialized store)
-    # never sees another's answer.
-    key = (id(_get_engine()), occurrence_id, limit)
-    cached = _recent_completed_cache.get(key)
-    if cached is not None and now - cached[0] < RECENT_COMPLETED_TTL_SECONDS:
-        return list(cached[1])
     window = max(RECENT_COMPLETED_WINDOW, limit * 5)
     rows: List[Dict[str, Any]] = []
     try:
+        # Keyed on the engine too: a new engine (tests, a re-initialized store)
+        # never sees another's answer.
+        key = (id(_get_engine()), occurrence_id, limit)
+        cached = _recent_completed_cache.get(key)
+        if cached is not None and now - cached[0] < RECENT_COMPLETED_TTL_SECONDS:
+            return list(cached[1])
         for page in _task_pages(
             {"status": TaskStatus.COMPLETED.value, "agent_occurrence_id": occurrence_id}, page_size=min(200, window)
         ):

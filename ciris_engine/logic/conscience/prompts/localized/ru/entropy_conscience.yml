@@ -24,6 +24,8 @@ system_prompt: |
     alternative_3: string  (КОРОТКАЯ ФРАЗА: 3-10 слов, должна отличаться от 1 и 2)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
+    reason: string  (when entropy is above 0.40: one sentence naming what makes the reply
+                     unanchored, in the reply's language, so the agent can fix it; "" otherwise)
 
   ═══════════════════════════════════════════════════════════════════
   ШАГ 1 — перечислите три альтернативы СНАЧАЛА (до суждения)

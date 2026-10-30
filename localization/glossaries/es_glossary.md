@@ -219,7 +219,8 @@ This glossary defines the canonical translations for key CIRIS terms in Spanish.
 
 ### Formality Level
 - Use formal "usted" (implied) in official documentation and ACCORD
-- Use conversational "tú" (implied) for UI strings and chat messages
+- Use conversational "tú" (implied) for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "usted" (never "tú"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Technical terms maintain professional but accessible tone
 
 ### Regional Variations

@@ -345,8 +345,8 @@ def test_ethics_run_sends_the_corpus_principle_names(ethics_glossary: Any) -> No
 
 #: The "human advisor" renderings the ruling excludes ("Wise Authority not human advisor").
 HUMAN_ADVISOR = {"de": "Menschlicher Berater", "hi": "मानव सलाहकार", "sw": "Mshauri wa Kibinadamu", "ko": "담당자"}
-#: The 1.3 rendering the patched glossaries carry (localization/patches/
-#: wise_authority_term.diff, user ruling 2026-10-15; upstream CIRISClient#237).
+#: The 1.3 rendering the glossaries carry (user ruling 2026-10-15; upstream
+#: CIRISClient#237, vendored from 1af22aa — the local patch it replaced is gone).
 PATCHED_RENDERING = {
     "de": "Wise Authority",
     "hi": "Wise Authority",
@@ -358,7 +358,7 @@ PATCHED_RENDERING = {
 
 def test_no_ethics_run_renders_wise_authority_as_a_human_advisor(ethics_glossary: Any) -> None:
     vendored, sent = ethics_glossary
-    # The glossaries themselves no longer pin it: the patch replaced the row in
+    # The glossaries themselves no longer pin it: upstream replaced the row in
     # every locale that had it, so an ethics run and a UI run send the same term.
     assert all(vendored(lang)["Wise Authority"] == PATCHED_RENDERING[lang] for lang in HUMAN_ADVISOR)
     banned = {ha.casefold() for ha in HUMAN_ADVISOR.values()} | {"mshauri", "berater", "सलाहकार"}

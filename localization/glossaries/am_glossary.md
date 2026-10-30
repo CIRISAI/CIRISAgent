@@ -143,7 +143,8 @@ This glossary defines the canonical translations for key CIRIS terms in Amharic.
 
 ### Formality Level
 - Use standard/formal Amharic (መደበኛ አማርኛ) for ACCORD and official documentation
-- Use conversational Amharic for UI strings and chat messages
+- Use conversational Amharic for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "እርስዎ" (never "አንተ" or "አንቺ"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Technical terms can use English loan words with Amharic script adaptation
 
 ### Honorifics and Respect

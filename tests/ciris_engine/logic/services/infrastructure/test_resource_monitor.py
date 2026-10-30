@@ -212,9 +212,11 @@ async def test_resource_monitor_signal_bus(resource_monitor, signal_bus, monkeyp
 
     await resource_monitor._check_limits()
 
-    # Only memory reclaims; elsewhere the ladder starts acting at THROTTLE
+    # Only memory reclaims; elsewhere the ladder starts acting at THROTTLE --
+    # except where THROTTLE does not relieve the resource: only the work loop
+    # drains active thoughts, so slowing it is not offered (straight to SHED).
     assert [s for s, r in emitted_signals if r == "cpu_percent"] == ["throttle"]
-    assert [s for s, r in emitted_signals if r == "thoughts_active"] == ["throttle", "shed"]
+    assert [s for s, r in emitted_signals if r == "thoughts_active"] == ["shed"]
     assert not [s for s, r in emitted_signals if r == "tokens_hour"]
 
 
@@ -1685,3 +1687,21 @@ async def test_record_release_accepts_a_release_done_elsewhere(resource_monitor)
 def test_monitor_is_subscribed_to_its_own_signals(resource_monitor, signal_bus):
     for signal in ("reclaim", "throttle", "shed", "drain", "throttle_lifted", "shed_lifted"):
         assert resource_monitor._on_resource_signal in signal_bus._handlers[signal], signal
+
+
+def test_cpu_percent_is_per_core() -> None:
+    """psutil's process CPU is 100 per busy core; the threshold is per core (owner ruling 2026-10-29)."""
+    from ciris_engine.logic.services.infrastructure.resource_monitor import service as rm
+
+    class Proc:
+        def cpu_affinity(self):
+            return [0, 1, 2, 3]
+
+    assert rm._usable_cores(Proc()) == 4
+    assert 220.0 / rm._usable_cores(Proc()) == 55.0, "two of four cores busy is 55%, under the 60 warning"
+
+    class NoAffinity:
+        def cpu_affinity(self):
+            raise AttributeError("macOS")
+
+    assert rm._usable_cores(NoAffinity()) >= 1

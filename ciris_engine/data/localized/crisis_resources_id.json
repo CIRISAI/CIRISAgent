@@ -1,14 +1,151 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'id'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "id",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for ID added 2026-10-29 (CIRISAgent#1248): 3 of 5 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "id"
+  ],
   "resources": {
+    "emergency_indonesia_112": {
+      "id": "emergency_indonesia_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Integrated emergency number (fire, accidents, medical, disasters, crime) — live in 141 cities and regencies as of 2025; where it does not connect, use the numbers below",
+      "availability": [
+        "id"
+      ],
+      "languages": [
+        "id"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | Biro Humas Kementerian Komunikasi dan Digital (Komdigi) press release on InfoPublik (govt portal): \"Call Center 112 beroperasi 24 jam selama seminggu untuk memberikan respons cepat terhadap keadaan darurat, seperti kebakaran, kecelakaan, kondisi medis, bencana alam, dan tindak kriminal.\" (https://infopublik.id/kategori/siaran-pers/912067/siaran-pers-kurangi-risiko-bencana-saat-lebaran-komdigi-siagakan-layanan-darurat-112-dan-ews). Sources agree it reaches: ambulance, fire. Listed beyond that by some sources only: police. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 118, fire 112, police 110, Wikipedia said 112 general, fire 113, ambulance 118/119. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/indonesia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general emergency and fire as 113. 'languages' = the locale this entry is staged for (id), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/indonesia/getting-help",
+      "source_urls": [
+        "https://infopublik.id/kategori/siaran-pers/912067/siaran-pers-kurangi-risiko-bencana-saat-lebaran-komdigi-siagakan-layanan-darurat-112-dan-ews",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_indonesia_110": {
+      "id": "emergency_indonesia_110",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "110",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (legacy fallback)",
+      "availability": [
+        "id"
+      ],
+      "languages": [
+        "id"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): ID 110 types ['POLICE']. Sources agree it reaches: police. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 118, fire 112, police 110, Wikipedia said 112 general, fire 113, ambulance 118/119. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/indonesia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general emergency and fire as 113. 'languages' = the locale this entry is staged for (id), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/indonesia/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_indonesia_118": {
+      "id": "emergency_indonesia_118",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "118",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (legacy fallback)",
+      "availability": [
+        "id"
+      ],
+      "languages": [
+        "id"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): ID 118 types ['AMBULANCE']. Sources agree it reaches: ambulance. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 118, fire 112, police 110, Wikipedia said 112 general, fire 113, ambulance 118/119. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/indonesia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general emergency and fire as 113. 'languages' = the locale this entry is staged for (id), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/indonesia/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_indonesia_119": {
+      "id": "emergency_indonesia_119",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "119",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (legacy fallback)",
+      "availability": [
+        "id"
+      ],
+      "languages": [
+        "id"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 118, fire 112, police 110, Wikipedia said 112 general, fire 113, ambulance 118/119. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/indonesia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general emergency and fire as 113. 'languages' = the locale this entry is staged for (id), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/indonesia/getting-help",
+      "source_urls": []
+    },
+    "emergency_indonesia_113": {
+      "id": "emergency_indonesia_113",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "113",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire (legacy fallback)",
+      "availability": [
+        "id"
+      ],
+      "languages": [
+        "id"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 118, fire 112, police 110, Wikipedia said 112 general, fire 113, ambulance 118/119. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/indonesia/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Indonesia Ambulance: 118 Fire: 112 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia lists 112 as general emergency and fire as 113. 'languages' = the locale this entry is staged for (id), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/indonesia/getting-help",
+      "source_urls": []
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

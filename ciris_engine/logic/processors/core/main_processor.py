@@ -1094,6 +1094,8 @@ class AgentProcessor:
             logger.debug(
                 f"Processor returned: {result.__class__.__name__ if hasattr(result, '__class__') else type(result)}"
             )
+            processed = getattr(result, "thoughts_processed", 0)
+            self._last_round_processed = processed if isinstance(processed, int) else 0
 
             # Check for state transition recommendations
             if current_state == AgentState.WORK:
@@ -1212,6 +1214,14 @@ class AgentProcessor:
                 delay = 10.0  # Slower pace in solitude
             elif current_state == AgentState.DREAM:
                 delay = 5.0  # Check dream state periodically
+
+        # The WORK delay is the idle poll. When the round just processed
+        # thoughts there is a backlog (each one leaves a follow-up or the next
+        # task's seed): waiting the poll interval only idles the loop that
+        # drains it -- a third of every cycle in the load-spike benchmark.
+        # Resource pressure still slows the loop through THROTTLE below.
+        if current_state == AgentState.WORK and getattr(self, "_last_round_processed", 0) > 0:
+            delay = 0.0
 
         # THROTTLE: a resource past its threshold slows the loop by a bounded
         # amount. Never applied to SHUTDOWN, which must not be slowed down.

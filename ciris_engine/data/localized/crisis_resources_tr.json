@@ -1,14 +1,46 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'tr'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "tr",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for TR added 2026-10-29 (CIRISAgent#1248): 1 of 1 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "tr"
+  ],
   "resources": {
+    "emergency_turkiye_112": {
+      "id": "emergency_turkiye_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Emergency number — fire, police (some sources also list: ambulance)",
+      "availability": [
+        "tr"
+      ],
+      "languages": [
+        "tr"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Turkey Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API) | T.C. İçişleri Bakanlığı, İller İdaresi Genel Müdürlüğü (112 Acil Çağrı Merkezi): \"Birden fazla olan acil çağrı numaralarının tek numara (112) altında toplanmasını sağlamak üzere 112 Acil Çağrı Merkezlerinin kurulum çalışmaları Bakanlığımız koordinesinde yürütülmektedir. ... Acil çağrı merkezinde; sağlık, itfaiye, jandarma, polis ve valiliklerce gerekli görülen diğer birimlerin aynı mekânda olduğu ... 2021 itibariyle 81 ilimizde acil durumda tek numara 112 sistemi devreye alınmıştır.\" (https://www.112.gov.tr/112-acm-projesi) | AOSP eccdata (Android's emergency-number database): TR 112 types ['AMBULANCE']. Sources agree it reaches: fire, police. Listed beyond that by some sources only: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/turkey/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Turkey Telephone: 112 (ambulance, fire, police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (tr), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/turkey/getting-help",
+      "source_urls": [
+        "https://www.112.gov.tr/112-acm-projesi",
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

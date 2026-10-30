@@ -108,11 +108,12 @@ This glossary defines the canonical translations for key CIRIS terms in Ukrainia
 
 1. Ukrainian uses Cyrillic script - distinct from Russian
 2. Use formal register (Ви) for system messages
-3. Technical terms (API, DMA, LLM) remain in Latin script
-4. Respect Ukrainian-specific letters: і, ї, є, ґ
-5. Preserve placeholders exactly: {action}, {threshold}, {confidence}
-6. Use Ukrainian vocabulary over Russian loanwords where possible
-7. Apostrophe (') is used for softening - critical for meaning
+3. **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "Ви" (never "ти"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
+4. Technical terms (API, DMA, LLM) remain in Latin script
+5. Respect Ukrainian-specific letters: і, ї, є, ґ
+6. Preserve placeholders exactly: {action}, {threshold}, {confidence}
+7. Use Ukrainian vocabulary over Russian loanwords where possible
+8. Apostrophe (') is used for softening - critical for meaning
 
 ## DSASPDMA Deferral Taxonomy Terms
 

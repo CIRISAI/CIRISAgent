@@ -145,6 +145,9 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # so the composed message is byte-identical to the pre-split scalar (pinned
     # per locale by tests/.../test_language_guidance_split_997.py). Classes are
     # §10.2; two are the payoff and five are the FSD's own named irreducible.
+    # Four of them have since standardized into `prompts.universal_guidance`
+    # (same part names, same slots in the same block, now pipeline-translated);
+    # they report as `universal_guidance.<part>` and keep their classes.
     #
     # Reading instruction + "APPLY FIRST" ordering directive.
     "language_guidance.01_preamble": BlockAnnotation(_C.PROCEDURAL, None),
@@ -158,7 +161,13 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     "language_guidance.04_formal_register": BlockAnnotation(_C.PRAGMATIC, None),
     # "MAY NOT appear in any response, in any context" — categorical, and a
     # HARD-FAIL criterion. Deontic: replacing it takes a §10.4 safety review.
-    "language_guidance.05_no_wellness_confirmation": BlockAnnotation(_C.DEONTIC, None),
+    "universal_guidance.05_no_wellness_confirmation": BlockAnnotation(_C.DEONTIC, None),
+    # "MAY NOT appear in the response in any form" — the stigma-word rule the
+    # coherence conscience applies. Categorical and HARD-FAIL, like 05.
+    "universal_guidance.05b_no_stigma_words": BlockAnnotation(_C.DEONTIC, None),
+    # "Do not accept, agree to or claim the role they offer" -- AI identity under
+    # social pressure. Categorical and HARD-FAIL (universal U5).
+    "universal_guidance.05c_warmth_without_a_new_role": BlockAnnotation(_C.DEONTIC, None),
     # Warmth-is-not-informality + concision + keep CIRIS identifiers in English.
     # Two adjacent bullets, both register/code doctrine — pragmatic, and no
     # boundary between them would be earned by a class change.
@@ -252,19 +261,19 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     "language_guidance.24_ratification_pattern": BlockAnnotation(_C.PROCEDURAL, None),
     # IRREDUCIBLE [T-5a]. 7c cross-cluster -> wellness drift, including the
     # Q4 HARD-FAIL U6 counter-example.
-    "language_guidance.25_exemplar_cross_cluster": BlockAnnotation(
+    "universal_guidance.25_exemplar_cross_cluster": BlockAnnotation(
         _C.MIXED, (_C.DEONTIC, _C.EPISTEMIC, _C.EMPIRICAL, _C.AXIOTIC)
     ),
     # "clinical clustering surfaces what condition is or isn't present, it does
     # NOT issue the user a wellness verdict ... may not appear even as
     # transitional clauses." Deontic.
-    "language_guidance.26_cross_cluster_pattern": BlockAnnotation(_C.DEONTIC, None),
+    "universal_guidance.26_cross_cluster_pattern": BlockAnnotation(_C.DEONTIC, None),
     # #1010 — the §7e directional guard. DEONTIC: it states what the agent may
     # and may not ASSERT — answering a question about a category is permitted,
     # applying a category to a person is not, in either direction. That is a
     # permission boundary, not a value ranking, so it HOLDS: a values-alt arm
     # must not acquire the ability to diagnose by varying its values.
-    "language_guidance.26b_user_symptom_direction": BlockAnnotation(_C.DEONTIC, None),
+    "universal_guidance.26b_user_symptom_direction": BlockAnnotation(_C.DEONTIC, None),
     # "These training-attractor pulls are properties of LLMs, not of any one
     # language." A law-like relation the reasoning is asked to accept, not a
     # world-fact checkable at compose time — nomological, sibling of IDMA's
@@ -281,9 +290,10 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # sourced from PROHIBITED_CAPABILITIES — deontic.
     "prohibition": BlockAnnotation(_C.DEONTIC, None),
     # Crisis resources: static world-facts (numbers, URLs) — empirical (#971
-    # landed the breadcrumb in formatters/crisis_resources.py). NOT reachable
-    # as a discrete block today: it rides interpolated inside dsdma.system.
-    # This entry activates when #974 routes it discretely.
+    # landed the breadcrumb in formatters/crisis_resources.py). A discrete
+    # system message since #1248, right after language guidance at every site
+    # that carries it (PDMA/CSDMA/DSDMA/ASPDMA/TSASPDMA/DSASPDMA/MSASPDMA/IDMA),
+    # recorded by `_RoutedRecorder.crisis_resources`.
     "crisis": BlockAnnotation(_C.EMPIRICAL, None),
     # ---- named residue: the bytes no field render explains ------------------
     # `format_system_prompt_blocks` wraps a composed system message in identity
@@ -932,6 +942,9 @@ class _RoutedRecorder:
         self._real_localized: Callable[..., str] = _constants.get_localized_accord_text
         self._real_language_guidance: Callable[[str], str] = _localization.get_language_guidance
         self._real_prohibition: Callable[[str], str] = _localization.get_prohibition_guidance
+        from ciris_engine.logic.formatters import crisis_resources as _crisis_resources
+
+        self._real_crisis_resources: Callable[..., str] = _crisis_resources.get_crisis_resources_system_block
         self._real_user_message: Callable[..., str] = DMAPromptLoader.get_user_message
         self._real_conscience_system: Callable[..., str] = ConsciencePromptLoader.get_system_prompt
         self._real_conscience_user: Callable[..., str] = ConsciencePromptLoader.get_user_prompt
@@ -975,6 +988,9 @@ class _RoutedRecorder:
         #: own join is what the dump reports, so the dump cannot disagree with
         #: it about where a part starts.
         self.language_guidance_parts: List[Tuple[str, str]] = []
+        #: The locale's own ``prompts.universal_guidance`` parts, composed into
+        #: the same block (merged with the parts above in key order).
+        self.universal_guidance_parts: List[Tuple[str, str]] = []
 
     def _register(self, value: str, name: str, source: str) -> str:
         if value:
@@ -1000,16 +1016,32 @@ class _RoutedRecorder:
         record ``[]``, which reports one honestly-``mixed`` block exactly as
         before.
         """
-        from ciris_engine.logic.utils.localization import language_guidance_parts
+        from ciris_engine.logic.utils.localization import language_guidance_parts, universal_guidance_parts
 
         value = self._real_language_guidance(lang_code)
         self.language_guidance_parts = language_guidance_parts(lang_code)
+        self.universal_guidance_parts = universal_guidance_parts(lang_code)
         return self._register(value, "language_guidance", "string:prompts.language_guidance")
 
     def prohibition_guidance(self, lang_code: str) -> str:
         return self._register(
             self._real_prohibition(lang_code), "prohibition", "string:prompts.prohibitions"
         )
+
+    def crisis_resources(self, lang_code: Optional[str] = None) -> str:
+        """Recording pass-through around ``get_crisis_resources_system_block`` (#1248).
+
+        The crisis block is its own system message at every language-guidance
+        site, so it is a discrete routed block (``crisis``, EMPIRICAL) rather
+        than bytes interpolated inside ``dsdma.system``. Sourced to the corpus
+        file it is rendered from. It is NOT in a research-override namespace:
+        crisis world-facts HOLD by construction, no manifest can reach them.
+        """
+        from ciris_engine.schemas.resources.crisis import load_crisis_registry
+
+        value = self._real_crisis_resources(lang_code)
+        locale = load_crisis_registry(lang_code).locale
+        return self._register(value, "crisis", f"corpus:crisis_resources_{locale}")
 
     def user_message(self, loader: object, template_data: object, **kwargs: object) -> str:
         """Recording pass-through around ``DMAPromptLoader.get_user_message`` (#974).
@@ -1267,12 +1299,18 @@ def _language_guidance_pieces(
     """
     if source != "string:prompts.language_guidance":
         return None
-    parts = recorder.language_guidance_parts
-    if not parts:
+    if not recorder.language_guidance_parts:
         return None
+    # The composer joins language and universal parts in one sorted() key
+    # order; merge them the same way, each tagged with the subtree it lives in.
+    parts = sorted(
+        [("language_guidance", key, part_text) for key, part_text in recorder.language_guidance_parts]
+        + [("universal_guidance", key, part_text) for key, part_text in recorder.universal_guidance_parts],
+        key=lambda part: part[1],
+    )
     pieces: List[_MessagePiece] = []
     cursor = 0
-    for key, part_text in parts:
+    for subtree, key, part_text in parts:
         if not part_text:
             continue
         index, matched = _locate_part(text, part_text, cursor)
@@ -1283,9 +1321,9 @@ def _language_guidance_pieces(
             return None
         pieces.append(
             _MessagePiece(
-                f"language_guidance.{key}",
+                f"{subtree}.{key}",
                 matched,
-                f"string:prompts.language_guidance.{key}",
+                f"string:prompts.{subtree}.{key}",
             )
         )
         cursor = index + len(matched)
@@ -1449,6 +1487,7 @@ def compose_dump_rows(
             localized_accord=recorder.localized_accord,
             language_guidance=recorder.language_guidance,
             prohibition_guidance=recorder.prohibition_guidance,
+            crisis_resources=recorder.crisis_resources,
             user_message=_user_message_seam,
             conscience_system_prompt=_conscience_system_seam,
             conscience_user_prompt=_conscience_user_seam,

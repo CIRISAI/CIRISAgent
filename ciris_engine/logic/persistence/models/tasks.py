@@ -11,9 +11,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, cast
 
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -420,6 +421,12 @@ def add_task(task: Task) -> str:
             return _handle_duplicate_task(task)
     try:
         engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        if correlation_id:
+            # Indexed whatever its created_at says (the incremental refresh
+            # only reads rows newer than the newest indexed one).
+            index = _correlation_indexes.get((id(engine), task.agent_occurrence_id))
+            if index is not None:
+                index.by_correlation[correlation_id] = task.task_id
         images_count = len(task.images) if task.images else 0
         if images_count > 0:
             logger.info(
@@ -629,23 +636,64 @@ async def add_system_task(
     return add_task(task)
 
 
+#: Newest completed tasks (by creation) searched for the most recently updated.
+RECENT_COMPLETED_WINDOW = 50
+
+#: One answer serves every thought of a round that asks within this many seconds.
+RECENT_COMPLETED_TTL_SECONDS = 2.0
+
+_recent_completed_cache: Dict[Tuple[int, str, int], Tuple[float, List[Task]]] = {}
+
+
 def get_recent_completed_tasks(
     occurrence_id: str = "default",
     limit: int = 10,
 ) -> List[Task]:
-    tasks_list = get_all_tasks(occurrence_id)
-    completed = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.COMPLETED]
-    completed_sorted = sorted(completed, key=lambda t: getattr(t, "updated_at", ""), reverse=True)
-    return completed_sorted[:limit]
+    """The ``limit`` most recently updated COMPLETED tasks.
+
+    Runs on every thought's context build. It used to materialize every task
+    the occurrence had ever had and filter in Python; now it asks for
+    COMPLETED rows and looks only at the newest RECENT_COMPLETED_WINDOW by
+    creation (at least 5x ``limit``), and one answer serves every caller
+    within RECENT_COMPLETED_TTL_SECONDS (a round's whole batch). A task
+    created before that window and completed just now is not listed -- the
+    context it feeds is a recent-activity summary, not an audit.
+    """
+    now = time.monotonic()
+    window = max(RECENT_COMPLETED_WINDOW, limit * 5)
+    rows: List[Dict[str, Any]] = []
+    try:
+        # Keyed on the engine too: a new engine (tests, a re-initialized store)
+        # never sees another's answer.
+        key = (id(_get_engine()), occurrence_id, limit)
+        cached = _recent_completed_cache.get(key)
+        if cached is not None and now - cached[0] < RECENT_COMPLETED_TTL_SECONDS:
+            return list(cached[1])
+        for page in _task_pages(
+            {"status": TaskStatus.COMPLETED.value, "agent_occurrence_id": occurrence_id}, page_size=min(200, window)
+        ):
+            rows.extend(page)
+            if len(rows) >= window:
+                break
+        # Sort the raw rows and build models only for the ones returned.
+        rows.sort(key=lambda r: str(r.get("updated_at", "")), reverse=True)
+        recent = [_persist_row_to_task(row) for row in rows[:limit]]
+        _recent_completed_cache[key] = (now, recent)
+        return list(recent)
+    except Exception as e:
+        logger.exception(f"Failed to get recent completed tasks for occurrence {occurrence_id}: {e}")
+        return []
 
 
 def get_top_tasks(
     occurrence_id: str = "default",
     limit: int = 10,
 ) -> List[Task]:
-    """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date."""
-    tasks_list = get_all_tasks(occurrence_id)
-    pending = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.PENDING]
+    """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date.
+
+    Asks the substrate for PENDING rows only (was: every task, filtered in Python).
+    """
+    pending = get_tasks_by_status(TaskStatus.PENDING, occurrence_id)
     sorted_tasks = sorted(pending, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
     return sorted_tasks[:limit]
 
@@ -660,14 +708,66 @@ def get_pending_tasks_for_activation(
     return sorted_tasks[:limit]
 
 
+def _task_pages(filter_dict: Dict[str, Any], page_size: int = 200) -> Iterator[List[Dict[str, Any]]]:
+    """Yield `task_list` pages as raw row dicts, newest first (DESC by created_at).
+
+    For callers that count, look for one row, or want only the newest few:
+    they stop early and never build a Task model for rows they discard.
+    """
+    engine = _get_engine()
+    last_ts = "9999-12-31T23:59:59Z"
+    last_id = ""
+    while True:
+        cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+        raw = engine.task_list(json.dumps(filter_dict), cursor_json, page_size)
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            return
+        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+        rows = [row for row in items if isinstance(row, dict)]
+        if not rows:
+            return
+        yield rows
+        last_ts = str(rows[-1].get("created_at", last_ts))
+        last_id = str(rows[-1].get("task_id", ""))
+        if len(items) < page_size:
+            return
+
+
+def _count_with_filter(filter_dict: Dict[str, Any]) -> int:
+    """Count `task_list` rows without materializing Task models (see count_tasks)."""
+    return sum(len(page) for page in _task_pages(filter_dict))
+
+
+def _row_correlation_id(row: Dict[str, Any], expected: Optional[str] = None) -> Optional[str]:
+    """The row's context correlation_id. With ``expected``, a row whose raw
+    context text does not even contain it is rejected without parsing."""
+    ctx = row.get("context")
+    if isinstance(ctx, str):
+        if expected is not None and expected not in ctx:
+            return None
+        try:
+            ctx = json.loads(ctx)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(ctx, dict):
+        value = ctx.get("correlation_id")
+        return str(value) if value is not None else None
+    return None
+
+
 def count_tasks(status: Optional[TaskStatus] = None, occurrence_id: str = "default") -> int:
-    """Count tasks matching the criteria."""
+    """Count tasks matching the criteria.
+
+    Counts substrate rows without building a Task model for each: this runs on
+    every thought's context build, and materializing the whole task history to
+    take its length grew with every task the agent had ever run.
+    """
     try:
         if status:
-            tasks = _list_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
-        else:
-            tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
-        return len(tasks)
+            return _count_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
+        return _count_with_filter({"agent_occurrence_id": occurrence_id})
     except Exception as e:
         logger.exception(f"Failed to count tasks for occurrence {occurrence_id}: {e}")
         return 0
@@ -1059,17 +1159,87 @@ def get_latest_shared_task(task_type: str, within_hours: int = 24) -> Optional[T
     return candidates[0]
 
 
+class _CorrelationIndex:
+    """correlation_id -> newest task_id for one occurrence, kept current incrementally.
+
+    get_task_by_correlation_id runs on every add_task, and for a new message it
+    is a miss: answered by a scan, that paged and decoded the occurrence's
+    entire task history per inbound message. The substrate's TaskFilter has no
+    correlation field, so the index lives here. Rows arrive newest first; each
+    lookup reads only rows created after the newest one already indexed (one
+    small page in steady state), whoever wrote them. A hit is confirmed with a
+    point read, and if that task is gone the full scan answers instead, so a
+    deleted task never shadows an older one.
+    """
+
+    REFRESH_PAGE = 20
+
+    def __init__(self) -> None:
+        self.by_correlation: Dict[str, str] = {}
+        self.high_water: Optional[str] = None  # created_at of the newest indexed row
+
+    def refresh(self, occurrence_id: str) -> None:
+        newest: Optional[str] = None
+        seen: set[str] = set()
+        page_size = self.REFRESH_PAGE
+        for page in _task_pages({"agent_occurrence_id": occurrence_id}, page_size=page_size):
+            reached_indexed = False
+            for row in page:
+                created = str(row.get("created_at", ""))
+                if self.high_water is not None and created < self.high_water:
+                    reached_indexed = True
+                    break
+                if newest is None or created > newest:
+                    newest = created
+                correlation_id = _row_correlation_id(row)
+                if correlation_id and correlation_id not in seen:
+                    seen.add(correlation_id)  # newest first: the first row is the newest
+                    self.by_correlation[correlation_id] = str(row.get("task_id", ""))
+            if reached_indexed:
+                break
+        if newest is not None and (self.high_water is None or newest > self.high_water):
+            self.high_water = newest
+
+
+_correlation_indexes: Dict[Tuple[int, str], _CorrelationIndex] = {}
+
+
+def _scan_for_correlation_id(correlation_id: str, occurrence_id: str) -> Optional[Task]:
+    """The full newest-first scan (index fallback)."""
+    for page in _task_pages({"agent_occurrence_id": occurrence_id}):
+        for row in page:
+            if _row_correlation_id(row, expected=correlation_id) == correlation_id:
+                return _persist_row_to_task(row)
+    return None
+
+
 def get_task_by_correlation_id(correlation_id: str, occurrence_id: str = "default") -> Optional[Task]:
-    """Query for a task by correlation_id (e.g., Reddit post/comment ID)."""
+    """Query for a task by correlation_id (e.g., Reddit post/comment ID); the newest match.
+
+    Served from _CorrelationIndex: rows created since the last lookup are read,
+    the rest is already indexed. Only the matching row is materialized.
+    """
     try:
-        all_tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
+        engine = _get_engine()
+        key = (id(engine), occurrence_id)
+        index = _correlation_indexes.get(key)
+        if index is None:
+            index = _correlation_indexes[key] = _CorrelationIndex()
+        index.refresh(occurrence_id)
+        task_id = index.by_correlation.get(correlation_id)
+        if task_id is None:
+            return None
+        raw = engine.task_get(task_id)
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if isinstance(row, dict) and _row_correlation_id(row) == correlation_id:
+            return _persist_row_to_task(row)
+        # Deleted (or rewritten) since indexed: a scan answers, and re-indexes
+        # what it finds (an older task with the same correlation id).
+        index.by_correlation.pop(correlation_id, None)
+        older = _scan_for_correlation_id(correlation_id, occurrence_id)
+        if older is not None:
+            index.by_correlation[correlation_id] = older.task_id
+        return older
     except Exception as e:
         logger.exception(f"Failed to get task by correlation_id {correlation_id}: {e}")
-        return None
-    matches = [
-        t for t in all_tasks if t.context is not None and getattr(t.context, "correlation_id", None) == correlation_id
-    ]
-    if not matches:
-        return None
-    matches.sort(key=lambda t: t.created_at, reverse=True)
-    return matches[0]
+    return None

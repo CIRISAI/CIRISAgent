@@ -107,7 +107,8 @@ This glossary defines the canonical translations for key CIRIS terms in Indonesi
 
 ### Formality Level
 - Use formal Indonesian (Bahasa Indonesia baku) for ACCORD and official documentation
-- Use conversational Indonesian for UI strings and chat messages
+- Use conversational Indonesian for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "Anda" (never "kamu" or "kau"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Technical terms may be borrowed from English where no clear Indonesian equivalent exists
 
 ### Pronouns

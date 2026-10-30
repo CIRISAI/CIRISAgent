@@ -714,6 +714,8 @@ def _stub_node_ownership(request, monkeypatch):
 
     monkeypatch.setattr(node_ownership, "_cached", None)
     monkeypatch.setattr(node_ownership, "_cached_at", 0.0)
+    monkeypatch.setattr(node_ownership, "_last_owned", None)
+    monkeypatch.setattr(node_ownership, "_inflight", None)
     if request.node.get_closest_marker("real_node_ownership"):
         return
 
@@ -801,6 +803,16 @@ def _stub_authentication_service_attestation(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_hedging_book():
+    """Hedge history and budget are process-wide; no test inherits another's."""
+    from ciris_engine.logic.utils import hedging
+
+    hedging.reset()
+    yield
+    hedging.reset()
+
+
+@pytest.fixture(autouse=True)
 def _stub_accord_halt_latch(request, monkeypatch):
     """Answer the constitutional-halt reader with "no halt stands".
 
@@ -824,6 +836,9 @@ def _stub_accord_halt_latch(request, monkeypatch):
     monkeypatch.setattr(halt_latch, "_unhalted_hooks", [])
     monkeypatch.setattr(halt_latch, "_halt_seen", False)
     monkeypatch.setattr(halt_latch, "_hooks_lock", None)
+    monkeypatch.setattr(halt_latch, "_inflight", None)
+    monkeypatch.setattr(halt_latch, "_last_good", None)
+    monkeypatch.setattr(halt_latch, "_last_good_at", 0.0)
     if request.node.get_closest_marker("real_halt_latch"):
         return
     from datetime import datetime, timezone

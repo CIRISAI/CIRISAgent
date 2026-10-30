@@ -155,7 +155,8 @@ This glossary defines the canonical translations for key CIRIS terms in Italian.
 ## Cultural Considerations
 
 ### Formality Level
-- Use **informal "tu"** form for conversational UI and chat interactions (e.g., "Come posso aiutarti?")
+- Use **informal "tu"** form for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "Lei" (never "tu"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Use **formal language** for legal/official documentation and system messages
 - For action buttons and commands, use **imperative verb forms** (e.g., "Invia", "Annulla", "Conferma")
 - Technical terms borrowed from English (API, LLM, DMA) remain unchanged

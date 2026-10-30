@@ -5,6 +5,44 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.0-stable] - 2026-10-29
+
+### Safety
+
+- **Crisis numbers in every reply step, by region (#1248, #779).** The crisis-resources block reached only DSDMA, so ASPDMA, which writes the user's reply, never saw the curated numbers, and in production the model invented one ("907 00 00 00", padded from Ethiopia's ambulance number). The block is now a system message after language guidance in all eight DMAs. It carries country-labelled emergency numbers for the user's opted-in location first, then for the countries where their language is spoken, under "Emergency services (police / ambulance / fire — NOT mental-health or crisis helplines)". 104 numbers across 55 countries are emitted, each backed by at least two agreeing sources, at least one of them official (`multi_source_cited`); 47 more are staged but not emitted. The hard-coded "Call 911" is gone from every locale but English, which reads "Call 911, or your local emergency number if not in the US". Hotlines still need human verification.
+- **No clinical determination in either direction, in any language (U1).** The "correct" cross-cluster exemplars ruled conditions out ("what you describe does not match psychosis"), and the agent copied them. The four universal parts (05 no wellness confirmation, 7c cross-cluster exemplar, its pattern, 7e user-symptom direction) are rewritten category-only. They move to `prompts.universal_guidance`, composed in the same block and in the same positions, and are translated per locale by the i18n pipeline. Every locale's `language_guidance` drops its own copy of that doctrine, including the cross-cluster "perform the distinction" sections and the "a sign of depression, not schizophrenia" glossary lines, so it now holds only what is specific to the language. es, it and ru exemplars are in the formal address (usted, Lei, capitalised Вы).
+- **Stigma words: the agent is told the rule its conscience enforces.** Coherence fails a reply that contains a colloquial word mocking mental illness in any framing (quoted back, denied, offered as a possibility, attributed, explained), but the agent-side guidance said only "never use", or nothing in English. In the bn battery the agent quoted the user's own word back five rounds running and deferred after 22 minutes. A new universal part, `05b_no_stigma_words`, states the rule in the conscience's terms with no example words, so no translation renders the word it forbids (29 locales; am, ta and te finished by hand from the reviewer's findings). The §18 ratification examples no longer quote the word as a user question in en, es, fr, it, pt, bn, hi, mr, pa, ha, yo and sw.
+- **Every conscience says why it bounced an action.** Coherence and entropy returned only a score, so a retry heard "Coherence 0.35 < threshold 0.60" and could not tell which phrase to change. Both now return a `reason` (the phrase that fails and the principle it breaks), carried into the retry and the ponder question, as the optimization veto and epistemic humility already did.
+- **Grounding:** WHO Psychological First Aid (the non-professional helper: listen, don't assess, link), the mhGAP Intervention Guide 2.0 (the referral pathway), the mhGAP guideline 3rd ed. (2023) and WHO's 2025 guidance on large multi-modal models (`FSD/SAFETY_GUIDANCE.md`).
+
+### Agent
+
+- **Chat collapses to direct links between room peers (CIRISEdge#915).** The agent's Edge proposes a direct link to its room peers, using the canonical's facilitator (the `ip` dial in the canonical's signed record, served on UDP beside its TCP listener) for NAT traversal. Room steps no longer wait on the canonical's round cadence. `CIRIS_DIRECT_LINK_FACILITATOR` names another facilitator, or `off` keeps every room step on the canonical. Feature-detected on the substrate.
+- **A burst of traffic no longer reads as a halt or an unowned node.** Both gates fail closed, and every request read them separately, so under load the reads timed out together and the agent refused everyone with 423 "accord halt in effect" or "node unclaimed": a denial of service. Concurrent reads now share one read. An owned node stays owned through a failed read; an answered "unowned" is still taken at once. A halt read that times out keeps the last answer for at most 5 s, then fails closed. An answered halt takes effect at once, and boot and invalidation never get the grace.
+- **Run-without-AI setup on desktop lands on the node, every time.** Setup wrote the `.env`, then appended to it around a 7 s consent grant before recording `CIRIS_RUN_WITHOUT_AI`; the desktop client read it mid-write, stayed on :8080 after the hand-off to :4243, and started a second node on the same home. The `.env` is now composed in memory and published with one atomic replace (created 0600), and the consent grants run after it. The client's early read is CIRISClient#269.
+- **Managed agents can ship traces once their owner consents (#1334).** An owner-authored community-trust grant applied to the node counts as the crossing (persist's `community_trust_consent_json` fold, which accepts the owner's roster keys). The opt-in survives the legacy migration's purge of the env var, and re-widening a grant that is already at federation reads as already widened, not as a refusal.
+
+### Load
+
+- **A load spike is shed only as far as the thresholds require.** A message is admitted while active thoughts are below one under CRITICAL; only the excess is refused, and admission reopens as soon as a slot frees. Retry-After comes from the measured drain rate (1–9 s under the benchmark burst), not a fixed 30 s. THROTTLE no longer applies to `thoughts_active`, because slowing the drain prolonged the overload; CPU throttling rests in proportion to the overshoot.
+- **Rounds stay flat as rows accumulate.** Per-thought LLM totals are kept in memory instead of scanning every metric node; the telemetry summary is computed once per expiry; prompt templates are parsed once; task, thought and correlation lookups read only new rows; graph writes and the secrets scan run off the event loop; with trace consent off the capture feed does no work. On a 4-vCPU runner a 50-thought round fell from 51–274 s (growing) to 5.5–9.4 s, loop stalls from 3–6 s to under 0.7 s, and the 1000-message burst went from 103/1000 to 1000/1000 in 414 s.
+- **`cpu_percent` is per core.** psutil counted 100 per busy core, so a 4-core agent read up to 400 against a limit of 80; the reading is now normalised to the cores the process may run on.
+- One line per work round logs phase timings, loop lag, active vs ceiling, CPU, memory, admissions, drain and Retry-After.
+
+### Privacy
+
+- **A thought's context no longer pulls user ids from other conversations.** User extraction passed a filter the substrate ignores, so it read the newest 100 correlations from every conversation.
+
+### Substrate
+
+- **ciris-server 0.5.242** (edge v43.3.0, persist v59.1.1, verify v20.2.0). Owner requests: the node lists what needs the owner's signature, the owner's device signs it, the node applies it and resumes delivery that was held waiting for its claim (#837). Chat messages can be replaced, withdrawn and recanted, with `/history` and `viewer_ops` (#836). A facilitator runs on every server (#838). A device is released by roster quorum and wipes itself (#839). Owned-node rows carry more detail (#840), and all 7 cohort scopes are handled (#835).
+- **ciris-client 0.5.236.** The startup-failure screen stays in the user's language and shows the agent's cause ("This device is out of storage"). Chat History opens the message lifecycle, and Replace / Withdraw / Recant follow the node's `viewer_ops`.
+
+### Quality
+
+- **Localize pipeline re-vendored** from CIRISClient 1af22aa: `--overwrite` for a deliberate retranslation (a kept value now fails the run), and the agent-speech register rule. The i18n translate workflow takes an `overwrite` input.
+- **The memory benchmark measures again (#1336).** It had passed 0–7% of messages since 2026-10-08 while the job stayed green. It now waits out the agent's 503/429 back-pressure (Retry-After), reports memory per processed message, names the reading on a 423 and fails below 99%.
+
 ## [2.17.0-stable] - 2026-10-29
 
 ### Chat

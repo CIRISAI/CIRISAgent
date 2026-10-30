@@ -95,7 +95,8 @@ This glossary defines the canonical translations for key CIRIS terms in Urdu. Al
 
 ### Formality Level
 - Use formal Urdu register (ادبی اردو) for ACCORD and official documentation
-- Use conversational Urdu (بول چال) for UI strings and chat messages
+- Use conversational Urdu (بول چال) for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "آپ" (never "تم" or "تو"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Use technical Urdu with English loan words for DMA prompts
 
 ### Honorifics

@@ -77,6 +77,11 @@ on:
         description: "Parallel locale shards, 1-28. 7 = 4 locales each; 1 = the old one-job lane. One commit either way."
         required: false
         default: "7"
+      overwrite:
+        description: "Replace values that already exist (target=ui). For a deliberate retranslation after an English change: use with EXACT keys, never a broad pattern, so hand-written overrules (TRANSLATION_GUIDE §1) stay."
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   # One writer at a time. Parallel agents racing on one bundle is the failure
@@ -106,4 +111,5 @@ jobs:
       max_keys: ${{ inputs.max_keys }}
       mode: ${{ inputs.mode }}
       shards: ${{ inputs.shards }}
+      overwrite: ${{ inputs.overwrite }}
       commit: true

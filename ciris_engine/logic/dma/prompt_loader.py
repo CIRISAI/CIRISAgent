@@ -12,7 +12,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
@@ -184,6 +184,15 @@ def apply_research_overrides_to_mapping(template_name: str, prompts: Dict[str, A
     return prompts
 
 
+#: Parsed template YAML by (path, mtime_ns, size); see DMAPromptLoader._read_template_data.
+#: Bounded by the number of template files (an edited file adds one entry).
+_TEMPLATE_DATA_CACHE: Dict[Tuple[str, int, int], Dict[str, Any]] = {}
+
+#: libyaml's safe loader when PyYAML was built with it (the manylinux wheels are);
+#: same safe-load semantics, several times faster than the pure-Python loader.
+_YAML_SAFE_LOADER: Any = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
 class DMAPromptLoader:
     """Loads and manages DMA prompts from YAML files.
 
@@ -284,6 +293,43 @@ class DMAPromptLoader:
 
         return POLYGLOT_PATTERN.sub(_replace, raw_content)
 
+    def _read_template_data(self, template_name: str, template_path: Path) -> Dict[str, Any]:
+        """The template's parsed YAML, read from disk once per file version.
+
+        Every DMA call loads its template, and a thought makes about ten: with
+        the file re-read, polyglot blocks re-substituted and the YAML re-parsed
+        by the pure-Python loader each time, this was ~20% of the event loop's
+        time under a burst. The parse is cached per (path, mtime, size), so an
+        edited file is picked up on its next load. Research overrides can
+        replace polyglot blocks in-memory, so nothing is cached while a
+        research manifest is active. Callers only read the returned mapping.
+        """
+        from ciris_engine.logic.utils.research_overrides import get_active_overrides
+
+        stat = template_path.stat()
+        key = (str(template_path), stat.st_mtime_ns, stat.st_size)
+        cacheable = get_active_overrides() is None
+        if cacheable:
+            cached = _TEMPLATE_DATA_CACHE.get(key)
+            if cached is not None:
+                return cached
+
+        logger.info(f"[DMA-PROMPT] Loading template from: {template_path}")
+        with open(template_path, "r", encoding="utf-8") as f:
+            raw_content = f.read()
+        logger.info(f"[DMA-PROMPT] Read {len(raw_content)} chars from {template_name}.yml")
+        raw_content = self._substitute_polyglot_blocks(raw_content, template_path)
+        template_data = yaml.load(raw_content, Loader=_YAML_SAFE_LOADER)
+
+        if not isinstance(template_data, dict):
+            logger.error(f"[DMA-PROMPT] Invalid template format: expected dict, got {type(template_data)}")
+            raise ValueError(f"Invalid template format in {template_path}: expected dict, got {type(template_data)}")
+
+        logger.info(f"[DMA-PROMPT] Parsed template {template_name}: keys={list(template_data.keys())}")
+        if cacheable:
+            _TEMPLATE_DATA_CACHE[key] = template_data
+        return template_data
+
     def load_prompt_template(self, template_name: str) -> PromptCollection:
         """
         Load a prompt template from a YAML file.
@@ -337,20 +383,7 @@ class DMAPromptLoader:
             raise FileNotFoundError(f"Prompt template not found: {template_path}")
 
         try:
-            logger.info(f"[DMA-PROMPT] Loading template from: {template_path}")
-            with open(template_path, "r", encoding="utf-8") as f:
-                raw_content = f.read()
-                logger.info(f"[DMA-PROMPT] Read {len(raw_content)} chars from {template_name}.yml")
-                raw_content = self._substitute_polyglot_blocks(raw_content, template_path)
-                template_data = yaml.safe_load(raw_content)
-
-            if not isinstance(template_data, dict):
-                logger.error(f"[DMA-PROMPT] Invalid template format: expected dict, got {type(template_data)}")
-                raise ValueError(
-                    f"Invalid template format in {template_path}: expected dict, got {type(template_data)}"
-                )
-
-            logger.info(f"[DMA-PROMPT] Parsed template {template_name}: keys={list(template_data.keys())}")
+            template_data = self._read_template_data(template_name, template_path)
 
             # Convert dict to PromptCollection
             # Populate every string field the schema declares, DERIVED from the
@@ -607,6 +640,7 @@ def set_prompt_language(language: str) -> None:
     was current at first load.
     """
     _loader_cache.clear()
+    _TEMPLATE_DATA_CACHE.clear()
     logger.info(
         f"set_prompt_language({_sanitize_for_log(language)}): cleared DMA prompt "
         "loader cache — prompts will rebuild for the new language"

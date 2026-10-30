@@ -22,7 +22,7 @@ This glossary defines the canonical translations for key CIRIS terms in German. 
 | English | German | Definition |
 |---------|--------|------------|
 | ACCORD | [DEPRECATED] ACCORD | DEPRECATED — superseded by the CIRIS Constitution. Do NOT coin a rendering for it. The ROLE (`accord holder`, `accord_custody`, `/v1/accord/*`) is live and follows the shipped strings, not this row. Was: The covenant governing agent behavior (kept as-is) |
-| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering) |
+| Wise Authority | Wise Authority | Human oversight entity; the English term is kept (Constitution 1.3 rendering), never "Menschlicher Berater" |
 | Conscience | Gewissen | Ethical filter mechanism |
 | Principal Hierarchy | Prinzipien-Hierarchie | Chain of command for guidance |
 | Coherence | Kohärenz | Logical and contextual consistency |
@@ -195,7 +195,8 @@ This glossary defines the canonical translations for key CIRIS terms in German. 
 
 ### Formality Level
 - Use formal German register (Sie-Form) for ACCORD and official documentation
-- Use conversational German for UI strings and chat messages
+- Use conversational German for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "Sie" (never "du"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Maintain professional tone throughout
 - Technical terms often remain in English (API, LLM, Token, Backend, etc.)
 

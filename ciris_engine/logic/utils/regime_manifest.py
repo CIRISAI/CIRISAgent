@@ -258,7 +258,6 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     "prompts.language_guidance.02_first_sentence_tone_lock": BlockClass.PRAGMATIC,
     "prompts.language_guidance.03_never_deny_ai": BlockClass.DEONTIC,
     "prompts.language_guidance.04_formal_register": BlockClass.PRAGMATIC,
-    "prompts.language_guidance.05_no_wellness_confirmation": BlockClass.DEONTIC,
     "prompts.language_guidance.06_warmth_and_concision": BlockClass.PRAGMATIC,
     "prompts.language_guidance.07_canonical_disclaimer": BlockClass.DEONTIC,
     "prompts.language_guidance.08_help_pathway_intro": BlockClass.EMPIRICAL,
@@ -278,12 +277,17 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     "prompts.language_guidance.22_ratification_register": BlockClass.PRAGMATIC,
     "prompts.language_guidance.23_ratification_templates": BlockClass.MIXED,
     "prompts.language_guidance.24_ratification_pattern": BlockClass.PROCEDURAL,
-    "prompts.language_guidance.25_exemplar_cross_cluster": BlockClass.MIXED,
-    "prompts.language_guidance.26_cross_cluster_pattern": BlockClass.DEONTIC,
-    "prompts.language_guidance.26b_user_symptom_direction": BlockClass.DEONTIC,
     "prompts.language_guidance.27_attractor_universality": BlockClass.NOMOLOGICAL,
     "prompts.language_guidance.28_brevity_restatement": BlockClass.PRAGMATIC,
     "prompts.language_guidance.29_no_medical_or_legal_advice": BlockClass.DEONTIC,
+    # The four parts that standardized into `prompts.universal_guidance` —
+    # same part names, same composed slots, same inherited classes.
+    "prompts.universal_guidance.05_no_wellness_confirmation": BlockClass.DEONTIC,
+    "prompts.universal_guidance.05b_no_stigma_words": BlockClass.DEONTIC,
+    "prompts.universal_guidance.05c_warmth_without_a_new_role": BlockClass.DEONTIC,
+    "prompts.universal_guidance.25_exemplar_cross_cluster": BlockClass.MIXED,
+    "prompts.universal_guidance.26_cross_cluster_pattern": BlockClass.DEONTIC,
+    "prompts.universal_guidance.26b_user_symptom_direction": BlockClass.DEONTIC,
     # #974 step 3: the three CORE IDENTITY copies collapsed to one key.
     "prompts.identity_block": BlockClass.ONTOLOGICAL,
     # A verified WA approval (formatters/wa_approval.py), split so each part is

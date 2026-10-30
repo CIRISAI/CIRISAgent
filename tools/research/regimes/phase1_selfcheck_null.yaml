@@ -61,7 +61,7 @@ blocks:
   language_guidance.23_ratification_templates:
     disposition: hold
     contaminant: [pragmatic, epistemic, ontological, axiotic]
-  language_guidance.25_exemplar_cross_cluster:
+  universal_guidance.25_exemplar_cross_cluster:
     disposition: hold
     contaminant: [deontic, epistemic, empirical, axiotic]
   pdma_ethical.system_guidance_header:

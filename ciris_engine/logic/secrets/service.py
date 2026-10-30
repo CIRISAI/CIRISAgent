@@ -23,6 +23,7 @@ surviving external accesses (`list_all_secrets`, `migrate_to_hardware_key`,
 `list_secrets`) are all methods on this class now.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -383,7 +384,11 @@ class SecretsService(BaseService, SecretsServiceProtocol):
         """
         try:
             engine = _get_engine()
-            raw = engine.secrets_process_incoming_text(text, source_message_id, "system")
+            # On a worker: the substrate's regex scan (and encrypt-and-store on a
+            # hit) is synchronous, and every memorized node passes through here
+            # -- about forty metric nodes per thought -- so on the loop it was
+            # the largest self-time frame of the burst profile.
+            raw = await asyncio.to_thread(engine.secrets_process_incoming_text, text, source_message_id, "system")
             envelope = json.loads(raw) if isinstance(raw, (bytes, str)) else raw
         except Exception as e:
             logger.error(f"Substrate secrets detection failed: {type(e).__name__}: {e}")

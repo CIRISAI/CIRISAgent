@@ -26,7 +26,9 @@ from ciris_engine.logic.services.infrastructure.resource_monitor import Resource
 from ciris_engine.logic.services.infrastructure.resource_monitor import service as rm_service
 from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import (
     MAX_THROTTLE_EXTRA_SECONDS,
+    MIN_RETRY_AFTER_SECONDS,
     SHED_RETRY_AFTER_SECONDS,
+    UNMEASURED_RETRY_AFTER_SECONDS,
     actions_for_level,
     pressure_gate_of,
 )
@@ -230,16 +232,22 @@ def _round_delay(monitor, state=AgentState.WORK) -> float:
 
 
 @pytest.mark.asyncio
+async def _set_cpu(monitor: ResourceMonitorService, value: int) -> None:
+    monitor.snapshot.cpu_average_1m = value
+    await monitor._check_limits()
+
+
+@pytest.mark.asyncio
 async def test_throttle_slows_the_loop_and_lifts(monitor):
     assert _round_delay(monitor) == 3.0
 
-    await _set_thoughts(monitor, 48)  # HIGH -> THROTTLE
-    assert _gate(monitor).resources(ResourceAction.THROTTLE) == ["thoughts_active"]
+    await _set_cpu(monitor, 76)  # HIGH -> THROTTLE (CPU: yielding between rounds frees it)
+    assert _gate(monitor).resources(ResourceAction.THROTTLE) == ["cpu_percent"]
     throttled = _round_delay(monitor)
     assert 3.0 < throttled <= 3.0 + MAX_THROTTLE_EXTRA_SECONDS
     assert _round_delay(monitor, AgentState.SHUTDOWN) == 1.0  # never slows shutdown
 
-    await _set_thoughts(monitor, 0)
+    await _set_cpu(monitor, 0)
     assert not _gate(monitor).is_active(ResourceAction.THROTTLE)
     assert _round_delay(monitor) == 3.0
     metrics = monitor._collect_custom_metrics()
@@ -362,7 +370,9 @@ async def test_shed_surfaces_as_503_with_retry_after(monitor, api_app, path):
     response = TestClient(api_app).post(path, json={"message": "hello"})
 
     assert response.status_code == 503
-    assert response.headers["Retry-After"] == str(SHED_RETRY_AFTER_SECONDS)
+    # No work round measured yet: the unmeasured hint, not the 30 s ceiling
+    assert response.headers["Retry-After"] == str(UNMEASURED_RETRY_AFTER_SECONDS)
+    assert response.json()["detail"]["retry_after_seconds"] == UNMEASURED_RETRY_AFTER_SECONDS
     detail = response.json()["detail"]
     assert detail["error"] == "resource_shed"
     assert detail["reason"] == "RESOURCE_SHED"
@@ -544,11 +554,11 @@ def test_thought_count_is_scoped_to_the_occurrence(monitor, monkeypatch):
 
     seen = []
 
-    def fake(status, occurrence_id="default", limit=None):
+    def fake(status, occurrence_id="default"):
         seen.append(occurrence_id)
-        return [object()] * (3 if occurrence_id == "occurrence-7" else 99)
+        return 3 if occurrence_id == "occurrence-7" else 99
 
-    monkeypatch.setattr(thoughts_model, "get_thoughts_by_status", fake)
+    monkeypatch.setattr(thoughts_model, "count_thoughts_by_status", fake)
     scoped = ResourceMonitorService(
         budget=ResourceBudget(), db_path=monitor.db_path, time_service=TimeService(), agent_occurrence_id="occurrence-7"
     )
@@ -730,6 +740,7 @@ async def test_cpu_cannot_engage_before_a_full_minute(monkeypatch):
     try:
         m = ResourceMonitorService(budget=ResourceBudget(), db_path=db_path, time_service=TimeService())
         monkeypatch.setattr(m._process, "cpu_percent", lambda interval=0: 94.0)  # the boot reading from the run
+        monkeypatch.setattr(rm_service, "_usable_cores", lambda process: 1)  # per-core math is tested elsewhere
 
         for _ in range(3):  # three seconds after start
             await m._update_snapshot()

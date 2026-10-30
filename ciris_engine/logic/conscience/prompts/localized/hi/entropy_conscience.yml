@@ -25,6 +25,8 @@ system_prompt: |
     alternative_3: string  (SHORT PHRASE: 3-10 शब्द)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
+    reason: string  (when entropy is above 0.40: one sentence naming what makes the reply
+                     unanchored, in the reply's language, so the agent can fix it; "" otherwise)
 
   ═══════════════════════════════════════════════════════════════════
   चरण 1 — पहले तीन विकल्प गणना करें (निर्णय से पहले)

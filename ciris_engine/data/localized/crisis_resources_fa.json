@@ -1,14 +1,265 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'fa'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "fa",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for IR, AF, TJ added 2026-10-29 (CIRISAgent#1248): 7 of 9 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "ir",
+    "af",
+    "tj"
+  ],
   "resources": {
+    "emergency_iran_115": {
+      "id": "emergency_iran_115",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "115",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance",
+      "availability": [
+        "ir"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Iran Ambulance: 115 Fire: 125 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): IR 115 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/iran/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Iran Ambulance: 115 Fire: 125 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/iran/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_iran_110": {
+      "id": "emergency_iran_110",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "110",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "ir"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Iran Ambulance: 115 Fire: 125 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): IR 110 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/iran/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Iran Ambulance: 115 Fire: 125 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (110 also general emergencies). 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/iran/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_iran_125": {
+      "id": "emergency_iran_125",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "125",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "ir"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Iran Ambulance: 115 Fire: 125 Police: 110\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): IR 125 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/iran/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Iran Ambulance: 115 Fire: 125 Police: 110\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/iran/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_afghanistan_119": {
+      "id": "emergency_afghanistan_119",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "119",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police / general emergency",
+      "availability": [
+        "af"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Afghanistan Telephone: 119 (police)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): AF 119 types ['FIRE', 'POLICE']. Sources agree it reaches: police. Listed beyond that by some sources only: fire. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said 119 (police); 102 ambulance (Kabul, health page), Wikipedia said police/fire 119, ambulance 112. Second-opinion review cites: Ministry of Interior 119 Directorate; no URL supplied — check at source. Reliability highly variable outside Kabul. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/afghanistan/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Afghanistan Telephone: 119 (police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (119 police, also listed for fire). 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/afghanistan/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_afghanistan_102": {
+      "id": "emergency_afghanistan_102",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "102",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (Kabul only)",
+      "availability": [
+        "af"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: region-only number (not national). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said 119 (police); 102 ambulance (Kabul, health page), Wikipedia said police/fire 119, ambulance 112. Second-opinion review cites: Ministry of Public Health; no URL supplied — check at source. Reliability highly variable outside Kabul. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/afghanistan/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Afghanistan Telephone: 119 (police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (119 police, also listed for fire). 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/afghanistan/getting-help",
+      "source_urls": []
+    },
+    "emergency_afghanistan_101": {
+      "id": "emergency_afghanistan_101",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "101",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire (or via 119)",
+      "availability": [
+        "af"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. UNRESOLVED (low confidence) — staged per owner ruling 2026-10-29 pending local confirmation; FCDO said 119 (police); 102 ambulance (Kabul, health page), Wikipedia said police/fire 119, ambulance 112. Reliability highly variable outside Kabul. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/afghanistan/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Afghanistan Telephone: 119 (police)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (119 police, also listed for fire). 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/afghanistan/getting-help",
+      "source_urls": []
+    },
+    "emergency_tajikistan_103": {
+      "id": "emergency_tajikistan_103",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "103",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (03 from landline)",
+      "availability": [
+        "tj"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Tajikistan Emergency services do not speak English. Ambulance: 03 (103 from mobile phone) Fire: 01 (101 from mobile phone) Police: 02 (102 from mobile phone)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): TJ 103 types ['AMBULANCE']. Sources agree it reaches: ambulance. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/tajikistan/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Tajikistan Emergency services do not speak English. Ambulance: 03 (103 from mobile phone) Fire: 01 (101 from mobile phone) Police: 02 (102 from mobile phone)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (103). 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/tajikistan/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_tajikistan_102": {
+      "id": "emergency_tajikistan_102",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "102",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (02 from landline)",
+      "availability": [
+        "tj"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Tajikistan Emergency services do not speak English. Ambulance: 03 (103 from mobile phone) Fire: 01 (101 from mobile phone) Police: 02 (102 from mobile phone)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): TJ 102 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/tajikistan/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Tajikistan Emergency services do not speak English. Ambulance: 03 (103 from mobile phone) Fire: 01 (101 from mobile phone) Police: 02 (102 from mobile phone)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (102). 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/tajikistan/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_tajikistan_101": {
+      "id": "emergency_tajikistan_101",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "101",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire (01 from landline)",
+      "availability": [
+        "tj"
+      ],
+      "languages": [
+        "fa"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Tajikistan Emergency services do not speak English. Ambulance: 03 (103 from mobile phone) Fire: 01 (101 from mobile phone) Police: 02 (102 from mobile phone)\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): TJ 101 types ['FIRE']. Sources agree it reaches: fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/tajikistan/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Tajikistan Emergency services do not speak English. Ambulance: 03 (103 from mobile phone) Fire: 01 (101 from mobile phone) Police: 02 (102 from mobile phone)\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (101). 'languages' = the locale this entry is staged for (fa), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/tajikistan/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

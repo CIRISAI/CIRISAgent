@@ -356,7 +356,7 @@ class TestEntropyConscience:
     ):
         """Test that high entropy content fails"""
         mock_sink_with_llm.llm.call_llm_structured.return_value = (
-            EntropyResult(entropy=0.8),
+            EntropyResult(entropy=0.8, reason="the reply invents a cause the user never gave"),
             None,
         )
 
@@ -372,6 +372,7 @@ class TestEntropyConscience:
         assert result.passed is False
         assert result.status == ConscienceStatus.FAILED
         assert "0.80" in result.reason
+        assert "invents a cause" in result.reason, "the shard's WHY must reach the retry"
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.conscience.core.persistence")
@@ -499,7 +500,7 @@ class TestCoherenceConscience:
     ):
         """Test that low coherence content fails"""
         mock_sink_with_llm.llm.call_llm_structured.return_value = (
-            CoherenceResult(coherence=0.3),
+            CoherenceResult(coherence=0.3, reason="quotes the stigma word 'pagol' back to the user"),
             None,
         )
 
@@ -515,6 +516,7 @@ class TestCoherenceConscience:
         assert result.passed is False
         assert result.status == ConscienceStatus.FAILED
         assert "0.30" in result.reason
+        assert "'pagol'" in result.reason, "the shard's WHY must reach the retry"
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.conscience.core.persistence")
@@ -921,3 +923,19 @@ class TestPresetScoresNeverJudge:
         )
         result = await conscience.check(action_speak, context_with_thought)
         assert result.passed is False and result.check_ran is False
+
+
+@pytest.mark.parametrize(
+    "schema, why",
+    [
+        (EntropyResult, "reason"),
+        (CoherenceResult, "reason"),
+        (OptimizationVetoResult, "justification"),
+        (EpistemicHumilityResult, "reflective_justification"),
+    ],
+)
+def test_every_llm_conscience_says_why(schema, why):
+    """A bounce the agent cannot read is a bounce it cannot address (bn q07,
+    2026-10-30: five rounds of "Coherence 0.35 < threshold 0.60", then DEFER)."""
+    field = schema.model_fields.get(why)
+    assert field is not None and field.annotation is str, f"{schema.__name__} has no WHY field"

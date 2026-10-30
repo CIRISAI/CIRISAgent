@@ -8,7 +8,7 @@ import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from ciris_engine.config.ciris_services import get_billing_url
 from ciris_engine.constants import CIRIS_VERSION
@@ -112,7 +112,7 @@ def prompt_llm_configuration() -> tuple[str, str, str, str]:
 
 
 
-from ciris_engine.logic.utils.env_file import env_path_value
+from ciris_engine.logic.utils.env_file import env_path_value, write_env_file
 
 
 def _env_quoted(value: str) -> str:
@@ -146,7 +146,23 @@ def create_env_file(
     llm_model: str,
     agent_port: int = 8080,
 ) -> Path:
-    """Create .env configuration file at the default config location.
+    """Create the .env configuration file at the default config location.
+
+    See ``render_env_file`` for the content; this publishes it atomically.
+    """
+    save_path, content = render_env_file(llm_provider, llm_api_key, llm_base_url, llm_model, agent_port)
+    write_env_file(save_path, content)
+    return save_path
+
+
+def render_env_file(
+    llm_provider: str,
+    llm_api_key: str,
+    llm_base_url: str,
+    llm_model: str,
+    agent_port: int = 8080,
+) -> Tuple[Path, str]:
+    """Build the .env content and the path it belongs at, without writing it.
 
     Uses get_default_config_path() to determine save location based on
     environment (development, production, Android, etc.). This ensures
@@ -378,20 +394,15 @@ GOOGLE_PLAY_SERVICES_AVAILABLE="true"
 # CIRISNODE_AGENT_SECRET_JWT="your_jwt_token"
 """
 
-    # Write file with restricted permissions (owner read/write only)
-    # Path is from get_default_config_path() - constructed from known-safe bases
-    save_path.parent.mkdir(parents=True, exist_ok=True)
+    # Path is from get_default_config_path() - constructed from known-safe bases.
     # lgtm[py/clear-text-storage-of-sensitive-information]
     # codeql[py/clear-text-storage-of-sensitive-information]
     # The agent's `.env` file is the only place these credentials can live:
     # the CIRIS process needs to read them at startup, and the file is the
-    # conventional persistence surface on every supported platform. The
-    # chmod(0o600) immediately below restricts it to the owner. Encrypting
-    # the blob would just push the problem to storing the decryption key.
-    save_path.write_text(content, encoding="utf-8")
-    save_path.chmod(0o600)  # rw------- (owner only)
-
-    return save_path
+    # conventional persistence surface on every supported platform.
+    # write_env_file creates it 0600 (owner only). Encrypting the blob would
+    # just push the problem to storing the decryption key.
+    return save_path, content
 
 
 def prompt_language_and_location() -> tuple[str, Optional[str], Optional[str], Optional[str]]:
@@ -504,24 +515,24 @@ def run_setup_wizard() -> Path:
     # Create .env file (uses get_default_config_path() internally)
     print()
     print(f"Creating configuration at: {config_path}")
-    save_path = create_env_file(
+    save_path, content = render_env_file(
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
         llm_model=llm_model,
     )
 
-    # Append language/location preferences to .env
-    with open(save_path, "a") as f:
-        f.write("\n# User Preferences (from setup wizard)\n")
-        f.write(f'CIRIS_PREFERRED_LANGUAGE="{language}"\n')
-        if country:
-            location_parts = [country]
-            if region:
-                location_parts.append(region)
-            if city:
-                location_parts.append(city)
-            f.write(f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n')
+    # Language/location preferences, then the whole file is published at once
+    content += "\n# User Preferences (from setup wizard)\n"
+    content += f'CIRIS_PREFERRED_LANGUAGE="{language}"\n'
+    if country:
+        location_parts = [country]
+        if region:
+            location_parts.append(region)
+        if city:
+            location_parts.append(city)
+        content += f'CIRIS_USER_LOCATION="{", ".join(location_parts)}"\n'
+    write_env_file(save_path, content)
 
     print()
     print("=" * 70)

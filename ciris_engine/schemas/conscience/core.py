@@ -97,6 +97,13 @@ class EntropyResult(BaseModel):
             "outlier to the cluster."
         ),
     )
+    reason: str = Field(
+        default="",
+        description=(
+            "When entropy is high: one sentence naming what makes the reply "
+            "unanchored, so the agent can fix it on its retry. Empty otherwise."
+        ),
+    )
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
@@ -109,10 +116,23 @@ class EntropyResult(BaseModel):
 
 
 class CoherenceResult(BaseModel):
-    """Raw LLM output schema for the IRIS-C coherence shard. Single
-    primitive float field — the simplest flat schema possible."""
+    """Raw LLM output schema for the IRIS-C coherence shard. Flat primitive
+    fields only.
+
+    `reason` is the WHY a failing score bounces the action. Without it the
+    retry heard only "Coherence 0.35 < threshold 0.60" and could not tell
+    which phrase to change: bn q07 (2026-10-30) re-drafted the same quoted
+    stigma word five rounds running until the depth guard deferred."""
 
     coherence: float = Field(ge=0.0, le=1.0)
+    reason: str = Field(
+        default="",
+        description=(
+            "When coherence is below the threshold: one sentence quoting the exact "
+            "phrase that fails and naming the principle it breaks, so the agent can "
+            "fix that phrase on its retry. Empty when the reply passes."
+        ),
+    )
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 

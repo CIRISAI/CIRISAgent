@@ -330,7 +330,6 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.language_guidance.02_first_sentence_tone_lock",
         "prompts.language_guidance.03_never_deny_ai",
         "prompts.language_guidance.04_formal_register",
-        "prompts.language_guidance.05_no_wellness_confirmation",
         "prompts.language_guidance.06_warmth_and_concision",
         "prompts.language_guidance.07_canonical_disclaimer",
         "prompts.language_guidance.08_help_pathway_intro",
@@ -350,15 +349,20 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.language_guidance.22_ratification_register",
         "prompts.language_guidance.23_ratification_templates",
         "prompts.language_guidance.24_ratification_pattern",
-        "prompts.language_guidance.25_exemplar_cross_cluster",
-        "prompts.language_guidance.26_cross_cluster_pattern",
-        # #1010 — the §7e directional guard. Declared alongside its siblings so a
-        # research arm can replace the exclusion-direction rule explicitly rather
-        # than losing it as collateral when 26 is replaced.
-        "prompts.language_guidance.26b_user_symptom_direction",
         "prompts.language_guidance.27_attractor_universality",
         "prompts.language_guidance.28_brevity_restatement",
         "prompts.language_guidance.29_no_medical_or_legal_advice",
+        # Universal doctrine moved out of language_guidance (same composed block,
+        # same part names). Translated per locale by the localize pipeline.
+        "prompts.universal_guidance.05_no_wellness_confirmation",
+        "prompts.universal_guidance.05b_no_stigma_words",
+        "prompts.universal_guidance.05c_warmth_without_a_new_role",
+        "prompts.universal_guidance.25_exemplar_cross_cluster",
+        "prompts.universal_guidance.26_cross_cluster_pattern",
+        # #1010 — the §7e directional guard. Declared alongside its siblings so a
+        # research arm can replace the exclusion-direction rule explicitly rather
+        # than losing it as collateral when 26 is replaced.
+        "prompts.universal_guidance.26b_user_symptom_direction",
         "prompts.prohibitions.AUTONOMOUS_DECEPTION",
         "prompts.prohibitions.BIOMETRIC_INFERENCE",
         "prompts.prohibitions.CONTENT_MODERATION",
@@ -435,6 +439,12 @@ def _scan_module_for_keys(path: Path) -> Set[str]:
                     from ciris_engine.logic.utils.localization import LANGUAGE_GUIDANCE_PART_KEYS
 
                     keys.update(f"{prefix}{part}" for part in LANGUAGE_GUIDANCE_PART_KEYS)
+                elif prefix == "prompts.universal_guidance.":
+                    # Same rule for the universal parts composed into the same
+                    # block (localization.py: `universal_guidance_parts`).
+                    from ciris_engine.logic.utils.localization import UNIVERSAL_GUIDANCE_PART_KEYS
+
+                    keys.update(f"{prefix}{part}" for part in UNIVERSAL_GUIDANCE_PART_KEYS)
     return keys
 
 

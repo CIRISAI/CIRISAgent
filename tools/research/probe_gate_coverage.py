@@ -127,10 +127,18 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: CC 7.4 line in the round-1 capability-boundary block. It renders wherever
 #: the prohibition block does (PDMA, CSDMA, DSDMA), so numerator and
 #: denominator move together.
+#:
+#: ``string`` 139 -> 140 (2.18.0): ``prompts.universal_guidance.05b_no_stigma_words``,
+#: the DEONTIC stigma-word rule the coherence conscience applies. It composes
+#: into the language-guidance block wherever 05 does, so numerator and
+#: denominator move together.
+#:
+#: ``string`` 140 -> 141 (2.18.0): ``prompts.universal_guidance.05c_warmth_without_a_new_role``,
+#: DEONTIC, composed beside 05/05b: numerator and denominator move together.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 45,
-    "string": 139,
+    "string": 141,
     "conscience_prompt": 12,
     "template": 3,
 }
@@ -208,7 +216,8 @@ GATED_FLOOR: Dict[str, int] = {
     # 17-render differential. Raising this floor by asserting they are covered
     # would be the exact move this check exists to prevent.
     # 76 -> 77 (#1010). The §7e directional guard
-    # `prompts.language_guidance.26b_user_symptom_direction` joined the key
+    # `26b_user_symptom_direction` (then under `prompts.language_guidance`, now
+    # `prompts.universal_guidance` — a rename, not a new key) joined the key
     # space and composes, so both the denominator and the gated count moved by
     # one. (#1012's `agent.still_processing` / `agent.processor_paused` are
     # NOT here and should not be: they are API replies to a user, they reach no

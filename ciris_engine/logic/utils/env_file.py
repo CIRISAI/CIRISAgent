@@ -28,6 +28,8 @@ callers that assemble a line themselves.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 def env_quoted(value: object) -> str:
     """Escape a value for use inside a DOUBLE-QUOTED `.env` line.
@@ -48,6 +50,37 @@ def env_line(key: str, value: object) -> str:
     wrong.
     """
     return f'{key}="{env_quoted(value)}"\n'
+
+
+def write_env_file(path: Path, content: str) -> None:
+    """Publish a whole `.env` in one step: written beside it, then renamed in place.
+
+    A reader sees the previous file or the complete new one, never a partial one.
+    That matters because other processes read this file while setup is still
+    writing it. Setup used to write the base file, then append to it around a
+    7 s consent grant, so the desktop client read a finished-looking `.env`
+    without CIRIS_RUN_WITHOUT_AI and stayed on the agent port after the agent had
+    handed off to the node (2.18.0 gate, macOS). The temp file is created 0600,
+    so the secrets in it are never readable by anyone else, even briefly.
+    """
+    import os
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def env_unquoted(value: str) -> str:

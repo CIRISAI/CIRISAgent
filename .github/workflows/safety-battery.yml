@@ -35,16 +35,19 @@ on:
       model:
         description: 'Live LLM model identifier (CLAUDE.md live model matrix). With live_provider=openrouter use the OpenRouter id, e.g. qwen/qwen3.6-35b-a3b.'
         required: false
-        default: 'Qwen/Qwen3.6-35B-A3B'
+        default: 'qwen/qwen3.6-35b-a3b'
         type: string
       live_provider:
         # deepinfra = the behaviour before this input existed. openrouter was
         # added 2026-10-15: DeepInfra Qwen3.6-35B-A3B queue latency put every
         # DMA call of the 2.16 battery past the 45 s per-call timeout (a
         # 201-token prompt measured 16-68 s), so 89 of 90 questions failed.
+        # DEFAULT since 2.18.0: DeepInfra degraded again on 2026-10-30 (step
+        # medians 27-56 s on ~26k-token prompts; two bn captures timed out at
+        # 75 min) while OpenRouter served the same model at a 4.1 s median.
         description: 'Capture LLM provider: deepinfra (DEEPINFRA_API_KEY) or openrouter (OPENROUTER_API_KEY, https://openrouter.ai/api/v1)'
         required: false
-        default: 'deepinfra'
+        default: 'openrouter'
         type: choice
         options: [deepinfra, openrouter]
       template_id:
@@ -226,8 +229,8 @@ jobs:
       PYTHONUNBUFFERED: "1"
       LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
-      MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
-      LIVE_PROVIDER_INPUT: ${{ github.event.inputs.live_provider || 'deepinfra' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'qwen/qwen3.6-35b-a3b' }}
+      LIVE_PROVIDER_INPUT: ${{ github.event.inputs.live_provider || 'openrouter' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}
@@ -460,13 +463,12 @@ jobs:
             echo "have_secret=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Write DeepInfra API key
-        # Capture default model is Qwen/Qwen3.6-35B-A3B served by
-        # DeepInfra (per CLAUDE.md live model matrix + safety_battery.py
-        # LIVE_LLM_DEFAULTS). The qa_runner's metadata-driven --live
-        # auto-enable looks for ~/.deepinfra_key — write the secret to
-        # that path so the lookup succeeds. (Earlier iteration used
-        # ~/.together_key + gemma; switched 2026-05-11.)
+      - name: Write the capture provider's API key
+        # Capture default (2.18.0) is qwen/qwen3.6-35b-a3b on OpenRouter; with
+        # live_provider=deepinfra it is Qwen/Qwen3.6-35B-A3B on DeepInfra, whose
+        # key the qa_runner's metadata-driven --live auto-enable reads from
+        # ~/.deepinfra_key. (Earlier iteration used ~/.together_key + gemma;
+        # switched 2026-05-11.)
         if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'
         env:
           DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
@@ -731,7 +733,7 @@ jobs:
       PYTHONUNBUFFERED: "1"
       LANG_INPUT: ${{ needs.pick-lang.outputs.lang }}
       DOMAIN_INPUT: ${{ github.event.inputs.domain || 'mental_health' }}
-      MODEL_INPUT: ${{ github.event.inputs.model || 'Qwen/Qwen3.6-35B-A3B' }}
+      MODEL_INPUT: ${{ github.event.inputs.model || 'qwen/qwen3.6-35b-a3b' }}
       TEMPLATE_INPUT: ${{ github.event.inputs.template_id || 'default' }}
       FORCE_INPUT: ${{ github.event.inputs.force || 'false' }}
       FRESHNESS_DAYS: ${{ github.event.inputs.freshness_days || '7' }}

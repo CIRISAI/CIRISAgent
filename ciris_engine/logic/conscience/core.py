@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,7 @@ from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout, llm_call_deadline
 from ciris_engine.logic.registries.base import ServiceRegistry
+from ciris_engine.logic.utils import hedging
 from ciris_engine.logic.utils.constants import get_accord_text
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.config.llm_budget import REMOTE_PROFILE, LLMBudgetProfile
@@ -120,6 +121,12 @@ from .transport import (
 
 MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
+
+
+def _with_why(verdict: str, why: str) -> str:
+    """A failing score plus the shard's WHY. The reason becomes the retry's
+    failure_reason and ponder question, so the agent learns what to change."""
+    return f"{verdict}: {why}" if why else verdict
 
 
 # LLM-output schemas live in `ciris_engine/schemas/conscience/core.py` —
@@ -254,6 +261,8 @@ class _BaseConscience(ConscienceInterface):
         calls it the same way. Three outcomes, each named in the log:
 
           answered   -> returned as-is
+          slow       -> hedged: past the shard's p95 a second attempt starts beside it,
+                        the first answer wins and the other is cancelled
           timed out  -> cancelled (which cancels the provider's own retry loop
                         underneath), retried with a fresh call up to
                         `llm_call_retries`; exhausted -> TimeoutError, which the
@@ -292,56 +301,117 @@ class _BaseConscience(ConscienceInterface):
         per_try = float(getattr(self.config, "llm_call_timeout_seconds", REMOTE_PROFILE.conscience_per_try_s))
         retries = int(getattr(self.config, "llm_call_retries", REMOTE_PROFILE.conscience_attempts - 1))
         name = kwargs.get("handler_name", type(self).__name__)
+        max_attempts = retries + 1
         last: Optional[BaseException] = None
+        fatal: Optional[BaseException] = None
         attempts_made = 0
         out_of_time = False
-        for attempt in range(1, retries + 2):
+        #: In-flight attempts: task -> (attempt number, monotonic start, its timeout).
+        live: Dict["asyncio.Task[Any]", Tuple[int, float, float]] = {}
+        may_hedge = max_attempts > 1
+
+        async def one_attempt(timeout: float) -> Any:
+            with llm_call_deadline(timeout):
+                return await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
+
+        def launch(hedge: bool = False) -> bool:
+            nonlocal attempts_made, out_of_time
+            if attempts_made >= max_attempts or fatal is not None or out_of_time:
+                return False
             timeout = attempt_timeout(per_try, deadline)
             if timeout is None:
-                logger.warning(
-                    "[CONSCIENCE] %s: thought deadline has %.1fs left, too little for attempt %d/%d -- giving up",
-                    name,
-                    deadline.remaining() if deadline else 0.0,
-                    attempt,
-                    retries + 1,
-                )
-                out_of_time = True
-                break
-            attempts_made = attempt
-            t0 = time.monotonic()
-            try:
-                with llm_call_deadline(timeout):
-                    result = await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
-                if attempt > 1:
-                    logger.info(
-                        "[CONSCIENCE] %s: answered on attempt %d after %.1fs", name, attempt, time.monotonic() - t0
-                    )
-                return result
-            except asyncio.TimeoutError as e:
-                last = e
-                logger.warning(
-                    "[CONSCIENCE] %s: no answer within the facility budget (%.0fs) on attempt %d/%d%s",
-                    name,
-                    timeout,
-                    attempt,
-                    retries + 1,
-                    " -- retrying with a fresh call" if attempt <= retries else " -- giving up",
-                )
-            except Exception as e:  # noqa: BLE001 - categorised below, never swallowed
-                cat = categorize_conscience_error(e)
-                if attempt <= retries and is_retryable_by_facility(e, cat):
-                    last = e
+                if not live:
                     logger.warning(
-                        "[CONSCIENCE] %s: %s on attempt %d/%d after %.1fs -- retrying with a fresh call (%s)",
+                        "[CONSCIENCE] %s: thought deadline has %.1fs left, too little for attempt %d/%d -- giving up",
                         name,
-                        cat,
-                        attempt,
-                        retries + 1,
-                        time.monotonic() - t0,
-                        str(e)[:160],
+                        deadline.remaining() if deadline else 0.0,
+                        attempts_made + 1,
+                        max_attempts,
                     )
+                out_of_time = True
+                return False
+            attempts_made += 1
+            if not hedge:
+                hedging.note_attempt()
+            live[asyncio.create_task(one_attempt(timeout))] = (attempts_made, time.monotonic(), timeout)
+            return True
+
+        try:
+            launch()
+            while live:
+                # HEDGE, don't abandon: past this shard's recent p95 the next
+                # attempt starts beside the slow one and the first answer wins.
+                hedge_in: Optional[float] = None
+                hedge_at = hedging.hedge_after_s(name) if may_hedge else None
+                if len(live) == 1 and attempts_made < max_attempts and fatal is None and not out_of_time and hedge_at is not None:
+                    ((slow_n, slow_t0, _),) = live.values()
+                    hedge_in = max(0.0, hedge_at - (time.monotonic() - slow_t0))
+                done, _ = await asyncio.wait(live, timeout=hedge_in, return_when=asyncio.FIRST_COMPLETED)
+                if not done:
+                    if not hedging.try_hedge():
+                        may_hedge = False
+                        continue
+                    if launch(hedge=True):
+                        logger.warning(
+                            "[HEDGE] [CONSCIENCE] %s: attempt %d has not answered after %.1fs -- attempt %d "
+                            "starts beside it; the first answer wins and the other is cancelled",
+                            name,
+                            slow_n,
+                            time.monotonic() - slow_t0,
+                            attempts_made,
+                        )
                     continue
-                raise
+                for task in done:
+                    n, t0, timeout = live.pop(task)
+                    error = task.exception()
+                    if error is None:
+                        elapsed = time.monotonic() - t0
+                        hedging.record_latency(name, elapsed)
+                        if n > 1 or live:
+                            logger.info(
+                                "[CONSCIENCE] %s: answered on attempt %d after %.1fs%s",
+                                name,
+                                n,
+                                elapsed,
+                                f"; cancelling attempt(s) {sorted(m for m, _, _ in live.values())}" if live else "",
+                            )
+                        return task.result()
+                    if isinstance(error, asyncio.TimeoutError):
+                        last = error
+                        logger.warning(
+                            "[CONSCIENCE] %s: no answer within the facility budget (%.0fs) on attempt %d/%d%s",
+                            name,
+                            timeout,
+                            n,
+                            max_attempts,
+                            " -- retrying with a fresh call" if n <= retries else " -- giving up",
+                        )
+                    else:
+                        cat = categorize_conscience_error(error)
+                        if n <= retries and is_retryable_by_facility(error, cat):
+                            last = error
+                            logger.warning(
+                                "[CONSCIENCE] %s: %s on attempt %d/%d after %.1fs -- retrying with a fresh call (%s)",
+                                name,
+                                cat,
+                                n,
+                                max_attempts,
+                                time.monotonic() - t0,
+                                str(error)[:160],
+                            )
+                        else:
+                            # Categorised, never swallowed: raised once nothing
+                            # else in flight can still answer.
+                            fatal = error
+                    if not live:
+                        if fatal is not None:
+                            raise fatal
+                        launch()
+        finally:
+            for task in live:
+                task.cancel()
+            if live:
+                await asyncio.gather(*live, return_exceptions=True)
         if out_of_time or last is None or isinstance(last, asyncio.TimeoutError):
             # Timed out, or the thought deadline ran out before (another)
             # attempt could start -- even if the previous try was a schema
@@ -349,7 +419,7 @@ class _BaseConscience(ConscienceInterface):
             # timeout" is what categorize_conscience_error maps to TIMEOUT.
             raise TimeoutError(
                 f"{name}: LLM API timeout -- no answer within the facility budget "
-                f"({attempts_made} of {retries + 1} attempts x {per_try:.0f}s"
+                f"({attempts_made} of {max_attempts} attempts x {per_try:.0f}s"
                 f"{'; thought deadline exhausted' if out_of_time else ''})"
             ) from last
         raise last
@@ -527,6 +597,7 @@ class EntropyConscience(_BaseConscience):
 
         # Inline the entropy evaluation
         entropy_user_prompt: Optional[str] = None
+        entropy_why = ""
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
@@ -567,6 +638,7 @@ class EntropyConscience(_BaseConscience):
                         logger.debug("  alt #%d: %s", i, alt[:200])
                 entropy_alternatives = list(entropy_eval.alternative_meanings)
                 entropy_actual_is_representative = entropy_eval.actual_is_representative
+                entropy_why = entropy_eval.reason.strip()
             else:
                 return unusable_answer_result(
                     "EntropyConscience",
@@ -585,7 +657,7 @@ class EntropyConscience(_BaseConscience):
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
         reason = None
         if not passed:
-            reason = f"Entropy {entropy:.2f} > threshold {self.config.entropy_threshold:.2f}"
+            reason = _with_why(f"Entropy {entropy:.2f} > threshold {self.config.entropy_threshold:.2f}", entropy_why)
         self._update_trace_correlation(
             correlation,
             passed,
@@ -683,6 +755,7 @@ class CoherenceConscience(_BaseConscience):
 
         # Inline the coherence evaluation
         coherence_user_prompt: Optional[str] = None
+        coherence_why = ""
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
@@ -715,6 +788,7 @@ class CoherenceConscience(_BaseConscience):
                     ts_datetime,
                 )
             coherence = float(coherence_eval.coherence)
+            coherence_why = coherence_eval.reason.strip()
         except Exception as e:
             # FAIL CLOSED either way — see EntropyConscience above; the default
             # `coherence` would otherwise be reported as a measurement.
@@ -726,7 +800,7 @@ class CoherenceConscience(_BaseConscience):
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
         reason = None
         if not passed:
-            reason = f"Coherence {coherence:.2f} < threshold {self.config.coherence_threshold:.2f}"
+            reason = _with_why(f"Coherence {coherence:.2f} < threshold {self.config.coherence_threshold:.2f}", coherence_why)
         self._update_trace_correlation(
             correlation,
             passed,

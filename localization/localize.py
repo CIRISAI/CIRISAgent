@@ -931,8 +931,13 @@ def repair_until_clean(lang: str, values: Dict[str, str], findings: Dict[str, Li
     return accepted, remaining
 
 
-def insert(lang: str, values: Dict[str, str], en: dict, *, overwrite: bool) -> None:
+def insert(lang: str, values: Dict[str, str], en: dict, *, overwrite: bool) -> List[str]:
     """Write into all four mirrors at en.json's key positions.
+
+    Returns the keys NOT written because a value was already there and
+    [overwrite] is false. The caller says so: reporting the drafts it was
+    handed as "written" when some were kept is a green run that changed
+    nothing (CIRISAgent run 40962921351).
 
     Position-preserving on purpose: a translated bundle whose keys are in a
     different order from en.json produces a diff nobody can review, and the
@@ -954,6 +959,7 @@ def insert(lang: str, values: Dict[str, str], en: dict, *, overwrite: bool) -> N
     order = list(guard.flat_values(en))
     doc = load(CANONICAL / f"{lang}.json")
 
+    kept: List[str] = []
     for key in sorted(values, key=lambda k: order.index(k) if k in order else 1 << 30):
         parts = key.split(".")
         node = doc
@@ -961,6 +967,7 @@ def insert(lang: str, values: Dict[str, str], en: dict, *, overwrite: bool) -> N
             node = node.setdefault(p, {})
         leaf = parts[-1]
         if leaf in node and str(node[leaf]).strip() and not overwrite:
+            kept.append(key)
             continue
         if leaf in node:
             node[leaf] = values[key]
@@ -989,6 +996,7 @@ def insert(lang: str, values: Dict[str, str], en: dict, *, overwrite: bool) -> N
     out = json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
     for bundle in guard.MIRROR_BUNDLES:
         (REPO_ROOT / bundle / f"{lang}.json").write_text(out, encoding="utf-8")
+    return kept
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -996,7 +1004,7 @@ def insert(lang: str, values: Dict[str, str], en: dict, *, overwrite: bool) -> N
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run(lane: str, patterns: Sequence[str], langs: Sequence[str], *, max_keys: int,
-        mode: str, dry_run: bool, report_path: Optional[Path]) -> int:
+        mode: str, dry_run: bool, report_path: Optional[Path], overwrite: bool = False) -> int:
     global REVIEW_MODEL  # noqa: PLW0603 - resolved once per run; see _review_model
     REVIEW_MODEL = _review_model()
 
@@ -1128,9 +1136,22 @@ def run(lane: str, patterns: Sequence[str], langs: Sequence[str], *, max_keys: i
         withheld = set(rejected.get(lang, {})) | set(unrepaired)
         writable = {k: v for k, v in values.items() if k not in withheld}
         if writable:
-            insert(lang, writable, en, overwrite=(lane != "translate"))
-            print(f"[write] {lang}: {len(writable)} value(s), 4 mirrors"
-                  + (f" ({len(withheld)} withheld — rejected)" if withheld else ""))
+            # The translate lane fills what is missing and never replaces a
+            # value unless asked: an existing value may be a hand-written
+            # overrule (TRANSLATION_GUIDE §1), and a broad --keys pattern would
+            # otherwise clobber it. --overwrite is the explicit ask.
+            kept = insert(lang, writable, en, overwrite=(lane != "translate" or overwrite))
+            written = len(writable) - len(kept)
+            print(f"[write] {lang}: {written} value(s) written, 4 mirrors"
+                  + (f" ({len(withheld)} withheld — rejected)" if withheld else "")
+                  + (f"; {len(kept)} KEPT — already present: {', '.join(kept[:5])}"
+                     f"{' …' if len(kept) > 5 else ''}" if kept else ""))
+            if kept:
+                # A run asked to translate these and changed nothing about
+                # them: that is not a success.
+                print(f"[write] {lang}: to replace existing values, re-run with --overwrite, "
+                      f"or use --lane evaluate to review them against the current English")
+                rc = 1
         elif withheld:
             print(f"[write] {lang}: nothing written — all {len(withheld)} rejected")
 
@@ -1185,6 +1206,9 @@ def main() -> int:
     ap.add_argument("--mode", choices=["fast", "batch"], default="fast")
     ap.add_argument("--max-keys", type=int, default=400,
                     help="refuse runs larger than this many key-values (default 400)")
+    ap.add_argument("--overwrite", action="store_true",
+                    help="translate lane: replace values that already exist (default: fill missing only, "
+                         "and fail if a selected key was already present)")
     ap.add_argument("--dry-run", action="store_true",
                     help="plan and token estimate, no API call")
     ap.add_argument("--report", metavar="PATH", default=None,
@@ -1213,7 +1237,8 @@ def main() -> int:
 
     return run(args.lane, args.keys, args.lang, max_keys=args.max_keys,
                mode=args.mode, dry_run=args.dry_run,
-               report_path=Path(args.report) if args.report else None)
+               report_path=Path(args.report) if args.report else None,
+               overwrite=args.overwrite)
 
 
 if __name__ == "__main__":

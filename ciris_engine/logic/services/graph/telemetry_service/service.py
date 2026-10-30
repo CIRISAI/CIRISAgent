@@ -124,6 +124,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
         # Cache for telemetry summaries to avoid slamming persistence
         self._summary_cache: dict[str, tuple[datetime, TelemetrySummary]] = {}
         self._summary_cache_ttl_seconds = 60  # Cache for 1 minute
+        # Serializes cache misses so one caller recomputes and the rest reuse it
+        self._summary_lock = asyncio.Lock()
 
         # Memory tracking
         self._process = psutil.Process() if PSUTIL_AVAILABLE else None
@@ -331,6 +333,26 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             MemoryBusUnavailableError: If memory bus not available
             MetricCollectionError: If query fails
         """
+        by_name = await self.query_metric_set([metric_name], start_time=start_time, end_time=end_time, tags=tags)
+        return by_name[metric_name]
+
+    async def query_metric_set(
+        self,
+        metric_names: List[str],
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, List[MetricRecord]]:
+        """Query several metrics over one window with ONE time-series recall.
+
+        recall_timeseries returns every metric in the window regardless of
+        name, so asking for N names one at a time fetched and decoded the same
+        rows N times. Each name maps to its records (empty list if none).
+
+        Raises:
+            MemoryBusUnavailableError: If memory bus not available
+            MetricCollectionError: If query fails
+        """
         if not self._memory_bus:
             raise MemoryBusUnavailableError("Memory bus not available for metric queries")
 
@@ -348,10 +370,10 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             )
 
             # Filter and convert to typed MetricRecord objects using helpers
-            results: List[MetricRecord] = []
+            results: Dict[str, List[MetricRecord]] = {name: [] for name in metric_names}
             for data in timeseries_data:
-                # Apply filters using helper functions
-                if not filter_by_metric_name(data, metric_name):
+                matched = [name for name in metric_names if filter_by_metric_name(data, name)]
+                if not matched:
                     continue
                 if not filter_by_tags(data, tags):
                     continue
@@ -361,7 +383,8 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
                 # Convert to MetricRecord using helper
                 record = convert_to_metric_record(data)
                 if record:
-                    results.append(record)
+                    for name in matched:
+                        results[name].append(record)
 
             return results
 
@@ -775,6 +798,22 @@ class GraphTelemetryService(BaseGraphService, TelemetryServiceProtocol, Registry
             cached.circuit_breaker = circuit_breaker_state
             return cached
 
+        # Single flight: every thought in a round asks for the summary while
+        # building its context, so on each expiry the whole batch used to miss
+        # the cache together and recompute it once per thought -- dozens of
+        # concurrent full-window scans. One caller computes; the rest wait for
+        # it and are served from the cache it fills.
+        async with self._summary_lock:
+            refreshed: TelemetrySummary | None = check_summary_cache(
+                self._summary_cache, "telemetry_summary", now, self._summary_cache_ttl_seconds
+            )
+            if refreshed:
+                refreshed.circuit_breaker = circuit_breaker_state
+                return refreshed
+            return await self._compute_telemetry_summary(now, circuit_breaker_state)
+
+    async def _compute_telemetry_summary(self, now: datetime, circuit_breaker_state: Any) -> "TelemetrySummary":
+        """Build the summary from the graph and cache it (get_telemetry_summary's slow path)."""
         # Fail fast if memory bus not available
         if not self._memory_bus:
             raise MemoryBusUnavailableError("Memory bus not available for telemetry queries")

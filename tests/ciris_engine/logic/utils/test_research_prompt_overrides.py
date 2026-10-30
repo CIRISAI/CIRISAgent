@@ -810,7 +810,7 @@ class TestDriftGuard:
         # above says is the only direction this may move unexplained.
         #
         # 191 -> 192: one key, #1010's §7e directional guard
-        # `prompts.language_guidance.26b_user_symptom_direction`. The FR safety
+        # `26b_user_symptom_direction` (now `prompts.universal_guidance.*`). The FR safety
         # battery caught the agent naming a clinical category at a user in the
         # EXCLUSION direction ("does not meet the criteria for X"), which the
         # inclusion-shaped guard did not cover. It is declared as its own part
@@ -844,7 +844,13 @@ class TestDriftGuard:
         #
         # 202 -> 203: prompts.prohibitions.LETHAL_ACTION (#1323), the CC 7.4
         # rule's line in the round-1 capability-boundary block.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 203
+        #
+        # 203 -> 204: prompts.universal_guidance.05b_no_stigma_words (2.18.0,
+        # deontic), the stigma-word rule the coherence conscience applies.
+        #
+        # 204 -> 205: prompts.universal_guidance.05c_warmth_without_a_new_role
+        # (2.18.0, deontic), AI identity under register pressure.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 205
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

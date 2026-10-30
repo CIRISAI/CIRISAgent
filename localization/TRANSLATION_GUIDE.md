@@ -60,12 +60,21 @@ without a sentence's worth of noise around it.
 | replace | `rọ́pò` | `maye gurbi` | `ተካ` | `အစားထိုး` |
 | node | `node` | `kumburi` | `ኖድ` | `node` |
 
-¹ **The one place the corpus was overruled.** It renders *Identity* as `Asali`,
-and the reviewer's finding was that `asali` means *origin / essence*, not a
+¹ **Hausa *Identity*.** The corpus renders *Identity* as `Asali`,
+but `asali` means *origin / essence*, not a
 credential. Confirmed against the language: `shaida` (< Arabic *shahāda*,
 "testimony") is the credential sense — `katin shaida` is an identity **card**,
 `takardar shaida` is a certificate. A federation identity is a signed credential,
 so `shaida` is right and `Asali` is the imprecise incumbent.
+
+² **Bengali *recant*, for a message.** The corpus renders *recant* as
+`অস্বীকার` (deny) and *recanted* as `অস্বীকৃত`. Recanting a message is its
+author saying their own statement was false, which is a retraction, not a
+denial; the reviewer rejected every `অস্বীকার` rendering of it on that ground.
+`ভুল স্বীকার` ("acknowledge as wrong") carries the retraction, and matches the
+confirm's own fact line ("you say it was false"). Chat uses `ভুল স্বীকৃত` and
+`এই বার্তাটি ভুল বলে স্বীকার করবেন?`; the Accord badge and op keep the corpus
+words until they are reviewed in their own context.
 
 **Overruling the corpus is a decision that gets written down, here.** It is not
 a licence to prefer your own taste; it took an independent reviewer's finding
@@ -127,6 +136,11 @@ so a lesson learned here reaches the models that would otherwise repeat it.
 - **Register drift.** The formality the glossary's standing rules specify is
   binding, not advisory: Amharic formal `እርስዎ` and never `አንተ/አንቺ`, Bengali
   `আপনি`, Yoruba respectful forms.
+- **Who is speaking decides the register.** When the agent addresses the person
+  (`prompts.*`, safety and care exemplars, replies), use the language's formal
+  address: `usted`, `Lei`, `Sie`, `vous`, `Вы`, `Ви`, `siz`, `आप`, `آپ`, `Anda`.
+  A glossary's conversational rule covers interface labels only. Spanish safety
+  exemplars came back in `tú` and passed review at MQM 100; a reviewer flags it.
 - **Orthography is meaning.** Yoruba tone marks and sub-dots disambiguate words
   (`okun` is beach, rope or strength by marks alone), so unmarked text is
   ambiguous rather than merely informal. Amharic takes `።` and `፣`; Hausa keeps
@@ -143,6 +157,11 @@ so a lesson learned here reaches the models that would otherwise repeat it.
   shipped anchors is wrong even when it is defensible, because the anchors are
   what users are already reading. Say so if you think the corpus is wrong;
   do not quietly diverge from it.
+- **Check the glossary before calling a term wrong.** A reviewer rejected
+  Turkish "token" for "Token" and asked for "jeton", claiming the shipped
+  strings use it; the tr glossary says "Token → Token" and every shipped
+  Turkish string writes "token'ı". Before flagging terminology, the glossary
+  row and the anchors are the evidence, not a guess at what the corpus says.
 
 ## 4. Writing them in
 
@@ -190,10 +209,9 @@ metaphor, legal review.
 Everything stays `status: draft` / `review_status: machine_reviewed`.
 That label is the honest one: these are machine translations, reviewed by an
 MQM judge from a different model family than the writer, and nothing more.
-It used to read `needs_native_review`, which named a queue that does not
-exist — there is no native-reviewer pipeline behind this project. A pending
-that can never clear is a worse claim than a stated limit, and it hid the
-real one. What does not change: draft, not native quality, and no output of
+There is no native-reviewer pipeline behind this project, so nothing may be
+labelled as awaiting one: a pending state that can never clear is a worse claim
+than a stated limit. What does not change: draft, not native quality, and no output of
 this pipeline may be marketed as native quality.
 
 **Hand-translating does not upgrade that status either.** An agent doing the

@@ -72,10 +72,13 @@ import pytest
 from ciris_engine.logic.utils.compose_dump import BLOCK_ANNOTATIONS, annotation_for
 from ciris_engine.logic.utils.localization import (
     LANGUAGE_GUIDANCE_PART_KEYS,
+    UNIVERSAL_GUIDANCE_PART_KEYS,
     clear_cache,
     get_language_guidance,
     language_guidance_part_keys,
     language_guidance_parts,
+    universal_guidance_part_keys,
+    universal_guidance_parts,
 )
 from ciris_engine.schemas.dma.compose import BlockClass
 
@@ -164,35 +167,124 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: (usted / vous / Lei / Sie / እርስዎ / ẹ-yín / ku); quoted user speech and
 #: shown WRONG forms untouched. Guarded by test_language_guidance_register.py.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("4d12ee281b483bc2a6f3715d3a20990322d3f6f324e9d57c4ed72c91f3882de7", 16307),  # separator restored before 7e/8
-    "am": ("09a71780cdafa9442fdbd1cbe4a59310786f3b598a5b39d9fbf09b4b160dfa5b", 32842),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
-    "ar": ("e582d038f4c9b434e028c3f4c7e23793008b9555a17f695037b58f267b78bd52", 22476),  # #1010 §7e guard + §26 reconciled
-    "de": ("a8ecfb9aff0b46f13a07892e73fd6be402f8ab07f5796a808da8fd2568445430", 20426),  # U1 fix: dropped the quoted ❌ specimen (GUIDANCE_FIXES.md 2026-08-12) + U6 register fix (formal instructions)
-    "es": ("374cf5714d70c35ec9f9083983af9360abce9fcd51c9e1667df703268bd12463", 18628),  # separator restored before 8 + U6 register fix (formal instructions)
-    "fr": ("247806bb957cd3a59161245b1c0a98d3981197020508e67eeeeacd1d19ced936", 24643),  # #1010 §7e gains the actionability boundary (q08 U2) + U6 register fix (formal instructions)
-    "hi": ("e707c74e3875cf1f70ff304e94090af3676c72e36df267077f40daed049d2364", 34173),  # #1010 §7e guard + §26 reconciled
-    "it": ("3984343c3adfda5b34a83c86860e7e8d6d016acd1372f85931b8965c863b0e1f", 18413),  # separator restored before 8 + U6 register fix (formal instructions)
-    "ja": ("469272c78454a02f594a821922a8657f9facf3a85af84a185594024d5618bf90", 29831),  # #1010 kindness-framed rewrite
-    "ko": ("bc0931d4781f5c0df5d9dd129d704e01289ae45a28e28df9440c24350e0a4789", 28015),  # #1010 kindness-framed rewrite
-    "pt": ("4bc204fc0e64697c4c6f89e6aa340da9d2694a437dd5a8c5ccd50a8bb8e5c3ff", 17993),  # separator restored before 8
-    "ru": ("21e54cc163726228a2e4576d4e7ad2b8032571bd86caed295dcd53d53cde5c86", 31292),  # #1010 §7e guard + §26 reconciled
-    "sw": ("a4d5d461d7c80119df4802fc49646be00d9ac2c4432afe4b504d96774ce94bfe", 17954),  # native §7e + §26 reconciled
-    "tr": ("d6a3281051247f3c6dbe42c558cace2af31de6f45128ed652faba17725c15577", 17498),  # #1010 §7e guard + §26 reconciled
-    "zh": ("11088ffc597a9922dd3cf6425f1229326dbd87b8e1dd3510d6e468a85f202d56", 12004),  # review FAILED — no guard
-    "ur": ("71ac466f2db78d1fd09a911fa793b2d3c71e3571e6113e1f65aa042ec3cc16e8", 29322),  # #1010 §7e guard + §26 reconciled
-    "bn": ("44feaf44d0b0a6d3c65912adf46f888cdbffcd3ce51df2b6778cc11ecaecfc0a", 37947),  # #1010 §7e guard + §26 reconciled
-    "fa": ("c953c3878719d38807f4678d8c3106f0b4a6809bba5b9f526ed34c84eb881dfc", 37357),  # #1010 kindness-framed rewrite
-    "ha": ("a82b8fdcc8f0e5d440c992bb21902403118ccc6194be1e0668330d128a98bba2", 18788),  # review FAILED — no guard + U6 register fix (formal instructions)
-    "id": ("bc724b53fd483213b163f7b821135800536072df57bcf474235c2d0aeb95d09b", 17774),  # #1010 §7e guard + §26 reconciled
-    "pa": ("1e69e8a6f45870a492b599449eb5eff0df4e76110b018a798b1075d3632937a7", 33060),  # #1010 §7e guard
-    "ta": ("8384d1c0c641f41b54641f5748718ce15b114d450faf1eafbbf00b8b2b5b5d98", 39702),  # #1010 §7e guard
-    "te": ("ba8481877dd63333f6b833944728beab62ef8fe267468e05220423fc6c060766", 35331),  # #1010 §7e guard
-    "vi": ("766eae14f4a0250055cd7032f638492881baeab4fcc3b6c0832628e267326eda", 21824),  # U1 fix: terminology table scoped to naming (GUIDANCE_FIXES.md 2026-08-12)
-    "mr": ("94d6dbfe7eaae41bcc572e42ead6c850dd2ab45140ef7f4270c0a83f958414f5", 32637),  # #1010 §7e guard + §26 reconciled
-    "my": ("c4bb255ce25a1964c176cc5b99d73b9f0af938e24e54c093325bebb8154cd4a7", 53450),  # #1010 §7e guard + §26 reconciled
-    "th": ("59576919a66bfa56285388bdfde024c8253676647378b873cd68d6ae8e454728", 32725),  # #1010 §7e guard
-    "uk": ("af19e474fade635dbbb927d91f2ae2cc384813972c54169bd58fad333a43cec2", 30672),  # #1010 §7e guard + §26 reconciled
-    "yo": ("75af4165533b7ca498a1d2bd4afa437d86b8325029c50e678f501746a890c00b", 29544),  # #1010 §7e guard + §26 reconciled + U6 register fix (formal instructions)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "en": ("4333cc5657ac45e453497896448c88cd31f4dd610f4021cbadfba8530d80b071", 17181),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "am": ("fdac6c92cb28ece7a7cbcf69a33b1d279ebd7ed61063736611fdc1c11e06ef26", 33860),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "ar": ("d6334dc85d406d97ce10798612985ad53be85ac3654382ab5989b73fa0b55541", 24076),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "de": ("b7aad87c7838536510bdcb22eb063492660f24cf5a439e1a10b443cf5a6b32e0", 21094),
+    # 18628 -> 17921 (2026-10-29): the U1 category-only rewrite of the four
+    # universal parts (05/25/26/26b), drafted by the i18n translate lane from en
+    # 4808efd98 and then hand-corrected to usted (04_formal_register). The es
+    # glossary's "tú for chat messages" rule had put the exemplar speech in tú.
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "es": ("4526c81517d590bcf3c2e229775acff1c07b722ce703bf6fc757dde26a2d70aa", 19394),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "fr": ("dd2aff33541a8afe3f33ec34e6afdba65f0798a5a678efe5d61ebb49cbbe00e8", 23747),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "hi": ("85435eccf58599a6613f22be337bfc6518089598117a4914581259808b9e5dab", 37346),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "it": ("e9faaa11f9ec0c531a9b3aa0cf0906796fe247b4af2004a77dc2495672fa6400", 19273),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "ja": ("93fa14d148a0329ebcd218fa4b6b8d669a953b7454438bd06adcbc08c5c49bf6", 31458),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "ko": ("ea935b0bee524e4ae9810fb3163b896a5dc6aaa1a42bad22ed69de105ab0057a", 29791),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "pt": ("988e73dc6772d2cabff2926a098df7add887cb8287cc352febf8b7a299916e97", 19162),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "ru": ("4daab895c369ff716b1c4c76f0152cdedb3dd8ab9e89463aa00ca90396049b5d", 33195),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "sw": ("da4f84c7fefa87e66c62b9464e8e8ac0a9954586eb072f407582b2693bd700de", 18172),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "tr": ("be3c8a1e4c7ac6c034a239f746b5a57d9de13d20c50e9e6c7aac95a9bc694d27", 18666),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "zh": ("1074ad24ac62b7cbdedfed16e85d00cac7bc551d39a84efa081cfa8b62f92efe", 16467),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "ur": ("38ab31d5645f784a6f21e70bc6b4ce3d9f3c7e1cf964494b8e08dd1f94a068bf", 31116),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "bn": ("2565b064a95e8a87211845a4c51d9b4966d76efe65329d88e08b6d549bf3d2d9", 38978),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "fa": ("033de1e81f724a1d334f953e80c7218abf1434a4466aa0df138e91ddb13028ec", 39867),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "ha": ("f3a5ff0af87288219e9f4321eda1c7be6fe908c5a4d95bbde9a10d2fd1d9216f", 22907),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "id": ("8cf05332ab732c04bbd8c00133b2f36beb22384602cecebf837d30f767ce5df2", 19868),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "pa": ("421d9cb05d39dce96a06936e5147f6eb4c81e43677eb68df6ce46e7a6fb74b5c", 37428),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "ta": ("01cddcf176b5645eb315aaad75325f71d224d773f5ce3fa3d09c39eb74efe690", 47220),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "te": ("2d06449636efac3356d20e95c6932eda469a4a953895cdaf3377ac77bef213da", 42798),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "vi": ("435029e855254b664074eae8928a1fab9958694e6b8b284099836c7714d00a7d", 24531),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "mr": ("0efe6b2388f5452f76e27df6fe4db801ba53b82aeefe0a2ba696efc1b7435c8f", 35481),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "my": ("6990dda0df13b15b82279613dcbb91c78c7faf83a671906df64d854c38973ad2", 54391),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "th": ("d6bad8e8cd9e16d04684ddc7e0be36517eb3b8d5b7b9fcd6904e3835d52e1f68", 40880),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "uk": ("4980a41215fa85575c425ab33648903efa6c0fcb5281486514b5547bafc026b1", 40821),
+    # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
+    "yo": ("2bc746c3fafab0bc190faa247ae6e5ecd7359a020d4289ed19f8253c3c54310e", 27095),
 }
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that
@@ -205,7 +297,20 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 # NAME...`. The §7e guard was rendering mid-paragraph instead of as a section.
 # Two separators x two newlines. MIXED is untouched at 4402 — the quantity this
 # ratchet exists to protect did not move.
-EN_TOTAL_BYTES = 16307
+# 16307 -> 15858 (U1, 2026-10-29). The cross-cluster parts stopped teaching a
+# determination: §25's CORRECT RESPONSE no longer sets the user's account beside
+# the category ("dark thoughts of the kind you describe are a different sort of
+# experience") and its WRONG specimen is gone; §26 drops its worked comparison;
+# §26b's second exemplar and its quoted verdicts went abstract; §05 loses the
+# "cross-cluster discrimination ('this isn't psychosis')" licence. Every byte of
+# the delta is in those four parts. Failing q04/U1 spans matched the old §25
+# nearly word for word in ru, ha, hi, es, pt, mr and yo.
+# 2.18.0 stigma words: +753 B deontic (universal 05b_no_stigma_words, the rule the
+# coherence conscience already applied) and -8 B (" / crazy" left the §18 example,
+# so the guidance no longer renders the word it forbids). Mixed bytes unchanged.
+# 2.18.0 register pressure: +578 B deontic (universal 05c_warmth_without_a_new_role,
+# AI identity holds when the user offers a friend role). Mixed bytes unchanged.
+EN_TOTAL_BYTES = 17181
 # 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
 # fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
 # ("what you're describing doesn't match psychosis") — the exact move §7e
@@ -216,13 +321,40 @@ EN_TOTAL_BYTES = 16307
 # The ratchet is RIGHT to flag it: 213 more bytes the ablation can neither
 # hold nor vary. Raised deliberately, for a correction, and named — a silent
 # bump here would be indistinguishable from the surface quietly rotting.
-EN_MAX_MIXED_BYTES = 4402  # the five FSD-irreducible worked exemplars
+EN_MAX_MIXED_BYTES = 4271  # the five FSD-irreducible worked exemplars; 4402 -> 4271 with the U1 §25 rewrite
 EN_MIN_AXIOTIC_BYTES = 429  # parts 09 and 11 — 0 before the split
+
+
+#: Every part that composes into the block, as the BLOCK name it reports under:
+#: the language parts plus the four that standardized into
+#: ``prompts.universal_guidance`` (same names, same slots). Sorted by part key,
+#: which is composition order across both subtrees.
+ALL_PART_BLOCKS: List[str] = [
+    block
+    for _, block in sorted(
+        [(key, f"language_guidance.{key}") for key in LANGUAGE_GUIDANCE_PART_KEYS]
+        + [(key, f"universal_guidance.{key}") for key in UNIVERSAL_GUIDANCE_PART_KEYS]
+    )
+]
+
+
+def _all_parts(lang: str) -> List[Tuple[str, str]]:
+    """``(block_name, text)`` for every part the composer joins, in its order."""
+    merged = [(key, f"language_guidance.{key}", text) for key, text in language_guidance_parts(lang)] + [
+        (key, f"universal_guidance.{key}", text) for key, text in universal_guidance_parts(lang)
+    ]
+    return [(block, text) for _, block, text in sorted(merged)]
 
 
 def _bundle_value(lang: str) -> object:
     data = json.loads((BUNDLE / f"{lang}.json").read_text(encoding="utf-8"))
     return data["prompts"]["language_guidance"]
+
+
+def _bundle_universal(lang: str) -> Dict[str, str]:
+    data = json.loads((BUNDLE / f"{lang}.json").read_text(encoding="utf-8"))
+    universal: Dict[str, str] = data["prompts"].get("universal_guidance", {})
+    return universal
 
 
 def _manifest_languages() -> List[str]:
@@ -254,8 +386,12 @@ def test_split_locale_parts_reassemble_to_the_composed_block(lang: str) -> None:
     parts = language_guidance_parts(lang)
     assert [k for k, _ in parts] == sorted(value), "parts must be resolved in sorted-key order"
 
-    joined = "".join(text for _, text in parts)
-    assert joined == "".join(value[k] for k in sorted(value))
+    # The universal parts join the same block, interleaved by key.
+    universal = _bundle_universal(lang)
+    merged = {**value, **universal}
+    assert len(merged) == len(value) + len(universal), "a part key lives in both subtrees"
+    joined = "".join(text for _, text in _all_parts(lang))
+    assert joined == "".join(merged[k] for k in sorted(merged))
     assert joined.strip() == get_language_guidance(lang)
 
 
@@ -305,11 +441,15 @@ def test_split_locales_carry_exactly_the_canonical_part_keys() -> None:
     joins — so an override key that works at ``en`` works at ``pt``."""
     for lang in SPLIT_LOCALES:
         assert language_guidance_part_keys(lang) == tuple(sorted(LANGUAGE_GUIDANCE_PART_KEYS)), lang
+        assert universal_guidance_part_keys(lang) == tuple(sorted(UNIVERSAL_GUIDANCE_PART_KEYS)), lang
 
 
 def test_part_keys_sort_into_composition_order() -> None:
     """The numeric prefix is not decoration: lexical order IS prompt order."""
     assert tuple(sorted(LANGUAGE_GUIDANCE_PART_KEYS)) == LANGUAGE_GUIDANCE_PART_KEYS
+    assert tuple(sorted(UNIVERSAL_GUIDANCE_PART_KEYS)) == UNIVERSAL_GUIDANCE_PART_KEYS
+    # Disjoint, so the merged sort has exactly one slot per key.
+    assert not set(LANGUAGE_GUIDANCE_PART_KEYS) & set(UNIVERSAL_GUIDANCE_PART_KEYS)
 
 
 def test_unsplit_locales_resolve_through_the_parent_key() -> None:
@@ -322,11 +462,67 @@ def test_unsplit_locales_resolve_through_the_parent_key() -> None:
         assert get_language_guidance(lang), f"{lang}: composed guidance is empty"
 
 
+# --------------------------------------------------------------------------
+# 2b. The universal_guidance move — same block, same bytes, never English
+# --------------------------------------------------------------------------
+
+
+def test_the_universal_parts_left_language_guidance() -> None:
+    """A part lives in exactly one subtree: none of the moved keys may linger
+    in a split locale's language_guidance, where the pipeline would not reach it."""
+    for lang in SPLIT_LOCALES:
+        value = _bundle_value(lang)
+        assert isinstance(value, dict)
+        lingering = set(value) & set(UNIVERSAL_GUIDANCE_PART_KEYS)
+        assert not lingering, f"{lang}: {sorted(lingering)} still under prompts.language_guidance"
+
+
+def test_a_scalar_locale_without_universal_parts_composes_its_scalar_exactly() -> None:
+    """The 24 scalar locales carry no universal part today; their block must be
+    the stripped scalar and nothing else (the digest pins above prove the same
+    bytes; this states WHY they hold)."""
+    for lang in _manifest_languages():
+        if lang in SPLIT_LOCALES or _bundle_universal(lang):
+            continue
+        scalar = _bundle_value(lang)
+        assert isinstance(scalar, str)
+        assert universal_guidance_parts(lang) == []
+        assert get_language_guidance(lang) == scalar.strip(), lang
+
+
+def test_a_universal_part_is_never_filled_from_english(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """R4: a locale composes only the universal parts its OWN bundle carries.
+
+    A locale missing one (not yet translated by the pipeline) composes without
+    it — never with English text spliced in through ``get_string``'s fallback.
+    """
+    import ciris_engine.logic.utils.localization as loc
+
+    de = json.loads((BUNDLE / "de.json").read_text(encoding="utf-8"))
+    # Every locale is translated now; build an untranslated one by dropping its parts.
+    de["prompts"].pop("universal_guidance", None)
+    marker = "UNIVERSAL-05-IN-THE-LOCALE\n\n"
+    de["prompts"]["universal_guidance"] = {"05_no_wellness_confirmation": marker}
+    (tmp_path / "de.json").write_text(json.dumps(de, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "en.json").write_text((BUNDLE / "en.json").read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(loc, "_get_localization_dir", lambda: tmp_path)
+    loc.clear_cache()
+    try:
+        assert universal_guidance_part_keys("de") == ("05_no_wellness_confirmation",)
+        composed = get_language_guidance("de")
+        assert composed == (de["prompts"]["language_guidance"].rstrip() + "\n\n" + marker).strip()
+        english = _bundle_universal("en")
+        leaked = [key for key, text in english.items() if text.strip() and text.strip() in composed]
+        assert not leaked, f"English universal parts leaked into de: {leaked}"
+    finally:
+        loc.clear_cache()
+
+
 def test_no_part_is_empty() -> None:
     """An empty part is a boundary in the wrong place — it contributes nothing
     and its block would be a zero-byte row the gate cannot compare."""
     for lang in SPLIT_LOCALES:
-        empty = [key for key, text in language_guidance_parts(lang) if not text]
+        empty = [block for block, text in _all_parts(lang) if not text]
         assert not empty, f"{lang}: empty parts {empty}"
 
 
@@ -344,8 +540,11 @@ def test_mirrors_carry_the_same_split_as_the_source_bundle() -> None:
             path = REPO_ROOT / mirror / f"{lang}.json"
             if not path.exists():  # pragma: no cover - optional bundle
                 continue
-            got = json.loads(path.read_text(encoding="utf-8"))["prompts"]["language_guidance"]
-            assert got == expected, f"{mirror}/{lang}.json: language_guidance diverges from source"
+            prompts = json.loads(path.read_text(encoding="utf-8"))["prompts"]
+            assert prompts["language_guidance"] == expected, f"{mirror}/{lang}.json: language_guidance diverges"
+            assert prompts.get("universal_guidance", {}) == _bundle_universal(lang), (
+                f"{mirror}/{lang}.json: universal_guidance diverges from source"
+            )
 
 
 # --------------------------------------------------------------------------
@@ -355,8 +554,8 @@ def test_mirrors_carry_the_same_split_as_the_source_bundle() -> None:
 
 def _en_class_bytes() -> Dict[BlockClass, int]:
     totals: Dict[BlockClass, int] = {}
-    for key, text in language_guidance_parts("en"):
-        annotation = annotation_for(f"pdma.language_guidance.{key}")
+    for block, text in _all_parts("en"):
+        annotation = annotation_for(f"pdma.{block}")
         totals[annotation.block_class] = totals.get(annotation.block_class, 0) + len(text.encode("utf-8"))
     return totals
 
@@ -364,7 +563,7 @@ def _en_class_bytes() -> Dict[BlockClass, int]:
 def test_every_part_is_annotated_explicitly() -> None:
     """A part resolving through the ``mixed`` fallback would be a silent
     regression that still refuses — honest, but invisible."""
-    missing = [key for key in LANGUAGE_GUIDANCE_PART_KEYS if f"language_guidance.{key}" not in BLOCK_ANNOTATIONS]
+    missing = [block for block in ALL_PART_BLOCKS if block not in BLOCK_ANNOTATIONS]
     assert not missing, f"language_guidance parts with no explicit annotation: {missing}"
 
 
@@ -402,11 +601,9 @@ def test_the_two_axiotic_parts_are_the_ones_that_were_argued_for() -> None:
     inside an empirical list.
     """
     axiotic: Set[str] = {
-        key
-        for key in LANGUAGE_GUIDANCE_PART_KEYS
-        if BLOCK_ANNOTATIONS[f"language_guidance.{key}"].block_class is BlockClass.AXIOTIC
+        block for block in ALL_PART_BLOCKS if BLOCK_ANNOTATIONS[block].block_class is BlockClass.AXIOTIC
     }
-    assert axiotic == {"09_trusted_person_first_step", "11_routing_doctrine"}
+    assert axiotic == {"language_guidance.09_trusted_person_first_step", "language_guidance.11_routing_doctrine"}
 
 
 def test_only_the_worked_exemplars_stay_mixed() -> None:
@@ -414,9 +611,5 @@ def test_only_the_worked_exemplars_stay_mixed() -> None:
     in the wrong place — that is a split failure, not an irreducible."""
     from tests.ciris_engine.logic.utils.test_taxonomy_gate_997 import IRREDUCIBLE_EXEMPLARS
 
-    mixed = {
-        f"language_guidance.{key}"
-        for key in LANGUAGE_GUIDANCE_PART_KEYS
-        if BLOCK_ANNOTATIONS[f"language_guidance.{key}"].block_class is BlockClass.MIXED
-    }
+    mixed = {block for block in ALL_PART_BLOCKS if BLOCK_ANNOTATIONS[block].block_class is BlockClass.MIXED}
     assert mixed == set(IRREDUCIBLE_EXEMPLARS)

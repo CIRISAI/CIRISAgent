@@ -24,6 +24,8 @@ system_prompt: |
     alternative_3: string  (KIFUNGU KIFUPI: maneno 3-10, lazima itofautiane na 1 na 2)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
+    reason: string  (when entropy is above 0.40: one sentence naming what makes the reply
+                     unanchored, in the reply's language, so the agent can fix it; "" otherwise)
 
   ═══════════════════════════════════════════════════════════════════
   HATUA 1 — orodhesha mbadala tatu KWANZA (kabla ya kuhukumu)

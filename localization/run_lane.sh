@@ -20,6 +20,10 @@
 #   KEYS            space-separated fnmatch patterns over flat dotted keys
 #   LANGS           space-separated locale codes; empty = all 28
 #   MAX_KEYS        refuse runs larger than this many key-values (accord: per unit)
+#   OVERWRITE       true = the translate lane replaces values that already exist
+#                   (TARGET=ui; localize.py --overwrite). For a deliberate
+#                   retranslation after an English change: pair it with exact
+#                   KEYS, never a broad pattern, so hand-written overrules stay.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -f  # KEYS patterns like accord.v9.* are fnmatch patterns, not shell globs
@@ -39,6 +43,7 @@ case "${TARGET:-accord}" in
     export LOCALIZE_TARGET=ui
     # localize.py's own CLI, with provider backoff installed (lane_backoff.py).
     cmd=(python3 localization/lane_backoff.py)
+    if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
     ;;
   *)
     echo "TARGET must be accord or ui, got '${TARGET}'" >&2

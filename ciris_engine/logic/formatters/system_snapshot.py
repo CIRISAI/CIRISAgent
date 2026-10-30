@@ -225,7 +225,7 @@ def format_system_snapshot(system_snapshot: SystemSnapshot, language: Optional[s
         )
         for tool_key, result in system_snapshot.context_enrichment_results.items():
             lines.append(f"--- {tool_key} ---")
-            ctx_logger.info(f"[CONTEXT BUILDER] Processing enrichment result: {tool_key}")
+            ctx_logger.debug(f"[CONTEXT BUILDER] Processing enrichment result: {tool_key}")
             if isinstance(result, dict):
                 if "error" in result:
                     lines.append(f"  Error: {result['error']}")
@@ -247,7 +247,7 @@ def format_system_snapshot(system_snapshot: SystemSnapshot, language: Optional[s
                     # Try to pretty-print, but limit length
                     try:
                         result_str = json.dumps(result, indent=2, default=str)
-                        ctx_logger.info(f"[CONTEXT BUILDER] {tool_key} JSON length: {len(result_str)} chars")
+                        ctx_logger.debug(f"[CONTEXT BUILDER] {tool_key} JSON length: {len(result_str)} chars")
                         # Limit to ~2000 chars to avoid bloating the prompt
                         if len(result_str) > 2000:
                             result_str = result_str[:2000] + "\n  ... (truncated)"

@@ -842,7 +842,11 @@ jobs:
       fail-fast: false  # Don't cancel other builds if one fails/is cancelled
       matrix:
         include:
-          - os: macos-14
+          # macos-15 (Apple Silicon): GitHub is browning out macos-14 ahead of its
+          # 2026-11-02 retirement (actions/runner-images#13518), refusing the job
+          # with zero steps. The wheel's tag is pinned in setup.py
+          # (macosx_11_0_arm64), so the runner's OS version does not narrow it.
+          - os: macos-15
             name: macOS ARM64
           # macOS Intel: built and uploaded manually (GitHub runner capacity issues)
           - os: ubuntu-latest

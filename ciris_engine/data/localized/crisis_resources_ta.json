@@ -1,14 +1,261 @@
 {
   "_meta": {
     "purpose": "Crisis-resource corpus for locale 'ta'. Loaded by ciris_engine.schemas.resources.crisis.load_crisis_registry and injected into DSDMA prompts via format_crisis_resources_block (CIRISAgent#971).",
-    "rule": "NEVER add or edit a phone number without a human verifying it against an authoritative source and setting verified=true. A wrong crisis number is catastrophically worse than the directory fallback.",
+    "rule": "HOTLINES: NEVER add or edit a hotline/text-line number without a human verifying it against an authoritative source (source=national_verified, verified=true). EMERGENCY numbers (police/ambulance/fire): emitted only under the owner's cited-sources standard of 2026-10-29 — >=2 independent agreeing sources, >=1 official, source=multi_source_cited (CIRISAgent#1248). A wrong crisis number is catastrophically worse than the directory fallback.",
     "see": "CRISIS_RESOURCES_VERIFICATION_NEEDED.md",
     "schema": "ciris_engine.schemas.resources.crisis.CrisisResourceRegistry"
   },
   "locale": "ta",
   "needs_verified_entries": true,
-  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source.",
+  "verification_notes": "No human-verified national hotline entries for this locale yet — international directories only. See CRISIS_RESOURCES_VERIFICATION_NEEDED.md before adding entries; numbers require human verification (verified=true) against an authoritative source. Emergency (police/ambulance/fire) numbers for IN, LK, SG added 2026-10-29 (CIRISAgent#1248): 6 of 9 meet the owner's cited-sources standard (source=multi_source_cited, emitted); the rest are staged verified=false and NOT emitted — see CRISIS_RESOURCES_VERIFICATION_NEEDED.md.",
+  "language_countries": [
+    "in",
+    "lk",
+    "sg"
+  ],
   "resources": {
+    "emergency_india_112": {
+      "id": "emergency_india_112",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "112",
+      "text_number": null,
+      "search_term": null,
+      "description": "Unified emergency number (police, ambulance, fire; ERSS)",
+      "availability": [
+        "in"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in India Telephone: 112 (ambulance, fire, police) These services provide support in English, Hindi and additional languages\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): IN 112 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: ambulance, fire, police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/india/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in India Telephone: 112 (ambulance, fire, police) These services provide support in English, Hindi and additional languages\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees; 112.gov.in timed out from this environment so not fetched. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/india/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_india_100": {
+      "id": "emergency_india_100",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "100",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "in"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: [safety-and-security] If you're the victim of crime in India, call: police helpline: 100 national emergency number: 112 | AOSP eccdata (Android's emergency-number database): IN 100 types ['AMBULANCE', 'FIRE', 'POLICE']. Sources agree it reaches: police. Listed beyond that by some sources only: ambulance, fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/india/safety-and-security (fetched 2026-10-29); page text: [safety-and-security] If you're the victim of crime in India, call: police helpline: 100 national emergency number: 112. Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees (police 100). 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/india/safety-and-security",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_sri_lanka_1990": {
+      "id": "emergency_sri_lanka_1990",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "1990",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance (1990 Suwa Seriya, free)",
+      "availability": [
+        "lk"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Sri Lanka Ambulance: 011 2691111 or 1990 Fire and Rescue: 111 Police: 118/119 Emergency Police Mobile Squad: 011 5717171 Tourist Police: 011 2421052\" (fetched 2026-10-29 via gov.uk content API) | 1990 Suwa Seriya Foundation (statutory body, 1990 Suwaseriya Foundation Act No. 18 of 2018) (non-official): \"the very first 1990 ambulance was launched in Hambantota on July 27, 2016 ... the \"1990 Suwa Seriya\" free ambulance service has become a proud pioneer in Sri Lanka\" (https://www.1990.lk/?p=13). Sources agree it reaches: ambulance. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 1990 (or 011 2691111), fire and rescue 111, police 118/119, Wikipedia said ambulance/fire 110, police 119. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Sri Lanka Ambulance: 011 2691111 or 1990 Fire and Rescue: 111 Police: 118/119 Emergency Police Mobile Squad: 011 5717171 Tourist Police: 011 2421052\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia does not list 1990; lists 110 for ambulance/fire. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help",
+      "source_urls": [
+        "https://www.1990.lk/?p=13"
+      ]
+    },
+    "emergency_sri_lanka_119": {
+      "id": "emergency_sri_lanka_119",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "119",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "lk"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Sri Lanka Ambulance: 011 2691111 or 1990 Fire and Rescue: 111 Police: 118/119 Emergency Police Mobile Squad: 011 5717171 Tourist Police: 011 2421052\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): LK 119 types ['POLICE']. Sources agree it reaches: police. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 1990 (or 011 2691111), fire and rescue 111, police 118/119, Wikipedia said ambulance/fire 110, police 119. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Sri Lanka Ambulance: 011 2691111 or 1990 Fire and Rescue: 111 Police: 118/119 Emergency Police Mobile Squad: 011 5717171 Tourist Police: 011 2421052\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia does not list 1990; lists 110 for ambulance/fire. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_sri_lanka_118": {
+      "id": "emergency_sri_lanka_118",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "118",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police (alternate listed by UK FCDO)",
+      "availability": [
+        "lk"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 118 for LK; no second official page found). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 1990 (or 011 2691111), fire and rescue 111, police 118/119, Wikipedia said ambulance/fire 110, police 119. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Sri Lanka Ambulance: 011 2691111 or 1990 Fire and Rescue: 111 Police: 118/119 Emergency Police Mobile Squad: 011 5717171 Tourist Police: 011 2421052\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia does not list 1990; lists 110 for ambulance/fire. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help",
+      "source_urls": []
+    },
+    "emergency_sri_lanka_110": {
+      "id": "emergency_sri_lanka_110",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "110",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire",
+      "availability": [
+        "lk"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: no official source (second-opinion lead only). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 1990 (or 011 2691111), fire and rescue 111, police 118/119, Wikipedia said ambulance/fire 110, police 119. This number's provenance: second-opinion — it is NOT on the FCDO page below; the page is cited as the authoritative page to check it against. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Sri Lanka Ambulance: 011 2691111 or 1990 Fire and Rescue: 111 Police: 118/119 Emergency Police Mobile Squad: 011 5717171 Tourist Police: 011 2421052\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia does not list 1990; lists 110 for ambulance/fire. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help",
+      "source_urls": []
+    },
+    "emergency_sri_lanka_111": {
+      "id": "emergency_sri_lanka_111",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "111",
+      "text_number": null,
+      "search_term": null,
+      "description": "Fire and rescue (listed by UK FCDO; second opinion gives 110)",
+      "availability": [
+        "lk"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "STAGED 2026-10-29 (CIRISAgent#1248) — BELOW the cited-sources bar: single source only (AOSP eccdata has no 111 for LK; no second official page found). Not emitted. Conflict resolved 2026-10-29 by owner-directed second-opinion review (not human verification); FCDO said ambulance 1990 (or 011 2691111), fire and rescue 111, police 118/119, Wikipedia said ambulance/fire 110, police 119. This number's provenance: FCDO. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Sri Lanka Ambulance: 011 2691111 or 1990 Fire and Rescue: 111 Police: 118/119 Emergency Police Mobile Squad: 011 5717171 Tourist Police: 011 2421052\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia does not list 1990; lists 110 for ambulance/fire. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "builtin",
+      "verified": false,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/sri-lanka/getting-help",
+      "source_urls": []
+    },
+    "emergency_singapore_995": {
+      "id": "emergency_singapore_995",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "995",
+      "text_number": null,
+      "search_term": null,
+      "description": "Ambulance and fire (SCDF)",
+      "availability": [
+        "sg"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): SG 995 types ['AMBULANCE', 'FIRE']. Sources agree it reaches: ambulance, fire. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/singapore/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/singapore/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
+    "emergency_singapore_999": {
+      "id": "emergency_singapore_999",
+      "name": "Emergency services",
+      "type": "emergency",
+      "url": null,
+      "phone": "999",
+      "text_number": null,
+      "search_term": null,
+      "description": "Police",
+      "availability": [
+        "sg"
+      ],
+      "languages": [
+        "ta"
+      ],
+      "last_validated": "2026-10-29T00:00:00Z",
+      "validation_notes": "CITED 2026-10-29 (CIRISAgent#1248) under the owner's cited-sources standard (>=2 independent agreeing sources, >=1 official; no human check). Sources: UK FCDO travel advice: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API) | AOSP eccdata (Android's emergency-number database): SG 999 types ['POLICE']. Sources agree it reaches: police. UK FCDO page checked: https://www.gov.uk/foreign-travel-advice/singapore/getting-help (fetched 2026-10-29); page text: UK FCDO travel advice, Getting help: \"Emergency services in Singapore Ambulance and fire: 995 Police: 999\" (fetched 2026-10-29 via gov.uk content API). Cross-check (not a source): en.wikipedia.org/wiki/List_of_emergency_telephone_numbers — wikipedia agrees. 'languages' = the locale this entry is staged for (ta), not a verified statement of operator languages.",
+      "is_endorsed": false,
+      "requires_disclaimer": true,
+      "source": "multi_source_cited",
+      "verified": true,
+      "snapshot_date": "2026-10-29",
+      "source_url": "https://www.gov.uk/foreign-travel-advice/singapore/getting-help",
+      "source_urls": [
+        "https://android.googlesource.com/platform/packages/services/Telephony/+/refs/heads/main/ecc/input/eccdata.txt",
+        "https://github.com/google/libphonenumber/blob/master/resources/ShortNumberMetadata.xml"
+      ]
+    },
     "findahelpline": {
       "id": "findahelpline",
       "name": "Find a Helpline",

@@ -191,6 +191,10 @@ _AUTH_FAILURE_MARKER = "verify_unknown_key"
 #: lens-core's stable refusal token for a mock-LLM batch (ingest_guard::REFUSAL_MOCK_LLM).
 MOCK_LLM_REFUSAL_TOKEN = "trace_mock_llm_refused"
 
+#: Without trace consent, the `[SEAL] SKIPPED` warning is logged for the first
+#: skipped trace and then once per this many (the count is always kept).
+SKIP_LOG_EVERY = 100
+
 
 class CaptureHealthState(str, Enum):
     """Health of a repeated-failure domain (#933 log hygiene).
@@ -232,6 +236,7 @@ class FailureStreak:
 
 from ciris_adapters.ciris_accord_metrics.egress_schema import TraceLevel as EgressTraceLevel
 from ciris_adapters.ciris_accord_metrics.egress_schema import ViolationReporter, enforce_egress_schema
+from ciris_engine.logic.utils.round_timing import RoundPhase, record_round_phase
 from ciris_engine.logic.utils.substrate_caps import substrate_can_scrub
 
 
@@ -571,21 +576,32 @@ class AccordMetricsService:
             try:
                 self._user_latitude = float(lat_str)
             except ValueError:
-                logger.warning("Invalid CIRIS_USER_LATITUDE value: %s", lat_str)
+                logger.warning("CIRIS_USER_LATITUDE is not a number; ignoring it")
         if lon_str:
             try:
                 self._user_longitude = float(lon_str)
             except ValueError:
-                logger.warning("Invalid CIRIS_USER_LONGITUDE value: %s", lon_str)
+                logger.warning("CIRIS_USER_LONGITUDE is not a number; ignoring it")
         if self._share_location_in_traces and self._user_location:
-            coords = f" ({self._user_latitude}, {self._user_longitude})" if self._user_latitude else ""
-            logger.info(f"   Location sharing enabled: {self._user_location}{coords}")
+            # Which fields are shared, never their values: a log is not where the
+            # user's location goes (CodeQL py/clear-text-logging-sensitive-data).
+            logger.info(
+                "   Location sharing enabled (location%s)",
+                " + coordinates" if self._user_latitude is not None else "",
+            )
 
         # The substrate client (constructed in start(); REQUIRED)
         self._lens: Optional[Any] = None
         # Whether _build_lens_client built _lens over MockLocalOnlyEngine (mock
         # LLM, #1244). None until the builder runs.
         self._lens_local_only: Optional[bool] = None
+        # Whether _build_lens_client built _lens with trace consent. None until
+        # the builder runs (then capture always proceeds); False means every seal
+        # would come back consent_blocked, so events are not built at all.
+        self._lens_consent_armed: Optional[bool] = None
+        # Reasoning events dropped before any extraction because the client has
+        # no consent (each would only have been answered consent_blocked).
+        self._events_skipped_no_consent = 0
 
         # Per-level egress schema (egress_schema.py): every built component is
         # filtered against its level's contract before it reaches the signer,
@@ -943,6 +959,11 @@ class AccordMetricsService:
 
         self._lens_local_only = is_mock_llm_active()
         lens_engine: Any = MockLocalOnlyEngine(engine) if self._lens_local_only else engine
+        # The consent this client is built with. The cohabitation seal gate reads
+        # only this config-fallback consent, so a client built without it answers
+        # every seal consent_blocked; _process_single_event skips building
+        # components for it (see _skip_capture_without_consent).
+        self._lens_consent_armed = bool(self._consent_given)
         try:
             return LensClient(
                 self._consent_timestamp if self._consent_given else None,
@@ -1241,7 +1262,7 @@ class AccordMetricsService:
                     # Wait for next event with timeout to check for cancellation
                     event_data = await asyncio.wait_for(self._reasoning_queue.get(), timeout=1.0)
                     events_processed += 1
-                    logger.info(f" RECEIVED reasoning event #{events_processed}: {type(event_data).__name__}")
+                    logger.debug(f" RECEIVED reasoning event #{events_processed}: {type(event_data).__name__}")
                     await self._handle_reasoning_event(event_data)
                 except asyncio.TimeoutError:
                     # No event, just continue waiting
@@ -1346,38 +1367,29 @@ class AccordMetricsService:
         # seal here so this event captures into the rebuilt, consent-on client.
         self._maybe_self_heal_consent()
 
-        self._ensure_mock_local_only()
-
         if self._lens is None:
             # start() raises when the substrate is unavailable, so this only
             # happens if events arrive before start() — drop with a debug.
             logger.debug("LensClient not ready; dropping event %s", event_type)
             return
 
-        component: Dict[str, Any] = {
-            "event_type": event_type,
-            "thought_id": thought_id,
-            "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
-            "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
-            "task_id": event.get("task_id"),
-            "trace_level": self._trace_level.value,
-            # #986: the #983 conscience-guidance mode must be auditable FROM THE
-            # ARTIFACT — arm D's void condition is trace-audit-based, and an env
-            # var that left no trace cannot be audited. Per-component because
-            # the batch envelope is substrate-assembled (LensClient exposes no
-            # metadata surface today; top-level field is a .155 ask). Every
-            # event in every batch and every CEG seal therefore carries which
-            # side of the CC 3.4.5 line the process ran on.
-            "conscience_guidance_mode": _conscience_guidance_mode_for_batch(),
-            "data": self._enforce_egress_schema(event_type, self._extract_component_data(event_type, event)),
-        }
+        if self._lens_consent_armed is False:
+            self._skip_capture_without_consent(event_type, thought_id)
+            return
 
-        # to_thread keeps the seal's Ed25519+DB work off the event loop;
-        # _capture_lock serializes against send_deferral (a separate task)
-        # so the substrate sees a strict FIFO — its attempt_index counters
-        # and seal ordering depend on it.
+        self._ensure_mock_local_only()
+
+        # Component building (extraction, egress-schema enforcement) and the
+        # seal's Ed25519+DB work both run on a worker thread, not the event
+        # loop: under a burst they are the bulk of this path's CPU, and on the
+        # loop they stalled HTTP intake for seconds at a time. _capture_lock
+        # serializes against send_deferral (a separate task) so the substrate
+        # sees a strict FIFO — its attempt_index counters and seal ordering
+        # depend on it.
+        started = time.monotonic()
         async with self._capture_lock:
-            outcome = await asyncio.to_thread(self._lens.capture_event, component)
+            outcome = await asyncio.to_thread(self._build_and_capture, event_type, thought_id, event)
+        record_round_phase(RoundPhase.TRACE_CAPTURE, time.monotonic() - started)
         # 933: a successful substrate round-trip closes any failure streak
         # (logs the recovery transition once; no-op while healthy).
         self._record_success(self._capture_streak)
@@ -1420,6 +1432,61 @@ class AccordMetricsService:
             self._events_rejected += 1
             logger.warning(f" Substrate rejected unknown event_type {outcome.get('raw')!r} (thought {thought_id})")
         # "appended" needs no bookkeeping
+
+    def _build_component(self, event_type: str, thought_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
+        """The `capture_event` component for one reasoning event (worker thread)."""
+        return {
+            "event_type": event_type,
+            "thought_id": thought_id,
+            "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "agent_id_hash": self._agent_id_hash or self._compute_instance_hash(),
+            "task_id": event.get("task_id"),
+            "trace_level": self._trace_level.value,
+            # #986: the #983 conscience-guidance mode must be auditable FROM THE
+            # ARTIFACT — arm D's void condition is trace-audit-based, and an env
+            # var that left no trace cannot be audited. Per-component because
+            # the batch envelope is substrate-assembled (LensClient exposes no
+            # metadata surface today; top-level field is a .155 ask). Every
+            # event in every batch and every CEG seal therefore carries which
+            # side of the CC 3.4.5 line the process ran on.
+            "conscience_guidance_mode": _conscience_guidance_mode_for_batch(),
+            "data": self._enforce_egress_schema(event_type, self._extract_component_data(event_type, event)),
+        }
+
+    def _build_and_capture(self, event_type: str, thought_id: str, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Build the component and hand it to the substrate (runs in a worker thread)."""
+        lens = self._lens
+        if lens is None:  # stopped between the check on the loop and this thread
+            return {"outcome": "dropped"}
+        outcome: Dict[str, Any] = lens.capture_event(self._build_component(event_type, thought_id, event))
+        return outcome
+
+    def _skip_capture_without_consent(self, event_type: str, thought_id: str) -> None:
+        """Drop an event the substrate could only answer consent_blocked.
+
+        The client was built without trace consent, so its seal gate refuses
+        every trace; building the component first (extraction, egress schema,
+        signing input) was pure cost — under a burst, the largest single block
+        of event-loop time. Nothing reaches the substrate, so nothing is teed
+        or persisted, exactly as before. The self-heal above runs first, so a
+        grant that lands mid-run rebuilds the client and the next event
+        captures normally.
+
+        Each would-be seal (the ACTION_RESULT) is still counted as
+        consent-blocked; the `[SEAL] SKIPPED` warning is logged for the first
+        and then every SKIP_LOG_EVERY-th, so a burst does not flood the log.
+        """
+        self._events_skipped_no_consent += 1
+        if event_type != "ACTION_RESULT":
+            return
+        self._open_thoughts.pop(thought_id, None)
+        self._traces_consent_blocked += 1
+        if self._traces_consent_blocked == 1 or self._traces_consent_blocked % SKIP_LOG_EVERY == 0:
+            logger.warning(
+                f"[SEAL] SKIPPED thought={thought_id} reason=no-consent "
+                f"({self._traces_consent_blocked} trace(s) so far, {self._events_skipped_no_consent} event(s) "
+                f"not built) — opt in via wizard or Data & Privacy → Send traces"
+            )
 
     def _declared_condition(self) -> Optional[str]:
         """The research condition the operator DECLARED, if any.
@@ -2612,6 +2679,7 @@ class AccordMetricsService:
             "traces_completed": self._traces_completed,
             "traces_signed": self._traces_signed,
             "traces_consent_blocked": self._traces_consent_blocked,
+            "events_skipped_no_consent": self._events_skipped_no_consent,
             "traces_mock_refused": self._traces_mock_refused,
             "signer_key_id": signer_key_id,
             "has_signing_key": signer_key_id is not None,

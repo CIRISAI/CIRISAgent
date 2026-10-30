@@ -106,7 +106,11 @@ async def _read_from_node() -> NodeOwnership:
     if fold_status() is None:
         return _state(NodeOwnershipReading.NO_NODE, read_error="no node in this deployment (CIRIS_NODE_FOLD=false)")
     try:
-        return await asyncio.wait_for(asyncio.to_thread(_read_owner_sync), timeout=NODE_OWNERSHIP_READ_TIMEOUT_SECONDS)
+        from ciris_engine.logic.utils.gate_reads import run_gate_read
+
+        # The reserved executor, not the default pool: under a burst the default
+        # pool is full and a read queued there timed out as "unclaimed".
+        return await asyncio.wait_for(run_gate_read(_read_owner_sync), timeout=NODE_OWNERSHIP_READ_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         return _state(
             NodeOwnershipReading.READ_TIMEOUT, read_error=f"no answer in {NODE_OWNERSHIP_READ_TIMEOUT_SECONDS}s"
@@ -126,13 +130,48 @@ def _observe(state: NodeOwnership) -> None:
         logger.info("Node ownership: node %s is owned by %s; the agent may run", state.node_key_id, state.owner_key_id)
 
 
+#: Readings that say the read failed, not that the node has no owner.
+_FAILED_READS = frozenset({NodeOwnershipReading.READ_TIMEOUT, NodeOwnershipReading.READ_ERROR})
+
+_inflight: Optional["asyncio.Task[NodeOwnership]"] = None
+#: The last OWNED reading a failed read may keep; cleared by invalidation.
+_last_owned: Optional[NodeOwnership] = None
+
+
+async def _shared_read() -> NodeOwnership:
+    """One ownership read, shared by every caller that arrives while it is in flight.
+
+    Without it a burst of requests, each finding the cache expired, queued one
+    read apiece on the thread pool; they timed out together and the agent told
+    every caller the node had no owner (a DoS, 2026-10-29).
+    """
+    global _inflight
+    loop = asyncio.get_running_loop()
+    task = _inflight
+    if task is None or task.done() or task.get_loop() is not loop:
+        task = loop.create_task(_read_from_node())
+        _inflight = task
+    return await asyncio.shield(task)
+
+
 async def node_owned(*, fresh: bool = False) -> NodeOwnership:
-    """THE reader. Cached for `NODE_OWNERSHIP_CACHE_TTL_SECONDS`; `fresh` always asks the node."""
-    global _cached, _cached_at
+    """THE reader. Cached for `NODE_OWNERSHIP_CACHE_TTL_SECONDS`; `fresh` always asks the node.
+
+    Ownership changes only by an explicit act (claim, release, transfer), and a
+    read that answers is always taken. A read that FAILS (timeout or error) after
+    the node was read as OWNED keeps the OWNED reading: a slow read is not the
+    owner going away. Before the first OWNED reading a failed read still holds
+    the agent (an unclaimed node never runs).
+    """
+    global _cached, _cached_at, _last_owned
     cached = _cached
     if not fresh and cached is not None and time.monotonic() - _cached_at < NODE_OWNERSHIP_CACHE_TTL_SECONDS:
         return cached
-    state = await _read_from_node()
+    state = await _shared_read()
+    if state.reading in _FAILED_READS and _last_owned is not None:
+        logger.debug("Node ownership read failed (%s); keeping the owned reading", state.read_error)
+        return _last_owned
+    _last_owned = state if state.reading == NodeOwnershipReading.OWNED else None
     _observe(state)
     _cached = state
     _cached_at = time.monotonic()
@@ -191,9 +230,10 @@ async def read_owner_record() -> Optional[NodeOwnerRecord]:
 
 
 def invalidate_node_ownership_cache() -> None:
-    """Force the next read to ask the node."""
-    global _cached_at
+    """Force the next read to ask the node; a failed read then holds the agent."""
+    global _cached_at, _last_owned
     _cached_at = 0.0
+    _last_owned = None
 
 
 __all__ = [

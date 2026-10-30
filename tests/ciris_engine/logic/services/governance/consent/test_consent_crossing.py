@@ -298,3 +298,26 @@ def test_grant_instant_picker_resolves_the_same_row_as_the_id_picker() -> None:
         att, "_resolve_attesting_key_id", return_value="fedaddr-node"
     ):
         assert att.current_community_grant_asserted_at() == "2026-09-04T10:00:00.123Z"
+
+
+def test_a_row_already_at_federation_is_already_widened_not_a_refusal(caplog: Any) -> None:
+    """Persist refuses federation→federation as `federation_audience_not_wider`; the
+    row is already where the crossing was taking it, so nothing is placed and nothing warns."""
+
+    class AlreadyWide(FakeEngine):
+        def widen_audience(self, prior_id: str, ci: str, strip: List[str]) -> Dict[str, Any]:
+            raise ValueError(
+                "federation_audience_not_wider: federation is not strictly wider than federation"
+            )
+
+    eng = AlreadyWide(enter={"outcome": "already_in_mesh", "attestation_id": "att-1"})
+    assert att.cross_to_mesh(eng, "att-1", label="directed grant") == ("already_widened", None)
+
+
+def test_any_other_widening_refusal_still_raises() -> None:
+    class Refuses(FakeEngine):
+        def widen_audience(self, prior_id: str, ci: str, strip: List[str]) -> Dict[str, Any]:
+            raise ValueError("contextual_integrity: axis audience refused")
+
+    with pytest.raises(ValueError, match="axis audience"):
+        att.cross_to_mesh(Refuses(enter={"outcome": "crossed"}), "att-1", label="directed grant")

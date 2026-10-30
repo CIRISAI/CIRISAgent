@@ -1,7 +1,8 @@
 """Context building utilities for Action Selection PDMA."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
@@ -15,6 +16,12 @@ from ciris_engine.schemas.runtime.models import Task, Thought
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
+
+#: How long the "Tools Available for Installation" block is reused (seconds).
+INSTALLABLE_TOOLS_TTL_SECONDS = 60.0
+
+#: (monotonic time built, text) of the last installable-tools block.
+_installable_tools_cache: Dict[str, Tuple[float, str]] = {}
 
 
 class ActionSelectionContextBuilder:
@@ -60,7 +67,23 @@ class ActionSelectionContextBuilder:
         return tool_count
 
     async def _cache_installable_tools(self) -> None:
-        """Pre-cache the installable tools string asynchronously."""
+        """Pre-cache the installable tools string asynchronously.
+
+        The adapter discovery behind it scans every adapter manifest and
+        checks binaries and env vars, and it ran for every thought's action
+        selection. Its answer depends on the host, not the thought, so it is
+        reused for INSTALLABLE_TOOLS_TTL_SECONDS (an install shows up within
+        that window).
+        """
+        now = time.monotonic()
+        cached = _installable_tools_cache.get("text")
+        if cached is not None and now - cached[0] < INSTALLABLE_TOOLS_TTL_SECONDS:
+            self._cached_installable_tools = cached[1]
+            return
+        await self._build_installable_tools()
+        _installable_tools_cache["text"] = (now, self._cached_installable_tools or "")
+
+    async def _build_installable_tools(self) -> None:
         try:
             from ciris_engine.logic.services.tool.discovery_service import AdapterDiscoveryService
 

@@ -254,27 +254,23 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
         return self.context_builder.build_main_user_content(input_data, agent_name)
 
+    @staticmethod
+    def _working_language(original_thought: Any, processing_context: Any) -> str:
+        """This thought's language, by the chain every other DMA and conscience uses:
+        thought / task preferred_language, then the user's profile, then the env var."""
+        from ciris_engine.logic.utils.localization import get_user_language_from_context
+
+        snapshot = _get_value(processing_context, "system_snapshot") if processing_context else None
+        return get_user_language_from_context({"thought": original_thought, "system_snapshot": snapshot})
+
     def _build_accord_with_metadata(self, original_thought: Any, processing_context: Any = None) -> str:
         """Build accord text with thought type metadata (uses LOCALIZED ACCORD for ASPDMA).
 
         ASPDMA uses the localized accord (single language) for clearer action selection guidance.
         Other DMAs (PDMA, CSDMA, IDMA, DSDMA) use the polyglot accord for cross-cultural depth.
         """
-        # ASPDMA uses localized accord - extracts user language from context if available
-        lang = None
-        if processing_context:
-            system_snapshot = _get_value(processing_context, "system_snapshot")
-            if system_snapshot:
-                user_profiles = _get_value(system_snapshot, "user_profiles")
-                if user_profiles and len(user_profiles) > 0:
-                    first_profile = user_profiles[0]
-                    lang = (
-                        first_profile.get("preferred_language")
-                        if isinstance(first_profile, dict)
-                        else getattr(first_profile, "preferred_language", None)
-                    )
-
-        accord_text = get_localized_accord_text(lang)
+        # ASPDMA uses the localized accord, in the same language as its guidance.
+        accord_text = get_localized_accord_text(self._working_language(original_thought, processing_context))
         if not accord_text:
             return ""
 
@@ -383,16 +379,26 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         messages: List[JSONDict] = []
         if accord_with_metadata:
             messages.append({"role": "system", "content": accord_with_metadata})
-        # Per-language guidance — empty for most languages, populated for
-        # locales where systematic terminology gaps were observed (am as
-        # of 2.7.6). ASPDMA has no prompt_loader, so resolve language from
-        # the env var (CIRIS_PREFERRED_LANGUAGE) which is what the agent's
-        # deployment sets globally.
-        from ciris_engine.logic.utils.localization import get_language_guidance, get_preferred_language
+        # Per-language guidance, in THIS THOUGHT'S language. ASPDMA writes the
+        # reply, so it needs the user's guidance more than any other DMA. It used
+        # to read the env var (CIRIS_PREFERRED_LANGUAGE) while IDMA, DSDMA,
+        # DSASPDMA and the consciences resolved the thought's own language: a bn
+        # user on a deployment without that variable got English guidance and
+        # English crisis numbers here while coherence judged the reply in bn
+        # (2.18.0 bn battery, q04/q06/q07).
+        from ciris_engine.logic.utils.localization import get_language_guidance
 
-        _lang_guidance = get_language_guidance(get_preferred_language())
+        _lang = self._working_language(input_data.original_thought, input_data.processing_context)
+        _lang_guidance = get_language_guidance(_lang)
         if _lang_guidance:
             messages.append({"role": "system", "content": _lang_guidance})
+        # Crisis resources ride directly after language guidance (#1248) — the
+        # locale's verified numbers, from the one composer every DMA shares.
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+
+        _crisis_block = get_crisis_resources_system_block(_lang)
+        if _crisis_block:
+            messages.append({"role": "system", "content": _crisis_block})
         messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": user_content})
 

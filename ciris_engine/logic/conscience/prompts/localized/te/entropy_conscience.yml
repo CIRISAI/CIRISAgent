@@ -26,6 +26,8 @@ system_prompt: |
     alternative_3: string  (చిన్న పదబంధం: 3-10 పదాలు)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
+    reason: string  (when entropy is above 0.40: one sentence naming what makes the reply
+                     unanchored, in the reply's language, so the agent can fix it; "" otherwise)
 
   ═══════════════════════════════════════════════════════════════════
   దశ 1 — ముందుగా మూడు ప్రత్యామ్నాయాలను లెక్కించండి (తీర్పు ఇచ్చే ముందు)

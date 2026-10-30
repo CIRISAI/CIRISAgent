@@ -254,6 +254,8 @@ def emit_consent_grant(status: ConsentStatus) -> Optional[str]:
 _CROSSING_BASIS_PRODUCER_AUTHORITY = '{"kind": "producer_authority"}'
 _CROSSING_TARGET_FEDERATION = "federation"
 _OUTCOME_PLACED = frozenset({"crossed", "already_in_mesh"})
+#: persist's refusal when the audience asked for is not wider than the row's own.
+_AUDIENCE_NOT_WIDER = "federation_audience_not_wider"
 
 
 def cross_to_mesh(engine: object, attestation_id: str, *, label: str) -> "tuple[str, Optional[str]]":
@@ -274,7 +276,14 @@ def cross_to_mesh(engine: object, attestation_id: str, *, label: str) -> "tuple[
         # sign it with the node's key. It WAITS; the callers say what that means.
         return outcome, None
     ci_fed = engine.describe_crossing(aid, _CROSSING_TARGET_FEDERATION, None, _CROSSING_BASIS_PRODUCER_AUTHORITY)  # type: ignore[attr-defined]
-    widened = engine.widen_audience(aid, ci_fed, [])  # type: ignore[attr-defined]
+    try:
+        widened = engine.widen_audience(aid, ci_fed, [])  # type: ignore[attr-defined]
+    except Exception as exc:
+        # The row is already at federation: persist refuses a widening that is not
+        # strictly wider rather than answering already_widened. Nothing to place.
+        if _AUDIENCE_NOT_WIDER in str(exc):
+            return "already_widened", None
+        raise
     w_outcome = str(widened.get("outcome", "unknown")) if isinstance(widened, dict) else "unknown"
     placed_raw = widened.get("attestation_id") if isinstance(widened, dict) else None
     placed = str(placed_raw) if placed_raw and w_outcome in _OUTCOME_PLACED else None
@@ -593,6 +602,26 @@ def current_community_grant_id() -> Optional[str]:
         return None
 
 
+def community_grant_in_force() -> Optional[str]:
+    """attestation_id of this agent's community grant if it is IN FORCE, else None.
+
+    Unlike :func:`current_community_grant_id` (the revocation target, revoked or
+    not), a grant that a withdraws/recants row at least as new has revoked is not
+    in force. Can't read ⇒ None: this answers "did the owner opt in", which fails
+    closed.
+    """
+    engine = _resolve_engine()
+    key_id = _resolve_attesting_key_id()
+    if engine is None or not key_id:
+        return None
+    try:
+        grant = _in_force_grant(_community_trust_rows(engine, key_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-CEG: in-force grant lookup failed: %s", exc)
+        return None
+    return str(grant.get("attestation_id")) if grant else None
+
+
 def _community_trust_rows(engine: object, key_id: str) -> "list[dict[str, object]]":
     """Every row this key attested on the community-trust dimension. Raises when unreadable.
 
@@ -790,6 +819,43 @@ def _owner_authored_door() -> Optional[Callable[[], Optional[str]]]:
     return door if callable(door) else None
 
 
+def _node_key_id() -> Optional[str]:
+    from ciris_engine.logic.runtime.edge_runtime import get_node_key_id
+
+    return get_node_key_id()
+
+
+def _applied_owner_grant(engine: object) -> Optional[str]:
+    """The owner-authored community_trust grant standing for this node, or None.
+
+    On a managed agent the owner's pen is never on the host: the owner's device signs
+    the grant (CIRISServer#837 owner-requests round trip) and the node applies it. Once
+    it stands the crossing is done, and the fold must not keep reporting the pen as
+    unreachable.
+
+    Asks persist's own fold (``community_trust_consent_json``, CIRISPersist#946), the
+    predicate the canonical applies. It knows that the attester may be a live roster
+    key of the owner's fedID and not the fedID itself, and that a revocation is a
+    boundary. Only a grant placed at federation counts here, because a local row has
+    not crossed. Can't read ⇒ None, so the caller falls through to the door as before.
+    """
+    try:
+        import json as _json
+
+        node = _node_key_id()
+        standing_json = getattr(engine, "community_trust_consent_json", None)
+        if not node or standing_json is None:
+            return None
+        grant = _json.loads(standing_json(node) or "null")
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("consent-CEG: standing owner grant lookup failed: %s", exc)
+        return None
+    if not isinstance(grant, dict) or grant.get("cohort_scope") != _CROSSING_TARGET_FEDERATION:
+        return None
+    attestation_id = grant.get("attestation_id")
+    return str(attestation_id) if attestation_id else None
+
+
 def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:
     """Cross the directed grant to the community, once per (grant, attempt) per process.
 
@@ -801,6 +867,10 @@ def _cross_grant(engine: object, attestation_id: str, attempt: str) -> str:
     when one was placed (CIRISAgent#1144), else the local row's.
     """
     _crossing_attempted.add((attestation_id, attempt))
+    applied = _applied_owner_grant(engine)
+    if applied is not None:
+        _log_grant_decision(f"owner-authored community_trust {applied} in force (local grant {attestation_id})")
+        return applied
     door = _owner_authored_door()
     if door is not None:
         try:

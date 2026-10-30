@@ -45,6 +45,7 @@ from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.capabilities import LLMCapabilities
 
 from .base_bus import BaseBus, BusMessage
+from .thought_resource_ledger import thought_resource_ledger
 
 logger = logging.getLogger(__name__)
 
@@ -1488,6 +1489,11 @@ class LLMBus(BaseBus[LLMService]):
                 await self.resource_monitor.record_tokens(usage.tokens_used)
             except Exception as e:  # never fail an LLM call over budget bookkeeping
                 logger.warning(f"Failed to record tokens with the resource monitor: {e}")
+
+        # Per-thought totals for the ACTION_COMPLETE event, kept in memory: a
+        # dict update here instead of six graph scans per thought later.
+        if thought_id:
+            thought_resource_ledger.record(thought_id, usage, api_base)
 
         if not self.telemetry_service:
             return

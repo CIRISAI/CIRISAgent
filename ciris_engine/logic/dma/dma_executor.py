@@ -175,8 +175,9 @@ async def run_dma_with_retries(
     #: In-flight attempts: task -> (attempt number, monotonic start).
     live: Dict["asyncio.Task[Any]", tuple[int, float]] = {}
     can_launch = True
+    may_hedge = max_attempts > 1
 
-    def launch() -> bool:
+    def launch(hedge: bool = False) -> bool:
         """Start the next attempt, or record why the deadline cannot afford one."""
         nonlocal attempt, last_error, can_launch
         if attempt >= max_attempts:
@@ -204,6 +205,8 @@ async def run_dma_with_retries(
                 )
             return False
         attempt += 1
+        if not hedge:
+            hedging.note_attempt()
         live[asyncio.create_task(one_attempt(this_try_s))] = (attempt, time.monotonic())
         return True
 
@@ -215,12 +218,18 @@ async def run_dma_with_retries(
             # first answer wins. A reply that lands after the retry started is taken,
             # and the retry cancelled, instead of being thrown away.
             hedge_in: Optional[float] = None
-            if len(live) == 1 and can_launch and max_attempts > 1:
+            hedge_at = hedging.hedge_after_s(name) if may_hedge else None
+            if len(live) == 1 and can_launch and hedge_at is not None:
                 (only_n, started), = live.values()
-                hedge_in = max(0.0, hedging.hedge_after_s(name, budget.llm_http_timeout_s) - (time.monotonic() - started))
+                hedge_in = max(0.0, hedge_at - (time.monotonic() - started))
             done, _ = await asyncio.wait(live, timeout=hedge_in, return_when=asyncio.FIRST_COMPLETED)
             if not done:
-                if launch():
+                # Spent from the process-wide hedge budget; refused, this call
+                # waits out its own attempt exactly as before hedging existed.
+                if not hedging.try_hedge():
+                    may_hedge = False
+                    continue
+                if launch(hedge=True):
                     logger.warning(
                         "[HEDGE] DMA %s attempt %s has not answered after %.1fs -- attempt %s starts beside it; "
                         "the first answer wins and the other is cancelled",

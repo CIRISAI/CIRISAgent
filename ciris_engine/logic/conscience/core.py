@@ -308,12 +308,13 @@ class _BaseConscience(ConscienceInterface):
         out_of_time = False
         #: In-flight attempts: task -> (attempt number, monotonic start, its timeout).
         live: Dict["asyncio.Task[Any]", Tuple[int, float, float]] = {}
+        may_hedge = max_attempts > 1
 
         async def one_attempt(timeout: float) -> Any:
             with llm_call_deadline(timeout):
                 return await asyncio.wait_for(sink.llm.call_llm_structured(**kwargs), timeout=timeout)
 
-        def launch() -> bool:
+        def launch(hedge: bool = False) -> bool:
             nonlocal attempts_made, out_of_time
             if attempts_made >= max_attempts or fatal is not None or out_of_time:
                 return False
@@ -330,6 +331,8 @@ class _BaseConscience(ConscienceInterface):
                 out_of_time = True
                 return False
             attempts_made += 1
+            if not hedge:
+                hedging.note_attempt()
             live[asyncio.create_task(one_attempt(timeout))] = (attempts_made, time.monotonic(), timeout)
             return True
 
@@ -339,12 +342,16 @@ class _BaseConscience(ConscienceInterface):
                 # HEDGE, don't abandon: past this shard's recent p95 the next
                 # attempt starts beside the slow one and the first answer wins.
                 hedge_in: Optional[float] = None
-                if len(live) == 1 and attempts_made < max_attempts and fatal is None and not out_of_time:
+                hedge_at = hedging.hedge_after_s(name) if may_hedge else None
+                if len(live) == 1 and attempts_made < max_attempts and fatal is None and not out_of_time and hedge_at is not None:
                     ((slow_n, slow_t0, _),) = live.values()
-                    hedge_in = max(0.0, hedging.hedge_after_s(name, per_try) - (time.monotonic() - slow_t0))
+                    hedge_in = max(0.0, hedge_at - (time.monotonic() - slow_t0))
                 done, _ = await asyncio.wait(live, timeout=hedge_in, return_when=asyncio.FIRST_COMPLETED)
                 if not done:
-                    if launch():
+                    if not hedging.try_hedge():
+                        may_hedge = False
+                        continue
+                    if launch(hedge=True):
                         logger.warning(
                             "[HEDGE] [CONSCIENCE] %s: attempt %d has not answered after %.1fs -- attempt %d "
                             "starts beside it; the first answer wins and the other is cancelled",

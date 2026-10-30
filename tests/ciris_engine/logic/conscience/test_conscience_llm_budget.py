@@ -359,7 +359,8 @@ async def test_a_slow_call_is_hedged_and_its_late_answer_is_taken(monkeypatch: p
     thrown away at the per-try limit."""
     from ciris_engine.logic.utils import hedging
 
-    monkeypatch.setattr(hedging, "hedge_after_s", lambda name, fallback: 0.05)
+    monkeypatch.setattr(hedging, "hedge_after_s", lambda name: 0.05)
+    hedging.reset()
     answered = (_humility(), None)
     calls = {"n": 0, "cancelled": 0}
 

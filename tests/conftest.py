@@ -803,6 +803,16 @@ def _stub_authentication_service_attestation(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_hedging_book():
+    """Hedge history and budget are process-wide; no test inherits another's."""
+    from ciris_engine.logic.utils import hedging
+
+    hedging.reset()
+    yield
+    hedging.reset()
+
+
+@pytest.fixture(autouse=True)
 def _stub_accord_halt_latch(request, monkeypatch):
     """Answer the constitutional-halt reader with "no halt stands".
 

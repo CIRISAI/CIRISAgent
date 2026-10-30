@@ -18,7 +18,7 @@ from ciris_engine.logic.utils import hedging
 
 @pytest.fixture(autouse=True)
 def _fast_hedge(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hedging, "hedge_after_s", lambda name, http_timeout_s: 0.1)
+    monkeypatch.setattr(hedging, "hedge_after_s", lambda name: 0.1)
     hedging.reset()
 
 
@@ -77,13 +77,37 @@ async def test_a_hedge_that_fails_outright_does_not_end_the_slow_attempt() -> No
     assert await run_dma_with_retries(attempts, retry_limit=2, timeout_seconds=5.0) == "first"
 
 
-def test_the_hedge_point_is_the_recent_p95(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_hedge_point_is_the_recent_p95_and_needs_history(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.undo()  # the real hedge_after_s
     hedging.reset()
-    assert hedging.hedge_after_s("run_x", 45.0) == 22.5, "no history: half the HTTP timeout"
+    assert hedging.hedge_after_s("run_x") is None, "no history: no hedge"
     for seconds in range(1, 41):
         hedging.record_latency("run_x", float(seconds))
-    assert hedging.hedge_after_s("run_x", 45.0) == 39.0
+    assert hedging.hedge_after_s("run_x") == 39.0
     for _ in range(30):
         hedging.record_latency("run_y", 2.0)
-    assert hedging.hedge_after_s("run_y", 45.0) == hedging.HEDGE_FLOOR_S
+    assert hedging.hedge_after_s("run_y") == hedging.HEDGE_FLOOR_S
+
+
+@pytest.mark.asyncio
+async def test_without_history_a_slow_attempt_is_not_hedged(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.undo()
+    hedging.reset()
+    attempts = Attempts((0.3, "only"), (0.0, "never"))
+    attempts.__name__ = "run_cold"  # type: ignore[attr-defined]
+    assert await run_dma_with_retries(attempts, retry_limit=2, timeout_seconds=5.0) == "only"
+    assert attempts.started == 1
+
+
+@pytest.mark.asyncio
+async def test_a_spent_hedge_budget_stops_hedging() -> None:
+    """When most calls are slow together (a degraded provider), hedging stops
+    instead of doubling the load: at most HEDGE_BUDGET of recent attempts."""
+    first = Attempts((0.3, "a"), (5.0, "hedge"))
+    first.__name__ = "run_budget"  # type: ignore[attr-defined]
+    assert await run_dma_with_retries(first, retry_limit=2, timeout_seconds=5.0) == "a"
+    assert first.started == 2, "the first slow call may hedge"
+    second = Attempts((0.3, "b"), (5.0, "hedge"))
+    second.__name__ = "run_budget"  # type: ignore[attr-defined]
+    assert await run_dma_with_retries(second, retry_limit=2, timeout_seconds=5.0) == "b"
+    assert second.started == 1, "the budget (5% of recent attempts) is spent"

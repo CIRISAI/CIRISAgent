@@ -268,3 +268,14 @@ def test_exit_code_non_zero_below_threshold(capsys: pytest.CaptureFixture[str]) 
     assert _report(processed=50, rate=0.5) == 0
     assert _report(processed=0, messages=0) == 1  # nothing measured is not a pass
     assert "Result:         FAIL" in capsys.readouterr().out
+
+
+def test_a_423_reports_the_halt_or_ownership_reading() -> None:
+    """A fail-closed read timeout is not a halt: the reason names the reading."""
+    from tools.memory_benchmark import _refusal_reason
+
+    halt_timeout = {"detail": {"error": "accord_halt_in_effect", "halt": {"reading": "node_timeout"}}}
+    assert _refusal_reason(423, halt_timeout) == "http_423_accord_halt_in_effect[node_timeout]"
+    unclaimed = {"detail": {"error": "node_unclaimed", "message": "This node has no owner (read_timeout: no answer in 2.0s). An agent ..."}}
+    assert _refusal_reason(423, unclaimed) == "http_423_node_unclaimed[read_timeout]"
+    assert _refusal_reason(503, {"detail": {"error": "resource_shed"}}) == "http_503_resource_shed"

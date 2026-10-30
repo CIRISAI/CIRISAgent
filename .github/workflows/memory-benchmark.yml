@@ -12,6 +12,8 @@ on:
       - 'ciris_engine/**'
       - 'main.py'
       - 'requirements.txt'
+      - 'tools/memory_benchmark.py'
+      - '.github/workflows/memory-benchmark.yml'
 
 # 2.8.11 Tier 3 CI hardening: cancel superseded runs on the same ref.
 # Memory benchmarks are long-running (~16min) — a PR force-push during

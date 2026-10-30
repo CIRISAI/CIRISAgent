@@ -264,8 +264,20 @@ def parse_retry_after(response: Any, body: Any, now_epoch: Optional[float] = Non
 
 
 def _refusal_reason(status: int, body: Any) -> str:
-    error = _detail(body).get("error")
-    return f"http_{status}_{error}" if isinstance(error, str) and error else f"http_{status}"
+    detail = _detail(body)
+    error = detail.get("error")
+    reason = f"http_{status}_{error}" if isinstance(error, str) and error else f"http_{status}"
+    # A 423 can be a real halt or claim, or a fail-closed READ of either: the
+    # halt latch and the ownership read both refuse when the local node does not
+    # answer in time. The reading says which, so a timeout under load is not
+    # reported as a halt.
+    halt = detail.get("halt")
+    reading = halt.get("reading") if isinstance(halt, dict) else None
+    if not reading and status == 423 and isinstance(detail.get("message"), str):
+        message = detail["message"]
+        if "no owner (" in message:
+            reading = message.split("no owner (", 1)[1].split(":", 1)[0].split(")", 1)[0]
+    return f"{reason}[{reading}]" if isinstance(reading, str) and reading else reason
 
 
 async def send_messages(

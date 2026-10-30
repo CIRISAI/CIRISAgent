@@ -6,6 +6,7 @@ node-claimed owner and keys the agent's consent and preferences to it.
 """
 
 import asyncio
+import io
 import logging
 import os
 import time
@@ -16,8 +17,8 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
-from ciris_engine.logic.setup.wizard import create_env_file
-from ciris_engine.logic.utils.env_file import env_line
+from ciris_engine.logic.setup.wizard import render_env_file
+from ciris_engine.logic.utils.env_file import env_line, write_env_file
 from ciris_engine.logic.utils.node_ownership import claim_pin_file, node_owned
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.runtime.node_ownership import CLAIM_ROUTE, NODE_UNCLAIMED_ERROR, UPGRADE_CLAIM_ROUTES
@@ -832,7 +833,7 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
     if not llm_api_key and setup.llm_provider in ("local", "local_inference", "mobile_local"):
         llm_api_key = "local"
 
-    config_path = create_env_file(
+    config_path, base_content = render_env_file(
         llm_provider=setup.llm_provider or "",
         llm_api_key=llm_api_key,
         llm_base_url=llm_base_url,
@@ -840,7 +841,12 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         agent_port=setup.agent_port,
     )
 
-    with open(config_path, "a") as f:
+    # ONE PUBLISH. The file is composed in memory and replaced in one step, so a
+    # reader sees the previous .env or the complete new one. Appending to the
+    # written base file let the desktop client read it mid-setup, find no
+    # CIRIS_RUN_WITHOUT_AI, and stay on :8080 after the hand-off (2.18.0 gate).
+    with io.StringIO(base_content) as f:
+        f.seek(0, io.SEEK_END)
         # Template and adapter configuration
         f.write("\n# Agent Template\n")
         f.write(f"CIRIS_TEMPLATE={setup.template_id}\n")
@@ -848,7 +854,6 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         f.write(f"CIRIS_ADAPTER={','.join(setup.enabled_adapters)}\n")
 
         # Write adapter-specific configs using helper functions
-        _emit_accord_metrics_consent(setup)
         _write_llm_availability_config(f, setup)
         _write_mobile_local_llm_config(f, setup)
         _write_adapter_specific_config(f, setup)
@@ -865,7 +870,11 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
         _write_node_connection_config(f, setup)
         _write_licensed_package_config(f, setup)
         _write_verify_config(f, setup)
+        write_env_file(config_path, f.getvalue())
 
+    # After the publish, not inside it: the consent grants are substrate calls
+    # that took 7 s on the 2.18.0 gate, and nothing they do touches this file.
+    _emit_accord_metrics_consent(setup)
     return config_path
 
 

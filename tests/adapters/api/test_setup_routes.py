@@ -674,15 +674,13 @@ class TestDualPasswordSupport:
 class TestSetupHelperFunctions:
     """Test setup route helper functions for saving config and creating users."""
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.create_env_file")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.render_env_file")
     def test_save_setup_config_openai(self, mock_create_env, tmp_path):
         """Test _save_setup_config with OpenAI provider."""
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
 
         config_path = tmp_path / ".env"
-        # Mock create_env_file to return test path and create the file
-        mock_create_env.return_value = config_path
-        config_path.write_text("")  # Create empty file for appending
+        mock_create_env.return_value = (config_path, "")
 
         setup = SetupCompleteRequest(
             llm_provider="openai",
@@ -699,7 +697,7 @@ class TestSetupHelperFunctions:
 
         result_path = _save_setup_config(setup)
 
-        # Verify create_env_file was called with correct params (no save_path)
+        # Verify render_env_file was called with correct params (no save_path)
         mock_create_env.assert_called_once_with(
             llm_provider="openai",
             llm_api_key="sk-test123",
@@ -715,15 +713,13 @@ class TestSetupHelperFunctions:
         assert "CIRIS_TEMPLATE=general" in content
         assert "CIRIS_ADAPTER=api,cli" in content
 
-    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.create_env_file")
+    @patch("ciris_engine.logic.adapters.api.routes.setup.complete.render_env_file")
     def test_save_setup_config_with_adapter_config(self, mock_create_env, tmp_path):
         """Test _save_setup_config with adapter-specific configuration."""
         from ciris_engine.logic.adapters.api.routes.setup import _save_setup_config
 
         config_path = tmp_path / ".env"
-        # Mock create_env_file to return test path and create the file
-        mock_create_env.return_value = config_path
-        config_path.write_text("")  # Create empty file for appending
+        mock_create_env.return_value = (config_path, "")
 
         setup = SetupCompleteRequest(
             llm_provider="local",
@@ -745,6 +741,60 @@ class TestSetupHelperFunctions:
         content = config_path.read_text()
         assert "DISCORD_BOT_TOKEN=test-token" in content
         assert "DISCORD_CHANNEL_ID=123456" in content
+
+    def test_the_env_is_complete_before_the_consent_grants_run(self, tmp_path, monkeypatch):
+        """A reader during the slow consent grants sees the finished .env (2.18.0 gate).
+
+        The desktop client read the home's .env while setup was still appending to
+        it around a 7 s consent grant, found no CIRIS_RUN_WITHOUT_AI, and stayed on
+        :8080 after the agent handed off to the node on :4243.
+        """
+        from ciris_engine.logic.adapters.api.routes.setup import complete
+
+        config_path = tmp_path / ".env"
+        monkeypatch.setattr(complete, "render_env_file", lambda **kw: (config_path, "BASE=1\n"))
+        seen: list[str] = []
+        monkeypatch.setattr(complete, "_emit_accord_metrics_consent", lambda setup: seen.append(config_path.read_text()))
+        setup = SetupCompleteRequest(
+            run_without_ai=True,
+            template_id="default",
+            enabled_adapters=["api", "ciris_accord_metrics"],
+            adapter_config={},
+            admin_username="admin",
+            admin_password="secure_password_123",
+        )
+
+        complete._save_setup_config(setup)
+
+        assert seen, "the consent grants never ran"
+        assert "CIRIS_RUN_WITHOUT_AI=true" in seen[0], "the grants ran while the .env lacked the hand-off flag"
+        assert seen[0] == config_path.read_text()
+
+    def test_a_failed_write_leaves_the_previous_env_whole(self, tmp_path, monkeypatch):
+        """The .env is replaced in one step: a failure mid-write keeps the old file."""
+        import os as _os
+
+        from ciris_engine.logic.utils import env_file
+
+        path = tmp_path / ".env"
+        path.write_text("OLD=1\n")
+
+        def boom(fd: int) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(_os, "fsync", boom)
+        with pytest.raises(OSError):
+            env_file.write_env_file(path, "NEW=1\n")
+        assert path.read_text() == "OLD=1\n"
+        assert not (tmp_path / ".env.tmp").exists()
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
+    def test_the_env_is_never_readable_by_others(self, tmp_path):
+        from ciris_engine.logic.utils import env_file
+
+        path = tmp_path / ".env"
+        env_file.write_env_file(path, "SECRETS_MASTER_KEY=x\n")
+        assert (path.stat().st_mode & 0o777) == 0o600
 
     @staticmethod
     def _node_owner(monkeypatch, name="newuser"):

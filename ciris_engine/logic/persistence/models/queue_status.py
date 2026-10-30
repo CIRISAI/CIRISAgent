@@ -1,13 +1,20 @@
 """Queue status functions for centralized access to task and thought counts."""
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
 
 from .tasks import count_tasks
-from .thoughts import get_thoughts_by_status
+from .thoughts import count_thoughts_by_status, get_thoughts_by_status
+
+
+#: How long one queue-status answer is reused (seconds); see get_queue_status.
+QUEUE_STATUS_TTL_SECONDS = 2.0
+
+_queue_status_cache: Dict[str, Tuple[float, "QueueStatus"]] = {}
 
 
 @dataclass
@@ -87,28 +94,36 @@ def get_queue_status() -> QueueStatus:
 
     Returns:
         QueueStatus object with counts
+
+    Every thought's context build asks for this, and the substrate has no
+    count: each answer pages the whole task and thought history. Within one
+    QUEUE_STATUS_TTL_SECONDS window the same answer is reused, so a batch of
+    fifty thoughts pages it once instead of fifty times.
     """
-    # Get task counts
+    now = time.monotonic()
+    cached = _queue_status_cache.get("status")
+    if cached is not None and now - cached[0] < QUEUE_STATUS_TTL_SECONDS:
+        return cached[1]
+
+    # Counted without materializing rows: total thoughts spans every
+    # COMPLETED thought the agent has ever had.
     pending_tasks = count_tasks(TaskStatus.PENDING)
     total_tasks = count_tasks()
-
-    # Get thought counts
-    # Note: count_thoughts() already returns PENDING + PROCESSING count
-    pending_thoughts = len(get_thoughts_by_status(ThoughtStatus.PENDING))
-    processing_thoughts = len(get_thoughts_by_status(ThoughtStatus.PROCESSING))
-
-    # For total thoughts, we need all statuses
+    pending_thoughts = count_thoughts_by_status(ThoughtStatus.PENDING)
+    processing_thoughts = count_thoughts_by_status(ThoughtStatus.PROCESSING)
     total_thoughts = (
         pending_thoughts
         + processing_thoughts
-        + len(get_thoughts_by_status(ThoughtStatus.COMPLETED))
-        + len(get_thoughts_by_status(ThoughtStatus.FAILED))
+        + count_thoughts_by_status(ThoughtStatus.COMPLETED)
+        + count_thoughts_by_status(ThoughtStatus.FAILED)
     )
 
-    return QueueStatus(
+    status = QueueStatus(
         pending_tasks=pending_tasks,
         pending_thoughts=pending_thoughts,
         processing_thoughts=processing_thoughts,
         total_tasks=total_tasks,
         total_thoughts=total_thoughts,
     )
+    _queue_status_cache["status"] = (now, status)
+    return status

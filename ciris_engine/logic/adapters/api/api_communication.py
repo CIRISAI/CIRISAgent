@@ -445,7 +445,11 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         from ciris_engine.logic.persistence import get_correlations_by_channel
 
         try:
-            correlations = get_correlations_by_channel(channel_id=channel_id, limit=limit, before=before)
+            # On a worker: the substrate query and row decoding are synchronous,
+            # and this runs twice per inbound message.
+            correlations = await asyncio.to_thread(
+                get_correlations_by_channel, channel_id=channel_id, limit=limit, before=before
+            )
 
             messages = []
             for corr in correlations:

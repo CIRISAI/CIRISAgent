@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Union
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 
@@ -337,6 +337,37 @@ def _row_to_service_correlation(row: Dict[str, Any]) -> Optional[ServiceCorrelat
     except Exception as e:
         logger.exception("Failed to materialize correlation row: %s", e)
         return None
+
+
+def _correlation_pages(filter_dict: Dict[str, Any], page_size: int = 200) -> Iterator[List[Dict[str, Any]]]:
+    """Yield persist's `correlation_query` pages (raw row dicts), newest first.
+
+    A caller that only needs the newest few matches stops iterating; the
+    remaining pages are never fetched or decoded.
+    """
+    engine = _get_engine()
+    last_ts = "9999-12-31T23:59:59Z"
+    last_id = ""
+    while True:
+        cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+        try:
+            raw = engine.correlation_query(json.dumps(filter_dict), cursor_json, page_size)
+        except Exception:
+            logger.exception("correlation_query failed; filter=%r", filter_dict)
+            return
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            return
+        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+        rows = [row for row in items if isinstance(row, dict)]
+        if not rows:
+            return
+        yield rows
+        last_ts = str(rows[-1].get("created_at", last_ts))
+        last_id = str(rows[-1].get("correlation_id", ""))
+        if len(items) < page_size:
+            return
 
 
 def _query_correlations(
@@ -760,17 +791,16 @@ def get_correlations_by_channel(
 ) -> List[ServiceCorrelation]:
     """Get correlations for a specific channel (for message history).
 
-    Walks all `service_interaction` correlations, filters by action_type
-    in {speak, observe} AND request_data.channel_id == channel_id. Returns
-    results in ascending timestamp order (oldest first) to match legacy
-    behavior.
-    """
-    try:
-        rows = _query_correlations({"correlation_type": "service_interaction"})
-    except Exception as e:
-        logger.exception("Failed to fetch correlations for channel %s: %s", channel_id, e)
-        return []
+    Walks `service_interaction` correlations newest first, filters by
+    action_type in {speak, observe} AND request_data.channel_id ==
+    channel_id, and stops at the end of the page on which ``limit`` matches
+    have been found. Returns results in ascending timestamp order (oldest
+    first) to match legacy behavior.
 
+    It used to fetch and decode EVERY correlation the agent had ever
+    recorded on each call -- twice per inbound message (passive observation
+    and context recall) -- so intake slowed with every message handled.
+    """
     before_dt: Optional[datetime] = None
     if before is not None:
         if isinstance(before, datetime):
@@ -779,19 +809,26 @@ def get_correlations_by_channel(
             before_dt = _parse_iso_timestamp(str(before))
 
     matched: List[ServiceCorrelation] = []
-    for row in rows:
-        action = _row_action_type(row)
-        if action not in ("speak", "observe"):
-            continue
-        if _row_channel_id(row) != channel_id:
-            continue
-        if before_dt is not None:
-            ts = _row_timestamp(row)
-            if ts is not None and ts >= before_dt:
-                continue
-        corr = _row_to_service_correlation(row)
-        if corr is not None:
-            matched.append(corr)
+    try:
+        for page in _correlation_pages({"correlation_type": "service_interaction"}):
+            for row in page:
+                action = _row_action_type(row)
+                if action not in ("speak", "observe"):
+                    continue
+                if _row_channel_id(row) != channel_id:
+                    continue
+                if before_dt is not None:
+                    ts = _row_timestamp(row)
+                    if ts is not None and ts >= before_dt:
+                        continue
+                corr = _row_to_service_correlation(row)
+                if corr is not None:
+                    matched.append(corr)
+            if len(matched) >= limit:
+                break
+    except Exception as e:
+        logger.exception("Failed to fetch correlations for channel %s: %s", channel_id, e)
+        return []
 
     # Sort DESC by timestamp, take top `limit`, then reverse for ASC return order
     matched.sort(key=lambda c: c.timestamp or datetime.min.replace(tzinfo=timezone.utc), reverse=True)

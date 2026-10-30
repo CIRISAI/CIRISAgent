@@ -13,7 +13,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, cast
 
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
@@ -629,12 +629,31 @@ async def add_system_task(
     return add_task(task)
 
 
+#: Newest completed tasks (by creation) searched for the most recently updated.
+RECENT_COMPLETED_WINDOW = 200
+
+
 def get_recent_completed_tasks(
     occurrence_id: str = "default",
     limit: int = 10,
 ) -> List[Task]:
-    tasks_list = get_all_tasks(occurrence_id)
-    completed = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.COMPLETED]
+    """The ``limit`` most recently updated COMPLETED tasks.
+
+    Runs on every thought's context build. It used to materialize every task
+    the occurrence had ever had and filter in Python; now it asks for
+    COMPLETED rows and looks only at the newest RECENT_COMPLETED_WINDOW by
+    creation (at least 20x ``limit``). A task created before that window
+    and completed just now is not listed -- the context it feeds is a
+    recent-activity summary, not an audit.
+    """
+    window = max(RECENT_COMPLETED_WINDOW, limit * 20)
+    try:
+        completed = _list_with_filter(
+            {"status": TaskStatus.COMPLETED.value, "agent_occurrence_id": occurrence_id}, limit=window
+        )
+    except Exception as e:
+        logger.exception(f"Failed to get recent completed tasks for occurrence {occurrence_id}: {e}")
+        return []
     completed_sorted = sorted(completed, key=lambda t: getattr(t, "updated_at", ""), reverse=True)
     return completed_sorted[:limit]
 
@@ -643,9 +662,11 @@ def get_top_tasks(
     occurrence_id: str = "default",
     limit: int = 10,
 ) -> List[Task]:
-    """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date."""
-    tasks_list = get_all_tasks(occurrence_id)
-    pending = [t for t in tasks_list if getattr(t, "status", None) == TaskStatus.PENDING]
+    """Get top pending tasks for occurrence ordered by priority (highest first) then by creation date.
+
+    Asks the substrate for PENDING rows only (was: every task, filtered in Python).
+    """
+    pending = get_tasks_by_status(TaskStatus.PENDING, occurrence_id)
     sorted_tasks = sorted(pending, key=lambda t: (-getattr(t, "priority", 0), getattr(t, "created_at", "")))
     return sorted_tasks[:limit]
 
@@ -660,14 +681,62 @@ def get_pending_tasks_for_activation(
     return sorted_tasks[:limit]
 
 
+def _task_pages(filter_dict: Dict[str, Any], page_size: int = 200) -> Iterator[List[Dict[str, Any]]]:
+    """Yield `task_list` pages as raw row dicts, newest first (DESC by created_at).
+
+    For callers that count, look for one row, or want only the newest few:
+    they stop early and never build a Task model for rows they discard.
+    """
+    engine = _get_engine()
+    last_ts = "9999-12-31T23:59:59Z"
+    last_id = ""
+    while True:
+        cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+        raw = engine.task_list(json.dumps(filter_dict), cursor_json, page_size)
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            return
+        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+        rows = [row for row in items if isinstance(row, dict)]
+        if not rows:
+            return
+        yield rows
+        last_ts = str(rows[-1].get("created_at", last_ts))
+        last_id = str(rows[-1].get("task_id", ""))
+        if len(items) < page_size:
+            return
+
+
+def _count_with_filter(filter_dict: Dict[str, Any]) -> int:
+    """Count `task_list` rows without materializing Task models (see count_tasks)."""
+    return sum(len(page) for page in _task_pages(filter_dict))
+
+
+def _row_correlation_id(row: Dict[str, Any]) -> Optional[str]:
+    ctx = row.get("context")
+    if isinstance(ctx, str):
+        try:
+            ctx = json.loads(ctx)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(ctx, dict):
+        value = ctx.get("correlation_id")
+        return str(value) if value is not None else None
+    return None
+
+
 def count_tasks(status: Optional[TaskStatus] = None, occurrence_id: str = "default") -> int:
-    """Count tasks matching the criteria."""
+    """Count tasks matching the criteria.
+
+    Counts substrate rows without building a Task model for each: this runs on
+    every thought's context build, and materializing the whole task history to
+    take its length grew with every task the agent had ever run.
+    """
     try:
         if status:
-            tasks = _list_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
-        else:
-            tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
-        return len(tasks)
+            return _count_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
+        return _count_with_filter({"agent_occurrence_id": occurrence_id})
     except Exception as e:
         logger.exception(f"Failed to count tasks for occurrence {occurrence_id}: {e}")
         return 0
@@ -1061,15 +1130,14 @@ def get_latest_shared_task(task_type: str, within_hours: int = 24) -> Optional[T
 
 def get_task_by_correlation_id(correlation_id: str, occurrence_id: str = "default") -> Optional[Task]:
     """Query for a task by correlation_id (e.g., Reddit post/comment ID)."""
+    # Runs on every add_task. Rows arrive newest first, so the first match is
+    # the newest; only that row is materialized (this used to build a Task
+    # model for every task the occurrence had ever had, per insert).
     try:
-        all_tasks = _list_with_filter({"agent_occurrence_id": occurrence_id})
+        for page in _task_pages({"agent_occurrence_id": occurrence_id}):
+            for row in page:
+                if _row_correlation_id(row) == correlation_id:
+                    return _persist_row_to_task(row)
     except Exception as e:
         logger.exception(f"Failed to get task by correlation_id {correlation_id}: {e}")
-        return None
-    matches = [
-        t for t in all_tasks if t.context is not None and getattr(t.context, "correlation_id", None) == correlation_id
-    ]
-    if not matches:
-        return None
-    matches.sort(key=lambda t: t.created_at, reverse=True)
-    return matches[0]
+    return None

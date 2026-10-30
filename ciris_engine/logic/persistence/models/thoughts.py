@@ -235,6 +235,50 @@ def _list_with_filter(
     return collected
 
 
+def _count_with_filter(filter_dict: Dict[str, Any]) -> int:
+    """Count `thought_list` rows without materializing them.
+
+    The substrate has no thought count; paging is unavoidable, but building a
+    Thought model per row (pydantic + context JSON) just to take len() of the
+    list was the bulk of the cost, and the counts run on every thought's
+    context build and every resource-monitor tick.
+    """
+    engine = _get_engine()
+    last_ts = "9999-12-31T23:59:59Z"
+    last_id = ""
+    page_size = 200
+    count = 0
+    while True:
+        cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+        raw = engine.thought_list(json.dumps(filter_dict), cursor_json, page_size)
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            break
+        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+        if not items:
+            break
+        rows = [row for row in items if isinstance(row, dict)]
+        count += len(rows)
+        if rows:
+            last_ts = str(rows[-1].get("created_at", last_ts))
+            last_id = str(rows[-1].get("thought_id", ""))
+        if len(items) < page_size:
+            break
+    return count
+
+
+def count_thoughts_by_status(status: ThoughtStatus, occurrence_id: str = "default") -> int:
+    """How many of the occurrence's thoughts have ``status`` (no rows materialized)."""
+    if not isinstance(status, ThoughtStatus):
+        raise TypeError(f"Expected ThoughtStatus enum, got {type(status)}: {status}")
+    try:
+        return _count_with_filter({"status": status.value, "agent_occurrence_id": occurrence_id})
+    except Exception as e:
+        logger.exception(f"Failed to count thoughts with status {status.value} for occurrence {occurrence_id}: {e}")
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # Public API — signatures preserved verbatim from the legacy raw-sqlite3 impl.
 # ---------------------------------------------------------------------------
@@ -517,13 +561,11 @@ def count_thoughts(occurrence_id: str = "default") -> int:
     """Return the count of thoughts that are PENDING or PROCESSING."""
     try:
         # Persist doesn't have OR filter support in `thought_list`; do two queries.
-        pending = _list_with_filter(
-            {"status": ThoughtStatus.PENDING.value, "agent_occurrence_id": occurrence_id}
-        )
-        processing = _list_with_filter(
+        pending = _count_with_filter({"status": ThoughtStatus.PENDING.value, "agent_occurrence_id": occurrence_id})
+        processing = _count_with_filter(
             {"status": ThoughtStatus.PROCESSING.value, "agent_occurrence_id": occurrence_id}
         )
-        return len(pending) + len(processing)
+        return pending + processing
     except Exception as e:
         logger.exception(f"Failed to count PENDING or PROCESSING thoughts for occurrence {occurrence_id}: {e}")
         return 0

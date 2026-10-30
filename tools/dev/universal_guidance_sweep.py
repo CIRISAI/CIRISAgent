@@ -41,6 +41,7 @@ TRACKER = REPO / "tests/safety/universal_guidance_sweep.csv"
 PIN_TEST = REPO / "tests/ciris_engine/logic/utils/test_language_guidance_split_997.py"
 UNIVERSAL_PARTS = (
     "05_no_wellness_confirmation",
+    "05b_no_stigma_words",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     "26b_user_symptom_direction",

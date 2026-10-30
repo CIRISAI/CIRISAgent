@@ -127,10 +127,15 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #: CC 7.4 line in the round-1 capability-boundary block. It renders wherever
 #: the prohibition block does (PDMA, CSDMA, DSDMA), so numerator and
 #: denominator move together.
+#:
+#: ``string`` 139 -> 140 (2.18.0): ``prompts.universal_guidance.05b_no_stigma_words``,
+#: the DEONTIC stigma-word rule the coherence conscience applies. It composes
+#: into the language-guidance block wherever 05 does, so numerator and
+#: denominator move together.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     "dma_prompt": 45,
-    "string": 139,
+    "string": 140,
     "conscience_prompt": 12,
     "template": 3,
 }

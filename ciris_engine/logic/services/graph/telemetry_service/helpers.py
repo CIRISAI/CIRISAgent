@@ -97,11 +97,14 @@ async def collect_metric_aggregates(
     aggregates = MetricAggregates()
 
     try:
+        # One recall for every metric type: the window's rows are the same for
+        # each name, so fetching them once per type multiplied the work by
+        # len(metric_types).
+        by_name: Dict[str, List[MetricRecord]] = await telemetry_service.query_metric_set(
+            [metric_name for metric_name, _ in metric_types], start_time=window_start_24h, end_time=window_end
+        )
         for metric_name, metric_type in metric_types:
-            # Get 24h data
-            day_metrics: List[MetricRecord] = await telemetry_service.query_metrics(
-                metric_name=metric_name, start_time=window_start_24h, end_time=window_end
-            )
+            day_metrics: List[MetricRecord] = by_name.get(metric_name, [])
 
             for metric in day_metrics:
                 # Aggregate into appropriate counter

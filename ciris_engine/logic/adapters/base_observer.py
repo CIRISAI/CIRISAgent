@@ -40,7 +40,6 @@ from ciris_engine.schemas.runtime.messages import MessageHandlingResult, Message
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
-from ciris_engine.schemas.services.resources_core import ResourceAction
 from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
@@ -1142,11 +1141,27 @@ class BaseObserver(Generic[MessageT], ABC):
         # under CRITICAL pressure. Refused before credit is charged and before
         # any task exists, with a typed status the adapter can surface (the API
         # answers 503 + Retry-After). Accord rows were forwarded above.
+        # Admission is per message (see ThoughtAdmission): an admitted message
+        # holds a reservation against the active-thought ceiling until it is
+        # known whether it created a thought.
+        gate = None
         if not is_agent_message:
             shed_result = self._refuse_if_shedding(msg, msg_id, channel_id)
             if shed_result is not None:
                 return shed_result
+            gate = pressure_gate_of(self._admission_monitor(msg))
+        result: Optional[MessageHandlingResult] = None
+        try:
+            result = await self._handle_admitted_message(msg, msg_id, channel_id, author, is_agent_message)
+            return result
+        finally:
+            if gate is not None:
+                gate.settle_intake(result is not None and result.status == MessageHandlingStatus.TASK_CREATED)
 
+    async def _handle_admitted_message(
+        self, msg: MessageT, msg_id: str, channel_id: str, author: str, is_agent_message: bool
+    ) -> MessageHandlingResult:
+        """handle_incoming_message after admission: credit, secrets, filter, task."""
         # Enforce credit policy if configured (may raise CreditDenied/CreditCheckFailed)
         await self._enforce_credit_policy(msg)
 
@@ -1247,25 +1262,32 @@ class BaseObserver(Generic[MessageT], ABC):
         return monitor
 
     def _refuse_if_shedding(self, msg: MessageT, msg_id: str, channel_id: str) -> Optional[MessageHandlingResult]:
-        """A RESOURCE_SHED result when admission is closed, else None."""
+        """A RESOURCE_SHED result when this message is not admitted, else None.
+
+        Admitting reserves a slot under the active-thought ceiling; the caller
+        settles it with `gate.settle_intake` once the outcome is known.
+        Refusals are logged by the gate at the transition and counted per
+        round, not one WARNING per message (a burst refuses hundreds).
+        """
         gate = pressure_gate_of(self._admission_monitor(msg))
         if gate is None:
             return None
-        holders = gate.resources(ResourceAction.SHED)
-        if not holders:
+        decision = gate.admit_intake()
+        if decision.admitted:
             return None
-        gate.note_shed_refusal()
-        logger.warning(
-            "[OBSERVER] Message %s in channel %s REFUSED: admission closed by resource pressure (shed: %s)",
+        logger.debug(
+            "[OBSERVER] Message %s in channel %s REFUSED: SHED by resource pressure (%s), Retry-After %ss",
             msg_id,
             channel_id,
-            ", ".join(holders),
+            ", ".join(decision.shed_resources),
+            decision.retry_after_seconds,
         )
         return MessageHandlingResult(
             status=MessageHandlingStatus.RESOURCE_SHED,
             message_id=msg_id,
             channel_id=channel_id,
-            shed_resources=holders,
+            shed_resources=decision.shed_resources,
+            retry_after_seconds=decision.retry_after_seconds,
         )
 
     async def _enhance_message(self, msg: MessageT) -> MessageT:

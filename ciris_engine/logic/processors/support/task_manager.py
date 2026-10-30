@@ -94,15 +94,20 @@ class TaskManager:
         logger.info(f"Created task {task.task_id} (occurrence: {self.agent_occurrence_id}): {description}")
         return task
 
-    def activate_pending_tasks(self) -> int:
+    def activate_pending_tasks(self, limit: Optional[int] = None) -> int:
         """
         Activate pending tasks up to the configured limit.
+
+        ``limit`` further caps this call (the resource-pressure headroom under
+        the active-thought ceiling: each activated task gets a seed thought).
         Returns the number of tasks activated.
         """
         logger.debug(f"[TASK DEBUG] activate_pending_tasks called for occurrence {self.agent_occurrence_id}")
         num_active = persistence.count_active_tasks(self.agent_occurrence_id)
         logger.debug(f"[TASK DEBUG] Current active tasks: {num_active}, max allowed: {self.max_active_tasks}")
         can_activate = max(0, self.max_active_tasks - num_active)
+        if limit is not None:
+            can_activate = min(can_activate, max(0, limit))
 
         if can_activate == 0:
             logger.debug(f"Maximum active tasks ({self.max_active_tasks}) reached.")

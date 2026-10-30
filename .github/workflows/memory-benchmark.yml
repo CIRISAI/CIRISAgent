@@ -6,6 +6,18 @@ on:
     - cron: '0 6 * * 1'  # Monday 6am UTC
   # Allow manual triggering
   workflow_dispatch:
+    inputs:
+      profile:
+        description: >-
+          Record the agent with py-spy during the 1000-msg burst (speedscope JSON,
+          uploaded under profile/). Off by default; the profiler samples without
+          pausing the agent (--nonblocking).
+        type: boolean
+        default: false
+      profile_seconds:
+        description: Seconds of the 1000-msg burst to record (starts 45 s after launch, past boot and setup)
+        type: string
+        default: '420'
   # Run on PRs that modify core engine code
   pull_request:
     paths:
@@ -189,12 +201,44 @@ jobs:
           # steps have to fit the 20 min job budget alongside it. Messages not
           # accepted by the deadline count as failures, so a too-slow agent
           # fails the gate rather than getting cancelled with no output.
+          # Opt-in profile (workflow_dispatch input `profile`): a background
+          # recorder waits for the agent's PID, skips boot and first-run setup,
+          # then samples the burst with py-spy. sudo because the runner's
+          # ptrace_scope forbids attaching to a sibling process otherwise.
+          if [ "${{ inputs.profile }}" = "true" ]; then
+            pip install py-spy
+            mkdir -p profile
+            rm -f agent.pid
+            (
+              for _ in $(seq 1 120); do [ -s agent.pid ] && break; sleep 1; done
+              sleep 45
+              sudo "$(command -v py-spy)" record --pid "$(cat agent.pid)" --nonblocking \
+                --rate 50 --duration "${{ inputs.profile_seconds }}" --format speedscope \
+                -o profile/agent-1000msg.speedscope.json > profile/py-spy.log 2>&1
+              sudo chown -R "$(id -u):$(id -g)" profile || true
+            ) &
+            PROFILE_ARGS="--pid-file agent.pid"
+          else
+            PROFILE_ARGS=""
+          fi
+          # The agent's session log rotates at 20 MB, which a burst fills in
+          # minutes; keep every per-round and admission line of this stage in
+          # its own file (uploaded with the logs) so the whole run can be read.
+          mkdir -p logs
+          ( tail -F -n 0 logs/latest.log 2>/dev/null \
+              | grep --line-buffered -E "Work round [0-9]+: completed|Admission: |Resource [a-z_]+ pressure|Resource pressure: " \
+              > logs/rounds-1000msg.log ) &
+          ROUNDS_PID=$!
           set +e
           python3 -u tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 30 \
-            --overall-deadline 600 \
+            --overall-deadline 600 $PROFILE_ARGS \
             --composition --composition-json composition.json | tee 1000msg.log
           rc=${PIPESTATUS[0]}
           set -e
+          pkill -P "$ROUNDS_PID" 2>/dev/null || true
+          kill "$ROUNDS_PID" 2>/dev/null || true
+          # Let the recorder write its file before the upload step runs.
+          wait || true
           if [ -f 1000msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
             # The composition report lands between the idle line and the results
@@ -246,6 +290,7 @@ jobs:
             composition.json
             logs/**
             data/*.db
+            profile/**
           retention-days: 90
 
       - name: Capture upgrade-compat fixture (memory-burst)

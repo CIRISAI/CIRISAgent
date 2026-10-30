@@ -114,8 +114,12 @@ async def test_get_telemetry_summary_queries_correct_metrics(telemetry_setup):
             return [MetricRecord(metric_name=metric_name, value=0.1, timestamp=mock_time_service.now(), tags={})]
         return []
 
-    # Patch query_metrics
-    with patch.object(telemetry_service, "query_metrics", side_effect=mock_query_metrics):
+    # The summary asks for all metric types in one query_metric_set call;
+    # serve it from the per-name stub so each requested name is recorded.
+    async def mock_query_metric_set(metric_names, **kwargs):
+        return {name: await mock_query_metrics(name, **kwargs) for name in metric_names}
+
+    with patch.object(telemetry_service, "query_metric_set", side_effect=mock_query_metric_set):
         # Call get_telemetry_summary
         summary = await telemetry_service.get_telemetry_summary()
 

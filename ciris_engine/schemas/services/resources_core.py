@@ -63,6 +63,14 @@ class ResourceLimit(BaseModel):
         ),
     )
     cooldown_seconds: int = Field(default=60, ge=0, description="Cooldown between repeat RECLAIMs and log lines")
+    throttle_relieves: bool = Field(
+        default=True,
+        description=(
+            "Whether THROTTLE (slowing the work loop) relieves this resource. True for CPU-type pressure, "
+            "where yielding the CPU between rounds helps. False for a backlog that only the work loop drains "
+            "(thoughts_active): slowing the drain prolongs the overload, so the HIGH rung adds nothing"
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -160,7 +168,9 @@ def _disk_mb_limit() -> ResourceLimit:
 
 
 def _thoughts_active_limit() -> ResourceLimit:
-    return ResourceLimit(limit=50, warning=40, critical=48, action=ResourceAction.SHED)
+    # Only the work loop drains active thoughts, so throttling it would prolong
+    # the overload; admission (SHED) is what holds this resource down.
+    return ResourceLimit(limit=50, warning=40, critical=48, action=ResourceAction.SHED, throttle_relieves=False)
 
 
 class ResourceBudget(BaseModel):
@@ -219,6 +229,27 @@ class MemoryReleaseResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class AdmissionState(BaseModel):
+    """Live admission against the active-thought ceiling.
+
+    Admission is per message: a message is admitted while the live estimate of
+    active thoughts (last sample + intakes since) is below the ceiling, so only
+    the excess is refused. The ceiling sits one below the CRITICAL threshold,
+    so admitted work alone never takes the resource CRITICAL.
+    """
+
+    active_estimate: int = Field(ge=0, description="Last sampled active thoughts plus intakes since the sample")
+    ceiling: int = Field(ge=0, description="Admission ceiling (one below thoughts_active's CRITICAL threshold)")
+    drain_per_second: Optional[float] = Field(
+        default=None, ge=0, description="Measured thought drain rate (EWMA over work rounds); None until measured"
+    )
+    retry_after_seconds: int = Field(ge=1, description="Retry-After a refusal would carry right now")
+    admitted_total: int = Field(default=0, ge=0, description="Messages admitted by the live check")
+    refused_total: int = Field(default=0, ge=0, description="Messages refused by the live check (the excess)")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ResourcePressureState(BaseModel):
     """Which self-protection actions are in force right now, and how often they applied.
 
@@ -239,6 +270,9 @@ class ResourcePressureState(BaseModel):
     )
     shed_rounds_total: int = Field(default=0, ge=0, description="Work rounds that activated no new tasks under SHED")
     shed_refusals_total: int = Field(default=0, ge=0, description="Inbound messages refused at intake under SHED")
+    admission: Optional[AdmissionState] = Field(
+        default=None, description="Live admission against the active-thought ceiling (None before the first sample)"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -354,6 +388,7 @@ __all__ = [
     "ResourceBudget",
     "ResourceSnapshot",
     "ResourcePressureState",
+    "AdmissionState",
     "ResourceCost",
     "ResourceAlert",
 ]

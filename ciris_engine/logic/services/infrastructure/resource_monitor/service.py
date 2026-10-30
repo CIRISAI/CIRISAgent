@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import shutil
+import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from pydantic import ValidationError
 from ciris_engine.constants import SERVER_MINIMUM_DISK_BYTES
 from ciris_engine.logic.services.base_scheduled_service import BaseScheduledService
 from ciris_engine.logic.utils.memory_release import release_memory as _release_process_memory
+from ciris_engine.logic.utils.round_timing import round_phase_timer
 from ciris_engine.protocols.services.graph.config import GraphConfigServiceProtocol
 from ciris_engine.protocols.services.infrastructure.credit_gate import CreditGateProtocol
 from ciris_engine.protocols.services.infrastructure.resource_monitor import ResourceMonitorServiceProtocol
@@ -139,6 +141,9 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         # so on a shared emit the monitor counts first and the gate latches second.
         self.pressure = ResourcePressureGate(self.signal_bus)
 
+        # End of the previous tick (monotonic), for the loop-lag measurement.
+        self._last_tick_end: Optional[float] = None
+
     def get_service_type(self) -> ServiceType:
         """Get service type."""
         return ServiceType.VISIBILITY
@@ -174,9 +179,17 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
 
     async def _run_scheduled_task(self) -> None:
         """Update resource snapshot and check limits."""
-        await self._update_snapshot()
-        await self._check_limits()
-        await self._check_token_refresh_signal()
+        # How late this tick is: the loop sleeps run_interval between ticks, so
+        # anything beyond that is time the event loop spent blocked elsewhere.
+        started = time.monotonic()
+        if self._last_tick_end is not None:
+            round_phase_timer.note_loop_lag(max(0.0, started - self._last_tick_end - self._run_interval))
+        try:
+            await self._update_snapshot()
+            await self._check_limits()
+            await self._check_token_refresh_signal()
+        finally:
+            self._last_tick_end = time.monotonic()
 
     async def _update_snapshot(self) -> None:
         if psutil and self._process:
@@ -240,6 +253,8 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         if self.budget.tokens_day is not None:
             await self._check_resource("tokens_day", self.snapshot.tokens_used_day)
         await self._check_resource("thoughts_active", self.snapshot.thoughts_active)
+        # Live admission re-bases on every sample (see ThoughtAdmission).
+        self.pressure.admission.observe(self.snapshot.thoughts_active, self.budget.thoughts_active)
         if self.snapshot.critical:
             self.snapshot.healthy = False
 
@@ -263,6 +278,10 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         elif current_value >= limit_config.warning:
             self.snapshot.warnings.append(f"{name}: {current_value}/{limit_config.limit}")
 
+        # What a proportional THROTTLE sizes its delay against: the HIGH
+        # threshold that engaged it, so the loop rests just enough to sit
+        # under it rather than under the (lower) lift point.
+        self.pressure.note_reading(name, current_value, limit_config.critical)
         previous = self._levels.get(name, PressureLevel.NORMAL)
         level = self._next_level(limit_config, previous, current_value)
         if level != previous:
@@ -625,11 +644,12 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
     def _count_active_thoughts(self) -> int:
         """Count this occurrence's thoughts in pending/processing status via persist substrate."""
         try:
-            from ciris_engine.logic.persistence.models.thoughts import get_thoughts_by_status
+            from ciris_engine.logic.persistence.models.thoughts import count_thoughts_by_status
             from ciris_engine.schemas.runtime.enums import ThoughtStatus
 
-            pending = len(get_thoughts_by_status(ThoughtStatus.PENDING, self.agent_occurrence_id))
-            processing = len(get_thoughts_by_status(ThoughtStatus.PROCESSING, self.agent_occurrence_id))
+            # Counted, not materialized: this runs every tick, on the loop.
+            pending = count_thoughts_by_status(ThoughtStatus.PENDING, self.agent_occurrence_id)
+            processing = count_thoughts_by_status(ThoughtStatus.PROCESSING, self.agent_occurrence_id)
             return pending + processing
         except Exception:  # pragma: no cover - persist errors unlikely in tests
             return 0

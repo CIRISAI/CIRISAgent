@@ -1507,11 +1507,15 @@ def _extract_users_from_correlation_history(task: Optional[Task], user_ids: Set[
         if engine is None:
             return
 
-        filter_json = _json.dumps({"correlation_id": task.context.correlation_id})
-        cursor = _json.dumps({"version": "v1", "last_ts": "9999-12-31T23:59:59Z", "last_id": ""})
-        raw = engine.correlation_query(filter_json, cursor, 100)
+        # A point read. This used to pass {"correlation_id": ...} to
+        # correlation_query, whose CorrelationFilter has no such field: the
+        # filter was silently dropped and the newest 100 correlations of ANY
+        # conversation came back, so user ids from other conversations were
+        # enriched into this thought's context -- and the 100-row decode ran on
+        # the loop for every thought.
+        raw = engine.correlation_get(task.context.correlation_id)
         parsed = _json.loads(raw) if isinstance(raw, (bytes, str)) else raw
-        items = parsed.get("items", []) if isinstance(parsed, dict) else []
+        items = [parsed] if isinstance(parsed, dict) else []
         for row in items:
             if not isinstance(row, dict):
                 continue

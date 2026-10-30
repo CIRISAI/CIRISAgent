@@ -21,6 +21,7 @@ from ciris_engine.logic.services.infrastructure.resource_monitor.pressure import
 
 # ServiceProtocol import removed - processors aren't services
 from ciris_engine.logic.utils.context_utils import build_dispatch_context
+from ciris_engine.logic.utils.round_timing import RoundPhase, format_phase_totals, round_phase_timer, timed_phase
 from ciris_engine.schemas.processors.results import WorkResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
@@ -83,25 +84,34 @@ class WorkProcessor(BaseProcessor):
         )
         self.last_activity_time = self.time_service.now()
         self.idle_rounds = 0
+        # Admission counters at the previous round line (the line reports deltas).
+        self._admitted_seen = 0
+        self._refused_seen = 0
 
     async def _admit_new_work(self) -> Tuple[int, int]:
-        """Phases 0 and 1 -- take on new work -- unless a resource is holding SHED.
+        """Phases 0 and 1 -- take on new work -- within the admission headroom.
 
-        SHED is admission control. Nothing new is taken on: no shared ticket is
-        claimed (a pressured occurrence must not take work a healthy peer
-        could do), no continuation task is created, and queued tasks stay
+        Admission control. With no headroom under the active-thought ceiling
+        (or SHED held by another resource) nothing new is taken on: no shared
+        ticket is claimed (a pressured occurrence must not take work a healthy
+        peer could do), no continuation task is created, and queued tasks stay
         PENDING. Tasks already active keep generating and processing their
-        thoughts, so in-flight work finishes and the pressure can drain. The
-        gate lifts SHED once the resource falls clearly back below CRITICAL.
+        thoughts, so in-flight work finishes and the pressure can drain. With
+        some headroom, at most that many tasks are activated: only the excess
+        waits.
 
         Returns (tickets_discovered, tasks_activated).
         """
+        headroom: Optional[int] = None
         gate = pressure_gate_of(self.resource_monitor)
         if gate is not None:
-            holders = gate.resources(ResourceAction.SHED)
-            if holders:
+            headroom = gate.activation_headroom()
+            if headroom == 0:
                 gate.note_shed_round()
-                logger.debug("Phases 0-1 skipped: admission closed by resource pressure (shed: %s)", ", ".join(holders))
+                logger.debug(
+                    "Phases 0-1 skipped: no admission headroom (shed: %s)",
+                    ", ".join(gate.resources(ResourceAction.SHED)) or "at the active-thought ceiling",
+                )
                 return 0, 0
 
         # Phase 0: Ticket discovery (claims shared tickets, creates tasks for incomplete tickets)
@@ -111,7 +121,11 @@ class WorkProcessor(BaseProcessor):
 
         # Phase 1: Task activation
         logger.debug("Phase 1: Activating pending tasks...")
-        activated = self.task_manager.activate_pending_tasks()
+        activated = (
+            self.task_manager.activate_pending_tasks()
+            if headroom is None
+            else self.task_manager.activate_pending_tasks(limit=headroom)
+        )
         return tickets_discovered, activated
 
     def get_supported_states(self) -> List[AgentState]:
@@ -170,6 +184,7 @@ class WorkProcessor(BaseProcessor):
             logger.debug("Phase 3: Populating processing queue...")
             queue_size = self.thought_manager.populate_queue(round_number)
             logger.debug(f"Queue size after population: {queue_size}")
+            round_metrics["queued"] = queue_size
 
             if queue_size > 0:
                 # Phase 4: Process thought batch
@@ -205,12 +220,13 @@ class WorkProcessor(BaseProcessor):
         # Only log at INFO level if work was actually done
         thoughts_processed = get_int(round_metrics, "thoughts_processed", 0)
         tasks_activated = get_int(round_metrics, "tasks_activated", 0)
+        gate = pressure_gate_of(self.resource_monitor)
+        if gate is not None:
+            gate.note_round(thoughts_processed, duration)
         if thoughts_processed > 0 or tasks_activated > 0:
-            logger.info(
-                f"Work round {round_number}: completed "
-                f"({round_metrics['thoughts_processed']} thoughts, {duration:.2f}s)"
-            )
+            self._log_round(round_number, thoughts_processed, duration, get_int(round_metrics, "queued", 0))
         else:
+            round_phase_timer.drain()  # an idle round's stray samples belong to no round
             logger.debug(f"Work round {round_number}: idle (no pending work)")
 
         return WorkResult(
@@ -219,6 +235,44 @@ class WorkProcessor(BaseProcessor):
             errors=round_metrics.get("errors", 0),
             duration_seconds=duration,
         )
+
+    def _log_round(self, round_number: int, thoughts: int, duration: float, queued: int) -> None:
+        """One line per work round: where its time went, and the pressure it ran under.
+
+        Phase totals are thought-seconds (see round_timing): compare a phase's
+        per-thought share across rounds; one that climbs while the batch size
+        holds is the one growing with accumulated state.
+        """
+        totals, loop_lag = round_phase_timer.drain()
+        parts = [
+            f"Work round {round_number}: completed ({thoughts} thoughts, {duration:.2f}s)",
+            f"phases {format_phase_totals(totals)}",
+            f"loop lag max {loop_lag:.2f}s",
+        ]
+        monitor = self.resource_monitor
+        snapshot = getattr(monitor, "snapshot", None)
+        gate = pressure_gate_of(monitor)
+        if snapshot is not None and gate is not None:
+            levels = monitor.get_pressure_levels() if hasattr(monitor, "get_pressure_levels") else {}
+            adm = gate.admission
+            parts.append(
+                f"thoughts_active {snapshot.thoughts_active} (live {adm.estimate}/{adm.ceiling}), queued {queued}, "
+                f"cpu {snapshot.cpu_average_1m}% (1m), rss {snapshot.memory_mb}MB"
+            )
+            parts.append(
+                "pressure "
+                + (", ".join(f"{name}={level.value}" for name, level in sorted(levels.items())) or "normal")
+                + f"; throttle [{', '.join(gate.resources(ResourceAction.THROTTLE))}]"
+                + f" shed [{', '.join(gate.resources(ResourceAction.SHED))}]"
+            )
+            drain = f"{adm.drain_per_second:.2f}/s" if adm.drain_per_second else "unmeasured"
+            parts.append(
+                f"admission admitted {adm.admitted_total - getattr(self, '_admitted_seen', 0)} refused "
+                f"{adm.refused_total - getattr(self, '_refused_seen', 0)} since last round, drain {drain}, "
+                f"Retry-After {adm.retry_after()}s"
+            )
+            self._admitted_seen, self._refused_seen = adm.admitted_total, adm.refused_total
+        logger.info(" | ".join(parts))
 
     async def _process_batch(self, batch: List[Any], round_number: int) -> int:
         """Process a batch of thoughts in PARALLEL using asyncio.gather."""
@@ -290,7 +344,8 @@ class WorkProcessor(BaseProcessor):
         )
 
         try:
-            await self.dispatch_action(result, thought_obj, dispatch_context.model_dump())
+            with timed_phase(RoundPhase.DISPATCH):
+                await self.dispatch_action(result, thought_obj, dispatch_context.model_dump())
         except Exception as e:
             logger.error(f"Error dispatching action for thought {thought_id}: {e}")
             self._mark_thought_failed(thought_id, f"Dispatch failed: {str(e)}")

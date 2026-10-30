@@ -633,6 +633,7 @@ def main(
     overall_deadline: float = DEFAULT_OVERALL_DEADLINE_S,
     locked_grace: float = DEFAULT_LOCKED_GRACE_S,
     min_success_rate: float = DEFAULT_MIN_SUCCESS_RATE,
+    pid_file: Optional[str] = None,
 ) -> int:
     """Run memory benchmark with N messages."""
     print("=" * 70)
@@ -679,6 +680,10 @@ def main(
     )
     pid = process.pid
     print(f"  PID: {pid}")
+    if pid_file:
+        # Lets a profiler outside this script (the workflow's opt-in py-spy
+        # recorder) attach to the agent without guessing which python it is.
+        Path(pid_file).write_text(f"{pid}\n")
 
     def shutdown_process() -> None:
         if process.poll() is not None:
@@ -910,6 +915,11 @@ def parse_args() -> argparse.Namespace:
             f"(default: {DEFAULT_MIN_SUCCESS_RATE:g})"
         ),
     )
+    parser.add_argument(
+        "--pid-file",
+        default=None,
+        help="Write the agent's PID here once it is launched (for an external profiler)",
+    )
     return parser.parse_args()
 
 
@@ -929,5 +939,6 @@ if __name__ == "__main__":
             overall_deadline=max(0.0, args.overall_deadline),
             locked_grace=max(0.0, args.locked_grace),
             min_success_rate=min(1.0, max(0.0, args.min_success_rate)),
+            pid_file=args.pid_file,
         )
     )

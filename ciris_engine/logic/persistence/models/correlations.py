@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Union
 
 from ciris_engine.constants import UTC_TIMEZONE_SUFFIX
 
@@ -339,6 +340,37 @@ def _row_to_service_correlation(row: Dict[str, Any]) -> Optional[ServiceCorrelat
         return None
 
 
+def _correlation_pages(filter_dict: Dict[str, Any], page_size: int = 200) -> Iterator[List[Dict[str, Any]]]:
+    """Yield persist's `correlation_query` pages (raw row dicts), newest first.
+
+    A caller that only needs the newest few matches stops iterating; the
+    remaining pages are never fetched or decoded.
+    """
+    engine = _get_engine()
+    last_ts = "9999-12-31T23:59:59Z"
+    last_id = ""
+    while True:
+        cursor_json = json.dumps({"version": "v1", "last_ts": last_ts, "last_id": last_id})
+        try:
+            raw = engine.correlation_query(json.dumps(filter_dict), cursor_json, page_size)
+        except Exception:
+            logger.exception("correlation_query failed; filter=%r", filter_dict)
+            return
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except json.JSONDecodeError:
+            return
+        items = (parsed.get("items") if isinstance(parsed, dict) else None) or []
+        rows = [row for row in items if isinstance(row, dict)]
+        if not rows:
+            return
+        yield rows
+        last_ts = str(rows[-1].get("created_at", last_ts))
+        last_id = str(rows[-1].get("correlation_id", ""))
+        if len(items) < page_size:
+            return
+
+
 def _query_correlations(
     filter_dict: Dict[str, Any],
     *,
@@ -435,6 +467,19 @@ def _row_tags(row: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _note_channel_history(engine: Any, corr: ServiceCorrelation) -> None:
+    """Index a speak/observe correlation this process just wrote (see _ChannelHistoryIndex)."""
+    action = str(getattr(corr, "action_type", "") or "")
+    channel = getattr(getattr(corr, "request_data", None), "channel_id", None)
+    if action not in _HISTORY_ACTIONS or not isinstance(channel, str):
+        return
+    with _channel_indexes_lock:
+        index = _channel_indexes.get(id(engine))
+    if index is not None:
+        with index.lock:
+            index.note(channel, corr.correlation_id, corr.timestamp)
+
+
 def add_correlation(
     corr: ServiceCorrelation,
     time_service: Optional[TimeServiceProtocol] = None
@@ -446,6 +491,7 @@ def add_correlation(
     try:
         engine.correlation_record(json.dumps(payload))
         logger.debug("Recorded correlation %s", corr.correlation_id)
+        _note_channel_history(engine, corr)
         return corr.correlation_id
     except Exception as e:
         logger.exception("Failed to add correlation %s: %s", corr.correlation_id, e)
@@ -752,6 +798,77 @@ def get_correlations_by_type_and_time(
     return results[:limit]
 
 
+#: Channel-history entries kept per channel by _ChannelHistoryIndex.
+CHANNEL_HISTORY_PER_CHANNEL = 500
+
+_HISTORY_ACTIONS = ("speak", "observe")
+
+
+class _ChannelHistoryIndex:
+    """channel_id -> its speak/observe correlations (newest CHANNEL_HISTORY_PER_CHANNEL).
+
+    get_correlations_by_channel runs twice per inbound message. The substrate's
+    CorrelationFilter has no channel field, so each call paged every
+    service_interaction correlation ever recorded -- and for a channel with no
+    history (every new conversation) it could not stop early. This index is
+    kept current incrementally: each lookup reads only rows created after the
+    newest one already indexed (one small page in steady state), whoever wrote
+    them, and add_correlation indexes its own writes directly. Matches are
+    materialized by point reads; one that has since been deleted is dropped.
+    Thread-safe: lookups run on worker threads.
+    """
+
+    REFRESH_PAGE = 50
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.by_channel: Dict[str, Dict[str, Optional[datetime]]] = {}
+        self.high_water: Optional[str] = None
+
+    def note(self, channel_id: str, correlation_id: str, timestamp: Optional[datetime]) -> None:
+        if timestamp is not None and timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)  # comparable with aware stamps
+        entries = self.by_channel.setdefault(channel_id, {})
+        entries[correlation_id] = timestamp
+        if len(entries) > CHANNEL_HISTORY_PER_CHANNEL:
+            oldest = sorted(entries.items(), key=lambda kv: kv[1] or datetime.min.replace(tzinfo=timezone.utc))
+            for cid, _ in oldest[: len(entries) - CHANNEL_HISTORY_PER_CHANNEL]:
+                entries.pop(cid, None)
+
+    def refresh(self) -> None:
+        newest: Optional[str] = None
+        for page in _correlation_pages({"correlation_type": "service_interaction"}, page_size=self.REFRESH_PAGE):
+            reached_indexed = False
+            for row in page:
+                created = str(row.get("created_at", ""))
+                if self.high_water is not None and created < self.high_water:
+                    reached_indexed = True
+                    break
+                if newest is None or created > newest:
+                    newest = created
+                if _row_action_type(row) not in _HISTORY_ACTIONS:
+                    continue
+                channel = _row_channel_id(row)
+                if channel is not None:
+                    self.note(channel, str(row.get("correlation_id", "")), _row_timestamp(row))
+            if reached_indexed:
+                break
+        if newest is not None and (self.high_water is None or newest > self.high_water):
+            self.high_water = newest
+
+
+_channel_indexes: Dict[int, _ChannelHistoryIndex] = {}
+_channel_indexes_lock = threading.Lock()
+
+
+def _channel_index(engine: Any) -> _ChannelHistoryIndex:
+    with _channel_indexes_lock:
+        index = _channel_indexes.get(id(engine))
+        if index is None:
+            index = _channel_indexes[id(engine)] = _ChannelHistoryIndex()
+        return index
+
+
 def get_correlations_by_channel(
     channel_id: str,
     limit: int = 50,
@@ -760,17 +877,11 @@ def get_correlations_by_channel(
 ) -> List[ServiceCorrelation]:
     """Get correlations for a specific channel (for message history).
 
-    Walks all `service_interaction` correlations, filters by action_type
-    in {speak, observe} AND request_data.channel_id == channel_id. Returns
-    results in ascending timestamp order (oldest first) to match legacy
-    behavior.
+    The newest ``limit`` `service_interaction` correlations with action_type
+    in {speak, observe} AND request_data.channel_id == channel_id (older
+    than ``before`` when given), in ascending timestamp order (oldest
+    first) to match legacy behavior. Served from _ChannelHistoryIndex.
     """
-    try:
-        rows = _query_correlations({"correlation_type": "service_interaction"})
-    except Exception as e:
-        logger.exception("Failed to fetch correlations for channel %s: %s", channel_id, e)
-        return []
-
     before_dt: Optional[datetime] = None
     if before is not None:
         if isinstance(before, datetime):
@@ -778,20 +889,34 @@ def get_correlations_by_channel(
         else:
             before_dt = _parse_iso_timestamp(str(before))
 
-    matched: List[ServiceCorrelation] = []
-    for row in rows:
-        action = _row_action_type(row)
-        if action not in ("speak", "observe"):
-            continue
-        if _row_channel_id(row) != channel_id:
-            continue
-        if before_dt is not None:
-            ts = _row_timestamp(row)
-            if ts is not None and ts >= before_dt:
+    try:
+        engine = _get_engine()
+        index = _channel_index(engine)
+        with index.lock:
+            index.refresh()
+            entries = dict(index.by_channel.get(channel_id, {}))
+        floor = datetime.min.replace(tzinfo=timezone.utc)
+        ordered = sorted(entries.items(), key=lambda kv: kv[1] or floor, reverse=True)
+        matched: List[ServiceCorrelation] = []
+        if before_dt is not None and before_dt.tzinfo is None:
+            before_dt = before_dt.replace(tzinfo=timezone.utc)
+        for correlation_id, ts in ordered:
+            if before_dt is not None and ts is not None and ts >= before_dt:
                 continue
-        corr = _row_to_service_correlation(row)
-        if corr is not None:
-            matched.append(corr)
+            raw = engine.correlation_get(correlation_id)
+            row = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(row, dict):
+                with index.lock:  # deleted since indexed
+                    index.by_channel.get(channel_id, {}).pop(correlation_id, None)
+                continue
+            corr = _row_to_service_correlation(row)
+            if corr is not None:
+                matched.append(corr)
+            if len(matched) >= limit:
+                break
+    except Exception as e:
+        logger.exception("Failed to fetch correlations for channel %s: %s", channel_id, e)
+        return []
 
     # Sort DESC by timestamp, take top `limit`, then reverse for ASC return order
     matched.sort(key=lambda c: c.timestamp or datetime.min.replace(tzinfo=timezone.utc), reverse=True)

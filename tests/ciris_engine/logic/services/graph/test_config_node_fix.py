@@ -70,6 +70,12 @@ async def services(temp_db, time_service):
         memory_service=memory_service, time_service=time_service, llm_service=llm_service, config_service=config_service
     )
     await filter_service.start()
+    # start() initializes the filter config in a background task; graph writes
+    # now run on a worker thread, so wait for it rather than assume it already
+    # finished within start()'s scheduling slice.
+    init_task = getattr(filter_service, "_init_task", None)
+    if init_task is not None:
+        await init_task
 
     yield {
         "memory": memory_service,

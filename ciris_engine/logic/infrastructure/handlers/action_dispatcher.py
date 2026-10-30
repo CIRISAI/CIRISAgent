@@ -10,6 +10,7 @@ from ciris_engine.logic.processors.core.step_decorators import step_point, strea
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.utils.halt_latch import agent_act_scope, exempt_act_for, exempt_act_scope, read_halt_latch
 from ciris_engine.logic.utils.node_ownership import node_owned
+from ciris_engine.logic.utils.round_timing import RoundPhase, timed_phase
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.accord_halt import ACCORD_HALT_REFUSAL, AccordHaltState
@@ -592,9 +593,10 @@ class ActionDispatcher:
             display_value = str(value)[:100] + "..." if len(str(value)) > 100 else value
             logger.info(f"[AUDIT]   {key}: {display_value}")
 
-        audit_result = await self.audit_service.log_action(
-            action_type=action_type, context=audit_context, outcome=outcome
-        )
+        with timed_phase(RoundPhase.AUDIT):
+            audit_result = await self.audit_service.log_action(
+                action_type=action_type, context=audit_context, outcome=outcome
+            )
         logger.info(f"[AUDIT] Created entry {audit_result.entry_id} for {action_type.value} (outcome={outcome})")
 
         # Build response

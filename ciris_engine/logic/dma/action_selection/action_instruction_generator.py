@@ -77,12 +77,6 @@ class ActionInstructionGenerator:
         if not param_class:
             return ""
 
-        # Get the Pydantic schema
-        schema = param_class.model_json_schema()
-
-        # Use the actual schema to generate the format
-        schema_str = self._simplify_schema(schema)
-
         # Add action-specific guidance with flat field names matching ASPDMALLMResult
         if action_type == HandlerActionType.SPEAK:
             return "SPEAK: speak_content (string, required) - the response text to speak"
@@ -129,7 +123,11 @@ class ActionInstructionGenerator:
             return "OBSERVE: observe_active (boolean, default: true)\nSet observe_active=true to actively observe."
 
         else:
-            # For all other actions, use the dynamically generated schema
+            # For all other actions, use the dynamically generated schema. Only
+            # here: model_json_schema() was computed for every action of every
+            # thought and discarded by all the branches above (~7% of the
+            # event loop under a burst).
+            schema_str = self._simplify_schema(param_class.model_json_schema())
             return f"{action_type.value.upper()}: {schema_str}"
 
     def _defer_policy_text(self) -> str:
@@ -260,7 +258,7 @@ class ActionInstructionGenerator:
         for tool_key, tool_info in all_tools.items():
             tool_name = tool_info.get("name", tool_key) if isinstance(tool_info, dict) else tool_key
             service = tool_info.get("service", "unknown") if isinstance(tool_info, dict) else "unknown"
-            logger.info(f"[TOOL_CACHE] Tool available: '{tool_name}' (service={service}, key={tool_key})")
+            logger.debug(f"[TOOL_CACHE] Tool available: '{tool_name}' (service={service}, key={tool_key})")
         return len(all_tools)
 
     async def _cache_tools_from_service(self, tool_service: Any, service_name: str, all_tools: JSONDict) -> None:
@@ -368,7 +366,7 @@ class ActionInstructionGenerator:
             tools_info.append(tool_line)
 
             # Log each tool being added to help debug tool selection issues
-            logger.info(f'[TOOL_PROMPT] Added to prompt: tool_name="{tool_name}" when_to_use="{when_to_use[:60]}..."')
+            logger.debug(f'[TOOL_PROMPT] Added to prompt: tool_name="{tool_name}" when_to_use="{when_to_use[:60]}..."')
 
         final_tools_str = "\n".join(tools_info)
         logger.info(f"[TOOL_PROMPT] Final tools section length: {len(final_tools_str)} chars")

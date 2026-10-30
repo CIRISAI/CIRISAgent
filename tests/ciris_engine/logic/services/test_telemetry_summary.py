@@ -13,6 +13,21 @@ from ciris_engine.schemas.runtime.system_context import TelemetrySummary
 from ciris_engine.schemas.services.graph.telemetry import MetricRecord
 
 
+
+def _metric_set_from(query_metrics: Any) -> Any:
+    """The summary asks for every metric type in one query_metric_set call
+    (one recall for the window); serve it from a per-name query_metrics stub."""
+
+    async def query_metric_set(
+        metric_names: List[str],
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        tags: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, List[MetricRecord]]:
+        return {name: await query_metrics(metric_name=name, start_time=start_time, end_time=end_time) for name in metric_names}
+
+    return query_metric_set
+
 class TestTelemetrySummary:
     """Test telemetry summary generation and caching."""
 
@@ -117,6 +132,7 @@ class TestTelemetrySummary:
             return []
 
         telemetry_service.query_metrics = mock_query_metrics
+        telemetry_service.query_metric_set = _metric_set_from(mock_query_metrics)
 
         # Get summary
         summary = await telemetry_service.get_telemetry_summary()
@@ -143,6 +159,7 @@ class TestTelemetrySummary:
             return self.create_mock_metrics(mock_time_service.now(), metric_name, [100])
 
         telemetry_service.query_metrics = mock_query_metrics
+        telemetry_service.query_metric_set = _metric_set_from(mock_query_metrics)
 
         # First call should query metrics (multiple times for different metric types)
         summary1 = await telemetry_service.get_telemetry_summary()
@@ -178,6 +195,7 @@ class TestTelemetrySummary:
             raise Exception("Database error")
 
         telemetry_service.query_metrics = mock_query_metrics
+        telemetry_service.query_metric_set = _metric_set_from(mock_query_metrics)
 
         # Should raise MetricCollectionError (fail fast and loud)
         from ciris_engine.logic.services.graph.telemetry_service.exceptions import MetricCollectionError
@@ -226,6 +244,7 @@ class TestTelemetrySummary:
             return []
 
         telemetry_service.query_metrics = mock_query_metrics
+        telemetry_service.query_metric_set = _metric_set_from(mock_query_metrics)
 
         summary = await telemetry_service.get_telemetry_summary()
 

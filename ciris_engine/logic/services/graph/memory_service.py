@@ -422,8 +422,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
                 start_time = end_time - timedelta(hours=hours)
 
             # Query TSDB_DATA nodes directly from graph_nodes table
-            data_points: List[TimeSeriesDataPoint] = []
-
             # Run database query in thread pool to avoid blocking event loop
             import asyncio
 
@@ -494,65 +492,73 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
                 return collected
 
-            rows = await loop.run_in_executor(None, _query_tsdb_nodes)
+            def _query_and_parse() -> List[TimeSeriesDataPoint]:
+                # Parsing runs on the worker with the query: up to 1000 rows of
+                # JSON + one pydantic model each, which on the event loop froze
+                # it (HTTP intake included) for seconds at a time.
+                rows = _query_tsdb_nodes()
+                points: List[TimeSeriesDataPoint] = []
 
-            for row in rows:
-                try:
-                    # Parse attributes - handle PostgreSQL JSONB vs SQLite TEXT
-                    attrs_json = row["attributes"]
-                    if attrs_json:
-                        attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
-                    else:
-                        attrs = {}
-
-                    # Extract metric data
-                    metric_name = attrs.get("metric_name")
-                    metric_value = attrs.get("value")
-
-                    if not metric_name or metric_value is None:
-                        continue
-
-                    # Get timestamp from created_at or attributes
-                    timestamp_str = attrs.get("created_at", row["created_at"])
-                    timestamp: datetime
-                    if isinstance(timestamp_str, str):
-                        # Handle both timezone-aware and naive timestamps
-                        if "Z" in timestamp_str:
-                            timestamp = datetime.fromisoformat(timestamp_str.replace("Z", UTC_TIMEZONE_SUFFIX))
-                        elif "+" in timestamp_str or "-" in timestamp_str[-6:]:
-                            timestamp = datetime.fromisoformat(timestamp_str)
+                for row in rows:
+                    try:
+                        # Parse attributes - handle PostgreSQL JSONB vs SQLite TEXT
+                        attrs_json = row["attributes"]
+                        if attrs_json:
+                            attrs = attrs_json if isinstance(attrs_json, dict) else json.loads(attrs_json)
                         else:
-                            # Naive timestamp - assume UTC
-                            timestamp = datetime.fromisoformat(timestamp_str)
+                            attrs = {}
+
+                        # Extract metric data
+                        metric_name = attrs.get("metric_name")
+                        metric_value = attrs.get("value")
+
+                        if not metric_name or metric_value is None:
+                            continue
+
+                        # Get timestamp from created_at or attributes
+                        timestamp_str = attrs.get("created_at", row["created_at"])
+                        timestamp: datetime
+                        if isinstance(timestamp_str, str):
+                            # Handle both timezone-aware and naive timestamps
+                            if "Z" in timestamp_str:
+                                timestamp = datetime.fromisoformat(timestamp_str.replace("Z", UTC_TIMEZONE_SUFFIX))
+                            elif "+" in timestamp_str or "-" in timestamp_str[-6:]:
+                                timestamp = datetime.fromisoformat(timestamp_str)
+                            else:
+                                # Naive timestamp - assume UTC
+                                timestamp = datetime.fromisoformat(timestamp_str)
+                                if timestamp.tzinfo is None:
+                                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+                        else:
+                            timestamp = timestamp_str if isinstance(timestamp_str, datetime) else datetime.now(timezone.utc)
+                            # Ensure timezone awareness
                             if timestamp.tzinfo is None:
                                 timestamp = timestamp.replace(tzinfo=timezone.utc)
-                    else:
-                        timestamp = timestamp_str if isinstance(timestamp_str, datetime) else datetime.now(timezone.utc)
-                        # Ensure timezone awareness
-                        if timestamp.tzinfo is None:
-                            timestamp = timestamp.replace(tzinfo=timezone.utc)
 
-                    # Get tags - check both 'labels' and 'metric_tags' for backward compatibility
-                    # Database stores in 'labels', but some older code may use 'metric_tags'
-                    metric_tags = attrs.get("labels", attrs.get("metric_tags", {}))
-                    if not isinstance(metric_tags, dict):
-                        metric_tags = {}
+                        # Get tags - check both 'labels' and 'metric_tags' for backward compatibility
+                        # Database stores in 'labels', but some older code may use 'metric_tags'
+                        metric_tags = attrs.get("labels", attrs.get("metric_tags", {}))
+                        if not isinstance(metric_tags, dict):
+                            metric_tags = {}
 
-                    # Create data point
-                    data_point = TimeSeriesDataPoint(
-                        timestamp=timestamp,
-                        metric_name=metric_name,
-                        value=float(metric_value),
-                        correlation_type="METRIC_DATAPOINT",  # Default for metrics
-                        tags=metric_tags,
-                        source=attrs.get("created_by", "memory_service"),
-                    )
+                        # Create data point
+                        data_point = TimeSeriesDataPoint(
+                            timestamp=timestamp,
+                            metric_name=metric_name,
+                            value=float(metric_value),
+                            correlation_type="METRIC_DATAPOINT",  # Default for metrics
+                            tags=metric_tags,
+                            source=attrs.get("created_by", "memory_service"),
+                        )
 
-                    data_points.append(data_point)
+                        points.append(data_point)
 
-                except Exception as e:
-                    logger.warning(f"Error parsing TSDB node {row['node_id']}: {e}")
-                    continue
+                    except Exception as e:
+                        logger.warning(f"Error parsing TSDB node {row['node_id']}: {e}")
+                        continue
+                return points
+
+            data_points = await loop.run_in_executor(None, _query_and_parse)
 
             # Sort by timestamp
             data_points.sort(key=lambda x: x.timestamp)

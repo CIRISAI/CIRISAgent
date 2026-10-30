@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -78,7 +79,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             from ciris_engine.logic.persistence.models import graph as persistence
 
             if self._time_service:
-                persistence.add_graph_node(processed_node, time_service=self._time_service)
+                # On a worker: the write signs the node and persists it, and
+                # every LLM call memorizes several metric nodes -- about forty
+                # writes per thought, which on the loop stalled everything else.
+                await asyncio.to_thread(persistence.add_graph_node, processed_node, time_service=self._time_service)
             else:
                 raise RuntimeError("TimeService is required for adding graph nodes")
             return MemoryOpResult[GraphNode](status=MemoryOpStatus.OK, data=processed_node)
@@ -423,7 +427,6 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
 
             # Query TSDB_DATA nodes directly from graph_nodes table
             # Run database query in thread pool to avoid blocking event loop
-            import asyncio
 
             loop = asyncio.get_event_loop()
 

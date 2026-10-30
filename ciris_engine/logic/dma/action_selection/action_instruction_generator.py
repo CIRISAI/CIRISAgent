@@ -77,12 +77,6 @@ class ActionInstructionGenerator:
         if not param_class:
             return ""
 
-        # Get the Pydantic schema
-        schema = param_class.model_json_schema()
-
-        # Use the actual schema to generate the format
-        schema_str = self._simplify_schema(schema)
-
         # Add action-specific guidance with flat field names matching ASPDMALLMResult
         if action_type == HandlerActionType.SPEAK:
             return "SPEAK: speak_content (string, required) - the response text to speak"
@@ -129,7 +123,11 @@ class ActionInstructionGenerator:
             return "OBSERVE: observe_active (boolean, default: true)\nSet observe_active=true to actively observe."
 
         else:
-            # For all other actions, use the dynamically generated schema
+            # For all other actions, use the dynamically generated schema. Only
+            # here: model_json_schema() was computed for every action of every
+            # thought and discarded by all the branches above (~7% of the
+            # event loop under a burst).
+            schema_str = self._simplify_schema(param_class.model_json_schema())
             return f"{action_type.value.upper()}: {schema_str}"
 
     def _defer_policy_text(self) -> str:

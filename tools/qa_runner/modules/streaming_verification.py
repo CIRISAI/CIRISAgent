@@ -1979,6 +1979,7 @@ class StreamingVerificationModule:
         time.sleep(1)
 
         # Trigger a task to generate events
+        own_task: Optional[str] = None
         try:
             response = requests.post(
                 f"{base_url}/v1/agent/message",
@@ -1986,8 +1987,21 @@ class StreamingVerificationModule:
                 json={"message": "Test localization verification"},
                 timeout=10,
             )
+            own_task = ((response.json() or {}).get("data") or {}).get("task_id")
         except Exception as e:
             errors.append(f"Failed to trigger task: {e}")
+
+        # THIS task's prompts only. The stream is shared, and a thought left in
+        # flight by an earlier (English) test streams its prompts here too; taking
+        # whichever arrived first read a localized agent as "NOT localized to am"
+        # on slower backends (2.18.0, PostgreSQL only, intermittently). Thought
+        # ids carry their task's 8-char prefix: th_seed_<task8>_..., th_followup_<task8>_...
+        own_prefix = f"_{own_task[:8]}_" if own_task else None
+
+        def _own(prompts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            if own_prefix is None:
+                return prompts
+            return [p for p in prompts if own_prefix in str(p.get("thought_id") or "")]
 
         # Wait for events
         elapsed = 0
@@ -1995,8 +2009,11 @@ class StreamingVerificationModule:
         # Wait until the EXPECTED set is a subset of received_events. The
         # previous len(received) < len(EXPECTED) check was unsound after LLM_CALL
         # was added: any received llm_call boosted the count past EXPECTED's
-        # length, satisfying the loop exit before thought_start arrived.
-        while elapsed < timeout and not StreamingVerificationModule.EXPECTED_EVENTS.issubset(received_events):
+        # length, satisfying the loop exit before thought_start arrived. And until
+        # this task's own DMA prompts have arrived, not just anyone's.
+        while elapsed < timeout and not (
+            StreamingVerificationModule.EXPECTED_EVENTS.issubset(received_events) and _own(dma_prompts)
+        ):
             time.sleep(check_interval)
             elapsed += check_interval
 
@@ -2012,8 +2029,9 @@ class StreamingVerificationModule:
             "total_events": len(event_details),
             "events_with_audit_data": events_with_audit_data,
             "event_details": event_details,
-            "conscience_prompts": conscience_prompts,
-            "dma_prompts": dma_prompts,
+            "conscience_prompts": _own(conscience_prompts),
+            "dma_prompts": _own(dma_prompts),
+            "own_task_id": own_task,
             "errors": errors,
         }
 

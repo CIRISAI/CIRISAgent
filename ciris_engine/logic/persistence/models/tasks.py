@@ -647,15 +647,20 @@ def get_recent_completed_tasks(
     recent-activity summary, not an audit.
     """
     window = max(RECENT_COMPLETED_WINDOW, limit * 20)
+    rows: List[Dict[str, Any]] = []
     try:
-        completed = _list_with_filter(
-            {"status": TaskStatus.COMPLETED.value, "agent_occurrence_id": occurrence_id}, limit=window
-        )
+        for page in _task_pages(
+            {"status": TaskStatus.COMPLETED.value, "agent_occurrence_id": occurrence_id}, page_size=min(200, window)
+        ):
+            rows.extend(page)
+            if len(rows) >= window:
+                break
+        # Sort the raw rows and build models only for the ones returned.
+        rows.sort(key=lambda r: str(r.get("updated_at", "")), reverse=True)
+        return [_persist_row_to_task(row) for row in rows[:limit]]
     except Exception as e:
         logger.exception(f"Failed to get recent completed tasks for occurrence {occurrence_id}: {e}")
         return []
-    completed_sorted = sorted(completed, key=lambda t: getattr(t, "updated_at", ""), reverse=True)
-    return completed_sorted[:limit]
 
 
 def get_top_tasks(
@@ -713,9 +718,13 @@ def _count_with_filter(filter_dict: Dict[str, Any]) -> int:
     return sum(len(page) for page in _task_pages(filter_dict))
 
 
-def _row_correlation_id(row: Dict[str, Any]) -> Optional[str]:
+def _row_correlation_id(row: Dict[str, Any], expected: Optional[str] = None) -> Optional[str]:
+    """The row's context correlation_id. With ``expected``, a row whose raw
+    context text does not even contain it is rejected without parsing."""
     ctx = row.get("context")
     if isinstance(ctx, str):
+        if expected is not None and expected not in ctx:
+            return None
         try:
             ctx = json.loads(ctx)
         except json.JSONDecodeError:
@@ -1136,7 +1145,7 @@ def get_task_by_correlation_id(correlation_id: str, occurrence_id: str = "defaul
     try:
         for page in _task_pages({"agent_occurrence_id": occurrence_id}):
             for row in page:
-                if _row_correlation_id(row) == correlation_id:
+                if _row_correlation_id(row, expected=correlation_id) == correlation_id:
                     return _persist_row_to_task(row)
     except Exception as e:
         logger.exception(f"Failed to get task by correlation_id {correlation_id}: {e}")

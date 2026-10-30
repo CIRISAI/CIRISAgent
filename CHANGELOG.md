@@ -5,6 +5,28 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.0-stable] - 2026-10-29
+
+### Safety
+
+- **Crisis numbers in every reply step, by region (#1248, #779).** The crisis-resources block reached only DSDMA, so ASPDMA, which writes the user's reply, never saw the curated numbers, and in production the model invented one ("907 00 00 00", padded from Ethiopia's ambulance number). The block is now a system message after language guidance in all eight DMAs. It carries country-labelled emergency numbers for the user's opted-in location first, then for the countries where their language is spoken, under "Emergency services (police / ambulance / fire — NOT mental-health or crisis helplines)". 104 numbers across 55 countries are emitted, each backed by at least two agreeing sources, at least one of them official (`multi_source_cited`); 47 more are staged but not emitted. The hard-coded "Call 911" is gone from every locale but English, which reads "Call 911, or your local emergency number if not in the US". Hotlines still need human verification.
+- **No clinical determination in either direction, in any language (U1).** The "correct" cross-cluster exemplars ruled conditions out ("what you describe does not match psychosis"), and the agent copied them. The four universal parts (05 no wellness confirmation, 7c cross-cluster exemplar, its pattern, 7e user-symptom direction) are rewritten category-only. They move to `prompts.universal_guidance`, composed in the same block and in the same positions, and are translated per locale by the i18n pipeline. Every locale's `language_guidance` drops its own copy of that doctrine, including the cross-cluster "perform the distinction" sections and the "a sign of depression, not schizophrenia" glossary lines, so it now holds only what is specific to the language. es, it and ru exemplars are in the formal address (usted, Lei, capitalised Вы).
+- **Grounding:** WHO Psychological First Aid (the non-professional helper: listen, don't assess, link), the mhGAP Intervention Guide 2.0 (the referral pathway), the mhGAP guideline 3rd ed. (2023) and WHO's 2025 guidance on large multi-modal models (`FSD/SAFETY_GUIDANCE.md`).
+
+### Agent
+
+- **A burst of traffic no longer reads as a halt or an unowned node.** Both gates fail closed, and every request read them separately, so under load the reads timed out together and the agent refused everyone with 423 "accord halt in effect" or "node unclaimed": a denial of service. Concurrent reads now share one read. An owned node stays owned through a failed read; an answered "unowned" is still taken at once. A halt read that times out keeps the last answer for at most 5 s, then fails closed. An answered halt takes effect at once, and boot and invalidation never get the grace.
+- **Managed agents can ship traces once their owner consents (#1334).** An owner-authored community-trust grant applied to the node counts as the crossing (persist's `community_trust_consent_json` fold, which accepts the owner's roster keys). The opt-in survives the legacy migration's purge of the env var, and re-widening a grant that is already at federation reads as already widened, not as a refusal.
+
+### Substrate
+
+- **ciris-server 0.5.242** — PENDING (tag cut, release running).
+- **ciris-client 0.5.236.** The startup-failure screen stays in the user's language and shows the agent's cause ("This device is out of storage"). Chat History opens the message lifecycle, and Replace / Withdraw / Recant follow the node's `viewer_ops`.
+
+### Quality
+
+- **The memory benchmark measures again (#1336).** It had passed 0–7% of messages since 2026-10-08 while the job stayed green. It now waits out the agent's 503/429 back-pressure (Retry-After), reports memory per processed message, names the reading on a 423 and fails below 99%.
+
 ## [2.17.0-stable] - 2026-10-29
 
 ### Chat

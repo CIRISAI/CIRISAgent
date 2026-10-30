@@ -24,6 +24,9 @@
 #                instead of a prerelease download (wins over the tag)
 #   MESH_LLM_KEY_FILE  the agents' LLM key, mounted read-only (default ~/.together_key)
 #   MESH_LLM_MODEL / MESH_LLM_BASE_URL / MESH_LLM_PROVIDER  default Together gemma-4-31B-it
+#   MESH_NODES   the nodes as "name:port ..." (default "mesh-a:18081 mesh-b:18082")
+#   MESH_BOOT_ONLY=1  boot, claim, announce and restart the nodes, then stop:
+#                no stage (nat-peer-node.yml boots node-c this way)
 #
 # Exit status is the stage's: 0 only when every enforced step passed.
 set -uo pipefail
@@ -41,8 +44,8 @@ if [ -n "${SERVER_WHEEL:-}" ]; then
   esac
   image="ciris-local-mesh:local-$(sha256sum "$SERVER_WHEEL" | cut -c1-12)"
 fi
-names=(mesh-a mesh-b)
-ports=(18081 18082)
+names=(); ports=()
+for spec in ${MESH_NODES:-mesh-a:18081 mesh-b:18082}; do names+=("${spec%%:*}"); ports+=("${spec##*:}"); done
 
 say() { printf '[local-mesh] %s\n' "$*"; }
 
@@ -67,7 +70,7 @@ docker build -q -t "$image" -f "$ctx/tools/qa_runner/local_mesh/Dockerfile" "$ct
   || { say "image build failed"; exit 2; }
 
 # ── Two nodes ────────────────────────────────────────────────────────────────
-for i in 0 1; do
+for i in "${!names[@]}"; do
   n=${names[$i]}
   docker rm -f "ciris-$n" >/dev/null 2>&1
   [ "${MESH_REUSE:-0}" = 1 ] || rm -rf "${out:?}/$n"
@@ -85,7 +88,7 @@ for i in 0 1; do
 done
 
 # Ready = the bootstrap's marker (fresh) or its restart note (reuse).
-for i in 0 1; do
+for i in "${!names[@]}"; do
   n=${names[$i]}; home="$out/$n/ciris"; deadline=$((SECONDS + 600))
   until [ -f "$home/mesh_ready.json" ] && { [ "${MESH_REUSE:-0}" != 1 ] || [ -f "$home/mesh_restarted.txt" ]; }; do
     if [ -f "$home/mesh_failed.txt" ] || [ "$(docker inspect -f '{{.State.Running}}' "ciris-$n" 2>/dev/null)" != true ]; then
@@ -116,6 +119,11 @@ if [ "${MESH_REUSE:-0}" != 1 ]; then
     done
     say "$n restarted from its home"
   done
+fi
+
+if [ "${MESH_BOOT_ONLY:-0}" = 1 ]; then
+  say "boot only: ${names[*]} up; no stage"
+  exit 0
 fi
 
 # ── The stage ────────────────────────────────────────────────────────────────

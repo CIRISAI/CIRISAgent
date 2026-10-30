@@ -222,9 +222,13 @@ def test_mutual_add_room_and_messages_pass():
     assert [s.step for s in rep.steps] == [
         "ready:linux", "ready:android", "code:linux", "code:android",
         "add:linux->android", "request:android<-linux", "accept:android->linux",
-        "cleared:android", "mutual:linux", "room", "messages", "reopen", "conversation",
+        "cleared:android", "mutual:linux", "room", "messages", "reopen", "conversation", "timed",
     ]
     assert all(s.ok for s in rep.steps)
+    # The timed exchange waits out the direct-link window, then reports both directions.
+    timed = _step(rep, "timed")
+    assert not timed.enforced and "after the direct-link window" in timed.detail
+    assert "linux->android" in timed.detail and "android->linux" in timed.detail
     # The 202 ladder was walked, not skipped.
     assert "after awaiting the key body" in _step(rep, "add:linux->android").detail
     assert rep.creator == "linux" and rep.joiner == "android"

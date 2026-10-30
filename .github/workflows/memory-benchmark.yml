@@ -12,6 +12,8 @@ on:
       - 'ciris_engine/**'
       - 'main.py'
       - 'requirements.txt'
+      - 'tools/memory_benchmark.py'
+      - '.github/workflows/memory-benchmark.yml'
 
 # 2.8.11 Tier 3 CI hardening: cancel superseded runs on the same ref.
 # Memory benchmarks are long-running (~16min) — a PR force-push during
@@ -140,16 +142,33 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: 100 Message Benchmark
+        # The benchmark exits non-zero below --min-success-rate (default 0.99)
+        # and that now fails the job: the old `|| echo "… skipped"` mask let a
+        # 1.5% success rate report green for three weeks after the pressure
+        # ladder (8b664fb9a) started answering the burst with 503 SHED. The
+        # exit status is taken from PIPESTATUS so the summary is still written
+        # before the step fails.
+        # --overall-deadline 150: 100 messages under SHED back-pressure
+        # (Retry-After 30 s) normally drain in well under a minute; the cap
+        # keeps a wedged agent from eating the 1000-msg run's budget.
         run: |
           echo "## 100 Message Benchmark" >> $GITHUB_STEP_SUMMARY
-          python3 -u tools/memory_benchmark.py --messages 100 --adapter api | tee 100msg.log || echo "100-msg benchmark skipped"
+          set +e
+          python3 -u tools/memory_benchmark.py --messages 100 --adapter api \
+            --overall-deadline 150 | tee 100msg.log
+          rc=${PIPESTATUS[0]}
+          set -e
           if [ -f 100msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -20 100msg.log >> $GITHUB_STEP_SUMMARY
+            tail -35 100msg.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
+          exit "$rc"
 
       - name: 1000 Message Benchmark
+        # Runs even when the 100-msg step failed (its numbers are still worth
+        # having); fails the job below --min-success-rate like the 100-msg step.
+        if: ${{ !cancelled() }}
         run: |
           echo "## 1000 Message Benchmark" >> $GITHUB_STEP_SUMMARY
           # Wipe data dir so the 1000-msg run gets a clean first-run setup
@@ -164,25 +183,37 @@ jobs:
           # instead of reporting a bare number. Between 2.10 and 2.11 this figure
           # moved 317 MB -> 732 MB with nothing in CI able to say which allocator
           # gained it; see tools/memory_composition.py.
+          # --overall-deadline 600 caps the submission burst at 10 min. The
+          # burst is now paced by the agent (SHED at thoughts_active=50, 503 +
+          # Retry-After 30 s), and boot + idle + composition + the earlier
+          # steps have to fit the 20 min job budget alongside it. Messages not
+          # accepted by the deadline count as failures, so a too-slow agent
+          # fails the gate rather than getting cancelled with no output.
+          set +e
           python3 -u tools/memory_benchmark.py --messages 1000 --adapter api --idle-seconds 30 \
-            --composition --composition-json composition.json | tee 1000msg.log \
-            || echo "1000-msg benchmark skipped"
+            --overall-deadline 600 \
+            --composition --composition-json composition.json | tee 1000msg.log
+          rc=${PIPESTATUS[0]}
+          set -e
           if [ -f 1000msg.log ]; then
             echo '```' >> $GITHUB_STEP_SUMMARY
             # The composition report lands between the idle line and the results
-            # banner. Cut it out for the run summary -- which keeps the same last
-            # 30 lines it always showed, failure breakdown and idle included --
-            # and give it its own section below.
+            # banner. Cut it out for the run summary -- which keeps the last
+            # 40 lines (30 before the banner grew its back-pressure lines),
+            # failure breakdown and idle included -- and give it its own
+            # section below.
             awk '/MEMORY COMPOSITION/{skip=1} /Shutting down server/{skip=0} !skip' 1000msg.log \
-              | tail -30 >> $GITHUB_STEP_SUMMARY
+              | tail -40 >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "### Resident memory composition" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             awk '/MEMORY COMPOSITION/,/Shutting down server/' 1000msg.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
+          exit "$rc"
 
       - name: Save Benchmark Results
+        if: always()
         run: |
           echo "## Benchmark Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -190,10 +221,17 @@ jobs:
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Date | $(date -u +%Y-%m-%d) |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
-          PEAK=$(grep -o "Peak:.*" cold_start.log | head -1 || echo "N/A")
+          PEAK=$(grep -o "Peak:.*" cold_start.log 2>/dev/null | head -1 || echo "N/A")
           echo "| Cold Start Peak | ${PEAK:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          for run in 100msg 1000msg; do
+            RATE=$(grep -o "Success Rate:.*" "$run.log" 2>/dev/null | tail -1 || true)
+            SHED=$(grep -o "Shed refusals:.*" "$run.log" 2>/dev/null | tail -1 || true)
+            PER=$(grep -o "Per Processed:.*" "$run.log" 2>/dev/null | tail -1 || true)
+            echo "| $run | ${RATE:-N/A} · ${SHED:-N/A} · ${PER:-N/A} |" >> $GITHUB_STEP_SUMMARY
+          done
 
       - name: Upload Benchmark Logs
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: memory-benchmark-${{ github.run_id }}

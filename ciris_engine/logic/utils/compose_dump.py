@@ -162,6 +162,9 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # "MAY NOT appear in any response, in any context" — categorical, and a
     # HARD-FAIL criterion. Deontic: replacing it takes a §10.4 safety review.
     "universal_guidance.05_no_wellness_confirmation": BlockAnnotation(_C.DEONTIC, None),
+    # "MAY NOT appear in the response in any form" — the stigma-word rule the
+    # coherence conscience applies. Categorical and HARD-FAIL, like 05.
+    "universal_guidance.05b_no_stigma_words": BlockAnnotation(_C.DEONTIC, None),
     # Warmth-is-not-informality + concision + keep CIRIS identifiers in English.
     # Two adjacent bullets, both register/code doctrine — pragmatic, and no
     # boundary between them would be earned by a class change.

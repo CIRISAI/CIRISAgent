@@ -247,7 +247,10 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 # "cross-cluster discrimination ('this isn't psychosis')" licence. Every byte of
 # the delta is in those four parts. Failing q04/U1 spans matched the old §25
 # nearly word for word in ru, ha, hi, es, pt, mr and yo.
-EN_TOTAL_BYTES = 15858
+# 2.18.0 stigma words: +753 B deontic (universal 05b_no_stigma_words, the rule the
+# coherence conscience already applied) and -8 B (" / crazy" left the §18 example,
+# so the guidance no longer renders the word it forbids). Mixed bytes unchanged.
+EN_TOTAL_BYTES = 16603
 # 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
 # fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
 # ("what you're describing doesn't match psychosis") — the exact move §7e

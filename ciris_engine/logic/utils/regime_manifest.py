@@ -283,6 +283,7 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     # The four parts that standardized into `prompts.universal_guidance` —
     # same part names, same composed slots, same inherited classes.
     "prompts.universal_guidance.05_no_wellness_confirmation": BlockClass.DEONTIC,
+    "prompts.universal_guidance.05b_no_stigma_words": BlockClass.DEONTIC,
     "prompts.universal_guidance.25_exemplar_cross_cluster": BlockClass.MIXED,
     "prompts.universal_guidance.26_cross_cluster_pattern": BlockClass.DEONTIC,
     "prompts.universal_guidance.26b_user_symptom_direction": BlockClass.DEONTIC,

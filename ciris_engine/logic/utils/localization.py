@@ -442,6 +442,9 @@ LANGUAGE_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
 #: the move changed which pipeline owns the text, not the bytes composed.
 UNIVERSAL_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     "05_no_wellness_confirmation",
+    # Stigma words in any framing (2.18.0): the agent-side half of the rule the
+    # coherence conscience already enforces, so a retry has something to follow.
+    "05b_no_stigma_words",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     # #1010 — the §7e directional guard: the license covers answering a

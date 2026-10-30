@@ -12,7 +12,7 @@ H3ERE action and none is ever offered to the model as a choice.
     ELEVATED -> RECLAIM    memory only (elevated_action): the monitor releases memory via
                            release_memory. Other resources: non-acting WARN at ELEVATED.
     HIGH     -> THROTTLE   AgentProcessor adds a delay between rounds sized to bring the
-                           resource back under its lift point (bounded) -- only for
+                           resource back under its HIGH threshold (bounded) -- only for
                            resources THROTTLE relieves (`ResourceLimit.throttle_relieves`):
                            CPU, where yielding between rounds frees the CPU. Not for
                            thoughts_active: only the work loop drains active thoughts, so
@@ -51,8 +51,9 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Callable, Deque, Dict, List, Optional, Set, Tuple
 
 from ciris_engine.schemas.services.resources_core import (
     AdmissionState,
@@ -201,6 +202,8 @@ class ThoughtAdmission:
         self.admitted_total = 0
         self.refused_total = 0
         self.closed = False  # last decision refused (for transition logging)
+        self._refusals: Deque[float] = deque()  # monotonic times of recent refusals
+        self._last_retry_after = MIN_RETRY_AFTER_SECONDS
 
     def observe(self, value: int, config: ResourceLimit) -> None:
         self.sampled = value
@@ -237,13 +240,38 @@ class ThoughtAdmission:
             rate if self.drain_per_second is None else DRAIN_EWMA_ALPHA * rate + (1 - DRAIN_EWMA_ALPHA) * self.drain_per_second
         )
 
-    def retry_after(self) -> int:
-        """Seconds for the measured drain to clear the excess over the ceiling, bounded."""
+    def note_refusal(self, now: Optional[float] = None) -> None:
+        now = time.monotonic() if now is None else now
+        self.refused_total += 1
+        self._refusals.append(now)
+        horizon = now - SHED_RETRY_AFTER_SECONDS
+        while self._refusals and self._refusals[0] < horizon:
+            self._refusals.popleft()
+
+    def waiting(self, now: Optional[float] = None) -> int:
+        """Callers refused within the last Retry-After period: each retries once
+        per period, so this counts the clients waiting for a slot."""
+        now = time.monotonic() if now is None else now
+        window = max(MIN_RETRY_AFTER_SECONDS, self._last_retry_after)
+        return sum(1 for t in self._refusals if t >= now - window)
+
+    def retry_after(self, now: Optional[float] = None) -> int:
+        """Seconds for the measured drain to clear what is ahead of a refused caller, bounded.
+
+        Ahead of it: the excess over the ceiling (at least the one slot it
+        needs) and the callers already waiting. Counting only the excess told
+        twenty concurrent clients to retry every second while two slots a
+        second freed: the refusals themselves then ate the CPU the drain
+        needed. With the waiting callers counted, refused requests arrive at
+        about the rate slots free.
+        """
         if not self.drain_per_second:
             return UNMEASURED_RETRY_AFTER_SECONDS
         excess = max(1, self.estimate - (self.ceiling or 0) + 1)
-        seconds = math.ceil(excess / self.drain_per_second)
-        return max(MIN_RETRY_AFTER_SECONDS, min(SHED_RETRY_AFTER_SECONDS, seconds))
+        seconds = math.ceil((excess + self.waiting(now)) / self.drain_per_second)
+        bounded = max(MIN_RETRY_AFTER_SECONDS, min(SHED_RETRY_AFTER_SECONDS, seconds))
+        self._last_retry_after = bounded
+        return bounded
 
     def state(self) -> Optional[AdmissionState]:
         if self.ceiling is None:
@@ -317,9 +345,9 @@ class ResourcePressureGate:
     def is_active(self, action: ResourceAction) -> bool:
         return bool(self._held.get(action))
 
-    def note_reading(self, resource: str, value: float, lift_threshold: float) -> None:
-        """The monitor's latest reading of a resource and the value its HIGH level lifts below."""
-        self._readings[resource] = (value, lift_threshold)
+    def note_reading(self, resource: str, value: float, target: float) -> None:
+        """The monitor's latest reading of a resource and the value THROTTLE aims to hold it under."""
+        self._readings[resource] = (value, target)
 
     def note_round(self, thoughts_completed: int, round_seconds: float, now: Optional[float] = None) -> None:
         """A work round finished: feeds the drain rate and sizes the next THROTTLE delay."""
@@ -330,10 +358,10 @@ class ResourcePressureGate:
     def throttle_extra_delay(self, base_delay: float) -> float:
         """Extra seconds to add to a round under THROTTLE (0.0 when lifted).
 
-        Only as much as brings the throttling resource back under the value
-        its HIGH level lifts below: a round that ran busy for T seconds with
-        the resource at `value` gets T * (value / lift - 1) of rest, so its
-        duty cycle drops by that ratio. Bounded to
+        Only as much as brings the throttling resource back under the HIGH
+        threshold that engaged it: a round that ran busy for T seconds with
+        the resource at `value` gets T * (value / threshold - 1) of rest, so
+        its duty cycle drops by that ratio. Bounded to
         [MIN_THROTTLE_EXTRA_SECONDS, MAX_THROTTLE_EXTRA_SECONDS]. Before a
         round has been measured (or with no reading) it falls back to doubling
         the round delay, at least one second. Counts the round when it applies.
@@ -377,7 +405,7 @@ class ResourcePressureGate:
                 return AdmissionDecision(False, [ADMISSION_RESOURCE], SHED_RETRY_AFTER_SECONDS)
         elif headroom <= 0:
             retry = adm.retry_after()
-            adm.refused_total += 1
+            adm.note_refusal()
             self._refuse([ADMISSION_RESOURCE], retry, None)
             return AdmissionDecision(False, [ADMISSION_RESOURCE], retry)
         if adm.closed:

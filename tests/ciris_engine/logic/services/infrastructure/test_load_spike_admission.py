@@ -216,10 +216,27 @@ def test_retry_after_is_the_time_to_drain_the_excess():
     adm.note_round(50, now=100.0)
     adm.note_round(50, now=110.0)  # 5 thoughts/s
     assert adm.drain_per_second == pytest.approx(5.0)
-    assert adm.retry_after() == 1  # excess 1 -> 0.2 s, bounded below at 1
+    assert adm.retry_after(now=200.0) == 1  # excess 1 -> 0.2 s, bounded below at 1
     adm.observe(68, ResourceLimit(limit=50, warning=40, critical=48))
-    assert adm.retry_after() == 4  # excess 20 at 5/s
-    assert adm.retry_after() != SHED_RETRY_AFTER_SECONDS  # negative: not the old fixed 30
+    assert adm.retry_after(now=200.0) == 4  # excess 20 at 5/s
+    assert adm.retry_after(now=200.0) != SHED_RETRY_AFTER_SECONDS  # negative: not the old fixed 30
+
+
+def test_retry_after_counts_the_callers_already_waiting():
+    adm = _admission(49)
+    adm.note_round(50, now=100.0)
+    adm.note_round(50, now=125.0)  # 2 thoughts/s
+    assert adm.retry_after(now=200.0) == 1  # nobody waiting: one slot at 2/s
+    for i in range(20):  # twenty clients refused within the last second
+        adm.note_refusal(now=200.0 + i * 0.01)
+    # negative: counting only the excess said 1 s, so all twenty came back every second
+    assert adm.retry_after(now=200.5) == 11  # (1 + 20) / 2 -> 10.5 -> 11
+    # they retry once per period, so the waiting count holds steady, not inflating
+    for i in range(20):
+        adm.note_refusal(now=211.0 + i * 0.01)
+    assert adm.retry_after(now=211.5) == 11
+    # once they stop coming the count decays with the window
+    assert adm.retry_after(now=260.0) == 1
 
 
 def test_retry_after_is_bounded():
@@ -312,16 +329,16 @@ async def test_cpu_throttle_is_proportional_to_the_overshoot(monitor):
     )
 
     gate = _gate(monitor)
-    monitor.snapshot.cpu_average_1m = 84  # HIGH; lifts below 75 - 5 = 70
+    monitor.snapshot.cpu_average_1m = 90  # HIGH (threshold 75)
     await monitor._check_limits()
     assert gate.throttle_extra_delay(3.0) == 3.0  # no round measured yet: the old doubling
     gate.note_round(49, 10.0)
-    assert gate.throttle_extra_delay(3.0) == pytest.approx(10.0 * (84 / 70 - 1))  # 2.0 s, not a fixed 3+
+    assert gate.throttle_extra_delay(3.0) == pytest.approx(10.0 * (90 / 75 - 1))  # 2.0 s, not a fixed 3+
     monitor.snapshot.cpu_average_1m = 100
     await monitor._check_limits()
     gate.note_round(49, 60.0)
     assert gate.throttle_extra_delay(3.0) == MAX_THROTTLE_EXTRA_SECONDS
-    monitor.snapshot.cpu_average_1m = 71  # still HIGH by hysteresis, barely over
+    monitor.snapshot.cpu_average_1m = 72  # still HIGH by hysteresis, under the threshold
     await monitor._check_limits()
     gate.note_round(49, 1.0)
     assert gate.throttle_extra_delay(3.0) == MIN_THROTTLE_EXTRA_SECONDS

@@ -167,66 +167,95 @@ SPLIT_LOCALES: Tuple[str, ...] = ("en", "es", "fr", "it", "pt")
 #: (usted / vous / Lei / Sie / እርስዎ / ẹ-yín / ku); quoted user speech and
 #: shown WRONG forms untouched. Guarded by test_language_guidance_register.py.
 COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
-    "en": ("be63d55f677415c9074a7fa36d71d3bbaebeb235eeb0b0a128d1e4a882d4cdc4", 15858),  # U1 either-direction: 7c/26/26b category-only, 05 licence removed
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "en": ("89774806ac46a0eb54c6e8f7dc1f0a0f0525bd90f9b937e458f5c69dccb4ea44", 16603),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "am": ("c2ae18972cacdc366b59a1e5c5bc18c7b27862d6978802069f8228ae673f9cbf", 31174),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "am": ("8036a750df2c3213b6fa115ea7535e600445d2164a6a1dc41ec1da7bd4e2a92c", 32684),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "ar": ("129e22efbfb80819b8c4d8322b68ae2c30d34aef8de8a71e5d013989139ab9af", 22025),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "ar": ("b4b61e21ee65774a7035f0f2a656c6ac8341b468cd4cb49995fdbe9a4eb513d5", 23103),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "de": ("a918a1f59721f558cff84a5cee8d28f6ced51500a7cb7e25062ce517aadaf0f7", 19355),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "de": ("482878d365a6e58e04badc696c5fc75f123d92578580a174dedbabe8edc4975d", 20313),
     # 18628 -> 17921 (2026-10-29): the U1 category-only rewrite of the four
     # universal parts (05/25/26/26b), drafted by the i18n translate lane from en
     # 4808efd98 and then hand-corrected to usted (04_formal_register). The es
     # glossary's "tú for chat messages" rule had put the exemplar speech in tú.
-    "es": ("fb62c60b9fba2e1ff72f5c959cd98ae78874c3bed2b855b21bb268d71c8d4a78", 17921),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "es": ("57f8f50989a6a75f0ebf32db09f0ff5a9d7441462c1a78db43d04740ce4737a0", 18754),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "fr": ("be4e170e1d0a5fca605f5fc97ba8406483cd9124500e66dda4dc84d9e62569aa", 22057),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "fr": ("f4c31e9e1b178050ffd36ac42ea2cd23b0e51b484189351264241bf4377deb88", 22986),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "hi": ("6d60222e93123a33b39c0f67a73b89588a58ab80a2840ee1b0e4a361d99392d7", 33716),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "hi": ("3a186d73e659867e121749828599eafc1f9e00f8a3cefdbd8ae385de1bc6ff43", 35777),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "it": ("e339b1933ed037054ad75b65bbe37572923fd7949f9a95e695f1262bcec9c3ed", 17739),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "it": ("704e0402c9b1198f0f6b704d0170010556002cf02b3343cbb3d2d4205344b80e", 18607),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "ja": ("b897ef52b0d753bae0e3fe88ec8f22b974fc5d3f1c2e3db30643af7342f439e1", 29361),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "ja": ("201675f48935b79f4aa71944562729a41b89fca1da80bb3b9871a958b2ba3728", 30591),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "ko": ("9fe536888e24ec806c472f05148c65613beb39ff314beab0e0dfb08fc73b4525", 27780),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "ko": ("215ad0bbae8f2286487af53cbf5280599ca5217c2f17633f7134a11f29c53b5e", 28909),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "pt": ("e8b8be0f4b955a1db58c2d97fd51fea2d42c32275d66813c0b6f8516891fdabe", 17640),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "pt": ("299d54f3c64e0bed917903e9f9423df81500c32641707bd0a5c2b69daab2091d", 18507),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "ru": ("a3f2a8285ccfc566c4dfc4a6c335ba231c987918bb73db44a4b47549d0c33f0d", 30385),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "ru": ("11197f5aaeb07e8e90c50eef967071ebc50988e42c05ce100365e268c2cb2312", 31989),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "sw": ("7be4717d6a8d2dcf8495fd0e6e786e66d6b4767b39977904774b671409cf26ad", 16748),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "sw": ("77112daca55096e4aebf06dccf156c71d93c925805c971ddeba8529d500feeb9", 17575),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "tr": ("c6a2da49d420ebbff7dfa03670e61e1cf5cfeae3f76695a4e362750f62fe6da3", 16966),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "tr": ("1d6ba0ad44053a32246ea6335b665235ccfe246ee17d76f150dd602d21f46467", 17955),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "zh": ("c56d9416260c0b021bdd91c264eb8c3d92b36395bd1d1e6b9152a405287ddac7", 14984),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "zh": ("33613e155ad63ea10061a063365e0b3feeab31616a73de02e4168ed42e957c01", 15826),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "ur": ("318ca3404c197d1ea1bc20e752125754c2c8e0f27608bee9057f14d6ed3133fe", 28654),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "ur": ("c70cd48d4173780ce4d2e56da54eaffbfeec9e745f0fcad0b93d79163697e03c", 30025),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "bn": ("f5aebaa840ddf961ccd3c7f606743b66a739e154179639731f9060aab10aab2d", 35158),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "bn": ("e4db769a7816876bb1a84780d9497c9cff1f300187de7949fc76885c685d3d86", 37236),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "fa": ("bbe2d133a0f85d31fb4bc16720a7dcbbf08d67acc888c5e47739e74039ced94a", 37419),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "fa": ("fc4e59e9759dbcf88dc76c0a91843466c396614eb619b46fd3fb9aed10b9363e", 38790),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "ha": ("ff2cea4bcc2cfd0b4c801bed2fe0cd86f15e8b1e45092b1c0ce2fcea32e25d61", 21228),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "ha": ("0f24a2a86f7bbba71c789cd4ea7f00ff3a0a045226eec10cacf7a2925acfa328", 22182),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "id": ("cf43b2194905bec071f3329ebcda63f8b040f5e77be766473fec0202e0b38ed3", 18180),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "id": ("5d560e0fd9d52cd7b873a1217226906c66ef5fc26de37b2d73c81f4a23b7faa5", 19123),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "pa": ("3f10b5d7b4443971ed30943e221545da1b16ca949fd2ac9264815317483bc846", 33729),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "pa": ("78573a0346348a54bd14fa10246bf3f8703a7087ce5822660b8161f5f5f62b49", 35833),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "ta": ("f4b5acda499fef04534e50ddd7b5adbf3742dd36aac842fd8f376a9b371a4ca2", 42616),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "ta": ("7c559fb83efba0bfc87784df5c75fc78fde27f8d634fa2706d50ccf7603367be", 45210),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "te": ("bc48c8d9c496d6a2ea547512a3f03aaeb121b8f9662465c704bfc37e1cd0b722", 38841),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "te": ("5d903462b3c4226296831e9c95c8f9e2c63061d15cad4f451684fc84293f9315", 41070),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "vi": ("1a3a4e1353b0ccd395b6404712ca818e0319c170c14f629faee8342d57059f5b", 22336),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "vi": ("e91c57851b15213359dce56a37bab9deca292ddf58127cef1ff6d61203329f3c", 23629),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "mr": ("85511063374973ea3ae618e20dff042e1cdd3f85ef98d48d71471e0016797fe6", 31799),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "mr": ("88c9ee3d1838a6d49cbd36f0a53893fddf8a3219f704436053a60da2f31e801c", 33783),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "my": ("af0c406ef3576afc56c1f7471a500db0b7a23f374958f5548fd012f0474e2951", 49207),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "my": ("b2692331cf04ca1f29263cd749fbec869408d9948d4600666b6a4ef3a656ce35", 52075),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "th": ("91fd5f58acd33dd6cd17af8ab1f41deb850aab3b72313a3c143868d00a3b3def", 37352),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "th": ("2da2210011de38ed8f4a9d448a7fccc75d94a81352367c9b1b8e1202ca759ce4", 39321),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "uk": ("8fd9c75fe11ee39e7068383d924620071af633ba62609606a47709ed4b5793cd", 38167),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "uk": ("83240951cec719f56c82732bc859cef06a852d4d4040fdde8a12781e258447b6", 39698),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
-    "yo": ("70ae863ed533a4de7eb4d340bea37129d4e1a4ab47666897e16aa8023600cc3c", 24922),
+    # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
+    "yo": ("d0be4e7d2bbb995c6439208b6b60957b3aa9fe0863696e5bdc77dae5112ad513", 26199),
 }
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that

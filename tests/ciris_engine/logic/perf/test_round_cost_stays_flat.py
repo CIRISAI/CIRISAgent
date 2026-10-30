@@ -443,3 +443,38 @@ def test_queue_status_is_reused_within_its_ttl(monkeypatch):
     monkeypatch.setattr(qs.time, "monotonic", lambda: 10**9)
     qs.get_queue_status()
     assert len(calls) == 4  # expired: recomputed
+
+
+@pytest.mark.asyncio
+async def test_graph_node_write_runs_off_the_loop(monkeypatch):
+    from ciris_engine.logic.persistence.models import graph as graph_model
+    from ciris_engine.logic.services.graph.memory_service import LocalGraphMemoryService
+    from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+    threads: List[str] = []
+    monkeypatch.setattr(graph_model, "add_graph_node", lambda node, time_service=None: threads.append(threading.current_thread().name))
+    service = LocalGraphMemoryService.__new__(LocalGraphMemoryService)
+    service._time_service = _Clock()
+    service._track_request = lambda: None  # type: ignore[method-assign]
+
+    async def _same(node: Any) -> Any:
+        return node
+
+    service._process_secrets_for_memorize = _same  # type: ignore[method-assign]
+    node = GraphNode(id="n1", type=NodeType.CONCEPT, scope=GraphScope.LOCAL, attributes={}, updated_by="t")
+    result = await service.memorize(node)
+    assert result.status.value == "ok"
+    assert threads and threads[0] != threading.main_thread().name  # negative: ran on the loop
+
+
+def test_aspdma_schema_is_built_only_where_used(monkeypatch):
+    from ciris_engine.logic.dma.action_selection.action_instruction_generator import ActionInstructionGenerator
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+    gen = ActionInstructionGenerator.__new__(ActionInstructionGenerator)
+    built: List[str] = []
+    for action, cls in ActionInstructionGenerator.ACTION_PARAM_SCHEMAS.items():
+        monkeypatch.setattr(cls, "model_json_schema", classmethod(lambda c, *a, **k: built.append(c.__name__) or {}))
+    assert gen._generate_schema_for_action(HandlerActionType.SPEAK).startswith("SPEAK:")
+    assert gen._generate_schema_for_action(HandlerActionType.TASK_COMPLETE).startswith("TASK_COMPLETE:")
+    assert built == []  # negative: computed and discarded for every action before

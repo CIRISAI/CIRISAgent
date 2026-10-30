@@ -56,6 +56,17 @@ _PRESSURE_SIGNALS = (
 logger = logging.getLogger(__name__)
 
 
+
+def _usable_cores(process: object) -> int:
+    """Cores this process may run on: its CPU affinity where the OS reports one, else all."""
+    try:
+        affinity = process.cpu_affinity()  # type: ignore[attr-defined]
+        if affinity:
+            return len(affinity)
+    except Exception:  # noqa: BLE001 - not every platform has affinity (macOS)
+        pass
+    return max(1, (psutil.cpu_count() if psutil else 1) or 1)
+
 class ResourceSignalBus:
     """Simple signal bus for resource events."""
 
@@ -200,7 +211,11 @@ class ResourceMonitorService(BaseScheduledService, ResourceMonitorServiceProtoco
         self.snapshot.memory_percent = self.snapshot.memory_mb * 100 // self.budget.memory_mb.limit
 
         if psutil and self._process:
-            cpu_percent = self._process.cpu_percent(interval=0)
+            # psutil reports process CPU with 100 = one full core, so a busy
+            # process on 4 cores read 94-116 and held THROTTLE on all burst.
+            # The thresholds are per core (owner ruling, 2026-10-29): normalise
+            # by the cores this process may run on, so 80 means 80% of each.
+            cpu_percent = self._process.cpu_percent(interval=0) / _usable_cores(self._process)
         else:
             cpu_percent = 0.0
         self._cpu_history.append(cpu_percent)

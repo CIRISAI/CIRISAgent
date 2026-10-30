@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A burst of traffic no longer reads as a halt or an unowned node.** Both gates fail closed, and every request read them separately, so under load the reads timed out together and the agent refused everyone with 423 "accord halt in effect" or "node unclaimed": a denial of service. Concurrent reads now share one read. An owned node stays owned through a failed read; an answered "unowned" is still taken at once. A halt read that times out keeps the last answer for at most 5 s, then fails closed. An answered halt takes effect at once, and boot and invalidation never get the grace.
 - **Managed agents can ship traces once their owner consents (#1334).** An owner-authored community-trust grant applied to the node counts as the crossing (persist's `community_trust_consent_json` fold, which accepts the owner's roster keys). The opt-in survives the legacy migration's purge of the env var, and re-widening a grant that is already at federation reads as already widened, not as a refusal.
 
+### Load
+
+- **A load spike is shed only as far as the thresholds require.** A message is admitted while active thoughts are below one under CRITICAL; only the excess is refused, and admission reopens as soon as a slot frees. Retry-After comes from the measured drain rate (1–9 s under the benchmark burst), not a fixed 30 s. THROTTLE no longer applies to `thoughts_active`, because slowing the drain prolonged the overload; CPU throttling rests in proportion to the overshoot.
+- **Rounds stay flat as rows accumulate.** Per-thought LLM totals are kept in memory instead of scanning every metric node; the telemetry summary is computed once per expiry; prompt templates are parsed once; task, thought and correlation lookups read only new rows; graph writes and the secrets scan run off the event loop; with trace consent off the capture feed does no work. On a 4-vCPU runner a 50-thought round fell from 51–274 s (growing) to 5.5–9.4 s, loop stalls from 3–6 s to under 0.7 s, and the 1000-message burst went from 103/1000 to 1000/1000 in 414 s.
+- **`cpu_percent` is per core.** psutil counted 100 per busy core, so a 4-core agent read up to 400 against a limit of 80; the reading is now normalised to the cores the process may run on.
+- One line per work round logs phase timings, loop lag, active vs ceiling, CPU, memory, admissions, drain and Retry-After.
+
+### Privacy
+
+- **A thought's context no longer pulls user ids from other conversations.** User extraction passed a filter the substrate ignores, so it read the newest 100 correlations from every conversation.
+
 ### Substrate
 
 - **ciris-server 0.5.242** (edge v43.3.0, persist v59.1.1, verify v20.2.0). Owner requests: the node lists what needs the owner's signature, the owner's device signs it, the node applies it and resumes delivery that was held waiting for its claim (#837). Chat messages can be replaced, withdrawn and recanted, with `/history` and `viewer_ops` (#836). A facilitator runs on every server (#838). A device is released by roster quorum and wipes itself (#839). Owned-node rows carry more detail (#840), and all 7 cohort scopes are handled (#835).
@@ -26,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Quality
 
+- **Localize pipeline re-vendored** from CIRISClient 1af22aa: `--overwrite` for a deliberate retranslation (a kept value now fails the run), and the agent-speech register rule. The i18n translate workflow takes an `overwrite` input.
 - **The memory benchmark measures again (#1336).** It had passed 0–7% of messages since 2026-10-08 while the job stayed green. It now waits out the agent's 503/429 back-pressure (Retry-After), reports memory per processed message, names the reading on a 423 and fails below 99%.
 
 ## [2.17.0-stable] - 2026-10-29

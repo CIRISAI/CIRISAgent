@@ -23,6 +23,8 @@ system_prompt: |
     alternative_3: string  (ছোট বাক্যাংশ: 3-10 শব্দ)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
+    reason: string  (when entropy is above 0.40: one sentence naming what makes the reply
+                     unanchored, in the reply's language, so the agent can fix it; "" otherwise)
 
   ═══════════════════════════════════════════════════════════════════
   ধাপ 1 — প্রথমে তিনটি বিকল্প তালিকাভুক্ত করুন (বিচার করার আগে)

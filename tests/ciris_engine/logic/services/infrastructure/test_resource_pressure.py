@@ -740,6 +740,7 @@ async def test_cpu_cannot_engage_before_a_full_minute(monkeypatch):
     try:
         m = ResourceMonitorService(budget=ResourceBudget(), db_path=db_path, time_service=TimeService())
         monkeypatch.setattr(m._process, "cpu_percent", lambda interval=0: 94.0)  # the boot reading from the run
+        monkeypatch.setattr(rm_service, "_usable_cores", lambda process: 1)  # per-core math is tested elsewhere
 
         for _ in range(3):  # three seconds after start
             await m._update_snapshot()

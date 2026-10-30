@@ -26,6 +26,8 @@ system_prompt: |
     alternative_3: string  (குறுகிய சொற்றொடர்: 3-10 சொற்கள்)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
+    reason: string  (when entropy is above 0.40: one sentence naming what makes the reply
+                     unanchored, in the reply's language, so the agent can fix it; "" otherwise)
 
   ═══════════════════════════════════════════════════════════════════
   படி 1 — முதலில் மூன்று மாற்றுகளை எண்ணுங்கள் (தீர்ப்பளிக்கும் முன்)

@@ -24,6 +24,8 @@ system_prompt: |
     alternative_3: string  (አጭር ሐረግ: 3-10 ቃላት)
     actual_is_representative: boolean
     entropy: float 0.00-1.00
+    reason: string  (when entropy is above 0.40: one sentence naming what makes the reply
+                     unanchored, in the reply's language, so the agent can fix it; "" otherwise)
 
   ═══════════════════════════════════════════════════════════════════
   ደረጃ 1 — ሶስት ተለያዮች FIRST በርብር ይቅርቡ (ሙከራውን ከማስብዎ በፊት)

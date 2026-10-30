@@ -122,6 +122,12 @@ MSG_SINK_NO_LLM = "Sink does not have LLM service"
 MSG_INVALID_LLM_RESULT = "Invalid result type from LLM"
 
 
+def _with_why(verdict: str, why: str) -> str:
+    """A failing score plus the shard's WHY. The reason becomes the retry's
+    failure_reason and ponder question, so the agent learns what to change."""
+    return f"{verdict}: {why}" if why else verdict
+
+
 # LLM-output schemas live in `ciris_engine/schemas/conscience/core.py` —
 # imported here for backward compat. New consumers should import directly
 # from the schemas module.
@@ -527,6 +533,7 @@ class EntropyConscience(_BaseConscience):
 
         # Inline the entropy evaluation
         entropy_user_prompt: Optional[str] = None
+        entropy_why = ""
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
@@ -567,6 +574,7 @@ class EntropyConscience(_BaseConscience):
                         logger.debug("  alt #%d: %s", i, alt[:200])
                 entropy_alternatives = list(entropy_eval.alternative_meanings)
                 entropy_actual_is_representative = entropy_eval.actual_is_representative
+                entropy_why = entropy_eval.reason.strip()
             else:
                 return unusable_answer_result(
                     "EntropyConscience",
@@ -585,7 +593,7 @@ class EntropyConscience(_BaseConscience):
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
         reason = None
         if not passed:
-            reason = f"Entropy {entropy:.2f} > threshold {self.config.entropy_threshold:.2f}"
+            reason = _with_why(f"Entropy {entropy:.2f} > threshold {self.config.entropy_threshold:.2f}", entropy_why)
         self._update_trace_correlation(
             correlation,
             passed,
@@ -683,6 +691,7 @@ class CoherenceConscience(_BaseConscience):
 
         # Inline the coherence evaluation
         coherence_user_prompt: Optional[str] = None
+        coherence_why = ""
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
@@ -715,6 +724,7 @@ class CoherenceConscience(_BaseConscience):
                     ts_datetime,
                 )
             coherence = float(coherence_eval.coherence)
+            coherence_why = coherence_eval.reason.strip()
         except Exception as e:
             # FAIL CLOSED either way — see EntropyConscience above; the default
             # `coherence` would otherwise be reported as a measurement.
@@ -726,7 +736,7 @@ class CoherenceConscience(_BaseConscience):
         status = ConscienceStatus.PASSED if passed else ConscienceStatus.FAILED
         reason = None
         if not passed:
-            reason = f"Coherence {coherence:.2f} < threshold {self.config.coherence_threshold:.2f}"
+            reason = _with_why(f"Coherence {coherence:.2f} < threshold {self.config.coherence_threshold:.2f}", coherence_why)
         self._update_trace_correlation(
             correlation,
             passed,

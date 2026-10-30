@@ -576,15 +576,19 @@ class AccordMetricsService:
             try:
                 self._user_latitude = float(lat_str)
             except ValueError:
-                logger.warning("Invalid CIRIS_USER_LATITUDE value: %s", lat_str)
+                logger.warning("CIRIS_USER_LATITUDE is not a number; ignoring it")
         if lon_str:
             try:
                 self._user_longitude = float(lon_str)
             except ValueError:
-                logger.warning("Invalid CIRIS_USER_LONGITUDE value: %s", lon_str)
+                logger.warning("CIRIS_USER_LONGITUDE is not a number; ignoring it")
         if self._share_location_in_traces and self._user_location:
-            coords = f" ({self._user_latitude}, {self._user_longitude})" if self._user_latitude else ""
-            logger.info(f"   Location sharing enabled: {self._user_location}{coords}")
+            # Which fields are shared, never their values: a log is not where the
+            # user's location goes (CodeQL py/clear-text-logging-sensitive-data).
+            logger.info(
+                "   Location sharing enabled (location%s)",
+                " + coordinates" if self._user_latitude is not None else "",
+            )
 
         # The substrate client (constructed in start(); REQUIRED)
         self._lens: Optional[Any] = None

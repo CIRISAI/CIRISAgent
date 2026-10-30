@@ -125,6 +125,11 @@ on:
         required: false
         default: "7"
         type: string
+      overwrite:
+        description: "translate lane replaces existing values (target=ui; pair with exact keys)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -153,6 +158,7 @@ jobs:
       KEYS: ${{ inputs.keys }}
       LANGS: ${{ inputs.langs }}
       MAX_KEYS: ${{ inputs.max_keys }}
+      OVERWRITE: ${{ inputs.overwrite }}
       MODE: ${{ inputs.mode }}
       SHARDS: ${{ inputs.shards }}
     steps:
@@ -288,6 +294,7 @@ jobs:
       LANGS: ${{ matrix.langs }}
       SHARD: ${{ matrix.shard }}
       MAX_KEYS: ${{ inputs.max_keys }}
+      OVERWRITE: ${{ inputs.overwrite }}
       MODE: ${{ inputs.mode }}
     steps:
       - uses: actions/checkout@v4

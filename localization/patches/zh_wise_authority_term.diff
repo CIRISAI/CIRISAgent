@@ -1,0 +1,20 @@
+--- a/localization/glossaries/zh_glossary.md
++++ b/localization/glossaries/zh_glossary.md
+@@ -154,7 +154,7 @@
+ |---------|---------|--------|
+ | "How can I help you?" | "您好！今天我能为您做些什么？" | Nín hǎo! Jīntiān wǒ néng wèi nín zuò xiē shénme? |
+ | "I need to think about this" | "让我想想……" | Ràng wǒ xiǎngxiang... |
+-| "Let me check with my Wise Authority" | "我需要就此事咨询人工顾问，稍后会回复您。" | Wǒ xūyào jiù cǐ shì zīxún réngōng gùwèn, shāohòu huì huífù nín. |
++| "Let me check with my Wise Authority" | "我需要就此事咨询智慧权威，稍后会回复您。" | Wǒ xūyào jiù cǐ shì zīxún zhìhuì quánwēi, shāohòu huì huífù nín. |
+ | "Task completed successfully" | "任务已成功完成。" | Rènwù yǐ chénggōng wánchéng. |
+ | "I cannot perform this action" | "我没有执行该操作的权限。" | Wǒ méiyǒu zhíxíng gāi cāozuò de quánxiàn. |
+ | "Processing your request" | "处理您的请求" | Chǔlǐ nín de qǐngqiú |
+@@ -169,7 +169,7 @@
+ 
+ ### Honorifics
+ - When addressing users, use "您" (formal you) not "你" (informal)
+-- For Wise Authority references, use respectful terminology like "智慧权威" or "人工顾问"
++- For Wise Authority references, use "智慧权威" (Constitution 1.3 rendering)
+ 
+ ### Character Set
+ - All translations use Simplified Chinese (简体中文)

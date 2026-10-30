@@ -144,7 +144,8 @@ This glossary defines the canonical translations for key CIRIS terms in Russian.
 
 ### Formality Level
 - Use formal Russian register (литературный русский) for ACCORD and official documentation
-- Use conversational Russian (разговорный язык) for UI strings and chat messages
+- Use conversational Russian (разговорный язык) for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "Вы" (never "ты"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Maintain professional tone without excessive formality in agent interactions
 
 ### Addressing Users

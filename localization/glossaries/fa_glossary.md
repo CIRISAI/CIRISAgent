@@ -109,7 +109,8 @@ This glossary defines the canonical translations for key CIRIS terms in Persian 
 
 ### Formality Level
 - Use formal Persian (فارسی رسمی) for ACCORD and official documentation
-- Use conversational Persian (فارسی محاوره‌ای) for UI strings and chat messages
+- Use conversational Persian (فارسی محاوره‌ای) for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "شما" with formal verb forms (never "تو"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Technical terms may use English loan words where established
 
 ### Pronouns and Respect

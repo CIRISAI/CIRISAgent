@@ -1,8 +1,8 @@
 {
   "upstream": {
     "repo": "CIRISAI/CIRISClient",
-    "commit": "e040ae76550d90039b6050706d65865ded6f77f4",
-    "ref": "origin/main",
+    "commit": "1af22aabf238cb98914badf04e86a6b87a915304",
+    "ref": "1af22aa",
     "committed": "2026-10-08T21:52:24-05:00"
   },
   "owned_dirs": [
@@ -15,7 +15,7 @@
       "upstream_path": "localization/localize.py",
       "kind": "verbatim",
       "upstream_blob": "69cf75a62c8a01a5519abc5c80cc3207abeca7f0",
-      "upstream_sha256": "1c58cec61596298f29a070a24d48bb08dc8885248783111c9b66892b4e53c993"
+      "upstream_sha256": "3c17aa0b5f1feaa201adf2a9c1f2075d39abb5c654b396602d89ec0517146d0b"
     },
     {
       "path": "localization/glossary.py",
@@ -43,7 +43,7 @@
       "upstream_path": "localization/TRANSLATION_GUIDE.md",
       "kind": "verbatim",
       "upstream_blob": "1d3dfa660ce4acfc5519ab51aafe36f376d391df",
-      "upstream_sha256": "f2af8a44e1b9acd0861475374ebe63ef44518d56f7c9bd4b0da38fbc034874fb"
+      "upstream_sha256": "b30f8cb3d53ae32039a4b0a4e3b67d811a59c1ca756a1fb6620bd3ba016ea308"
     },
     {
       "path": "localization/upstream/check_localization_sync.py",
@@ -64,7 +64,7 @@
       "upstream_path": "localization/glossaries/am_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "d3fafcd39778455a558dd0ffa2396e26b4a77dd2",
-      "upstream_sha256": "90fb8eef61875738427a4f4d4f3d8f613fea9654c976d959858269fa0bcf44ac"
+      "upstream_sha256": "c3a8beabfe0497a78d69728c3a4e6388f8df237bcf41b7928bd79abc7e14f940"
     },
     {
       "path": "localization/glossaries/ar_glossary.md",
@@ -83,26 +83,23 @@
     {
       "path": "localization/glossaries/de_glossary.md",
       "upstream_path": "localization/glossaries/de_glossary.md",
-      "kind": "patched",
+      "kind": "verbatim",
       "upstream_blob": "eacdfeaaba1fe8ce85e1f243ca5234393c9d8948",
-      "upstream_sha256": "888b2a4db76c5ea360314ee68be02355ab6c0b18c429027dbc844effb8a05e05",
-      "patch": "localization/patches/wise_authority_term.diff",
-      "sha256": "a8d003925e976054df2fbeddc0f171f72b59082f4398564eccadb7d223b8cfe6",
-      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); upstream in CIRISClient#237"
+      "upstream_sha256": "0d75897f7a848ee64d217a59615729df2dde7388a9c9965c64c4800953cad641"
     },
     {
       "path": "localization/glossaries/es_glossary.md",
       "upstream_path": "localization/glossaries/es_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "dda5d32ace3def066a855bc0a990b43ea5ff7a9a",
-      "upstream_sha256": "82066d34d23e65d011dcd824fc70dbfbe8a979c2562ed7e0643a36009b73825c"
+      "upstream_sha256": "ad59b6c6318cf5de894ad650859c835004e1324c2cf38b82fbecd87103b4ba23"
     },
     {
       "path": "localization/glossaries/fa_glossary.md",
       "upstream_path": "localization/glossaries/fa_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "d39ce7006ba005f4d444dcca4c13ea55ed3d3f32",
-      "upstream_sha256": "7d30027294dfc781a4cca7e5d5d4daa2f29e078bbe8af05502569fc909b3c205"
+      "upstream_sha256": "45b7225e471400e3213ef563b7fcbf95c35a61620f14cbaa5c6e1417d04d99d5"
     },
     {
       "path": "localization/glossaries/fr_glossary.md",
@@ -121,26 +118,23 @@
     {
       "path": "localization/glossaries/hi_glossary.md",
       "upstream_path": "localization/glossaries/hi_glossary.md",
-      "kind": "patched",
+      "kind": "verbatim",
       "upstream_blob": "6f6f91d3b4eb682d76ba276b4f7a13e50cc7b948",
-      "upstream_sha256": "1981b37457e1d04b50a3d24161f485ee84a6d9bbc879139182535c178d86e0d3",
-      "patch": "localization/patches/wise_authority_term.diff",
-      "sha256": "6512ce4aca31453effc7b26cb354ef8b87c5001d6095ab11c1006c3c3282c9eb",
-      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); upstream in CIRISClient#237"
+      "upstream_sha256": "9a72ccfbd5987a6fc769df4bf7172be95f76647ba1a2cea1fa4de78679fde533"
     },
     {
       "path": "localization/glossaries/id_glossary.md",
       "upstream_path": "localization/glossaries/id_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "434f6ba71746c97c516379f24b9514a3443b5a1f",
-      "upstream_sha256": "1d18e6e12f87f61409038bd0c04aa91b516097d5a8646c6cd3ba0e2faedd7f7c"
+      "upstream_sha256": "301409bc4c62608c84c95e9e4cf826f2782a1f735c253c380b765727564c4d4a"
     },
     {
       "path": "localization/glossaries/it_glossary.md",
       "upstream_path": "localization/glossaries/it_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "4fb7c0a90744a163dff7beb267f4ebd95c78f74d",
-      "upstream_sha256": "b332c18a463fc641d0565509ac4ba8ec182d473a14fb210a987ab8884815d633"
+      "upstream_sha256": "bdb500078baa5d5778bb8856e061d0b56c90fa7d91a0185aabf4cc734e6fb906"
     },
     {
       "path": "localization/glossaries/ja_glossary.md",
@@ -152,12 +146,9 @@
     {
       "path": "localization/glossaries/ko_glossary.md",
       "upstream_path": "localization/glossaries/ko_glossary.md",
-      "kind": "patched",
+      "kind": "verbatim",
       "upstream_blob": "d0d2814dbbd8e7e794c11f1fc3982f723f5316ea",
-      "upstream_sha256": "fdd65ec26d5fcba03ee045b13e637b7b4187382b753636b98288bdbd71b087dd",
-      "patch": "localization/patches/wise_authority_term.diff",
-      "sha256": "a81a443cb0d5c257315fd3d5b5677f4dc78a6d7db480ff2b011e6630157c61b2",
-      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); upstream in CIRISClient#237"
+      "upstream_sha256": "0cb848e8af701da4fed0ca51ef744238a699f5825f4c623ca9e5e0f5896ff0d9"
     },
     {
       "path": "localization/glossaries/mr_glossary.md",
@@ -185,24 +176,21 @@
       "upstream_path": "localization/glossaries/pt_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "75fa41b0cf6e42a7ef03511b6c01d3ced57376a6",
-      "upstream_sha256": "bc6cacfff0ba5e63ea470f8969ed797757e64b96ac35bc14f207a280bfc8c45f"
+      "upstream_sha256": "2dfb9799b0c4422219f7fe7e77787032de5415e8a4d28811303e433264cee7aa"
     },
     {
       "path": "localization/glossaries/ru_glossary.md",
       "upstream_path": "localization/glossaries/ru_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "77e159f17857a507b34fbde108812dfaded27dff",
-      "upstream_sha256": "567f0ff0fa7840ab04f9b16635aafe55f7a2afd04fd2464583a7c1114d853cc6"
+      "upstream_sha256": "a1e8b675cf81ad5dd8c0c275500b3d4f9124788b220a245a3bde59748780dbd2"
     },
     {
       "path": "localization/glossaries/sw_glossary.md",
       "upstream_path": "localization/glossaries/sw_glossary.md",
-      "kind": "patched",
+      "kind": "verbatim",
       "upstream_blob": "6ecca46e9c4ce02c4b310c82dc79e833cc0dece1",
-      "upstream_sha256": "f8a383e41c856fc250499efcde4a979299223611ca4494d75e4e9350448a9340",
-      "patch": "localization/patches/wise_authority_term.diff",
-      "sha256": "1569f46ad8edee2e8433d384ce96a7ca0b427ce65a83c6b13858803bbb9fa363",
-      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); upstream in CIRISClient#237"
+      "upstream_sha256": "a8ee3248080e0e495cdd2c638a769e4d3f2685265e3751c7d4a5bba42fc2a45b"
     },
     {
       "path": "localization/glossaries/ta_glossary.md",
@@ -228,26 +216,23 @@
     {
       "path": "localization/glossaries/tr_glossary.md",
       "upstream_path": "localization/glossaries/tr_glossary.md",
-      "kind": "patched",
+      "kind": "verbatim",
       "upstream_blob": "769768d2d78245fc0f72f5f07a1798c7d1d559ce",
-      "upstream_sha256": "4ed71042c5e884da23a634c3d74e9838f16df82197aa9848da290f55ca222e1b",
-      "patch": "localization/patches/wise_authority_term.diff",
-      "sha256": "d934f4132994ff9146cb57f1ef913794961b6c961d08bf4cc696fb10da5dc8d5",
-      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); upstream in CIRISClient#237"
+      "upstream_sha256": "43b1953946fe849309421a7d1152662c2bfca13b31906e47c958654016a8bcab"
     },
     {
       "path": "localization/glossaries/uk_glossary.md",
       "upstream_path": "localization/glossaries/uk_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "9c2f7f530f14b7ff32e5c8abf22ce68d84827021",
-      "upstream_sha256": "6d47688c50216bb0e14772accabdeb50f09d605838f3053fd21ac52e41be3524"
+      "upstream_sha256": "697e6c3ba386730f7769927e8e887260902e76800b55c2d66f13d1a8bb838d6f"
     },
     {
       "path": "localization/glossaries/ur_glossary.md",
       "upstream_path": "localization/glossaries/ur_glossary.md",
       "kind": "verbatim",
       "upstream_blob": "75d750077f18c82f5f46dbaf9b85daff98b8a70f",
-      "upstream_sha256": "c7d198364b7b264c1c77e6329d77decedd4462c76e9a932156a024cb1d7e9492"
+      "upstream_sha256": "5d4b1585cddacf1fe487ea8d682f75e72ca1ae6071a4aadf7f97cde039cf73be"
     },
     {
       "path": "localization/glossaries/vi_glossary.md",
@@ -269,9 +254,9 @@
       "kind": "patched",
       "upstream_blob": "4fa33d87b1f523188f7e411bbddcfd7c36c128a3",
       "upstream_sha256": "0de260c661c4c992caeffb8bc18f42cc122575b118b18f4b7ac5db2adb6e476f",
-      "patch": "localization/patches/wise_authority_term.diff",
+      "patch": "localization/patches/zh_wise_authority_term.diff",
       "sha256": "2e2c9dedd452ab19c0a9d0c31808dec03c4d40bcef688adc1ca1814c2cc3448b",
-      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering, never \"human advisor\" (user ruling 2026-10-15); upstream in CIRISClient#237"
+      "patch_reason": "Wise Authority uses the Constitution 1.3 rendering 智慧权威, never 人工顾问 (\"human advisor\"); Eric ruling 2026-10-15. Upstream CIRISClient#237 fixed the other locales but left the zh example (l.157) and usage note (l.172); drop this patch when upstream fixes zh."
     },
     {
       "path": ".github/workflows/i18n-lane.yml",

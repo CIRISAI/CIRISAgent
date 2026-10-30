@@ -152,7 +152,8 @@ This glossary defines the canonical translations for key CIRIS terms in Turkish.
 
 ### Formality Level
 - Use formal register for ACCORD and official documentation
-- Use conversational Turkish for UI strings and chat messages
+- Use conversational Turkish for interface text (labels, buttons, menus)
+- **When the agent speaks to the person** (keys under `prompts.`, safety and care exemplars, the agent's replies): always formal "siz" (never "sen"). This overrides any conversational rule for interface text: a person in distress is addressed with respect, and the agent's own guidance requires it.
 - Technical Turkish with English loan words for DMA prompts is acceptable
 
 ### Politeness

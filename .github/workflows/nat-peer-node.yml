@@ -53,10 +53,14 @@ jobs:
           export MESH_OUT="$RUNNER_TEMP/mesh" MESH_LLM_KEY_FILE="$RUNNER_TEMP/llm_key"
           tools/qa_runner/local_mesh/run.sh "$SERVER_TAG"
 
+      # The harness runs inside node-c's own container: the image has every
+      # dependency, and the node's API is its localhost:8080. /mesh/home is
+      # $RUNNER_TEMP/mesh/node-c on the runner.
       - name: Publish node-c's contact
         run: |
-          pip install -q httpx
-          python -m tools.qa_runner.nat_peer code --node node-c=http://127.0.0.1:18083 --out contact/contact.json
+          docker exec -w /app ciris-node-c python -m tools.qa_runner.nat_peer code \
+            --node node-c=http://127.0.0.1:8080 --out /mesh/home/contact.json
+          mkdir -p contact && cp "$RUNNER_TEMP/mesh/node-c/contact.json" contact/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -66,9 +70,14 @@ jobs:
       - name: node-c's half (requester)
         run: |
           mkdir -p results
-          python -m tools.qa_runner.nat_peer half --node node-c=http://127.0.0.1:18083 --role requester \
-            --peers "$RUNNER_TEMP/peers.json" --nonce "$NONCE" --out results/result.json \
-            --summary "$GITHUB_STEP_SUMMARY"
+          cp "$RUNNER_TEMP/peers.json" "$RUNNER_TEMP/mesh/node-c/peers.json"
+          rc=0
+          docker exec -w /app ciris-node-c python -m tools.qa_runner.nat_peer half \
+            --node node-c=http://127.0.0.1:8080 --role requester --peers /mesh/home/peers.json \
+            --nonce "$NONCE" --out /mesh/home/result.json --summary /mesh/home/summary.md || rc=$?
+          cp "$RUNNER_TEMP/mesh/node-c/result.json" results/ 2>/dev/null || true
+          cat "$RUNNER_TEMP/mesh/node-c/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          exit $rc
 
       - name: Collect node-c's logs
         if: always()

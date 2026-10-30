@@ -467,12 +467,31 @@ def test_channel_history_stops_once_it_has_enough(monkeypatch):
         }
         for i in range(2000)
     ]
-    engine = _PagingEngine(rows, "correlation_id")
+    class _Engine(_PagingEngine):
+        def correlation_get(self, correlation_id: str) -> Any:
+            row = next((r for r in self.rows if r["correlation_id"] == correlation_id), None)
+            return json.dumps(row) if row is not None else None
+
+    engine = _Engine(rows, "correlation_id")
     monkeypatch.setattr(corr_model, "_get_engine", lambda: engine)
-    history = corr_model.get_correlations_by_channel("chan", limit=20)
+    monkeypatch.setattr(corr_model, "_channel_indexes", {})
+    history = corr_model.get_correlations_by_channel("chan", limit=20)  # first call indexes once
     assert len(history) == 20
-    assert engine.pages_served == 1  # negative: every correlation ever recorded was paged
     assert [c.correlation_id for c in history][-1] == "corr-01999"  # oldest-first, newest last
+    warm = engine.pages_served
+
+    # a new conversation: no history, and only rows newer than the index are read
+    assert corr_model.get_correlations_by_channel("brand-new-channel", limit=20) == []
+    assert engine.pages_served - warm == 1  # negative: the old scan paged all 2000 rows per call
+
+    # a correlation written since (by anyone) is picked up by the next lookup
+    new = dict(rows[0], correlation_id="corr-new", created_at="2026-10-29T01:00:00Z", timestamp="2026-10-29T01:00:00Z")
+    engine.rows.insert(0, new)
+    assert corr_model.get_correlations_by_channel("chan", limit=1)[0].correlation_id == "corr-new"
+
+    # one deleted since it was indexed is dropped, not returned
+    engine.rows = [r for r in engine.rows if r["correlation_id"] != "corr-new"]
+    assert corr_model.get_correlations_by_channel("chan", limit=1)[0].correlation_id == "corr-01999"
 
 
 def test_queue_status_is_reused_within_its_ttl(monkeypatch):

@@ -48,6 +48,13 @@ def owner_opted_into_trace_sharing() -> bool:
 
     Returns False when the signal cannot be read, so the failure mode is "no
     consent authored" and never "consented on the owner's behalf".
+
+    Two signals: the opt-in env var, and a community grant already in force. The
+    accord adapter's legacy migration turns the env var into that grant and then
+    PURGES the var (process env and .env), so after it runs the grant is the only
+    record of the owner's opt-in. Reading the var alone told the node fold and the
+    delivery probe "not opted in" nine seconds after the same boot had granted.
+    A withdrawn or recanted grant is not in force, so revocation still reads as no.
     """
     try:
         from ciris_engine.logic.config.env_utils import get_env_var  # noqa: PLC0415
@@ -58,7 +65,11 @@ def owner_opted_into_trace_sharing() -> bool:
         pass
     import os
 
-    return os.environ.get(OPT_IN_ENV_VAR, "").lower() == "true"
+    if os.environ.get(OPT_IN_ENV_VAR, "").lower() == "true":
+        return True
+    from ciris_engine.logic.services.governance.consent.attestation import community_grant_in_force
+
+    return community_grant_in_force() is not None
 
 
 def trace_sharing_status() -> TraceSharingConsent:

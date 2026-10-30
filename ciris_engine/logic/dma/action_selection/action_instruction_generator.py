@@ -260,7 +260,7 @@ class ActionInstructionGenerator:
         for tool_key, tool_info in all_tools.items():
             tool_name = tool_info.get("name", tool_key) if isinstance(tool_info, dict) else tool_key
             service = tool_info.get("service", "unknown") if isinstance(tool_info, dict) else "unknown"
-            logger.info(f"[TOOL_CACHE] Tool available: '{tool_name}' (service={service}, key={tool_key})")
+            logger.debug(f"[TOOL_CACHE] Tool available: '{tool_name}' (service={service}, key={tool_key})")
         return len(all_tools)
 
     async def _cache_tools_from_service(self, tool_service: Any, service_name: str, all_tools: JSONDict) -> None:
@@ -368,7 +368,7 @@ class ActionInstructionGenerator:
             tools_info.append(tool_line)
 
             # Log each tool being added to help debug tool selection issues
-            logger.info(f'[TOOL_PROMPT] Added to prompt: tool_name="{tool_name}" when_to_use="{when_to_use[:60]}..."')
+            logger.debug(f'[TOOL_PROMPT] Added to prompt: tool_name="{tool_name}" when_to_use="{when_to_use[:60]}..."')
 
         final_tools_str = "\n".join(tools_info)
         logger.info(f"[TOOL_PROMPT] Final tools section length: {len(final_tools_str)} chars")

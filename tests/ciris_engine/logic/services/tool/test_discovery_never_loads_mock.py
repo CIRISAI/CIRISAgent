@@ -110,11 +110,11 @@ class TestDiscoveryNeverConstructsTheMock:
     async def test_action_selection_installable_tools_cache(
         self, real_llm_mode: None, discovery_sees_mock: None, constructions: List[str]
     ) -> None:
-        """The installable-tools cache runs a discovery report on EVERY action-selection build."""
+        """The installable-tools block is built from a discovery report (reused for a TTL, see context_builder)."""
         from ciris_engine.logic.dma.action_selection.context_builder import ActionSelectionContextBuilder
 
         builder = ActionSelectionContextBuilder.__new__(ActionSelectionContextBuilder)
-        await builder._cache_installable_tools()
+        await builder._build_installable_tools()
         assert constructions == []
         assert not is_mock_llm_active()
 

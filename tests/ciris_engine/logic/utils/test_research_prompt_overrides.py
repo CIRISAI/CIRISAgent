@@ -844,7 +844,10 @@ class TestDriftGuard:
         #
         # 202 -> 203: prompts.prohibitions.LETHAL_ACTION (#1323), the CC 7.4
         # rule's line in the round-1 capability-boundary block.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 203
+        #
+        # 203 -> 204: prompts.universal_guidance.05b_no_stigma_words (2.18.0,
+        # deontic), the stigma-word rule the coherence conscience applies.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 204
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

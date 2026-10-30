@@ -56,6 +56,22 @@ HALT_READ_TIMEOUT_SECONDS = 1.0
 #: halt" would admit an act, or a message, for up to this long after the latch.
 HALT_READ_CACHE_TTL_SECONDS = 1.0
 
+#: A fresh caller joins a read that started at most this long ago instead of
+#: starting its own. Without it every API request, act gate and bus backstop
+#: read in parallel, so a burst of traffic became a burst of loopback reads that
+#: timed out and failed closed: the agent refused everyone as halted (a DoS that
+#: the memory benchmark demonstrated, 2026-10-29).
+HALT_FRESH_JOIN_SECONDS = 0.25
+
+#: A read that TIMES OUT or cannot reach the node keeps the last successful
+#: reading for at most this long, then fails closed. A read that answers is
+#: always taken at once, so a halt that is read stops acts immediately; this
+#: only stops a slow read under load from looking like a halt. It never applies
+#: before the first successful read (boot fails closed) or with no node.
+HALT_TRANSIENT_GRACE_SECONDS = 5.0
+
+_TRANSIENT_READINGS = frozenset({AccordHaltReading.NODE_TIMEOUT, AccordHaltReading.NODE_UNREACHABLE})
+
 #: How often a held loop re-reads the latch to notice a release or a lapse.
 HALT_HOLD_TICK_SECONDS = 5.0
 
@@ -217,17 +233,55 @@ def _observe(state: AccordHaltState) -> None:
         _episode_start = None
 
 
+_inflight: Optional["asyncio.Task[AccordHaltState]"] = None
+_inflight_started: float = 0.0
+_last_good: Optional[AccordHaltState] = None
+_last_good_at: float = 0.0
+
+
+async def _shared_read() -> AccordHaltState:
+    """One node read, shared by every caller that arrives while it is in flight.
+
+    A caller joins a read that started within ``HALT_FRESH_JOIN_SECONDS`` and
+    is still running; otherwise it starts the next one.
+    """
+    global _inflight, _inflight_started
+    loop = asyncio.get_running_loop()
+    task = _inflight
+    now = time.monotonic()
+    if task is None or task.done() or task.get_loop() is not loop or now - _inflight_started > HALT_FRESH_JOIN_SECONDS:
+        task = loop.create_task(_read_from_node())
+        _inflight, _inflight_started = task, now
+    return await asyncio.shield(task)
+
+
+def _within_grace(state: AccordHaltState) -> Optional[AccordHaltState]:
+    """The last successful reading, if a transient read failure may keep it."""
+    if state.reading not in _TRANSIENT_READINGS or _last_good is None:
+        return None
+    if time.monotonic() - _last_good_at > HALT_TRANSIENT_GRACE_SECONDS:
+        return None
+    return _last_good
+
+
 async def read_halt_latch(*, fresh: bool = False) -> AccordHaltState:
     """THE reader. Cached for at most `HALT_READ_CACHE_TTL_SECONDS`; `fresh` always asks the node.
 
     An act is gated on a fresh read: the cache is for loops that poll, not for
-    the decision that lets an act run.
+    the decision that lets an act run. Concurrent fresh reads share one node
+    read, and a slow read keeps the last answer briefly (see the constants).
     """
-    global _cached, _cached_at
+    global _cached, _cached_at, _last_good, _last_good_at
     cached = _cached
     if not fresh and cached is not None and time.monotonic() - _cached_at < HALT_READ_CACHE_TTL_SECONDS:
         return cached
-    state = await _read_from_node()
+    state = await _shared_read()
+    kept = _within_grace(state)
+    if kept is not None:
+        logger.debug("halt-status read failed transiently (%s); keeping the last reading", state.read_error)
+        return kept
+    if state.reading not in _TRANSIENT_READINGS and state.reading != AccordHaltReading.NODE_ERROR:
+        _last_good, _last_good_at = state, time.monotonic()
     _observe(state)
     if not state.halted and (_unhalted_hooks or (_hooks_lock is not None and _hooks_lock.locked())):
         await _run_unhalted_hooks(state)
@@ -261,9 +315,15 @@ async def _run_unhalted_hooks(state: AccordHaltState) -> None:
 
 
 def invalidate_halt_cache() -> None:
-    """Force the next `read_halt_latch()` to ask the node."""
-    global _cached_at
+    """Force the next `read_halt_latch()` to ask the node, with no grace.
+
+    Called when something has just changed (an invocation arrived): the next
+    read must reflect it, so a transient failure fails closed instead of
+    keeping the answer from before the change.
+    """
+    global _cached_at, _last_good, _last_good_at
     _cached_at = 0.0
+    _last_good, _last_good_at = None, 0.0
 
 
 def exempt_act_for(action: HandlerActionType) -> Optional[AccordHaltExemptAct]:

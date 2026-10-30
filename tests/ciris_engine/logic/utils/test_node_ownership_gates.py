@@ -85,6 +85,8 @@ def node(home: Path, monkeypatch: pytest.MonkeyPatch) -> Node:
     n = Node()
     monkeypatch.setattr(node_ownership, "_read_from_node", n.read)
     monkeypatch.setattr(node_ownership, "_cached", None)
+    monkeypatch.setattr(node_ownership, "_last_owned", None)
+    monkeypatch.setattr(node_ownership, "_inflight", None)
     monkeypatch.setattr(node_ownership, "_cached_at", 0.0)
     monkeypatch.setattr(node_ownership, "NODE_OWNERSHIP_CACHE_TTL_SECONDS", 0.0)
     monkeypatch.setattr(node_ownership, "NODE_OWNERSHIP_HOLD_TICK_SECONDS", 0.01)
@@ -111,6 +113,8 @@ def fold_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(node_fold, "fold_status", lambda: {"folded": True, "reachable": True})
     monkeypatch.setattr(node_ownership, "_cached", None)
+    monkeypatch.setattr(node_ownership, "_last_owned", None)
+    monkeypatch.setattr(node_ownership, "_inflight", None)
 
 
 def _substrate(monkeypatch: pytest.MonkeyPatch, key_id: Optional[str], owner_of: Any) -> None:
@@ -556,6 +560,8 @@ async def test_the_pin_value_never_appears_in_a_log_or_a_body(
 
     # The real edge-logging reader, over the mocked node.
     monkeypatch.setattr(node_ownership, "_cached", None)
+    monkeypatch.setattr(node_ownership, "_last_owned", None)
+    monkeypatch.setattr(node_ownership, "_inflight", None)
     await node_ownership.node_owned(fresh=True)
 
     _intake_patches(monkeypatch)

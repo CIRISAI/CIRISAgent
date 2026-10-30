@@ -158,7 +158,7 @@ IRREDUCIBLE_EXEMPLARS: Dict[str, str] = {
     "language_guidance.23_ratification_templates": (
         "FSD §10.2.1 [T-5a] — two verbatim INVOCABLE TEMPLATE model outputs"
     ),
-    "language_guidance.25_exemplar_cross_cluster": (
+    "universal_guidance.25_exemplar_cross_cluster": (
         "FSD §10.2.1 [T-5a] — 7c: the cluster answer and the Q4 HARD-FAIL U6 "
         "counter-example, both shown verbatim"
     ),

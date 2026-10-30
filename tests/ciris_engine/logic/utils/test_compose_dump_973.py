@@ -27,7 +27,7 @@ from ciris_engine.logic.utils.compose_dump import (
     run_gate,
     write_dump,
 )
-from ciris_engine.logic.utils.localization import LANGUAGE_GUIDANCE_PART_KEYS
+from ciris_engine.logic.utils.localization import LANGUAGE_GUIDANCE_PART_KEYS, UNIVERSAL_GUIDANCE_PART_KEYS
 from ciris_engine.schemas.dma.compose import BlockClass, BlockDisposition, ComposedBlock, ComposeDumpMeta
 
 #: ``prompts.language_guidance`` is 29 blocks at ``en`` since #997 — one per
@@ -35,7 +35,15 @@ from ciris_engine.schemas.dma.compose import BlockClass, BlockDisposition, Compo
 #: step's expected list rather than spelled out thirteen times; ``en`` is split,
 #: so no step composes the bare ``language_guidance`` block any more (the 24
 #: unsplit locales still do).
-LANGUAGE_GUIDANCE_BLOCKS: List[str] = [f"language_guidance.{key}" for key in LANGUAGE_GUIDANCE_PART_KEYS]
+#: Four of the 29 now live under ``prompts.universal_guidance`` and report as
+#: ``universal_guidance.<part>`` — same count, same slots (sorted by part key).
+LANGUAGE_GUIDANCE_BLOCKS: List[str] = [
+    block
+    for _, block in sorted(
+        [(key, f"language_guidance.{key}") for key in LANGUAGE_GUIDANCE_PART_KEYS]
+        + [(key, f"universal_guidance.{key}") for key in UNIVERSAL_GUIDANCE_PART_KEYS]
+    )
+]
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _NULL_REGIME = _REPO_ROOT / "tools" / "research" / "regimes" / "phase1_selfcheck_null.yaml"
@@ -463,7 +471,7 @@ blocks:
   language_guidance.14_exemplar_register_pressure: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.16_exemplar_false_reassurance: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
-  language_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
+  universal_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.closing_reminder: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
@@ -501,7 +509,7 @@ blocks:
   language_guidance.14_exemplar_register_pressure: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.16_exemplar_false_reassurance: {disposition: hold, confound_accepted: [axiotic]}
   language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
-  language_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
+  universal_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.closing_reminder: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}

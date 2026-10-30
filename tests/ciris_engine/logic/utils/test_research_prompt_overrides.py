@@ -810,7 +810,7 @@ class TestDriftGuard:
         # above says is the only direction this may move unexplained.
         #
         # 191 -> 192: one key, #1010's §7e directional guard
-        # `prompts.language_guidance.26b_user_symptom_direction`. The FR safety
+        # `26b_user_symptom_direction` (now `prompts.universal_guidance.*`). The FR safety
         # battery caught the agent naming a clinical category at a user in the
         # EXCLUSION direction ("does not meet the criteria for X"), which the
         # inclusion-shaped guard did not cover. It is declared as its own part

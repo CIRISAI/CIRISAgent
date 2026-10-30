@@ -404,7 +404,6 @@ LANGUAGE_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     "02_first_sentence_tone_lock",
     "03_never_deny_ai",
     "04_formal_register",
-    "05_no_wellness_confirmation",
     "06_warmth_and_concision",
     "07_canonical_disclaimer",
     "08_help_pathway_intro",
@@ -424,23 +423,56 @@ LANGUAGE_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     "22_ratification_register",
     "23_ratification_templates",
     "24_ratification_pattern",
+    "27_attractor_universality",
+    "28_brevity_restatement",
+    "29_no_medical_or_legal_advice",
+)
+
+#: The ordered part keys of ``prompts.universal_guidance`` — doctrine that has
+#: standardized out of ``prompts.language_guidance``.
+#:
+#: ``prompts.language_guidance`` is per-language authored prose and is excluded
+#: from the localize pipeline (``UI_EXCLUDED_PREFIXES``). Once a part says the
+#: same thing in every language it stops being language guidance: it moves here,
+#: keeping its numeric prefix, so the pipeline translates it into every locale.
+#:
+#: It composes in the SAME block. ``get_language_guidance`` merges these with
+#: the language parts and joins in ``sorted()`` key order, so the prefix still
+#: places each part exactly where it sat when it lived under language_guidance —
+#: the move changed which pipeline owns the text, not the bytes composed.
+UNIVERSAL_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
+    "05_no_wellness_confirmation",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     # #1010 — the §7e directional guard: the license covers answering a
     # question ABOUT a category, never applying a category TO a person, and the
     # EXCLUSION direction ("does not meet the criteria for X") is the same
-    # violation as the inclusion. Absent everywhere but `sw` until now.
+    # violation as the inclusion.
     "26b_user_symptom_direction",
-    "27_attractor_universality",
-    "28_brevity_restatement",
-    "29_no_medical_or_legal_advice",
 )
+
+#: Parent of the universal parts. Not separately overridable as a whole: the
+#: parts are, and a ``prompts.language_guidance`` override still replaces the
+#: entire composed block, universal parts included.
+UNIVERSAL_GUIDANCE_KEY = "prompts.universal_guidance"
 
 #: The parent key. Still reachable, still overridable, and it WINS: a manifest
 #: that replaces the whole block replaces the whole block. Stated here rather
 #: than left implicit because parent-and-parts both being overridable with no
 #: declared precedence is a confound the gate cannot see.
 LANGUAGE_GUIDANCE_KEY = "prompts.language_guidance"
+
+
+def _own_part_keys(lang_code: str, parent_key: str) -> Tuple[str, ...]:
+    """Sorted child keys of ``parent_key`` in the locale's OWN bundle, else ()."""
+    node: Any = _get_language_data(lang_code)
+    for segment in parent_key.split("."):
+        if not isinstance(node, dict):
+            return ()
+        node = node.get(segment)
+    if not isinstance(node, dict):
+        return ()
+    return tuple(sorted(node))
 
 
 def language_guidance_part_keys(lang_code: str) -> Tuple[str, ...]:
@@ -452,14 +484,17 @@ def language_guidance_part_keys(lang_code: str) -> Tuple[str, ...]:
     into a localized prompt — the laundering R4 forbids, and the exact failure
     the streaming localization gate exists to catch.
     """
-    node: Any = _get_language_data(lang_code)
-    for segment in LANGUAGE_GUIDANCE_KEY.split("."):
-        if not isinstance(node, dict):
-            return ()
-        node = node.get(segment)
-    if not isinstance(node, dict):
-        return ()
-    return tuple(sorted(node))
+    return _own_part_keys(lang_code, LANGUAGE_GUIDANCE_KEY)
+
+
+def universal_guidance_part_keys(lang_code: str) -> Tuple[str, ...]:
+    """The ordered universal part keys this locale actually carries, or ().
+
+    Own bundle only, for the same R4 reason as ``language_guidance_part_keys``:
+    a locale the pipeline has not yet translated composes WITHOUT the part,
+    never with the English text spliced in.
+    """
+    return _own_part_keys(lang_code, UNIVERSAL_GUIDANCE_KEY)
 
 
 def language_guidance_parts(lang_code: str) -> List[Tuple[str, str]]:
@@ -480,6 +515,29 @@ def language_guidance_parts(lang_code: str) -> List[Tuple[str, str]]:
     ]
 
 
+def universal_guidance_parts(lang_code: str) -> List[Tuple[str, str]]:
+    """Ordered ``(part_key, resolved_text)`` of the locale's universal parts.
+
+    Mirrors ``language_guidance_parts``: resolved per part through
+    ``get_string`` so a research manifest can hold or vary each one.
+    """
+    # Literal f-string prefix for the `ast` scan — see language_guidance_parts.
+    return [
+        (key, get_string(lang_code, f"prompts.universal_guidance.{key}", default=""))
+        for key in universal_guidance_part_keys(lang_code)
+    ]
+
+
+def _compose_parts(*part_lists: List[Tuple[str, str]]) -> str:
+    """Join parts from several subtrees in ``sorted()`` key order, then strip.
+
+    The numeric prefixes are disjoint across subtrees, so sorting the merged
+    list interleaves universal parts back into their composition slots.
+    """
+    merged = sorted((pair for parts in part_lists for pair in parts), key=lambda pair: pair[0])
+    return "".join(text for _, text in merged).strip()
+
+
 def get_language_guidance(lang_code: str) -> str:
     """Return the per-language guidance block for LLM prompts.
 
@@ -489,6 +547,11 @@ def get_language_guidance(lang_code: str) -> str:
     locales whose prose does not partition on the same boundaries, the original
     single scalar. Both compose to the same bytes; the split changes what the
     ablation gate can address, not what the model receives.
+
+    The locale's own ``prompts.universal_guidance`` parts compose into the SAME
+    block: merged with the split parts in key order, or appended after the
+    scalar (which already carries its own rendering of that doctrine until it
+    is re-cut).
 
     For languages where we've observed systematic terminology gaps —
     wrong-sense disambiguation, transliteration fallbacks, or cross-cluster
@@ -513,15 +576,21 @@ def get_language_guidance(lang_code: str) -> str:
             return whole.strip()
 
     parts = language_guidance_parts(lang_code)
+    universal = universal_guidance_parts(lang_code)
     if parts:
         # `.strip()` is applied to the JOIN, exactly where it was applied to the
         # scalar. Every part carries its own trailing separator, so joining with
         # "" and stripping once reproduces the pre-split bytes.
-        return "".join(text for _, text in parts).strip()
+        return _compose_parts(parts, universal)
 
     raw = get_string(lang_code, "prompts.language_guidance", default="")
     if raw:
-        return raw.strip()
+        if not universal:
+            return raw.strip()
+        # The scalar has no slots to sort into, so its universal parts follow
+        # it. The scalar ends without its trailing separator once stripped;
+        # restore one blank line, the separator every part already carries.
+        return (raw.rstrip() + "\n\n" + _compose_parts(universal)).strip()
 
     # Neither shape: an unknown locale with no bundle at all. `get_string`'s own
     # chain is requested-language -> English, and it used to deliver that here
@@ -532,7 +601,7 @@ def get_language_guidance(lang_code: str) -> str:
     if lang_code != DEFAULT_LANGUAGE:
         english = language_guidance_parts(DEFAULT_LANGUAGE)
         if english:
-            return "".join(text for _, text in english).strip()
+            return _compose_parts(english, universal_guidance_parts(DEFAULT_LANGUAGE))
     return ""
 
 

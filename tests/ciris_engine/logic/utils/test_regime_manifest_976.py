@@ -104,7 +104,7 @@ def _baseline_blocks() -> Dict[str, dict]:
             **held,
             "contaminant": ["pragmatic", "epistemic", "ontological", "axiotic"],
         },
-        "language_guidance.25_exemplar_cross_cluster": {
+        "universal_guidance.25_exemplar_cross_cluster": {
             **held,
             "contaminant": ["deontic", "epistemic", "empirical", "axiotic"],
         },

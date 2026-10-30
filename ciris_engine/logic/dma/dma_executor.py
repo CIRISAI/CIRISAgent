@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import time
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Union
 
@@ -48,6 +49,7 @@ from ciris_engine.logic.config.llm_budget import (
 from ciris_engine.logic.conscience.transport import categorize_conscience_error, is_transient_transport_failure
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
+from ciris_engine.logic.utils import hedging
 from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
 from ciris_engine.schemas.dma.results import (
     ActionSelectionDMAResult,
@@ -143,6 +145,13 @@ async def run_dma_with_retries(
     limit, an open breaker, an unrecognised error) fails fast -- a fresh
     request would fail the same way. Either way an exhausted DMA raises
     DMAFailure: nothing here ever fails open.
+
+    A SLOW attempt is hedged, not abandoned: past the DMA's recent p95 latency
+    the next attempt starts beside it, the first answer wins and the other is
+    cancelled. A late reply to the first attempt is therefore taken rather than
+    thrown away. At most two attempts are in flight, every one counts toward the
+    attempt cap and stays inside the thought deadline, and a profile with one
+    attempt (a local single-slot model) never hedges.
     """
     budget = active_budget()
     if retry_limit is None:
@@ -150,73 +159,123 @@ async def run_dma_with_retries(
     if timeout_seconds is None:
         timeout_seconds = budget.dma_per_try_s
     max_attempts = max(retry_limit, budget.dma_attempt_cap) if deadline is not None else retry_limit
+    name = run_fn.__name__
+    if time_service and "time_service" not in kwargs:
+        kwargs["time_service"] = time_service
+
+    async def one_attempt(this_try_s: float) -> Any:
+        async with _async_timeout(this_try_s):
+            # The bus reads this to decide whether waiting out an open
+            # breaker's recovery fits inside this attempt.
+            with llm_call_deadline(this_try_s):
+                return await run_fn(*args, **kwargs)
+
     attempt = 0
     last_error: Optional[Exception] = None
-    while attempt < max_attempts:
+    #: In-flight attempts: task -> (attempt number, monotonic start).
+    live: Dict["asyncio.Task[Any]", tuple[int, float]] = {}
+    can_launch = True
+
+    def launch() -> bool:
+        """Start the next attempt, or record why the deadline cannot afford one."""
+        nonlocal attempt, last_error, can_launch
+        if attempt >= max_attempts:
+            can_launch = False
+            return False
         this_try_s = attempt_timeout(timeout_seconds, deadline)
         if this_try_s is None:
+            can_launch = False
             remaining = deadline.remaining() if deadline is not None else 0.0
             if attempt >= retry_limit and last_error is not None:
                 # A deadline-bought extra attempt that no longer fits: the
                 # failure to report is the real one we already have.
-                break
-            logger.error(
-                "DMA %s: thought deadline has %.1fs left, too little for attempt %s/%s -- giving up",
-                run_fn.__name__,
-                remaining,
-                attempt + 1,
-                max_attempts,
-            )
-            last_error = TimeoutError(
-                f"thought deadline exhausted ({remaining:.1f}s left) before attempt {attempt + 1}/{max_attempts}"
-                + (f"; last error: {last_error}" if last_error is not None else "")
-            )
-            break
-        try:
-            async with _async_timeout(this_try_s):
-                # Pass time_service if the function expects it
-                if time_service and "time_service" not in kwargs:
-                    kwargs["time_service"] = time_service
-                # The bus reads this to decide whether waiting out an open
-                # breaker's recovery fits inside this attempt.
-                with llm_call_deadline(this_try_s):
-                    return await run_fn(*args, **kwargs)
-        except TimeoutError as e:
-            last_error = e
-            attempt += 1
-            logger.error("DMA %s timed out after %.1f seconds on attempt %s", run_fn.__name__, this_try_s, attempt)
-        except Exception as e:  # noqa: BLE001
-            last_error = e
-            attempt += 1
-            category = categorize_conscience_error(e)
-            retryable = is_transient_transport_failure(e, category) or _is_schema_redraw(e, category)
-            # Ensure we never log empty error messages
-            error_msg = str(e).replace("\n", " ").strip()
-            if not error_msg:
-                error_msg = f"<{type(e).__name__} with no message>"
-            if not retryable:
-                logger.warning(
-                    "DMA %s attempt %s failed (%s, not retried): %s",
-                    run_fn.__name__,
-                    attempt,
-                    category,
-                    error_msg[:200],
+                return False
+            if not live:
+                logger.error(
+                    "DMA %s: thought deadline has %.1fs left, too little for attempt %s/%s -- giving up",
+                    name,
+                    remaining,
+                    attempt + 1,
+                    max_attempts,
                 )
-                break
-            # Only log full details on first failure
-            if attempt == 1:
-                logger.warning("DMA %s attempt %s failed (%s): %s", run_fn.__name__, attempt, category, error_msg[:200])
-            elif attempt == max_attempts:
-                logger.warning(
-                    "DMA %s final attempt %s failed (same error repeated %s times)",
-                    run_fn.__name__,
-                    attempt,
-                    attempt - 1,
+                last_error = TimeoutError(
+                    f"thought deadline exhausted ({remaining:.1f}s left) before attempt {attempt + 1}/{max_attempts}"
+                    + (f"; last error: {last_error}" if last_error is not None else "")
                 )
+            return False
+        attempt += 1
+        live[asyncio.create_task(one_attempt(this_try_s))] = (attempt, time.monotonic())
+        return True
 
-            # Add small delay between retries to reduce log spam
-            if attempt < max_attempts:
-                await asyncio.sleep(0.1)  # 100ms delay
+    try:
+        launch()
+        while live:
+            # HEDGE, don't abandon (the "tail at scale" pattern). A slow attempt is
+            # not cancelled for its retry: the next attempt starts beside it and the
+            # first answer wins. A reply that lands after the retry started is taken,
+            # and the retry cancelled, instead of being thrown away.
+            hedge_in: Optional[float] = None
+            if len(live) == 1 and can_launch and max_attempts > 1:
+                (only_n, started), = live.values()
+                hedge_in = max(0.0, hedging.hedge_after_s(name, budget.llm_http_timeout_s) - (time.monotonic() - started))
+            done, _ = await asyncio.wait(live, timeout=hedge_in, return_when=asyncio.FIRST_COMPLETED)
+            if not done:
+                if launch():
+                    logger.warning(
+                        "[HEDGE] DMA %s attempt %s has not answered after %.1fs -- attempt %s starts beside it; "
+                        "the first answer wins and the other is cancelled",
+                        name,
+                        only_n,
+                        time.monotonic() - started,
+                        attempt,
+                    )
+                continue
+            for task in done:
+                n, started = live.pop(task)
+                error = task.exception() if not task.cancelled() else asyncio.CancelledError()
+                if error is None:
+                    hedging.record_latency(name, time.monotonic() - started)
+                    if live:
+                        logger.info(
+                            "[HEDGE] DMA %s attempt %s answered first after %.1fs; cancelling attempt(s) %s",
+                            name,
+                            n,
+                            time.monotonic() - started,
+                            sorted(other for other, _ in live.values()),
+                        )
+                    return task.result()
+                last_error = error if isinstance(error, Exception) else RuntimeError(repr(error))
+                if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
+                    logger.error("DMA %s timed out on attempt %s", name, n)
+                    retryable = True
+                else:
+                    category = categorize_conscience_error(last_error)
+                    retryable = is_transient_transport_failure(last_error, category) or _is_schema_redraw(
+                        last_error, category
+                    )
+                    # Ensure we never log empty error messages
+                    error_msg = str(error).replace("\n", " ").strip() or f"<{type(error).__name__} with no message>"
+                    if not retryable:
+                        logger.warning(
+                            "DMA %s attempt %s failed (%s, not retried): %s", name, n, category, error_msg[:200]
+                        )
+                        can_launch = False
+                    elif n == 1:
+                        logger.warning("DMA %s attempt %s failed (%s): %s", name, n, category, error_msg[:200])
+                    elif n == max_attempts:
+                        logger.warning(
+                            "DMA %s final attempt %s failed (same error repeated %s times)", name, n, n - 1
+                        )
+                # A failed attempt with nothing else in flight: try again now. With
+                # a hedge still running, it keeps going and may yet answer.
+                if retryable and not live and can_launch:
+                    await asyncio.sleep(0.1)  # 100ms delay
+                    launch()
+    finally:
+        for task in live:
+            task.cancel()
+        if live:
+            await asyncio.gather(*live, return_exceptions=True)
 
     thought_arg = next(
         (arg for arg in args if isinstance(arg, (Thought, ProcessingQueueItem))),

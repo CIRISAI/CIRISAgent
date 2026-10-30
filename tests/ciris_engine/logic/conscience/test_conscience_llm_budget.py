@@ -350,3 +350,31 @@ async def test_humility_non_transport_failure_fails_closed_as_did_not_run() -> N
     assert "DID NOT RUN" in (result.reason or "")
     assert "concern: abort" not in (result.reason or "")
     assert sink.llm.call_llm_structured.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_slow_call_is_hedged_and_its_late_answer_is_taken(monkeypatch: pytest.MonkeyPatch) -> None:
+    """2.18.0: past the shard's p95 a second call starts beside the slow one; the
+    first answer wins and the other is cancelled, instead of the slow call being
+    thrown away at the per-try limit."""
+    from ciris_engine.logic.utils import hedging
+
+    monkeypatch.setattr(hedging, "hedge_after_s", lambda name, fallback: 0.05)
+    answered = (_humility(), None)
+    calls = {"n": 0, "cancelled": 0}
+
+    async def slow_first(**_: Any) -> Any:
+        calls["n"] += 1
+        try:
+            await asyncio.sleep(0.3 if calls["n"] == 1 else 5.0)
+        except asyncio.CancelledError:
+            calls["cancelled"] += 1
+            raise
+        return answered
+
+    loop = asyncio.get_running_loop()
+    began = loop.time()
+    result = await _shard(timeout=2.0, retries=1)._call_llm_with_budget(_sink(slow_first), handler_name="x")
+    assert result is answered
+    assert loop.time() - began < 1.0, "the first call's answer was not taken when it arrived"
+    assert calls == {"n": 2, "cancelled": 1}

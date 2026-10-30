@@ -375,3 +375,20 @@ async def test_throttle_still_slows_a_busy_loop(monitor):
     monitor.snapshot.cpu_average_1m = 84
     await monitor._check_limits()
     assert _work_delay(monitor, 49) > 0.0
+
+
+@pytest.mark.asyncio
+async def test_admission_transition_lines_are_rate_limited(monitor, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="ciris_engine.logic.services.infrastructure.resource_monitor.pressure")
+    gate = _gate(monitor)
+    for _ in range(20):  # flapping at the ceiling, many times a round
+        await _sample(monitor, 49)
+        assert not gate.admit_intake().admitted
+        await _sample(monitor, 40)
+        assert gate.admit_intake().admitted
+        gate.settle_intake(False)
+    lines = [r for r in caplog.records if r.getMessage().startswith("Admission: ")]
+    assert len(lines) == 1  # negative: one line per flip (40) before
+    assert gate.admission.refused_total == 20  # every refusal still counted

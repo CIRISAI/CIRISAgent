@@ -116,6 +116,9 @@ UNMEASURED_RETRY_AFTER_SECONDS = 5
 #: Weight of the newest round in the drain-rate average.
 DRAIN_EWMA_ALPHA = 0.3
 
+#: At most one Admission SHED/OPEN transition line per this many seconds.
+ADMISSION_LOG_INTERVAL_SECONDS = 10.0
+
 #: The resource admission is measured against (each admitted message creates one).
 ADMISSION_RESOURCE = "thoughts_active"
 
@@ -204,6 +207,7 @@ class ThoughtAdmission:
         self.closed = False  # last decision refused (for transition logging)
         self._refusals: Deque[float] = deque()  # monotonic times of recent refusals
         self._last_retry_after = MIN_RETRY_AFTER_SECONDS
+        self._last_transition_log: Optional[float] = None
 
     def observe(self, value: int, config: ResourceLimit) -> None:
         self.sampled = value
@@ -239,6 +243,16 @@ class ThoughtAdmission:
         self.drain_per_second = (
             rate if self.drain_per_second is None else DRAIN_EWMA_ALPHA * rate + (1 - DRAIN_EWMA_ALPHA) * self.drain_per_second
         )
+
+    def may_log_transition(self, now: Optional[float] = None) -> bool:
+        """SHED/OPEN can flip several times a round at the ceiling; log at most
+        one transition per ADMISSION_LOG_INTERVAL_SECONDS (the round line
+        carries the admitted/refused counts either way)."""
+        now = time.monotonic() if now is None else now
+        if self._last_transition_log is not None and now - self._last_transition_log < ADMISSION_LOG_INTERVAL_SECONDS:
+            return False
+        self._last_transition_log = now
+        return True
 
     def note_refusal(self, now: Optional[float] = None) -> None:
         now = time.monotonic() if now is None else now
@@ -411,12 +425,13 @@ class ResourcePressureGate:
             return AdmissionDecision(False, [ADMISSION_RESOURCE], retry)
         if adm.closed:
             adm.closed = False
-            logger.info(
-                "Admission: OPEN again -- thoughts_active %s/%s live (drain %s)",
-                adm.estimate,
-                adm.ceiling,
-                _rate(adm.drain_per_second),
-            )
+            if adm.may_log_transition():
+                logger.info(
+                    "Admission: OPEN again -- thoughts_active %s/%s live (drain %s)",
+                    adm.estimate,
+                    adm.ceiling,
+                    _rate(adm.drain_per_second),
+                )
         adm.reserve()
         return AdmissionDecision(True)
 
@@ -429,6 +444,8 @@ class ResourcePressureGate:
         if adm.closed:
             return  # logged at the transition; the round line carries the counts
         adm.closed = True
+        if not adm.may_log_transition():
+            return  # at most one transition line per ADMISSION_LOG_INTERVAL_SECONDS
         logger.warning(
             "Admission: SHED -- refusing the excess: thoughts_active %s/%s live (ceiling = CRITICAL %s - 1), "
             "drain %s, Retry-After %ss%s",

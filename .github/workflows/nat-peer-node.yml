@@ -38,7 +38,7 @@ jobs:
           jq -r '.server_tag // ""' .nat-peer/request.json | sed 's/^/SERVER_TAG=/' >> "$GITHUB_ENV"
           jq -r '.nonce' .nat-peer/request.json | sed 's/^/NONCE=/' >> "$GITHUB_ENV"
           jq '.peers' .nat-peer/request.json > "$RUNNER_TEMP/peers.json"
-          jq -r '.peers[] | "peer \(.name): \(.key_id)"' "$RUNNER_TEMP/peers.json"
+          jq -r '.[] | "peer \(.name): \(.key_id)"' "$RUNNER_TEMP/peers.json"
 
       - name: Boot node-c (claim + announce + restart)
         env:

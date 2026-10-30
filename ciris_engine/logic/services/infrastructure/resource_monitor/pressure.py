@@ -259,16 +259,17 @@ class ThoughtAdmission:
         """Seconds for the measured drain to clear what is ahead of a refused caller, bounded.
 
         Ahead of it: the excess over the ceiling (at least the one slot it
-        needs) and the callers already waiting. Counting only the excess told
-        twenty concurrent clients to retry every second while two slots a
-        second freed: the refusals themselves then ate the CPU the drain
-        needed. With the waiting callers counted, refused requests arrive at
-        about the rate slots free.
+        needs) and, on average, half of the callers already waiting (a caller
+        is equally likely to be anywhere in that line). Counting only the
+        excess told twenty concurrent clients to retry every second while two
+        slots a second freed: the refusals themselves then ate the CPU the
+        drain needed. Counting the whole line sent every caller to its back,
+        so slots freed with nobody there to take them.
         """
         if not self.drain_per_second:
             return UNMEASURED_RETRY_AFTER_SECONDS
         excess = max(1, self.estimate - (self.ceiling or 0) + 1)
-        seconds = math.ceil((excess + self.waiting(now)) / self.drain_per_second)
+        seconds = math.ceil((excess + self.waiting(now) / 2) / self.drain_per_second)
         bounded = max(MIN_RETRY_AFTER_SECONDS, min(SHED_RETRY_AFTER_SECONDS, seconds))
         self._last_retry_after = bounded
         return bounded

@@ -230,11 +230,11 @@ def test_retry_after_counts_the_callers_already_waiting():
     for i in range(20):  # twenty clients refused within the last second
         adm.note_refusal(now=200.0 + i * 0.01)
     # negative: counting only the excess said 1 s, so all twenty came back every second
-    assert adm.retry_after(now=200.5) == 11  # (1 + 20) / 2 -> 10.5 -> 11
+    assert adm.retry_after(now=200.5) == 6  # (1 + 20 / 2) / 2 -> 5.5 -> 6
     # they retry once per period, so the waiting count holds steady, not inflating
     for i in range(20):
-        adm.note_refusal(now=211.0 + i * 0.01)
-    assert adm.retry_after(now=211.5) == 11
+        adm.note_refusal(now=206.0 + i * 0.01)
+    assert adm.retry_after(now=206.5) == 6
     # once they stop coming the count decays with the window
     assert adm.retry_after(now=260.0) == 1
 

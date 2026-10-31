@@ -21,6 +21,7 @@ artifact and hands the locals' to the workflow as a dispatch input.
       --role requester --peers peers.json --nonce abcd1234 --out result.json
   python -m tools.qa_runner.nat_peer drive --node home=http://127.0.0.1:18081 \\
       --node phone=http://127.0.0.1:8080 --server-tag test-0.5.242-adce9ee2
+  python -m tools.qa_runner.nat_peer pair --server-tag test-0.5.242-358d4078   # both in CI
 """
 
 from __future__ import annotations
@@ -445,6 +446,45 @@ def _drive_run(branch: str, nonce: str, local_specs: List[str], out: Path, usern
     return 0 if ok else 1
 
 
+def pair(server_tag: str, ref: str, out: Path) -> int:
+    """Both nodes in CI (cross-nat-pair.yml), each on its own runner; collect both sides."""
+    nonce = secrets.token_hex(4)
+    branch = f"nat-pair/{nonce}"
+    _push_request(ref, branch, {"nonce": nonce, "server_tag": server_tag})
+    started = time.time()
+    try:
+        run_id = ""
+        while not run_id and time.time() - started < 180:
+            time.sleep(5)
+            rows = json.loads(_gh("run", "list", "-R", REPO, "-b", branch, "-L", "5", "--json", "databaseId,workflowName"))
+            run_id = next((str(r["databaseId"]) for r in rows if r.get("workflowName") == "Cross-NAT pair"), "")
+        if not run_id:
+            print(f"[pair] no run started for {branch}")
+            return 2
+        print(f"[pair] https://github.com/{REPO}/actions/runs/{run_id} (nonce {nonce}, server {server_tag or 'the pin'})", flush=True)
+        subprocess.run(["gh", "run", "watch", run_id, "-R", REPO, "--interval", "30"], capture_output=True)
+        out.mkdir(parents=True, exist_ok=True)
+        ok = True
+        for name in ("node-a", "node-b"):
+            subprocess.run(["gh", "run", "download", run_id, "-R", REPO, "-n", f"results-{name}", "-D", str(out / name)],
+                           capture_output=True)
+            rpath = out / name / "result.json"
+            halves = json.loads(rpath.read_text()) if rpath.exists() else []
+            ok = ok and bool(halves) and all(h.get("ok") for h in halves)
+            for h in halves or [{"me": name, "peer": "?", "role": "?", "ok": False, "failed_step": "no result", "steps": []}]:
+                print(f"[pair] {h['me']}<->{h['peer']} ({h['role']}): {'PASS' if h.get('ok') else 'FAIL at ' + str(h.get('failed_step'))}")
+                for st in h.get("steps", []):
+                    print(f"    {st['step']:28} {'ok' if st['ok'] else 'FAIL'} {st['elapsed_s']:5.0f}s {st['detail'][:150]}")
+            gate = out / name / "trace-gate.log"
+            tail = gate.read_text().strip().splitlines()[-1:] if gate.exists() else ["no trace-gate log"]
+            print(f"[pair] {name} trace gate: {tail[0][:200]}")
+        conclusion = json.loads(_gh("run", "view", run_id, "-R", REPO, "--json", "conclusion"))["conclusion"]
+        print(f"[pair] run {conclusion}; chat {'PASS' if ok else 'FAIL'}; artifacts under {out}")
+        return 0 if ok and conclusion == "success" else 1
+    finally:
+        subprocess.run(["git", "push", "-q", "origin", "--delete", branch], capture_output=True)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--username", default="qaadmin")
@@ -465,6 +505,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     d.add_argument("--server-tag", default="")
     d.add_argument("--ref", default="fix/qa-harness-announce")
     d.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-peer-{int(time.time())}")
+    pr = sub.add_parser("pair", help="both nodes in CI, each on its own runner (cross-nat-pair.yml)")
+    pr.add_argument("--server-tag", default="")
+    pr.add_argument("--ref", default="fix/qa-harness-announce")
+    pr.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-pair-{int(time.time())}")
     args = ap.parse_args(argv)
 
     if args.cmd == "code":
@@ -487,6 +531,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             with open(args.summary, "a", encoding="utf-8") as fh:
                 fh.write("\n".join(lines) + "\n")
         return 0 if reports and all(r.ok for r in reports) else 1
+    if args.cmd == "pair":
+        return pair(args.server_tag, args.ref, args.out)
     return drive(args.node, args.server_tag, args.ref, args.out, args.username, args.password)
 
 

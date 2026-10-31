@@ -1,0 +1,136 @@
+name: Cross-NAT pair
+
+# Two nodes, each on its own GitHub runner (its own VM behind its own NAT),
+# both on the same server wheel, reaching each other only through the live
+# canonical. node-a adds node-b by its contact code; node-b sees the request
+# and accepts it; then pair room, a message each way, re-open, and a timed
+# message each way (tools/qa_runner/nat_peer.py: each side only ever calls its
+# own node). The two jobs swap contacts through this run's artifacts. Each
+# node then authors one trace and checks it reached the canonical.
+#
+# Started by `python -m tools.qa_runner.nat_peer pair --server-tag <tag>`,
+# which pushes a throwaway branch nat-pair/<nonce> carrying
+# .nat-peer/request.json ({"nonce", "server_tag"}) and deletes it after.
+# (A push, not workflow_dispatch: a dispatch needs the file on main first.)
+
+run-name: nat-pair ${{ github.ref_name }}
+
+on:
+  push:
+    branches: ['nat-pair/**']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  node:
+    name: ${{ matrix.name }} (${{ matrix.role }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: node-a, other: node-b, role: requester}
+          - {name: node-b, other: node-a, role: responder}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NAME: ${{ matrix.name }}
+      OTHER: ${{ matrix.other }}
+      ROLE: ${{ matrix.role }}
+      RUN_ID: ${{ github.run_id }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the request
+        run: |
+          jq -r '.server_tag // ""' .nat-peer/request.json | sed 's/^/SERVER_TAG=/' >> "$GITHUB_ENV"
+          jq -r '.nonce' .nat-peer/request.json | sed 's/^/NONCE=/' >> "$GITHUB_ENV"
+          echo "public address of this runner: $(curl -s -m 10 https://api.ipify.org || echo unknown)"
+
+      - name: LLM key file
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$OPENROUTER_API_KEY" > "$RUNNER_TEMP/llm_key"
+
+      - name: Boot the node (claim + announce + restart)
+        id: boot
+        env:
+          MESH_BOOT_ONLY: '1'
+          MESH_KEEP: '1'
+          MESH_LLM_MODEL: qwen/qwen3.6-35b-a3b
+          MESH_LLM_BASE_URL: https://openrouter.ai/api/v1
+          MESH_LLM_PROVIDER: openai
+        run: |
+          export MESH_NODES="$NAME:18083" MESH_OUT="$RUNNER_TEMP/mesh" MESH_LLM_KEY_FILE="$RUNNER_TEMP/llm_key"
+          tools/qa_runner/local_mesh/run.sh "$SERVER_TAG"
+
+      # The harness runs inside the node's own container: the image has every
+      # dependency, and the node's API is its localhost:8080. /mesh/home is
+      # $RUNNER_TEMP/mesh/$NAME on the runner.
+      - name: Publish this node's contact
+        run: |
+          docker exec -w /app "ciris-$NAME" python -m tools.qa_runner.nat_peer code \
+            --node "$NAME=http://127.0.0.1:8080" --out /mesh/home/contact.json
+          mkdir -p contact && cp "$RUNNER_TEMP/mesh/$NAME/contact.json" contact/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contact-${{ matrix.name }}
+          path: contact/contact.json
+
+      - name: Wait for the other node's contact
+        run: |
+          deadline=$((SECONDS + 1200))
+          until gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts" --jq '.artifacts[].name' | grep -qx "contact-$OTHER"; do
+            [ $SECONDS -lt $deadline ] || { echo "::error::$OTHER never published its contact"; exit 1; }
+            sleep 10
+          done
+          gh run download "$RUN_ID" -R "$REPO" -n "contact-$OTHER" -D "$RUNNER_TEMP/other"
+          jq -s '.' "$RUNNER_TEMP/other/contact.json" > "$RUNNER_TEMP/mesh/$NAME/peers.json"
+          jq -r '.[] | "peer \(.name): \(.key_id)"' "$RUNNER_TEMP/mesh/$NAME/peers.json"
+
+      - name: This node's half of the chat
+        run: |
+          mkdir -p results
+          rc=0
+          docker exec -w /app "ciris-$NAME" python -m tools.qa_runner.nat_peer half \
+            --node "$NAME=http://127.0.0.1:8080" --role "$ROLE" --peers /mesh/home/peers.json \
+            --nonce "$NONCE" --out /mesh/home/result.json --summary /mesh/home/summary.md || rc=$?
+          cp "$RUNNER_TEMP/mesh/$NAME/result.json" results/ 2>/dev/null || true
+          cat "$RUNNER_TEMP/mesh/$NAME/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          exit $rc
+
+      - name: Trace reaches the canonical
+        if: always() && steps.boot.outcome == 'success'
+        run: |
+          set -o pipefail
+          tok=$(curl -s -X POST http://127.0.0.1:18083/v1/auth/login -H 'Content-Type: application/json' \
+                -d '{"username":"qaadmin","password":"qa_test_password_12345"}' | jq -r '.access_token // .data.access_token')
+          curl -s -m 240 -X POST http://127.0.0.1:18083/v1/agent/interact -H "Authorization: Bearer $tok" \
+               -H 'Content-Type: application/json' -d '{"message":"Hello, what can you help me with today?"}' \
+            | jq -r '(.data.response // .) | tostring | .[0:160]'
+          docker exec -w /app "ciris-$NAME" python tools/dev/assert_traces_reached_canonical.py \
+            /mesh/home/ciris/logs --require replication --wait-secs 180 --poll-secs 15 \
+            --receipt-url http://127.0.0.1:8080 --receipt-username qaadmin \
+            --receipt-password qa_test_password_12345 --receipt-raw-out /mesh/home/receipt.json \
+            --require-authored | tee results/trace-gate.log
+          cp "$RUNNER_TEMP/mesh/$NAME/receipt.json" results/ 2>/dev/null || true
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p results/logs
+          docker logs "ciris-$NAME" > results/logs/container.log 2>&1 || true
+          cp -r "$RUNNER_TEMP/mesh/$NAME/ciris/logs/." results/logs/ 2>/dev/null || true
+          docker stop -t 30 "ciris-$NAME" >/dev/null 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.name }}
+          path: results/

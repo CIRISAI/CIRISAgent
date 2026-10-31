@@ -111,8 +111,12 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     """
     # Skip exclusive access check for PostgreSQL — sqlx pools handle
     # multi-process safely, and there's no notion of file-level locking.
+    from ciris_engine.logic.persistence.db.core import _redact_dsn
+
     if db_path.startswith(("postgresql://", "postgres://")):
-        print(f"[OK] Skipping exclusive access check for PostgreSQL: {db_path}")
+        # Redacted: the DSN carries the database password, and this line goes to
+        # container stdout on every boot (2.18.0 scouts).
+        print(f"[OK] Skipping exclusive access check for PostgreSQL: {_redact_dsn(db_path)}")
         return
 
     db_path_obj = Path(db_path)
@@ -136,7 +140,7 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     try:
         if not os.access(db_path_obj.parent, os.W_OK):
             raise PermissionError(f"Database parent dir not writable: {db_path_obj.parent}")
-        print(f"[OK] Database parent dir ready: {db_path}")
+        print(f"[OK] Database parent dir ready: {_redact_dsn(db_path)}")
 
     except Exception as e:
         msg = str(e).lower()

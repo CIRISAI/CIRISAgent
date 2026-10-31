@@ -7,8 +7,10 @@ discarded at the source — which is why persist's "migration phase begin
 Two properties matter and are both asserted here:
 
 1. The bridge installs, is idempotent, and CANNOT fail boot.
-2. It adds no Python logging handler, so substrate output structurally
-   cannot reach `incidents_latest.log` (#935 incident hygiene).
+2. It adds no Python logging handler, and the node's records (on
+   `ciris_node.*` under ciris-server 0.5.243's python_logging sink) are
+   dropped by the incident handler, so substrate output cannot reach
+   `incidents_latest.log` (#935 incident hygiene).
 """
 
 import logging
@@ -88,8 +90,70 @@ def test_installs_and_passes_log_dir_and_filter(
     )
 
     assert substrate_logging.install_substrate_tracing(log_dir=log_dir, force=True)
-    assert calls == [{"log_dir": log_dir, "filter": "warn,ciris_persist=info"}]
+    # ONE log file: a substrate that takes python_logging gets it, not a log_dir.
+    assert calls == [{"filter": "warn,ciris_persist=info", "python_logging": True}]
     assert substrate_logging.substrate_tracing_installed()
+
+
+def _old_wheel(calls: list[dict]):
+    def init_tracing(log_dir=None, filter=None):  # pre-0.5.243 signature
+        calls.append({"log_dir": log_dir, "filter": filter})
+
+    return init_tracing
+
+
+def test_an_older_wheel_keeps_its_file_sink() -> None:
+    calls: list[dict] = []
+    substrate_logging.call_init_tracing(_old_wheel(calls), "/var/log/ciris", "info")
+    assert calls == [{"log_dir": "/var/log/ciris", "filter": "info"}]
+
+
+def test_the_file_sink_can_be_kept_on_purpose(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict] = []
+    monkeypatch.setenv(substrate_logging.SUBSTRATE_LOG_SINK_ENV, "file")
+    substrate_logging.call_init_tracing(lambda **kw: calls.append(kw), "/var/log/ciris", "info")
+    assert calls == [{"log_dir": "/var/log/ciris", "filter": "info"}]
+
+
+def test_node_records_never_reach_the_incidents_log(tmp_path) -> None:
+    """python_logging puts the node's WARNs on `ciris_node.*`; the incident handler drops them (#935)."""
+    from ciris_engine.logic.utils.incident_capture_handler import IncidentCaptureHandler
+
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    clock = SimpleNamespace(now=lambda: datetime.now(timezone.utc), now_iso=lambda: datetime.now(timezone.utc).isoformat())
+    h = IncidentCaptureHandler(log_dir=str(tmp_path), time_service=clock)  # type: ignore[arg-type]
+    before = h.log_file.read_text() if h.log_file.exists() else ""
+    for name in ("ciris_node.ciris_edge", "ciris_node"):
+        h.emit(logging.LogRecord(name, logging.WARNING, __file__, 1, "delivered envelope REFUSED", None, None))
+    after = h.log_file.read_text() if h.log_file.exists() else ""
+    assert "delivered envelope REFUSED" not in after and after == before
+    h.emit(logging.LogRecord("ciris_engine.x", logging.WARNING, __file__, 1, "an agent warning", None, None))
+    assert "an agent warning" in h.log_file.read_text(), "the handler still captures the agent's own WARNs"
+    assert substrate_logging.is_substrate_record(
+        logging.LogRecord("ciris_node.ciris_server", logging.INFO, __file__, 1, "x", None, None)
+    )
+    assert not substrate_logging.is_substrate_record(
+        logging.LogRecord("ciris_nodes", logging.INFO, __file__, 1, "x", None, None)
+    )
+
+
+def test_the_process_label_is_set_on_desktop_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    import types
+
+    from ciris_engine.logic.utils import path_resolution
+
+    labels: list[str] = []
+    monkeypatch.setitem(sys.modules, "ciris_server", types.SimpleNamespace(set_process_label=labels.append))
+    monkeypatch.setattr(path_resolution, "is_android", lambda: False)
+    monkeypatch.setattr(path_resolution, "is_ios", lambda: False)
+    assert substrate_logging.set_process_label() and labels == ["ciris-agent"]
+    monkeypatch.setattr(path_resolution, "is_android", lambda: True)
+    assert not substrate_logging.set_process_label() and labels == ["ciris-agent"]
+    monkeypatch.setitem(sys.modules, "ciris_server", types.SimpleNamespace())
+    monkeypatch.setattr(path_resolution, "is_android", lambda: False)
+    assert not substrate_logging.set_process_label(), "a pre-0.5.243 wheel has no label call"
 
 
 def test_install_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:

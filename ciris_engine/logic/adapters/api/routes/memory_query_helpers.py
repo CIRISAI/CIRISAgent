@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
+from ciris_engine.logic.persistence.db.paging import next_page_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -390,10 +391,10 @@ def _paginate_nodes(
                     break
         if len(items) < _PAGE_SIZE:
             break
-        next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+        next_cursor = next_page_cursor(parsed)
         if not next_cursor:
             break
-        cursor = next_cursor if isinstance(next_cursor, str) else json.dumps(next_cursor)
+        cursor = next_cursor
     return out
 
 

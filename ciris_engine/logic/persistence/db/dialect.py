@@ -40,7 +40,10 @@ def parse_postgres_url(url: str) -> tuple[str, str, str, int, str, str, str]:
     match = re.match(pattern, url)
 
     if not match:
-        raise ValueError(f"Invalid PostgreSQL URL format: {url}")
+        # Never the URL itself: it carries the password, and callers log this message.
+        from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+        raise ValueError(f"Invalid PostgreSQL URL format: {_redact_dsn(url)}")
 
     scheme, username, password_and_host, host, port, database, params = match.groups()
 

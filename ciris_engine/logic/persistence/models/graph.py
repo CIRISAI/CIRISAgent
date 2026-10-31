@@ -37,6 +37,7 @@ from ciris_engine.schemas.services.graph_core import (
     GraphScope,
     NodeType,
 )
+from ciris_engine.logic.persistence.db.paging import next_page_cursor
 
 logger = logging.getLogger(__name__)
 
@@ -219,12 +220,15 @@ def _edge_from_persist_json(blob: Any, fallback_scope: Optional[GraphScope] = No
     valid_attrs = {k: attrs[k] for k in ("created_at", "context") if k in attrs}
     scope_str = d.get("scope")
     scope = _from_persist_scope(scope_str) if scope_str else (fallback_scope or GraphScope.LOCAL)
+    # persist omits `weight` when the edge has none (Option<f64>); passing None
+    # into the agent's float field failed every such edge (2.18.0 scouts).
+    weight = d.get("weight")
     return GraphEdge(
         source=d["source_node_id"],
         target=d["target_node_id"],
         relationship=d["relationship"],
         scope=scope,
-        weight=d.get("weight"),
+        **({"weight": weight} if weight is not None else {}),
         attributes=GraphEdgeAttributes(**valid_attrs) if valid_attrs else GraphEdgeAttributes(),
     )
 
@@ -522,7 +526,7 @@ def _query_nodes_paged(
     rows or exhaust the page chain."""
     engine = _get_engine()
     out: List[GraphNode] = []
-    cursor: Optional[str] = None
+    cursor: Optional[str] = None  # persist's ListCursor, JSON-encoded
     remaining = limit
     while remaining > 0:
         filt: dict[str, Any] = {"scope": persist_scope}
@@ -531,7 +535,7 @@ def _query_nodes_paged(
         page_size = min(remaining, 100)
         blob = engine.cirisgraph_query_nodes(
             json.dumps(filt),
-            json.dumps({"cursor": cursor}) if cursor else None,
+            cursor,
             page_size,
         )
         page = json.loads(blob) if isinstance(blob, str) else blob
@@ -544,7 +548,7 @@ def _query_nodes_paged(
         if not items:
             break
         remaining -= len(items)
-        cursor = page.get("next_cursor") if isinstance(page, dict) else None
+        cursor = next_page_cursor(page)
         if not cursor:
             break
     return out

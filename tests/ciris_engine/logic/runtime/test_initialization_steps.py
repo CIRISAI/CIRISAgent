@@ -269,6 +269,47 @@ class TestLoadSavedAdaptersFromGraph:
             mock_adapter_manager.load_adapter.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_a_retired_adapter_type_is_dropped_not_loaded(self) -> None:
+        """2.18.0 scouts: a saved ciris_covenant_metrics_<id> entry (renamed in 2.0.2)
+        failed to import on every boot. It is dropped, with its keys cleared, not loaded."""
+        from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
+
+        runtime = MagicMock()
+        runtime.adapters = []
+
+        class MockConfigNode:
+            def __init__(self, value: str | bool | dict) -> None:
+                self.value = value
+
+        stale = {
+            "adapter.ciris_covenant_metrics_8dc8b469.type": "ciris_covenant_metrics",
+            "adapter.ciris_covenant_metrics_8dc8b469.config": {},
+            "adapter.ciris_covenant_metrics_8dc8b469.persist": True,
+        }
+        mock_config_service = MagicMock()
+        mock_config_service.list_configs = AsyncMock(return_value=stale)
+        mock_config_service.get_config = AsyncMock(side_effect=lambda key: MockConfigNode(stale[key]) if key in stale else None)
+        mock_config_service.set_config = AsyncMock()
+
+        mock_adapter_manager = MagicMock()
+        mock_adapter_manager.loaded_adapters = {}
+        mock_adapter_manager.load_adapter = AsyncMock(return_value=MagicMock(success=True))
+        runtime.service_initializer.config_service = mock_config_service
+        mock_runtime_control_service = MagicMock()
+        mock_runtime_control_service.adapter_manager = mock_adapter_manager
+        runtime.service_initializer.runtime_control_service = mock_runtime_control_service
+
+        with patch("ciris_engine.logic.setup.first_run.is_first_run", return_value=False), patch.dict(
+            "os.environ", {"CIRIS_ADAPTER": ""}
+        ):
+            await load_saved_adapters_from_graph(runtime)
+
+        loaded_types = [c.args[0] if c.args else c.kwargs.get("adapter_type") for c in mock_adapter_manager.load_adapter.call_args_list]
+        assert "ciris_covenant_metrics" not in loaded_types
+        cleared = {c.args[0] for c in mock_config_service.set_config.call_args_list if c.args and c.args[1] is None}
+        assert cleared == set(stale), "every key of the retired entry is cleared"
+
+    @pytest.mark.asyncio
     async def test_load_saved_adapters_skips_already_loaded(self) -> None:
         """Test that already-loaded adapters are skipped."""
         from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph

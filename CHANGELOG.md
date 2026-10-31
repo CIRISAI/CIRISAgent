@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **One log file.** With ciris-server 0.5.243 the node's own tracing arrives as Python records on `ciris_node.<crate>` and lands in `latest.log` under the agent's rotation, so there is no second `ciris-server.log.<date>` to manage. The node's filter is `info`. Its records never reach `incidents_latest.log`. An older server wheel keeps its own file, and `CIRIS_SUBSTRATE_LOG_SINK=file` keeps it on purpose (the local mesh does, for its DEBUG-level canonical check).
+- **The process is named `ciris-agent`** in ps, top and pgrep, so one agent can be told apart from other nodes on the same host (ciris-server 0.5.243). Desktop and server only; a phone app keeps its own name.
 - **Agent nodes no longer propose direct links by default.** A NAT punch that succeeds on one side only moves that side to UDP while the other stays relayed, and the link then carries nothing until it runs out of channel. This broke chat between two agent nodes. Proposing waits for leviculum's two-sided punch commit. Until then room traffic stays on the canonical path, as ciris-server 0.5.243 does for its own default. `CIRIS_DIRECT_LINK_FACILITATOR=bootstrap` opts back in to the canonical's facilitator; a `host:port` names another.
 
 ### Security

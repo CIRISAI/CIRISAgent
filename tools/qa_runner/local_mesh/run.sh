@@ -18,7 +18,10 @@
 #                under ${TMPDIR:-/tmp})
 #   MESH_KEEP=1  leave both containers running afterwards (for poking at them)
 #   RUST_LOG     passed to both nodes (default info,ciris_edge::replication::bridge=debug,
-#                which the canonical-holds-nothing check below reads)
+#                which the canonical-holds-nothing check below reads). The nodes keep
+#                the substrate's own ciris-server.log file sink (CIRIS_SUBSTRATE_LOG_SINK=file):
+#                that check needs the bridge's DEBUG lines, which Python's INFO root
+#                level would drop under the one-file python_logging sink.
 #   MESH_REUSE=1 keep MESH_OUT's homes: restart the same two nodes, skip setup
 #   SERVER_WHEEL a locally built manylinux x86_64 ciris_server wheel to use
 #                instead of a prerelease download (wins over the tag)
@@ -76,6 +79,7 @@ for i in 0 1; do
   docker run -d --name "ciris-$n" --user "$(id -u):$(id -g)" \
     -e HOME=/mesh/home -e CIRIS_HOME=/mesh/home/ciris -e MESH_LABEL="qa-node-$(date +%s)$i" \
     -e RUST_LOG="${RUST_LOG:-info,ciris_edge::replication::bridge=debug}" -v "$key_file:/run/mesh/llm_key:ro" \
+    -e CIRIS_SUBSTRATE_LOG_SINK=file \
     -e MESH_LLM_MODEL="${MESH_LLM_MODEL:-google/gemma-4-31B-it}" \
     -e MESH_LLM_BASE_URL="${MESH_LLM_BASE_URL:-https://api.together.xyz/v1}" \
     -e MESH_LLM_PROVIDER="${MESH_LLM_PROVIDER:-openai}" \

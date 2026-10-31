@@ -89,17 +89,24 @@ def get_federation_alias_for_log() -> str:
 def _direct_link_facilitator(engine: Any) -> Optional[str]:
     """``host:port`` of the facilitator room peers probe, or None.
 
-    ``CIRIS_DIRECT_LINK_FACILITATOR`` wins: a ``host:port``, or ``off`` / ``0`` /
-    empty to propose no direct links. Otherwise it is the canonical's ``ip``
-    dial from persist's signed canonical records
-    (``engine.canonical_bootstrap_hints()``). A server serves its facilitator on
+    OFF by default: an agent node proposes no direct links. A punch that
+    succeeds on one side only moves that side to UDP while the other stays
+    relayed, and the link then lands nothing until ChannelExhausted; proposing
+    waits for leviculum's two-sided punch commit (ciris-server 0.5.243 defaults
+    its own facilitator to None the same way).
+
+    ``CIRIS_DIRECT_LINK_FACILITATOR`` opts in: ``bootstrap`` takes the
+    canonical's ``ip`` dial from persist's signed canonical records
+    (``engine.canonical_bootstrap_hints()``; a server serves its facilitator on
     UDP at the same port number as its TCP listener, so that dial is the
-    facilitator's address. Unreadable hints mean no facilitator, never a guess.
+    facilitator's address), or a ``host:port`` names one. Unreadable hints mean
+    no facilitator, never a guess.
     """
-    override = os.environ.get("CIRIS_DIRECT_LINK_FACILITATOR")
-    if override is not None:
-        value = override.strip()
-        return None if value.lower() in ("", "0", "off", "false", "none", "no") else value
+    value = (os.environ.get("CIRIS_DIRECT_LINK_FACILITATOR") or "").strip()
+    if value.lower() in ("", "0", "off", "false", "none", "no"):
+        return None
+    if value.lower() != "bootstrap":
+        return value
     try:
         import json as _json
 
@@ -434,11 +441,14 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 _edge_kwargs["direct_link_facilitator"] = facilitator
                 logger.info(
                     "[DIRECT-LINK] room peers propose direct links via facilitator %s "
-                    "(CIRIS_DIRECT_LINK_FACILITATOR=off to keep every room step on the canonical)",
+                    "(opted in by CIRIS_DIRECT_LINK_FACILITATOR; unset it to keep every room step on the canonical)",
                     facilitator,
                 )
             else:
-                logger.info("[DIRECT-LINK] no facilitator; room traffic stays on the canonical path")
+                logger.info(
+                    "[DIRECT-LINK] off (the default until two-sided punch commit); room traffic stays on the "
+                    "canonical path. CIRIS_DIRECT_LINK_FACILITATOR=bootstrap opts in"
+                )
 
         edge = init_edge_runtime(
             engine,

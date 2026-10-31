@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.18.1-stable] - 2026-10-30
 
+### Changed
+
+- **Agent nodes no longer propose direct links by default.** A NAT punch that succeeds on one side only moves that side to UDP while the other stays relayed, and the link then carries nothing until it runs out of channel. This broke chat between two agent nodes. Proposing waits for leviculum's two-sided punch commit. Until then room traffic stays on the canonical path, as ciris-server 0.5.243 does for its own default. `CIRIS_DIRECT_LINK_FACILITATOR=bootstrap` opts back in to the canonical's facilitator; a `host:port` names another.
+
 ### Security
 
 - **The PostgreSQL password no longer reaches the logs.** On a Postgres-backed agent the boot check printed the full DSN, password included, to stdout on every start ("Skipping exclusive access check for PostgreSQL: postgresql://user:password@…"). Two more paths did the same: setup logged "Using runtime main database: …", which holds the Postgres DSN when one is configured, and a malformed DSN's parse error quoted it in full before being logged. All three now pass through the existing `_redact_dsn` (`user:***@host`). The guard test that should have caught them only read `logger.*` calls and did not know `db_path` held a DSN; it now also reads `print(...)` and exception messages and treats `db_path` as a DSN, and two behaviour tests pin the boot line and the parse error. SQLite agents were not affected. Operators of Postgres-backed agents should treat the database password as exposed to anyone with access to the container's logs and rotate it.

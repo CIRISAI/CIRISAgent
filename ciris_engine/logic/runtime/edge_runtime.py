@@ -89,17 +89,24 @@ def get_federation_alias_for_log() -> str:
 def _direct_link_facilitator(engine: Any) -> Optional[str]:
     """``host:port`` of the facilitator room peers probe, or None.
 
-    ``CIRIS_DIRECT_LINK_FACILITATOR`` wins: a ``host:port``, or ``off`` / ``0`` /
-    empty to propose no direct links. Otherwise it is the canonical's ``ip``
-    dial from persist's signed canonical records
-    (``engine.canonical_bootstrap_hints()``). A server serves its facilitator on
+    OFF by default: an agent node proposes no direct links. A punch that
+    succeeds on one side only moves that side to UDP while the other stays
+    relayed, and the link then lands nothing until ChannelExhausted; proposing
+    waits for leviculum's two-sided punch commit (ciris-server 0.5.243 defaults
+    its own facilitator to None the same way).
+
+    ``CIRIS_DIRECT_LINK_FACILITATOR`` opts in: ``bootstrap`` takes the
+    canonical's ``ip`` dial from persist's signed canonical records
+    (``engine.canonical_bootstrap_hints()``; a server serves its facilitator on
     UDP at the same port number as its TCP listener, so that dial is the
-    facilitator's address. Unreadable hints mean no facilitator, never a guess.
+    facilitator's address), or a ``host:port`` names one. Unreadable hints mean
+    no facilitator, never a guess.
     """
-    override = os.environ.get("CIRIS_DIRECT_LINK_FACILITATOR")
-    if override is not None:
-        value = override.strip()
-        return None if value.lower() in ("", "0", "off", "false", "none", "no") else value
+    value = (os.environ.get("CIRIS_DIRECT_LINK_FACILITATOR") or "").strip()
+    if value.lower() in ("", "0", "off", "false", "none", "no"):
+        return None
+    if value.lower() != "bootstrap":
+        return value
     try:
         import json as _json
 
@@ -304,23 +311,29 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 )
                 os.environ.setdefault("RUST_BACKTRACE", "full")
             else:
-                _filter = os.environ.get("RUST_LOG") or "info,ciris_server=debug,ciris_edge=debug,ciris_persist=info"
+                _filter = os.environ.get("RUST_LOG") or "info"
+            from ciris_engine.logic.utils.substrate_logging import call_init_tracing
+
             try:
-                _sink_verdict = _init_tracing(log_dir=_log_dir, filter=_filter)
+                _sink_verdict = call_init_tracing(_init_tracing, _log_dir, _filter)
             except TypeError:  # pre-0.5.116 bare signature
                 _sink_verdict = _init_tracing()
+            _python_sink = isinstance(_sink_verdict, dict) and _sink_verdict.get("sink") == "python_logging"
             logger.info(
-                "Rust tracing initialized: log_dir=%s filter=%s test_mode=%s (rust logs → ciris-server.log*)",
+                "Rust tracing initialized: log_dir=%s filter=%s test_mode=%s (rust logs → %s)",
                 _log_dir,
                 _filter,
                 _test_mode,
+                "latest.log as ciris_node.*" if _python_sink else "ciris-server.log*",
             )
             # 0.5.120 (CIRISServer#279 ask 1): init_tracing returns the sink
             # verdict {fresh_subscriber, file_layer_attached, first_write_ok,
             # log_path} — first-write-verified at t=0. Log it loudly either way
             # so every pull carries it (the t+60s [RUST-SINK] sentinel stays as
             # the belt for older wheels / late failures).
-            if isinstance(_sink_verdict, dict):
+            if _python_sink:
+                logger.info("[RUST-SINK] t=0 verdict: %s", _sink_verdict)
+            elif isinstance(_sink_verdict, dict):
                 if _sink_verdict.get("first_write_ok"):
                     logger.info("[RUST-SINK] t=0 verdict: %s", _sink_verdict)
                 else:
@@ -434,11 +447,14 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 _edge_kwargs["direct_link_facilitator"] = facilitator
                 logger.info(
                     "[DIRECT-LINK] room peers propose direct links via facilitator %s "
-                    "(CIRIS_DIRECT_LINK_FACILITATOR=off to keep every room step on the canonical)",
+                    "(opted in by CIRIS_DIRECT_LINK_FACILITATOR; unset it to keep every room step on the canonical)",
                     facilitator,
                 )
             else:
-                logger.info("[DIRECT-LINK] no facilitator; room traffic stays on the canonical path")
+                logger.info(
+                    "[DIRECT-LINK] off (the default until two-sided punch commit); room traffic stays on the "
+                    "canonical path. CIRIS_DIRECT_LINK_FACILITATOR=bootstrap opts in"
+                )
 
         edge = init_edge_runtime(
             engine,
@@ -1218,6 +1234,8 @@ def _spawn_delivery_rooting_probe(engine: Any, edge: Any) -> None:
             if not _home:
                 return
             _rust_logs = sorted(_glob.glob(os.path.join(_home, "logs", "ciris-server.log*")))
+            if not _rust_logs:
+                return  # python_logging sink: the node's lines are in latest.log
             _sizes = {os.path.basename(p): os.path.getsize(p) for p in _rust_logs}
             _dated = {n: s for n, s in _sizes.items() if not n.endswith(".boot")}
             if _dated and all(s == 0 for s in _dated.values()):

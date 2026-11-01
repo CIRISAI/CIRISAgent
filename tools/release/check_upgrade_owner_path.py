@@ -89,10 +89,12 @@ class Agent:
         else:
             self.stop()
             sys.exit(f"FAIL: never healthy; see {log}")
-        db = [line for line in log.read_text(errors="replace").splitlines() if "Database parent dir ready" in line]
-        if not db or str(home) not in db[0]:
+        # The boot line no longer names the database (it can be a DSN); the
+        # scratch database file under the scratch home is the proof instead.
+        db = sorted(home.rglob("ciris_engine.db"))
+        if not db:
             self.stop()
-            sys.exit(f"ABORT: the agent is not on the scratch database: {db[:1]}")
+            sys.exit(f"ABORT: the agent is not on the scratch database: no ciris_engine.db under {home}")
 
     def health(self) -> Tuple[int, str, List[str]]:
         r = httpx.get(f"{self.base}/v1/system/health", timeout=10)

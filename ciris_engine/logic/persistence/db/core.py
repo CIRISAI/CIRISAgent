@@ -411,11 +411,12 @@ def _construct_engine_bounded(construct: Callable[[], Any], dsn: str, bump_stack
             f"{budget:.0f}s" if budget > 0 else "unbounded",
         )
         if budget > 0 and elapsed >= budget:
+            hint = _blocker_hint(dsn)
             raise DatabaseInitializationTimeout(
                 f"persist Engine construction exceeded {budget:.0f}s "
                 f"(elapsed {elapsed:.0f}s) for target={redacted}. The agent is "
                 f"blocked in persist's connect + migration phase and will not "
-                f"finish booting.{_blocker_hint(dsn)} "
+                f"finish booting.{hint} "
                 f"Raise {DB_INIT_TIMEOUT_ENV} if this database legitimately "
                 f"needs longer to migrate."
             )

@@ -476,6 +476,7 @@ class CrossChatStage:
     ) -> None:
         self.a, self.b = a, b
         self.clock = clock or RealClock()
+        self.room_ready_at: Optional[float] = None
         self.d = deadlines or Deadlines()
         self.log = log
         self.nonce = nonce or secrets.token_hex(4)
@@ -958,6 +959,52 @@ class CrossChatStage:
             "sides, once each, in the same order on both, each sender's turns in send order, with the right mine flags"
         )
 
+    #: Seconds after the room is ready on both sides before the timed exchange.
+    #: Edge's direct-link fix (CIRISEdge#920) backs a refused proposal off for
+    #: leviculum's 60 s per-link cooldown, so a link refused during room setup
+    #: can go direct only after that; 70 s leaves a margin.
+    DIRECT_WINDOW_S = 70.0
+
+    def timed_exchange(self, a: Node, b: Node, cid: str) -> str:
+        """One message each way, timed, once the direct-link window has passed.
+
+        Not enforced: it reports how long a message takes to arrive after the
+        link had its chance to go direct (relayed baseline ~10 s each way), so a
+        run against an edge with working direct links shows the difference.
+        """
+        step = "timed"
+        wait = (self.room_ready_at or self.clock.now()) + self.DIRECT_WINDOW_S - self.clock.now()
+        if wait > 0:
+            self.log(f"[cross-chat] waiting {wait:.0f}s for the direct-link window before the timed exchange")
+            self.clock.sleep(wait)
+        timings: List[str] = []
+        for src, dst in ((a, b), (b, a)):
+            text = f"timed {src.name}->{dst.name} {self.nonce}"
+            started = self.clock.now()
+
+            def send(_: int, src: Node = src, text: str = text) -> Optional[str]:
+                r = self._call(src, "POST", f"/v1/chat/{cid}/messages", {"body": text})
+                if r.ok:
+                    return "sent"
+                if 400 <= r.status < 500:
+                    raise self._fail(step, LAYER_MESSAGE, f"{src.name} could not send: {r.brief()}")
+                return None
+
+            if self._poll(self.d.send_s, send) is None:
+                raise self._fail(step, LAYER_MESSAGE, f"{src.name} could not send within {self.d.send_s:.0f}s")
+
+            def received(_: int, dst: Node = dst, text: str = text) -> Optional[str]:
+                r = self._call(dst, "GET", f"/v1/chat/{cid}/messages")
+                for m in chat_messages(r.body) if r.ok else []:
+                    if m.get("body") == text and m.get("mine") is False:
+                        return "opened"
+                return None
+
+            if self._poll(self.d.receive_s, received) is None:
+                raise self._fail(step, LAYER_MESSAGE, f"{dst.name} never opened the timed message from {src.name}")
+            timings.append(f"{src.name}->{dst.name} {self.clock.now() - started:.1f}s")
+        return "after the direct-link window: " + ", ".join(timings) + " (relayed baseline ~10 s each way)"
+
     # -- the whole stage --
 
     def run(self) -> StageReport:
@@ -996,6 +1043,7 @@ class CrossChatStage:
             return self._finish()
         assert rep.community_id
         cid = rep.community_id
+        self.room_ready_at = self.clock.now()
         chat: List[Tuple[str, str, Callable[[], str]]] = [
             ("messages", LAYER_MESSAGE, lambda: self.exchange(a, b, cid)),
             ("reopen", LAYER_ROOM, lambda: self.reopen(creator, joiner, cid)),
@@ -1004,6 +1052,7 @@ class CrossChatStage:
         for name, layer, fn in chat:
             if not self._step(name, layer, fn).ok:
                 return self._finish()
+        self._step("timed", LAYER_MESSAGE, lambda: self.timed_exchange(a, b, cid), enforced=False)
         return self._finish()
 
     def _finish(self) -> StageReport:

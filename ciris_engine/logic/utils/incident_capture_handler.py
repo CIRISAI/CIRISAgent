@@ -132,6 +132,12 @@ class IncidentCaptureHandler(logging.Handler):
             if record.levelno < logging.WARNING:
                 return
 
+            # The node's own tracing (ciris_node.*, ciris-server's python_logging
+            # sink) belongs in latest.log, never the incidents log (#935): its
+            # edge/replication WARNs would flood it.
+            if record.name == "ciris_node" or record.name.startswith("ciris_node."):
+                return
+
             # Re-entrancy guard: NEVER capture a log record emitted by this
             # handler itself. `_save_incident_to_graph` logs its own
             # persist-write failures; without this guard that failure log

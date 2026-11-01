@@ -46,7 +46,7 @@ since the substrate's own docstring documents `filter` as overriding it.
 
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,39 @@ def reset_substrate_tracing_state() -> None:
     """
     global _installed
     _installed = False
+
+
+#: Logger the substrate's records arrive on in python_logging mode
+#: (`ciris_node.<crate>`, e.g. `ciris_node.ciris_edge`).
+SUBSTRATE_PYTHON_LOGGER = "ciris_node"
+
+#: `file` keeps the substrate's own daily `ciris-server.log.<date>` sink.
+SUBSTRATE_LOG_SINK_ENV = "CIRIS_SUBSTRATE_LOG_SINK"
+
+
+def call_init_tracing(init_tracing: Any, log_dir: Optional[str], log_filter: Optional[str]) -> Any:
+    """Call the substrate's `init_tracing`, preferring ONE log file.
+
+    ciris-server 0.5.243 can emit the node's tracing as Python records on
+    `ciris_node.<crate>`, so they land in OUR latest.log under OUR rotation
+    instead of a second `ciris-server.log.<date>` file. An older wheel rejects
+    the `python_logging` kwarg (TypeError) and keeps its file sink at
+    `log_dir`; `CIRIS_SUBSTRATE_LOG_SINK=file` keeps it on purpose. The
+    records never reach incidents_latest.log: the incident handler drops
+    `ciris_node.*` (#935).
+    """
+    if os.environ.get(SUBSTRATE_LOG_SINK_ENV, "").strip().lower() != "file":
+        try:
+            return init_tracing(filter=log_filter, python_logging=True)
+        except TypeError:
+            pass  # pre-0.5.243: no python_logging sink
+    return init_tracing(log_dir=log_dir, filter=log_filter)
+
+
+def is_substrate_record(record: logging.LogRecord) -> bool:
+    """A record the substrate emitted through Python logging (python_logging sink)."""
+    name = record.name
+    return name == SUBSTRATE_PYTHON_LOGGER or name.startswith(SUBSTRATE_PYTHON_LOGGER + ".")
 
 
 def resolve_substrate_log_filter() -> Optional[str]:
@@ -158,7 +191,7 @@ def install_substrate_tracing(
     try:
         # Both kwargs are optional on the substrate side; pass them
         # explicitly so a None filter means "defer to RUST_LOG".
-        init_tracing(log_dir=log_dir, filter=log_filter)
+        call_init_tracing(init_tracing, log_dir, log_filter)
     except Exception as e:  # noqa: BLE001 - logging must never block boot
         logger.warning(
             "Substrate tracing init failed (%s) — persist/edge logs will not be "
@@ -177,3 +210,34 @@ def install_substrate_tracing(
         f" and {log_dir}/ciris-server.log" if log_dir else "",
     )
     return True
+
+
+#: The name this process carries in ps/top/pgrep (Linux keeps 15 bytes).
+PROCESS_LABEL = "ciris-agent"
+
+
+def set_process_label(label: str = PROCESS_LABEL) -> bool:
+    """Name this process and the node's runtime threads (ciris-server 0.5.243).
+
+    So `pgrep ciris-agent` finds an agent when several nodes run on one host.
+    Desktop/server only: an embedded app (Android, iOS) is the host's process
+    and its name is the host's, so we leave it alone. Call early, from the main
+    thread, before the node serves. Never fails boot; False when skipped.
+    """
+    try:
+        from ciris_engine.logic.utils.path_resolution import is_android, is_ios
+
+        if is_android() or is_ios():
+            return False
+        import ciris_server  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        fn = getattr(ciris_server, "set_process_label", None) or getattr(
+            getattr(ciris_server, "_native", None), "set_process_label", None
+        )
+        if fn is None:
+            return False  # pre-0.5.243
+        fn(label)
+        return True
+    except Exception as e:  # noqa: BLE001 - a process name must never block boot
+        logger.debug("process label not set (%s)", e)
+        return False

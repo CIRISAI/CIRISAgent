@@ -92,7 +92,7 @@ def _count_consent_nodes(db_path: str) -> int:
     while True:
         blob = engine.cirisgraph_query_nodes(
             _json.dumps({"scope": "LOCAL"}),
-            _json.dumps({"cursor": cursor}) if cursor else None,
+            cursor,
             100,
         )
         page = _json.loads(blob) if isinstance(blob, str) else blob
@@ -101,7 +101,9 @@ def _count_consent_nodes(db_path: str) -> int:
             d = _json.loads(it) if isinstance(it, str) else it
             if d.get("node_id", "").startswith("consent/"):
                 cnt += 1
-        cursor = page.get("next_cursor") if isinstance(page, dict) else None
+        from ciris_engine.logic.persistence.db.paging import next_page_cursor
+
+        cursor = next_page_cursor(page)
         if not items or not cursor:
             break
     return cnt

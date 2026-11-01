@@ -81,7 +81,9 @@ async def init_database(runtime: Any) -> None:
         logger.info("Using PostgreSQL database from environment (CIRIS_DB_URL)")
     else:
         db_path = str(runtime.essential_config.database.main_db)
-        logger.info(f"Using SQLite database: {db_path}")
+        from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+        logger.info(f"Using SQLite database: {_redact_dsn(db_path)}")
 
     # initialize_database bootstraps persist's Engine end-to-end (schema
     # via persist's own sqlx migrations + A0a legacy graph migration).
@@ -593,6 +595,27 @@ async def _load_adapters_from_env_fallback(
     return loaded_count
 
 
+#: Adapter types a saved graph entry may still name but that no longer exist.
+#: Restoring one fails on every boot with "Could not import adapter module"
+#: (2.18.0 scouts: ciris_covenant_metrics_8dc8b469). The entry is dropped with a
+#: warning, not remapped: the replacement is normally configured already
+#: (CIRIS_ADAPTER), and loading a second copy would double it.
+RETIRED_ADAPTER_TYPES: Dict[str, str] = {
+    "ciris_covenant_metrics": "renamed to ciris_accord_metrics in 2.0.2; enable ciris_accord_metrics instead",
+    "sync": "removed",
+}
+
+
+async def _remove_saved_adapter(config_service: Any, adapter_id: str, updated_by: str) -> None:
+    """Clear every `adapter.<id>.*` key, so the entry is not restored again."""
+    try:
+        stale_configs = await config_service.list_configs(prefix=f"adapter.{adapter_id}")
+        for config_key in stale_configs.keys():
+            await config_service.set_config(config_key, None, updated_by=updated_by)
+    except Exception as cleanup_err:
+        logger.debug(f"Could not clean up saved adapter {adapter_id}: {cleanup_err}")
+
+
 async def load_saved_adapters_from_graph(runtime: Any) -> None:
     """Load adapters that were saved to the graph config service.
 
@@ -644,18 +667,20 @@ async def load_saved_adapters_from_graph(runtime: Any) -> None:
             adapter_type_node = await config_service.get_config(f"adapter.{adapter_id}.type")
             adapter_type_val = _extract_config_value(adapter_type_node)
             if adapter_type_val and isinstance(adapter_type_val, str):
+                if adapter_type_val in RETIRED_ADAPTER_TYPES:
+                    logger.warning(
+                        f"Dropping saved adapter {adapter_id}: type '{adapter_type_val}' is "
+                        f"{RETIRED_ADAPTER_TYPES[adapter_type_val]}. Removing its graph entry so it "
+                        f"is not restored (and fails) on every boot."
+                    )
+                    await _remove_saved_adapter(config_service, adapter_id, "retired_adapter_cleanup")
+                    continue
                 if adapter_type_val in loaded_adapter_types:
                     logger.warning(
                         f"Skipping duplicate adapter {adapter_id} — type '{adapter_type_val}' already loaded, "
                         f"removing stale graph entry"
                     )
-                    # Clean up stale duplicate from graph
-                    try:
-                        stale_configs = await config_service.list_configs(prefix=f"adapter.{adapter_id}")
-                        for config_key in stale_configs.keys():
-                            await config_service.set_config(config_key, None, updated_by="dedup_cleanup")
-                    except Exception as cleanup_err:
-                        logger.debug(f"Could not clean up stale adapter {adapter_id}: {cleanup_err}")
+                    await _remove_saved_adapter(config_service, adapter_id, "dedup_cleanup")
                     continue
 
             loaded = await _load_single_saved_adapter(

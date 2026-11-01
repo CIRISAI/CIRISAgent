@@ -22,6 +22,7 @@ from typing import Annotated, Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.persistence.db.paging import next_page_cursor
 
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
@@ -1206,7 +1207,7 @@ def _count_recent_task_completes_sqlite(days: int = SIGMA_WINDOW_DAYS) -> int:
             count += len(items)
             if len(items) < 500:
                 break
-            next_cursor = parsed.get("cursor") if isinstance(parsed, dict) else None
+            next_cursor = next_page_cursor(parsed)
             if not next_cursor:
                 break
             cursor_json = next_cursor if isinstance(next_cursor, str) else _json.dumps(next_cursor)

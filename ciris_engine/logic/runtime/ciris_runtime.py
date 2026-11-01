@@ -725,7 +725,9 @@ class CIRISRuntime(ServicePropertyMixin):
         if db_path.startswith(("postgresql://", "postgres://")):
             logger.info("Using PostgreSQL database")
         else:
-            logger.info(f"Using SQLite database: {db_path}")
+            from ciris_engine.logic.persistence.db.core import _redact_dsn
+
+            logger.info(f"Using SQLite database: {_redact_dsn(db_path)}")
 
         # initialize_database bootstraps persist's Engine end-to-end (schema
         # via persist's own sqlx migrations + A0a legacy graph migration).

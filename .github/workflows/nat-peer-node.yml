@@ -1,0 +1,94 @@
+name: NAT peer node (node-c)
+
+# node-c for the cross-NAT chat harness: one node on a GitHub runner, behind
+# GitHub's NAT, chatting with nodes behind other NATs (a desktop container at
+# home, a phone on cellular). Started by `python -m tools.qa_runner.nat_peer
+# drive`, which pushes a throwaway branch nat-peer/<nonce> carrying
+# .nat-peer/request.json ({"nonce", "server_tag", "peers": [{"name", "key_id",
+# "code"}]}: the local nodes' contacts), runs their halves against this node,
+# then deletes the branch. Each side only ever calls its own node's API.
+# (A push, not workflow_dispatch: a dispatch needs the file on main first.)
+
+run-name: nat-peer ${{ github.ref_name }}
+
+on:
+  push:
+    branches: ['nat-peer/**']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  node-c:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: LLM key file
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$OPENROUTER_API_KEY" > "$RUNNER_TEMP/llm_key"
+
+      - name: Read the request
+        run: |
+          jq -r '.server_tag // ""' .nat-peer/request.json | sed 's/^/SERVER_TAG=/' >> "$GITHUB_ENV"
+          jq -r '.nonce' .nat-peer/request.json | sed 's/^/NONCE=/' >> "$GITHUB_ENV"
+          jq '.peers' .nat-peer/request.json > "$RUNNER_TEMP/peers.json"
+          jq -r '.[] | "peer \(.name): \(.key_id)"' "$RUNNER_TEMP/peers.json"
+
+      - name: Boot node-c (claim + announce + restart)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MESH_NODES: node-c:18083
+          MESH_BOOT_ONLY: '1'
+          MESH_KEEP: '1'
+          MESH_LLM_MODEL: qwen/qwen3.6-35b-a3b
+          MESH_LLM_BASE_URL: https://openrouter.ai/api/v1
+          MESH_LLM_PROVIDER: openai
+        run: |
+          export MESH_OUT="$RUNNER_TEMP/mesh" MESH_LLM_KEY_FILE="$RUNNER_TEMP/llm_key"
+          tools/qa_runner/local_mesh/run.sh "$SERVER_TAG"
+
+      # The harness runs inside node-c's own container: the image has every
+      # dependency, and the node's API is its localhost:8080. /mesh/home is
+      # $RUNNER_TEMP/mesh/node-c on the runner.
+      - name: Publish node-c's contact
+        run: |
+          docker exec -w /app ciris-node-c python -m tools.qa_runner.nat_peer code \
+            --node node-c=http://127.0.0.1:8080 --out /mesh/home/contact.json
+          mkdir -p contact && cp "$RUNNER_TEMP/mesh/node-c/contact.json" contact/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-c-contact
+          path: contact/contact.json
+
+      - name: node-c's half (requester)
+        run: |
+          mkdir -p results
+          cp "$RUNNER_TEMP/peers.json" "$RUNNER_TEMP/mesh/node-c/peers.json"
+          rc=0
+          docker exec -w /app ciris-node-c python -m tools.qa_runner.nat_peer half \
+            --node node-c=http://127.0.0.1:8080 --role requester --peers /mesh/home/peers.json \
+            --nonce "$NONCE" --out /mesh/home/result.json --summary /mesh/home/summary.md || rc=$?
+          cp "$RUNNER_TEMP/mesh/node-c/result.json" results/ 2>/dev/null || true
+          cat "$RUNNER_TEMP/mesh/node-c/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          exit $rc
+
+      - name: Collect node-c's logs
+        if: always()
+        run: |
+          mkdir -p results/logs
+          docker logs ciris-node-c > results/logs/container.log 2>&1 || true
+          cp -r "$RUNNER_TEMP/mesh/node-c/ciris/logs/." results/logs/ 2>/dev/null || true
+          docker stop -t 30 ciris-node-c >/dev/null 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: node-c-results
+          path: results/

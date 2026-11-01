@@ -795,6 +795,11 @@ def main(
     if _node_only is not None:
         node_only.run_headless(_node_only)
 
+    # One name for this process in ps/top/pgrep, before the node serves.
+    from ciris_engine.logic.utils.substrate_logging import set_process_label
+
+    set_process_label()
+
     # Setup basic console logging first (without file logging)
     # File logging will be set up later once TimeService is available
     setup_basic_logging(

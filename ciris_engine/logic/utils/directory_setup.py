@@ -112,7 +112,9 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     # Skip exclusive access check for PostgreSQL — sqlx pools handle
     # multi-process safely, and there's no notion of file-level locking.
     if db_path.startswith(("postgresql://", "postgres://")):
-        print(f"[OK] Skipping exclusive access check for PostgreSQL: {db_path}")
+        # No DSN in this line: it carries the database password and goes to
+        # container stdout on every boot (2.18.0 scouts).
+        print("[OK] Skipping exclusive access check for PostgreSQL")
         return
 
     db_path_obj = Path(db_path)
@@ -136,7 +138,7 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
     try:
         if not os.access(db_path_obj.parent, os.W_OK):
             raise PermissionError(f"Database parent dir not writable: {db_path_obj.parent}")
-        print(f"[OK] Database parent dir ready: {db_path}")
+        print("[OK] Database parent dir ready")
 
     except Exception as e:
         msg = str(e).lower()
@@ -149,13 +151,13 @@ def ensure_database_exclusive_access(db_path: str, fail_fast: bool = True) -> No
             return
 
         if is_lock_error:
-            error_msg = f"CANNOT ACCESS DATABASE {db_path} - ANOTHER AGENT MAY BE RUNNING"
+            error_msg = "CANNOT ACCESS THE DATABASE - ANOTHER AGENT MAY BE RUNNING"
             print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
             print(f"  Underlying error: {e}", file=sys.stderr)
             print("  Only one CIRIS agent can run per database file", file=sys.stderr)
             print("  Check for other running agents using: ps aux | grep ciris", file=sys.stderr)
         else:
-            error_msg = f"UNEXPECTED DATABASE ERROR for {db_path}: {e}"
+            error_msg = f"UNEXPECTED DATABASE ERROR: {e}"
             print(f"CRITICAL ERROR: {error_msg}", file=sys.stderr)
 
         if fail_fast:

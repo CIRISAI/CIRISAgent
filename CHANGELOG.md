@@ -5,6 +5,26 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.0-stable] - 2026-10-31
+
+### Changed
+
+- **ciris-server 0.5.243 (edge v43.4.1, persist v59.1.2).** A contact request now reaches the other person across NATs. Once their node is known, the request is re-addressed to that node. A row waiting on an unknown signer asks the peer that sent it for the key, so the other node's owner key is no longer starved behind unrelated keys. Direct links open only between contacts who have accepted each other, and proposing is off by default. Gated by the new CI cross-NAT pair: two nodes on separate GitHub runners completed add, request, accept, mutual, pair room, messages, and trace delivery to the canonical.
+- **ciris-client 0.5.237.** A Files panel in every chat room, where you can rename, move or withdraw your own files. Moderate or flag a message's author from its menu. The 13 ciris-server 0.5.242 message ids are localized.
+- **One log file.** With ciris-server 0.5.243 the node's own tracing arrives as Python records on `ciris_node.<crate>` and lands in `latest.log` under the agent's rotation, so there is no second `ciris-server.log.<date>` to manage. The node's filter is `info`. Its records never reach `incidents_latest.log`. An older server wheel keeps its own file, and `CIRIS_SUBSTRATE_LOG_SINK=file` keeps it on purpose (the local mesh does, for its DEBUG-level canonical check).
+- **The process is named `ciris-agent`** in ps, top and pgrep, so one agent can be told apart from other nodes on the same host (ciris-server 0.5.243). Desktop and server only; a phone app keeps its own name.
+- **Agent nodes no longer propose direct links by default.** A NAT punch that succeeds on one side only moves that side to UDP while the other stays relayed, and the link then carries nothing until it runs out of channel. This broke chat between two agent nodes. Proposing waits for leviculum's two-sided punch commit. Until then room traffic stays on the canonical path, as ciris-server 0.5.243 does for its own default. `CIRIS_DIRECT_LINK_FACILITATOR=bootstrap` opts back in to the canonical's facilitator; a `host:port` names another.
+
+### Security
+
+- **The PostgreSQL password no longer reaches the logs.** On a Postgres-backed agent the boot check printed the full DSN, password included, to stdout on every start ("Skipping exclusive access check for PostgreSQL: postgresql://user:password@…"). Two more paths did the same: setup logged "Using runtime main database: …", which holds the Postgres DSN when one is configured, and a malformed DSN's parse error quoted it in full before being logged. All three now pass through the existing `_redact_dsn` (`user:***@host`). The guard test that should have caught them only read `logger.*` calls and did not know `db_path` held a DSN; it now also reads `print(...)` and exception messages and treats `db_path` as a DSN, and two behaviour tests pin the boot line and the parse error. SQLite agents were not affected. Operators of Postgres-backed agents should treat the database password as exposed to anyone with access to the container's logs and rotate it.
+
+### Fixed
+
+- **Persist's cursor pages are followed past the first page.** Every persist list page carries its continuation as `next_cursor`, a cursor object. The graph scope walk sent it back wrapped as `{"cursor": …}`, which persist rejects ("ListCursor decode: missing field `version`"), so `get_all_graph_nodes` failed on any scope with more than 100 nodes. The audit listing, the user data export (`my_data`), memory queries and cross-channel history read `page["cursor"]`, a field no persist page has, so they silently stopped after one page. All five now use one helper, `persistence/db/paging.py::next_page_cursor`.
+- **Saved adapters of a retired type are dropped on restore.** An adapter the agent saved to its graph under a type that no longer exists (`ciris_covenant_metrics`, renamed to `ciris_accord_metrics` in 2.0.2; `sync`, removed) was restored and failed to import on every boot. It is now removed from the graph with a warning naming the replacement. It is not remapped, because the replacement is normally configured already and a second copy would double it.
+- **Edges without a weight read correctly.** persist omits `weight` when an edge has none; the agent passed `None` into GraphEdge's float field, and every such edge failed validation (`get_edges_for_node failed`).
+
 ## [2.18.0-stable] - 2026-10-29
 
 ### Safety

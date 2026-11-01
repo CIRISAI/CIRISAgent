@@ -1823,6 +1823,41 @@ class APIServerManager:
         )
         return True
 
+    def _announce_like_the_wizard(self, token: str) -> None:
+        """Announce the node's ownership to the federation, with the owner's session.
+
+        CIRISServer's headless first-run sequence (its DRY doors, 2026-10-30):
+        claim -> POST /v1/federation/announce (owner session) -> consent. The
+        wizard announces; this harness never did, so the owner-binding stayed
+        at cohort_scope `self`, the canonical could not resolve the node's
+        owner, and no trace it was offered could be checked against an owner
+        (every safety-battery run back to 2.17 served zero trace rows).
+
+        Loud but not fatal: a failed announce is named here and in the node's
+        delivery status, and does not stop the run it would otherwise block.
+        """
+        import httpx
+
+        from .announce_bundle import check_announce_bundle
+
+        async def announce() -> Any:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                return await check_announce_bundle(
+                    client, f"http://127.0.0.1:{NODE_HTTP_PORT}", {"Authorization": f"Bearer {token}"}
+                )
+
+        try:
+            check = asyncio.run(announce())
+        except Exception as exc:  # noqa: BLE001 -- reported, never swallowed silently
+            self.console.print(f"[yellow][WARN] Ownership announce raised {type(exc).__name__}: {exc}[/yellow]")
+            return
+        colour = "green" if check.status == "ok" else "yellow"
+        label = "OK" if check.status == "ok" else "WARN"
+        self.console.print(
+            f"[{colour}][{label}] Ownership announced to the federation: {check.status} "
+            f"{getattr(check, 'message', '')}[/{colour}]"
+        )
+
     def _complete_qa_setup(self) -> bool:
         """Complete setup wizard to create test user when data was wiped.
 
@@ -2072,6 +2107,8 @@ class APIServerManager:
         if token is None:
             # Diagnostics already emitted by _authenticate_with_retry on its final failure.
             return False
+        if self.config.wipe_data:
+            self._announce_like_the_wizard(token)
 
         last_reported_state = ""
         last_state_report_at = 0.0

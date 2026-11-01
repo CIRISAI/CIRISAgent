@@ -135,4 +135,4 @@ def test_the_boot_access_check_never_prints_the_password(capsys) -> None:  # typ
     directory_setup.ensure_database_exclusive_access(f"postgresql://ciris_user:{secret}@scoutdb:5432/ciris_db?sslmode=disable")
     out = capsys.readouterr().out
     assert "Skipping exclusive access check for PostgreSQL" in out
-    assert secret not in out and "ciris_user:***@scoutdb" in out
+    assert secret not in out and "scoutdb" not in out, "the boot line names no part of the DSN"

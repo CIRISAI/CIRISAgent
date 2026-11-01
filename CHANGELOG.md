@@ -5,10 +5,12 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.18.1-stable] - 2026-10-30
+## [2.19.0-stable] - 2026-10-31
 
 ### Changed
 
+- **ciris-server 0.5.243 (edge v43.4.1, persist v59.1.2).** A contact request now reaches the other person across NATs. Once their node is known, the request is re-addressed to that node. A row waiting on an unknown signer asks the peer that sent it for the key, so the other node's owner key is no longer starved behind unrelated keys. Direct links open only between contacts who have accepted each other, and proposing is off by default. Gated by the new CI cross-NAT pair: two nodes on separate GitHub runners completed add, request, accept, mutual, pair room, messages, and trace delivery to the canonical.
+- **ciris-client 0.5.237.** A Files panel in every chat room, where you can rename, move or withdraw your own files. Moderate or flag a message's author from its menu. The 13 ciris-server 0.5.242 message ids are localized.
 - **One log file.** With ciris-server 0.5.243 the node's own tracing arrives as Python records on `ciris_node.<crate>` and lands in `latest.log` under the agent's rotation, so there is no second `ciris-server.log.<date>` to manage. The node's filter is `info`. Its records never reach `incidents_latest.log`. An older server wheel keeps its own file, and `CIRIS_SUBSTRATE_LOG_SINK=file` keeps it on purpose (the local mesh does, for its DEBUG-level canonical check).
 - **The process is named `ciris-agent`** in ps, top and pgrep, so one agent can be told apart from other nodes on the same host (ciris-server 0.5.243). Desktop and server only; a phone app keeps its own name.
 - **Agent nodes no longer propose direct links by default.** A NAT punch that succeeds on one side only moves that side to UDP while the other stays relayed, and the link then carries nothing until it runs out of channel. This broke chat between two agent nodes. Proposing waits for leviculum's two-sided punch commit. Until then room traffic stays on the canonical path, as ciris-server 0.5.243 does for its own default. `CIRIS_DIRECT_LINK_FACILITATOR=bootstrap` opts back in to the canonical's facilitator; a `host:port` names another.

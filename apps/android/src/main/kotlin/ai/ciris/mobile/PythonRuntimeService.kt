@@ -81,10 +81,41 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
         }
     }
 
+    /**
+     * Started by MainActivity, in the foreground, and only then.
+     *
+     * NOT STICKY. This service lives while the app is in use plus a 3-minute
+     * grace for OAuth/purchase callbacks. START_STICKY made the system restart it
+     * after the process was killed for memory, and that restart arrives with a
+     * null intent while the app is in the background, where Android 12+ refuses
+     * startForeground(): ForegroundServiceStartNotAllowedException, a crash, and
+     * another scheduled restart with a longer backoff, on a loop (every release
+     * from 2.6.0 through 2.19.0).
+     *   https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start
+     *   https://developer.android.com/reference/android/app/Service#START_NOT_STICKY
+     * Background delivery is not this service's job: a woken app catches up on
+     * its own (pull on wake), not a service the OS revives in the background.
+     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null) {
+            // A system re-delivery of an old sticky start (an install upgraded
+            // from a sticky build). Nothing asked for CIRIS; do not start it.
+            Log.w(TAG, "Not starting: system restart with no intent (the app is not in use)")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         Log.i(TAG, "Service starting")
 
-        startForeground(NOTIFICATION_ID, createNotification("Starting CIRIS..."))
+        try {
+            startForeground(NOTIFICATION_ID, createNotification("Starting CIRIS..."))
+        } catch (e: IllegalStateException) {
+            // ForegroundServiceStartNotAllowedException (API 31+) extends
+            // IllegalStateException: the app is no longer in the foreground by the
+            // time the start is delivered. Stop cleanly instead of crashing.
+            Log.w(TAG, "Not starting: foreground start refused (${e.javaClass.simpleName}: ${e.message})")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         isRunning = true
         acquireMulticastLock()
 
@@ -99,7 +130,7 @@ class PythonRuntimeService : Service(), DefaultLifecycleObserver {
             }
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

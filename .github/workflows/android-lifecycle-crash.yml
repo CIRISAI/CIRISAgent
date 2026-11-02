@@ -1,0 +1,81 @@
+name: Android lifecycle crash
+
+# Common Android crash scenarios for the app shell, on an emulator
+# (tools/qa_runner/android_lifecycle_crash.sh). First scenario: killed in the
+# background must not be revived there (the START_STICKY →
+# ForegroundServiceStartNotAllowedException loop, every release 2.6.0..2.19.0).
+# https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start
+
+on:
+  pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'tools/qa_runner/android_lifecycle_crash.sh'
+      - '.github/workflows/android-lifecycle-crash.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules >/dev/null
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Python 3.10 (required by Chaquopy)
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      - name: Symlink python3.10 for Chaquopy
+        run: |
+          PYTHON_PATH=$(which python3.10)
+          if [ ! -f /usr/bin/python3.10 ] && [ -n "$PYTHON_PATH" ]; then
+            sudo ln -s "$PYTHON_PATH" /usr/bin/python3.10
+          fi
+
+      - name: Fetch the published CIRISClient AAR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/fetch_client_artifacts.py --platform android
+
+      - name: Build debug APK
+        run: |
+          cd apps
+          ./gradlew :android:syncPythonSources
+          ./gradlew :android:assembleDebug
+
+      - name: Scenarios on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash tools/qa_runner/android_lifecycle_crash.sh apps/android/build/outputs/apk/debug/android-debug.apk out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-lifecycle-crash
+          path: out/

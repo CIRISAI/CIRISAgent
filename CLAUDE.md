@@ -809,7 +809,7 @@ python3 -u -m tools.qa_runner model_eval \
 - **OAuth**: https://agents.ciris.ai/v1/auth/oauth/{agent_id}/{provider}/callback
 
 ### Production Server Access
-- **SSH**: `ssh -i ~/.ssh/ciris_deploy root@108.61.119.117`
+- **SSH**: take the current production host from CIRISBridge (its CLAUDE.md). The former host, cirisnode0, was released and now belongs to another Vultr customer: never SSH to an address copied from an old note or log.
 - **Agent Locations**: `/opt/ciris/agents/`
 - **Log Files**: Logs are always written to files inside containers at `/app/logs/`
   - `/app/logs/incidents_latest.log` - Current incidents (ALWAYS CHECK THIS FIRST)

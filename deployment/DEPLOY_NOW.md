@@ -1,5 +1,9 @@
 # Emergency Deployment Instructions
 
+> The host this runbook used to name (cirisnode0) was released and now belongs to
+> another Vultr customer. Never SSH to an address copied from an old note; take the
+> current production host from CIRISBridge.
+
 The automated deployment has failed due to the graceful shutdown timeout issue. Here's how to manually deploy:
 
 ## Quick Fix (Recommended)
@@ -7,7 +11,7 @@ The automated deployment has failed due to the graceful shutdown timeout issue. 
 SSH to the server and run the emergency deployment script:
 
 ```bash
-ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+ssh <production host>   # see CIRISBridge for the current host
 cd /home/ciris/CIRISAgent
 ./deployment/emergency-deploy.sh
 ```
@@ -24,7 +28,7 @@ If the emergency script is not available:
 
 ```bash
 # 1. SSH to server
-ssh -i ~/.ssh/ciris_deploy root@108.61.119.117
+ssh <production host>   # see CIRISBridge for the current host
 
 # 2. Check current state
 docker ps -a | grep ciris

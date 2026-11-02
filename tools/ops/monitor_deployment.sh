@@ -53,4 +53,4 @@ fi
 
 echo ""
 echo "To view logs: gh run view $RUN_ID --repo $REPO --log"
-echo "To check production: ssh -i ~/.ssh/ciris_deploy root@108.61.119.117"
+echo "To check production: see CIRISBridge (it documents the current hosts)"

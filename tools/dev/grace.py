@@ -272,7 +272,7 @@ class GraceFlow:
         if prod_status.get("production") != "UP" or prod_status.get("datum") != "RUNNING":
             message += "🔴 PRODUCTION ISSUE DETECTED\n"
             message += "Priority: Check production immediately\n"
-            message += "Command: ssh -i ~/.ssh/ciris_deploy root@108.61.119.117\n"
+            message += "Next: check production through CIRISBridge (it documents the current hosts)\n"
         elif prod_status.get("ci_cd") in ["FAILURE", "FAILED"]:
             message += "⚠️ CI/CD FAILURE\n"
             message += "Priority: Check recent PR/build failures\n"

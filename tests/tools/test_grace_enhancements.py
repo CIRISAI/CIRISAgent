@@ -83,13 +83,14 @@ class TestGraceProductionMonitoring:
         # Mock being in a container with incidents
         mock_run.return_value = MagicMock(returncode=0, stdout="2025-08-07 15:00:00 ERROR: Test incident")
 
-        with patch("tools.grace.main.Path.exists", return_value=True):
-            grace = Grace()
-            status = grace.status()
+        grace = Grace()
+        status = grace.status()
 
-            # Status should include incidents if available
-            # (Note: actual behavior depends on implementation)
-            assert isinstance(status, str)
+        # Status should include incidents if available
+        # (Note: actual behavior depends on implementation)
+        assert isinstance(status, str)
+        # Grace never SSHes anywhere (the former production host was released).
+        assert not any(c.args and c.args[0] and c.args[0][0] == "ssh" for c in mock_run.call_args_list)
 
 
 class TestGracePrecommit:

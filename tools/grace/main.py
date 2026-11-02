@@ -2,10 +2,8 @@
 Main Grace class - ties everything together simply.
 """
 
-import os
 import subprocess
 from datetime import datetime
-from pathlib import Path
 
 from .ci import CIMonitor
 from .context import WorkContext
@@ -45,37 +43,9 @@ class Grace:
         if "deployment" in health:
             message.append(f"\n🚀 {health['deployment']}")
 
-        # ALWAYS check production incidents - they can happen even when service is UP
-        # Updated container names to match actual production deployment
-        prod_containers = ["ciris-datum", "ciris-sage-2wnuc8", "container0", "container1"]
-        ssh_key = os.path.expanduser("~/.ssh/ciris_deploy")
-
-        if os.path.exists(ssh_key):
-            # We have SSH access, check production incidents
-            for container in prod_containers:
-                try:
-                    result = subprocess.run(
-                        [
-                            "ssh",
-                            "-i",
-                            ssh_key,
-                            "root@108.61.119.117",
-                            f"docker exec {container} tail -n 20 /app/logs/incidents_latest.log | grep ERROR | tail -3",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-                    if result.returncode == 0 and result.stdout.strip():
-                        message.append(f"\n⚠️ Recent errors in {container}:")
-                        for line in result.stdout.strip().split("\n")[:2]:  # Show max 2 errors
-                            # Extract just the error message part
-                            if " - ERROR - " in line:
-                                error_part = line.split(" - ERROR - ")[-1][:80]  # First 80 chars
-                                message.append(f"  • {error_part}...")
-                        break  # Only show first container with errors
-                except:
-                    pass  # Silent fail, don't disrupt status
+        # No production SSH from grace: the former production host was released
+        # and now belongs to another Vultr customer. Production incidents are
+        # read through CIRISBridge, which documents the current hosts.
 
         # Show other problems
         if health.get("production") != "UP":
@@ -197,58 +167,19 @@ class Grace:
         """
         message = [f"Incidents Check: {container_name}\n" + "─" * 40]
 
-        # Check if this is a production container and SSH key exists
-        # Updated container names to match actual production deployment
-        prod_containers = ["ciris-datum", "ciris-sage-2wnuc8", "container0", "container1"]
-        ssh_key = os.path.expanduser("~/.ssh/ciris_deploy")
-
-        if container_name in prod_containers and os.path.exists(ssh_key):
-            # Try SSH to production
-            try:
-                result = subprocess.run(
-                    [
-                        "ssh",
-                        "-i",
-                        ssh_key,
-                        "root@108.61.119.117",
-                        f"docker exec {container_name} tail -n 100 /app/logs/incidents_latest.log",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                if result.returncode == 0:
-                    message[0] = f"Incidents Check: {container_name} (PRODUCTION)\n" + "─" * 40
-                else:
-                    # SSH failed, fall back to local
-                    result = subprocess.run(
-                        ["docker", "exec", container_name, "tail", "-n", "100", "/app/logs/incidents_latest.log"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-            except Exception:
-                # SSH failed, fall back to local
-                result = subprocess.run(
-                    ["docker", "exec", container_name, "tail", "-n", "100", "/app/logs/incidents_latest.log"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-        else:
-            # Local Docker check
-            try:
-                result = subprocess.run(
-                    ["docker", "exec", container_name, "tail", "-n", "100", "/app/logs/incidents_latest.log"],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-            except Exception:
-                # Final fallback
-                message.append(f"❌ Could not access container {container_name}")
-                message.append("Container may not exist or Docker/SSH is not available")
-                return "\n".join(message)
+        # Local Docker only. Production incidents are read through CIRISBridge;
+        # grace never SSHes anywhere (the former production host was released).
+        try:
+            result = subprocess.run(
+                ["docker", "exec", container_name, "tail", "-n", "100", "/app/logs/incidents_latest.log"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            message.append(f"❌ Could not access container {container_name}")
+            message.append("Container may not exist or Docker is not available")
+            return "\n".join(message)
 
         if result.returncode != 0:
             message.append(f"❌ Could not access container {container_name}")

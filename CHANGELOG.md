@@ -5,6 +5,16 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.1-stable] - 2026-11-02
+
+### Fixed
+
+- **Android: no more crash loop after the phone reclaims memory.** The runtime service asked Android to restart it whenever its process was killed. That restart came in the background, where Android 12+ refuses to start a foreground service. The app crashed and was scheduled to restart again with a longer backoff, on a loop. This affected every release from 2.6.0 through 2.19.0. The service now runs only while the app is in use plus its 3-minute grace for sign-in and purchase callbacks, and a refused start stops cleanly instead of crashing ([background start restrictions](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)). A new emulator lane, `android-lifecycle-crash.yml`, kills the app in the background and fails on any background restart or crash.
+
+### Security
+
+- **The released production host is gone from the repo.** Grace SSH'd to the former production host with the deploy key on every status check, and that host now belongs to another Vultr customer. Grace now reads local Docker only, and the runbooks point to CIRISBridge for the current host.
+
 ## [2.19.0-stable] - 2026-10-31
 
 ### Changed

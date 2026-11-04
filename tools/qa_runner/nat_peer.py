@@ -247,6 +247,28 @@ class PeerHalf(CrossChatStage):
         took = self.read(cid, self.text("timed", peer, me), "timed")
         return f"{peer}->{me} opened {took:.1f}s after {me} sent (both send at room-ready + {self.DIRECT_WINDOW_S:.0f}s)"
 
+    def direct_round_trip(self, cid: str, ceiling_secs: float) -> str:
+        """Run once the link is punched: one round trip, timed by the requester.
+
+        The two runners' clocks can't be compared, so the requester sends, the
+        responder answers the moment it reads that, and the requester times the
+        round trip against twice the one-way ceiling.
+        """
+        me, peer = self.me.name, self.peer.name
+        ping, pong = f"nat-peer direct ping {self.nonce}", f"nat-peer direct pong {self.nonce}"
+        if self.role == ROLE_RESPONDER:
+            took = self.read(cid, ping, "direct")
+            self.send(cid, pong, "direct")
+            return f"{me} answered {peer}'s ping {took:.1f}s after it started listening"
+        started = self.clock.now()
+        self.send(cid, ping, "direct")
+        self.read(cid, pong, "direct")
+        round_trip = self.clock.now() - started
+        detail = f"{me}->{peer}->{me} round trip {round_trip:.2f}s (ceiling {2 * ceiling_secs:.0f}s)"
+        if round_trip > 2 * ceiling_secs:
+            raise self._fail("direct", LAYER_MESSAGE, detail)
+        return detail
+
     # -- the half --
 
     def run_half(self) -> HalfReport:
@@ -500,6 +522,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     h.add_argument("--nonce", required=True)
     h.add_argument("--out", type=Path, default=None)
     h.add_argument("--summary", type=Path, default=None)
+    t = sub.add_parser("direct-timed", help="one timed round trip after the link went direct")
+    t.add_argument("--node", required=True)
+    t.add_argument("--role", choices=[ROLE_REQUESTER, ROLE_RESPONDER], required=True)
+    t.add_argument("--peers", type=Path, required=True)
+    t.add_argument("--nonce", required=True)
+    t.add_argument("--result", type=Path, required=True, help="this node's half result, for the room id")
+    t.add_argument("--ceiling-secs", type=float, default=2.0, help="one-way ceiling")
+    t.add_argument("--out", type=Path, default=None)
     d = sub.add_parser("drive", help="dispatch node-c in CI and run the local halves against it")
     d.add_argument("--node", action="append", required=True)
     d.add_argument("--server-tag", default="")
@@ -516,6 +546,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         _write(args.out, contact)
         print(json.dumps(asdict(contact)))
         return 0
+    if args.cmd == "direct-timed":
+        peer = PeerContact(**json.loads(args.peers.read_text())[0])
+        me = _node(args.node, args.username, args.password)
+        half = PeerHalf(me, peer, args.role, args.nonce, deadlines=Deadlines(poll_s=0.2, send_s=30.0, receive_s=300.0))
+        half._login(me)
+        cid = str(json.loads(args.result.read_text())[0]["community_id"])
+        step = half._step("direct", LAYER_MESSAGE, lambda: half.direct_round_trip(cid, args.ceiling_secs))
+        _write(args.out, asdict(step))
+        return 0 if step.ok else 1
     if args.cmd == "half":
         peers = [PeerContact(**p) for p in json.loads(args.peers.read_text())]
         reports = run_halves(args.node, peers, args.role, args.nonce, args.username, args.password)

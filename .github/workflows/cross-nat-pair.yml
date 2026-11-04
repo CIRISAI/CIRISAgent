@@ -112,9 +112,20 @@ jobs:
           deadline=$((SECONDS + 300))
           until sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/mesh/$NAME/ciris/logs/"ciris-server.log.* 2>/dev/null \
                 | grep -q -E 'direct link ESTABLISHED|direct link: established'; do
-            [ $SECONDS -lt $deadline ] || { echo "no direct link on $NAME within 300 s"; break; }
-            sleep 10
+            [ $SECONDS -lt $deadline ] || { echo "::error::no direct link on $NAME within 300 s"; exit 1; }
+            sleep 5
           done
+
+      # After the link moved, on the direct path. Ceiling from edge: 2 s each way.
+      - name: Timed round trip over the direct link
+        if: always() && steps.boot.outcome == 'success'
+        run: |
+          rc=0
+          docker exec -w /app "ciris-$NAME" python -m tools.qa_runner.nat_peer direct-timed \
+            --node "$NAME=http://127.0.0.1:8080" --role "$ROLE" --peers /mesh/home/peers.json \
+            --nonce "$NONCE" --result /mesh/home/result.json --out /mesh/home/direct-timed.json || rc=$?
+          cp "$RUNNER_TEMP/mesh/$NAME/direct-timed.json" results/ 2>/dev/null || true
+          exit $rc
 
       - name: Trace reaches the canonical
         if: always() && steps.boot.outcome == 'success'

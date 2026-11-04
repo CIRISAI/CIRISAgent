@@ -182,7 +182,10 @@ class Device:
             password=self.password,
             fed_label=fed_label,
             announce=True,
-            trace_opt_in=False,
+            # Sending traces is what grants the canonical consent to carry this
+            # node's rows. Without it nothing of this identity leaves the node,
+            # announced or not, and no other device can find it.
+            trace_opt_in=True,
             run_without_ai=True,
         )
         if not ok:
@@ -249,6 +252,19 @@ class Device:
 
     # ── a joining device ─────────────────────────────────────────────────────
 
+    async def send_join_request(self) -> None:
+        """Send, and as a person would, send again while the other device's
+        address is still on its way: the node answers 503 with Retry-After, or
+        the client's own request times out first."""
+        end = time.monotonic() + STEP_DEADLINE_S
+        while time.monotonic() < end:
+            await self.must_click("btn_add_device_send")
+            if await self.helper.wait_for_optional_element("text_add_device_match_code", timeout=45000):
+                return
+            self.log(f"no match code yet: {await self.text('add_device_refusal')!r}")
+        await self.runner._dump_tree("match code")
+        raise RuntimeError(f"no match code: {await self.text('add_device_refusal')}")
+
     async def type_into(self, tag: str, text: str) -> None:
         """The field below the fold, or not composed yet, on a phone's screen."""
         await self.helper.wait_for_optional_element(tag, timeout=30000)
@@ -279,10 +295,7 @@ class Device:
         await self.must_click("btn_setup_add_this_device", 60000)
         await self.type_into("input_add_device_name", f"qa-{self.name}")
         await self.type_into("input_add_device_contact", code)
-        await self.must_click("btn_add_device_send")
-        if not await self.helper.wait_for_element("text_add_device_match_code", timeout=int(STEP_DEADLINE_S * 1000)):
-            await self.runner._dump_tree("match code")
-            raise RuntimeError(f"no match code: {await self.text('add_device_refusal')}")
+        await self.send_join_request()
         self.signals.put(f"requested/{self.name}", await self.text("text_add_device_match_code"))
         # The client finishes by itself once approved: it holds the approval,
         # reads its own claim PIN from disk and collects the owner's session.

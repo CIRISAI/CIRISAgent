@@ -2014,6 +2014,7 @@ Examples:
             "desktop-login",
             "desktop-chat",
             "desktop-setup",
+            "desktop-mos",
             "desktop-reset",
             "desktop-catchup",
             "desktop-up",
@@ -2079,6 +2080,11 @@ Examples:
         "--message",
         default=None,
         help="Message for desktop chat test (default: 'Hello, can you hear me?')",
+    )
+    parser.add_argument(
+        "--mos-device",
+        choices=["linux", "android", "windows", "macos", "ios"],
+        help="desktop-mos: which of the five devices this job is",
     )
     parser.add_argument(
         "--fed-label",
@@ -5026,6 +5032,12 @@ async def run_desktop_tests(args: argparse.Namespace) -> int:
             runner.print_summary()
             return 0 if success else 1
 
+        elif args.command == "desktop-mos":
+            # One person across five platforms (multi_occurrence_self.py).
+            from .multi_occurrence_self import run_device
+
+            return 0 if await run_device(runner, args) else 1
+
         elif args.command == "desktop-reset":
             # Log out + factory reset THROUGH THE CLIENT, so the .env (and with it
             # CIRIS_RUN_WITHOUT_AI) is cleared the way a user would clear it.
@@ -5082,9 +5094,9 @@ async def main() -> int:
     if args.command == "flow":
         return await run_flow_specs(args)
 
-    # Node-client first-run setup wizard: --launch brings up backend in
+    # Node-client first-run setup wizard (desktop-mos shares the bring-up): --launch brings up backend in
     # FIRST-RUN mode + desktop app sitting on the Setup wizard, then drives it.
-    if args.command == "desktop-setup" and args.launch:
+    if args.command in ("desktop-setup", "desktop-mos") and args.launch:
         # BRING UP THE PLATFORM THAT WAS ASKED FOR.
         #
         # This called run_desktop_first_run_up() unconditionally, so

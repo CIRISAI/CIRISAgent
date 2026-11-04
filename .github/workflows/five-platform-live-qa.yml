@@ -62,6 +62,12 @@ on:
         required: false
         default: ""
         type: string
+      scenario:
+        description: "live-qa (the release gate) or multi-occurrence-self (no AI: one fedID made in the wizard, the other four platforms join it through the UI, five jobs)"
+        required: false
+        default: "live-qa"
+        type: choice
+        options: ["live-qa", "multi-occurrence-self"]
       chat_rust_log:
         description: "RUST_LOG for the linux node the cross-platform chat stage restarts (e.g. info,ciris_edge::replication::bridge=debug). Empty = the node's default filter."
         required: false
@@ -118,29 +124,22 @@ jobs:
     if: ${{ !cancelled() }}
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 75
+    timeout-minutes: ${{ inputs.scenario == 'multi-occurrence-self' && 170 || 75 }}
+    permissions:
+      contents: read
+      actions: read
+      # multi-occurrence-self: the jobs signal each other as commit statuses.
+      statuses: write
     strategy:
       # NEVER fail-fast. The entire point is a five-way comparison; killing the
       # matrix on the first red destroys the gallery that makes it reviewable.
       fail-fast: false
+      # macos-15, NOT macos-14: the macos-14 image carries only Xcode 15.4, while
+      # Homebrew's xcodegen emits pbxproj format 77, which it cannot open.
+      # multi-occurrence-self gives each platform its own job: all five nodes are
+      # up at once, and an iOS simulator shares its host's ports with macOS desktop.
       matrix:
-        include:
-          - label: linux-android
-            os: ubuntu-latest
-            platforms: "linux android"
-          - label: macos-ios
-            # macos-15, NOT macos-14. The macos-14 image carries only Xcode 15.4,
-            # while Homebrew's xcodegen (2.45.4) emits pbxproj format 77:
-            #   xcodebuild: error: The project 'iosApp' cannot be opened because
-            #   it is in a future Xcode project file format (77)
-            # Pinning an older xcodegen would silence that, but it would also mean
-            # CI validated a toolchain nobody ships from. macos-15 carries Xcode 16
-            # and matches the generator, so the build here is the build that ships.
-            os: macos-15
-            platforms: "macos ios"
-          - label: windows
-            os: windows-latest
-            platforms: "windows"
+        include: ${{ fromJSON(inputs.scenario == 'multi-occurrence-self' && '[{"label":"linux","os":"ubuntu-latest","platforms":"linux"},{"label":"android","os":"ubuntu-latest","platforms":"android"},{"label":"windows","os":"windows-latest","platforms":"windows"},{"label":"macos","os":"macos-15","platforms":"macos"},{"label":"ios","os":"macos-15","platforms":"ios"}]' || '[{"label":"linux-android","os":"ubuntu-latest","platforms":"linux android"},{"label":"macos-ios","os":"macos-15","platforms":"macos ios"},{"label":"windows","os":"windows-latest","platforms":"windows"}]') }}
 
     env:
       CIRIS_TEST_MODE: "true"
@@ -641,7 +640,29 @@ jobs:
           echo "app=$APP" >> "$GITHUB_OUTPUT"
           echo "built: ${APP:-<none>}"
 
+      - name: Multi-occurrence self (this device's part)
+        if: ${{ inputs.scenario == 'multi-occurrence-self' }}
+        timeout-minutes: 150
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IOS_APP: ${{ steps.iosbuild.outputs.app }}
+          MOS_DEVICE: ${{ matrix.platforms }}
+        run: |
+          set -uo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export CIRIS_HOME="${RUNNER_TEMP}/ciris-$MOS_DEVICE"
+          mkdir -p "$CIRIS_HOME" artifacts/shots artifacts/logs
+          case "$MOS_DEVICE" in
+            linux|macos|windows) target=desktop; extra="--headless" ;;
+            ios) target=ios; extra="--ios-app-path $IOS_APP" ;;
+            *) target="$MOS_DEVICE"; extra="" ;;
+          esac
+          python -m tools.qa_runner.modules.web_ui desktop-mos --mos-device "$MOS_DEVICE" \
+            --platform "$target" --launch $extra -v 2>&1 | tee "artifacts/logs/mos-$MOS_DEVICE.log"
+
       - name: Run the shared flow on each platform this runner owns
+        if: ${{ inputs.scenario != 'multi-occurrence-self' }}
         id: qa
         shell: bash
         env:
@@ -1186,7 +1207,7 @@ jobs:
       # every result-recording command is guarded.
       - name: Cross-platform chat (linux <-> android, through the live canonical)
         id: xchat
-        if: ${{ !cancelled() && contains(matrix.platforms, 'android') }}
+        if: ${{ !cancelled() && contains(matrix.platforms, 'android') && inputs.scenario != 'multi-occurrence-self' }}
         timeout-minutes: 40
         shell: bash
         env:

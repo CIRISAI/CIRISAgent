@@ -11,13 +11,17 @@ The launcher:
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 from ciris_engine.logic.utils import win_console as _win_console
+
+#: The running desktop app, so an upgrade can close it.
+_desktop_proc: Optional["subprocess.Popen[bytes]"] = None
 
 _win_console.setup()
 
@@ -96,16 +100,50 @@ def find_desktop_jar() -> Optional[Path]:
     if jar_dir.exists():
         jars = list(jar_dir.glob("CIRIS-*.jar"))
         if jars:
-            return jars[0]
+            return _newest_jar(jars)
 
     # Fallback: check for development build
     dev_jar = package_dir.parent / "client" / "desktopApp" / "build" / "compose" / "jars"
     if dev_jar.exists():
         jars = list(dev_jar.glob("CIRIS-*.jar"))
         if jars:
-            return jars[0]
+            return _newest_jar(jars)
 
     return None
+
+
+def _jar_version(jar: Path) -> Tuple[int, ...]:
+    found = re.findall(r"\d+(?:\.\d+)+", jar.stem)
+    return tuple(int(part) for part in found[-1].split(".")) if found else ()
+
+
+def _newest_jar(jars: List[Path]) -> Path:
+    """The newest JAR by version. A repaired install has the old one on disk too,
+    and the first one a directory listing gave back could be either."""
+    return max(jars, key=lambda jar: (_jar_version(jar), jar.name))
+
+
+def _run_from_private_copy(jar: Path) -> Path:
+    """The JAR to run: a copy under CIRIS_HOME where the wheel can make one.
+
+    A JVM holds its JAR open, and on Windows pip can't move an open file, so
+    running the installed JAR makes `pip install -U` fail part way through.
+    ciris-server >= 0.5.245 makes the copy; an older wheel runs it in place.
+    """
+    try:
+        from ciris_server.upgrade import private_jar  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    except ImportError:
+        return jar
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+
+    return Path(private_jar(jar, get_ciris_home()))
+
+
+def stop_desktop_app() -> None:
+    """Close the running desktop app, if there is one."""
+    proc = _desktop_proc
+    if proc is not None and proc.poll() is None:
+        proc.terminate()
 
 
 def _check_java_version(java_path: str) -> tuple[bool, str]:
@@ -244,14 +282,16 @@ def launch_desktop_app(server_url: str = "http://localhost:8080") -> int:
         _print_java_install_instructions()
         return 1
 
+    jar_path = _run_from_private_copy(jar_path)
     print(f"Launching CIRIS Desktop from: {jar_path}")
 
     env = desktop_app_env(server_url)
 
     # Launch desktop app
+    global _desktop_proc
     try:
-        result = subprocess.run([java, "-jar", str(jar_path)], env=env)
-        return result.returncode
+        _desktop_proc = subprocess.Popen([java, "-jar", str(jar_path)], env=env)
+        return _desktop_proc.wait()
     except KeyboardInterrupt:
         print("\nShutting down...")
         return 0

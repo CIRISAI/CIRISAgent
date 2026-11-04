@@ -659,7 +659,9 @@ jobs:
             *) target="$MOS_DEVICE"; extra="" ;;
           esac
           python -m tools.qa_runner.modules.web_ui desktop-mos --mos-device "$MOS_DEVICE" \
-            --platform "$target" --launch $extra -v 2>&1 | tee "artifacts/logs/mos-$MOS_DEVICE.log"
+            --platform "$target" --launch $extra \
+            --username qaadmin --password "qa_test_password_12345" --run-without-ai \
+            -v 2>&1 | tee "artifacts/logs/mos-$MOS_DEVICE.log"
 
       - name: Run the shared flow on each platform this runner owns
         if: ${{ inputs.scenario != 'multi-occurrence-self' }}

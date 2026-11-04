@@ -2352,6 +2352,10 @@ Examples:
     # without parsing argv a second time (which would diverge the moment a
     # command mutates its own args).
     global _LAST_ARGS
+    if args.command == "desktop-mos":
+        # Every device runs without an assistant. The wizard's own checks read
+        # this flag to find the node on :4243 after :8080 hands over.
+        args.run_without_ai = True
     _LAST_ARGS = args
     return args
 

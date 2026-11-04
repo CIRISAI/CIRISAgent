@@ -43,6 +43,8 @@ CHUNK = 130
 PEER_DEADLINE_S = 3000.0
 #: A contact request took ~93 s to cross; a held addition crosses the same way.
 STEP_DEADLINE_S = 600.0
+#: From the wizard finishing to the client settling on the node.
+HANDOVER_DEADLINE_S = 90.0
 POLL_S = 10.0
 
 
@@ -182,11 +184,24 @@ class Device:
         )
         if not ok:
             raise RuntimeError("the setup wizard did not complete")
-        if await self.helper.wait_for_optional_element("input_username", timeout=8000):
-            if not await self.runner.test_login_flow(
-                username="qaadmin", password=self.password, run_without_ai=True
-            ):
-                raise RuntimeError("could not log in after the wizard")
+        await self.sign_in_after_handover()
+
+    async def sign_in_after_handover(self) -> None:
+        """The client follows the backend to the node, then lands on the login
+        screen or on the shell. Either can take a while: wait for one of them."""
+        deadline = time.monotonic() + HANDOVER_DEADLINE_S
+        while time.monotonic() < deadline:
+            tags = {e.test_tag for e in await self.helper.get_elements()}
+            if "btn_my_things" in tags:
+                return
+            if tags & {"input_username", "btn_local_login"}:
+                if not await self.runner.test_login_flow(
+                    username="qaadmin", password=self.password, run_without_ai=True
+                ):
+                    raise RuntimeError("could not log in after the wizard")
+                return
+            await asyncio.sleep(1)
+        raise RuntimeError("neither the login screen nor the shell appeared after the wizard")
 
     async def publish_contact_code(self) -> None:
         if not await self.helper.reach_surface("contacts"):

@@ -140,7 +140,9 @@ def test_the_helper_imports_nothing_of_ours() -> None:
 
 def test_the_windows_launcher_hands_off_and_exits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(sys, "argv", [r"C:\\py\\Scripts\\ciris-agent.exe\\__main__.py", "--adapter", "api"])
+    # pip's launcher strips ".exe" from argv[0]; __main__ still names the exe.
+    monkeypatch.setattr(sys, "argv", [r"C:\\py\\Scripts\\ciris-agent", "--adapter", "api"])
+    monkeypatch.setattr(sys.modules["__main__"], "__file__", r"C:\\py\\Scripts\\ciris-agent.exe\\__main__.py", raising=False)
     monkeypatch.delenv(cli.HANDOFF_ENV, raising=False)
     with patch("ciris_engine.cli.subprocess.Popen") as popen:
         with pytest.raises(SystemExit) as done:
@@ -164,7 +166,8 @@ def test_the_launcher_stays_when_it_should(
     monkeypatch: pytest.MonkeyPatch, platform: str, argv0: str, env: str, extra: list
 ) -> None:
     monkeypatch.setattr(sys, "platform", platform)
-    monkeypatch.setattr(sys, "argv", [argv0, *extra])
+    monkeypatch.setattr(sys, "argv", ["ciris-agent", *extra])
+    monkeypatch.setattr(sys.modules["__main__"], "__file__", argv0, raising=False)
     if env is None:
         monkeypatch.delenv(cli.HANDOFF_ENV, raising=False)
     else:

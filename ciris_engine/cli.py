@@ -84,8 +84,13 @@ def main() -> None:
 
 
 def _started_from_exe_launcher() -> bool:
-    """True under the Scripts\\ciris-agent.exe pip generated."""
-    return ".exe" in Path(sys.argv[0]).as_posix().lower()
+    """True under the Scripts\\ciris-agent.exe pip generated.
+
+    Not sys.argv[0]: pip's launcher script strips ".exe" from it. The script runs
+    from inside the exe, so __main__ is "...\\ciris-agent.exe\\__main__.py".
+    """
+    main_file = getattr(sys.modules.get("__main__"), "__file__", None) or ""
+    return ".exe" in str(main_file).lower()
 
 
 def _hand_off_from_launcher() -> None:

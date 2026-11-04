@@ -6,6 +6,7 @@ import json
 import pytest
 
 from tools.qa_runner.modules.web_ui.multi_occurrence_self import (
+    Device,
     ORDER,
     SignalFailed,
     Signals,
@@ -135,3 +136,27 @@ def test_a_joiner_helps_every_later_addition_and_the_last_helps_none():
     last = FakeDevice("ios", s2)
     asyncio.run(play(last, "1"))
     assert last.acts == ["join"]
+
+
+class SurfaceHelper:
+    def __init__(self, answer):
+        self.answer = answer
+
+    async def reach_surface(self, surface):
+        return self.answer
+
+
+class SurfaceRunner:
+    def __init__(self, answer):
+        self.helper = SurfaceHelper(answer)
+
+    async def _dump_tree(self, why):
+        pass
+
+
+def test_reach_surface_answers_none_on_success_and_why_on_failure():
+    good = Device(SurfaceRunner(None), "linux", None, "pw")
+    asyncio.run(good.identity())
+    bad = Device(SurfaceRunner("no route"), "linux", None, "pw")
+    with pytest.raises(RuntimeError, match="no route"):
+        asyncio.run(bad.identity())

@@ -115,7 +115,7 @@ concurrency:
 jobs:
   refresh:
     name: Refresh iOS substrate (${{ inputs.libs || 'all' }}) on ${{ inputs.target_branch || github.head_ref }}
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - name: Checkout ${{ inputs.target_branch }}

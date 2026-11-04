@@ -162,9 +162,10 @@ class Device:
             raise RuntimeError(f"{self.name}: could not click {tag}")
 
     async def identity(self) -> None:
-        if not await self.helper.reach_surface("identity-management"):
+        why = await self.helper.reach_surface("identity-management")
+        if why:
             await self.runner._dump_tree("identity")
-            raise RuntimeError(f"{self.name}: could not reach My Identity")
+            raise RuntimeError(f"{self.name}: could not reach My Identity: {why}")
 
     async def text(self, tag: str) -> str:
         el = await self.helper.get_element(tag)
@@ -204,8 +205,9 @@ class Device:
         raise RuntimeError("neither the login screen nor the shell appeared after the wizard")
 
     async def publish_contact_code(self) -> None:
-        if not await self.helper.reach_surface("contacts"):
-            raise RuntimeError("could not reach People for the contact code")
+        why = await self.helper.reach_surface("contacts")
+        if why:
+            raise RuntimeError(f"could not reach People for the contact code: {why}")
         await self.must_click("btn_contact_code_open")
         if not await self.helper.wait_for_element("text_contact_code", timeout=30000):
             raise RuntimeError("no contact code appeared")

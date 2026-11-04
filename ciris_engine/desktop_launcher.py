@@ -124,19 +124,31 @@ def _newest_jar(jars: List[Path]) -> Path:
 
 
 def _run_from_private_copy(jar: Path) -> Path:
-    """The JAR to run: a copy under CIRIS_HOME where the wheel can make one.
+    """The JAR to run: a copy under CIRIS_HOME, or the installed one if that fails.
 
     A JVM holds its JAR open, and on Windows pip can't move an open file, so
     running the installed JAR makes `pip install -U` fail part way through.
-    ciris-server >= 0.5.245 makes the copy; an older wheel runs it in place.
     """
-    try:
-        from ciris_server.upgrade import private_jar  # type: ignore[import-not-found, import-untyped, unused-ignore]
-    except ImportError:
-        return jar
     from ciris_engine.logic.utils.path_resolution import get_ciris_home
 
-    return Path(private_jar(jar, get_ciris_home()))
+    home = get_ciris_home()
+    try:
+        from ciris_server.upgrade import private_jar  # type: ignore[import-not-found, import-untyped, unused-ignore]
+
+        return Path(private_jar(jar, home))
+    except ImportError:
+        pass  # ciris-server < 0.5.245
+    dest = home / "runtime" / "desktop" / jar.name
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if not dest.exists() or dest.stat().st_size != jar.stat().st_size:
+            tmp = dest.with_suffix(f".{os.getpid()}.tmp")
+            shutil.copyfile(jar, tmp)
+            os.replace(tmp, dest)
+        return dest
+    except OSError as e:
+        print(f"Running the desktop app in place ({e})", file=sys.stderr)
+        return jar
 
 
 def stop_desktop_app() -> None:

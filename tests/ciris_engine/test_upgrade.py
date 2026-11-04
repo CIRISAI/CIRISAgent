@@ -136,3 +136,50 @@ def test_the_helper_imports_nothing_of_ours() -> None:
         text=True,
     )
     assert result.returncode == 0
+
+
+def test_the_windows_launcher_hands_off_and_exits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "argv", [r"C:\\py\\Scripts\\ciris-agent.exe\\__main__.py", "--adapter", "api"])
+    monkeypatch.delenv(cli.HANDOFF_ENV, raising=False)
+    with patch("ciris_engine.cli.subprocess.Popen") as popen:
+        with pytest.raises(SystemExit) as done:
+            cli._hand_off_from_launcher()
+    assert done.value.code == 0
+    command = popen.call_args.args[0]
+    assert command[1:] == ["-m", "ciris_engine.cli", "--adapter", "api"]
+    assert popen.call_args.kwargs["env"][cli.HANDOFF_ENV] == "0", "the child must not hand off again"
+
+
+@pytest.mark.parametrize(
+    "platform, argv0, env, extra",
+    [
+        ("linux", "/usr/bin/ciris-agent", None, []),
+        ("win32", r"C:\\py\\Lib\\site-packages\\ciris_engine\\cli.py", None, []),
+        ("win32", r"C:\\py\\Scripts\\ciris-agent.exe", "0", []),
+        ("win32", r"C:\\py\\Scripts\\ciris-agent.exe", None, ["--help"]),
+    ],
+)
+def test_the_launcher_stays_when_it_should(
+    monkeypatch: pytest.MonkeyPatch, platform: str, argv0: str, env: str, extra: list
+) -> None:
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(sys, "argv", [argv0, *extra])
+    if env is None:
+        monkeypatch.delenv(cli.HANDOFF_ENV, raising=False)
+    else:
+        monkeypatch.setenv(cli.HANDOFF_ENV, env)
+    with patch("ciris_engine.cli.subprocess.Popen") as popen:
+        cli._hand_off_from_launcher()
+    popen.assert_not_called()
+
+
+def test_the_jar_runs_from_a_copy_outside_the_install(tmp_path: Path) -> None:
+    jar = tmp_path / "site" / "CIRIS-windows-x64-1.5.237.jar"
+    jar.parent.mkdir()
+    jar.write_bytes(b"jar")
+    home = tmp_path / "home"
+    with patch("ciris_engine.logic.utils.path_resolution.get_ciris_home", return_value=home):
+        copy = desktop_launcher._run_from_private_copy(jar)
+    assert copy.read_bytes() == b"jar"
+    assert home in copy.parents and jar.parent not in copy.parents

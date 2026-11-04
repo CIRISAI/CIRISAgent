@@ -23,6 +23,9 @@ from ciris_engine.logic.utils import win_console as _win_console  # noqa: E402
 
 _win_console.setup()
 
+#: Set to 0 to keep ciris-agent.exe in the foreground on Windows.
+HANDOFF_ENV = "CIRIS_LAUNCHER_HANDOFF"
+
 
 def main() -> None:
     """
@@ -36,6 +39,8 @@ def main() -> None:
         from ciris_engine.upgrade import run_upgrade
 
         sys.exit(run_upgrade(sys.argv[2:]))
+
+    _hand_off_from_launcher()
 
     # Check if user wants server/headless mode
     server_mode = False
@@ -76,6 +81,36 @@ def main() -> None:
         # Start server then launch desktop app
         _run_desktop_mode()
 
+
+
+def _started_from_exe_launcher() -> bool:
+    """True under the Scripts\\ciris-agent.exe pip generated."""
+    return ".exe" in Path(sys.argv[0]).as_posix().lower()
+
+
+def _hand_off_from_launcher() -> None:
+    """On Windows, keep running without ciris-agent.exe.
+
+    The launcher stays alive as long as what it started, and pip can't replace a
+    running launcher, so `pip install -U` under a running CIRIS failed (WinError 32)
+    after it had already replaced the client and the server, and left an agent
+    that couldn't import. Stopping when pip starts doesn't help: pip reaches the
+    launcher within seconds (8 s in run 41856049056), faster than a clean stop.
+    So nothing waits on the launcher: this restarts under the plain interpreter,
+    on the same console, and lets the launcher exit.
+
+    CIRIS_LAUNCHER_HANDOFF=0 keeps it in the foreground, for a service wrapper
+    that watches the process it started.
+    """
+    if sys.platform != "win32" or os.environ.get(HANDOFF_ENV, "1").strip() == "0":
+        return
+    if not _started_from_exe_launcher() or any(a in ("--help", "-h", "--version") for a in sys.argv[1:]):
+        return
+    env = _win_console.subprocess_env()
+    env[HANDOFF_ENV] = "0"
+    child = subprocess.Popen([sys.executable, "-m", "ciris_engine.cli", *sys.argv[1:]], env=env)
+    print(f"CIRIS is running (pid {child.pid}). This window shows its output; close it or press Ctrl+C to stop.")
+    sys.exit(0)
 
 
 def _normalize_server_flags() -> None:

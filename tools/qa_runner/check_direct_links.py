@@ -4,7 +4,7 @@
 
 Reads each node's log directory after a cross-NAT run (cross-nat-pair.yml) and
 requires one link that BOTH sides report as punched, established after that side's
-contact went mutual, with no ChannelExhausted and no stall-guard close. One side
+contact was accepted, with no ChannelExhausted and no stall-guard close. One side
 ESTABLISHED and the other not is the one-sided move that stranded a live chat.
 """
 
@@ -20,7 +20,8 @@ ESTABLISHED = re.compile(r"direct link ESTABLISHED|direct link: established, lin
 LINK = re.compile(r"\blink=\"?([0-9a-f]{16,})")
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?")
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
-MUTUAL = "CONTACT mutual"
+#: The requester logs mutual; the side that accepts logs accept.
+ACCEPTED = re.compile(r"CONTACT (?:accept|mutual)\b")
 LOST = "direct link LOST"
 STALL = "CIRISEdge#926"
 EXHAUSTED = re.compile(r"ChannelExhausted|channel-exhausted")
@@ -29,7 +30,7 @@ EXHAUSTED = re.compile(r"ChannelExhausted|channel-exhausted")
 @dataclass
 class NodeView:
     established: Dict[str, str] = field(default_factory=dict)
-    first_mutual: str = ""
+    first_accepted: str = ""
     lost: List[str] = field(default_factory=list)
     stalls: List[str] = field(default_factory=list)
     exhausted: List[str] = field(default_factory=list)
@@ -41,8 +42,8 @@ def read_node(lines: Iterable[str]) -> NodeView:
         line = ANSI.sub("", raw)
         when = TIME.search(line)
         stamp = when.group(0) if when else ""
-        if MUTUAL in line and not view.first_mutual:
-            view.first_mutual = stamp
+        if ACCEPTED.search(line) and not view.first_accepted:
+            view.first_accepted = stamp
         if ESTABLISHED.search(line):
             found = LINK.search(line)
             if found:
@@ -67,8 +68,8 @@ def verdict(a: NodeView, b: NodeView) -> List[str]:
         )
     for link in shared:
         for name, view in (("a", a), ("b", b)):
-            if not view.first_mutual or view.established[link] < view.first_mutual:
-                problems.append(f"node {name} went direct on {link} before the contact was mutual")
+            if not view.first_accepted or view.established[link] < view.first_accepted:
+                problems.append(f"node {name} went direct on {link} before the contact was accepted")
     for name, view in (("a", a), ("b", b)):
         problems += [f"node {name} ChannelExhausted: {x}" for x in view.exhausted[:3]]
         problems += [f"node {name} stall-guard close: {x}" for x in view.stalls[:3]]
@@ -84,12 +85,12 @@ def log_lines(directory: Path) -> Iterable[str]:
 def main(argv: Sequence[str]) -> int:
     a, b = (read_node(log_lines(Path(d))) for d in argv[:2])
     for name, view in (("a", a), ("b", b)):
-        print(f"node {name}: mutual {view.first_mutual or 'never'}; established {view.established or 'none'}")
+        print(f"node {name}: accepted {view.first_accepted or 'never'}; established {view.established or 'none'}")
     problems = verdict(a, b)
     for problem in problems:
         print(f"FAIL: {problem}")
     if not problems:
-        print("PASS: both sides on one punched link, after mutual, no exhaustion or stall")
+        print("PASS: both sides on one punched link, after acceptance, no exhaustion or stall")
     return 1 if problems else 0
 
 

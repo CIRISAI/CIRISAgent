@@ -25,7 +25,12 @@ def test_no_direct_link_fails() -> None:
 
 def test_going_direct_before_mutual_fails() -> None:
     late = "2026-11-04T10:05:00Z INFO contact_trace: CONTACT mutual owner=a"
-    assert any("before the contact was mutual" in p for p in verdict(read_node([EST, late]), read_node([MUTUAL, EST])))
+    assert any("before the contact was accepted" in p for p in verdict(read_node([EST, late]), read_node([MUTUAL, EST])))
+
+
+def test_the_accepting_side_logs_accept_not_mutual() -> None:
+    accept = "2026-11-04T10:00:00Z INFO contact_trace: CONTACT accept owner=b"
+    assert verdict(read_node([MUTUAL, EST]), read_node([accept, EST])) == []
 
 
 def test_exhaustion_a_stall_close_or_a_lost_link_fails() -> None:

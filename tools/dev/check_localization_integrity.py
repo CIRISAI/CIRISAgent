@@ -344,8 +344,10 @@ def check_placeholders(lang: str, loc: Dict[str, str], en: Dict[str, str], allow
         if key in allow:
             continue
         # 1. Corrupt token contents — the placeholder name itself was translated.
+        # A token that reads the same in English wasn't translated: it's literal
+        # sample text, like the "{…}" in a JSON example.
         for token in _PLACEHOLDER.findall(value):
-            if not _VALID_TOKEN.fullmatch(token):
+            if not _VALID_TOKEN.fullmatch(token) and f"{{{token}}}" not in en.get(key, ""):
                 bad = "".join(ch for ch in token if not _VALID_TOKEN.fullmatch(ch))
                 out.append(
                     Finding(

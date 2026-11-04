@@ -194,13 +194,12 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
         _provision = getattr(_cs_prov, "provision_node_identity", None)
         if _provision is None:
-            # <0.5.189. The edge then carries the ACTOR key's transport identity,
-            # which is the pre-split behaviour: safe, but the lightnet door is
-            # walked by an agency-bearing key. Say so rather than pass silently.
-            logger.warning(
-                "[NODE-KEY] ciris_server.provision_node_identity absent (<0.5.189) — "
-                "this edge will carry the ACTOR key's transport identity. CC 3.4.7.3 "
-                "wants a node-only key on that door; upgrade the substrate to split them."
+            # Refused, not warned: under persist v61 an agent-key transport publishes
+            # no route, so this node would run and nothing could reach it.
+            raise RuntimeError(
+                "ciris_server.provision_node_identity is missing: this substrate can't "
+                "split the node key from the agent key (CC 3.4.7.3), and an agent-key "
+                "transport publishes no route. Upgrade ciris-server."
             )
         else:
             # actor_key_id is deliberately omitted — see CIRISAgent#1119. Passing it

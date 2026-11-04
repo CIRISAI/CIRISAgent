@@ -249,6 +249,14 @@ class Device:
 
     # ── a joining device ─────────────────────────────────────────────────────
 
+    async def type_into(self, tag: str, text: str) -> None:
+        """The field below the fold, or not composed yet, on a phone's screen."""
+        await self.helper.wait_for_optional_element(tag, timeout=30000)
+        await self.helper.scroll_into_view(tag)
+        if not await self.helper.input_text(tag, text):
+            await self.runner._dump_tree(f"could not fill {tag}")
+            raise RuntimeError(f"{self.name}: could not fill {tag}")
+
     async def open_wizard(self) -> None:
         """A first run can start at the Login chooser, as the creator's wizard
         finds too: take the local path until the wizard's first question shows."""
@@ -269,10 +277,8 @@ class Device:
         self.log("wizard: adding this device to the identity")
         await self.open_wizard()
         await self.must_click("btn_setup_add_this_device", 60000)
-        if not await self.helper.input_text("input_add_device_name", f"qa-{self.name}"):
-            raise RuntimeError("could not name this device")
-        if not await self.helper.input_text("input_add_device_contact", code):
-            raise RuntimeError("could not enter the contact code")
+        await self.type_into("input_add_device_name", f"qa-{self.name}")
+        await self.type_into("input_add_device_contact", code)
         await self.must_click("btn_add_device_send")
         if not await self.helper.wait_for_element("text_add_device_match_code", timeout=int(STEP_DEADLINE_S * 1000)):
             await self.runner._dump_tree("match code")

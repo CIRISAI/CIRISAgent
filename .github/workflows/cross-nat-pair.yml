@@ -105,6 +105,17 @@ jobs:
           cat "$RUNNER_TEMP/mesh/$NAME/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           exit $rc
 
+      - name: Wait for the direct link
+        if: always() && steps.boot.outcome == 'success'
+        run: |
+          # Proposed only after the contact is accepted, then retried on a backoff.
+          deadline=$((SECONDS + 300))
+          until sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/mesh/$NAME/ciris/logs/"ciris-server.log.* 2>/dev/null \
+                | grep -q -E 'direct link ESTABLISHED|direct link: established'; do
+            [ $SECONDS -lt $deadline ] || { echo "no direct link on $NAME within 300 s"; break; }
+            sleep 10
+          done
+
       - name: Trace reaches the canonical
         if: always() && steps.boot.outcome == 'success'
         run: |
@@ -134,3 +145,16 @@ jobs:
         with:
           name: results-${{ matrix.name }}
           path: results/
+
+  direct-link:
+    name: Direct link, both sides
+    needs: node
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: logs
+      - name: One punched link on both sides, after mutual
+        run: PYTHONPATH=. python3 -I tools/qa_runner/check_direct_links.py logs/results-node-a/logs logs/results-node-b/logs

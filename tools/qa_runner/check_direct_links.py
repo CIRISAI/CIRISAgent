@@ -1,0 +1,97 @@
+"""Did two nodes go direct, both ways, and only after they accepted each other?
+
+    python -m tools.qa_runner.check_direct_links <logs-a> <logs-b>     # exit 1 on failure
+
+Reads each node's log directory after a cross-NAT run (cross-nat-pair.yml) and
+requires one link that BOTH sides report as punched, established after that side's
+contact went mutual, with no ChannelExhausted and no stall-guard close. One side
+ESTABLISHED and the other not is the one-sided move that stranded a live chat.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Dict, Iterable, List, Sequence
+
+ESTABLISHED = re.compile(r"direct link ESTABLISHED|direct link: established, link moved onto the direct interface")
+LINK = re.compile(r"\blink=\"?([0-9a-f]{16,})")
+TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?")
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+MUTUAL = "CONTACT mutual"
+LOST = "direct link LOST"
+STALL = "CIRISEdge#926"
+EXHAUSTED = re.compile(r"ChannelExhausted|channel-exhausted")
+
+
+@dataclass
+class NodeView:
+    established: Dict[str, str] = field(default_factory=dict)
+    first_mutual: str = ""
+    lost: List[str] = field(default_factory=list)
+    stalls: List[str] = field(default_factory=list)
+    exhausted: List[str] = field(default_factory=list)
+
+
+def read_node(lines: Iterable[str]) -> NodeView:
+    view = NodeView()
+    for raw in lines:
+        line = ANSI.sub("", raw)
+        when = TIME.search(line)
+        stamp = when.group(0) if when else ""
+        if MUTUAL in line and not view.first_mutual:
+            view.first_mutual = stamp
+        if ESTABLISHED.search(line):
+            found = LINK.search(line)
+            if found:
+                view.established.setdefault(found.group(1), stamp)
+        if LOST in line:
+            view.lost.append(line.strip()[:200])
+        if STALL in line:
+            view.stalls.append(line.strip()[:200])
+        if EXHAUSTED.search(line):
+            view.exhausted.append(line.strip()[:200])
+    return view
+
+
+def verdict(a: NodeView, b: NodeView) -> List[str]:
+    """What's wrong; empty means the direct link is proven."""
+    problems: List[str] = []
+    shared = sorted(set(a.established) & set(b.established))
+    if not shared:
+        one_sided = sorted(set(a.established) ^ set(b.established))
+        problems.append(
+            f"one-sided move: {one_sided} established on one side only" if one_sided else "no direct link established"
+        )
+    for link in shared:
+        for name, view in (("a", a), ("b", b)):
+            if not view.first_mutual or view.established[link] < view.first_mutual:
+                problems.append(f"node {name} went direct on {link} before the contact was mutual")
+    for name, view in (("a", a), ("b", b)):
+        problems += [f"node {name} ChannelExhausted: {x}" for x in view.exhausted[:3]]
+        problems += [f"node {name} stall-guard close: {x}" for x in view.stalls[:3]]
+        problems += [f"node {name} lost the direct link: {x}" for x in view.lost[:3]]
+    return problems
+
+
+def log_lines(directory: Path) -> Iterable[str]:
+    for path in sorted(directory.glob("ciris-server.log.*")) + sorted(directory.glob("ciris_agent_*.log")):
+        yield from path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+
+def main(argv: Sequence[str]) -> int:
+    a, b = (read_node(log_lines(Path(d))) for d in argv[:2])
+    for name, view in (("a", a), ("b", b)):
+        print(f"node {name}: mutual {view.first_mutual or 'never'}; established {view.established or 'none'}")
+    problems = verdict(a, b)
+    for problem in problems:
+        print(f"FAIL: {problem}")
+    if not problems:
+        print("PASS: both sides on one punched link, after mutual, no exhaustion or stall")
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

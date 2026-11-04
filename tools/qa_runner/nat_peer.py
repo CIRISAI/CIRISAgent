@@ -503,11 +503,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     d = sub.add_parser("drive", help="dispatch node-c in CI and run the local halves against it")
     d.add_argument("--node", action="append", required=True)
     d.add_argument("--server-tag", default="")
-    d.add_argument("--ref", default="fix/qa-harness-announce")
+    d.add_argument("--ref", default="main")
     d.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-peer-{int(time.time())}")
     pr = sub.add_parser("pair", help="both nodes in CI, each on its own runner (cross-nat-pair.yml)")
     pr.add_argument("--server-tag", default="")
-    pr.add_argument("--ref", default="fix/qa-harness-announce")
+    pr.add_argument("--ref", default="main")
     pr.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-pair-{int(time.time())}")
     args = ap.parse_args(argv)
 

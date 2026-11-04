@@ -45,6 +45,8 @@ PEER_DEADLINE_S = 3000.0
 STEP_DEADLINE_S = 600.0
 #: From the wizard finishing to the client settling on the node.
 HANDOVER_DEADLINE_S = 90.0
+#: A cold device reaching the wizard's first question.
+WIZARD_DEADLINE_S = 180.0
 POLL_S = 10.0
 
 
@@ -247,10 +249,25 @@ class Device:
 
     # ── a joining device ─────────────────────────────────────────────────────
 
+    async def open_wizard(self) -> None:
+        """A first run can start at the Login chooser, as the creator's wizard
+        finds too: take the local path until the wizard's first question shows."""
+        end = time.monotonic() + WIZARD_DEADLINE_S
+        while time.monotonic() < end:
+            tags = {e.test_tag for e in await self.helper.get_elements()}
+            if "btn_setup_add_this_device" in tags:
+                return
+            if "btn_local_login" in tags:
+                await self.helper.click("btn_local_login")
+            await asyncio.sleep(1)
+        await self.runner._dump_tree("open wizard")
+        raise RuntimeError("the wizard's first question never appeared")
+
     async def join(self) -> None:
         await self.signals.wait(f"window/{self.name}", PEER_DEADLINE_S)
         code = await self.signals.wait_text("code", 60)
         self.log("wizard: adding this device to the identity")
+        await self.open_wizard()
         await self.must_click("btn_setup_add_this_device", 60000)
         if not await self.helper.input_text("input_add_device_name", f"qa-{self.name}"):
             raise RuntimeError("could not name this device")

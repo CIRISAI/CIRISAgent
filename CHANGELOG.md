@@ -5,6 +5,16 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.2-stable] - 2026-11-04
+
+### Fixed
+
+- **The app no longer shows raw string keys.** 2.19.0 and 2.19.1 rendered names like `mobile.owned_agents_claim` on every platform, including the device-claim screens. The app reads the agent's string bundle, and 417 keys that ciris-client 0.5.237 added were never merged into it. They are now merged in all 29 locales and every platform copy. The merge only adds: no existing string changed.
+
+### Added
+
+- **`tools/dev/check_client_strings.py`** runs in the build and fails if any string in the pinned ciris-client is missing from the bundle. It failed on the 2.19.1 tree with 12,093 missing entries (417 keys across 29 locales) and passes here. `--merge` adds what's missing.
+
 ## [2.19.1-stable] - 2026-11-02
 
 ### Fixed

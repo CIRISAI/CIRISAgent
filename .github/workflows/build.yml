@@ -52,6 +52,14 @@ jobs:
       - name: Localization guard (reference coverage + mirror parity)
         run: python tools/dev/check_localization_sync.py
 
+      # The app reads the agent's bundle, not the client library's, so a key the
+      # pinned ciris-client adds renders raw until it's merged here. 2.19.0 and
+      # 2.19.1 shipped 417 raw keys this way; the guard above can't see it.
+      - name: Pinned client strings are all in the bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/dev/check_client_strings.py
+
       # Value-integrity ratchet. check_localization_integrity has existed since
       # #952 but nothing ever invoked it, which is how 1116 errors sat in the
       # corpus through green run after green run — the tool was treated as the

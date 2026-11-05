@@ -84,7 +84,18 @@ class Signals:
 
     @staticmethod
     def _run_gh(args: List[str]) -> str:
-        return subprocess.run(["gh", *args], check=True, capture_output=True, text=True, timeout=60).stdout
+        # One failed poll of GitHub must not end a five-device run. Blocks the
+        # loop while it backs off, as the call itself does.
+        for wait in (2, 5, 15, 30, None):
+            try:
+                return subprocess.run(
+                    ["gh", *args], check=True, capture_output=True, text=True, timeout=90
+                ).stdout
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                if wait is None:
+                    raise
+                time.sleep(wait)
+        raise AssertionError("unreachable")
 
     def put(self, key: str, value: str = "yes") -> None:
         self._gh(

@@ -788,7 +788,7 @@ class TestWakeupProcessorMultiOccurrenceCoordination:
         this occurrence should only store the root task and not create step tasks.
         """
         # Set up multi-occurrence mode - this is critical for the early return path
-        wakeup_processor.occurrence_id = "occurrence-2"  # Not "default"
+        wakeup_processor.agent_occurrence_id = "occurrence-2"  # Not "default"
 
         mock_is_completed.return_value = False
 
@@ -1481,3 +1481,31 @@ class TestWakeupProcessorProcessingThoughts:
         assert result["status"] == "completed"
         # Should not create any thoughts for completed tasks
         mock_persistence.add_thought.assert_not_called()
+
+
+class TestOccurrenceIdentity:
+    """#1048: a non-default occurrence knows who it is, so it monitors instead of claiming."""
+
+    def test_agent_processor_hands_its_occurrence_to_wakeup(self):
+        import inspect
+
+        from ciris_engine.logic.processors.core import main_processor
+
+        source = inspect.getsource(main_processor.AgentProcessor.__init__)
+        call = source[source.index("WakeupProcessor(") : source.index("self.work_processor")]
+        assert "agent_occurrence_id=agent_occurrence_id" in call
+
+    def test_constructor_keeps_the_occurrence(self, mock_time_service, mock_services, mock_auth_service):
+        from ciris_engine.logic.processors.states.wakeup_processor import WakeupProcessor
+
+        processor = WakeupProcessor(
+            config_accessor=Mock(),
+            thought_processor=Mock(),
+            action_dispatcher=Mock(),
+            services=mock_services,
+            startup_channel_id="test_channel",
+            time_service=mock_time_service,
+            auth_service=mock_auth_service,
+            agent_occurrence_id="002",
+        )
+        assert processor.agent_occurrence_id == "002"

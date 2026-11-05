@@ -126,6 +126,7 @@ class AgentProcessor:
             services=services,
             startup_channel_id=startup_channel_id,
             time_service=time_service,
+            agent_occurrence_id=agent_occurrence_id,
         )
 
         self.work_processor = WorkProcessor(

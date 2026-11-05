@@ -3827,7 +3827,40 @@
     "add_device_stopped_retrying": "已停止尝试。没有任何请求到达您的其他设备。",
     "add_device_withdraw_here": "停止等待，并丢弃此请求的密钥以及已收到的批准。",
     "add_device_withdraw_other": "该设备会被告知放弃此请求；如果它已批准，则撤销其批准。如果无法联系到它，该请求将在 15 分钟后在那里过期。",
-    "add_device_withdraw_held": "不会有任何设备加入。您可以重新选择，或发送新请求。"
+    "add_device_withdraw_held": "不会有任何设备加入。您可以重新选择，或发送新请求。",
+    "my_devices_claim": "认领设备",
+    "chat_unopened_withheld_by_moderation": "此房间的管理员标记了此消息，因此在您选择查看之前，它将保持隐藏。",
+    "chat_attach": "附加",
+    "chat_attached": "已附加：{name}",
+    "chat_attachment_remove": "移除",
+    "chat_attachment_open": "打开附加文件",
+    "files_withheld": "已被管理员隐藏",
+    "files_act_revealed": "现在您可以查看它了。",
+    "files_pick_hint": "选择一个文件进行附加，或先添加一个文件。",
+    "moderation_reveal": "显示",
+    "moderation_reveal_title": "要查看此项内容吗？",
+    "moderation_reveal_fact_flag": "标记为",
+    "moderation_reveal_fact_effect": "将发生的变化",
+    "moderation_reveal_effect": "它会在您自己的设备上为您打开。不会因此让其他任何人看到它。",
+    "moderation_reveal_fact_signer": "签名者",
+    "moderation_reveal_signer": "您自己的密钥，作为您同意查看此单项内容的凭证",
+    "moderation_note_flagged": "管理员将此标记为{flag}。",
+    "moderation_note_revealed": "管理员将此标记为{flag}。您选择了查看它。",
+    "moderation_note_cleared": "管理员对此的标记已被清除。",
+    "moderation_appeal_filed": "申诉正在等待裁决。",
+    "moderation_appeal_upheld": "该标记在申诉中被维持。",
+    "moderation_appeal_partial": "该标记在申诉中被部分维持。",
+    "moderation_appeal_reversed": "该标记在申诉中被撤销。",
+    "local_community_body": "本地社区基于地理位置：即您附近的人。仅当您选择共享位置并且当前正在共享时，此功能才适用。",
+    "local_community_not_on_this_node": "此节点尚无法共享您的位置，因此本地房间目前不与地点绑定，由您选择谁可以加入。您的位置信息未被共享。",
+    "setup_template_ally": "Ally，个人助手。对于个人安装而言，这是正确的选择。",
+    "setup_template_chosen": "从 {name} 模板开始。",
+    "setup_template_provisioned": "{name}，由您所属组织的 Portal 记录设置。",
+    "community_section_title_local": "您的本地房间",
+    "community_section_body_local": "面向您附近的人的本地房间。目前，房间仅在创建它的设备上显示为本地。其他成员会在“社区”下看到它。",
+    "community_empty_local": "您还没有任何本地房间。创建一个房间，并邀请您附近的人。",
+    "community_create_open_local": "创建本地房间",
+    "community_create_title_local": "创建本地房间"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4727,12 @@
       "community_chats": "聊天室",
       "affiliations_chats": "聊天室",
       "node_self": "自身状态",
-      "owned_agents": "您拥有的智能体"
+      "owned_agents": "您拥有的智能体",
+      "my_devices": "我的设备",
+      "layer_communities": "社区",
+      "layer_affiliations": "隶属关系",
+      "local_chats": "本地房间",
+      "local_roster": "本地成员"
     },
     "circle": {
       "agent": "仅我本人",
@@ -4745,7 +4783,8 @@
       "files_agent": "这里还没有内容。一切都从这里开始，且这里的内容不会被公开。",
       "decisions_agent": "这里没有可以共同决策的人。决策从“家族”开始。",
       "decisions_family": "家族通过交谈做出决策。这里没有需要投票的事项。",
-      "chats_agent": "此节点上没有智能体，因此这里没有可以交流的对象。设置一个后，您与它的对话记录将显示在这里。"
+      "chats_agent": "此节点上没有智能体，因此这里没有可以交流的对象。设置一个后，您与它的对话记录将显示在这里。",
+      "files_local": "文件保存在各个房间中。打开一个本地房间以查看其文件。"
     },
     "my_things": "我的内容",
     "stop_everything": "停止一切",
@@ -5398,7 +5437,11 @@
       "error": "无法提出此事：{detail}。未提交任何内容。",
       "not_on_this_node": "本节点尚不能接受社区提议：它没有 /v1/safety/reports 路由（需要 CIRISServer#665）。未提交任何内容。如果您持有管理职责，请改在“安全 > 管理”下提交。",
       "refused_minor": "您在本节点上的年龄记录显示为未成年人，因此此事需通过您的监护人提出，而非直接提出。未提交任何内容；请让您的监护人代为提出。"
-    }
+    },
+    "item_not_in_room": "那不是此房间中的消息或文件",
+    "not_flagged": "此房间的管理员未标记该项内容 — 没有可显示的内容",
+    "reveal_failed": "无法记录查看同意，因此该项内容仍保持隐藏。",
+    "unknown_action": "房间中的项目可通过 reveal 来显示"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "此消息已被撤回或撤销",
     "not_author": "只有撰写该消息的人才能取代、撤回或撤销它",
     "reason_invalid": "该原因代码不适用于此修订",
-    "unknown_revision_op": "消息的修订方式为取代、撤回或撤销"
+    "unknown_revision_op": "消息的修订方式为取代、撤回或撤销",
+    "attachment_not_in_room": "该文件不在此房间中。请先将其分享到房间中，然后再发送。"
   },
   "contacts": {
     "awaiting_consent": "对方尚未接受。这一步取决于对方，因此重试不会改变任何结果。",
@@ -6020,7 +6064,9 @@
     "too_large_for_whole_read": "此文件过大，无法整块读取，必须以流式方式读取。",
     "withdraw_failed": "文件撤回失败。请重试。",
     "withdrawn": "其作者已撤回此文件。这些字节已不再在任何地方提供。",
-    "awaiting_key": "其字节已在此，但本设备用于解密它们的密钥尚未到达。它会自行送达；请稍后重试。"
+    "awaiting_key": "其字节已在此，但本设备用于解密它们的密钥尚未到达。它会自行送达；请稍后重试。",
+    "withheld_by_moderation": "此房间的管理员标记了此文件，因此在您选择查看之前，它将保持隐藏。",
+    "flagged_by_moderation": "此房间的管理员标记了此文件；在标记有效期间，它仍保留在房间中"
   },
   "notes": {
     "author_signer_unavailable": "此节点当前无法以您的身份签名，因此笔记未能写入。",

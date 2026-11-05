@@ -3827,7 +3827,40 @@
     "contacts_pending_refused": "Non aggiunto: {why}",
     "contacts_pending_retry": "Riprova",
     "contacts_pending_forget": "Dimentica",
-    "approve_device_desc": "Sul nuovo dispositivo, scegli Aggiungi questo dispositivo a un CIRIS ID esistente. Mostrerà un numero: approvalo qui solo se i numeri corrispondono."
+    "approve_device_desc": "Sul nuovo dispositivo, scegli Aggiungi questo dispositivo a un CIRIS ID esistente. Mostrerà un numero: approvalo qui solo se i numeri corrispondono.",
+    "files_pick_hint": "Scegli un file da allegare, o aggiungine prima uno.",
+    "moderation_reveal": "Rivela",
+    "moderation_reveal_title": "Vedere questo elemento?",
+    "moderation_reveal_fact_flag": "Segnalato come",
+    "moderation_reveal_fact_effect": "Cosa cambia",
+    "moderation_reveal_effect": "Si apre per te, sui tuoi dispositivi. Nessun altro lo vede per questo.",
+    "moderation_reveal_fact_signer": "Firmato da",
+    "moderation_reveal_signer": "La tua chiave, come tuo consenso a visualizzare questo singolo elemento",
+    "moderation_note_flagged": "Un moderatore ha segnalato questo come {flag}.",
+    "moderation_note_revealed": "Un moderatore ha segnalato questo come {flag}. Hai scelto di vederlo.",
+    "moderation_note_cleared": "La segnalazione di un moderatore su questo è stata revocata.",
+    "moderation_appeal_filed": "Un ricorso è in attesa di una decisione.",
+    "moderation_appeal_upheld": "La segnalazione è stata confermata in appello.",
+    "moderation_appeal_partial": "La segnalazione è stata parzialmente confermata in appello.",
+    "moderation_appeal_reversed": "La segnalazione è stata ribaltata in appello.",
+    "local_community_body": "La comunità locale è geografica: le persone vicino a te. Si applica solo se hai scelto di condividere la tua posizione e la stai condividendo in questo momento.",
+    "local_community_not_on_this_node": "Questo nodo non può ancora condividere la tua posizione, quindi per ora una stanza locale non è legata a un luogo e sei tu a scegliere chi vi partecipa. La tua posizione non viene condivisa.",
+    "setup_template_ally": "Ally, un assistente personale. È la scelta giusta per un'installazione personale.",
+    "setup_template_chosen": "Si parte dal modello {name}.",
+    "setup_template_provisioned": "{name}, impostato dal record Portal della tua organizzazione.",
+    "community_section_title_local": "Le tue stanze locali",
+    "community_section_body_local": "Stanze per le persone vicino a te. Per ora, una stanza appare come locale solo sul dispositivo che l'ha fondata. Gli altri membri la vedono sotto Comunità.",
+    "community_empty_local": "Non hai ancora nessuna stanza locale. Fondane una e invita le persone vicino a te.",
+    "community_create_open_local": "Fonda una stanza locale",
+    "community_create_title_local": "Fonda una stanza locale",
+    "my_devices_claim": "Rivendica un dispositivo",
+    "chat_unopened_withheld_by_moderation": "Un moderatore di questa stanza ha segnalato questo messaggio, quindi resta nascosto finché non scegli di vederlo.",
+    "chat_attach": "Allega",
+    "chat_attached": "Allegato: {name}",
+    "chat_attachment_remove": "Rimuovi",
+    "chat_attachment_open": "Apri il file allegato",
+    "files_withheld": "Trattenuto da un moderatore",
+    "files_act_revealed": "Ora è aperto per te."
   },
   "prompts": {
     "dma": {
@@ -4721,7 +4754,12 @@
       "community_chats": "Stanze",
       "affiliations_chats": "Stanze",
       "node_self": "La propria condizione",
-      "owned_agents": "Agenti che possiedi"
+      "owned_agents": "Agenti che possiedi",
+      "my_devices": "I miei dispositivi",
+      "layer_communities": "Comunità",
+      "layer_affiliations": "Affiliazioni",
+      "local_chats": "Stanze locali",
+      "local_roster": "Membri locali"
     },
     "circle": {
       "agent": "Solo io",
@@ -4772,7 +4810,8 @@
       "files_agent": "Ancora nulla qui. È qui che tutto inizia, e nulla qui viene pubblicizzato.",
       "decisions_agent": "Non c'è nessuno qui con cui decidere. Le decisioni iniziano in Famiglia.",
       "decisions_family": "Una famiglia decide parlando. Non c'è nulla su cui votare qui.",
-      "chats_agent": "Non c'è alcun agente su questo nodo, quindi non c'è nessuno con cui parlare qui. Configurane uno e le tue conversazioni con lui saranno qui."
+      "chats_agent": "Non c'è alcun agente su questo nodo, quindi non c'è nessuno con cui parlare qui. Configurane uno e le tue conversazioni con lui saranno qui.",
+      "files_local": "I file risiedono in ciascuna stanza. Apri una stanza locale per vedere i suoi file."
     },
     "my_things": "Le mie cose",
     "stop_everything": "Ferma tutto",
@@ -5425,7 +5464,11 @@
       "error": "Non è stato possibile sollevare la questione: {detail}. Non è stato depositato nulla.",
       "not_on_this_node": "Questo nodo non può ancora accettare una proposta della comunità: non dispone di una rotta /v1/safety/reports (richiede CIRISServer#665). Non è stato depositato nulla. Se detieni un incarico di moderazione, deposita invece sotto Sicurezza > Moderazione.",
       "refused_minor": "La tua registrazione dell'età su questo nodo indica minorenne, quindi questa viene sollevata tramite il tuo tutore, non direttamente. Non è stato depositato nulla; chiedi al tuo tutore di sollevarla."
-    }
+    },
+    "item_not_in_room": "non è un messaggio o un file in questa stanza",
+    "not_flagged": "nessun moderatore di questa stanza ha segnalato quell'elemento — non c'è nulla da rivelare",
+    "reveal_failed": "Il consenso a visualizzare non ha potuto essere registrato, quindi l'elemento resta nascosto.",
+    "unknown_action": "un elemento in una stanza viene rivelato con reveal"
   },
   "operator": {
     "carriage": {
@@ -5917,7 +5960,8 @@
     "message_not_live": "questo messaggio è già stato ritirato o ritrattato",
     "not_author": "solo la persona che ha scritto un messaggio può sostituirlo, ritirarlo o ritrattarlo",
     "reason_invalid": "quel codice motivo non si applica a questa revisione",
-    "unknown_revision_op": "un messaggio viene revisionato tramite sostituzione, ritiro o ritrattazione"
+    "unknown_revision_op": "un messaggio viene revisionato tramite sostituzione, ritiro o ritrattazione",
+    "attachment_not_in_room": "Quel file non è in questa stanza. Condividilo prima nella stanza, poi invialo."
   },
   "contacts": {
     "awaiting_consent": "Non ha ancora accettato. Questo dipende da una persona, quindi riprovare non cambierà nulla.",
@@ -6047,7 +6091,9 @@
     "too_large_for_whole_read": "Questo file è troppo grande per essere letto in un'unica parte. Deve essere trasmesso in streaming.",
     "withdraw_failed": "Non è stato possibile ritirare il file. Riprova.",
     "withdrawn": "Il suo autore ha ritirato questo file. I byte non vengono più forniti da nessuna parte.",
-    "awaiting_key": "I suoi byte sono qui, ma la chiave di questo dispositivo per essi non è ancora arrivata. Arriverà da sola; riprova a breve."
+    "awaiting_key": "I suoi byte sono qui, ma la chiave di questo dispositivo per essi non è ancora arrivata. Arriverà da sola; riprova a breve.",
+    "withheld_by_moderation": "Un moderatore di questa stanza ha segnalato questo file, quindi resta nascosto finché non scegli di vederlo.",
+    "flagged_by_moderation": "un moderatore di questa stanza ha segnalato questo file; resta nella stanza finché la segnalazione è valida"
   },
   "notes": {
     "author_signer_unavailable": "Questo nodo non può firmare come te in questo momento, quindi la nota non è stata scritta.",

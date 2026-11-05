@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`ciris-agent upgrade [--to VERSION] [--no-restart]`** closes CIRIS, upgrades it from a helper outside the install, and starts it again. Progress goes to `logs/upgrade.log`.
 
+### Changed
+
+- **ciris-client 0.5.238.** My keys, My devices and Agents you own are now separate cards. Chats can take attachments where the room allows them, and flagged messages and files show what the server says about them. Ally is the setup default. Desktop close now force-stops after 8 seconds if a shutdown hook hangs, though the cause of that hang isn't confirmed. Signing in works when the browser is slow to reach `/login`. Known issue: add-device can time out at 30 seconds, fixed in client 0.5.239.
+
 ## [2.19.2-stable] - 2026-11-04
 
 ### Fixed

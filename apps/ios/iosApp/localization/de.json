@@ -3827,7 +3827,40 @@
     "contacts_pending_stopped": "Anfrage vorerst gestoppt. Aktualisieren Sie, oder tippen Sie auf „Erneut versuchen“.",
     "contacts_pending_refused": "Nicht hinzugefügt: {why}",
     "contacts_pending_retry": "Erneut versuchen",
-    "contacts_pending_forget": "Vergessen"
+    "contacts_pending_forget": "Vergessen",
+    "my_devices_claim": "Ein Gerät beanspruchen",
+    "chat_unopened_withheld_by_moderation": "Ein Moderator dieses Raums hat diese Nachricht markiert, daher bleibt sie verborgen, bis Sie sich entscheiden, sie anzusehen.",
+    "chat_attach": "Anhängen",
+    "chat_attached": "Angehängt: {name}",
+    "chat_attachment_remove": "Entfernen",
+    "chat_attachment_open": "Angehängte Datei öffnen",
+    "files_withheld": "Von einem Moderator zurückgehalten",
+    "files_act_revealed": "Sie ist jetzt für Sie geöffnet.",
+    "files_pick_hint": "Wählen Sie eine Datei zum Anhängen aus, oder fügen Sie zuerst eine hinzu.",
+    "moderation_reveal": "Anzeigen",
+    "moderation_reveal_title": "Dieses Element ansehen?",
+    "moderation_reveal_fact_flag": "Markiert als",
+    "moderation_reveal_fact_effect": "Was sich ändert",
+    "moderation_reveal_effect": "Es öffnet sich für Sie, auf Ihren eigenen Geräten. Niemand sonst sieht es dadurch.",
+    "moderation_reveal_fact_signer": "Signiert von",
+    "moderation_reveal_signer": "Ihr eigener Schlüssel, als Ihre Zustimmung, dieses eine Element anzusehen",
+    "moderation_note_flagged": "Ein Moderator hat dies als {flag} markiert.",
+    "moderation_note_revealed": "Ein Moderator hat dies als {flag} markiert. Sie haben sich entschieden, es anzusehen.",
+    "moderation_note_cleared": "Die Markierung eines Moderators hierfür wurde aufgehoben.",
+    "moderation_appeal_filed": "Ein Einspruch wartet auf eine Entscheidung.",
+    "moderation_appeal_upheld": "Die Markierung wurde im Einspruch bestätigt.",
+    "moderation_appeal_partial": "Die Markierung wurde im Einspruch teilweise bestätigt.",
+    "moderation_appeal_reversed": "Die Markierung wurde im Einspruch aufgehoben.",
+    "local_community_body": "Lokale Gemeinschaft ist geografisch: die Menschen in Ihrer Nähe. Sie gilt nur, wenn Sie zugestimmt haben, Ihren Standort zu teilen, und ihn gerade teilen.",
+    "local_community_not_on_this_node": "Dieser Knoten kann Ihren Standort noch nicht teilen, daher ist ein lokaler Raum vorerst nicht an einen Ort gebunden, und Sie entscheiden, wer beitritt. Ihr Standort wird nicht geteilt.",
+    "setup_template_ally": "Ally, ein persönlicher Assistent. Dies ist die richtige Wahl für eine persönliche Installation.",
+    "setup_template_chosen": "Ausgehend von der Vorlage {name}.",
+    "setup_template_provisioned": "{name}, festgelegt durch den Portal-Eintrag Ihrer Organisation.",
+    "community_section_title_local": "Ihre lokalen Räume",
+    "community_section_body_local": "Räume für die Menschen in Ihrer Nähe. Vorerst wird ein Raum nur auf dem Gerät, das ihn gegründet hat, als lokal angezeigt. Andere Mitglieder sehen ihn unter Communities.",
+    "community_empty_local": "Sie haben noch keine lokalen Räume. Gründen Sie einen und laden Sie die Personen in Ihrer Nähe ein.",
+    "community_create_open_local": "Lokalen Raum gründen",
+    "community_create_title_local": "Lokalen Raum gründen"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4727,12 @@
       "community_chats": "Räume",
       "affiliations_chats": "Räume",
       "node_self": "Eigener Stand",
-      "owned_agents": "Eigene Agenten"
+      "owned_agents": "Eigene Agenten",
+      "my_devices": "Meine Geräte",
+      "layer_communities": "Gemeinschaften",
+      "layer_affiliations": "Zugehörigkeiten",
+      "local_chats": "Lokale Räume",
+      "local_roster": "Lokale Mitglieder"
     },
     "circle": {
       "agent": "Nur ich",
@@ -4745,7 +4783,8 @@
       "files_agent": "Noch nichts hier. Hier beginnt alles, und nichts davon wird angekündigt.",
       "decisions_agent": "Hier ist niemand, mit dem Sie entscheiden könnten. Entscheidungen beginnen in Familie.",
       "decisions_family": "Eine Familie entscheidet durch Gespräche. Hier gibt es nichts, worüber abgestimmt werden könnte.",
-      "chats_agent": "Dieser Knoten hat keinen Agenten, daher ist hier niemand, mit dem Sie sprechen könnten. Richten Sie einen ein, und Ihre Unterhaltungen mit ihm werden hier erscheinen."
+      "chats_agent": "Dieser Knoten hat keinen Agenten, daher ist hier niemand, mit dem Sie sprechen könnten. Richten Sie einen ein, und Ihre Unterhaltungen mit ihm werden hier erscheinen.",
+      "files_local": "Dateien gehören zu jedem Raum. Öffnen Sie einen lokalen Raum, um seine Dateien zu sehen."
     },
     "my_things": "Meine Sachen",
     "stop_everything": "Alles stoppen",
@@ -5398,7 +5437,11 @@
       "raised": "Vorgebracht. Das 48-Stunden-Fenster der Community ist geöffnet; ein Moderator oder Steward kann früher eingreifen.",
       "error": "Konnte dies nicht vorbringen: {detail}. Es wurde nichts eingereicht.",
       "not_on_this_node": "Dieser Knoten kann noch keinen Community-Vorschlag entgegennehmen: Er verfügt über keine /v1/safety/reports-Route (benötigt CIRISServer#665). Es wurde nichts eingereicht. Wenn Sie eine Moderationspflicht haben, reichen Sie es stattdessen unter Sicherheit > Moderation ein."
-    }
+    },
+    "item_not_in_room": "das ist weder eine Nachricht noch eine Datei in diesem Raum",
+    "not_flagged": "kein Moderator dieses Raums hat dieses Element markiert — es gibt nichts anzuzeigen",
+    "reveal_failed": "Die Zustimmung zur Ansicht konnte nicht erfasst werden, daher bleibt das Element verborgen.",
+    "unknown_action": "ein Element in einem Raum wird mit „reveal“ sichtbar gemacht"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "diese Nachricht wurde bereits zurückgezogen oder widerrufen",
     "not_author": "nur die Person, die eine Nachricht geschrieben hat, darf sie ersetzen, zurückziehen oder widerrufen",
     "reason_invalid": "dieser Begründungscode gilt nicht für diese Revision",
-    "unknown_revision_op": "eine Nachricht wird durch Ersetzen, Zurückziehen oder Widerrufen revidiert"
+    "unknown_revision_op": "eine Nachricht wird durch Ersetzen, Zurückziehen oder Widerrufen revidiert",
+    "attachment_not_in_room": "Diese Datei befindet sich nicht in diesem Raum. Teilen Sie sie zuerst in den Raum, dann senden Sie sie."
   },
   "contacts": {
     "awaiting_consent": "Diese Person hat noch nicht zugestimmt. Dies wartet auf einen Menschen, ein erneuter Versuch wird daher nichts ändern.",
@@ -6020,7 +6064,9 @@
     "format_mismatch": "Die Datei entspricht nicht dem angegebenen Dateityp, daher wurde sie nicht hinzugefügt.",
     "not_author": "Nur der Autor kann eine Datei ändern oder zurückziehen. Eine Datei, die Sie auf einem anderen Ihrer Geräte geschrieben haben, wird von jenem Gerät aus geändert.",
     "range_not_satisfiable": "Der angeforderte Bereich liegt außerhalb dieser Datei.",
-    "same_room": "die Datei ist bereits in jenem Raum — zum Verschieben braucht es einen anderen Raum"
+    "same_room": "die Datei ist bereits in jenem Raum — zum Verschieben braucht es einen anderen Raum",
+    "withheld_by_moderation": "Ein Moderator dieses Raums hat diese Datei markiert, daher bleibt sie verborgen, bis Sie sich entscheiden, sie anzusehen.",
+    "flagged_by_moderation": "ein Moderator dieses Raums hat diese Datei markiert; sie bleibt im Raum, solange die Markierung besteht"
   },
   "notes": {
     "author_signer_unavailable": "Dieser Knoten kann derzeit nicht als Sie signieren, daher wurde die Notiz nicht geschrieben.",

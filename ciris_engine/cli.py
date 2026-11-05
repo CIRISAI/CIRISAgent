@@ -4,13 +4,15 @@ CIRIS Agent CLI - Desktop-first launcher with server fallback.
 Usage after 'pip install ciris-agent':
     ciris-agent                          # Start server + launch desktop app
     ciris-agent --server                 # Start API server only (headless)
-    ciris-agent --adapter api            # Legacy: same as --server
+    ciris-agent --adapter api            # Same as --server
     ciris-agent --adapter discord        # Discord bot mode
+    ciris-agent upgrade                  # Close CIRIS, upgrade it, start it again
 """
 
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 # Skip early FFI verification to avoid tokio runtime hang during Python import lock
@@ -21,6 +23,9 @@ from ciris_engine.logic.utils import win_console as _win_console  # noqa: E402
 
 _win_console.setup()
 
+#: Set to 0 to keep ciris-agent.exe in the foreground on Windows.
+HANDOFF_ENV = "CIRIS_LAUNCHER_HANDOFF"
+
 
 def main() -> None:
     """
@@ -29,6 +34,14 @@ def main() -> None:
     By default, starts the API server and launches the desktop app.
     Use --server or --adapter for headless/server modes.
     """
+    # Stops CIRIS first: pip can't replace a running install on Windows.
+    if sys.argv[1:2] == ["upgrade"]:
+        from ciris_engine.upgrade import run_upgrade
+
+        sys.exit(run_upgrade(sys.argv[2:]))
+
+    _hand_off_from_launcher()
+
     # Check if user wants server/headless mode
     server_mode = False
     for arg in sys.argv[1:]:
@@ -61,12 +74,60 @@ def main() -> None:
         sys.exit(node_only.run_desktop(cfg))
 
     if server_mode:
+        _normalize_server_flags()
         # Delegate to main.py for server/adapter modes
         _run_server_mode()
     else:
         # Start server then launch desktop app
         _run_desktop_mode()
 
+
+
+def _started_from_exe_launcher() -> bool:
+    """True under the Scripts\\ciris-agent.exe pip generated.
+
+    Not sys.argv[0]: pip's launcher script strips ".exe" from it. The script runs
+    from inside the exe, so __main__ is "...\\ciris-agent.exe\\__main__.py".
+    """
+    main_file = getattr(sys.modules.get("__main__"), "__file__", None) or ""
+    return ".exe" in str(main_file).lower()
+
+
+def _hand_off_from_launcher() -> None:
+    """On Windows, keep running without ciris-agent.exe.
+
+    The launcher stays alive as long as what it started, and pip can't replace a
+    running launcher, so `pip install -U` under a running CIRIS failed (WinError 32)
+    after it had already replaced the client and the server, and left an agent
+    that couldn't import. Stopping when pip starts doesn't help: pip reaches the
+    launcher within seconds (8 s in run 41856049056), faster than a clean stop.
+    So nothing waits on the launcher: this restarts under the plain interpreter,
+    on the same console, and lets the launcher exit.
+
+    CIRIS_LAUNCHER_HANDOFF=0 keeps it in the foreground, for a service wrapper
+    that watches the process it started.
+    """
+    if sys.platform != "win32" or os.environ.get(HANDOFF_ENV, "1").strip() == "0":
+        return
+    if not _started_from_exe_launcher() or any(a in ("--help", "-h", "--version") for a in sys.argv[1:]):
+        return
+    env = _win_console.subprocess_env()
+    env[HANDOFF_ENV] = "0"
+    child = subprocess.Popen([sys.executable, "-m", "ciris_engine.cli", *sys.argv[1:]], env=env)
+    print(f"CIRIS is running (pid {child.pid}). This window shows its output; close it or press Ctrl+C to stop.")
+    sys.exit(0)
+
+
+def _normalize_server_flags() -> None:
+    """Turn ``--server`` / ``--headless`` into what main.py's click interface takes.
+
+    They selected server mode here and were then passed through, so the documented
+    ``ciris-agent --server`` died with "No such option '--server'" on every version.
+    """
+    args = [a for a in sys.argv[1:] if a not in ("--server", "--headless")]
+    if len(args) != len(sys.argv) - 1 and "--adapter" not in args and "-a" not in args:
+        args = ["--adapter", "api", *args]
+    sys.argv[1:] = args
 
 
 def _explain_server_death(exit_code: int, port: int) -> None:
@@ -252,6 +313,24 @@ def _run_desktop_mode() -> None:
         print(f"{'=' * 60}\n", file=sys.stderr)
         sys.exit(exit_code if exit_code != 0 else 1)
 
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+    from ciris_engine.upgrade import STOP_DEADLINE_SECS, register_running, start_watch
+
+    home = get_ciris_home()
+    register_running(home, [sys.executable, "-m", "ciris_engine.cli", *sys.argv[1:]])
+    stopping_for_upgrade = threading.Event()
+
+    def _close_for_upgrade(reason: str) -> None:
+        # The server child has its own watcher and stops itself; close the UI so
+        # this launcher can exit and release ciris-agent.exe.
+        print(f"\nCIRIS is closing for an upgrade: {reason}. Start it again when the upgrade finishes.", file=sys.stderr)
+        stopping_for_upgrade.set()
+        from ciris_engine.desktop_launcher import stop_desktop_app
+
+        stop_desktop_app()
+
+    start_watch(_close_for_upgrade, home)
+
     try:
         # Wait for server to be actually healthy before launching desktop
         # This prevents the desktop app from trying to start its own server
@@ -295,6 +374,11 @@ def _run_desktop_mode() -> None:
     finally:
         # Shutdown server
         print("\nShutting down server...")
+        if stopping_for_upgrade.is_set():
+            try:
+                server_proc.wait(timeout=STOP_DEADLINE_SECS)
+            except subprocess.TimeoutExpired:
+                pass
         server_proc.terminate()
         try:
             server_proc.wait(timeout=5)
@@ -310,6 +394,12 @@ def _run_server_mode() -> None:
     parent_dir = Path(__file__).parent.parent
     if str(parent_dir) not in sys.path:
         sys.path.insert(0, str(parent_dir))
+
+    # So `ciris-agent upgrade` can find and restart this process.
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home
+    from ciris_engine.upgrade import register_running
+
+    register_running(get_ciris_home(), [sys.executable, "-m", "ciris_engine.cli", *sys.argv[1:]])
 
     # Import and run the existing main() function from main.py
     try:

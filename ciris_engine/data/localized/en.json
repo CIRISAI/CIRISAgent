@@ -4005,7 +4005,40 @@
     "add_device_stopped_retrying": "Stopped trying. No request reached your other device.",
     "add_device_withdraw_here": "Stops waiting, and discards this request's keys and any approval already received.",
     "add_device_withdraw_other": "It is told to drop the request, or to undo its approval if it already gave one. If it can't be reached, the request expires there after 15 minutes.",
-    "add_device_withdraw_held": "Nothing joins. You can choose again, or send a new request."
+    "add_device_withdraw_held": "Nothing joins. You can choose again, or send a new request.",
+    "my_devices_claim": "Claim a device",
+    "chat_unopened_withheld_by_moderation": "A moderator of this room flagged this message, so it stays hidden until you choose to see it.",
+    "chat_attach": "Attach",
+    "chat_attached": "Attached: {name}",
+    "chat_attachment_remove": "Remove",
+    "chat_attachment_open": "Open attached file",
+    "files_withheld": "Withheld by a moderator",
+    "files_act_revealed": "It is open to you now.",
+    "files_pick_hint": "Choose a file to attach, or add one first.",
+    "moderation_reveal": "Reveal",
+    "moderation_reveal_title": "See this item?",
+    "moderation_reveal_fact_flag": "Flagged as",
+    "moderation_reveal_fact_effect": "What changes",
+    "moderation_reveal_effect": "It opens for you, on your own devices. Nobody else sees it because of this.",
+    "moderation_reveal_fact_signer": "Signed by",
+    "moderation_reveal_signer": "Your own key, as your consent to view this one item",
+    "moderation_note_flagged": "A moderator flagged this as {flag}.",
+    "moderation_note_revealed": "A moderator flagged this as {flag}. You chose to see it.",
+    "moderation_note_cleared": "A moderator's flag on this was cleared.",
+    "moderation_appeal_filed": "An appeal is waiting for a ruling.",
+    "moderation_appeal_upheld": "The flag was upheld on appeal.",
+    "moderation_appeal_partial": "The flag was partly upheld on appeal.",
+    "moderation_appeal_reversed": "The flag was reversed on appeal.",
+    "local_community_body": "Local community is geographic: the people near you. It applies only if you opted in to share your location and are sharing it right now.",
+    "local_community_not_on_this_node": "This node can't share your location yet, so a local room isn't tied to a place for now and you choose who joins. Your location is not being shared.",
+    "setup_template_ally": "Ally, a personal assistant. This is the right choice for a personal install.",
+    "setup_template_chosen": "Starting from the {name} template.",
+    "setup_template_provisioned": "{name}, set by your organisation's Portal record.",
+    "community_section_title_local": "Your local rooms",
+    "community_section_body_local": "Rooms for the people near you. For now, a room shows as local only on the device that founded it. Other members see it under Communities.",
+    "community_empty_local": "You have no local rooms yet. Found one and invite the people near you.",
+    "community_create_open_local": "Found a local room",
+    "community_create_title_local": "Found a local room"
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
@@ -4723,7 +4756,12 @@
       "community_chats": "Rooms",
       "affiliations_chats": "Rooms",
       "node_self": "Own standing",
-      "owned_agents": "Agents you own"
+      "owned_agents": "Agents you own",
+      "my_devices": "My devices",
+      "layer_communities": "Communities",
+      "layer_affiliations": "Affiliations",
+      "local_chats": "Local rooms",
+      "local_roster": "Local members"
     },
     "circle": {
       "agent": "Just me",
@@ -4774,7 +4812,8 @@
       "files_agent": "Nothing here yet. This is where everything starts, and nothing here is advertised.",
       "decisions_agent": "There is nobody here to decide with. Decisions start in Family.",
       "decisions_family": "A family decides by talking. There is nothing to vote on here.",
-      "chats_agent": "There is no agent on this node, so there is nobody here to talk to. Set one up and your conversations with it will be here."
+      "chats_agent": "There is no agent on this node, so there is nobody here to talk to. Set one up and your conversations with it will be here.",
+      "files_local": "Files live in each room. Open a local room to see its files."
     },
     "my_things": "My things",
     "stop_everything": "Stop everything",
@@ -5427,7 +5466,11 @@
       "error": "Could not raise this: {detail}. Nothing was filed.",
       "not_on_this_node": "This node can't take a community proposal yet: it has no /v1/safety/reports route (needs CIRISServer#665). Nothing was filed. If you hold a moderation duty, file under Safety > Moderation instead.",
       "refused_minor": "Your age record on this node says minor, so this is raised through your steward, not directly. Nothing was filed; ask your steward to raise it."
-    }
+    },
+    "item_not_in_room": "that is not a message or a file in this room",
+    "not_flagged": "no moderator of this room has flagged that item — there is nothing to reveal",
+    "reveal_failed": "The consent to view could not be recorded, so the item stays hidden.",
+    "unknown_action": "an item in a room is revealed with reveal"
   },
   "operator": {
     "carriage": {
@@ -5908,7 +5951,8 @@
     "message_not_live": "this message was already withdrawn or recanted",
     "not_author": "only the person who wrote a message may supersede, withdraw or recant it",
     "reason_invalid": "that reason code does not apply to this revision",
-    "unknown_revision_op": "a message is revised by supersede, withdraw or recant"
+    "unknown_revision_op": "a message is revised by supersede, withdraw or recant",
+    "attachment_not_in_room": "That file is not in this room. Share it into the room first, then send it."
   },
   "claim": {
     "bad_request": "That claim request couldn't be read.",
@@ -6065,7 +6109,9 @@
     "too_large_for_whole_read": "This file is too large to read in one piece. It has to be streamed.",
     "withdraw_failed": "The file couldn't be withdrawn. Try again.",
     "withdrawn": "Its author withdrew this file. The bytes are no longer served anywhere.",
-    "awaiting_key": "Its bytes are here, but this device's key for them hasn't arrived yet. It follows on its own; try again shortly."
+    "awaiting_key": "Its bytes are here, but this device's key for them hasn't arrived yet. It follows on its own; try again shortly.",
+    "withheld_by_moderation": "A moderator of this room flagged this file, so it stays hidden until you choose to see it.",
+    "flagged_by_moderation": "a moderator of this room flagged this file; it stays in the room while the flag stands"
   },
   "notes": {
     "author_signer_unavailable": "This node can't sign as you right now, so the note wasn't written.",

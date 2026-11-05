@@ -3978,7 +3978,40 @@
     "add_device_stopped_retrying": "A ti dáwọ́ ìgbìyànjú dúró. Kò sí ìbéèrè tí ó dé ọ̀dọ̀ ẹ̀rọ rẹ mìíràn.",
     "add_device_withdraw_here": "Ó dáwọ́ ìdúró dúró, ó sì pa àwọn kọ́kọ́rọ́ ìbéèrè yìí rẹ́ pẹ̀lú ìfọwọ́sí èyíkéyìí tí a ti gbà.",
     "add_device_withdraw_other": "A ó sọ fún un pé kí ó pa ìbéèrè náà tì, tàbí kí ó yí ìfọwọ́sí rẹ̀ padà bí ó bá ti fọwọ́sí i. Bí a kò bá lè dé ọ̀dọ̀ rẹ̀, ìbéèrè náà yóò parí níbẹ̀ lẹ́yìn ìṣẹ́jú 15.",
-    "add_device_withdraw_held": "Kò sí ohun tí yóò darapọ̀. O lè yàn lẹ́ẹ̀kan síi, tàbí fi ìbéèrè tuntun ránṣẹ́."
+    "add_device_withdraw_held": "Kò sí ohun tí yóò darapọ̀. O lè yàn lẹ́ẹ̀kan síi, tàbí fi ìbéèrè tuntun ránṣẹ́.",
+    "moderation_appeal_filed": "Ẹ̀bẹ̀ kan ń dúró de ìdájọ́.",
+    "moderation_appeal_upheld": "A fìdí àmì náà múlẹ̀ lẹ́yìn ẹ̀bẹ̀.",
+    "moderation_appeal_partial": "A fìdí àmì náà múlẹ̀ ní apá kan lẹ́yìn ẹ̀bẹ̀.",
+    "moderation_appeal_reversed": "A yí àmì náà padà lẹ́yìn ẹ̀bẹ̀.",
+    "local_community_body": "Àdúgbò ìbílẹ̀ jẹ́ ìbàtan ipò: àwọn ènìyàn tí ó wà nítòsí rẹ. Ó kàn ọ́ nìkan bí o bá ti yàn láti pín ipò rẹ tí o sì ń pín in nísinsìnyí.",
+    "local_community_not_on_this_node": "Nódù yìí kò tíì lè pín ipò rẹ síi, nítorí náà yàrá ìbílẹ̀ kò sopọ̀ mọ́ ibì kan fún ìsinsìnyí, ìwọ sì ni ẹni tí ó yan ẹni tí ó lè wọlé. A kò ń pín ipò rẹ.",
+    "setup_template_ally": "Ally, olùrànlọ́wọ́ ara ẹni. Èyí ni yíyàn tó tọ́ fún fífi sórí ẹ̀rọ ti ara ẹni.",
+    "setup_template_chosen": "Bíbẹ̀rẹ̀ láti inú àdàkọ {name}.",
+    "setup_template_provisioned": "{name}, tí àkọsílẹ̀ Portal ẹgbẹ́ rẹ ṣètò.",
+    "community_section_title_local": "Àwọn yàrá ìbílẹ̀ rẹ",
+    "community_section_body_local": "Àwọn yàrá fún àwọn ènìyàn tí ó wà nítòsí rẹ. Fún ìsinsìnyí, yàrá kan máa hàn gẹ́gẹ́ bí ìbílẹ̀ nìkan lórí ẹ̀rọ tí ó dá a sílẹ̀. Àwọn ọmọ ẹgbẹ́ mìíràn máa rí i lábẹ́ Àwọn Àwùjọ.",
+    "community_empty_local": "O kò ní yàrá ìbílẹ̀ kankan síbí síi. Dá ọ̀kan sílẹ̀, kí o sì pe àwọn ènìyàn tí ó wà nítòsí rẹ.",
+    "community_create_open_local": "Dá yàrá ìbílẹ̀ kan sílẹ̀",
+    "community_create_title_local": "Dá yàrá ìbílẹ̀ kan sílẹ̀",
+    "my_devices_claim": "Gba Ẹ̀rọ Kan",
+    "chat_unopened_withheld_by_moderation": "Olùdarí yàrá yìí ti fi àmì sí ìfiránṣẹ́ yìí, nítorí náà yóò farapamọ́ títí tí o fi yàn láti rí i.",
+    "chat_attach": "Sopọ̀ Mọ́",
+    "chat_attached": "Tí a sopọ̀ mọ́: {name}",
+    "chat_attachment_remove": "Yọ Kúrò",
+    "chat_attachment_open": "Ṣí fáìlì tí a sopọ̀ mọ́",
+    "files_withheld": "Tí olùdarí fi pamọ́",
+    "files_act_revealed": "Ó ṣí sílẹ̀ fún ọ nísinsìnyí.",
+    "files_pick_hint": "Yan fáìlì kan láti sopọ̀ mọ́, tàbí kọ́kọ́ fi ọ̀kan kún.",
+    "moderation_reveal": "Fihàn",
+    "moderation_reveal_title": "Wo nǹkan yìí?",
+    "moderation_reveal_fact_flag": "Tí a fi àmì sí gẹ́gẹ́ bí",
+    "moderation_reveal_fact_effect": "Ohun tí ó yí padà",
+    "moderation_reveal_effect": "Ó ṣí sílẹ̀ fún ọ, lórí àwọn ẹ̀rọ tirẹ. Kò sí ẹlòmíràn tí yóò rí i nítorí èyí.",
+    "moderation_reveal_fact_signer": "Tí ó fọwọ́ sí láti ọ̀dọ̀",
+    "moderation_reveal_signer": "Kọ́kọ́rọ́ tìrẹ, gẹ́gẹ́ bí ìyọ̀ọ́da rẹ láti wo nǹkan kan yìí",
+    "moderation_note_flagged": "Olùdarí kan fi àmì sí èyí gẹ́gẹ́ bí {flag}.",
+    "moderation_note_revealed": "Olùdarí kan fi àmì sí èyí gẹ́gẹ́ bí {flag}. O yàn láti rí i.",
+    "moderation_note_cleared": "Wọ́n ti pa àmì olùmójútó kan rẹ́ lórí èyí."
   },
   "conscience": {
     "ponder_attempted": "Mo gbìyànjú láti {action}",
@@ -4694,7 +4727,12 @@
       "community_chats": "Àwọn yàrá",
       "affiliations_chats": "Àwọn yàrá",
       "node_self": "Ipò Ara Ẹni",
-      "owned_agents": "Àwọn aṣojú tí o ni"
+      "owned_agents": "Àwọn aṣojú tí o ni",
+      "my_devices": "Àwọn Ẹ̀rọ Mi",
+      "layer_communities": "Àwọn Àwùjọ",
+      "layer_affiliations": "Àwọn Ìbárẹ́",
+      "local_chats": "Àwọn yàrá ìbílẹ̀",
+      "local_roster": "Àwọn ọmọ ẹgbẹ́ ìbílẹ̀"
     },
     "circle": {
       "agent": "Èmi nìkan",
@@ -4745,7 +4783,8 @@
       "files_agent": "Kò sí ohunkóhun níbí síbẹ̀. Níbí ni gbogbo ohun ti ń bẹ̀rẹ̀, kò sì sí ohun tí a ń kéde níbí.",
       "decisions_agent": "Kò sí ẹnikẹ́ni níbí láti pinnu pẹ̀lú. Àwọn ìpinnu ń bẹ̀rẹ̀ ní Ìdílé.",
       "decisions_family": "Ìdílé ń pinnu nípasẹ̀ ìsọ̀rọ̀. Kò sí ohunkóhun láti dìbò lé níbí.",
-      "chats_agent": "Kò sí aṣojú lórí nódù yìí, nítorí náà kò sí ẹnikẹ́ni níbí láti bá sọ̀rọ̀. Ṣètò ọ̀kan kí àwọn ìjíròrò rẹ pẹ̀lú rẹ̀ lè wà níbí."
+      "chats_agent": "Kò sí aṣojú lórí nódù yìí, nítorí náà kò sí ẹnikẹ́ni níbí láti bá sọ̀rọ̀. Ṣètò ọ̀kan kí àwọn ìjíròrò rẹ pẹ̀lú rẹ̀ lè wà níbí.",
+      "files_local": "Àwọn fáìlì ń gbé nínú yàrá kọ̀ọ̀kan. Ṣí yàrá ìbílẹ̀ kan láti rí àwọn fáìlì rẹ̀."
     },
     "my_things": "Àwọn ohun mi",
     "stop_everything": "Dá ohun gbogbo dúró",
@@ -5398,7 +5437,11 @@
       "raised": "A ti gbé sókè. Fèrèsé wákàtí 48 ti àdúgbò náà ti ṣí; alábòójútó tàbí olùtọ́jú lè ṣe ìṣe kí àkókò yẹn tó pé.",
       "error": "A kò lè gbé èyí sókè: {detail}. Kò sí ohun tí a fi lélẹ̀.",
       "not_on_this_node": "Nódù yìí kò tíì lè gba dábàá àwùjọ kan: kò ní ọ̀nà /v1/safety/reports (nílò CIRISServer#665). Kò sí ohun tí a fi lélẹ̀. Bí o bá ní ojúṣe àmójútó, fi lélẹ̀ lábẹ́ Ààbò > Àmójútó dípò rẹ̀."
-    }
+    },
+    "item_not_in_room": "èyí kì í ṣe ìfiránṣẹ́ tàbí fáìlì nínú yàrá yìí",
+    "not_flagged": "kò sí olùdarí yàrá yìí tí ó ti fi àmì sí nǹkan yẹn — kò sí ohunkóhun láti fihàn",
+    "reveal_failed": "A kò lè gba ìyọ̀ọ́da láti wò ó sílẹ̀, nítorí náà nǹkan náà máa farapamọ́.",
+    "unknown_action": "nǹkan kan nínú yàrá ni a fihàn pẹ̀lú àṣẹ fihàn"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "a ti yọ ìfiránṣẹ́ yìí kúrò tàbí a ti yí i padà tẹ́lẹ̀",
     "not_author": "ẹnìkẹ́ni tí ó kọ ìfiránṣẹ́ kan nìkan ni ó lè rọ́pò rẹ̀, yọ ọ́ kúrò, tàbí yí i padà",
     "reason_invalid": "àmì-ìdí yẹn kò bá àtúnyẹ̀wò yìí mu",
-    "unknown_revision_op": "a máa ń ṣàtúnyẹ̀wò ìfiránṣẹ́ nípa rírọ́pò rẹ̀, yíyọ ọ́ kúrò, tàbí yíyí i padà"
+    "unknown_revision_op": "a máa ń ṣàtúnyẹ̀wò ìfiránṣẹ́ nípa rírọ́pò rẹ̀, yíyọ ọ́ kúrò, tàbí yíyí i padà",
+    "attachment_not_in_room": "Fáìlì yẹn kò sí nínú yàrá yìí. Kọ́kọ́ pín in sínú yàrá náà, kí o sì fi ránṣẹ́."
   },
   "contacts": {
     "awaiting_consent": "Wọn kò tíì gbà. Èyí ń dúró de ẹnìkan, nítorí náà àtúngbìyànjú kò ní yí ohunkóhun padà.",
@@ -6020,7 +6064,9 @@
     "bad_media_type": "Èyí kì í ṣe irúfẹ́ fáìlì tí ó tọ́ (type/subtype).",
     "bad_move_target": "Èyí kì í ṣe ibi tí a lè gbé fáìlì yìí sí.",
     "declared_length_mismatch": "Ìwọ̀n fáìlì náà kò bá ìwọ̀n tí a kéde mu. A kò kọ ohunkóhun; fi í ránṣẹ́ padà.",
-    "delegate_may_not_author": "aṣojú tí a fún ní ìfilélẹ̀-àṣẹ kò lè kọ, yí padà tàbí yọ fáìlì kúrò: a fọwọ́ sí ìlà náà sínú gíráàfù (graph) gẹ́gẹ́ bí ìṣe olóhun fúnra rẹ̀, ìfilélẹ̀-àṣẹ tí ó bá parí kò sì lè yọ ìfọwọ́sí náà kúrò"
+    "delegate_may_not_author": "aṣojú tí a fún ní ìfilélẹ̀-àṣẹ kò lè kọ, yí padà tàbí yọ fáìlì kúrò: a fọwọ́ sí ìlà náà sínú gíráàfù (graph) gẹ́gẹ́ bí ìṣe olóhun fúnra rẹ̀, ìfilélẹ̀-àṣẹ tí ó bá parí kò sì lè yọ ìfọwọ́sí náà kúrò",
+    "withheld_by_moderation": "Olùdarí yàrá yìí ti fi àmì sí fáìlì yìí, nítorí náà yóò farapamọ́ títí tí o fi yàn láti rí i.",
+    "flagged_by_moderation": "olùdarí yàrá yìí ti fi àmì sí fáìlì yìí; yóò dúró nínú yàrá náà níwọ̀n ìgbà tí àmì náà bá dúró"
   },
   "notes": {
     "author_signer_unavailable": "Nódù yìí kò lè fọwọ́sí bí ìwọ ní ìsinsìnyí, nítorí náà a kò kọ àkọsílẹ̀ náà.",

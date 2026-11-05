@@ -3827,7 +3827,40 @@
     "add_device_stopped_retrying": "Se dejó de intentar. Ninguna solicitud llegó a tu otro dispositivo.",
     "add_device_withdraw_here": "Deja de esperar, y descarta las claves de esta solicitud y cualquier aprobación ya recibida.",
     "add_device_withdraw_other": "Se le indica que descarte la solicitud, o que deshaga su aprobación si ya la dio. Si no se puede contactar, la solicitud expira allí después de 15 minutos.",
-    "add_device_withdraw_held": "Nada se une. Puedes elegir de nuevo, o enviar una nueva solicitud."
+    "add_device_withdraw_held": "Nada se une. Puedes elegir de nuevo, o enviar una nueva solicitud.",
+    "my_devices_claim": "Reclamar un dispositivo",
+    "chat_unopened_withheld_by_moderation": "Un moderador de esta sala marcó este mensaje, así que permanece oculto hasta que elijas verlo.",
+    "chat_attach": "Adjuntar",
+    "chat_attached": "Adjunto: {name}",
+    "chat_attachment_remove": "Quitar",
+    "chat_attachment_open": "Abrir archivo adjunto",
+    "files_withheld": "Retenido por un moderador",
+    "files_act_revealed": "Ahora está abierto para ti.",
+    "files_pick_hint": "Elige un archivo para adjuntar, o añade uno primero.",
+    "moderation_reveal": "Revelar",
+    "moderation_reveal_title": "¿Ver este elemento?",
+    "moderation_reveal_fact_flag": "Marcado como",
+    "moderation_reveal_fact_effect": "Qué cambia",
+    "moderation_reveal_effect": "Se abre para ti, en tus propios dispositivos. Nadie más lo ve por esto.",
+    "moderation_reveal_fact_signer": "Firmado por",
+    "moderation_reveal_signer": "Tu propia clave, como tu consentimiento para ver este único elemento",
+    "moderation_note_flagged": "Un moderador marcó esto como {flag}.",
+    "moderation_note_revealed": "Un moderador marcó esto como {flag}. Elegiste verlo.",
+    "moderation_note_cleared": "La marca de un moderador sobre esto fue eliminada.",
+    "moderation_appeal_filed": "Hay una apelación pendiente de resolución.",
+    "moderation_appeal_upheld": "La marca fue confirmada en apelación.",
+    "moderation_appeal_partial": "La marca fue parcialmente confirmada en apelación.",
+    "moderation_appeal_reversed": "La marca fue revocada en apelación.",
+    "local_community_body": "La comunidad local es geográfica: las personas cerca de ti. Se aplica solo si aceptaste compartir tu ubicación y la estás compartiendo en este momento.",
+    "local_community_not_on_this_node": "Este nodo todavía no puede compartir tu ubicación, así que por ahora una sala local no está ligada a un lugar y tú eliges quién se une. Tu ubicación no se está compartiendo.",
+    "setup_template_ally": "Ally, un asistente personal. Esta es la opción adecuada para una instalación personal.",
+    "setup_template_chosen": "Partiendo de la plantilla {name}.",
+    "setup_template_provisioned": "{name}, establecido por el registro del Portal de tu organización.",
+    "community_section_title_local": "Tus salas locales",
+    "community_section_body_local": "Salas para las personas cerca de ti. Por ahora, una sala aparece como local solo en el dispositivo que la fundó. Los demás miembros la ven en Comunidades.",
+    "community_empty_local": "Aún no tienes salas locales. Funda una e invita a las personas cerca de ti.",
+    "community_create_open_local": "Fundar una sala local",
+    "community_create_title_local": "Fundar una sala local"
   },
   "prompts": {
     "dma": {
@@ -4721,7 +4754,12 @@
       "community_chats": "Salas",
       "affiliations_chats": "Salas",
       "node_self": "Situación propia",
-      "owned_agents": "Agentes que posees"
+      "owned_agents": "Agentes que posees",
+      "my_devices": "Mis dispositivos",
+      "layer_communities": "Comunidades",
+      "layer_affiliations": "Afiliaciones",
+      "local_chats": "Salas locales",
+      "local_roster": "Miembros locales"
     },
     "circle": {
       "agent": "Solo yo",
@@ -4772,7 +4810,8 @@
       "record": "Aún no ha pasado nada en este círculo.",
       "files_agent": "Aún no hay nada aquí. Aquí es donde todo comienza, y nada aquí se anuncia.",
       "decisions_agent": "No hay nadie aquí con quien decidir. Las decisiones comienzan en el círculo Familia.",
-      "chats_agent": "No hay agente en este nodo, así que no hay nadie aquí con quien hablar. Configura uno y tus conversaciones con él aparecerán aquí."
+      "chats_agent": "No hay agente en este nodo, así que no hay nadie aquí con quien hablar. Configura uno y tus conversaciones con él aparecerán aquí.",
+      "files_local": "Los archivos viven en cada sala. Abre una sala local para ver sus archivos."
     },
     "my_things": "Mis cosas",
     "stop_everything": "Detener todo",
@@ -5425,7 +5464,11 @@
       "error": "No se pudo plantear esto: {detail}. No se presentó nada.",
       "not_on_this_node": "Este nodo todavía no puede recibir una propuesta de la comunidad: no tiene una ruta /v1/safety/reports (necesita CIRISServer#665). No se presentó nada. Si tienes el deber de moderación, presenta la propuesta en Seguridad > Moderación.",
       "refused_minor": "Tu registro de edad en este nodo indica que eres menor, así que esto se plantea a través de tu custodio, no directamente. No se presentó nada; pide a tu custodio que lo plantee."
-    }
+    },
+    "item_not_in_room": "eso no es un mensaje ni un archivo en esta sala",
+    "not_flagged": "ningún moderador de esta sala ha marcado ese elemento — no hay nada que revelar",
+    "reveal_failed": "El consentimiento para ver no pudo registrarse, así que el elemento permanece oculto.",
+    "unknown_action": "un elemento en una sala se revela con \"reveal\""
   },
   "operator": {
     "carriage": {
@@ -5917,7 +5960,8 @@
     "message_not_live": "este mensaje ya fue retirado o retractado",
     "not_author": "solo la persona que escribió un mensaje puede reemplazarlo, retirarlo o retractarlo",
     "reason_invalid": "ese código de motivo no aplica a esta revisión",
-    "unknown_revision_op": "un mensaje se revisa mediante reemplazo, retiro o retractación"
+    "unknown_revision_op": "un mensaje se revisa mediante reemplazo, retiro o retractación",
+    "attachment_not_in_room": "Ese archivo no está en esta sala. Compártelo en la sala primero, y luego envíalo."
   },
   "contacts": {
     "awaiting_consent": "Aún no han aceptado. Esto depende de una persona, así que intentarlo de nuevo no cambiará nada.",
@@ -6047,7 +6091,9 @@
     "unopened": "Este dispositivo no puede abrirlo.",
     "bad_base64": "El contenido del archivo no era base64 válido, así que no se escribió nada.",
     "bad_body": "No se pudo leer la subida. No se escribió nada; envíala de nuevo.",
-    "bad_cursor": "`after` no es un cursor emitido por este drive — devuelve tal cual el `resume` de una página"
+    "bad_cursor": "`after` no es un cursor emitido por este drive — devuelve tal cual el `resume` de una página",
+    "withheld_by_moderation": "Un moderador de esta sala marcó este archivo, así que permanece oculto hasta que elijas verlo.",
+    "flagged_by_moderation": "un moderador de esta sala marcó este archivo; permanece en la sala mientras la marca siga vigente"
   },
   "notes": {
     "author_signer_unavailable": "Este nodo no puede firmar en tu nombre ahora mismo, así que la nota no se escribió.",

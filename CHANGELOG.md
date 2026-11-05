@@ -5,6 +5,22 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.3-stable] - 2026-11-04
+
+### Fixed
+
+- **Upgrading while CIRIS runs no longer breaks a Windows install.** `pip install -U` with CIRIS open replaced the client and the server, then failed with `WinError 32` on the launcher or the desktop JAR. That left an agent that died at import before it could log anything, and `~iris_*` directories that a later pip run warned about for good. Nothing of ours holds those files now: on Windows `ciris-agent` hands off to the plain interpreter and exits, and the desktop app runs from a copy of its JAR under `CIRIS_HOME`. A running CIRIS notices the upgrade and closes, so old and new code never mix. `windows-upgrade-while-running.yml` proves all of this on a real Windows runner. A service wrapper that watches the process it started can set `CIRIS_LAUNCHER_HANDOFF=0`.
+- **`ciris-agent --server` works.** It failed with `No such option '--server'` on every version, despite the docs.
+- **The newest desktop JAR always wins.** A repaired install keeps the old JAR on disk, and the launcher could run it.
+
+### Added
+
+- **`ciris-agent upgrade [--to VERSION] [--no-restart]`** closes CIRIS, upgrades it from a helper outside the install, and starts it again. Progress goes to `logs/upgrade.log`.
+
+### Changed
+
+- **ciris-client 0.5.238.** My keys, My devices and Agents you own are now separate cards. Rooms can take attachments, flagged items show their moderation status, and Ally is the setup default. Known issue: add-device can time out at 30 seconds, fixed in client 0.5.239.
+
 ## [2.19.2-stable] - 2026-11-04
 
 ### Fixed

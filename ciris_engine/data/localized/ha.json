@@ -3978,7 +3978,40 @@
     "contacts_pending_stopped": "An dakatar da tambaya na ɗan lokaci. Sabunta, ko danna Sake gwadawa.",
     "contacts_pending_refused": "Ba a ƙara ba: {why}",
     "contacts_pending_retry": "Sake gwadawa",
-    "contacts_pending_forget": "Manta"
+    "contacts_pending_forget": "Manta",
+    "my_devices_claim": "Nemi na'ura",
+    "chat_unopened_withheld_by_moderation": "Mai kula da wannan ɗaki ya yiwa wannan saƙon alama, don haka yana zama a ɓoye har sai kun zaɓi ganin shi.",
+    "chat_attach": "Haɗa",
+    "chat_attached": "An haɗa: {name}",
+    "chat_attachment_remove": "Cire",
+    "chat_attachment_open": "Buɗe fayil ɗin da aka haɗa",
+    "files_withheld": "An ɓoye shi daga mai kula",
+    "files_act_revealed": "Yana buɗe a gare ku yanzu.",
+    "files_pick_hint": "Zaɓi fayil don haɗawa, ko ƙara ɗaya tukuna.",
+    "moderation_reveal": "Bayyana",
+    "moderation_reveal_title": "Ga wannan abu?",
+    "moderation_reveal_fact_flag": "An yiwa alama a matsayin",
+    "moderation_reveal_fact_effect": "Abin da zai canza",
+    "moderation_reveal_effect": "Yana buɗewa a gare ku, a na'urorinku kaɗai. Babu wani da zai gan shi saboda wannan.",
+    "moderation_reveal_fact_signer": "Mai sa hannu",
+    "moderation_reveal_signer": "Maɓallinku na kanku, a matsayin yardarku na ganin wannan abu guda",
+    "moderation_note_flagged": "Mai kula ya yiwa wannan alama a matsayin {flag}.",
+    "moderation_note_revealed": "Mai kula ya yiwa wannan alama a matsayin {flag}. Kun zaɓi ganin shi.",
+    "moderation_note_cleared": "An share alamar mai kula a kan wannan.",
+    "moderation_appeal_filed": "Akwai ƙorafi mai jiran hukunci.",
+    "moderation_appeal_upheld": "An tabbatar da alamar bayan ƙorafi.",
+    "moderation_appeal_partial": "An tabbatar da alamar a wani ɓangare bayan ƙorafi.",
+    "moderation_appeal_reversed": "An soke alamar bayan ƙorafi.",
+    "local_community_body": "Al'umma ta gida ta yanki ce: mutanen da ke kusa da ku. Tana aiki ne kawai idan kun zaɓi raba wurinku kuma kuna raba shi a yanzu.",
+    "local_community_not_on_this_node": "Wannan kumburi har yanzu ba zai iya raba wurinku ba, don haka ɗaki na gida ba a daure shi da wuri ba a yanzu kuma ku ne za ku zaɓi wanda zai shiga. Ba a raba wurinku ba.",
+    "setup_template_ally": "Ally, wakili na sirri. Wannan shi ne zaɓin da ya dace don shigarwa ta sirri.",
+    "setup_template_chosen": "Ana farawa daga samfurin {name}.",
+    "setup_template_provisioned": "{name}, wanda aka saita ta rikodin Portal na ƙungiyarku.",
+    "community_section_title_local": "Ɗakunanku na gida",
+    "community_section_body_local": "Ɗakuna don mutanen da ke kusa da ku. A yanzu, ɗaki yana nunawa a matsayin na gida ne kawai a kan na'urar da ta kafa shi. Sauran mambobi suna ganinsa a ƙarƙashin Al'ummomi.",
+    "community_empty_local": "Ba ku da wani ɗaki na gida tukuna. Ku kafa ɗaya sannan ku gayyaci mutanen da ke kusa da ku.",
+    "community_create_open_local": "Kafa ɗaki na gida",
+    "community_create_title_local": "Kafa ɗaki na gida"
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -4694,7 +4727,12 @@
       "community_chats": "Ɗakuna",
       "affiliations_chats": "Ɗakuna",
       "node_self": "Matsayin Kansa",
-      "owned_agents": "Wakilan da kuke da su"
+      "owned_agents": "Wakilan da kuke da su",
+      "my_devices": "Na'urorina",
+      "layer_communities": "Al'ummomi",
+      "layer_affiliations": "Mambobi",
+      "local_chats": "Ɗakunan gida",
+      "local_roster": "Mambobin gida"
     },
     "circle": {
       "agent": "Ni kaɗai",
@@ -4745,7 +4783,8 @@
       "files_agent": "Babu komai a nan tukuna. Nan ne duk abu yake farawa, kuma babu abin da ake sanarwa a nan.",
       "decisions_agent": "Babu wani a nan da za ku yanke shawara tare da shi. Yanke shawara yana farawa a Iyali.",
       "decisions_family": "Iyali yana yanke shawara ta hanyar tattaunawa. Babu abin da za a kada kuri'a a kai a nan.",
-      "chats_agent": "Babu wakili a wannan kumburi, don haka babu wani a nan da za ku yi magana da shi. Ku kafa ɗaya kuma tattaunawar ku da shi za ta kasance a nan."
+      "chats_agent": "Babu wakili a wannan kumburi, don haka babu wani a nan da za ku yi magana da shi. Ku kafa ɗaya kuma tattaunawar ku da shi za ta kasance a nan.",
+      "files_local": "Fayiloli suna zama a kowane ɗaki. Buɗe ɗaki na gida don ganin fayilolinsa."
     },
     "my_things": "Abubuwana",
     "stop_everything": "Tsayar da komai",
@@ -5398,7 +5437,11 @@
       "error": "Ba a iya gabatar da wannan ba: {detail}. Ba a shigar da komai ba.",
       "not_on_this_node": "Wannan kumburi ba zai iya karɓar shawarar al'umma tukuna ba: bai da hanyar /v1/safety/reports (yana buƙatar CIRISServer#665). Ba a shigar da komai ba. Idan kuna riƙe da nauyin daidaitawa, a shigar a ƙarƙashin Tsaro > Daidaitawa maimakon.",
       "refused_minor": "Rikodin shekarunku a kan wannan kumburi ya nuna ƙarami, don haka a gabatar da wannan ta hannun mai kula da ku, ba kai tsaye ba. Ba a shigar da komai ba; a tambayi mai kula da ku ya gabatar da shi."
-    }
+    },
+    "item_not_in_room": "wannan ba saƙo ko fayil ba ne a wannan ɗaki",
+    "not_flagged": "babu mai kula da wannan ɗaki da ya yiwa wannan abu alama — babu abin da za a bayyana",
+    "reveal_failed": "Ba a iya rubuta yardar ganin shi ba, don haka abun yana zama a ɓoye.",
+    "unknown_action": "ana bayyana abu a ɗaki da umarnin bayyana"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "An riga an janye ko soke wannan saƙon.",
     "not_author": "Mutumin da ya rubuta saƙo ne kaɗai zai iya maye gurbinsa, janye shi, ko soke shi.",
     "reason_invalid": "Wannan lambar dalili ba ta shafi wannan gyaran ba.",
-    "unknown_revision_op": "Ana gyara saƙo ta hanyar maye gurbi, janye, ko soke."
+    "unknown_revision_op": "Ana gyara saƙo ta hanyar maye gurbi, janye, ko soke.",
+    "attachment_not_in_room": "Wannan fayil ba ya cikin wannan ɗaki ba. Ku raba shi cikin ɗakin da farko, sannan ku aika shi."
   },
   "contacts": {
     "awaiting_consent": "Har yanzu ba su karɓa ba. Wannan yana jiran mutum ne, don haka sake gwadawa ba zai canza komai ba.",
@@ -6020,7 +6064,9 @@
     "withdraw_failed": "Ba a iya janye fayil ba. Sake gwadawa.",
     "withdrawn": "Marubucinsa ya janye wannan fayil. Ba a ƙara bayar da bytes a ko'ina ba.",
     "awaiting_key": "Bytes nasa suna nan, amma maɓallin wannan na'urar dominsu bai isa ba tukuna. Yana biye da kansa; sake gwadawa nan da ƴan lokaci.",
-    "not_a_member": "Ba ku cikin mambobin wannan ɗakin ba."
+    "not_a_member": "Ba ku cikin mambobin wannan ɗakin ba.",
+    "withheld_by_moderation": "Mai kula da wannan ɗaki ya yiwa wannan fayil ɗin alama, don haka yana zama a ɓoye har sai kun zaɓi ganin shi.",
+    "flagged_by_moderation": "mai kula da wannan ɗaki ya yiwa wannan fayil ɗin alama; yana zama a cikin ɗakin muddin alamar take nan"
   },
   "notes": {
     "author_signer_unavailable": "Wannan kumburi ba zai iya sa hannu a madadinku yanzu ba, don haka ba a rubuta bayani ba.",

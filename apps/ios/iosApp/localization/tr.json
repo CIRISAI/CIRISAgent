@@ -3827,7 +3827,40 @@
     "add_device_stopped_retrying": "Deneme durduruldu. Diğer cihazınıza hiçbir istek ulaşmadı.",
     "add_device_withdraw_here": "Beklemeyi durdurur; bu isteğin anahtarlarını ve daha önce alınmış onayı siler.",
     "add_device_withdraw_other": "Diğer cihaza isteği bırakması, ya da zaten onay verdiyse onayını geri alması bildirilir. Ulaşılamazsa istek orada 15 dakika sonra sona erer.",
-    "add_device_withdraw_held": "Hiçbir şey katılmaz. Yeniden seçebilir ya da yeni bir istek gönderebilirsiniz."
+    "add_device_withdraw_held": "Hiçbir şey katılmaz. Yeniden seçebilir ya da yeni bir istek gönderebilirsiniz.",
+    "my_devices_claim": "Bir cihaz talep et",
+    "chat_unopened_withheld_by_moderation": "Bu odanın bir moderatörü bu mesajı işaretledi, bu nedenle siz görmeyi seçene kadar gizli kalır.",
+    "chat_attach": "Ekle",
+    "chat_attached": "Eklendi: {name}",
+    "chat_attachment_remove": "Kaldır",
+    "chat_attachment_open": "Ekli dosyayı aç",
+    "files_withheld": "Bir moderatör tarafından gizlendi",
+    "files_act_revealed": "Artık sizin için açık.",
+    "files_pick_hint": "Eklemek için bir dosya seçin ya da önce bir tane ekleyin.",
+    "moderation_reveal": "Göster",
+    "moderation_reveal_title": "Bu öğe görüntülensin mi?",
+    "moderation_reveal_fact_flag": "Olarak işaretlendi",
+    "moderation_reveal_fact_effect": "Ne değişir",
+    "moderation_reveal_effect": "Sizin için, kendi cihazlarınızda açılır. Bu yüzden başka kimse onu görmez.",
+    "moderation_reveal_fact_signer": "İmzalayan",
+    "moderation_reveal_signer": "Bu tek öğeyi görüntülemeye onayınız olarak kendi anahtarınız",
+    "moderation_note_flagged": "Bir moderatör bunu {flag} olarak işaretledi.",
+    "moderation_note_revealed": "Bir moderatör bunu {flag} olarak işaretledi. Siz görmeyi seçtiniz.",
+    "moderation_note_cleared": "Bunun üzerindeki moderatör işareti kaldırıldı.",
+    "moderation_appeal_filed": "Bir itiraz karar bekliyor.",
+    "moderation_appeal_upheld": "İşaret, itirazda onaylandı.",
+    "moderation_appeal_partial": "İşaret, itirazda kısmen onaylandı.",
+    "moderation_appeal_reversed": "İşaret, itirazda geri alındı.",
+    "local_community_body": "Yerel topluluk coğrafidir: size yakın kişiler. Yalnızca konumunuzu paylaşmayı tercih ettiyseniz ve şu anda paylaşıyorsanız geçerlidir.",
+    "local_community_not_on_this_node": "Bu düğüm henüz konumunuzu paylaşamıyor, bu yüzden şimdilik yerel bir oda bir yere bağlı değildir ve kimin katılacağını siz seçersiniz. Konumunuz paylaşılmıyor.",
+    "setup_template_ally": "Ally, kişisel bir asistandır. Kişisel bir kurulum için doğru seçim budur.",
+    "setup_template_chosen": "{name} şablonundan başlanıyor.",
+    "setup_template_provisioned": "{name}, kuruluşunuzun Portal kaydı tarafından ayarlandı.",
+    "community_section_title_local": "Yerel odalarınız",
+    "community_section_body_local": "Size yakın kişiler için odalar. Şimdilik bir oda, yalnızca onu kuran cihazda yerel olarak görünür. Diğer üyeler onu Topluluklar altında görür.",
+    "community_empty_local": "Henüz hiç yerel odanız yok. Bir tane kurun ve size yakın kişileri davet edin.",
+    "community_create_open_local": "Yerel bir oda kurun",
+    "community_create_title_local": "Yerel bir oda kurun"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4727,12 @@
       "community_chats": "Odalar",
       "affiliations_chats": "Odalar",
       "node_self": "Kendi Durumu",
-      "owned_agents": "Sahip olduğunuz ajanlar"
+      "owned_agents": "Sahip olduğunuz ajanlar",
+      "my_devices": "Cihazlarım",
+      "layer_communities": "Topluluklar",
+      "layer_affiliations": "Aidiyetler",
+      "local_chats": "Yerel odalar",
+      "local_roster": "Yerel üyeler"
     },
     "circle": {
       "agent": "Sadece ben",
@@ -4745,7 +4783,8 @@
       "files_agent": "Burada henüz bir şey yok. Her şey buradan başlar ve burada hiçbir şey ilan edilmez.",
       "decisions_agent": "Burada birlikte karar verecek kimse yok. Kararlar Aile'de başlar.",
       "decisions_family": "Bir aile konuşarak karar verir. Burada oylanacak bir şey yok.",
-      "chats_agent": "Bu düğümde bir ajan yok, bu yüzden burada konuşacak kimse yok. Bir ajan kurun; onunla olan sohbetleriniz burada olacak."
+      "chats_agent": "Bu düğümde bir ajan yok, bu yüzden burada konuşacak kimse yok. Bir ajan kurun; onunla olan sohbetleriniz burada olacak.",
+      "files_local": "Dosyalar her odada bulunur. Dosyalarını görmek için bir yerel oda açın."
     },
     "my_things": "Kendi şeylerim",
     "stop_everything": "Her şeyi durdur",
@@ -5398,7 +5437,11 @@
       "error": "Bu konu açılamadı: {detail}. Hiçbir şey kaydedilmedi.",
       "not_on_this_node": "Bu düğüm henüz bir topluluk önerisi alamıyor: /v1/safety/reports rotası yok (CIRISServer#665 gerekiyor). Hiçbir şey kaydedilmedi. Bir moderasyon göreviniz varsa, bunun yerine Güvenlik > Moderasyon altında kaydedin.",
       "refused_minor": "Bu düğümdeki yaş kaydınız reşit olmadığınızı gösteriyor; dolayısıyla bu, doğrudan değil vekiliniz aracılığıyla açılır. Hiçbir şey kaydedilmedi; bunu açması için vekilinize başvurun."
-    }
+    },
+    "item_not_in_room": "bu, bu odadaki bir mesaj veya dosya değil",
+    "not_flagged": "bu odanın hiçbir moderatörü bu öğeyi işaretlememiş — gösterilecek bir şey yok",
+    "reveal_failed": "Görüntüleme onayı kaydedilemedi, bu nedenle öğe gizli kalır.",
+    "unknown_action": "bir odadaki bir öğe, reveal ile gösterilir"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "bu mesaj zaten geri çekildi veya reddedildi",
     "not_author": "bir mesajı yalnızca onu yazan kişi değiştirebilir, geri çekebilir veya reddedebilir",
     "reason_invalid": "bu sebep kodu bu düzeltmeye uygulanamaz",
-    "unknown_revision_op": "bir mesaj değiştirme, geri çekme veya reddetme yoluyla düzeltilir"
+    "unknown_revision_op": "bir mesaj değiştirme, geri çekme veya reddetme yoluyla düzeltilir",
+    "attachment_not_in_room": "Bu dosya bu odada değil. Önce dosyayı odaya paylaşın, sonra gönderin."
   },
   "contacts": {
     "awaiting_consent": "Henüz kabul etmediler. Bu bir kişiyi beklediğinden, yeniden denemek hiçbir şeyi değiştirmeyecektir.",
@@ -6020,7 +6064,9 @@
     "format_mismatch": "Dosya, türünün söylediği şey değil, bu nedenle eklenmedi.",
     "not_author": "Bir dosyayı yalnızca yazarı değiştirebilir veya geri çekebilir. Başka bir cihazınızda yazdığınız bir dosya o cihazdan değiştirilir.",
     "range_not_satisfiable": "İstenen aralık bu dosyanın dışında.",
-    "same_room": "dosya zaten o odada — taşımak için farklı bir oda gerekir"
+    "same_room": "dosya zaten o odada — taşımak için farklı bir oda gerekir",
+    "withheld_by_moderation": "Bu odanın bir moderatörü bu dosyayı işaretledi, bu nedenle siz görmeyi seçene kadar gizli kalır.",
+    "flagged_by_moderation": "bu odanın bir moderatörü bu dosyayı işaretledi; işaret geçerli olduğu sürece dosya odada kalır"
   },
   "notes": {
     "author_signer_unavailable": "Bu düğüm şu anda sizin adınıza imza atamıyor, bu nedenle not yazılmadı.",

@@ -254,11 +254,14 @@ class Device:
 
     async def send_join_request(self) -> None:
         """Send, and as a person would, send again while the other device's
-        address is still on its way: the node answers 503 with Retry-After, or
-        the client's own request times out first."""
+        address is still on its way, if the client is not already doing so."""
         end = time.monotonic() + STEP_DEADLINE_S
         while time.monotonic() < end:
-            await self.must_click("btn_add_device_send")
+            # The client re-sends by itself for five minutes while the other
+            # device can't be reached, with the button hidden, so a person would
+            # only press it again once it comes back.
+            if await self.helper.wait_for_optional_element("btn_add_device_send", timeout=1000):
+                await self.must_click("btn_add_device_send")
             if await self.helper.wait_for_optional_element("text_add_device_match_code", timeout=45000):
                 return
             self.log(f"no match code yet: {await self.text('add_device_refusal')!r}")

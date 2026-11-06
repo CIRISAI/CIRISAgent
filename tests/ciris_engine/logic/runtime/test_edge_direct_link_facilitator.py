@@ -50,16 +50,3 @@ def test_the_env_can_name_another_facilitator(monkeypatch: pytest.MonkeyPatch) -
 def test_no_ip_hint_or_unreadable_hints_mean_no_facilitator(monkeypatch: pytest.MonkeyPatch, hints: object) -> None:
     monkeypatch.delenv("CIRIS_DIRECT_LINK_FACILITATOR", raising=False)
     assert edge_runtime._direct_link_facilitator(_Engine(hints)) is None
-
-
-@pytest.mark.parametrize("value", ["server", "home", "phone-wifi", "phone-cellular", "off"])
-def test_the_chosen_shaping_class_reaches_the_node(monkeypatch, value):
-    monkeypatch.setenv("CIRIS_SHAPING_CLASS", value)
-    assert edge_runtime._shaping_class() == value
-
-
-@pytest.mark.parametrize("value", ["", "seat", "SERVER", "nonsense"])
-def test_no_class_or_an_unknown_one_is_left_to_the_node(monkeypatch, value):
-    monkeypatch.setenv("CIRIS_SHAPING_CLASS", value)
-    assert edge_runtime._shaping_class() is None
-

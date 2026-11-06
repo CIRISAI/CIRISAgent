@@ -242,20 +242,3 @@ async def test_reset_clears_the_cached_identities(
 
     assert get_federation_address() is None, "actor id survived the reset"
     assert get_node_key_id() is None, "node id survived the reset"
-
-
-@pytest.mark.parametrize("chosen, passed", [("server", "server"), ("", None), ("nonsense", None)])
-def test_the_wizard_choice_reaches_edge(
-    monkeypatch: pytest.MonkeyPatch, calls: Dict[str, Any], engine: Any, tmp_path: Path, chosen: str, passed: Any
-) -> None:
-    """No class leaves the kwarg out, so edge applies its own default."""
-    import ciris_engine.logic.persistence._substrate as substrate
-    from ciris_engine.logic.runtime.edge_runtime import initialize_edge_runtime
-
-    substrate.init_edge_runtime.__text_signature__ = "(shaping_class=None)"  # type: ignore[attr-defined]
-    monkeypatch.setenv("CIRIS_SHAPING_CLASS", chosen)
-    _install_fake_substrate(monkeypatch, calls, "ciris-agent-bootstrap-node")
-    initialize_edge_runtime(tmp_path / "identity")
-
-    assert calls["edge_kwargs"].get("shaping_class") == passed
-

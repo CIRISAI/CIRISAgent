@@ -316,29 +316,3 @@ class TestWriteLocationSharingConsent:
         assert "CIRIS_SHARE_LOCATION_IN_TRACES=true" in content
         assert "CIRIS_LOCATION_CONSENT_TIMESTAMP=" in content
         assert "Location Data Sharing Consent" in content
-
-
-class TestShapingClassIsSaved:
-    @staticmethod
-    def _saved(**choice):
-        import io
-
-        from ciris_engine.logic.adapters.api.routes.setup.complete import _write_shaping_class
-        from ciris_engine.logic.adapters.api.routes.setup.models import SetupCompleteRequest
-
-        setup = SetupCompleteRequest(
-            llm_provider="openai", llm_api_key="k", admin_username="a", admin_password="p" * 12, **choice
-        )
-        out = io.StringIO()
-        _write_shaping_class(out, setup)
-        return out.getvalue()
-
-    def test_the_choice_is_written(self):
-        assert self._saved(shaping_class="phone-cellular") == 'CIRIS_SHAPING_CLASS="phone-cellular"\n'
-
-    def test_no_choice_writes_nothing(self):
-        assert self._saved() == ""
-
-    def test_an_unknown_class_is_refused(self):
-        with pytest.raises(ValueError):
-            self._saved(shaping_class="seat")

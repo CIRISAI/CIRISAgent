@@ -86,24 +86,6 @@ def get_federation_alias_for_log() -> str:
         return "<unresolved>"
 
 
-def _shaping_class() -> Optional[str]:
-    """The link-shaping class the person chose in the first-run wizard, if any.
-
-    Edge refuses an unknown class at boot, and a bad value in a file shouldn't stop
-    the node, so it's dropped with a warning. No class means the node's own default.
-    """
-    from ciris_engine.logic.runtime.device_class import SHAPING_CLASS_ENV, ShapingClass
-
-    raw = os.environ.get(SHAPING_CLASS_ENV, "").strip()
-    if not raw:
-        return None
-    try:
-        return ShapingClass(raw).value
-    except ValueError:
-        logger.warning("[EDGE] ignoring unknown %s=%r", SHAPING_CLASS_ENV, raw)
-        return None
-
-
 def _direct_link_facilitator(engine: Any) -> Optional[str]:
     """``host:port`` of the facilitator room peers probe, or None.
 
@@ -460,10 +442,6 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
         # none. Without it every room step is two hops through the canonical at
         # its round cadence. Feature-detected: an unknown kwarg is a TypeError on
         # older wheels.
-        shaping_class = _shaping_class()
-        if shaping_class and "shaping_class" in (getattr(init_edge_runtime, "__text_signature__", "") or ""):
-            _edge_kwargs["shaping_class"] = shaping_class
-
         if _delivery_on and "direct_link_facilitator" in (getattr(init_edge_runtime, "__text_signature__", "") or ""):
             facilitator = _direct_link_facilitator(engine)
             if facilitator:

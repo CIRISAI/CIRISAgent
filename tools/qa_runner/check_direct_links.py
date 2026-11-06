@@ -43,7 +43,9 @@ def read_node(lines: Iterable[str]) -> NodeView:
         line = ANSI.sub("", raw)
         when = TIME.search(line)
         stamp = when.group(0) if when else ""
-        view.last_seen = max(view.last_seen, stamp)
+        # The line's own time: a line can also quote a later one, such as an expiry.
+        own = TIME.match(line)
+        view.last_seen = max(view.last_seen, own.group(0) if own else "")
         if ACCEPTED.search(line) and not view.first_accepted:
             view.first_accepted = stamp
         if ESTABLISHED.search(line):

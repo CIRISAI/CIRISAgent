@@ -52,3 +52,10 @@ def test_exhaustion_a_stall_close_or_a_lost_link_fails() -> None:
 def test_a_loss_after_the_peer_stopped_does_not_count() -> None:
     bad = "2026-11-04T10:03:00Z WARN direct link LOST: the punched interface went down"
     assert verdict(read_node([MUTUAL, EST, bad]), read_node([MUTUAL, EST])) == []
+
+
+def test_a_later_time_quoted_in_a_line_does_not_extend_the_peer() -> None:
+    bad = "2026-11-04T10:03:00Z WARN direct link LOST: the punched interface went down"
+    quoted = "2026-11-04T10:02:30Z INFO grant expires_at=2026-12-04T10:00:00Z"
+    assert verdict(read_node([MUTUAL, EST, bad]), read_node([MUTUAL, EST, quoted])) == []
+

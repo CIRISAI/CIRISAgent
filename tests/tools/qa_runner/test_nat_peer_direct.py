@@ -76,3 +76,19 @@ def test_repeated_pairs_keep_every_run_and_fail_if_any_failed(monkeypatch, tmp_p
     assert nat_peer.pair_repeated("t", "r", tmp_path, 3) == 1
     assert outs == ["run-1", "run-2", "run-3"]
 
+
+def test_time_to_contact_reports_each_step_and_a_failure() -> None:
+    from tools.qa_runner.nat_peer import contact_times
+
+    halves = [
+        {
+            "steps": [
+                {"step": "code:node-a", "ok": True, "elapsed_s": 1.0},
+                {"step": "add:node-a->node-b", "ok": True, "elapsed_s": 21.0},
+                {"step": "mutual:node-a", "ok": False, "elapsed_s": 180.0},
+            ]
+        }
+    ]
+    assert contact_times(halves) == "add:node-a->node-b 21s, mutual:node-a 180s FAILED"
+    assert contact_times([]) == "no contact steps recorded"
+

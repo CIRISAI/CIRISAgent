@@ -497,6 +497,7 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
                 print(f"[pair] {h['me']}<->{h['peer']} ({h['role']}): {'PASS' if h.get('ok') else 'FAIL at ' + str(h.get('failed_step'))}")
                 for st in h.get("steps", []):
                     print(f"    {st['step']:28} {'ok' if st['ok'] else 'FAIL'} {st['elapsed_s']:5.0f}s {st['detail'][:150]}")
+            print(f"[pair] {name} time to contact: {contact_times(halves)}")
             gate = out / name / "trace-gate.log"
             tail = gate.read_text().strip().splitlines()[-1:] if gate.exists() else ["no trace-gate log"]
             print(f"[pair] {name} trace gate: {tail[0][:200]}")
@@ -505,6 +506,16 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
         return 0 if ok and conclusion == "success" else 1
     finally:
         subprocess.run(["git", "push", "-q", "origin", "--delete", branch], capture_output=True)
+
+
+def contact_times(halves: Sequence[dict]) -> str:
+    """Seconds each contact step took, measured against the 30 s target for a relayed add."""
+    parts = []
+    for half in halves:
+        for st in half.get("steps", []):
+            if st["step"].split(":")[0] in ("add", "request", "mutual"):
+                parts.append(f"{st['step']} {st['elapsed_s']:.0f}s{'' if st['ok'] else ' FAILED'}")
+    return ", ".join(parts) or "no contact steps recorded"
 
 
 def pair_repeated(server_tag: str, ref: str, out: Path, repeat: int) -> int:

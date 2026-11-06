@@ -61,11 +61,13 @@ def verdict(a: NodeView, b: NodeView) -> List[str]:
     """What's wrong; empty means the direct link is proven."""
     problems: List[str] = []
     shared = sorted(set(a.established) & set(b.established))
-    if not shared:
-        one_sided = sorted(set(a.established) ^ set(b.established))
-        problems.append(
-            f"one-sided move: {one_sided} established on one side only" if one_sided else "no direct link established"
-        )
+    # A good retry doesn't excuse an earlier attempt: while one side is direct and the
+    # other relayed, the link can strand a live chat.
+    one_sided = sorted(set(a.established) ^ set(b.established))
+    if one_sided:
+        problems.append(f"one-sided move: {one_sided} established on one side only")
+    elif not shared:
+        problems.append("no direct link established")
     for link in shared:
         for name, view in (("a", a), ("b", b)):
             if not view.first_accepted or view.established[link] < view.first_accepted:

@@ -19,6 +19,12 @@ def test_a_one_sided_move_fails() -> None:
     assert "one-sided" in verdict(read_node([MUTUAL, EST]), read_node([MUTUAL]))[0]
 
 
+def test_a_one_sided_attempt_fails_even_after_a_good_retry() -> None:
+    first = EST.replace(EST.rsplit("link=", 1)[1], "b" * 32)
+    problems = verdict(read_node([MUTUAL, EST]), read_node([MUTUAL, first, EST]))
+    assert len(problems) == 1 and "one-sided" in problems[0]
+
+
 def test_no_direct_link_fails() -> None:
     assert verdict(read_node([MUTUAL]), read_node([MUTUAL])) == ["no direct link established"]
 

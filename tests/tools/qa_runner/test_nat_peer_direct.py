@@ -63,6 +63,8 @@ def test_the_responder_answers_what_it_read() -> None:
 
 
 def test_repeated_pairs_keep_every_run_and_fail_if_any_failed(monkeypatch, tmp_path) -> None:
+    from tools.qa_runner import nat_peer
+
     results = iter([0, 1, 0])
     outs = []
 

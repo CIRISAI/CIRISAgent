@@ -1048,29 +1048,23 @@ class CIRISVerify:
         # Parse validation results
         validation = resp.get("validation", {})
         overall_str = validation.get("overall", "ValidationError")
-        dns_us = validation.get("dns_us", {})
-        dns_eu = validation.get("dns_eu", {})
-        https_src = validation.get("https", {})
+        checks = [c for c in validation.get("sources") or [] if isinstance(c, dict)]
+        trust_root = validation.get("trust_root") or {}
+        fingerprint = trust_root.get("bundle_fingerprint")
+        failed = next((c for c in checks if c.get("error_details") or c.get("error")), {})
 
+        # Trust-root hosts since CIRISVerify 21: DNS is not a source, so the dns_*
+        # fields stay at their defaults and every host reports as https.
         source_details = SourceDetails(
-            dns_us_reachable=dns_us.get("reachable", False),
-            dns_eu_reachable=dns_eu.get("reachable", False),
-            https_reachable=https_src.get("reachable", False),
+            https_reachable=any(c.get("reachable", False) for c in checks),
             validation_status=_RUST_VALIDATION_MAP.get(
                 overall_str, ValidationStatus.VALIDATION_ERROR
             ),
-            sources_agreeing=sum([
-                dns_us.get("valid", False),
-                dns_eu.get("valid", False),
-                https_src.get("valid", False),
-            ]),
-            # Error details (added in v0.6.6)
-            dns_us_error=dns_us.get("error_details") or dns_us.get("error"),
-            dns_us_error_category=dns_us.get("error_category"),
-            dns_eu_error=dns_eu.get("error_details") or dns_eu.get("error"),
-            dns_eu_error_category=dns_eu.get("error_category"),
-            https_error=https_src.get("error_details") or https_src.get("error"),
-            https_error_category=https_src.get("error_category"),
+            sources_agreeing=sum(
+                1 for c in checks if fingerprint and c.get("bundle_fingerprint") == fingerprint
+            ),
+            https_error=failed.get("error_details") or failed.get("error"),
+            https_error_category=failed.get("error_category"),
         )
 
         # Parse license details if present
@@ -3349,11 +3343,9 @@ class MockCIRISVerify(CIRISVerify):
             ),
             hardware_type=self._mock_hardware,
             source_details=SourceDetails(
-                dns_us_reachable=True,
-                dns_eu_reachable=True,
                 https_reachable=True,
                 validation_status=ValidationStatus.ALL_SOURCES_AGREE,
-                sources_agreeing=3,
+                sources_agreeing=1,
             ),
             cached=False,
             verification_timestamp=datetime.now(timezone.utc),
@@ -3491,9 +3483,10 @@ class MockCIRISVerify(CIRISVerify):
             },
             "file_integrity": None,  # Skipped in mock
             "sources": {
-                "dns_us": {"reachable": True, "valid": True},
-                "dns_eu": {"reachable": True, "valid": True},
-                "https": {"reachable": True, "valid": True},
+                "sources": [{"endpoint": "mock://trust-root", "reachable": True,
+                             "verified": True, "bundle_fingerprint": "sha256:mock"}],
+                "trust_root": {"version": 4, "bundle_fingerprint": "sha256:mock"},
+                "validation_status": "AllSourcesAgree",
             },
             "audit_trail": None,  # Skipped in mock
             "python_integrity": {
@@ -3541,9 +3534,10 @@ class MockCIRISVerify(CIRISVerify):
             },
             "file_integrity": None,
             "sources": {
-                "dns_us": {"reachable": True, "valid": True},
-                "dns_eu": {"reachable": True, "valid": True},
-                "https": {"reachable": True, "valid": True},
+                "sources": [{"endpoint": "mock://trust-root", "reachable": True,
+                             "verified": True, "bundle_fingerprint": "sha256:mock"}],
+                "trust_root": {"version": 4, "bundle_fingerprint": "sha256:mock"},
+                "validation_status": "AllSourcesAgree",
             },
             "audit_trail": None,
             "python_integrity": {

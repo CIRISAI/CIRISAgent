@@ -35,7 +35,9 @@ def test_a_round_trip_inside_the_ceiling_passes() -> None:
         return 1.5
 
     half.read = read  # type: ignore[method-assign]
-    assert "1.50s" in half.direct_round_trip("c", 2.0)
+    detail = half.direct_round_trip("c", 2.0)
+    assert "round trip 1.50s" in detail
+    assert "send call 0.00s, then 1.50s until the reply opened" in detail
 
 
 def test_a_slow_round_trip_fails() -> None:

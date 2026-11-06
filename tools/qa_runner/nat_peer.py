@@ -252,19 +252,28 @@ class PeerHalf(CrossChatStage):
 
         The two runners' clocks can't be compared, so the requester sends, the
         responder answers the moment it reads that, and the requester times the
-        round trip against twice the one-way ceiling.
+        round trip against twice the one-way ceiling. Each side reports its own legs,
+        so a slow total says which part to look at; the ceiling is on the total.
         """
         me, peer = self.me.name, self.peer.name
         ping, pong = f"nat-peer direct ping {self.nonce}", f"nat-peer direct pong {self.nonce}"
         if self.role == ROLE_RESPONDER:
             took = self.read(cid, ping, "direct")
+            answering = self.clock.now()
             self.send(cid, pong, "direct")
-            return f"{me} answered {peer}'s ping {took:.1f}s after it started listening"
+            return (
+                f"{me} answered {peer}'s ping {took:.1f}s after it started listening; "
+                f"send call {self.clock.now() - answering:.2f}s"
+            )
         started = self.clock.now()
         self.send(cid, ping, "direct")
+        sent = self.clock.now()
         self.read(cid, pong, "direct")
         round_trip = self.clock.now() - started
-        detail = f"{me}->{peer}->{me} round trip {round_trip:.2f}s (ceiling {2 * ceiling_secs:.0f}s)"
+        detail = (
+            f"{me}->{peer}->{me} round trip {round_trip:.2f}s (ceiling {2 * ceiling_secs:.0f}s): "
+            f"send call {sent - started:.2f}s, then {round_trip - (sent - started):.2f}s until the reply opened"
+        )
         if round_trip > 2 * ceiling_secs:
             raise self._fail("direct", LAYER_MESSAGE, detail)
         return detail
@@ -498,6 +507,9 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
                 for st in h.get("steps", []):
                     print(f"    {st['step']:28} {'ok' if st['ok'] else 'FAIL'} {st['elapsed_s']:5.0f}s {st['detail'][:150]}")
             print(f"[pair] {name} time to contact: {contact_times(halves)}")
+            timed = out / name / "direct-timed.json"
+            if timed.exists():
+                print(f"[pair] {name} direct: {json.loads(timed.read_text()).get('detail', '')}")
             gate = out / name / "trace-gate.log"
             tail = gate.read_text().strip().splitlines()[-1:] if gate.exists() else ["no trace-gate log"]
             print(f"[pair] {name} trace gate: {tail[0][:200]}")

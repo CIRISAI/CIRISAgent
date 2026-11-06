@@ -507,6 +507,15 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
         subprocess.run(["git", "push", "-q", "origin", "--delete", branch], capture_output=True)
 
 
+def pair_repeated(server_tag: str, ref: str, out: Path, repeat: int) -> int:
+    """One sample can't give a rate: run every pair, and fail if any of them did."""
+    if repeat <= 1:
+        return pair(server_tag, ref, out)
+    codes = [pair(server_tag, ref, out / f"run-{n}") for n in range(1, repeat + 1)]
+    print(f"[pair] {codes.count(0)} of {repeat} passed: {codes}")
+    return 0 if not any(codes) else 1
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--username", default="qaadmin")
@@ -538,6 +547,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pr = sub.add_parser("pair", help="both nodes in CI, each on its own runner (cross-nat-pair.yml)")
     pr.add_argument("--server-tag", default="")
     pr.add_argument("--ref", default="main")
+    pr.add_argument("--repeat", type=int, default=1, help="run the pair this many times, one after another")
     pr.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-pair-{int(time.time())}")
     args = ap.parse_args(argv)
 
@@ -571,7 +581,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 fh.write("\n".join(lines) + "\n")
         return 0 if reports and all(r.ok for r in reports) else 1
     if args.cmd == "pair":
-        return pair(args.server_tag, args.ref, args.out)
+        return pair_repeated(args.server_tag, args.ref, args.out, args.repeat)
     return drive(args.node, args.server_tag, args.ref, args.out, args.username, args.password)
 
 

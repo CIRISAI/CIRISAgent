@@ -62,6 +62,8 @@ jobs:
         env:
           MESH_BOOT_ONLY: '1'
           MESH_KEEP: '1'
+          # Enough to see which side of a punch stops moving a link.
+          RUST_LOG: info,ciris_edge::replication::bridge=debug,ciris_edge::transport::reticulum=debug,leviculum_core=debug,leviculum_std=debug
           MESH_LLM_MODEL: qwen/qwen3.6-35b-a3b
           MESH_LLM_BASE_URL: https://openrouter.ai/api/v1
           MESH_LLM_PROVIDER: openai

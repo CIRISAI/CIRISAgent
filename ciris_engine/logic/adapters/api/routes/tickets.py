@@ -29,10 +29,12 @@ from ciris_engine.logic.persistence.models.tickets import (
     update_ticket_status,
 )
 from ciris_engine.logic.services.governance.budget_envelope import NestingViolation, issue_grant
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.config.tickets import TicketsConfig, TicketSOPConfig
 from ciris_engine.schemas.services.budget_envelope import (
     BUDGET_SPENT_METADATA_KEY,
     GRANTED_BUDGET_METADATA_KEY,
+    PROPOSAL_TICKET_STATUS,
     REQUESTED_BUDGET_METADATA_KEY,
     is_unapproved_proposal,
 )
@@ -47,6 +49,9 @@ logger = logging.getLogger(__name__)
 CurrentUserDep = Annotated[TokenData, Depends(get_current_user)]
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
+
+#: Metadata key holding who moved a ticket out of `blocked`. Written only here.
+STATUS_TRANSITIONS_METADATA_KEY = "status_transitions"
 
 
 # ============================================================================
@@ -92,6 +97,9 @@ class UpdateTicketRequest(BaseModel):
     status: Optional[str] = Field(None, description="New status (pending|in_progress|completed|cancelled|failed)")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Updated metadata")
     notes: Optional[str] = Field(None, description="Updated notes")
+    expected_status: Optional[str] = Field(
+        None, description="Refuse with 409 unless the ticket is still in this status"
+    )
 
 
 class SOPMetadataResponse(BaseModel):
@@ -449,6 +457,51 @@ def _verify_ticket_exists(ticket_id: str) -> Dict[str, Any]:
     return ticket
 
 
+def _may_decide_blocked_ticket(role: str) -> bool:
+    """A blocked ticket is a decision waiting on a person: an ADMIN (who is a WA) or a WA.
+
+    SERVICE_ACCOUNT shares ADMIN's level for shutdown operations, but it isn't a
+    person who can decide. An unknown role is refused.
+    """
+    try:
+        user_role = UserRole(role)
+    except ValueError:
+        return False
+    return user_role != UserRole.SERVICE_ACCOUNT and user_role.has_permission(UserRole.ADMIN)
+
+
+def _check_update_allowed(ticket: Dict[str, Any], request: UpdateTicketRequest, role: str) -> None:
+    """Refuse a stale update (409), or a change to a blocked ticket without standing (403)."""
+    current = ticket.get("status")
+    if request.expected_status is not None and request.expected_status != current:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Ticket is {current}, not {request.expected_status}",
+        )
+    changes_status = request.status is not None and request.status != current
+    if current == PROPOSAL_TICKET_STATUS and (changes_status or request.metadata):
+        if not _may_decide_blocked_ticket(role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Changing a blocked ticket requires ADMIN or Wise Authority standing",
+            )
+
+
+def _record_blocked_transition(ticket: Dict[str, Any], new_status: Optional[str], actor: str) -> None:
+    """Add who moved this ticket out of `blocked` to `ticket`'s metadata, to be persisted."""
+    if ticket.get("status") != PROPOSAL_TICKET_STATUS or not new_status or new_status == PROPOSAL_TICKET_STATUS:
+        return
+    metadata = ticket.setdefault("metadata", {})
+    metadata.setdefault(STATUS_TRANSITIONS_METADATA_KEY, []).append(
+        {
+            "from": PROPOSAL_TICKET_STATUS,
+            "to": new_status,
+            "actor": actor,
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
 def _update_ticket_status_if_provided(ticket_id: str, request: UpdateTicketRequest) -> None:
     """Update ticket status if provided in request."""
     if not request.status:
@@ -467,15 +520,17 @@ def _update_ticket_status_if_provided(ticket_id: str, request: UpdateTicketReque
 
 
 def _update_ticket_metadata_if_provided(
-    ticket_id: str, request: UpdateTicketRequest, ticket: Dict[str, Any]
+    ticket_id: str, request: UpdateTicketRequest, ticket: Dict[str, Any], transition_added: bool = False
 ) -> None:
     """Update ticket metadata if provided in request (deep merge with existing)."""
-    if not request.metadata:
+    # The transition record is the server's own: a client can't write or rewrite it.
+    requested = {k: v for k, v in (request.metadata or {}).items() if k != STATUS_TRANSITIONS_METADATA_KEY}
+    if not requested and not transition_added:
         return
 
     # Get current metadata and merge with new data
     existing_metadata = ticket.get("metadata", {})
-    merged_metadata = _deep_merge(existing_metadata, request.metadata)
+    merged_metadata = _deep_merge(existing_metadata, requested)
 
     success = update_ticket_metadata(
         ticket_id=ticket_id,
@@ -502,7 +557,9 @@ def _retrieve_updated_ticket(ticket_id: str) -> Dict[str, Any]:
 @router.patch(
     "/{ticket_id}",
     responses={
+        403: {"description": "Ticket is blocked; requires ADMIN or Wise Authority"},
         404: {"description": "Ticket not found"},
+        409: {"description": "expected_status doesn't match"},
         500: {"description": "Update failed"},
     },
 )
@@ -518,17 +575,25 @@ async def update_existing_ticket(
         Updated ticket data
 
     Raises:
+        403: Ticket is blocked and the caller isn't an ADMIN or Wise Authority
         404: Ticket not found
+        409: expected_status doesn't match
         500: Update failed
     """
     # Verify ticket exists
     ticket = _verify_ticket_exists(ticket_id)
+    _check_update_allowed(ticket, request, current_user.role)
 
     # Update status if provided
     _update_ticket_status_if_provided(ticket_id, request)
+    leaves_blocked = ticket.get("status") == PROPOSAL_TICKET_STATUS and request.status not in (
+        None,
+        PROPOSAL_TICKET_STATUS,
+    )
+    _record_blocked_transition(ticket, request.status, current_user.username)
 
     # Update metadata if provided (merge with existing)
-    _update_ticket_metadata_if_provided(ticket_id, request, ticket)
+    _update_ticket_metadata_if_provided(ticket_id, request, ticket, leaves_blocked)
 
     # Retrieve and return updated ticket
     updated_ticket = _retrieve_updated_ticket(ticket_id)

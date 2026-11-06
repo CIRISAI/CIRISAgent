@@ -789,3 +789,93 @@ class TestCancelTicket:
 
         assert exc_info.value.status_code == 500
         assert "Failed to delete ticket" in exc_info.value.detail
+
+
+# ============================================================================
+# Changing a blocked ticket (#1224)
+# ============================================================================
+
+
+def _user(role: str, name: str = "someone") -> Mock:
+    user = Mock()
+    user.username = name
+    user.role = role
+    return user
+
+
+def _blocked(metadata: Optional[Dict[str, Any]] = None, status: str = "blocked") -> Dict[str, Any]:
+    return {
+        "ticket_id": "T-1",
+        "sop": "DSAR_ACCESS",
+        "ticket_type": "dsar",
+        "status": status,
+        "priority": 5,
+        "email": "x@example.com",
+        "user_identifier": None,
+        "submitted_at": "2026-11-05T00:00:00+00:00",
+        "deadline": None,
+        "last_updated": "2026-11-05T00:00:00+00:00",
+        "completed_at": None,
+        "metadata": metadata if metadata is not None else {},
+        "notes": None,
+        "automated": False,
+        "correlation_id": None,
+        "agent_occurrence_id": "__shared__",
+    }
+
+
+@patch("ciris_engine.logic.adapters.api.routes.tickets.update_ticket_metadata", return_value=True)
+@patch("ciris_engine.logic.adapters.api.routes.tickets.update_ticket_status", return_value=True)
+@patch("ciris_engine.logic.adapters.api.routes.tickets.get_ticket")
+class TestBlockedTicketStanding:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("role", ["OBSERVER", "SERVICE_ACCOUNT", "NOT_A_ROLE"])
+    async def test_without_standing_nothing_is_written(self, get, set_status, set_meta, role, mock_request):
+        from ciris_engine.logic.adapters.api.routes.tickets import UpdateTicketRequest
+
+        get.return_value = _blocked()
+        for body in (UpdateTicketRequest(status="pending"), UpdateTicketRequest(metadata={"granted_budget": {"usd": 9}})):
+            with pytest.raises(HTTPException) as exc:
+                await update_existing_ticket("T-1", body, mock_request, _user(role))
+            assert exc.value.status_code == 403
+        set_status.assert_not_called()
+        set_meta.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("role", ["ADMIN", "AUTHORITY", "SYSTEM_ADMIN"])
+    async def test_admin_and_wa_can_decide_and_are_recorded(self, get, set_status, set_meta, role, mock_request):
+        from ciris_engine.logic.adapters.api.routes.tickets import UpdateTicketRequest
+
+        get.side_effect = [_blocked(), _blocked(status="pending")]
+        await update_existing_ticket("T-1", UpdateTicketRequest(status="pending"), mock_request, _user(role, "eric"))
+        set_status.assert_called_once()
+        record = set_meta.call_args.kwargs["metadata"]["status_transitions"][-1]
+        assert (record["from"], record["to"], record["actor"]) == ("blocked", "pending", "eric")
+
+    @pytest.mark.asyncio
+    async def test_a_client_cannot_write_the_transition_record(self, get, set_status, set_meta, mock_request):
+        from ciris_engine.logic.adapters.api.routes.tickets import UpdateTicketRequest
+
+        get.side_effect = [_blocked(status="in_progress"), _blocked(status="in_progress")]
+        body = UpdateTicketRequest(metadata={"status_transitions": [{"actor": "forged"}]})
+        await update_existing_ticket("T-1", body, mock_request, _user("OBSERVER"))
+        set_meta.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_expected_status_mismatch_is_a_409(self, get, set_status, set_meta, mock_request):
+        from ciris_engine.logic.adapters.api.routes.tickets import UpdateTicketRequest
+
+        get.return_value = _blocked(status="pending")
+        body = UpdateTicketRequest(status="completed", expected_status="blocked")
+        with pytest.raises(HTTPException) as exc:
+            await update_existing_ticket("T-1", body, mock_request, _user("ADMIN"))
+        assert exc.value.status_code == 409
+        set_status.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_other_tickets_keep_working_for_any_user(self, get, set_status, set_meta, mock_request):
+        from ciris_engine.logic.adapters.api.routes.tickets import UpdateTicketRequest
+
+        get.side_effect = [_blocked(status="pending"), _blocked(status="in_progress")]
+        await update_existing_ticket("T-1", UpdateTicketRequest(status="in_progress"), mock_request, _user("OBSERVER"))
+        set_status.assert_called_once()

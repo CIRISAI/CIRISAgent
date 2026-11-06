@@ -5,6 +5,13 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Only an ADMIN or Wise Authority can change a blocked ticket.** Any logged-in user could resolve a deferral through `PATCH /v1/tickets/{id}`. Leaving `blocked` now records who did it, and `expected_status` answers 409 if the ticket has moved.
+- **Non-default occurrences finish wakeup.** They never received their own id, so they stayed stuck in WAKEUP.
+
 ## [2.19.2-stable] - 2026-11-04
 
 ### Fixed

@@ -34,6 +34,7 @@ class NodeView:
     lost: List[str] = field(default_factory=list)
     stalls: List[str] = field(default_factory=list)
     exhausted: List[str] = field(default_factory=list)
+    last_seen: str = ""
 
 
 def read_node(lines: Iterable[str]) -> NodeView:
@@ -42,6 +43,7 @@ def read_node(lines: Iterable[str]) -> NodeView:
         line = ANSI.sub("", raw)
         when = TIME.search(line)
         stamp = when.group(0) if when else ""
+        view.last_seen = max(view.last_seen, stamp)
         if ACCEPTED.search(line) and not view.first_accepted:
             view.first_accepted = stamp
         if ESTABLISHED.search(line):
@@ -72,11 +74,19 @@ def verdict(a: NodeView, b: NodeView) -> List[str]:
         for name, view in (("a", a), ("b", b)):
             if not view.first_accepted or view.established[link] < view.first_accepted:
                 problems.append(f"node {name} went direct on {link} before the contact was accepted")
-    for name, view in (("a", a), ("b", b)):
-        problems += [f"node {name} ChannelExhausted: {x}" for x in view.exhausted[:3]]
-        problems += [f"node {name} stall-guard close: {x}" for x in view.stalls[:3]]
-        problems += [f"node {name} lost the direct link: {x}" for x in view.lost[:3]]
+    for name, view, other in (("a", a, b), ("b", b, a)):
+        # A link does go down when its peer's job ends and the node stops. Only a loss
+        # while the other side was still running counts.
+        live = [x for x in view.lost + view.exhausted + view.stalls if _while_running(x, other)]
+        problems += [f"node {name} ChannelExhausted: {x}" for x in view.exhausted[:3] if x in live]
+        problems += [f"node {name} stall-guard close: {x}" for x in view.stalls[:3] if x in live]
+        problems += [f"node {name} lost the direct link: {x}" for x in view.lost[:3] if x in live]
     return problems
+
+
+def _while_running(line: str, other: NodeView) -> bool:
+    found = TIME.search(line)
+    return not found or not other.last_seen or found.group(0) <= other.last_seen
 
 
 def log_lines(directory: Path) -> Iterable[str]:

@@ -45,4 +45,10 @@ def test_exhaustion_a_stall_close_or_a_lost_link_fails() -> None:
         "2026-11-04T10:03:00Z WARN stalled link closed (CIRISEdge#926) link=x",
         "2026-11-04T10:03:00Z WARN direct link LOST: the punched interface went down",
     ):
-        assert verdict(read_node([MUTUAL, EST, bad]), read_node([MUTUAL, EST])), bad
+        peer_still_up = "2026-11-04T10:09:00Z INFO still running"
+        assert verdict(read_node([MUTUAL, EST, bad]), read_node([MUTUAL, EST, peer_still_up])), bad
+
+
+def test_a_loss_after_the_peer_stopped_does_not_count() -> None:
+    bad = "2026-11-04T10:03:00Z WARN direct link LOST: the punched interface went down"
+    assert verdict(read_node([MUTUAL, EST, bad]), read_node([MUTUAL, EST])) == []

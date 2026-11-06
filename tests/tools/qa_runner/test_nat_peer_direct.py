@@ -94,3 +94,18 @@ def test_time_to_contact_reports_each_step_and_a_failure() -> None:
     assert contact_times(halves) == "add:node-a->node-b 21s, mutual:node-a 180s FAILED"
     assert contact_times([]) == "no contact steps recorded"
 
+
+def test_parallel_pairs_really_overlap_and_keep_their_order(monkeypatch, tmp_path) -> None:
+    import threading
+
+    from tools.qa_runner import nat_peer
+
+    together = threading.Barrier(3, timeout=5)
+
+    def fake_pair(tag, ref, out):
+        together.wait()  # only passes if three pairs are running at once
+        return 1 if out.name == "run-2" else 0
+
+    monkeypatch.setattr(nat_peer, "pair", fake_pair)
+    assert nat_peer.pair_repeated("t", "r", tmp_path, 3, parallel=3) == 1
+

@@ -35,6 +35,7 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -375,6 +376,9 @@ def _write(path: Optional[Path], obj: object) -> None:
         path.write_text(json.dumps(obj, indent=2, sort_keys=True, default=lambda o: asdict(o)))
 
 
+_FETCH_LOCK = threading.Lock()
+
+
 def _gh(*args: str) -> str:
     return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
 
@@ -401,8 +405,9 @@ def _push_request(ref: str, branch: str, request: Dict[str, object]) -> None:
     def git(*args: str, env: Optional[Dict[str, str]] = None, stdin: Optional[str] = None) -> str:
         return subprocess.run(["git", *args], check=True, capture_output=True, text=True, env=env, input=stdin).stdout.strip()
 
-    subprocess.run(["git", "fetch", "-q", "origin", ref], check=True)
-    base = git("rev-parse", "FETCH_HEAD")
+    with _FETCH_LOCK:  # FETCH_HEAD is one file, and pairs can start together.
+        subprocess.run(["git", "fetch", "-q", "origin", ref], check=True)
+        base = git("rev-parse", "FETCH_HEAD")
     blob = git("hash-object", "-w", "--stdin", stdin=json.dumps(request, indent=2) + "\n")
     with tempfile.TemporaryDirectory() as tmp:
         env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
@@ -492,6 +497,8 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
         if not run_id:
             print(f"[pair] no run started for {branch}")
             return 2
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "run-id.txt").write_text(run_id + "\n", encoding="utf-8")
         print(f"[pair] https://github.com/{REPO}/actions/runs/{run_id} (nonce {nonce}, server {server_tag or 'the pin'})", flush=True)
         subprocess.run(["gh", "run", "watch", run_id, "-R", REPO, "--interval", "30"], capture_output=True)
         out.mkdir(parents=True, exist_ok=True)
@@ -530,11 +537,12 @@ def contact_times(halves: Sequence[dict]) -> str:
     return ", ".join(parts) or "no contact steps recorded"
 
 
-def pair_repeated(server_tag: str, ref: str, out: Path, repeat: int) -> int:
+def pair_repeated(server_tag: str, ref: str, out: Path, repeat: int, parallel: int = 1) -> int:
     """One sample can't give a rate: run every pair, and fail if any of them did."""
     if repeat <= 1:
         return pair(server_tag, ref, out)
-    codes = [pair(server_tag, ref, out / f"run-{n}") for n in range(1, repeat + 1)]
+    with ThreadPoolExecutor(max_workers=max(parallel, 1)) as pool:
+        codes = list(pool.map(lambda n: pair(server_tag, ref, out / f"run-{n}"), range(1, repeat + 1)))
     print(f"[pair] {codes.count(0)} of {repeat} passed: {codes}")
     return 0 if not any(codes) else 1
 
@@ -570,7 +578,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pr = sub.add_parser("pair", help="both nodes in CI, each on its own runner (cross-nat-pair.yml)")
     pr.add_argument("--server-tag", default="")
     pr.add_argument("--ref", default="main")
-    pr.add_argument("--repeat", type=int, default=1, help="run the pair this many times, one after another")
+    pr.add_argument("--repeat", type=int, default=1, help="run the pair this many times")
+    pr.add_argument("--parallel", type=int, default=1, help="how many of them run at once")
     pr.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-pair-{int(time.time())}")
     args = ap.parse_args(argv)
 
@@ -604,7 +613,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 fh.write("\n".join(lines) + "\n")
         return 0 if reports and all(r.ok for r in reports) else 1
     if args.cmd == "pair":
-        return pair_repeated(args.server_tag, args.ref, args.out, args.repeat)
+        return pair_repeated(args.server_tag, args.ref, args.out, args.repeat, args.parallel)
     return drive(args.node, args.server_tag, args.ref, args.out, args.username, args.password)
 
 

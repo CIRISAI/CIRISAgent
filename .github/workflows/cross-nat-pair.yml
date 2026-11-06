@@ -97,6 +97,7 @@ jobs:
           jq -r '.[] | "peer \(.name): \(.key_id)"' "$RUNNER_TEMP/mesh/$NAME/peers.json"
 
       - name: This node's half of the chat
+        id: half
         run: |
           mkdir -p results
           rc=0
@@ -107,8 +108,10 @@ jobs:
           cat "$RUNNER_TEMP/mesh/$NAME/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           exit $rc
 
+      # Proposed only after acceptance, so a failed contact can't produce a link.
       - name: Wait for the direct link
-        if: always() && steps.boot.outcome == 'success'
+        id: direct
+        if: always() && steps.half.outcome == 'success'
         run: |
           # Proposed only after the contact is accepted, then retried on a backoff.
           deadline=$((SECONDS + 300))
@@ -120,7 +123,7 @@ jobs:
 
       # After the link moved, on the direct path. Ceiling from edge: 2 s each way.
       - name: Timed round trip over the direct link
-        if: always() && steps.boot.outcome == 'success'
+        if: always() && steps.direct.outcome == 'success'
         run: |
           rc=0
           docker exec -w /app "ciris-$NAME" python -m tools.qa_runner.nat_peer direct-timed \

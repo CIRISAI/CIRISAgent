@@ -641,13 +641,14 @@ jobs:
           echo "built: ${APP:-<none>}"
 
       - name: Multi-occurrence self (this device's part)
-        if: ${{ inputs.scenario == 'multi-occurrence-self' }}
+        if: ${{ inputs.scenario == 'multi-occurrence-self' && (inputs.platforms == '' || inputs.platforms == 'all' || contains(inputs.platforms, matrix.platforms)) }}
         timeout-minutes: 150
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           IOS_APP: ${{ steps.iosbuild.outputs.app }}
           MOS_DEVICE: ${{ matrix.platforms }}
+          MOS_DEVICES: ${{ inputs.platforms }}
         run: |
           set -uo pipefail
           export ANDROID_AVD_HOME="$HOME/.android/avd"

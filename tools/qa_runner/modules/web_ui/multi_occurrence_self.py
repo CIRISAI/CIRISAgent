@@ -33,8 +33,12 @@ import subprocess
 import time
 from typing import Callable, Dict, List, Optional
 
-#: The order they join. The first creates the identity.
-ORDER = ["linux", "android", "windows", "macos", "ios"]
+#: The order they join. The first creates the identity. `MOS_DEVICES` narrows it,
+#: for a run where only some platforms carry the server under test: a device on an
+#: older server can't stand in for it, and one failed join ends the scenario.
+ALL_DEVICES = ["linux", "android", "windows", "macos", "ios"]
+_ASKED = os.environ.get("MOS_DEVICES", "").split()
+ORDER = [d for d in ALL_DEVICES if d in _ASKED] if _ASKED and "all" not in _ASKED else ALL_DEVICES
 #: Past this many keys an addition is held for the roster (CC 3.3.6.3).
 UNILATERAL_KEYS = 1
 #: A commit status description holds 140 characters.

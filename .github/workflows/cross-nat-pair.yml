@@ -145,6 +145,19 @@ jobs:
             --require-authored | tee results/trace-gate.log
           cp "$RUNNER_TEMP/mesh/$NAME/receipt.json" results/ 2>/dev/null || true
 
+      # The same family-keyed maps as PyEdge.metrics_snapshot(): direct_link,
+      # direct_links_active and link_stall live here, not in the logs.
+      - name: Edge metrics
+        if: always() && steps.boot.outcome == 'success'
+        continue-on-error: true
+        run: |
+          mkdir -p results
+          tok=$(curl -s -m 15 -X POST http://127.0.0.1:18083/v1/auth/login -H 'Content-Type: application/json' \
+                -d '{"username":"qaadmin","password":"qa_test_password_12345"}' | jq -r '.access_token // .data.access_token')
+          curl -s -m 30 -w '\n%{http_code}\n' -H "Authorization: Bearer $tok" \
+               http://127.0.0.1:18083/v1/federation/metrics > results/edge-metrics.json
+          tail -1 results/edge-metrics.json
+
       - name: Collect logs
         if: always()
         run: |

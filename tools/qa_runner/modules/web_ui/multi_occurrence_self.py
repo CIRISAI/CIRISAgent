@@ -315,12 +315,40 @@ class Device:
         await self.type_into("input_add_device_contact", code)
         await self.send_join_request()
         self.signals.put(f"requested/{self.name}", await self.text("text_add_device_match_code"))
-        # The client finishes by itself once approved: it holds the approval,
-        # reads its own claim PIN from disk and collects the owner's session.
-        if not await self.helper.wait_for_element("btn_my_things", timeout=int(PEER_DEADLINE_S * 1000)):
-            await self.runner._dump_tree("after join")
-            raise RuntimeError(f"never left the wizard: {await self.text('text_add_device_status')}")
+        await self.signals.wait(f"approved/{self.name}", PEER_DEADLINE_S)
+        await self.finish_wizard_after_approval()
         self.signals.put(f"joined/{self.name}")
+
+    async def finish_wizard_after_approval(self) -> None:
+        """The approval only holds the claim. A person presses on through the
+        wizard, and its last step applies the claim and collects the session."""
+        end = time.monotonic() + STEP_DEADLINE_S
+        account_filled = answered_ai = answered_traces = False
+        while time.monotonic() < end:
+            tags = {e.test_tag for e in await self.helper.get_elements()}
+            if "btn_my_things" in tags:
+                return
+            if "btn_add_device_finish_retry" in tags:
+                await self.helper.click("btn_add_device_finish_retry")
+            elif "btn_next" in tags:
+                if "input_username" in tags and not account_filled:
+                    await self.type_into("input_username", "qaadmin")
+                    await self.type_into("input_password", self.password)
+                    await self.type_into("input_password_confirm", self.password)
+                    account_filled = True
+                if "opt_run_without_ai" in tags and not answered_ai:
+                    await self.helper.click("opt_run_without_ai")
+                    answered_ai = True
+                if "trace_consent_yes" in tags and not answered_traces:
+                    await self.helper.click("trace_consent_yes")
+                    answered_traces = True
+                await self.helper.click("btn_next")
+            elif tags & {"input_username", "btn_local_login"}:
+                await self.sign_in_after_handover()
+                return
+            await asyncio.sleep(2)
+        await self.runner._dump_tree("after join")
+        raise RuntimeError(f"never left the wizard: {await self.text('text_add_device_status')}")
 
     async def assent_to(self, joiner: str) -> None:
         """Agree to `joiner`'s held addition, if it still needs this key."""

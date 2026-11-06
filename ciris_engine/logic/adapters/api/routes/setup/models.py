@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from ciris_engine.logic.runtime.device_class import ShapingClass
 from ciris_engine.config.model_capabilities import ModelCapabilities
 
 # Constants used in model field descriptions
@@ -413,6 +414,9 @@ class SetupCompleteRequest(BaseModel):
     agent_port: int = Field(default=8080, description="Agent API port")
 
     # User Preferences (language & location at user-selected granularity)
+    shaping_class: Optional[ShapingClass] = Field(
+        None, description="Link-shaping class the person chose; omitted means the node's default"
+    )
     preferred_language: Optional[str] = Field(
         None, description="ISO 639-1 language code (e.g., 'en', 'am', 'es', 'fr')"
     )

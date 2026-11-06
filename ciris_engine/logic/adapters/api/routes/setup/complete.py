@@ -18,6 +18,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 
 from ciris_engine.logic.config.db_paths import get_sqlite_db_full_path
 from ciris_engine.logic.setup.wizard import render_env_file
+from ciris_engine.logic.runtime.device_class import SHAPING_CLASS_ENV, ShapingClass
 from ciris_engine.logic.utils.env_file import env_line, write_env_file
 from ciris_engine.logic.utils.node_ownership import claim_pin_file, node_owned
 from ciris_engine.schemas.api.responses import SuccessResponse
@@ -523,6 +524,12 @@ def _save_and_reload_config(setup: SetupCompleteRequest) -> Path:
     return config_path
 
 
+def _write_shaping_class(f: Any, setup: SetupCompleteRequest) -> None:
+    """Save the link-shaping class the person chose; no choice writes nothing."""
+    if isinstance(setup.shaping_class, ShapingClass):
+        f.write(env_line(SHAPING_CLASS_ENV, setup.shaping_class.value))
+
+
 def _write_section_header(f: Any, title: str) -> None:
     """Write a section header with separators to the config file."""
     f.write("\n# ============================================================================\n")
@@ -860,6 +867,7 @@ def _save_setup_config(setup: SetupCompleteRequest) -> Path:
 
         # User preferences (language & location)
         f.write("\n# User Preferences (from setup wizard PREFERENCES step)\n")
+        _write_shaping_class(f, setup)
         preferred_lang = setup.preferred_language or "en"
         f.write(env_line("CIRIS_PREFERRED_LANGUAGE", preferred_lang))
         _write_location_config(f, setup)

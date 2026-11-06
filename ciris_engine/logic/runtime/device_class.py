@@ -33,6 +33,17 @@ from ciris_engine.schemas.services.resources_core import DeviceClass
 logger = logging.getLogger(__name__)
 
 DEVICE_CLASS_ENV = "CIRIS_DEVICE_CLASS"
+SHAPING_CLASS_ENV = "CIRIS_SHAPING_CLASS"
+
+
+class ShapingClass(str, Enum):
+    """Link-shaping classes the person can choose (CC 5.4.3). Edge's own tokens."""
+
+    SERVER = "server"
+    HOME = "home"
+    PHONE_WIFI = "phone-wifi"
+    PHONE_CELLULAR = "phone-cellular"
+    OFF = "off"
 
 
 class HostDeviceClass(str, Enum):

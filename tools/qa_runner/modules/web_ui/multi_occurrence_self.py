@@ -342,7 +342,11 @@ class Device:
                 if "trace_consent_yes" in tags and not answered_traces:
                     await self.helper.click("trace_consent_yes")
                     answered_traces = True
-                await self.helper.click("btn_next")
+                # Disabled while the last step runs, and a click on it then raises.
+                try:
+                    await self.helper.click("btn_next")
+                except Exception as e:  # noqa: BLE001 - the loop looks again
+                    self.log(f"btn_next not ready: {str(e)[:60]}")
             elif tags & {"input_username", "btn_local_login"}:
                 await self.sign_in_after_handover()
                 return

@@ -270,6 +270,8 @@ class TestBuildAttestationResult:
         assert result.sources_agreeing == 1
         assert result.https_us_ok is True
         assert result.dns_us_ok is False
+        assert [(h.endpoint, h.reachable, h.verified) for h in result.sources] == [("https://h", True, True)]
+        assert result.source_validation_status == "AllSourcesAgree"
         assert result.max_level == 4
         assert result.attestation_status == "verified"
 

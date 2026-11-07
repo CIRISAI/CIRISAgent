@@ -240,14 +240,14 @@ class PeerHalf(CrossChatStage):
             raise self._fail("reopen", LAYER_ROOM, f"re-open answered room {p.get('community_id')!r}, not {cid}")
         return f"re-open returned the same room {cid}"
 
-    def file_body(self, src: str) -> bytes:
+    def file_body(self, src: str, size: int) -> bytes:
         """The file `src` sends: the same bytes on both runners, so each can check the other's."""
-        block = hashlib.sha256(f"{self.nonce} {src}".encode()).digest()
-        return (block * (FILE_BYTES // len(block) + 1))[:FILE_BYTES]
+        block = hashlib.sha256(f"{self.nonce} {src} {size}".encode()).digest()
+        return (block * (size // len(block) + 1))[:size]
 
-    def files_one_side(self, cid: str) -> str:
+    def files_one_side(self, cid: str, label: str) -> str:
         """Each side puts a file in the room, then opens the peer's and checks every byte."""
-        me, peer = self.me.name, self.peer.name
+        me, peer, size, step = self.me.name, self.peer.name, FILE_SIZES[label], f"files:{label}"
         r = self._call(
             self.me,
             "POST",
@@ -255,15 +255,15 @@ class PeerHalf(CrossChatStage):
             {
                 "cohort": "community",
                 "room_id": cid,
-                "bytes_base64": base64.b64encode(self.file_body(me)).decode(),
+                "bytes_base64": base64.b64encode(self.file_body(me, size)).decode(),
                 "media_type": "application/octet-stream",
-                "filename": f"nat-peer-{me}-{self.nonce}.bin",
+                "filename": f"nat-peer-{me}-{label}-{self.nonce}.bin",
             },
         )
         if not r.ok:
-            raise self._fail("files", LAYER_MESSAGE, f"{me} could not put a file in the room: {r.brief()}")
+            raise self._fail(step, LAYER_MESSAGE, f"{me} could not put a {size} byte file in the room: {r.brief()}")
         started = self.clock.now()
-        name, want = f"nat-peer-{peer}-{self.nonce}.bin", self.file_body(peer)
+        name, want = f"nat-peer-{peer}-{label}-{self.nonce}.bin", self.file_body(peer, size)
         room = f"cohort=community&room_id={urllib.parse.quote(cid, safe='')}"
         seen: List[str] = []
 
@@ -280,16 +280,16 @@ class PeerHalf(CrossChatStage):
                     seen[:] = [f"listed, open answered {got.brief()}"]
                     return None
                 if base64.b64decode(str(opened.get("bytes_base64", ""))) != want:
-                    raise self._fail("files", LAYER_MESSAGE, f"{peer}'s file opened with different bytes")
+                    raise self._fail(step, LAYER_MESSAGE, f"{peer}'s {size} byte file opened with different bytes")
                 return "opened"
             return None
 
         if self._poll(self.d.receive_s, attempt) is None:
             raise self._fail(
-                "files", LAYER_MESSAGE,
-                f"{me} never opened {peer}'s file within {self.d.receive_s:.0f}s ({seen[0] if seen else 'never listed'})",
+                step, LAYER_MESSAGE,
+                f"{me} never opened {peer}'s {size} byte file within {self.d.receive_s:.0f}s ({seen[0] if seen else 'never listed'})",
             )
-        return f"{FILE_BYTES} bytes each way; {peer}'s opened and matched {self.clock.now() - started:.0f}s after mine went up"
+        return f"{size} bytes each way; {peer}'s opened and matched {self.clock.now() - started:.0f}s after mine went up"
 
     def timed_one_side(self, cid: str) -> str:
         """After the direct-link window: send, then time the peer's arrival from my send."""
@@ -362,7 +362,8 @@ class PeerHalf(CrossChatStage):
         for name, layer, fn2 in (
             ("messages", LAYER_MESSAGE, lambda: self.messages_one_side(cid)),
             ("reopen", LAYER_ROOM, lambda: self.reopen_one_side(cid)),
-            ("files", LAYER_MESSAGE, lambda: self.files_one_side(cid)),
+            ("files:small", LAYER_MESSAGE, lambda: self.files_one_side(cid, "small")),
+            ("files:large", LAYER_MESSAGE, lambda: self.files_one_side(cid, "large")),
         ):
             if not self._step(name, layer, fn2).ok:
                 return self._finish_half(rep)
@@ -432,8 +433,8 @@ def _write(path: Optional[Path], obj: object) -> None:
 
 
 _FETCH_LOCK = threading.Lock()
-#: Under the node's 1 MiB inline cap, and big enough to need more than one frame.
-FILE_BYTES = 64 * 1024
+#: One under the node's 1 MiB inline cap, one over it, which the edge seals as a chunk DAG.
+FILE_SIZES = {"small": 64 * 1024, "large": 8 * 1024 * 1024}
 
 
 def _gh(*args: str) -> str:
@@ -539,6 +540,17 @@ def _drive_run(branch: str, nonce: str, local_specs: List[str], out: Path, usern
     return 0 if ok else 1
 
 
+def _wait_for_run(run_id: str, poll_s: float = 30.0) -> None:
+    """Until the run ends. `gh run watch` can return early, and the branch goes when this does."""
+    while True:
+        try:
+            if json.loads(_gh("run", "view", run_id, "-R", REPO, "--json", "status"))["status"] == "completed":
+                return
+        except subprocess.CalledProcessError:
+            pass  # a passing GitHub error is not the end of the run
+        time.sleep(poll_s)
+
+
 def pair(server_tag: str, ref: str, out: Path) -> int:
     """Both nodes in CI (cross-nat-pair.yml), each on its own runner; collect both sides."""
     nonce = secrets.token_hex(4)
@@ -557,7 +569,7 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
         out.mkdir(parents=True, exist_ok=True)
         (out / "run-id.txt").write_text(run_id + "\n", encoding="utf-8")
         print(f"[pair] https://github.com/{REPO}/actions/runs/{run_id} (nonce {nonce}, server {server_tag or 'the pin'})", flush=True)
-        subprocess.run(["gh", "run", "watch", run_id, "-R", REPO, "--interval", "30"], capture_output=True)
+        _wait_for_run(run_id)
         out.mkdir(parents=True, exist_ok=True)
         ok = True
         for name in ("node-a", "node-b"):

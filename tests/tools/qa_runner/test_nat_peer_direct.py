@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 import pytest
 
 from tools.qa_runner.cross_platform_chat import StepFailed
-from tools.qa_runner.nat_peer import ROLE_REQUESTER, ROLE_RESPONDER, PeerContact, PeerHalf
+from tools.qa_runner.nat_peer import FILE_SIZES, ROLE_REQUESTER, ROLE_RESPONDER, PeerContact, PeerHalf
 from tools.qa_runner.cross_platform_chat import Deadlines, Node
 
 
@@ -130,7 +130,7 @@ def _file_half(peer_bytes: Optional[bytes]) -> Tuple[PeerHalf, List[Tuple[str, s
         if method == "POST":
             return _Answer({})
         if path.startswith("/v1/drive"):
-            entries = [{"filename": "nat-peer-b-n1.bin", "attestation_id": "x", "bytes": "here"}]
+            entries = [{"filename": "nat-peer-b-small-n1.bin", "attestation_id": "x", "bytes": "here"}]
             return _Answer({"entries": entries if peer_bytes is not None else []})
         return _Answer({"bytes_base64": base64.b64encode(peer_bytes or b"").decode()})
 
@@ -139,8 +139,8 @@ def _file_half(peer_bytes: Optional[bytes]) -> Tuple[PeerHalf, List[Tuple[str, s
 
 
 def test_a_peers_file_opens_with_exactly_its_bytes() -> None:
-    half, calls = _file_half(_half(ROLE_REQUESTER, _Clock()).file_body("b"))
-    assert "bytes each way" in half.files_one_side("room/1")
+    half, calls = _file_half(_half(ROLE_REQUESTER, _Clock()).file_body("b", FILE_SIZES["small"]))
+    assert "bytes each way" in half.files_one_side("room/1", "small")
     assert calls[0] == ("POST", "/v1/files")
     assert "room_id=room%2F1" in calls[1][1]
 
@@ -148,10 +148,34 @@ def test_a_peers_file_opens_with_exactly_its_bytes() -> None:
 def test_different_bytes_fail_rather_than_pass_on_a_listing() -> None:
     half, _ = _file_half(b"not the file")
     with pytest.raises(StepFailed):
-        half.files_one_side("c")
+        half.files_one_side("c", "small")
 
 
 def test_a_file_that_never_arrives_fails() -> None:
     half, _ = _file_half(None)
     with pytest.raises(StepFailed):
-        half.files_one_side("c")
+        half.files_one_side("c", "small")
+
+
+def test_the_large_file_goes_over_the_inline_cap_and_uses_its_own_name() -> None:
+    assert FILE_SIZES["large"] > 1024 * 1024
+    half, _ = _file_half(_half(ROLE_REQUESTER, _Clock()).file_body("b", FILE_SIZES["small"]))
+    assert len(half.file_body("a", FILE_SIZES["large"])) == FILE_SIZES["large"]
+
+
+def test_waiting_for_a_run_survives_a_github_error(monkeypatch) -> None:
+    import subprocess
+
+    from tools.qa_runner import nat_peer
+
+    answers = iter([subprocess.CalledProcessError(1, "gh"), '{"status": "in_progress"}', '{"status": "completed"}'])
+
+    def gh(*args: str) -> str:
+        got = next(answers)
+        if isinstance(got, Exception):
+            raise got
+        return got
+
+    monkeypatch.setattr(nat_peer, "_gh", gh)
+    nat_peer._wait_for_run("1", poll_s=0)
+    assert next(answers, None) is None

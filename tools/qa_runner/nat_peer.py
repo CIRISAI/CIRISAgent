@@ -27,6 +27,8 @@ artifact and hands the locals' to the workflow as a dispatch input.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import secrets
@@ -35,6 +37,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -237,6 +240,57 @@ class PeerHalf(CrossChatStage):
             raise self._fail("reopen", LAYER_ROOM, f"re-open answered room {p.get('community_id')!r}, not {cid}")
         return f"re-open returned the same room {cid}"
 
+    def file_body(self, src: str) -> bytes:
+        """The file `src` sends: the same bytes on both runners, so each can check the other's."""
+        block = hashlib.sha256(f"{self.nonce} {src}".encode()).digest()
+        return (block * (FILE_BYTES // len(block) + 1))[:FILE_BYTES]
+
+    def files_one_side(self, cid: str) -> str:
+        """Each side puts a file in the room, then opens the peer's and checks every byte."""
+        me, peer = self.me.name, self.peer.name
+        r = self._call(
+            self.me,
+            "POST",
+            "/v1/files",
+            {
+                "cohort": "community",
+                "room_id": cid,
+                "bytes_base64": base64.b64encode(self.file_body(me)).decode(),
+                "media_type": "application/octet-stream",
+                "filename": f"nat-peer-{me}-{self.nonce}.bin",
+            },
+        )
+        if not r.ok:
+            raise self._fail("files", LAYER_MESSAGE, f"{me} could not put a file in the room: {r.brief()}")
+        started = self.clock.now()
+        name, want = f"nat-peer-{peer}-{self.nonce}.bin", self.file_body(peer)
+        room = f"cohort=community&room_id={urllib.parse.quote(cid, safe='')}"
+        seen: List[str] = []
+
+        def attempt(_: int) -> Optional[str]:
+            listed = self._call(self.me, "GET", f"/v1/drive?{room}&limit=200")
+            page = _payload(listed.body) if listed.ok else None
+            for entry in page.get("entries", []) if isinstance(page, dict) else []:
+                if entry.get("filename") != name:
+                    continue
+                seen[:] = [f"listed, bytes={entry.get('bytes')}"]
+                got = self._call(self.me, "GET", f"/v1/files/{entry.get('attestation_id')}?{room}")
+                opened = _payload(got.body) if got.ok else None
+                if not isinstance(opened, dict):
+                    seen[:] = [f"listed, open answered {got.brief()}"]
+                    return None
+                if base64.b64decode(str(opened.get("bytes_base64", ""))) != want:
+                    raise self._fail("files", LAYER_MESSAGE, f"{peer}'s file opened with different bytes")
+                return "opened"
+            return None
+
+        if self._poll(self.d.receive_s, attempt) is None:
+            raise self._fail(
+                "files", LAYER_MESSAGE,
+                f"{me} never opened {peer}'s file within {self.d.receive_s:.0f}s ({seen[0] if seen else 'never listed'})",
+            )
+        return f"{FILE_BYTES} bytes each way; {peer}'s opened and matched {self.clock.now() - started:.0f}s after mine went up"
+
     def timed_one_side(self, cid: str) -> str:
         """After the direct-link window: send, then time the peer's arrival from my send."""
         wait = (self.room_ready_at or self.clock.now()) + self.DIRECT_WINDOW_S - self.clock.now()
@@ -308,6 +362,7 @@ class PeerHalf(CrossChatStage):
         for name, layer, fn2 in (
             ("messages", LAYER_MESSAGE, lambda: self.messages_one_side(cid)),
             ("reopen", LAYER_ROOM, lambda: self.reopen_one_side(cid)),
+            ("files", LAYER_MESSAGE, lambda: self.files_one_side(cid)),
         ):
             if not self._step(name, layer, fn2).ok:
                 return self._finish_half(rep)
@@ -377,6 +432,8 @@ def _write(path: Optional[Path], obj: object) -> None:
 
 
 _FETCH_LOCK = threading.Lock()
+#: Under the node's 1 MiB inline cap, and big enough to need more than one frame.
+FILE_BYTES = 64 * 1024
 
 
 def _gh(*args: str) -> str:

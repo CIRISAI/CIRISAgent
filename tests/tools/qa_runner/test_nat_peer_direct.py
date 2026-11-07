@@ -1,6 +1,7 @@
 """The timed round trip over a punched link."""
 
-from typing import List
+import base64
+from typing import List, Optional, Tuple
 
 import pytest
 
@@ -109,3 +110,48 @@ def test_parallel_pairs_really_overlap_and_keep_their_order(monkeypatch, tmp_pat
     monkeypatch.setattr(nat_peer, "pair", fake_pair)
     assert nat_peer.pair_repeated("t", "r", tmp_path, 3, parallel=3) == 1
 
+
+class _Answer:
+    def __init__(self, body: object, ok: bool = True) -> None:
+        self.body, self.ok = body, ok
+
+    def brief(self) -> str:
+        return f"ok={self.ok}"
+
+
+def _file_half(peer_bytes: Optional[bytes]) -> Tuple[PeerHalf, List[Tuple[str, str]]]:
+    """A half whose node holds the peer's file with `peer_bytes`, or doesn't hold it yet."""
+    half = _half(ROLE_REQUESTER, _Clock())
+    half.d = Deadlines(poll_s=1.0, receive_s=3.0)
+    calls: List[Tuple[str, str]] = []
+
+    def call(node: Node, method: str, path: str, body: Optional[object] = None) -> _Answer:
+        calls.append((method, path))
+        if method == "POST":
+            return _Answer({})
+        if path.startswith("/v1/drive"):
+            entries = [{"filename": "nat-peer-b-n1.bin", "attestation_id": "x", "bytes": "here"}]
+            return _Answer({"entries": entries if peer_bytes is not None else []})
+        return _Answer({"bytes_base64": base64.b64encode(peer_bytes or b"").decode()})
+
+    half._call = call  # type: ignore[method-assign,assignment]
+    return half, calls
+
+
+def test_a_peers_file_opens_with_exactly_its_bytes() -> None:
+    half, calls = _file_half(_half(ROLE_REQUESTER, _Clock()).file_body("b"))
+    assert "bytes each way" in half.files_one_side("room/1")
+    assert calls[0] == ("POST", "/v1/files")
+    assert "room_id=room%2F1" in calls[1][1]
+
+
+def test_different_bytes_fail_rather_than_pass_on_a_listing() -> None:
+    half, _ = _file_half(b"not the file")
+    with pytest.raises(StepFailed):
+        half.files_one_side("c")
+
+
+def test_a_file_that_never_arrives_fails() -> None:
+    half, _ = _file_half(None)
+    with pytest.raises(StepFailed):
+        half.files_one_side("c")

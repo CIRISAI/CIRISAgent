@@ -271,6 +271,9 @@ class PeerHalf(CrossChatStage):
             listed = self._call(self.me, "GET", f"/v1/drive?{room}&limit=200")
             page = _payload(listed.body) if listed.ok else None
             for entry in page.get("entries", []) if isinstance(page, dict) else []:
+                # A row held but not opened here lists no name, so it isn't a missing row.
+                if entry.get("filename") is None and entry.get("author_key_id") != self.me.fed_id:
+                    seen[:] = [f"listed sealed, {entry.get('description')}, bytes={entry.get('bytes')}"]
                 if entry.get("filename") != name:
                     continue
                 seen[:] = [f"listed, bytes={entry.get('bytes')}"]

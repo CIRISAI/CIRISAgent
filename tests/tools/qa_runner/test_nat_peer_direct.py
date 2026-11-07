@@ -179,3 +179,20 @@ def test_waiting_for_a_run_survives_a_github_error(monkeypatch) -> None:
     monkeypatch.setattr(nat_peer, "_gh", gh)
     nat_peer._wait_for_run("1", poll_s=0)
     assert next(answers, None) is None
+
+
+def test_a_sealed_row_is_reported_as_sealed_not_as_never_listed() -> None:
+    half, _ = _file_half(None)
+    inner = half._call
+
+    def call(node: Node, method: str, path: str, body: Optional[object] = None) -> _Answer:
+        if path.startswith("/v1/drive"):
+            sealed = {"filename": None, "description": "sealed", "bytes": "not_fetched", "author_key_id": "b"}
+            return _Answer({"entries": [sealed]})
+        return inner(node, method, path, body)  # type: ignore[arg-type,return-value]
+
+    half._call = call  # type: ignore[method-assign,assignment]
+    with pytest.raises(StepFailed) as failed:
+        half.files_one_side("c", "small")
+    assert "listed sealed, sealed, bytes=not_fetched" in str(failed.value.result.detail)
+

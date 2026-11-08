@@ -67,6 +67,9 @@ ROLE_REQUESTER = "requester"
 ROLE_RESPONDER = "responder"
 REPO = "CIRISAI/CIRISAgent"
 NODE_C = "node-c"
+# The A/V step: a 60 s call, one stream each way (Eric, via edge).
+AV_SECONDS, AV_RATE_HZ, AV_FRAME_BYTES = 60, 30, 1024
+AV_JOIN_S, AV_DRAIN_S = 60.0, 15.0
 
 
 @dataclass
@@ -111,6 +114,7 @@ class PeerHalf(CrossChatStage):
         super().__init__(me, remote, clock=clock, deadlines=deadlines, log=log, nonce=nonce)
         self.me, self.peer, self.role = me, remote, role
         self.report = StageReport(pair=[me.name, peer.name])
+        self.av_record: Dict[str, object] = {}
 
     # -- one-sided steps the two-node stage does not have --
 
@@ -336,6 +340,61 @@ class PeerHalf(CrossChatStage):
             raise self._fail("direct", LAYER_MESSAGE, detail)
         return detail
 
+    def av_call(self, cid: str, seconds: int = AV_SECONDS, rate_hz: int = AV_RATE_HZ, frame_bytes: int = AV_FRAME_BYTES) -> str:
+        """A call in the pair room: one generated stream each way, then the stats edge kept.
+
+        Server 0.5.245's QA call routes (node runs with CIRIS_QA_CALLS=1). Both
+        sides join, wait until the call has a leg, stream for `seconds`, keep
+        listening for the drain, then leave. The peer's frames arriving here is
+        the pass; the rest (late, stale, leg kind) is recorded for edge in
+        `self.av_record`, whether or not the step passed.
+        """
+        me, peer, step = self.me.name, self.peer.name, "av"
+        started = self._call(self.me, "POST", "/v1/qa/call/start", {"room": cid, "relay": False})  # type: ignore[dict-item]
+        if not started.ok:
+            self.av_record = {"joined": started.brief()}
+            raise self._fail(step, LAYER_MESSAGE, f"{me} could not join the call: {started.brief()}")
+        joined_at = self.clock.now()
+        last: Dict[str, object] = {}
+
+        def stats() -> Dict[str, object]:
+            r = self._call(self.me, "GET", f"/v1/qa/call/stats?room={urllib.parse.quote(cid, safe='')}")
+            got = _payload(r.body) if r.ok else None
+            if isinstance(got, dict):
+                last.clear()
+                last.update(got)
+            return last
+
+        def has_leg(_: int) -> Optional[str]:
+            call = stats().get("call")
+            return "leg up" if isinstance(call, dict) and call.get("legs") else None
+
+        leg_wait = self._poll(AV_JOIN_S, has_leg)
+        stream = self._call(
+            self.me, "POST", "/v1/qa/call/stream",
+            {"room": cid, "rate_hz": rate_hz, "frame_bytes": frame_bytes, "seconds": seconds},  # type: ignore[dict-item]
+        )
+        if not stream.ok:
+            self._call(self.me, "POST", "/v1/qa/call/stop", {"room": cid})
+            raise self._fail(step, LAYER_MESSAGE, f"{me} could not start its stream: {stream.brief()}")
+        self.clock.sleep(seconds + AV_DRAIN_S)
+        stats()
+        stop = self._call(self.me, "POST", "/v1/qa/call/stop", {"room": cid})
+        final = _payload(stop.body) if stop.ok else None
+        self.av_record = record = {
+            "joined": _payload(started.body),
+            "leg_up_s": None if leg_wait is None else round(self.clock.now() - joined_at - seconds - AV_DRAIN_S, 1),
+            "last_stats": dict(last),
+            "stop": final if isinstance(final, dict) else stop.brief(),
+            "asked": {"seconds": seconds, "rate_hz": rate_hz, "frame_bytes": frame_bytes},
+        }
+        body = final.get("stats", final) if isinstance(final, dict) else last
+        detail = av_summary(body if isinstance(body, dict) else {}, seconds * rate_hz)
+        received = _dig(body, "received", "frames")
+        if not isinstance(received, int) or received <= 0:
+            raise self._fail(step, LAYER_MESSAGE, f"{me} heard none of {peer}'s frames: {detail}")
+        return f"{peer}->{me}: {detail}"
+
     # -- the half --
 
     def run_half(self) -> HalfReport:
@@ -438,6 +497,31 @@ def _write(path: Optional[Path], obj: object) -> None:
 _FETCH_LOCK = threading.Lock()
 #: One under the node's 1 MiB inline cap, one over it, which the edge seals as a chunk DAG.
 FILE_SIZES = {"small": 64 * 1024, "large": 8 * 1024 * 1024}
+
+
+def _dig(obj: object, *keys: str) -> object:
+    for k in keys:
+        if not isinstance(obj, dict):
+            return None
+        obj = obj.get(k)
+    return obj
+
+
+def av_summary(stats: Dict[str, object], expected: int) -> str:
+    """One line edge reads: frames each way, delay, late/stale, and the leg each stream rode."""
+    streams = _dig(stats, "call", "streams")
+    legs = ", ".join(
+        f"{s.get('leg')}(parent_changes={s.get('parent_changes')})" for s in streams if isinstance(s, dict)
+    ) if isinstance(streams, list) else "no streams"
+    return (
+        f"sent {_dig(stats, 'sent', 'frames')} (refused {_dig(stats, 'sent', 'publish_refused')}, "
+        f"legs {_dig(stats, 'sent', 'legs')}); received {_dig(stats, 'received', 'frames')}/{expected} "
+        f"p50 {_dig(stats, 'received', 'delay_ms_p50')} p95 {_dig(stats, 'received', 'delay_ms_p95')} "
+        f"max {_dig(stats, 'received', 'delay_ms_max')} ms (incl. clock skew); "
+        f"expired_late {_dig(stats, 'call', 'reorder', 'expired_late')}, "
+        f"stale_dropped {_dig(stats, 'call', 'alm', 'stale_dropped')}; streams: {legs}; "
+        f"tier {_dig(stats, 'call', 'service_tier')}"
+    )
 
 
 def _gh(*args: str) -> str:
@@ -589,6 +673,10 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
             timed = out / name / "direct-timed.json"
             if timed.exists():
                 print(f"[pair] {name} direct: {json.loads(timed.read_text()).get('detail', '')}")
+            av = out / name / "av.json"
+            if av.exists():
+                got = json.loads(av.read_text())
+                print(f"[pair] {name} av: {'ok' if got.get('ok') else 'FAIL'} {got.get('detail', '')[:400]}")
             gate = out / name / "trace-gate.log"
             tail = gate.read_text().strip().splitlines()[-1:] if gate.exists() else ["no trace-gate log"]
             print(f"[pair] {name} trace gate: {tail[0][:200]}")
@@ -642,6 +730,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     t.add_argument("--result", type=Path, required=True, help="this node's half result, for the room id")
     t.add_argument("--ceiling-secs", type=float, default=2.0, help="one-way ceiling")
     t.add_argument("--out", type=Path, default=None)
+    v = sub.add_parser("av", help="a 60 s call in the pair room, one stream each way (needs CIRIS_QA_CALLS=1)")
+    v.add_argument("--node", required=True)
+    v.add_argument("--role", choices=[ROLE_REQUESTER, ROLE_RESPONDER], required=True)
+    v.add_argument("--peers", type=Path, required=True)
+    v.add_argument("--nonce", required=True)
+    v.add_argument("--result", type=Path, required=True, help="this node's half result, for the room id")
+    v.add_argument("--seconds", type=int, default=AV_SECONDS)
+    v.add_argument("--out", type=Path, default=None)
     d = sub.add_parser("drive", help="dispatch node-c in CI and run the local halves against it")
     d.add_argument("--node", action="append", required=True)
     d.add_argument("--server-tag", default="")
@@ -668,6 +764,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         cid = str(json.loads(args.result.read_text())[0]["community_id"])
         step = half._step("direct", LAYER_MESSAGE, lambda: half.direct_round_trip(cid, args.ceiling_secs))
         _write(args.out, asdict(step))
+        return 0 if step.ok else 1
+    if args.cmd == "av":
+        peer = PeerContact(**json.loads(args.peers.read_text())[0])
+        me = _node(args.node, args.username, args.password)
+        half = PeerHalf(me, peer, args.role, args.nonce, deadlines=Deadlines(poll_s=2.0, send_s=30.0, receive_s=300.0))
+        half._login(me)
+        cid = str(json.loads(args.result.read_text())[0]["community_id"])
+        step = half._step("av", LAYER_MESSAGE, lambda: half.av_call(cid, seconds=args.seconds))
+        _write(args.out, {**asdict(step), "record": half.av_record})
         return 0 if step.ok else 1
     if args.cmd == "half":
         peers = [PeerContact(**p) for p in json.loads(args.peers.read_text())]

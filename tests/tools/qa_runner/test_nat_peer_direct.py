@@ -196,3 +196,53 @@ def test_a_sealed_row_is_reported_as_sealed_not_as_never_listed() -> None:
         half.files_one_side("c", "small")
     assert "listed sealed, sealed, bytes=not_fetched" in str(failed.value.result.detail)
 
+
+
+def _av_half(join_ok: bool = True, heard: int = 1700) -> Tuple[PeerHalf, List[Tuple[str, str, Optional[object]]]]:
+    """A half whose node answers the 0.5.245 QA call routes."""
+    half = _half(ROLE_REQUESTER, _Clock())
+    half.d = Deadlines(poll_s=2.0)
+    calls: List[Tuple[str, str, Optional[object]]] = []
+    stats = {
+        "sent": {"frames": 1800, "publish_refused": 0, "legs": {"delivered": 1800}},
+        "received": {"frames": heard, "delay_ms_p50": 40, "delay_ms_p95": 120, "delay_ms_max": 300},
+        "call": {"legs": [{"peer": "b"}], "service_tier": "full", "reorder": {"expired_late": 3},
+                 "alm": {"stale_dropped": 1}, "streams": [{"leg": "direct", "parent_changes": 0}]},
+    }
+
+    def call(node: Node, method: str, path: str, body: Optional[object] = None) -> _Answer:
+        calls.append((method, path, body))
+        if path == "/v1/qa/call/start":
+            return _Answer({"legs": 1} if join_ok else {"detail": "NotARoomMember"}, ok=join_ok)
+        if path == "/v1/qa/call/stop":
+            return _Answer({"stats": stats, "summary": {}})
+        return _Answer(stats)
+
+    half._call = call  # type: ignore[method-assign,assignment]
+    return half, calls
+
+
+def test_an_av_call_reports_frames_delay_and_the_leg() -> None:
+    half, calls = _av_half()
+    detail = half.av_call("room/1")
+    assert [c[1].split("?")[0] for c in calls][:3] == ["/v1/qa/call/start", "/v1/qa/call/stats", "/v1/qa/call/stream"]
+    assert calls[-1][1] == "/v1/qa/call/stop"
+    assert "room=room%2F1" in calls[1][1]
+    assert calls[2][2] == {"room": "room/1", "rate_hz": 30, "frame_bytes": 1024, "seconds": 60}
+    assert "received 1700/1800" in detail and "expired_late 3" in detail and "direct(parent_changes=0)" in detail
+    assert half.av_record["stop"]
+
+
+def test_an_av_call_that_hears_nothing_fails_and_keeps_the_record() -> None:
+    half, calls = _av_half(heard=0)
+    with pytest.raises(StepFailed):
+        half.av_call("c")
+    assert calls[-1][1] == "/v1/qa/call/stop" and half.av_record["last_stats"]
+
+
+def test_a_refused_join_fails_with_the_reason() -> None:
+    half, calls = _av_half(join_ok=False)
+    with pytest.raises(StepFailed) as failed:
+        half.av_call("c")
+    assert "could not join the call" in failed.value.result.detail
+    assert len(calls) == 1 and half.av_record == {"joined": "ok=False"}

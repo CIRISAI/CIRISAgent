@@ -61,6 +61,7 @@ jobs:
         id: boot
         env:
           MESH_BOOT_ONLY: '1'
+          CIRIS_QA_CALLS: '1'
           MESH_KEEP: '1'
           # Enough to see which side of a punch stops moving a link.
           RUST_LOG: info,ciris_edge::replication::bridge=debug,ciris_edge::transport::reticulum=debug,leviculum_core=debug,leviculum_std=debug
@@ -130,6 +131,20 @@ jobs:
             --node "$NAME=http://127.0.0.1:8080" --role "$ROLE" --peers /mesh/home/peers.json \
             --nonce "$NONCE" --result /mesh/home/result.json --out /mesh/home/direct-timed.json || rc=$?
           cp "$RUNNER_TEMP/mesh/$NAME/direct-timed.json" results/ 2>/dev/null || true
+          exit $rc
+
+      # Server 0.5.245's QA call routes: a 60 s call, one generated stream each
+      # way. Not gating yet (join needs edge 44.1); `pair` prints its result.
+      - name: A/V call
+        if: always() && steps.half.outcome == 'success'
+        continue-on-error: true
+        run: |
+          rc=0
+          docker exec -w /app "ciris-$NAME" python -m tools.qa_runner.nat_peer av \
+            --node "$NAME=http://127.0.0.1:8080" --role "$ROLE" --peers /mesh/home/peers.json \
+            --nonce "$NONCE" --result /mesh/home/result.json --out /mesh/home/av.json || rc=$?
+          cp "$RUNNER_TEMP/mesh/$NAME/av.json" results/ 2>/dev/null || true
+          jq -r '"av: \(.ok) \(.detail)"' results/av.json 2>/dev/null || true
           exit $rc
 
       - name: Trace reaches the canonical

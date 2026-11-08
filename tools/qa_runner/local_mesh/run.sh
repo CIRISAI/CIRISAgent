@@ -83,6 +83,7 @@ for i in "${!names[@]}"; do
     -e HOME=/mesh/home -e CIRIS_HOME=/mesh/home/ciris -e MESH_LABEL="qa-node-$(date +%s)$i" \
     -e RUST_LOG="${RUST_LOG:-info,ciris_edge::replication::bridge=debug}" -v "$key_file:/run/mesh/llm_key:ro" \
     -e CIRIS_SUBSTRATE_LOG_SINK=file \
+    -e CIRIS_QA_CALLS="${CIRIS_QA_CALLS:-}" \
     -e MESH_LLM_MODEL="${MESH_LLM_MODEL:-google/gemma-4-31B-it}" \
     -e MESH_LLM_BASE_URL="${MESH_LLM_BASE_URL:-https://api.together.xyz/v1}" \
     -e MESH_LLM_PROVIDER="${MESH_LLM_PROVIDER:-openai}" \

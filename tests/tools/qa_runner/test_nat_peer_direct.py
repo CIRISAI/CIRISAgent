@@ -198,7 +198,7 @@ def test_a_sealed_row_is_reported_as_sealed_not_as_never_listed() -> None:
 
 
 
-def _av_half(join_ok: bool = True, heard: int = 1700) -> Tuple[PeerHalf, List[Tuple[str, str, Optional[object]]]]:
+def _av_half(join_ok: bool = True, heard: int = 1700, budget: Optional[int] = None) -> Tuple[PeerHalf, List[Tuple[str, str, Optional[object]]]]:
     """A half whose node answers the 0.5.245 QA call routes."""
     half = _half(ROLE_REQUESTER, _Clock())
     half.d = Deadlines(poll_s=2.0)
@@ -206,7 +206,7 @@ def _av_half(join_ok: bool = True, heard: int = 1700) -> Tuple[PeerHalf, List[Tu
     stats = {
         "sent": {"frames": 1800, "publish_refused": 0, "legs": {"delivered": 1800}},
         "received": {"frames": heard, "delay_ms_p50": 40, "delay_ms_p95": 120, "delay_ms_max": 300},
-        "call": {"legs": [{"peer": "b"}], "service_tier": "full", "reorder": {"expired_late": 3},
+        "call": {"legs": [{"peer": "b"}], "frame_budget_bytes": budget, "service_tier": "full", "reorder": {"expired_late": 3},
                  "alm": {"stale_dropped": 1}, "streams": [{"leg": "direct", "parent_changes": 0}]},
     }
 
@@ -215,7 +215,7 @@ def _av_half(join_ok: bool = True, heard: int = 1700) -> Tuple[PeerHalf, List[Tu
         if path == "/v1/qa/call/start":
             return _Answer({"legs": 1} if join_ok else {"detail": "NotARoomMember"}, ok=join_ok)
         if path == "/v1/qa/call/stop":
-            return _Answer({"stats": stats, "summary": {}})
+            return _Answer({**stats, "room": "c", "summary": {}})
         return _Answer(stats)
 
     half._call = call  # type: ignore[method-assign,assignment]
@@ -246,3 +246,12 @@ def test_a_refused_join_fails_with_the_reason() -> None:
         half.av_call("c")
     assert "could not join the call" in failed.value.result.detail
     assert len(calls) == 1 and half.av_record == {"joined": "ok=False"}
+
+
+def test_an_av_stream_fits_the_legs_frame_budget() -> None:
+    half, calls = _av_half(budget=700)
+    half.av_call("c")
+    assert calls[2][2]["frame_bytes"] == 700  # type: ignore[index]
+    half, calls = _av_half(budget=4096)
+    half.av_call("c")
+    assert calls[2][2]["frame_bytes"] == 1024  # type: ignore[index]

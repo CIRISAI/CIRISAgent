@@ -370,6 +370,10 @@ class PeerHalf(CrossChatStage):
             return "leg up" if isinstance(call, dict) and call.get("legs") else None
 
         leg_wait = self._poll(AV_JOIN_S, has_leg)
+        # A leg's budget is its link's Channel limit less chunk overhead; over it, publish is refused.
+        budget = _dig(last, "call", "frame_budget_bytes")
+        if isinstance(budget, int) and budget > 0:
+            frame_bytes = max(16, min(frame_bytes, budget))
         stream = self._call(
             self.me, "POST", "/v1/qa/call/stream",
             {"room": cid, "rate_hz": rate_hz, "frame_bytes": frame_bytes, "seconds": seconds},  # type: ignore[dict-item]
@@ -386,9 +390,10 @@ class PeerHalf(CrossChatStage):
             "leg_up_s": None if leg_wait is None else round(self.clock.now() - joined_at - seconds - AV_DRAIN_S, 1),
             "last_stats": dict(last),
             "stop": final if isinstance(final, dict) else stop.brief(),
-            "asked": {"seconds": seconds, "rate_hz": rate_hz, "frame_bytes": frame_bytes},
+            "asked": {"seconds": seconds, "rate_hz": rate_hz, "frame_bytes": frame_bytes, "frame_budget_bytes": budget},
         }
-        body = final.get("stats", final) if isinstance(final, dict) else last
+        # The stop body carries the stats at its top level, beside "room" and "summary".
+        body = final if isinstance(final, dict) else last
         detail = av_summary(body if isinstance(body, dict) else {}, seconds * rate_hz)
         received = _dig(body, "received", "frames")
         if not isinstance(received, int) or received <= 0:
@@ -514,7 +519,8 @@ def av_summary(stats: Dict[str, object], expected: int) -> str:
         f"{s.get('leg')}(parent_changes={s.get('parent_changes')})" for s in streams if isinstance(s, dict)
     ) if isinstance(streams, list) else "no streams"
     return (
-        f"sent {_dig(stats, 'sent', 'frames')} (refused {_dig(stats, 'sent', 'publish_refused')}, "
+        f"sent {_dig(stats, 'sent', 'frames')} (refused {_dig(stats, 'sent', 'publish_refused')}"
+        f" last_error {_dig(stats, 'sent', 'last_publish_error')}, "
         f"legs {_dig(stats, 'sent', 'legs')}); received {_dig(stats, 'received', 'frames')}/{expected} "
         f"p50 {_dig(stats, 'received', 'delay_ms_p50')} p95 {_dig(stats, 'received', 'delay_ms_p95')} "
         f"max {_dig(stats, 'received', 'delay_ms_max')} ms (incl. clock skew); "

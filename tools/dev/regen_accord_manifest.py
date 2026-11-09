@@ -27,6 +27,7 @@ test_accord_manifest_line_endings.py` holds that line.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -120,9 +121,49 @@ def check() -> int:
     return 1 if bad else 0
 
 
+HYBRID = MANIFEST.with_name("accord_manifest.hybrid.json")
+
+
+def prepare_hybrid(out_dir: pathlib.Path) -> int:
+    """Write what A1 signs, for the ceremony device (A1 never sits on a build machine).
+
+    Bound hybrid form (CC 5.3.2.4.3.1): Ed25519 over the manifest bytes, then
+    ML-DSA-65 over the manifest bytes followed by that Ed25519 signature.
+    """
+    if not MANIFEST.exists():
+        print("manifest missing; rebuild it first")
+        return 1
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "accord_manifest.json").write_bytes(MANIFEST.read_bytes())
+    print(f"wrote {out_dir / 'accord_manifest.json'} (sha256 {hashlib.sha256(MANIFEST.read_bytes()).hexdigest()})")
+    print("sign it with A1: ed25519 over these bytes; ml-dsa-65 over these bytes || the ed25519 signature")
+    print("then: regen_accord_manifest.py --attach-hybrid <ed25519_b64> <ml_dsa_65_b64>")
+    return 0
+
+
+def attach_hybrid(ed_b64: str, pqc_b64: str, signer: str = "A1") -> int:
+    """Write the ceremony's two halves beside the manifest; the agent verifies them strict at startup."""
+    for name, val in (("ed25519", ed_b64), ("ml-dsa-65", pqc_b64)):
+        try:
+            base64.b64decode(val, validate=True)
+        except ValueError:
+            print(f"FAIL: the {name} half is not base64")
+            return 1
+    doc = {"signer_key_id": signer, "ed25519_sig": ed_b64, "ml_dsa_65_sig": pqc_b64}
+    HYBRID.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {HYBRID}; the agent verifies it against {signer}'s directory record when the engine starts")
+    return 0
+
+
 def main() -> int:
     if "--check" in sys.argv:
         return check()
+    if "--prepare-hybrid" in sys.argv:
+        i = sys.argv.index("--prepare-hybrid")
+        return prepare_hybrid(pathlib.Path(sys.argv[i + 1]) if len(sys.argv) > i + 1 else ROOT / "accord-ceremony")
+    if "--attach-hybrid" in sys.argv:
+        i = sys.argv.index("--attach-hybrid")
+        return attach_hybrid(sys.argv[i + 1], sys.argv[i + 2])
     # Signing key path comes from the operator, not from this source file.
     env = os.environ.get("CIRIS_ROOT_WA_KEY")
     if not env:

@@ -384,10 +384,12 @@ decimal_id	claim_id	repo	path#symbol	status
 # reads a HARDCODED ROOT_WA_AUTHORITY_KEYS list (emergency.py:40-45), a DIFFERENT
 # trust root from the accord verifier the service layer now uses. "One authority
 # source, two entry surfaces" was the stated #998 goal; the route was not converted.
-# RETIRED HERE (2026-11-08): the agent's root-key-signed /emergency/shutdown route
-# is deleted. The emergency halt is the HUMANITY_ACCORD halt the server verifies,
-# latches and serves; the agent's act gate reads it via halt-status.
-8.8.7	CLM-await-emergency-signature-is-auth	—	—	substrate
+# 2026-11-08 (Eric): the root-key-signed route is gone; POST /emergency/shutdown
+# stays, and the signature IS the authorisation: a hybrid (Ed25519 + ML-DSA-65)
+# signature by the seated Wise Authority (the node owner), verified hybrid-required,
+# inside a 5-minute window. Accord holders A1/B1/C1 are refused here; they act via
+# the HUMANITY_ACCORD halt the server verifies and the act gate reads via halt-status.
+8.8.7	CLM-await-emergency-signature-is-auth	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#verify_command	impl
 #
 # ── Prohibited capability, and content the agent must not fabricate ──
 #
@@ -661,9 +663,10 @@ decimal_id	claim_id	repo	path#symbol	status
 # whose single entry did not match the steward's actual root key, so the
 # endpoint rejected the person holding the key while a comment claimed the key
 # came from that file. Failed closed, and was a non-functional safety control.
-# RETIRED HERE (2026-11-08): with the signed emergency route gone the agent holds
-# no emergency trust root at all; the one root is the server's accord halt.
-3.2	CLM-await-one-emergency-trust-root	—	—	substrate
+# 2026-11-08: the agent holds no emergency key of its own. The one signer its
+# emergency route admits is the seated Wise Authority, resolved from the node's
+# owner binding (the server's); the accord halt is the server's.
+3.2	CLM-await-one-emergency-trust-root	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#_seated_wa	impl
 # The independent variable is content-addressed (#999, FSD §15.3): sha256 over
 # JCS-canonical manifest bytes, so two arms cannot claim distinct identities
 # while carrying the same manifest. Without it a manifest edited in place left

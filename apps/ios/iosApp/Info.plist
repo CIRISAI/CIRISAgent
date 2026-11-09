@@ -28,6 +28,10 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>CIRIS uses the camera to scan a QR code you point it at, and during a video call you start or join. You can always paste a code instead, and a call works without the camera.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CIRIS uses the microphone only during a call you start or join, so the people in that room can hear you.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

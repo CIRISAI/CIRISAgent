@@ -149,25 +149,28 @@ async def test_modify_is_signed_as_not_approved(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
-async def test_a_deferral_without_a_request_row_resolves_without_a_response_row(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_deferral_without_a_request_row_is_not_resolved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """100% PQC: no answer row signed by the WA's own pen, no resolution; no delegate-only fallback."""
     node = install_fake_node(monkeypatch, _node_with_request())
     h = _Harness(_pending(None, status="failed"))
-    await h.resolve()
+    with pytest.raises(HTTPException) as caught:
+        await h.resolve()
+    assert caught.value.status_code == 409
     assert node.calls_to("emit_deferral_response") == []
-    assert h.resolved[0].response_attestation_id is None, "so an identity change it approves is not applied"
+    assert "resolve_deferral" not in h.order
 
 
 @pytest.mark.asyncio
-async def test_a_node_without_rows_resolves_as_before(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_node_without_rows_does_not_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     node = install_fake_node(
         monkeypatch, FakeNode(missing=("emit_deferral_request", "emit_deferral_response", "emit_identity_amendment"))
     )
     h = _Harness(_pending(None, status="unavailable"))
-    result = await h.resolve()
+    with pytest.raises(HTTPException) as caught:
+        await h.resolve()
+    assert caught.value.status_code == 503
     assert node.calls == []
-    assert h.order == ["sign", "resolve_deferral"]
-    assert h.resolved[0].response_attestation_id is None
-    assert result.data.success is True
+    assert "resolve_deferral" not in h.order
 
 
 @pytest.mark.asyncio

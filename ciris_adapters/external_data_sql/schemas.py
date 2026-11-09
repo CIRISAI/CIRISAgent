@@ -168,7 +168,7 @@ class SQLVerificationResult(BaseModel):
         default_factory=dict, description="Remaining data by table (should be empty)"
     )
     verification_timestamp: str = Field(..., description="Verification timestamp")
-    cryptographic_proof: Optional[str] = Field(default=None, description="Ed25519 signature of verification")
+    cryptographic_proof: Optional[str] = Field(default=None, description="Hybrid signature: ed25519+ml-dsa-65:<key_id>:<ed25519_b64>:<ml_dsa_65_b64>")
     error: Optional[str] = Field(default=None, description="Error message if failed")
 
 

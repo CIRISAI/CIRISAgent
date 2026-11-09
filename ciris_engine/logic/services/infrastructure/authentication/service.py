@@ -263,15 +263,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             "update_wa",
             "revoke_wa",
             "list_was",
-            "rotate_keys",
             # Utility operations
             "bootstrap_if_needed",
             "update_last_login",
-            "sign_task",
-            "verify_task_signature",
             # Key operations
             "generate_keypair",
-            "sign_data",
             "hash_password",
             # Attestation operations (CIRISVerify)
             "run_attestation",
@@ -716,8 +712,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             # Observer already exists and is active (since _get_wa_by_adapter only returns active ones)
             return existing
 
-        # Generate new observer WA
-        private_key, public_key = self.generate_keypair()
+        # Generate new observer WA. The private half is never kept and nothing
+        # signs as an observer (its tokens are gateway HS256); the public half
+        # stays only because the persist WA-cert store requires a pubkey.
+        _, public_key = self.generate_keypair()
         timestamp = self._get_current_time()
         wa_id = self._generate_wa_id(timestamp)
         jwt_kid = f"wa-jwt-{wa_id[-6:].lower()}"
@@ -826,15 +824,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return jwt.encode(payload, self.gateway_secret, algorithm="HS256", headers={"kid": wa.jwt_kid})
 
-    def _create_authority_token(self, wa: WACertificate, private_key: bytes) -> str:
-        """Create WA-signed authority token."""
-        payload = self._build_base_jwt_payload(wa, JWTSubType.AUTHORITY, 24 * 3600)  # 24 hours
-
-        # Load Ed25519 private key
-        signing_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key)
-
-        return jwt.encode(payload, signing_key, algorithm="EdDSA", headers={"kid": wa.jwt_kid})
-
     async def _verify_jwt_and_get_context(
         self, token: str
     ) -> Optional[Tuple[AuthorizationContext, Optional[datetime]]]:
@@ -869,57 +858,16 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             except jwt.InvalidTokenError as e:
                 logger.debug(f"[TOKEN_VERIFY] Gateway verification failed: {type(e).__name__}")
 
-            # If gateway verification failed, try WA-signed tokens
+            # The gateway secret is the only token key. WA-signed (EdDSA)
+            # AUTHORITY tokens were never minted in production and are refused.
             if not decoded:
-                logger.debug("[TOKEN_VERIFY] Attempting WA-signed token verification (EdDSA)")
-                try:
-                    public_key_bytes = self._decode_public_key(wa.pubkey)
-                    public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
-                    decoded = jwt.decode(token, public_key, algorithms=["EdDSA"])
-                    logger.debug("[TOKEN_VERIFY] WA verification succeeded")
-                except jwt.InvalidTokenError as e:
-                    logger.info(f"[TOKEN_VERIFY] WA verification failed: {type(e).__name__}")
-
-            # If no verification succeeded, token is invalid
-            if not decoded:
-                logger.warning("[TOKEN_VERIFY] Both gateway and WA verification failed - token invalid")
+                logger.warning("[TOKEN_VERIFY] Gateway verification failed - token invalid")
                 return None
 
-            # Validate sub_type and algorithm after verification
-            # IMPORTANT: We must validate that the token was verified with the expected algorithm
-            # to prevent algorithm confusion attacks
+            # Only gateway sub-types are accepted: an AUTHORITY sub_type on an
+            # HS256 token is refused, so the sub_type cannot claim more than the key.
             sub_type = decoded.get("sub_type")
-
-            # Determine which verification succeeded based on the algorithm
-            verified_with_gateway = False
-            verified_with_wa_key = False
-
-            # Re-verify to determine which key actually verified the token
-            try:
-                jwt.decode(token, self.gateway_secret, algorithms=["HS256"])
-                verified_with_gateway = True
-            except jwt.InvalidTokenError:
-                pass
-
-            if not verified_with_gateway:
-                try:
-                    public_key_bytes = self._decode_public_key(wa.pubkey)
-                    public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
-                    jwt.decode(token, public_key, algorithms=["EdDSA"])
-                    verified_with_wa_key = True
-                except jwt.InvalidTokenError:
-                    pass
-
-            # Validate that the token type matches the verification method
-            if sub_type == JWTSubType.AUTHORITY.value:
-                # Authority tokens must be verified with WA key (EdDSA)
-                if not verified_with_wa_key:
-                    return None
-            elif sub_type in [JWTSubType.ANON.value, JWTSubType.OAUTH.value, JWTSubType.USER.value]:
-                # Gateway tokens must be verified with gateway secret (HS256)
-                if not verified_with_gateway:
-                    return None
-            else:
+            if sub_type not in [JWTSubType.ANON.value, JWTSubType.OAUTH.value, JWTSubType.USER.value]:
                 return None
 
             # Create authorization context
@@ -983,12 +931,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         )
 
         return private_bytes, public_bytes
-
-    def sign_data(self, data: bytes, private_key: bytes) -> str:
-        """Sign data with Ed25519 private key."""
-        signing_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key)
-        signature = signing_key.sign(data)
-        return base64.b64encode(signature).decode()
 
     def _verify_signature(self, data: bytes, signature: str, public_key: str) -> bool:
         """Verify Ed25519 signature."""
@@ -1241,24 +1183,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """List Wise Authority identities."""
         return await self._list_all_was(active_only=active_only)
 
-    async def rotate_keys(self, wa_id: str) -> bool:
-        """Rotate cryptographic keys for a WA."""
-        wa = await self.get_wa(wa_id)
-        if not wa:
-            return False
-
-        # Generate new keypair
-        private_key, public_key = self.generate_keypair()
-
-        # Update WA with new public key
-        wa.pubkey = self._encode_public_key(public_key)
-
-        # Store the updated certificate
-        await self.update_wa(wa_id, pubkey=wa.pubkey)
-
-        logger.info(f"Rotated keys for WA {wa_id}")
-        return True
-
     # Original verify_token implementation (renamed for internal use)
     async def _verify_token_internal(self, token: Optional[str]) -> Optional[AuthorizationContext]:
         """Authenticate request and return auth context."""
@@ -1387,35 +1311,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             base64.b64encode(pqc).decode("ascii"),
         )
 
-    async def sign_task(self, task: "Task", wa_id: str) -> Tuple[str, str]:
-        """Sign a task with a WA's private key.
-
-        Uses CIRISVerify named keys for TPM/Keystore-protected signing.
-
-        Returns:
-            Tuple of (signature, signed_at timestamp)
-        """
-        # Get the WA certificate
-        wa = await self.get_wa(wa_id)
-        if not wa:
-            raise ValueError(f"WA {wa_id} not found")
-
-        data_bytes = self._task_canonical_bytes(task)
-
-        # Try CIRISVerify named key first (TPM/Keystore protected)
-        if has_verifier():
-            try:
-                verifier = get_verifier()
-                if verifier.has_named_key(wa_id):
-                    signature_bytes = verifier.sign_with_named_key(wa_id, data_bytes)
-                    signature = base64.b64encode(signature_bytes).decode()
-                    signed_at = self._get_current_time().isoformat()
-                    return signature, signed_at
-            except Exception as e:
-                logger.debug(f"CIRISVerify signing failed for {wa_id}: {e}")
-
-        raise ValueError(f"No signing key available for WA {wa_id}")
-
     async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
         """Sign arbitrary data with a WA's private key.
 
@@ -1452,7 +1347,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
     def _deferral_canonical_bytes(deferral_id: str, response: "DeferralResponse", signed_at: str) -> bytes:
         """Canonical bytes the deferral-resolution signature commits to.
 
-        Sorted compact JSON, matching ``sign_task``/``verify_task_signature``.
+        Sorted compact JSON, matching ``_task_canonical_bytes``.
         #944 suggests JCS to share one story with the 2.9.6 trace cut; adopting
         it here alone would create two stories *inside* the signing code
         instead of one, so unifying all three belongs in its own change.
@@ -1663,44 +1558,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
 
         return True
 
-    async def verify_task_signature(self, task: "Task") -> bool:
-        """Verify a task's signature.
-
-        Returns:
-            True if signature is valid, False otherwise
-        """
-        if not task.signed_by or not task.signature or not task.signed_at:
-            return False
-
-        canonical = self._task_canonical_bytes(task)
-
-        # A WA-signed task (and system tasks a pre-#1287 install signed with its
-        # local System Authority cert) verifies against that WA's key.
-        wa = await self.get_wa(task.signed_by)
-        if wa:
-            return self._verify_signature(canonical, task.signature, wa.pubkey)
-
-        # Otherwise it is agent-signed (sign_system_task): resolve the key the way
-        # deferral resolutions are resolved. Fails closed.
-        from ciris_engine.logic.persistence.models.graph import get_persist_engine
-
-        engine = get_persist_engine()
-        if engine is None:
-            return False
-        pubkeys = self._signing_pubkeys(engine, task.signed_by)
-        if pubkeys is None:
-            return False
-        from ciris_engine.logic.utils import substrate_signing
-
-        try:
-            substrate_signing.verify_hybrid_required(
-                engine, canonical, task.signature, task.signature_pqc, pubkeys[0], pubkeys[1]
-            )
-        except Exception as exc:
-            logger.warning("System task %s failed signature verification: %s", task.task_id, exc)
-            return False
-        return True
-
     @staticmethod
     def _holds_deferral_jurisdiction(scopes: List[str]) -> bool:
         """Does any held scope name `resolve_deferral` (or everything) as its action?
@@ -1874,7 +1731,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
                 "update_wa",
                 "list_was",
                 "get_wa",
-                "rotate_keys",
                 "bootstrap_if_needed",
                 "create_channel_token",
                 "verify_token_sync",
@@ -2275,35 +2131,6 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         except Exception as e:
             logger.warning(f"[CIRISVerify] Failed to get singleton: {e}")
             return None
-
-    def import_portal_key(self, private_key_bytes: bytes) -> bool:
-        """Import a Portal-issued Ed25519 signing key into the CIRISVerify vault.
-
-        This uses the singleton verifier to import the key. CIRISVerify handles
-        storage in Android Keystore, Secure Enclave, TPM, or SW fallback.
-
-        Args:
-            private_key_bytes: 32-byte Ed25519 private key from Portal
-
-        Returns:
-            True if import succeeded, False otherwise.
-        """
-        verifier = self.get_verifier()
-        if verifier is None:
-            logger.warning("[CIRISVerify] Cannot import key - verifier not available")
-            return False
-
-        try:
-            if not hasattr(verifier, "import_key_sync"):
-                logger.warning("[CIRISVerify] import_key_sync not available")
-                return False
-
-            verifier.import_key_sync(private_key_bytes)
-            logger.info("[CIRISVerify] Portal key imported successfully")
-            return True
-        except Exception as e:
-            logger.warning(f"[CIRISVerify] Failed to import portal key: {e}")
-            return False
 
     def has_signing_key(self) -> bool:
         """Check if a signing key exists in the CIRISVerify vault.

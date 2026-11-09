@@ -159,7 +159,6 @@ class RateLimitMiddleware:
             "/openapi.json",
             "/docs",
             "/redoc",
-            "/emergency/shutdown",  # Emergency endpoints bypass rate limiting
             "/v1/system/health",  # Health checks should not be rate limited
             "/v1/system/adapters",  # Adapter listing for mobile app
             "/v1/setup/adapter-types",  # Adapter type listing for add adapter dialog

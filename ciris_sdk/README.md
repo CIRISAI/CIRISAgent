@@ -246,7 +246,6 @@ The SDK also provides access to all system resources:
 - `client.audit` - Audit trail access
 - `client.wa` - Wise Authority operations
 - `client.config` - Configuration management (with PATCH support)
-- `client.emergency` - Emergency shutdown with cryptographic signatures
 - `client.jobs` - Async job management for expensive operations
 - WebSocket streaming - Real-time updates with channel filters
 

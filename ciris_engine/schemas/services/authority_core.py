@@ -328,10 +328,9 @@ class DeferralResponse(BaseModel):
 def deferral_resolution_payload(deferral_id: str, response: "DeferralResponse", signed_at: str) -> Dict[str, object]:
     """The exact fields a WA's signature commits to when resolving a deferral.
 
-    ONE function, called by both the signer and the verifier. ``sign_task`` and
-    ``verify_task_signature`` each build their canonical dict inline, so the two
-    can drift apart silently and a signature would simply stop verifying with no
-    indication why. This does not repeat that.
+    ONE function, called by both the signer and the verifier, so the two cannot
+    drift apart silently (a signature would simply stop verifying with no
+    indication why).
 
     It commits to the decision, not to a rendering of it: which deferral, the
     verdict, the guidance given, who decided, and when. ``signed_at`` is inside
@@ -519,8 +518,8 @@ WILDCARD_RESOURCE_PATTERNS = frozenset({"*", "any"})
 """Resource patterns that mean "every resource".
 
 ``any`` is not glob syntax — it is the spelling this codebase already mints.
-Every WA created by ``logic/runtime/service_initializer.py``,
-``routes/setup/complete.py`` and ``infrastructure/sub_services/wa_cli_bootstrap.py``
+Every WA created by ``logic/runtime/service_initializer.py`` and
+``routes/setup/complete.py`` (and by the retired ``wa_cli_bootstrap.py``)
 carries scopes shaped like ``read:any`` / ``write:any``. If ``any`` did not keep
 meaning "unrestricted", the first enforcement pass would narrow every
 certificate already in the field, which is how a control gets reverted instead

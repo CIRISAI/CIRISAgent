@@ -263,9 +263,14 @@ async def test_data_signing(auth_service):
     private_key, public_key = auth_service.generate_keypair()
     encoded_pubkey = auth_service._encode_public_key(public_key)
 
-    # Sign data
+    # Sign data (the service holds no raw-key signer; _verify_signature stays
+    # for budget grants)
+    import base64
+
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
     data = b"test data to sign"
-    signature = auth_service.sign_data(data, private_key)
+    signature = base64.b64encode(ed25519.Ed25519PrivateKey.from_private_bytes(private_key).sign(data)).decode()
 
     assert signature is not None
     assert len(signature) > 0

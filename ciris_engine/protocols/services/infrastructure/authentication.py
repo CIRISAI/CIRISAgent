@@ -69,11 +69,6 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def rotate_keys(self, wa_id: str) -> bool:
-        """Rotate cryptographic keys for a WA."""
-        ...
-
-    @abstractmethod
     async def bootstrap_if_needed(self) -> None:
         """Bootstrap the system with root WA if needed."""
         ...
@@ -133,20 +128,6 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    def sign_data(self, data: bytes, private_key: bytes) -> str:
-        """Sign data with Ed25519 private key."""
-        ...
-
-    @abstractmethod
-    async def sign_task(self, task: "Task", wa_id: str) -> Tuple[str, str]:
-        """Sign a task with a WA's private key.
-
-        Returns:
-            Tuple of (signature, signed_at timestamp)
-        """
-        ...
-
-    @abstractmethod
     async def sign_as_wa(self, wa_id: str, data: bytes) -> str:
         """Sign arbitrary data with a WA's private key.
 
@@ -156,15 +137,6 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
 
         Returns:
             Base64-encoded signature
-        """
-        ...
-
-    @abstractmethod
-    async def verify_task_signature(self, task: "Task") -> bool:
-        """Verify a task's signature.
-
-        Returns:
-            True if signature is valid, False otherwise
         """
         ...
 

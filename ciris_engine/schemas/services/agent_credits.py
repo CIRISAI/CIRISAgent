@@ -223,67 +223,6 @@ class AgentCreditSummary(BaseModel):
     computed_at: datetime = Field(..., description="When this summary was computed")
 
 
-class CreditGenerationPolicy(BaseModel):
-    """Anti-gaming rules for credit record generation.
-
-    Distributed via CIRISNode, signed by CIRIS L3C root key.
-    Enforced locally by each agent. Code-level constants — cannot
-    be modified by memory, learning, or runtime adaptation.
-
-    These are the parameters that credit-weighted governance could
-    vote to adjust (via signed policy updates from L3C).
-    """
-
-    model_config = ConfigDict(extra="forbid", defer_build=True)
-
-    policy_version: str = Field(..., description="Policy version date string (YYYY-MM-DD)")
-
-    # Rate limiting
-    cooldown_seconds: int = Field(
-        60,
-        ge=0,
-        description="Minimum seconds between credit records for the same agent pair",
-    )
-    max_daily_interactions_per_pair: int = Field(
-        10,
-        ge=1,
-        description="Maximum credit records per unique agent pair per day",
-    )
-
-    # Quality thresholds
-    coherence_threshold: float = Field(
-        0.3,
-        ge=0.0,
-        le=1.0,
-        description="Minimum coherence score for a record to be accepted",
-    )
-
-    # Circular detection
-    circular_deferral_window_seconds: int = Field(
-        300,
-        ge=0,
-        description="Window (seconds) to detect A->B->A circular deferrals",
-    )
-
-    # Identity requirements
-    min_attestation_level: int = Field(
-        2,
-        ge=0,
-        le=5,
-        description="Minimum CIRISVerify attestation level to generate records",
-    )
-
-    # Policy authentication
-    policy_signature: Optional[str] = Field(
-        None,
-        description="Ed25519 signature of the policy by CIRIS L3C root key",
-    )
-    policy_key_id: Optional[str] = Field(
-        None,
-        description="Key ID of the L3C root key that signed the policy",
-    )
-
-
 class DomainDeferralRequired(BaseModel):
     """Signal from WiseBus that a capability requires domain-specific deferral.
 
@@ -322,7 +261,6 @@ __all__ = [
     "GratitudeSignal",
     "CreditRecord",
     "AgentCreditSummary",
-    "CreditGenerationPolicy",
     "DomainDeferralRequired",
     "CreditRecordBatch",
 ]

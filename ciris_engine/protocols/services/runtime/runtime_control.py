@@ -18,7 +18,6 @@ from ciris_engine.schemas.services.core.runtime import (
     ServiceHealthStatus,
     ServiceSelectionExplanation,
 )
-from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, WASignedCommand
 
 from ...runtime.base import ServiceProtocol
 
@@ -187,11 +186,4 @@ class RuntimeControlServiceProtocol(ServiceProtocol, Protocol):
     @abstractmethod
     async def get_service_selection_explanation(self) -> ServiceSelectionExplanation:
         """Get explanation of service selection logic."""
-        ...
-
-    # ========== Emergency Operations ==========
-
-    @abstractmethod
-    async def handle_emergency_shutdown(self, command: WASignedCommand) -> EmergencyShutdownStatus:
-        """Process WA-authorized emergency shutdown."""
         ...

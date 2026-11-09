@@ -188,7 +188,9 @@ decimal_id	claim_id	repo	path#symbol	status
 # (#995 P0-1). Binding the module constant put it past corpus substitution and
 # ACCORD_MODE, so a values-ablation arm still delivered the full accord to
 # entropy/coherence/optimization-veto/epistemic-humility and reported clean.
-8.8.7	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/accord/authorities.py#EmergencyAuthorities.public_key_for	impl
+# (The pointer used to name the retired emergency authority roster, a rename
+# leftover from the stego verifier; the seam this row describes is get_accord_text.)
+8.8.7	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/utils/constants.py#get_accord_text	impl
 # No prompt-bound text reaches a model except through a loader (#995). Text
 # written in Python is English forever and invisible to every research manifest;
 # this is the structural rule behind the localization and override guarantees.
@@ -272,7 +274,11 @@ decimal_id	claim_id	repo	path#symbol	status
 # in seed/root_pub.json; False -> 401 before mint_wise_authority is reached
 # (routes/users.py:887). Without it an ADMIN-role API caller can promote arbitrary
 # users into deferral-resolution and guidance authority.
-8.8.7	CLM-await-root-signature-mints-wa	CIRISAgent	ciris_engine/logic/adapters/api/services/auth_service.py#APIAuthService.verify_root_signature	impl
+# RETIRED HERE (2026-11-08, root signing retired in the agent): the agent no longer
+# mints Wise Authorities. The route, verify_root_signature and the ~/.ciris/wa_keys
+# auto-sign are deleted; the WA seat comes from the node's owner binding, which the
+# server owns. The claim's evidence moved with it.
+8.8.7	CLM-await-root-signature-mints-wa	—	—	substrate
 # The OAuth callback is refused (400) unless its `state` carries a CSRF token this
 # process issued, still unexpired and not already used — the token is popped, so a
 # replay of the same callback fails. The pre-#847 behaviour was to log and
@@ -378,7 +384,10 @@ decimal_id	claim_id	repo	path#symbol	status
 # reads a HARDCODED ROOT_WA_AUTHORITY_KEYS list (emergency.py:40-45), a DIFFERENT
 # trust root from the accord verifier the service layer now uses. "One authority
 # source, two entry surfaces" was the stated #998 goal; the route was not converted.
-8.8.7	CLM-await-emergency-signature-is-auth	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#emergency_shutdown	impl
+# RETIRED HERE (2026-11-08): the agent's root-key-signed /emergency/shutdown route
+# is deleted. The emergency halt is the HUMANITY_ACCORD halt the server verifies,
+# latches and serves; the agent's act gate reads it via halt-status.
+8.8.7	CLM-await-emergency-signature-is-auth	—	—	substrate
 #
 # ── Prohibited capability, and content the agent must not fabricate ──
 #
@@ -652,7 +661,9 @@ decimal_id	claim_id	repo	path#symbol	status
 # whose single entry did not match the steward's actual root key, so the
 # endpoint rejected the person holding the key while a comment claimed the key
 # came from that file. Failed closed, and was a non-functional safety control.
-3.2	CLM-await-one-emergency-trust-root	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#is_authorized_key	impl
+# RETIRED HERE (2026-11-08): with the signed emergency route gone the agent holds
+# no emergency trust root at all; the one root is the server's accord halt.
+3.2	CLM-await-one-emergency-trust-root	—	—	substrate
 # The independent variable is content-addressed (#999, FSD §15.3): sha256 over
 # JCS-canonical manifest bytes, so two arms cannot claim distinct identities
 # while carrying the same manifest. Without it a manifest edited in place left

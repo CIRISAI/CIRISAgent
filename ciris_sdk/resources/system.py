@@ -267,9 +267,6 @@ class SystemResource:
             confirm: Confirmation flag - must be True (default: True)
 
         Requires: ADMIN role
-
-        Note: For emergency shutdown with cryptographic signatures, use
-        the EmergencyResource instead.
         """
         result = await self._transport.request(
             "POST",

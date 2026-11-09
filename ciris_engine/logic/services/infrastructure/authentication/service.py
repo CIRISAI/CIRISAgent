@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, TypeVar, Union, cast
 
-import aiofiles
 import jwt
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -1613,31 +1612,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             logger.warning("Could not backfill deferral scopes: %s", e, exc_info=True)
 
     async def bootstrap_if_needed(self) -> None:
-        """Bootstrap the system if no WAs exist."""
-        was = await self._list_all_was()
+        """Startup upkeep for stored WA certificates.
 
-        # Check if we have a root WA
-        has_root = any(wa.role == WARole.ROOT for wa in was)
-
-        if not has_root:
-            # Load and insert root certificate
-            seed_path = Path(__file__).parent.parent.parent / "seed" / "root_pub.json"
-            if seed_path.exists():
-                async with aiofiles.open(seed_path, encoding="utf-8") as f:
-                    content = await f.read()
-                    root_data = json.loads(content)
-
-                # Convert created timestamp - handle both 'Z' and '+00:00' formats
-                created_str = root_data["created"]
-                if created_str.endswith("Z"):
-                    created_str = created_str[:-1] + "+00:00"
-                root_data["created"] = datetime.fromisoformat(created_str)
-
-                root_wa = WACertificate(**root_data)
-                await self._store_wa_certificate(root_wa)
-
-                logger.info(f"Loaded root WA certificate: {root_wa.wa_id}")
-
+        No root certificate is loaded: root signing is retired in the agent
+        (Eric, 2026-11-08). The WA seat is the node's owner. The seed path this
+        once read never existed, so it never ran.
+        """
         # Certificates minted before the scope grammar existed would be refused
         # every domain-tagged deferral by the F1 gate. Restore the breadth they
         # already had, without widening anyone who named the action explicitly.

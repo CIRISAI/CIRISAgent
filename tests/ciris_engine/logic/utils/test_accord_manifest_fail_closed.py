@@ -36,3 +36,13 @@ def test_the_wheel_ships_the_seed_files() -> None:
 
     setup_py = (Path(__file__).resolve().parents[4] / "setup.py").read_text(encoding="utf-8")
     assert re.search(r'"seed/\*\.json"', setup_py) and re.search(r'"seed/\*\.sig"', setup_py)
+
+
+def test_an_a1_hybrid_signature_hands_the_check_to_engine_start(tmp_path, monkeypatch) -> None:
+    """With A1's file present the WA-root .sig no longer applies (it retires); the engine-start check runs."""
+    for f in constants.ACCORD_SEED_DIR.iterdir():
+        shutil.copy(f, tmp_path / f.name)
+    (tmp_path / "accord_manifest.sig").write_bytes(b"stale root signature")
+    (tmp_path / "accord_manifest.hybrid.json").write_text("{}")
+    monkeypatch.setattr(constants, "ACCORD_SEED_DIR", tmp_path)
+    constants._verify_accord_manifest_signature()

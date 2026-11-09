@@ -495,7 +495,7 @@ Consent Serviceはデフォルトで14日間自動期限切れの**TEMPORARY同�
 - `POST /v1/billing/purchase/initiate` — 支払い開始
 
 ### 緊急
-- `POST /emergency/shutdown` — 緊急シャットダウン(Ed25519署名が必要)
+- `POST /emergency/shutdown` — 緊急シャットダウン(Ed25519 + ML-DSA-65署名が必要)
 
 ---
 
@@ -514,7 +514,7 @@ GDPR/DSAR準拠のためのランタイム設定可能なデータベースコ�
 
 **9つのSQLツール**: initialize_sql_connector、get_sql_service_metadata、sql_find_user_data、sql_export_user、sql_delete_user、sql_anonymize_user、sql_verify_deletion、sql_get_stats、sql_query
 
-サポートされる方言: SQLite、PostgreSQL、MySQL。削除検証はEd25519署名された暗号証明を生成します。
+サポートされる方言: SQLite、PostgreSQL、MySQL。削除検証はEd25519 + ML-DSA-65署名された暗号証明を生成します。
 
 ---
 
@@ -524,7 +524,7 @@ GDPR/DSAR準拠のためのランタイム設定可能なデータベースコ�
 
 1. **提案**: 作成者が名前、目的、正当化、倫理的考慮事項を提供
 2. **テンプレート選択**: 利用可能なテンプレートから(scout、sage、datum、echoなど)
-3. **Wise Authorityレビュー**: Ed25519署名が必要
+3. **Wise Authorityレビュー**: Ed25519 + ML-DSA-65署名が必要
 4. **作成**: グラフデータベースのアイデンティティルート、不変の系統記録、ランタイム構成
 5. **アクティベーション**: エージェントは作成コンテキストの完全な知識を持って開始
 
@@ -534,7 +534,7 @@ GDPR/DSAR準拠のためのランタイム設定可能なデータベースコ�
 
 ## セキュリティ
 
-- **Ed25519署名**: 認証、監査署名、緊急シャットダウン
+- **Ed25519 + ML-DSA-65署名**: 認証、監査署名、緊急シャットダウン
 - **JWTトークン**: 24時間有効期限(設定可能)
 - **サービストークン**: システム間通信用のフォーマット`Bearer service:TOKEN_VALUE`
 - **OAuthトークン**: ロッキング付き自動リフレッシュ

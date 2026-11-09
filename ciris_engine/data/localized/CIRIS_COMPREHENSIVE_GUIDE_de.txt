@@ -495,7 +495,7 @@ Jede Instanz verarbeitet nur ihre eigenen Aufgaben, trägt aber zum gemeinsamen 
 - `POST /v1/billing/purchase/initiate` — Zahlungsinitiierung
 
 ### Notfall
-- `POST /emergency/shutdown` — Notabschaltung (Ed25519-Signatur erforderlich)
+- `POST /emergency/shutdown` — Notabschaltung (Ed25519 + ML-DSA-65-Signatur erforderlich)
 
 ---
 
@@ -514,7 +514,7 @@ Bietet laufzeitkonfigurierbare Datenbankverbindungen für GDPR/DSAR-Compliance:
 
 **9 SQL-Werkzeuge**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Unterstützte Dialekte: SQLite, PostgreSQL, MySQL. Löschverifizierung produziert Ed25519-signierte kryptografische Beweise.
+Unterstützte Dialekte: SQLite, PostgreSQL, MySQL. Löschverifizierung produziert Ed25519 + ML-DSA-65-signierte kryptografische Beweise.
 
 ---
 
@@ -524,7 +524,7 @@ Jeder CIRIS-Agent wird durch einen formalen Prozess erstellt:
 
 1. **Proposal**: Ersteller gibt Name, Zweck, Rechtfertigung, ethische Überlegungen an
 2. **Template Selection**: Aus verfügbaren Templates (scout, sage, datum, echo, etc.)
-3. **Wise Authority Review**: Ed25519-Signatur erforderlich
+3. **Wise Authority Review**: Ed25519 + ML-DSA-65-Signatur erforderlich
 4. **Creation**: Identitätswurzel in Graph-Datenbank, unveränderlicher Abstammungseintrag, Laufzeitkonfiguration
 5. **Activation**: Agent startet mit vollständigem Wissen über seinen Erstellungskontext
 
@@ -534,7 +534,7 @@ Jeder Agent hat unveränderliches Wissen über: Ersteller-Absichtserklärung, St
 
 ## Sicherheit
 
-- **Ed25519-Signaturen**: Authentifizierung, Audit-Signierung, Notabschaltung
+- **Ed25519 + ML-DSA-65-Signaturen**: Authentifizierung, Audit-Signierung, Notabschaltung
 - **JWT-Tokens**: 24-Stunden-Ablauf (konfigurierbar)
 - **Service-Tokens**: Format `Bearer service:TOKEN_VALUE` für System-zu-System-Kommunikation
 - **OAuth-Tokens**: Automatische Aktualisierung mit Locking

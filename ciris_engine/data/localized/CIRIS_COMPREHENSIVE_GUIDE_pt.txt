@@ -495,7 +495,7 @@ Cada instância processa apenas suas próprias tarefas mas contribui para memór
 - `POST /v1/billing/purchase/initiate` — Iniciação de pagamento
 
 ### Emergência
-- `POST /emergency/shutdown` — Desligamento de emergência (assinatura Ed25519 necessária)
+- `POST /emergency/shutdown` — Desligamento de emergência (assinatura Ed25519 + ML-DSA-65 necessária)
 
 ---
 
@@ -514,7 +514,7 @@ Fornece conectores de banco de dados configuráveis em runtime para conformidade
 
 **9 Ferramentas SQL**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Dialetos suportados: SQLite, PostgreSQL, MySQL. Verificação de deleção produz provas criptográficas assinadas com Ed25519.
+Dialetos suportados: SQLite, PostgreSQL, MySQL. Verificação de deleção produz provas criptográficas assinadas com Ed25519 + ML-DSA-65.
 
 ---
 
@@ -524,7 +524,7 @@ Cada agente CIRIS é criado através de um processo formal:
 
 1. **Proposta**: Criador fornece nome, propósito, justificativa, considerações éticas
 2. **Seleção de Template**: De templates disponíveis (scout, sage, datum, echo, etc.)
-3. **Revisão Wise Authority**: Assinatura Ed25519 necessária
+3. **Revisão Wise Authority**: Assinatura Ed25519 + ML-DSA-65 necessária
 4. **Criação**: Raiz de identidade em banco de dados de grafo, registro de linhagem imutável, configuração de runtime
 5. **Ativação**: Agente inicia com conhecimento completo de seu contexto de criação
 
@@ -534,7 +534,7 @@ Cada agente tem conhecimento imutável de: declaração de intenção do criador
 
 ## Segurança
 
-- **Assinaturas Ed25519**: Autenticação, assinatura de auditoria, desligamento de emergência
+- **Assinaturas Ed25519 + ML-DSA-65**: Autenticação, assinatura de auditoria, desligamento de emergência
 - **Tokens JWT**: Expiração de 24 horas (configurável)
 - **Tokens de serviço**: Formato `Bearer service:TOKEN_VALUE` para comunicação sistema-a-sistema
 - **Tokens OAuth**: Refresh automático com travamento

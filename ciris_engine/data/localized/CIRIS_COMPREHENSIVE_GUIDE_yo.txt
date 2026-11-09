@@ -503,7 +503,7 @@ Aṣojú le ṣiṣẹ́ bí àwọn àpẹẹrẹ púpọ̀ lòdì sí fáìlì
 
 ### Ìpamọ́ra
 
-- `POST /emergency/shutdown` — Dídínà ìpamọ́ra (ó nílò àkọsílẹ̀ Ed25519)
+- `POST /emergency/shutdown` — Dídínà ìpamọ́ra (ó nílò àkọsílẹ̀ Ed25519 + ML-DSA-65)
 
 ---
 
@@ -522,7 +522,7 @@ Aṣojú le ṣiṣẹ́ bí àwọn àpẹẹrẹ púpọ̀ lòdì sí fáìlì
 
 **9 Irinṣẹ́ SQL**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Àwọn èdè tí a ṣe àtìlẹ́yìn: SQLite, PostgreSQL, MySQL. Ìfọwọ́sí yíyọkúrò ń ṣe àwọn ẹ̀rí kírípítógíráfì tí a fọwọ́sí Ed25519.
+Àwọn èdè tí a ṣe àtìlẹ́yìn: SQLite, PostgreSQL, MySQL. Ìfọwọ́sí yíyọkúrò ń ṣe àwọn ẹ̀rí kírípítógíráfì tí a fọwọ́sí Ed25519 + ML-DSA-65.
 
 ---
 
@@ -532,7 +532,7 @@ Aṣojú CIRIS kọ̀ọ̀kan ni a ṣẹ̀dá nípasẹ̀ ìlànà gbangba:
 
 1. **Ìdábàá**: Ẹlẹ́dàá ń pèsè orúkọ, ìdí, ìdáláre, àwọn ìṣàrò ìwà rere
 2. **Yíyàn Àwòṣe**: Láti àwọn àwòṣe tó wà (scout, sage, datum, echo, àbẹ́ẹ̀bẹ̀ẹ̀lọ)
-3. **Àtúnyẹ̀wò Aláṣẹ Ọlọ́gbọ́n**: Ó nílò àkọsílẹ̀ Ed25519
+3. **Àtúnyẹ̀wò Aláṣẹ Ọlọ́gbọ́n**: Ó nílò àkọsílẹ̀ Ed25519 + ML-DSA-65
 4. **Ṣíṣẹ̀dá**: Gbòǹgbò ìdánimọ̀ nínú fáìlì dátà àwòrán, àkọsílẹ̀ ìran tí kò yí padà, ìṣètò ìṣiṣẹ́
 5. **Ìmúlò**: Aṣojú ń bẹ̀rẹ̀ pẹ̀lú ìmọ̀ kíkún ti àyíká ìṣẹ̀dá rẹ̀
 
@@ -542,7 +542,7 @@ Aṣojú kọ̀ọ̀kan ní ìmọ̀ tí kò yí padà ti: àsọyé ìpinnu ẹ
 
 ## Ààbò
 
-- **Àwọn àkọsílẹ̀ Ed25519**: Ìfọwọ́sí, fífọwọ́sí ìgbọ́ràn, dídínà ìpamọ́ra
+- **Àwọn àkọsílẹ̀ Ed25519 + ML-DSA-65**: Ìfọwọ́sí, fífọwọ́sí ìgbọ́ràn, dídínà ìpamọ́ra
 - **Àwọn àmì JWT**: Ìparí wákàtí 24 (a le ṣètò)
 - **Àwọn àmì iṣẹ́**: Ọ̀nà `Bearer service:TOKEN_VALUE` fún ìfọ̀rọ̀wérọ̀ ètò-sí-ètò
 - **Àwọn àmì OAuth**: Ìsọdọ̀tun adáṣiṣẹ́ pẹ̀lú títii

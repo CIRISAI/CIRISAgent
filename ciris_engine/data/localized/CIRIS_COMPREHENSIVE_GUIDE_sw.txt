@@ -495,7 +495,7 @@ Kila mfano unasindika kazi zake pekee lakini unachangia kumbukumbu iliyoshirikiw
 - `POST /v1/billing/purchase/initiate` — Kuanzisha malipo
 
 ### Dharura
-- `POST /emergency/shutdown` — Kuzima kwa dharura (saini ya Ed25519 inahitajika)
+- `POST /emergency/shutdown` — Kuzima kwa dharura (saini ya Ed25519 + ML-DSA-65 inahitajika)
 
 ---
 
@@ -514,7 +514,7 @@ Inatoa viunganishi vya hifadhidata vinavyoweza kusanidiwa wakati wa kuendesha kw
 
 **Zana 9 za SQL**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Lahaja zinazotumika: SQLite, PostgreSQL, MySQL. Uthibitishaji wa ufutaji unazalisha ushahidi wa kriptografia uliotiwa saini na Ed25519.
+Lahaja zinazotumika: SQLite, PostgreSQL, MySQL. Uthibitishaji wa ufutaji unazalisha ushahidi wa kriptografia uliotiwa saini na Ed25519 + ML-DSA-65.
 
 ---
 
@@ -524,7 +524,7 @@ Kila wakala wa CIRIS unazalishwa kupitia utaratibu rasmi:
 
 1. **Pendekezo**: Muundaji anatoa jina, kusudi, ufafanuzi, mawazo ya kimaadili
 2. **Uchaguzi wa Kiolezo**: Kutoka kiolezo zinazopatikana (scout, sage, datum, echo, n.k.)
-3. **Mapitio ya Mamlaka ya Busara**: Saini ya Ed25519 inahitajika
+3. **Mapitio ya Mamlaka ya Busara**: Saini ya Ed25519 + ML-DSA-65 inahitajika
 4. **Uundaji**: Mzizi wa utambulisho katika hifadhidata ya grafu, rekodi ya ukoo isiyobadilika, usanidi wa wakati wa kuendesha
 5. **Kuamsha**: Wakala anaanza na ujuzi kamili wa muktadha wake wa kuundwa
 
@@ -534,7 +534,7 @@ Kila wakala ana ujuzi usiobadirika wa: taarifa ya nia ya muundaji, ngazi ya ulin
 
 ## Usalama
 
-- **Saini za Ed25519**: Uthibitishaji, kutia saini ukaguzi, kuzima kwa dharura
+- **Saini za Ed25519 + ML-DSA-65**: Uthibitishaji, kutia saini ukaguzi, kuzima kwa dharura
 - **Tokeni za JWT**: Kumalizika kwa masaa 24 (inaweza kusanidiwa)
 - **Tokeni za huduma**: Muundo `Bearer service:TOKEN_VALUE` kwa mawasiliano ya mfumo-kwa-mfumo
 - **Tokeni za OAuth**: Kuonyesha upya kiotomatiki na kufunga

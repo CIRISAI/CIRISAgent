@@ -121,8 +121,9 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
     # hash unchanged (no edits to that variant yet). Base hash updated 2026-10-15:
     # its localization line names the served constitution_ethics_1.3 files.
     # Both updated 2026-10-27: the "Never Allowed" section (CC 7.4 and plain
-    # rules 9a/9b), CIRISAgent#1323 / #1325.
-    "CIRIS_COMPREHENSIVE_GUIDE.txt": "6d9796fdc30545c675ec033c5cec07545e7ec03026e285c3c42ca851e45df457",
+    # rules 9a/9b), CIRISAgent#1323 / #1325. Base updated 2026-11-08: four
+    # signature lines name Ed25519 + ML-DSA-65 (100% PQC).
+    "CIRIS_COMPREHENSIVE_GUIDE.txt": "d79e76a13240a2faea64e15ecaaf19b303e928e6b58f8732b67647b61e49e612",
     "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": "68a1f6f4fdab0944f7fdf29bcc3a7f1b831af2923065a2740c3be1b2e8d9a7bb",
 }
 
@@ -217,6 +218,12 @@ def _verify_accord_manifest_signature() -> None:
         # Fail closed (CC: no fail-open where a signature or key is missing):
         # the accord text governs from the first decision, so nothing runs on
         # a text whose manifest can't be verified.
+        if (ACCORD_SEED_DIR / "accord_manifest.hybrid.json").exists():
+            # A1's bound hybrid signature supersedes the WA root's. Nothing here
+            # verifies ML-DSA-65, so it is checked as soon as the engine is
+            # wired, before any decision (accord_manifest_hybrid.py).
+            logger.info("[ACCORD] A1 hybrid manifest signature present; verified when the engine starts")
+            return
         missing = [p.name for p in (manifest_path, sig_path, root_pub_path) if not p.exists()]
         if missing:
             raise RuntimeError(

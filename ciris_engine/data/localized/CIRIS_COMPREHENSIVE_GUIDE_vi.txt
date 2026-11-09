@@ -495,7 +495,7 @@ Mỗi phiên bản chỉ xử lý các nhiệm vụ của riêng nó nhưng đó
 - `POST /v1/billing/purchase/initiate` — Khởi tạo thanh toán
 
 ### Khẩn Cấp
-- `POST /emergency/shutdown` — Tắt máy khẩn cấp (yêu cầu chữ ký Ed25519)
+- `POST /emergency/shutdown` — Tắt máy khẩn cấp (yêu cầu chữ ký Ed25519 + ML-DSA-65)
 
 ---
 
@@ -514,7 +514,7 @@ Cung cấp các connector cơ sở dữ liệu có thể cấu hình runtime cho
 
 **9 Công Cụ SQL**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Phương ngữ được hỗ trợ: SQLite, PostgreSQL, MySQL. Xác minh xóa tạo bằng chứng mật mã được ký Ed25519.
+Phương ngữ được hỗ trợ: SQLite, PostgreSQL, MySQL. Xác minh xóa tạo bằng chứng mật mã được ký Ed25519 + ML-DSA-65.
 
 ---
 
@@ -524,7 +524,7 @@ Mọi tác nhân CIRIS đều được tạo thông qua một quy trình chính 
 
 1. **Đề xuất**: Người tạo cung cấp tên, mục đích, biện minh, cân nhắc đạo đức
 2. **Lựa Chọn Template**: Từ các template có sẵn (scout, sage, datum, echo, v.v.)
-3. **Đánh Giá Cơ Quan Sáng Suốt**: Yêu cầu chữ ký Ed25519
+3. **Đánh Giá Cơ Quan Sáng Suốt**: Yêu cầu chữ ký Ed25519 + ML-DSA-65
 4. **Tạo**: Gốc danh tính trong cơ sở dữ liệu đồ thị, bản ghi dòng dõi bất biến, cấu hình runtime
 5. **Kích Hoạt**: Tác nhân bắt đầu với kiến thức đầy đủ về ngữ cảnh tạo của nó
 
@@ -534,7 +534,7 @@ Mỗi tác nhân có kiến thức bất biến về: tuyên bố ý định c�
 
 ## Bảo Mật
 
-- **Chữ ký Ed25519**: Xác thực, ký audit, tắt máy khẩn cấp
+- **Chữ ký Ed25519 + ML-DSA-65**: Xác thực, ký audit, tắt máy khẩn cấp
 - **JWT tokens**: Hết hạn 24 giờ (có thể cấu hình)
 - **Service tokens**: Định dạng `Bearer service:TOKEN_VALUE` cho giao tiếp hệ thống-với-hệ thống
 - **OAuth tokens**: Tự động làm mới với khóa

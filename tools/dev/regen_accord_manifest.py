@@ -91,6 +91,15 @@ def check() -> int:
             bad.append(f"{name}: named by the manifest but not on disk")
         elif hashlib.sha256(p.read_bytes()).hexdigest() != rec["sha256"]:
             bad.append(f"{name}: hash differs from the manifest")
+    if HYBRID.exists():
+        # A1's bound hybrid signature supersedes the WA-root one. Its ML-DSA-65
+        # half is verified by the agent at startup, against A1's federation
+        # directory record (accord_manifest_hybrid.py); here, the file only.
+        for b in bad:
+            print(f"  {b}")
+        if not bad:
+            print(f"hashes ok over {len(doc['files'])} files; A1 hybrid signature present (verified at agent startup)")
+        return 1 if bad else 0
     # Verify with `cryptography`, the same library the agent's own startup check
     # uses (logic/utils/constants.py), not PyNaCl. PyNaCl is only needed to SIGN
     # -- which happens on a key holder's machine -- and requiring it to *check*
@@ -130,9 +139,12 @@ def prepare_hybrid(out_dir: pathlib.Path) -> int:
     Bound hybrid form (CC 5.3.2.4.3.1): Ed25519 over the manifest bytes, then
     ML-DSA-65 over the manifest bytes followed by that Ed25519 signature.
     """
-    if not MANIFEST.exists():
-        print("manifest missing; rebuild it first")
-        return 1
+    # Freeze the bytes A1 will sign: build once, write, and never rebuild
+    # before --attach-hybrid (build() stamps signed_at). A stale hybrid file
+    # would not cover these bytes, so it goes.
+    MANIFEST.write_bytes(build())
+    if HYBRID.exists():
+        HYBRID.unlink()
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "accord_manifest.json").write_bytes(MANIFEST.read_bytes())
     print(f"wrote {out_dir / 'accord_manifest.json'} (sha256 {hashlib.sha256(MANIFEST.read_bytes()).hexdigest()})")

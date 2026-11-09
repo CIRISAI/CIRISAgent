@@ -68,7 +68,7 @@ ROLE_RESPONDER = "responder"
 REPO = "CIRISAI/CIRISAgent"
 NODE_C = "node-c"
 # The A/V step: a 60 s call, one stream each way (Eric, via edge).
-AV_SECONDS, AV_RATE_HZ, AV_FRAME_BYTES = 60, 30, 1024
+AV_SECONDS, AV_RATE_HZ, AV_FRAME_BYTES = 60, 30, 256  # audio-sized: 400 B A/V MDU today (leviculum#104)
 AV_JOIN_S, AV_DRAIN_S = 60.0, 15.0
 
 

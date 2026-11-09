@@ -228,7 +228,7 @@ def test_an_av_call_reports_frames_delay_and_the_leg() -> None:
     assert [c[1].split("?")[0] for c in calls][:3] == ["/v1/qa/call/start", "/v1/qa/call/stats", "/v1/qa/call/stream"]
     assert calls[-1][1] == "/v1/qa/call/stop"
     assert "room=room%2F1" in calls[1][1]
-    assert calls[2][2] == {"room": "room/1", "rate_hz": 30, "frame_bytes": 1024, "seconds": 60}
+    assert calls[2][2] == {"room": "room/1", "rate_hz": 30, "frame_bytes": 256, "seconds": 60}
     assert "received 1700/1800" in detail and "expired_late 3" in detail and "direct(parent_changes=0)" in detail
     assert half.av_record["stop"]
 
@@ -249,9 +249,9 @@ def test_a_refused_join_fails_with_the_reason() -> None:
 
 
 def test_an_av_stream_fits_the_legs_frame_budget() -> None:
-    half, calls = _av_half(budget=700)
+    half, calls = _av_half(budget=200)
     half.av_call("c")
-    assert calls[2][2]["frame_bytes"] == 700  # type: ignore[index]
+    assert calls[2][2]["frame_bytes"] == 200  # type: ignore[index]
     half, calls = _av_half(budget=4096)
     half.av_call("c")
-    assert calls[2][2]["frame_bytes"] == 1024  # type: ignore[index]
+    assert calls[2][2]["frame_bytes"] == 256  # type: ignore[index]

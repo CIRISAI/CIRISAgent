@@ -285,7 +285,7 @@ class TestRateLimitMiddlewareInitialization:
         """Test middleware initializes with defaults."""
         middleware = RateLimitMiddleware()
         assert middleware.limiter.rate == 60
-        assert len(middleware.exempt_paths) == 6  # docs, openapi, redoc, health, adapters, adapter-types
+        assert len(middleware.exempt_paths) == 7  # docs, openapi, redoc, emergency, health, adapters, adapter-types
 
     def test_custom_rate_middleware_initialization(self):
         """Test middleware with custom rate."""

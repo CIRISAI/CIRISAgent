@@ -1,8 +1,8 @@
 """Root signing is retired in the agent (2026-11-08).
 
 The agent no longer accepts a root-key-signed emergency shutdown or mints a
-Wise Authority from a root signature. The emergency halt is the accord halt the
-server serves; the WA seat comes from the node's owner. These locks fail if
+Wise Authority from a root signature. Emergency shutdown stays, signed hybrid by
+the seated WA (test_emergency_hybrid.py); the WA seat comes from the node's owner. These locks fail if
 either surface, or the single-key Ed25519 signing code behind it, comes back.
 """
 
@@ -20,19 +20,18 @@ def _route_paths() -> set[str]:
 
 def test_signed_emergency_and_mint_routes_are_not_mounted() -> None:
     paths = _route_paths()
-    for gone in ("/emergency/shutdown", "/emergency/test", "/v1/users/{user_id}/mint-wa", "/v1/users/wa/key-check"):
+    for gone in ("/emergency/test", "/v1/users/{user_id}/mint-wa", "/v1/users/wa/key-check"):
         assert gone not in paths, gone
-    # Positive control: the ordinary shutdown route the app's button uses is still there.
+    # Positive controls: the ordinary shutdown route, and the hybrid-signed emergency route.
     assert "/v1/system/shutdown" in paths
+    assert "/emergency/shutdown" in paths
 
 
 @pytest.mark.parametrize(
     "module",
     [
-        "ciris_engine.logic.adapters.api.routes.emergency",
         "ciris_engine.logic.adapters.api.endpoints.emergency",
         "ciris_engine.logic.accord.authorities",
-        "ciris_engine.schemas.services.shutdown",
         "ciris_engine.schemas.api.emergency",
         "ciris_sdk.resources.emergency",
     ],

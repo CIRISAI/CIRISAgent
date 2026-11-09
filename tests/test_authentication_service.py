@@ -23,6 +23,20 @@ from ciris_engine.schemas.services.authority.wise_authority import WAUpdate
 from ciris_engine.schemas.services.authority_core import JWTSubType, TokenType, WACertificate, WARole
 
 
+def _eddsa_authority_token(auth_service, wa, private_key: bytes) -> str:
+    """An AUTHORITY token signed with the WA's own Ed25519 key.
+
+    The service used to mint these (``_create_authority_token``). Nothing in
+    production ever did, and the single-key path is retired: the service must
+    refuse them. Tests build one by hand to prove it does.
+    """
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+
+    payload = auth_service._build_base_jwt_payload(wa, JWTSubType.AUTHORITY, 24 * 3600)
+    signing_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key)
+    return jwt.encode(payload, signing_key, algorithm="EdDSA", headers={"kid": wa.jwt_kid})
+
+
 class TestAuthenticationServiceUnit:
     """Unit tests for individual methods."""
 
@@ -72,17 +86,16 @@ class TestAuthenticationServiceUnit:
             "update_wa",
             "revoke_wa",
             "list_was",
-            "rotate_keys",
             "bootstrap_if_needed",
             "update_last_login",
-            "sign_task",
-            "verify_task_signature",
             "generate_keypair",
-            "sign_data",
             "hash_password",
         ]
         for action in expected_actions:
             assert action in actions
+        # The single-key Ed25519 signing surface is retired.
+        for retired in ("rotate_keys", "sign_task", "verify_task_signature", "sign_data"):
+            assert retired not in actions
 
     def test_check_dependencies(self, auth_service):
         """Test dependency checking."""
@@ -319,9 +332,12 @@ class TestAuthenticationServiceUnit:
         assert len(private_key) == 32
         assert len(public_key) == 32
 
-        # Sign data
+        # Sign data (the service no longer signs with raw keys; budget grants
+        # are still verified by _verify_signature)
+        from cryptography.hazmat.primitives.asymmetric import ed25519
+
         data = b"Important message to sign"
-        signature = auth_service.sign_data(data, private_key)
+        signature = base64.b64encode(ed25519.Ed25519PrivateKey.from_private_bytes(private_key).sign(data)).decode()
 
         # Verify signature
         encoded_pubkey = auth_service._encode_public_key(public_key)
@@ -470,27 +486,15 @@ class TestAuthenticationServiceJWT:
         assert "exp" not in long_decoded  # No expiry when ttl = 0
 
     @pytest.mark.asyncio
-    async def test_authority_token_creation(self, auth_service, test_wa):
-        """Test authority-signed tokens (EdDSA)."""
+    async def test_eddsa_authority_token_is_refused(self, auth_service, test_wa):
+        """A WA-key-signed (EdDSA) AUTHORITY token is refused: the gateway
+        secret is the only token key."""
         wa, private_key = test_wa
 
-        # Create authority token
-        token = auth_service._create_authority_token(wa, private_key)
+        token = _eddsa_authority_token(auth_service, wa, private_key)
+        assert jwt.get_unverified_header(token)["alg"] == "EdDSA"
 
-        # Decode header to check algorithm
-        header = jwt.get_unverified_header(token)
-        assert header["alg"] == "EdDSA"
-        assert header["kid"] == wa.jwt_kid
-
-        # Decode payload
-        decoded = jwt.decode(token, options={"verify_signature": False})
-        assert decoded["sub_type"] == JWTSubType.AUTHORITY.value
-
-        # Verify with public key
-        result = await auth_service._verify_jwt_and_get_context(token)
-        assert result is not None
-        context, _ = result
-        assert context.sub_type == JWTSubType.AUTHORITY
+        assert await auth_service._verify_jwt_and_get_context(token) is None
 
     @pytest.mark.asyncio
     async def test_token_verification_invalid_cases(self, auth_service, test_wa):
@@ -532,7 +536,7 @@ class TestAuthenticationServiceJWT:
         assert result is None
 
         # Algorithm confusion attack - try to verify EdDSA token with HS256
-        authority_token = auth_service._create_authority_token(wa, private_key)
+        authority_token = _eddsa_authority_token(auth_service, wa, private_key)
 
         # Decode the authority token and re-encode with HS256
         decoded = jwt.decode(authority_token, options={"verify_signature": False})
@@ -540,7 +544,7 @@ class TestAuthenticationServiceJWT:
 
         fake_token = jwt.encode(decoded, auth_service.gateway_secret, algorithm="HS256", headers={"kid": header["kid"]})
 
-        # This should fail because AUTHORITY tokens must use EdDSA
+        # This should fail: an AUTHORITY sub_type is never accepted
         result = await auth_service._verify_jwt_and_get_context(fake_token)
         assert result is None
 
@@ -694,14 +698,6 @@ class TestAuthenticationServiceIntegration:
         assert updated.name == "Updated Name"
         assert "write:self" in updated.scopes
 
-        # Rotate keys
-        old_pubkey = wa.pubkey
-        rotated = await auth_service.rotate_keys(wa.wa_id)
-        assert rotated is True
-
-        updated_wa = await auth_service.get_wa(wa.wa_id)
-        assert updated_wa.pubkey != old_pubkey
-
         # Revoke
         revoked = await auth_service.revoke_wa(wa.wa_id, "Test revocation")
         assert revoked is True
@@ -743,7 +739,12 @@ class TestAuthenticationServiceIntegration:
 
     @pytest.mark.asyncio
     async def test_system_tasks_are_signed_and_verified_as_the_agent(self, auth_service, monkeypatch):
-        """Tasks are the agent's work: signed with the engine's local key, verified fail-closed."""
+        """Tasks are the agent's work: signed hybrid with the engine's local key.
+
+        The service's own task verifier had no production caller and is gone;
+        the signature is checked here the way any verifier must check it,
+        hybrid-required (#1348).
+        """
         import base64 as _b64
 
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
@@ -770,12 +771,19 @@ class TestAuthenticationServiceIntegration:
                 if _b64.b64decode(pqc_sig) != b"pqc:" + data:
                     raise ValueError("pqc half does not verify")
 
-        monkeypatch.setattr(graph_mod, "get_persist_engine", lambda: _Engine())
-        monkeypatch.setattr(
-            type(auth_service),
-            "_signing_pubkeys",
-            staticmethod(lambda engine, key_id: (pub_b64, "pqc-pub") if key_id == "qa-runner-ciris-agent-test" else None),
-        )
+        engine = _Engine()
+        monkeypatch.setattr(graph_mod, "get_persist_engine", lambda: engine)
+
+        from ciris_engine.logic.utils import substrate_signing
+
+        def _verifies(t: Task) -> bool:
+            try:
+                substrate_signing.verify_hybrid_required(
+                    engine, auth_service._task_canonical_bytes(t), t.signature, t.signature_pqc, pub_b64, "pqc-pub"
+                )
+            except Exception:
+                return False
+            return True
 
         task = Task(
             task_id="WAKEUP_test",
@@ -788,19 +796,16 @@ class TestAuthenticationServiceIntegration:
         )
         task.signed_by, task.signature, task.signed_at, task.signature_pqc = await auth_service.sign_system_task(task)
         assert task.signed_by == "qa-runner-ciris-agent-test"
-        assert await auth_service.verify_task_signature(task) is True
+        assert task.signature_pqc, "both halves are produced (#1348)"
+        assert _verifies(task) is True
 
         pqc = task.signature_pqc
         task.signature_pqc = None
-        assert await auth_service.verify_task_signature(task) is False, "Ed25519 alone is not accepted (#1348)"
+        assert _verifies(task) is False, "Ed25519 alone is not accepted (#1348)"
         task.signature_pqc = pqc
 
         task.description = "Tampered description"
-        assert await auth_service.verify_task_signature(task) is False
-
-        task.description = "Wakeup"
-        task.signed_by = "someone-else"
-        assert await auth_service.verify_task_signature(task) is False, "an unresolvable signer fails closed"
+        assert _verifies(task) is False
 
 
 class TestAuthenticationServiceErrorHandling:
@@ -859,72 +864,6 @@ class TestAuthenticationServiceErrorHandling:
 
         with pytest.raises(ValueError, match="CHANNEL tokens require channel_id"):
             await auth_service.create_token(wa.wa_id, TokenType.CHANNEL)
-
-    @pytest.mark.asyncio
-    async def test_sign_task_invalid_wa(self, auth_service):
-        """Test signing task with invalid WA."""
-        from ciris_engine.schemas.runtime.models import Task, TaskStatus
-
-        mock_task = Task(
-            task_id="test-task",
-            channel_id="test_channel",
-            description="Test",
-            status=TaskStatus.PENDING,
-            priority=1,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-        with pytest.raises(ValueError, match="WA .* not found"):
-            await auth_service.sign_task(mock_task, "wa-9999-99-99-NONE01")
-
-    @pytest.mark.skip(
-        reason="Post-2.9.0 sign_task tries CIRISVerify's named-key path "
-        "(verifier.has_named_key + sign_with_named_key) before raising "
-        "'No signing key available'. CIRISVerify in this test env "
-        "auto-creates the named key on first lookup, so the ValueError "
-        "branch is unreachable. Need a CIRISVerify test-mode (no-auto-create) "
-        "before this can be re-enabled."
-    )
-    @pytest.mark.asyncio
-    async def test_sign_task_no_private_key(self, auth_service):
-        """Test signing task when no signing key available for WA."""
-        # Create a regular WA (not system)
-        wa = await auth_service.create_wa("Regular User", "user@test.com", ["read"], WARole.OBSERVER)
-
-        from ciris_engine.schemas.runtime.models import Task, TaskStatus
-
-        mock_task = Task(
-            task_id="test-task",
-            channel_id="test_channel",
-            description="Test",
-            status=TaskStatus.PENDING,
-            priority=1,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-        with pytest.raises(ValueError, match="No signing key available for WA"):
-            await auth_service.sign_task(mock_task, wa.wa_id)
-
-    @pytest.mark.asyncio
-    async def test_verify_unsigned_task(self, auth_service):
-        """Test verifying task without signature."""
-        from ciris_engine.schemas.runtime.models import Task, TaskStatus
-
-        mock_task = Task(
-            task_id="test-task",
-            channel_id="test_channel",
-            description="Test",
-            status=TaskStatus.PENDING,
-            priority=1,
-            created_at=datetime.now(timezone.utc).isoformat(),
-            updated_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-        # No signature fields set
-        is_valid = await auth_service.verify_task_signature(mock_task)
-        assert is_valid is False
 
     @pytest.mark.asyncio
     async def test_health_check_with_db_issues(self, auth_service):
@@ -1257,13 +1196,13 @@ class TestAuthenticationServiceSecurity:
         await auth_service._store_wa_certificate(wa)
 
         # Create authority token (EdDSA)
-        authority_token = auth_service._create_authority_token(wa, private_key)
+        authority_token = _eddsa_authority_token(auth_service, wa, private_key)
 
         # Try to create a forged token with same payload but HS256
         decoded = jwt.decode(authority_token, options={"verify_signature": False})
         forged_token = jwt.encode(decoded, auth_service.gateway_secret, algorithm="HS256", headers={"kid": wa.jwt_kid})
 
-        # Verification should fail - authority tokens must use EdDSA
+        # Verification should fail - an AUTHORITY sub_type is never accepted
         result = await auth_service._verify_jwt_and_get_context(forged_token)
         assert result is None
 
@@ -1279,7 +1218,7 @@ class TestAuthenticationServiceSecurity:
             gateway_decoded, auth_service.gateway_secret, algorithm="HS256", headers={"kid": wa.jwt_kid}
         )
 
-        # Should fail because AUTHORITY tokens must use EdDSA
+        # Should fail: an AUTHORITY sub_type is never accepted
         result = await auth_service._verify_jwt_and_get_context(forged_authority)
         assert result is None
 

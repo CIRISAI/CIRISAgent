@@ -3,16 +3,14 @@
 Manages API keys, OAuth users, and authentication state.
 """
 
-import base64
 import hashlib
 import logging
 import os
 import secrets
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import aiofiles
 import bcrypt
 
 logger = logging.getLogger(__name__)
@@ -1111,87 +1109,6 @@ class APIAuthService:
             if stored_key.user_id == user_id:
                 keys.append(stored_key)
         return sorted(keys, key=lambda k: k.created_at, reverse=True)
-
-    async def verify_root_signature(self, user_id: str, wa_role: WARole, signature: str) -> bool:
-        """Verify a ROOT signature for WA minting.
-
-        The signature should be over the message:
-        "MINT_WA:{user_id}:{wa_role}:{timestamp}"
-
-        Where timestamp is in ISO format.
-        """
-        import json
-        from pathlib import Path
-
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        try:
-            # Load ROOT public key from seed/
-            root_pub_path = Path(__file__).parent.parent.parent.parent.parent.parent / "seed" / "root_pub.json"
-            async with aiofiles.open(root_pub_path, "r", encoding="utf-8") as f:
-                content = await f.read()
-                root_data = json.loads(content)
-
-            # Get the public key (base64url encoded)
-            pubkey_b64 = root_data["pubkey"]
-
-            # Decode from base64url to bytes
-            # Add padding if needed
-            pubkey_b64_padded = pubkey_b64 + "=" * (4 - len(pubkey_b64) % 4)
-            pubkey_bytes = base64.urlsafe_b64decode(pubkey_b64_padded)
-
-            # Create Ed25519 public key object
-            public_key = ed25519.Ed25519PublicKey.from_public_bytes(pubkey_bytes)
-
-            # The signature should include a timestamp
-            # For verification, we'll accept signatures from the last hour
-            now = datetime.now(timezone.utc)
-
-            # Try multiple timestamp formats within the last hour
-            for minutes_ago in range(0, 60, 1):  # Check last 60 minutes
-                timestamp = (now - timedelta(minutes=minutes_ago)).isoformat()
-                message = f"MINT_WA:{user_id}:{wa_role.value}:{timestamp}"
-
-                try:
-                    # Decode signature from base64url
-                    sig_padded = signature + "=" * (4 - len(signature) % 4)
-                    sig_bytes = base64.urlsafe_b64decode(sig_padded)
-
-                    # Verify signature
-                    public_key.verify(sig_bytes, message.encode())
-
-                    # If we get here, signature is valid
-                    return True
-                except Exception:
-                    # Try next timestamp
-                    continue
-
-            # Also try without timestamp for backwards compatibility
-            message_no_ts = f"MINT_WA:{user_id}:{wa_role.value}"
-
-            # Try standard base64 first (what our signing script produces)
-            try:
-                sig_bytes = base64.b64decode(signature)
-                public_key.verify(sig_bytes, message_no_ts.encode())
-                return True
-            except Exception:
-                pass
-
-            # Try urlsafe base64
-            try:
-                sig_padded = signature + "=" * (4 - len(signature) % 4)
-                sig_bytes = base64.urlsafe_b64decode(sig_padded)
-                public_key.verify(sig_bytes, message_no_ts.encode())
-                return True
-            except Exception:
-                pass
-
-            return False
-
-        except Exception as e:
-            # Log error but don't expose internal details
-            logger.debug(f"[AUTH DEBUG] Signature verification error: {e}")
-            return False
 
     def _update_user_wa_role(self, user: User, wa_role: WARole, minted_by: str) -> None:
         """Update user's WA role and related fields."""

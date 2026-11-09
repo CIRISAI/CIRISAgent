@@ -74,7 +74,6 @@ class MockRuntimeControlService:
         self.reset_circuit_breakers = AsyncMock()
         self.get_circuit_breaker_status = AsyncMock()
         self.get_service_selection_explanation = AsyncMock()
-        self.handle_emergency_shutdown = AsyncMock()
 
 
 @pytest.fixture

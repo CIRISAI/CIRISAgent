@@ -37,7 +37,6 @@ The Shutdown Service serves **Meta-Goal M-1** (Promote sustainable adaptive cohe
 - **Current**: `/home/emoore/CIRISAgent/ciris_engine/logic/services/lifecycle/shutdown.py` (single file)
 - **Needs Conversion**: Should be converted to module directory structure
 - **Protocol**: `/home/emoore/CIRISAgent/ciris_engine/protocols/services/lifecycle/shutdown.py`
-- **Schemas**: `/home/emoore/CIRISAgent/ciris_engine/schemas/services/shutdown.py`
 
 ### Service Classification
 - **Base Class**: `BaseInfrastructureService`
@@ -146,26 +145,11 @@ ShutdownService
 
 ## 🔐 Security & Emergency Features
 
-### WA-Authorized Emergency Shutdown
+### Emergency halt
 
-The service integrates with CIRIS emergency command system:
-
-**Schema Classes** (`ciris_engine/schemas/services/shutdown.py`):
-- `WASignedCommand`: Ed25519-signed emergency commands
-- `EmergencyShutdownStatus`: Tracking emergency shutdown progress
-- `KillSwitchConfig`: Configuration for emergency shutdown behavior
-
-**Command Types**:
-- `SHUTDOWN_NOW`: Immediate forced termination
-- `FREEZE`: Stop processing but maintain state
-- `SAFE_MODE`: Minimal functionality only
-
-**Security Chain**:
-1. WA public key verification
-2. Signature validation using Ed25519
-3. Command expiration checking
-4. Trust tree depth validation
-5. Audit logging of all commands
+The agent no longer carries a WA-signed emergency command (`WASignedCommand`
+and its schemas were removed 2026-11-08). The emergency halt is the
+HUMANITY_ACCORD halt served by the server and read by the agent's act gate.
 
 ### Force Kill Protection
 - 5-second timeout for emergency shutdown

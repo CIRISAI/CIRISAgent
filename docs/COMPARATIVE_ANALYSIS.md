@@ -101,7 +101,7 @@ CIRIS implements seven non-negotiable requirements that distinguish ethical AI f
 | **Independence Math** | ✅ [IDMA k_eff](DMA_CREATION_GUIDE.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Human Deferral** | ✅ [Crypto WA](WISE_AUTHORITIES.md) | ✅ HITL modes | ✅ Handoffs | ⚠️ Hooks | ❌ Manual | ⚠️ Manual | ❌ None |
 | **Audit Trail** | ✅ [Triple+Signed](TRACE_FORMAT.md) | ✅ OTel | ✅ Traces | ⚠️ LangSmith | ⚠️ Enterprise| ⚠️ Cloud | ⚠️ Memory |
-| **Emergency Stop** | ✅ [Ed25519](EMERGENCY_SHUTDOWN.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Emergency Stop** | ✅ Accord halt (server-verified) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
 | **GDPR/DSAR** | ✅ [Automated](CIRIS_CONSENT_SERVICE.md) | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
 | **Offline Capable** | ✅ [Mock LLM](MOCK_LLM.md) | ⚠️ Local LLM | ❌ No | ⚠️ Requires LLM | ❌ No | ❌ No | ⚠️ Local |
 | **Multi-Language** | ✅ [29-braid](ACCORD.md) | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic |

@@ -10,7 +10,6 @@ from .resources.auth import AuthResource
 from .resources.billing import BillingResource
 from .resources.config import ConfigResource
 from .resources.consent import ConsentResource
-from .resources.emergency import EmergencyResource
 from .resources.jobs import JobsResource
 from .resources.memory import MemoryResource
 from .resources.setup import SetupResource
@@ -85,7 +84,6 @@ class CIRISClient:
         self.wa = WiseAuthorityResource(self._transport)
         self.config = ConfigResource(self._transport)
         self.consent = ConsentResource(self._transport)  # NEW: Consent management
-        self.emergency = EmergencyResource(self._transport)  # NEW: Emergency operations
         self.jobs = JobsResource(self._transport)  # NEW: Async job management
 
         # Legacy resource references for backwards compatibility

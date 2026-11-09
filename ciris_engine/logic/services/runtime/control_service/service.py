@@ -51,7 +51,6 @@ from ciris_engine.schemas.services.runtime_control import (
     ServiceProviderUpdate,
     ServiceRegistryInfoResponse,
 )
-from ciris_engine.schemas.services.shutdown import EmergencyShutdownStatus, KillSwitchConfig, WASignedCommand
 from ciris_engine.schemas.types import ConfigMapping, ConfigValue
 
 # GraphConfigService is injected via dependency injection to avoid circular imports
@@ -194,39 +193,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
         # State transition tracking for v1.4.3 metrics
         self._state_transitions = 0
         self._commands_processed = 0
-
-        # Kill switch — LEGACY (#998).
-        #
-        # This service used to keep its OWN authority list: `_wa_key_map`, a
-        # WAPublicKeyMap constructed empty here whose only writer was
-        # `_configure_kill_switch`, which nothing ever called. So
-        # `_verify_wa_signature` rejected EVERY WA-signed emergency shutdown
-        # regardless of signature validity, while `GET /v1/emergency/kill-switch/status`
-        # reported `enabled: true` off a hardcoded default. A live endpoint that
-        # could never succeed, describing a control that was not the one
-        # protecting the system.
-        #
-        # Authorities now come from EmergencyAuthorities (accord/authorities.py)
-        # — ONE authority source for the WASignedCommand this API accepts. (The
-        # stego AccordPayload that shared it is retired, #1231: the CC 4.2.1.1
-        # halt is verified and latched by the node.)
-        #
-        # REDUNDANT BY DESIGN: the substrate carries its own, separate kill
-        # switch that halts the node itself. These are not competing paths —
-        # this one stops the agent, the substrate's stops the node underneath
-        # it. Defence in depth: either alone is sufficient to stop the system.
-        #
-        # TODO(#998): today's authority set is Ed25519 over the steward keys.
-        self._kill_switch_config = KillSwitchConfig(
-            enabled=True,
-            trust_tree_depth=3,
-            allow_relay=True,
-            max_shutdown_time_ms=30000,
-            command_expiry_seconds=300,
-            require_reason=True,
-            log_to_audit=True,
-            allow_override=False,
-        )
 
     def _get_config_manager(self) -> "GraphConfigService":
         """Get config manager with lazy initialization to avoid circular imports."""
@@ -620,157 +586,6 @@ class RuntimeControlService(BaseService, RuntimeControlServiceProtocol):
                 new_status=self._processor_status,
                 error=str(e),
             )
-
-    async def handle_emergency_shutdown(self, command: WASignedCommand) -> EmergencyShutdownStatus:
-        """
-        Handle WA-authorized emergency shutdown command.
-
-        Verifies WA signature and calls the shutdown service immediately.
-
-        Args:
-            command: Signed emergency shutdown command from WA
-
-        Returns:
-            Status of emergency shutdown process
-        """
-        logger.critical(f"EMERGENCY SHUTDOWN COMMAND RECEIVED from WA {command.wa_id}")
-
-        # Initialize status
-        now = self._now()
-
-        status = EmergencyShutdownStatus(
-            command_received=now,
-            command_verified=False,
-            verification_error=None,
-            shutdown_initiated=None,
-            data_persisted=False,
-            final_message_sent=False,
-            shutdown_completed=None,
-            exit_code=None,
-        )
-
-        try:
-            # Verify WA signature
-            if not self._verify_wa_signature(command):
-                status.command_verified = False
-                status.verification_error = "Invalid WA signature"
-                logger.error(f"Emergency shutdown rejected: Invalid signature from {command.wa_id}")
-                return status
-
-            status.command_verified = True
-            status.shutdown_initiated = self._now()
-
-            # Record emergency event
-            await self._record_event(
-                "emergency_shutdown",
-                "command_verified",
-                success=True,
-                result={"wa_id": command.wa_id, "command_id": command.command_id, "reason": command.reason},
-            )
-
-            # Call the existing shutdown mechanism
-            # This will trigger all registered shutdown handlers
-            shutdown_reason = f"WA EMERGENCY SHUTDOWN: {command.reason} (WA: {command.wa_id})"
-
-            # Get shutdown service from registry if available
-            if self.runtime and hasattr(self.runtime, "service_registry"):
-                # Fix: Provide both handler and service_type parameters
-                shutdown_service = await self.runtime.service_registry.get_service(
-                    handler="default", service_type=ServiceType.SHUTDOWN
-                )
-                if shutdown_service:
-                    shutdown_service.request_shutdown(shutdown_reason)
-                    status.shutdown_completed = self._now()
-                    status.exit_code = 0
-                    logger.info("Emergency shutdown delegated to ShutdownService")
-                    return status
-
-            # Fallback to direct shutdown
-            await self.shutdown_runtime(shutdown_reason)
-            status.shutdown_completed = self._now()
-            status.exit_code = 0
-
-            return status
-
-        except Exception as e:
-            logger.critical(f"Emergency shutdown failed: {e}")
-            status.verification_error = str(e)
-            status.shutdown_completed = self._now()
-            status.exit_code = 1
-            return status
-
-    def _verify_wa_signature(self, command: WASignedCommand) -> bool:
-        """
-        Verify the WA signature on an emergency command.
-
-        Args:
-            command: The signed command to verify
-
-        Returns:
-            True if signature is valid, False otherwise
-        """
-        try:
-            # Authority resolved from EmergencyAuthorities (#998). An empty
-            # roster resolves no key, so every command is refused (fail closed).
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
-            from ciris_engine.logic.accord.authorities import EmergencyAuthorities
-
-            key_bytes = EmergencyAuthorities().public_key_for(command.wa_id)
-            if key_bytes is None:
-                logger.error(f"WA {command.wa_id} is not a trusted accord authority")
-                return False
-
-            public_key = Ed25519PublicKey.from_public_bytes(key_bytes)
-
-            # Reconstruct signed data (canonical form)
-            signed_data = "|".join(
-                [
-                    f"command_id:{command.command_id}",
-                    f"command_type:{command.command_type}",
-                    f"wa_id:{command.wa_id}",
-                    f"issued_at:{command.issued_at.isoformat()}",
-                    f"reason:{command.reason}",
-                ]
-            )
-
-            if command.target_agent_id:
-                signed_data += f"|target_agent_id:{command.target_agent_id}"
-
-            # Verify signature
-            from cryptography.exceptions import InvalidSignature
-
-            try:
-                signature_bytes = bytes.fromhex(command.signature)
-                public_key.verify(signature_bytes, signed_data.encode("utf-8"))
-                return True
-            except InvalidSignature:
-                logger.error("Invalid signature on emergency command")
-                return False
-            except ValueError as e:
-                # bytes.fromhex can raise ValueError for invalid hex
-                logger.error(f"Invalid signature format (not valid hex): {e}")
-                return False
-
-        except (ValueError, TypeError) as e:
-            # ValueError: invalid key format, TypeError: wrong key type
-            logger.error(f"Signature verification failed due to format error: {e}")
-            return False
-        except Exception as e:
-            # Catch-all for unexpected errors (e.g., cryptography library errors)
-            logger.error(f"Signature verification failed unexpectedly: {e}")
-            return False
-
-    def _extract_wa_id_from_pem(self, key_pem: str) -> str:
-        """Extract WA ID from PEM comment or generate from hash."""
-        for line in key_pem.split("\n"):
-            if line.startswith("# WA-ID:"):
-                return line.split(":", 1)[1].strip()
-
-        # Fallback to hash
-        import hashlib
-
-        return hashlib.sha256(key_pem.encode()).hexdigest()[:16]
 
     def _ensure_adapter_manager(self) -> bool:
         """Lazy-initialize adapter_manager if needed. Returns True if available."""

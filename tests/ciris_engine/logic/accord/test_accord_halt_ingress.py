@@ -320,7 +320,6 @@ def test_nothing_in_the_agent_writes_the_latch():
 _ACCORD_PATH = [
     "ciris_engine/logic/accord/__init__.py",
     "ciris_engine/logic/accord/ingress.py",
-    "ciris_engine/logic/accord/authorities.py",
     "ciris_engine/logic/utils/halt_latch.py",
     "ciris_engine/schemas/runtime/accord_halt.py",
 ]

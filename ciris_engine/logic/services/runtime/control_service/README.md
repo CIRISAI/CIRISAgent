@@ -179,34 +179,10 @@ Circuit breakers prevent cascade failures by:
 
 ## Emergency Operations
 
-### WA-Signed Emergency Shutdown
-
-The Runtime Control Service implements cryptographically-verified emergency shutdown:
-
-#### Signature Verification Process
-
-```python
-def _verify_wa_signature(self, command: WASignedCommand) -> bool:
-    # 1. Check WA is in authorized key list
-    # 2. Load Ed25519 public key from PEM format
-    # 3. Reconstruct canonical signed data
-    # 4. Verify Ed25519 signature
-    # 5. Return verification result
-```
-
-#### Signed Data Format
-
-```
-command_id:{uuid}|command_type:emergency_shutdown|wa_id:{wa_id}|issued_at:{iso_timestamp}|reason:{reason}
-```
-
-#### Emergency Shutdown Flow
-
-1. **Command Reception**: WA sends signed emergency command
-2. **Signature Verification**: Ed25519 signature validation
-3. **Authorization Check**: Verify WA is in authorized key list
-4. **Shutdown Initiation**: Trigger ShutdownService with emergency priority
-5. **Status Tracking**: Record shutdown progress and completion
+The service no longer accepts a root-key-signed emergency shutdown (retired
+2026-11-08). The emergency halt is the HUMANITY_ACCORD constitutional halt that
+the server verifies, latches and serves; the agent's act gate reads it via
+halt-status. Ordinary shutdown goes through `POST /v1/system/shutdown`.
 
 ## Metrics and Observability
 

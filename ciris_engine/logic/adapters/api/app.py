@@ -24,7 +24,6 @@ from .routes import (
     consent,
     dsar,
     dsar_multi_source,
-    emergency,
     memory,
     my_data,
     node_identity,
@@ -390,9 +389,6 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # there) and no single address answered both, which is what broke desktop
     # BYOK. See routes/node_proxy.py.
     app.include_router(node_proxy.router, prefix="/v1")
-
-    # Mount emergency routes at root level (no /v1 prefix)
-    app.include_router(emergency.router)
 
     print("[STARTUP] Routes registered successfully")
     set_api_status("routes_registered")

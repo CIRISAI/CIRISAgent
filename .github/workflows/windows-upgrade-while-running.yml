@@ -1,0 +1,116 @@
+name: Windows upgrade while running
+
+# A running CIRIS must never stop `pip install -U` on Windows. It used to: the
+# launcher and the desktop JAR were held open, so pip replaced the client and the
+# server, failed on the agent (WinError 32), and left an install that died at
+# import before it could log (runs 41848318081, 41850556394; a user hit it).
+#
+# Each case runs CIRIS on the current launcher, upgrades underneath it, and fails
+# unless pip succeeded and nothing is half-installed. The launcher files come from
+# this branch; everything else is the last published release, with client and
+# server rolled back so pip replaces client, server, agent in the real order.
+
+on:
+  pull_request:
+    paths:
+      - 'ciris_engine/cli.py'
+      - 'ciris_engine/desktop_launcher.py'
+      - 'ciris_engine/upgrade.py'
+      - 'ciris_engine/_upgrade_helper.py'
+      - 'main.py'
+      - '.github/workflows/windows-upgrade-while-running.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    name: ${{ matrix.mode }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [pip-under-desktop, pip-under-server, upgrade-verb-desktop, upgrade-verb-server]
+    env:
+      MODE: ${{ matrix.mode }}
+      PYTHONUTF8: '1'
+      BASE: '2.19.1'
+      TARGET: '2.19.0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: branch
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Upgrade under a running CIRIS
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $failed = @()
+          New-Item -ItemType Directory -Force out | Out-Null
+          $sp = python -c "import site; print(site.getsitepackages()[-1])"
+          python -m pip install -q "ciris-agent==$env:BASE" 2>&1 | Select-Object -Last 2
+          python -m pip install -q --no-deps 'ciris-client==0.5.236' 'ciris-server==0.5.242' 2>&1 | Select-Object -Last 2
+          foreach ($f in 'ciris_engine\cli.py','ciris_engine\desktop_launcher.py','ciris_engine\upgrade.py','ciris_engine\_upgrade_helper.py','main.py') { Copy-Item "branch\$f" (Join-Path $sp $f) -Force }
+
+          function Wait-Health($secs) {
+            $end = (Get-Date).AddSeconds($secs)
+            while ((Get-Date) -lt $end) {
+              try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 http://127.0.0.1:8080/v1/system/health; if ($r.StatusCode -eq 200) { return $true } } catch {}
+              Start-Sleep 2
+            }
+            return $false
+          }
+          function Stop-Ciris { Get-Process | Where-Object { $_.ProcessName -match '^(python|pythonw|java|javaw|ciris.*)$' } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 3 }
+
+          $exe = (Get-Command ciris-agent).Source
+          if ($env:MODE -like '*desktop') { Start-Process $exe -RedirectStandardOutput out\run1.out -RedirectStandardError out\run1.err | Out-Null }
+          else { Start-Process $exe -ArgumentList '--server','--port','8080' -RedirectStandardOutput out\run1.out -RedirectStandardError out\run1.err | Out-Null }
+          if (-not (Wait-Health 180)) { $failed += 'CIRIS never started, so the case did not run' }
+          Start-Sleep 15
+          if (Get-Process -Name 'ciris-agent' -ErrorAction SilentlyContinue) { $failed += 'ciris-agent.exe is still running: the launcher did not hand off' }
+
+          if ($env:MODE -like 'pip-*') {
+            python -m pip install --force-reinstall --no-deps 'ciris-client==0.5.237' 'ciris-server==0.5.243' "ciris-agent==$env:TARGET" 2>&1 | Tee-Object out\pip.txt | Select-String -Pattern 'Successfully installed|ERROR|WinError' | ForEach-Object { $_.Line.Substring(0, [Math]::Min(190, $_.Line.Length)) }
+            if ($LASTEXITCODE -ne 0) { $failed += "pip exited $LASTEXITCODE under a running CIRIS" }
+          } else {
+            & $exe upgrade --to $env:TARGET 2>&1 | Out-File out\verb.txt
+            if ($LASTEXITCODE -ne 0) { $failed += "ciris-agent upgrade exited $LASTEXITCODE" }
+            $log = "$env:USERPROFILE\ciris\logs\upgrade.log"
+            $end = (Get-Date).AddSeconds(420)
+            while ((Get-Date) -lt $end) { if ((Test-Path $log) -and (Select-String -Quiet -Path $log -Pattern 'pip exited|not upgrading')) { break }; Start-Sleep 3 }
+            Copy-Item $log out\ -ErrorAction SilentlyContinue
+            if (-not (Select-String -Quiet -Path $log -Pattern 'pip exited 0')) { $failed += 'the upgrade helper did not finish pip cleanly' }
+            if (-not (Wait-Health 150)) { $failed += 'CIRIS did not come back after ciris-agent upgrade' }
+          }
+
+          Start-Sleep 3
+          $dist = (Get-ChildItem $sp -Directory -Filter 'ciris_agent-*.dist-info').Name
+          if ($dist -ne "ciris_agent-$env:TARGET.dist-info") { $failed += "agent is not at the target version: $dist" }
+          foreach ($gone in '~iris_agent*', '~iris_engine', '~iris_adapters') {
+            if (Get-ChildItem $sp -Force -Filter $gone) { $failed += "pip left $gone behind" }
+          }
+          $adapters = (Get-ChildItem (Join-Path $sp 'ciris_adapters') -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+          if ($adapters -lt 100) { $failed += "ciris_adapters is half-installed ($adapters files)" }
+
+          # The upgraded package must start. --adapter api works on every version.
+          Stop-Ciris
+          Start-Process $exe -ArgumentList '--adapter','api','--port','8080' -RedirectStandardOutput out\run2.out -RedirectStandardError out\run2.err | Out-Null
+          if (-not (Wait-Health 150)) { $failed += 'CIRIS did not start after the upgrade' }
+          Stop-Ciris
+
+          if ($failed.Count) { foreach ($f in $failed) { "::error::$env:MODE`: $f" }; exit 1 }
+          "PASS: $env:MODE"
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upgrade-${{ matrix.mode }}
+          path: out/

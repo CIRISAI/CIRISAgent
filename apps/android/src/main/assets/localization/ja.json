@@ -3827,7 +3827,40 @@
     "add_device_stopped_retrying": "再試行を停止しました。リクエストは他のデバイスに届きませんでした。",
     "add_device_withdraw_here": "待機を停止し、このリクエストの鍵と、すでに受け取った承認を破棄します。",
     "add_device_withdraw_other": "他のデバイスにはリクエストを破棄するよう、または既に承認済みの場合はその承認を取り消すよう通知されます。到達できない場合、そちらでは15分後にリクエストが期限切れになります。",
-    "add_device_withdraw_held": "何も参加しません。再度選択するか、新しいリクエストを送信できます。"
+    "add_device_withdraw_held": "何も参加しません。再度選択するか、新しいリクエストを送信できます。",
+    "my_devices_claim": "デバイスの所有権取得",
+    "chat_unopened_withheld_by_moderation": "このルームのモデレーターがこのメッセージにフラグを立てたため、あなたが表示を選択するまで非表示のままになります。",
+    "chat_attach": "添付",
+    "chat_attached": "添付済み: {name}",
+    "chat_attachment_remove": "削除",
+    "chat_attachment_open": "添付ファイルを開く",
+    "files_withheld": "モデレーターにより非表示",
+    "files_act_revealed": "これで表示できるようになりました。",
+    "files_pick_hint": "添付するファイルを選択するか、先にファイルを追加してください。",
+    "moderation_reveal": "表示",
+    "moderation_reveal_title": "この項目を表示しますか？",
+    "moderation_reveal_fact_flag": "フラグの種類",
+    "moderation_reveal_fact_effect": "変更内容",
+    "moderation_reveal_effect": "あなた自身のデバイス上で、あなたに対して開かれます。これによって他の人に見られることはありません。",
+    "moderation_reveal_fact_signer": "署名者",
+    "moderation_reveal_signer": "この項目1件を表示することへの同意として、あなた自身の鍵",
+    "moderation_note_flagged": "モデレーターがこれに「{flag}」のフラグを立てました。",
+    "moderation_note_revealed": "モデレーターがこれに「{flag}」のフラグを立てましたが、あなたは表示を選択しました。",
+    "moderation_note_cleared": "これに対するモデレーターのフラグは解除されました。",
+    "moderation_appeal_filed": "異議申し立てが裁定を待っています。",
+    "moderation_appeal_upheld": "異議申し立てにより、フラグは維持されました。",
+    "moderation_appeal_partial": "異議申し立てにより、フラグは部分的に維持されました。",
+    "moderation_appeal_reversed": "異議申し立てにより、フラグは取り消されました。",
+    "local_community_body": "ローカルコミュニティは地理的範囲です：あなたの近くにいる人々を指します。これは、位置情報の共有にオプトインし、現在も共有している場合にのみ適用されます。",
+    "local_community_not_on_this_node": "このノードはまだ位置情報を共有できないため、現在のところローカルルームは場所に紐づいておらず、参加者はあなたが選びます。あなたの位置情報は共有されていません。",
+    "setup_template_ally": "Ally、個人アシスタントです。個人用インストールにはこちらが正しい選択です。",
+    "setup_template_chosen": "{name}テンプレートから開始します。",
+    "setup_template_provisioned": "{name} — 組織のPortalレコードによって設定されています。",
+    "community_section_title_local": "あなたのローカルルーム",
+    "community_section_body_local": "近くにいる人々のためのルームです。現在のところ、ルームは創設したデバイス上でのみローカルとして表示されます。他のメンバーには、コミュニティの下に表示されます。",
+    "community_empty_local": "まだローカルルームがありません。ルームを創設し、近くにいる人を招待してください。",
+    "community_create_open_local": "ローカルルームを創設",
+    "community_create_title_local": "ローカルルームを創設"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4727,12 @@
       "community_chats": "ルーム",
       "affiliations_chats": "ルーム",
       "node_self": "自身の状態",
-      "owned_agents": "所有するエージェント"
+      "owned_agents": "所有するエージェント",
+      "my_devices": "自分のデバイス",
+      "layer_communities": "コミュニティ",
+      "layer_affiliations": "所属",
+      "local_chats": "ローカルルーム",
+      "local_roster": "ローカルメンバー"
     },
     "circle": {
       "agent": "自分のみ",
@@ -4745,7 +4783,8 @@
       "files_agent": "ここにはまだ何もありません。ここはすべての出発点であり、ここにあるものは公開されません。",
       "decisions_agent": "ここには一緒に決める相手がいません。決定はファミリーから始まります。",
       "decisions_family": "ファミリーは話し合いで決めます。ここには投票すべきものはありません。",
-      "chats_agent": "このノードにはエージェントがいないため、話す相手がここにはいません。エージェントを設定すると、そのエージェントとの会話がここに表示されます。"
+      "chats_agent": "このノードにはエージェントがいないため、話す相手がここにはいません。エージェントを設定すると、そのエージェントとの会話がここに表示されます。",
+      "files_local": "ファイルは各ルームに保存されます。ファイルを見るには、ローカルルームを開いてください。"
     },
     "my_things": "自分のもの",
     "stop_everything": "すべてを停止",
@@ -5398,7 +5437,11 @@
       "error": "これを提起できませんでした: {detail}。何も提出されていません。",
       "not_on_this_node": "このノードはまだコミュニティ提案を受け付けられません。/v1/safety/reports ルートがないためです（CIRISServer#665 が必要）。何も提出されていません。モデレーションの職務をお持ちの場合は、代わりに「安全性 > モデレーション」から提出してください。",
       "refused_minor": "このノード上のあなたの年齢記録は未成年となっているため、これは直接ではなく、あなたのスチュワードを通じて提起されます。何も提出されていません。スチュワードに提起を依頼してください。"
-    }
+    },
+    "item_not_in_room": "それはこのルームのメッセージでもファイルでもありません",
+    "not_flagged": "このルームのモデレーターはその項目にフラグを立てていません — 表示するものはありません",
+    "reveal_failed": "表示への同意を記録できなかったため、項目は非表示のままです。",
+    "unknown_action": "ルーム内の項目は「reveal」で開示されます"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "このメッセージはすでに撤回または取り消されています",
     "not_author": "メッセージの差し替え、撤回、取り消しを行えるのは、それを書いた本人のみです",
     "reason_invalid": "その理由コードはこの改訂には適用されません",
-    "unknown_revision_op": "メッセージの改訂は、差し替え、撤回、または取り消しによって行われます"
+    "unknown_revision_op": "メッセージの改訂は、差し替え、撤回、または取り消しによって行われます",
+    "attachment_not_in_room": "そのファイルはこのルームにありません。先にルームに共有してから送信してください。"
   },
   "contacts": {
     "awaiting_consent": "相手はまだ承諾していません。これは人の対応を待っている状態のため、再試行しても何も変わりません。",
@@ -6020,7 +6064,9 @@
     "format_mismatch": "ファイルの内容が、指定されたタイプと一致しないため、追加されませんでした。",
     "not_author": "ファイルを変更または取り下げられるのは作成者のみです。別のデバイスで書き込んだファイルは、そのデバイスから変更してください。",
     "range_not_satisfiable": "リクエストされた範囲は、このファイルの範囲外です。",
-    "same_room": "ファイルはすでにそのルームにあります — 移動するには別のルームを指定してください"
+    "same_room": "ファイルはすでにそのルームにあります — 移動するには別のルームを指定してください",
+    "withheld_by_moderation": "このルームのモデレーターがこのファイルにフラグを立てたため、あなたが表示を選択するまで非表示のままになります。",
+    "flagged_by_moderation": "このルームのモデレーターがこのファイルにフラグを立てました。フラグが有効な間、ファイルはルームに残ります。"
   },
   "notes": {
     "author_signer_unavailable": "このノードは現在あなたとして署名できないため、ノートは書き込まれませんでした。",

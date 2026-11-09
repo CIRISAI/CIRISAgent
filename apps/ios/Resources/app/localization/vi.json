@@ -4213,7 +4213,40 @@
     "add_device_stopped_retrying": "Đã ngừng thử. Không có yêu cầu nào đến được thiết bị khác của bạn.",
     "add_device_withdraw_here": "Ngừng chờ, đồng thời xóa các khóa của yêu cầu này và mọi chấp thuận đã nhận.",
     "add_device_withdraw_other": "Thiết bị đó được báo để bỏ yêu cầu, hoặc hoàn tác chấp thuận nếu đã chấp thuận. Nếu không liên lạc được, yêu cầu sẽ hết hạn ở đó sau 15 phút.",
-    "add_device_withdraw_held": "Không có gì tham gia. Bạn có thể chọn lại, hoặc gửi một yêu cầu mới."
+    "add_device_withdraw_held": "Không có gì tham gia. Bạn có thể chọn lại, hoặc gửi một yêu cầu mới.",
+    "my_devices_claim": "Nhận quyền sở hữu thiết bị",
+    "chat_unopened_withheld_by_moderation": "Một người kiểm duyệt của phòng này đã gắn cờ tin nhắn này, nên tin nhắn vẫn ẩn cho đến khi bạn chọn xem nó.",
+    "chat_attach": "Đính kèm",
+    "chat_attached": "Đã đính kèm: {name}",
+    "chat_attachment_remove": "Xóa",
+    "chat_attachment_open": "Mở tệp đính kèm",
+    "files_withheld": "Bị giữ lại bởi người kiểm duyệt",
+    "files_act_revealed": "Giờ đây nó đã mở cho bạn.",
+    "files_pick_hint": "Chọn một tệp để đính kèm, hoặc thêm một tệp trước.",
+    "moderation_reveal": "Hiển thị",
+    "moderation_reveal_title": "Xem mục này?",
+    "moderation_reveal_fact_flag": "Được gắn cờ là",
+    "moderation_reveal_fact_effect": "Điều gì thay đổi",
+    "moderation_reveal_effect": "Nó sẽ mở ra cho bạn, trên chính các thiết bị của bạn. Không ai khác thấy nó vì việc này.",
+    "moderation_reveal_fact_signer": "Được ký bởi",
+    "moderation_reveal_signer": "Khóa của chính bạn, như sự đồng ý của bạn để xem riêng mục này",
+    "moderation_note_flagged": "Một người kiểm duyệt đã gắn cờ mục này là {flag}.",
+    "moderation_note_revealed": "Một người kiểm duyệt đã gắn cờ mục này là {flag}. Bạn đã chọn xem nó.",
+    "moderation_note_cleared": "Cờ của người kiểm duyệt trên mục này đã được gỡ bỏ.",
+    "moderation_appeal_filed": "Một kháng nghị đang chờ phán quyết.",
+    "moderation_appeal_upheld": "Cờ đã được giữ nguyên sau kháng nghị.",
+    "moderation_appeal_partial": "Cờ đã được giữ nguyên một phần sau kháng nghị.",
+    "moderation_appeal_reversed": "Cờ đã bị bác bỏ sau kháng nghị.",
+    "local_community_body": "Cộng đồng địa phương mang tính địa lý: những người gần bạn. Nó chỉ áp dụng nếu bạn đã chọn chia sẻ vị trí của mình và đang chia sẻ vị trí đó ngay bây giờ.",
+    "local_community_not_on_this_node": "Nút này chưa thể chia sẻ vị trí của bạn, nên hiện tại một phòng địa phương không gắn với một địa điểm nào và bạn tự chọn ai được tham gia. Vị trí của bạn hiện không được chia sẻ.",
+    "setup_template_ally": "Ally, một trợ lý cá nhân. Đây là lựa chọn phù hợp cho một bản cài đặt cá nhân.",
+    "setup_template_chosen": "Bắt đầu từ mẫu {name}.",
+    "setup_template_provisioned": "{name}, được đặt bởi hồ sơ Portal của tổ chức bạn.",
+    "community_section_title_local": "Phòng địa phương của bạn",
+    "community_section_body_local": "Phòng dành cho những người gần bạn. Hiện tại, một phòng chỉ hiển thị là địa phương trên thiết bị đã sáng lập nó. Các thành viên khác sẽ thấy nó trong mục Cộng đồng.",
+    "community_empty_local": "Bạn chưa có phòng địa phương nào. Hãy sáng lập một phòng và mời những người gần bạn.",
+    "community_create_open_local": "Sáng lập một phòng địa phương",
+    "community_create_title_local": "Sáng lập một phòng địa phương"
   },
   "network": {
     "title": "Mạng",
@@ -4694,7 +4727,12 @@
       "community_chats": "Phòng",
       "affiliations_chats": "Phòng",
       "node_self": "Trạng Thái Riêng",
-      "owned_agents": "Tác nhân bạn sở hữu"
+      "owned_agents": "Tác nhân bạn sở hữu",
+      "my_devices": "Thiết bị của tôi",
+      "layer_communities": "Cộng đồng",
+      "layer_affiliations": "Liên kết",
+      "local_chats": "Phòng địa phương",
+      "local_roster": "Thành viên địa phương"
     },
     "circle": {
       "agent": "Chỉ mình tôi",
@@ -4745,7 +4783,8 @@
       "files_agent": "Chưa có gì ở đây. Đây là nơi mọi thứ bắt đầu, và không gì ở đây được công bố.",
       "decisions_agent": "Không có ai ở đây để cùng quyết định. Quyết định bắt đầu từ Gia đình.",
       "decisions_family": "Một gia đình quyết định bằng cách trò chuyện. Không có gì để bỏ phiếu ở đây.",
-      "chats_agent": "Không có tác nhân nào trên nút này, nên không có ai ở đây để nói chuyện. Hãy thiết lập một tác nhân và các cuộc trò chuyện của bạn với nó sẽ ở đây."
+      "chats_agent": "Không có tác nhân nào trên nút này, nên không có ai ở đây để nói chuyện. Hãy thiết lập một tác nhân và các cuộc trò chuyện của bạn với nó sẽ ở đây.",
+      "files_local": "Tệp tồn tại trong từng phòng. Hãy mở một phòng địa phương để xem tệp của nó."
     },
     "my_things": "Của tôi",
     "stop_everything": "Dừng tất cả",
@@ -5398,7 +5437,11 @@
       "error": "Không thể đưa ra vấn đề này: {detail}. Không có gì được nộp.",
       "not_on_this_node": "Nút này chưa thể nhận đề xuất cộng đồng: nó không có tuyến /v1/safety/reports (cần CIRISServer#665). Không có gì được nộp. Nếu bạn giữ nhiệm vụ kiểm duyệt, hãy nộp dưới mục Safety > Moderation thay vào đó.",
       "refused_minor": "Hồ sơ tuổi của bạn trên nút này ghi là trẻ vị thành niên, nên vấn đề này phải được đưa ra qua người giám hộ của bạn, không trực tiếp. Không có gì được nộp; hãy nhờ người giám hộ của bạn đưa ra vấn đề này."
-    }
+    },
+    "item_not_in_room": "đó không phải là tin nhắn hoặc tệp trong phòng này",
+    "not_flagged": "không có người kiểm duyệt nào của phòng này gắn cờ mục đó — không có gì để hiển thị",
+    "reveal_failed": "Sự đồng ý xem không thể được ghi lại, nên mục này vẫn ẩn.",
+    "unknown_action": "một mục trong phòng được hiển thị bằng lệnh reveal"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "tin nhắn này đã được rút lại hoặc thu hồi trước đó",
     "not_author": "chỉ người đã viết tin nhắn mới có thể thay thế, rút lại hoặc thu hồi tin nhắn đó",
     "reason_invalid": "mã lý do đó không áp dụng cho bản sửa đổi này",
-    "unknown_revision_op": "một tin nhắn được sửa đổi bằng cách thay thế, rút lại hoặc thu hồi"
+    "unknown_revision_op": "một tin nhắn được sửa đổi bằng cách thay thế, rút lại hoặc thu hồi",
+    "attachment_not_in_room": "Tệp đó không có trong phòng này. Hãy chia sẻ nó vào phòng trước, sau đó gửi nó."
   },
   "contacts": {
     "awaiting_consent": "Họ chưa chấp thuận. Điều này đang chờ một người, nên thử lại sẽ không thay đổi được gì.",
@@ -6020,7 +6064,9 @@
     "bad_media_type": "Đó không phải là một loại tệp hợp lệ (type/subtype).",
     "bad_move_target": "Đó không phải là nơi tệp này có thể được di chuyển đến.",
     "declared_length_mismatch": "Kích thước tệp không khớp với kích thước đã khai báo. Không có gì được ghi; hãy gửi lại.",
-    "delegate_may_not_author": "người được ủy quyền không thể ghi, thay đổi hoặc rút lại một tệp: hàng dữ liệu được ký vào đồ thị như hành động của chính chủ sở hữu, và một ủy quyền dù đã kết thúc cũng không thể gỡ bỏ chữ ký đó"
+    "delegate_may_not_author": "người được ủy quyền không thể ghi, thay đổi hoặc rút lại một tệp: hàng dữ liệu được ký vào đồ thị như hành động của chính chủ sở hữu, và một ủy quyền dù đã kết thúc cũng không thể gỡ bỏ chữ ký đó",
+    "withheld_by_moderation": "Một người kiểm duyệt của phòng này đã gắn cờ tệp này, nên tệp vẫn ẩn cho đến khi bạn chọn xem nó.",
+    "flagged_by_moderation": "một người kiểm duyệt của phòng này đã gắn cờ tệp này; tệp vẫn ở trong phòng trong khi cờ còn hiệu lực"
   },
   "notes": {
     "author_signer_unavailable": "Nút này hiện không thể ký với tư cách bạn, nên ghi chú đã không được ghi lại.",

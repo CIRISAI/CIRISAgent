@@ -3827,7 +3827,40 @@
     "add_device_stopped_retrying": "Imeacha kujaribu. Hakuna ombi lililofika kwenye kifaa chako kingine.",
     "add_device_withdraw_here": "Inaacha kusubiri, na kutupa funguo za ombi hili na idhini yoyote iliyopokelewa tayari.",
     "add_device_withdraw_other": "Kinaambiwa kiliachie ombi hilo, au kutengua idhini yake kama kilikwisha kutoa moja. Kama hakiwezi kufikiwa, ombi hilo litaisha muda wake huko baada ya dakika 15.",
-    "add_device_withdraw_held": "Hakuna kinachojiunga. Unaweza kuchagua tena, au tuma ombi jipya."
+    "add_device_withdraw_held": "Hakuna kinachojiunga. Unaweza kuchagua tena, au tuma ombi jipya.",
+    "my_devices_claim": "Dai kifaa",
+    "chat_unopened_withheld_by_moderation": "Msimamizi wa chumba hiki ameweka alama kwenye ujumbe huu, hivyo unabaki umefichwa mpaka uchague kuuona.",
+    "chat_attach": "Ambatisha",
+    "chat_attached": "Imeambatishwa: {name}",
+    "chat_attachment_remove": "Ondoa",
+    "chat_attachment_open": "Fungua faili lililoambatishwa",
+    "files_withheld": "Limezuiliwa na msimamizi",
+    "files_act_revealed": "Sasa limefunguliwa kwako.",
+    "files_pick_hint": "Chagua faili la kuambatisha, au ongeza moja kwanza.",
+    "moderation_reveal": "Onyesha",
+    "moderation_reveal_title": "Uone kipengele hiki?",
+    "moderation_reveal_fact_flag": "Imewekwa alama kama",
+    "moderation_reveal_fact_effect": "Kinachobadilika",
+    "moderation_reveal_effect": "Linafunguka kwako, kwenye vifaa vyako mwenyewe. Hakuna mtu mwingine anayeliona kwa sababu ya hili.",
+    "moderation_reveal_fact_signer": "Imetiwa saini na",
+    "moderation_reveal_signer": "Ufunguo wako mwenyewe, kama idhini yako ya kuona kipengele hiki kimoja",
+    "moderation_note_flagged": "Msimamizi aliweka alama kwenye hili kama {flag}.",
+    "moderation_note_revealed": "Msimamizi aliweka alama kwenye hili kama {flag}. Ulichagua kuliona.",
+    "moderation_note_cleared": "Alama ya msimamizi kwenye hili iliondolewa.",
+    "moderation_appeal_filed": "Rufaa inasubiri uamuzi.",
+    "moderation_appeal_upheld": "Alama ilithibitishwa katika rufaa.",
+    "moderation_appeal_partial": "Alama ilithibitishwa kwa sehemu katika rufaa.",
+    "moderation_appeal_reversed": "Alama ilibatilishwa katika rufaa.",
+    "local_community_body": "Jamii ya Karibu ni ya kijiografia: watu walio karibu nawe. Inatumika tu ikiwa umekubali kushiriki mahali pako na unashiriki kwa sasa.",
+    "local_community_not_on_this_node": "Nodi hii haiwezi kushiriki mahali pako bado, kwa hivyo chumba cha ndani hakijafungwa na mahali fulani kwa sasa, na wewe ndiye unayechagua nani ajiunge. Mahali pako hapashirikiwi.",
+    "setup_template_ally": "Ally, msaidizi wa kibinafsi. Huu ndio uchaguzi sahihi kwa usakinishaji wa kibinafsi.",
+    "setup_template_chosen": "Kuanzia kiolezo cha {name}.",
+    "setup_template_provisioned": "{name}, iliyowekwa na rekodi ya Portal ya shirika lako.",
+    "community_section_title_local": "Vyumba vyako vya ndani",
+    "community_section_body_local": "Vyumba kwa ajili ya watu walio karibu nawe. Kwa sasa, chumba huonekana kuwa cha ndani tu kwenye kifaa kilichokianzisha. Wanachama wengine wanakiona chini ya Jamii.",
+    "community_empty_local": "Huna vyumba vya ndani bado. Anzisha kimoja na uwaalike watu walio karibu nawe.",
+    "community_create_open_local": "Anzisha chumba cha ndani",
+    "community_create_title_local": "Anzisha chumba cha ndani"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4727,12 @@
       "community_chats": "Vyumba",
       "affiliations_chats": "Vyumba",
       "node_self": "Hali yangu",
-      "owned_agents": "Wakala unaowamiliki"
+      "owned_agents": "Wakala unaowamiliki",
+      "my_devices": "Vifaa vyangu",
+      "layer_communities": "Jamii",
+      "layer_affiliations": "Mahusiano",
+      "local_chats": "Vyumba vya ndani",
+      "local_roster": "Wanachama wa ndani"
     },
     "circle": {
       "agent": "Mimi tu",
@@ -4745,7 +4783,8 @@
       "files_agent": "Hakuna chochote hapa bado. Hapa ndipo kila kitu huanzia, na hakuna kinachotangazwa hapa.",
       "decisions_agent": "Hakuna mtu hapa wa kuamua naye. Maamuzi huanzia katika Familia.",
       "decisions_family": "Familia huamua kwa kuzungumza. Hakuna la kupigia kura hapa.",
-      "chats_agent": "Hakuna wakala kwenye nodi hii, kwa hivyo hakuna mtu hapa wa kuzungumza naye. Sanidi mmoja na mazungumzo yako naye yatakuwa hapa."
+      "chats_agent": "Hakuna wakala kwenye nodi hii, kwa hivyo hakuna mtu hapa wa kuzungumza naye. Sanidi mmoja na mazungumzo yako naye yatakuwa hapa.",
+      "files_local": "Faili huishi katika kila chumba. Fungua chumba cha ndani ili kuona faili zake."
     },
     "my_things": "Vitu vyangu",
     "stop_everything": "Simamisha kila kitu",
@@ -5398,7 +5437,11 @@
       "error": "Haikuweza kuleta hili: {detail}. Hakuna kilichowasilishwa.",
       "not_on_this_node": "Nodi hii haiwezi kupokea pendekezo la jamii bado: haina njia ya /v1/safety/reports (inahitaji CIRISServer#665). Hakuna kilichowasilishwa. Ikiwa unashikilia wajibu wa usimamizi, wasilisha chini ya Usalama > Usimamizi badala yake.",
       "refused_minor": "Rekodi yako ya umri kwenye nodi hii inaonyesha kuwa ni mtoto mdogo, hivyo hili linaletwa kupitia mlezi wako, si moja kwa moja. Hakuna kilichowasilishwa; muombe mlezi wako alilete."
-    }
+    },
+    "item_not_in_room": "hiyo si ujumbe wala faili katika chumba hiki",
+    "not_flagged": "hakuna msimamizi wa chumba hiki aliyeweka alama kwenye kipengele hicho — hakuna cha kuonyesha",
+    "reveal_failed": "Idhini ya kuona haikuweza kurekodiwa, kwa hivyo kipengele kinabaki kimefichwa.",
+    "unknown_action": "kipengele katika chumba kinaonyeshwa kwa kutumia 'onyesha'"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "ujumbe huu tayari uliondolewa au kukanushwa",
     "not_author": "ni mtu aliyeandika ujumbe pekee anayeweza kuubadilisha, kuuondoa au kuukanusha",
     "reason_invalid": "msimbo huo wa sababu hautumiki kwa marekebisho haya",
-    "unknown_revision_op": "ujumbe hurekebishwa kwa kuubadilisha, kuuondoa au kuukanusha"
+    "unknown_revision_op": "ujumbe hurekebishwa kwa kuubadilisha, kuuondoa au kuukanusha",
+    "attachment_not_in_room": "Faili hilo halipo kwenye chumba hiki. Lishiriki kwenye chumba kwanza, kisha ulitume."
   },
   "contacts": {
     "awaiting_consent": "Hawajakubali bado. Hii inasubiri mtu, hivyo kujaribu tena hakutabadilisha chochote.",
@@ -6020,7 +6064,9 @@
     "bad_media_type": "Hiyo si aina sahihi ya faili (type/subtype).",
     "bad_move_target": "Hilo si mahali ambapo faili hii inaweza kuhamishiwa.",
     "declared_length_mismatch": "Ukubwa wa faili haukufanana na ukubwa ulioelezwa. Hakuna kilichoandikwa; tuma tena.",
-    "delegate_may_not_author": "mkabidhiwa hawezi kuandika, kubadilisha au kuondoa faili: safu hiyo hutiwa saini kwenye grafu kama tendo la mmiliki mwenyewe, na ukabidhi unaoisha hauwezi kubatilisha saini hiyo"
+    "delegate_may_not_author": "mkabidhiwa hawezi kuandika, kubadilisha au kuondoa faili: safu hiyo hutiwa saini kwenye grafu kama tendo la mmiliki mwenyewe, na ukabidhi unaoisha hauwezi kubatilisha saini hiyo",
+    "withheld_by_moderation": "Msimamizi wa chumba hiki ameweka alama kwenye faili hili, hivyo linabaki limefichwa mpaka uchague kuliona.",
+    "flagged_by_moderation": "msimamizi wa chumba hiki ameweka alama kwenye faili hili; linabaki kwenye chumba wakati alama hiyo ipo"
   },
   "notes": {
     "author_signer_unavailable": "Nodi hii haiwezi kutia saini kama wewe kwa sasa, kwa hivyo kumbukumbu haikuandikwa.",

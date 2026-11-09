@@ -299,3 +299,4 @@ ciris_engine/data/localized/.accord_i18n_cache/
 localization/accord/*/en.json
 localization/accord/*/manifest.json
 localization/hard-cases/
+/run/

@@ -3978,7 +3978,40 @@
     "add_device_stopped_retrying": "Berhenti mencoba. Tidak ada permintaan yang sampai ke perangkat lain Anda.",
     "add_device_withdraw_here": "Menghentikan penantian, dan membuang kunci permintaan ini beserta persetujuan apa pun yang sudah diterima.",
     "add_device_withdraw_other": "Perangkat tersebut diberi tahu untuk mengabaikan permintaan ini, atau membatalkan persetujuannya jika sudah diberikan. Jika tidak dapat dijangkau, permintaan akan kedaluwarsa di sana setelah 15 menit.",
-    "add_device_withdraw_held": "Tidak ada yang bergabung. Anda dapat memilih lagi, atau mengirim permintaan baru."
+    "add_device_withdraw_held": "Tidak ada yang bergabung. Anda dapat memilih lagi, atau mengirim permintaan baru.",
+    "my_devices_claim": "Klaim perangkat",
+    "chat_unopened_withheld_by_moderation": "Seorang moderator ruang ini menandai pesan ini, sehingga tetap tersembunyi sampai Anda memilih untuk melihatnya.",
+    "chat_attach": "Lampirkan",
+    "chat_attached": "Terlampir: {name}",
+    "chat_attachment_remove": "Hapus",
+    "chat_attachment_open": "Buka berkas lampiran",
+    "files_withheld": "Ditahan oleh moderator",
+    "files_act_revealed": "Sekarang terbuka untuk Anda.",
+    "files_pick_hint": "Pilih berkas untuk dilampirkan, atau tambahkan satu terlebih dahulu.",
+    "moderation_reveal": "Tampilkan",
+    "moderation_reveal_title": "Lihat item ini?",
+    "moderation_reveal_fact_flag": "Ditandai sebagai",
+    "moderation_reveal_fact_effect": "Apa yang berubah",
+    "moderation_reveal_effect": "Ini terbuka untuk Anda, di perangkat Anda sendiri. Tidak ada orang lain yang melihatnya karena ini.",
+    "moderation_reveal_fact_signer": "Ditandatangani oleh",
+    "moderation_reveal_signer": "Kunci Anda sendiri, sebagai persetujuan Anda untuk melihat item ini",
+    "moderation_note_flagged": "Seorang moderator menandai ini sebagai {flag}.",
+    "moderation_note_revealed": "Seorang moderator menandai ini sebagai {flag}. Anda memilih untuk melihatnya.",
+    "moderation_note_cleared": "Tanda moderator pada ini telah dihapus.",
+    "moderation_appeal_filed": "Sebuah banding sedang menunggu putusan.",
+    "moderation_appeal_upheld": "Tanda tersebut dipertahankan dalam banding.",
+    "moderation_appeal_partial": "Tanda tersebut sebagian dipertahankan dalam banding.",
+    "moderation_appeal_reversed": "Tanda tersebut dibatalkan dalam banding.",
+    "local_community_body": "Komunitas lokal bersifat geografis: orang-orang di dekat Anda. Ini hanya berlaku jika Anda memilih untuk membagikan lokasi dan sedang membagikannya sekarang.",
+    "local_community_not_on_this_node": "Node ini belum dapat membagikan lokasi Anda, sehingga ruang lokal belum terikat pada suatu tempat untuk saat ini dan Anda yang memilih siapa yang bergabung. Lokasi Anda tidak sedang dibagikan.",
+    "setup_template_ally": "Ally, asisten pribadi. Ini adalah pilihan yang tepat untuk instalasi pribadi.",
+    "setup_template_chosen": "Memulai dari template {name}.",
+    "setup_template_provisioned": "{name}, ditetapkan oleh catatan Portal organisasi Anda.",
+    "community_section_title_local": "Ruang lokal Anda",
+    "community_section_body_local": "Ruang untuk orang-orang di dekat Anda. Untuk saat ini, sebuah ruang tampil sebagai lokal hanya pada perangkat yang mendirikannya. Anggota lain melihatnya di bawah Komunitas.",
+    "community_empty_local": "Anda belum memiliki ruang lokal. Dirikan satu dan undang orang-orang di dekat Anda.",
+    "community_create_open_local": "Dirikan Ruang Lokal",
+    "community_create_title_local": "Dirikan Ruang Lokal"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -4694,7 +4727,12 @@
       "community_chats": "Ruangan",
       "affiliations_chats": "Ruangan",
       "node_self": "Status Sendiri",
-      "owned_agents": "Agen milik Anda"
+      "owned_agents": "Agen milik Anda",
+      "my_devices": "Perangkat saya",
+      "layer_communities": "Komunitas",
+      "layer_affiliations": "Afiliasi",
+      "local_chats": "Ruang lokal",
+      "local_roster": "Anggota lokal"
     },
     "circle": {
       "agent": "Hanya saya",
@@ -4745,7 +4783,8 @@
       "files_agent": "Belum ada apa pun di sini. Di sinilah semuanya dimulai, dan tidak ada yang diumumkan ke luar.",
       "decisions_agent": "Tidak ada siapa pun di sini untuk memutuskan bersama. Keputusan dimulai di Keluarga.",
       "decisions_family": "Keluarga memutuskan dengan berbicara. Tidak ada yang perlu dipungut suara di sini.",
-      "chats_agent": "Tidak ada agen di node ini, sehingga tidak ada siapa pun di sini untuk diajak bicara. Siapkan satu, dan percakapan Anda dengannya akan ada di sini."
+      "chats_agent": "Tidak ada agen di node ini, sehingga tidak ada siapa pun di sini untuk diajak bicara. Siapkan satu, dan percakapan Anda dengannya akan ada di sini.",
+      "files_local": "File berada di setiap ruang. Buka ruang lokal untuk melihat filenya."
     },
     "my_things": "Milik saya",
     "stop_everything": "Hentikan semuanya",
@@ -5398,7 +5437,11 @@
       "error": "Tidak dapat mengajukan ini: {detail}. Tidak ada yang diarsipkan.",
       "not_on_this_node": "Node ini belum dapat menerima usulan komunitas: node ini tidak memiliki rute /v1/safety/reports (memerlukan CIRISServer#665). Tidak ada yang diarsipkan. Jika Anda memegang tugas moderasi, ajukan melalui Safety > Moderation sebagai gantinya.",
       "refused_minor": "Catatan usia Anda pada node ini menyatakan Anda masih di bawah umur, sehingga hal ini diajukan melalui steward Anda, bukan secara langsung. Tidak ada yang diarsipkan; mintalah steward Anda untuk mengajukannya."
-    }
+    },
+    "item_not_in_room": "itu bukan pesan atau berkas di ruang ini",
+    "not_flagged": "tidak ada moderator ruang ini yang menandai item itu — tidak ada yang perlu ditampilkan",
+    "reveal_failed": "Persetujuan untuk melihat tidak dapat dicatat, sehingga item tetap tersembunyi.",
+    "unknown_action": "item dalam ruang ditampilkan dengan reveal"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "pesan ini sudah ditarik atau dicabut pernyataannya",
     "not_author": "hanya orang yang menulis pesan yang dapat menggantikan, menarik, atau mencabutnya",
     "reason_invalid": "kode alasan tersebut tidak berlaku untuk revisi ini",
-    "unknown_revision_op": "pesan direvisi dengan tindakan menggantikan, menarik, atau meralat"
+    "unknown_revision_op": "pesan direvisi dengan tindakan menggantikan, menarik, atau meralat",
+    "attachment_not_in_room": "Berkas itu tidak ada di ruang ini. Bagikan dulu ke ruang ini, lalu kirim."
   },
   "contacts": {
     "awaiting_consent": "Mereka belum menerima. Ini menunggu keputusan orang lain, sehingga mencoba lagi tidak akan mengubah apa pun.",
@@ -6020,7 +6064,9 @@
     "too_large_for_whole_read": "Berkas ini terlalu besar untuk dibaca dalam satu bagian. Berkas ini harus dialirkan (streaming).",
     "withdraw_failed": "Berkas tidak dapat ditarik. Coba lagi.",
     "withdrawn": "Penulisnya telah menarik berkas ini. Bita-bitanya tidak lagi disajikan di mana pun.",
-    "awaiting_key": "Byte-nya sudah ada di sini, tetapi kunci perangkat ini untuknya belum tiba. Kunci itu akan menyusul dengan sendirinya; coba lagi sebentar lagi."
+    "awaiting_key": "Byte-nya sudah ada di sini, tetapi kunci perangkat ini untuknya belum tiba. Kunci itu akan menyusul dengan sendirinya; coba lagi sebentar lagi.",
+    "withheld_by_moderation": "Seorang moderator ruang ini menandai berkas ini, sehingga tetap tersembunyi sampai Anda memilih untuk melihatnya.",
+    "flagged_by_moderation": "seorang moderator ruang ini menandai berkas ini; berkas tetap berada di ruang selama tanda tersebut berlaku"
   },
   "notes": {
     "author_signer_unavailable": "Node ini tidak dapat menandatangani sebagai Anda saat ini, sehingga catatan tidak ditulis.",

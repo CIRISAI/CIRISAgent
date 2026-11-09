@@ -3827,7 +3827,40 @@
     "add_device_stopped_retrying": "መሞከር ቆሟል። ምንም ጥያቄ ወደ ሌላ መሣሪያዎ አልደረሰም።",
     "add_device_withdraw_here": "መጠበቅን ያቆማል፣ እና የዚህን ጥያቄ ቁልፎች እና አስቀድሞ የተገኘ ማንኛውንም ማጽደቅ ይጥላል።",
     "add_device_withdraw_other": "ጥያቄውን እንዲተው ተነግሮታል፣ ወይም ቀድሞውኑ ካጸደቀ ማጽደቁን እንዲሽር ተነግሮታል። ሊደረስበት ካልቻለ፣ ጥያቄው እዚያ ከ15 ደቂቃዎች በኋላ ያልቃል።",
-    "add_device_withdraw_held": "ምንም አይቀላቀልም። እንደገና መምረጥ፣ ወይም አዲስ ጥያቄ መላክ ይችላሉ።"
+    "add_device_withdraw_held": "ምንም አይቀላቀልም። እንደገና መምረጥ፣ ወይም አዲስ ጥያቄ መላክ ይችላሉ።",
+    "my_devices_claim": "መሣሪያ ይያዙ",
+    "chat_unopened_withheld_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን መልዕክት ፈርጆታል፣ ስለዚህ እስኪመርጡ ድረስ ተደብቆ ይቆያል።",
+    "chat_attach": "አያይዝ",
+    "chat_attached": "ተያይዟል፦ {name}",
+    "chat_attachment_remove": "አስወግድ",
+    "chat_attachment_open": "የተያያዘ ፋይል ክፈት",
+    "files_withheld": "በተቆጣጣሪ ተደብቋል",
+    "files_act_revealed": "አሁን ለእርስዎ ተከፍቷል።",
+    "files_pick_hint": "ለማያያዝ ፋይል ይምረጡ፣ ወይም መጀመሪያ አንድ ይጨምሩ።",
+    "moderation_reveal": "አሳይ",
+    "moderation_reveal_title": "ይህን ነገር ይመልከቱ?",
+    "moderation_reveal_fact_flag": "እንደ ተፈረጀው",
+    "moderation_reveal_fact_effect": "የሚለወጠው ነገር",
+    "moderation_reveal_effect": "ለእርስዎ ይከፈታል፣ በራስዎ መሣሪያዎች ላይ። በዚህ ምክንያት ማንም ሌላ ሰው አያየውም።",
+    "moderation_reveal_fact_signer": "የፈረመው",
+    "moderation_reveal_signer": "የራስዎ ቁልፍ፣ ይህን አንድ ነገር ለማየት የእርስዎ ፈቃድ ሆኖ",
+    "moderation_note_flagged": "ተቆጣጣሪ ይህን እንደ {flag} ፈርጆታል።",
+    "moderation_note_revealed": "ተቆጣጣሪ ይህን እንደ {flag} ፈርጆታል። እርስዎ ለማየት መርጠዋል።",
+    "moderation_note_cleared": "በዚህ ላይ የነበረው የተቆጣጣሪ ምልክት ተወግዷል።",
+    "moderation_appeal_filed": "ይግባኝ ውሳኔ እየጠበቀ ነው።",
+    "moderation_appeal_upheld": "ምልክቱ በይግባኝ ጸድቋል።",
+    "moderation_appeal_partial": "ምልክቱ በይግባኝ በከፊል ጸድቋል።",
+    "moderation_appeal_reversed": "ምልክቱ በይግባኝ ተሽሯል።",
+    "local_community_body": "የአካባቢ ማህበረሰብ ጂኦግራፊያዊ ነው፦ በአቅራቢያዎ ያሉ ሰዎች። የሚተገበረው ቦታዎን ለማጋራት ከፈቀዱ እና አሁን እያጋሩት ከሆነ ብቻ ነው።",
+    "local_community_not_on_this_node": "ይህ ኖድ የእርስዎን ቦታ ገና ማጋራት አይችልም፣ ስለዚህ የአካባቢ ክፍል ለአሁኑ ከቦታ ጋር አልተቆራኘም እና ማን እንደሚቀላቀል እርስዎ ይመርጣሉ። ቦታዎ እየተጋራ አይደለም።",
+    "setup_template_ally": "Ally፣ የግል ረዳት። ይህ ለግል ጭነት ትክክለኛው ምርጫ ነው።",
+    "setup_template_chosen": "ከ{name} ቴምፕሌት ይጀምራል።",
+    "setup_template_provisioned": "{name}፣ በድርጅትዎ Portal መዝገብ የተዋቀረ።",
+    "community_section_title_local": "የእርስዎ የአካባቢ ክፍሎች",
+    "community_section_body_local": "ክፍሎች በአቅራቢያዎ ላሉ ሰዎች ናቸው። ለአሁኑ፣ ክፍል የአካባቢ ተብሎ የሚታየው በመሠረተው መሣሪያ ላይ ብቻ ነው። ሌሎች አባላት ከማህበረሰቦች ስር ያዩታል።",
+    "community_empty_local": "እስካሁን ምንም የአካባቢ ክፍሎች የሉዎትም። አንዱን መሥርተው በአቅራቢያዎ ያሉ ሰዎችን ይጋብዙ።",
+    "community_create_open_local": "የአካባቢ ክፍል መሥርት",
+    "community_create_title_local": "የአካባቢ ክፍል መሥርት"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4727,12 @@
       "community_chats": "ክፍሎች",
       "affiliations_chats": "ክፍሎች",
       "node_self": "የራስ ሁኔታ",
-      "owned_agents": "የእርስዎ ወኪሎች"
+      "owned_agents": "የእርስዎ ወኪሎች",
+      "my_devices": "የእኔ መሣሪያዎች",
+      "layer_communities": "ማህበረሰቦች",
+      "layer_affiliations": "አባልነቶች",
+      "local_chats": "የአካባቢ ክፍሎች",
+      "local_roster": "የአካባቢ አባላት"
     },
     "circle": {
       "agent": "እኔ ብቻ",
@@ -4745,7 +4783,8 @@
       "files_agent": "እዚህ እስካሁን ምንም ነገር የለም። ሁሉም ነገር የሚጀምረው እዚህ ነው፣ እና እዚህ ያለው ምንም ነገር አይታወጅም።",
       "decisions_agent": "እዚህ ውሳኔ የሚደረግበት ማንም የለም። ውሳኔዎች የሚጀምሩት በቤተሰብ ውስጥ ነው።",
       "decisions_family": "ቤተሰብ በመነጋገር ይወስናል። እዚህ ድምፅ የሚሰጥበት ነገር የለም።",
-      "chats_agent": "በዚህ ኖድ ላይ ወኪል የለም፤ ስለዚህ እዚህ የሚያወራው ማንም የለም። አንድ ወኪል ያዋቅሩ እና ከእሱ ጋር የሚያደርጉት ውይይቶች እዚህ ይሆናሉ።"
+      "chats_agent": "በዚህ ኖድ ላይ ወኪል የለም፤ ስለዚህ እዚህ የሚያወራው ማንም የለም። አንድ ወኪል ያዋቅሩ እና ከእሱ ጋር የሚያደርጉት ውይይቶች እዚህ ይሆናሉ።",
+      "files_local": "ፋይሎች በእያንዳንዱ ክፍል ውስጥ ይገኛሉ። ፋይሎቹን ለማየት የአካባቢ ክፍል ይክፈቱ።"
     },
     "my_things": "የእኔ ነገሮች",
     "stop_everything": "ሁሉንም አቁም",
@@ -5398,7 +5437,11 @@
       "error": "ይህን ማቅረብ አልተቻለም፦ {detail}። ምንም አልተመዘገበም።",
       "not_on_this_node": "ይህ ኖድ እስካሁን የማህበረሰብ ሀሳብ መቀበል አይችልም፦ /v1/safety/reports መንገድ የለውም (CIRISServer#665 ይፈልጋል)። ምንም አልተመዘገበም። የመቆጣጠር ግዴታ ካለዎት፣ በምትኩ በ Safety > Moderation ስር ያመልክቱ።",
       "refused_minor": "በዚህ ኖድ ላይ ያለው የዕድሜ መዝገብዎ ታዳጊ እንደሆኑ ይገልጻል፣ ስለዚህ ይህ በቀጥታ ሳይሆን በጠባቂዎ በኩል ይቀርባል። ምንም አልተመዘገበም፤ ጠባቂዎን ይህን እንዲያቀርብ ይጠይቁ።"
-    }
+    },
+    "item_not_in_room": "ያ በዚህ ክፍል ውስጥ መልዕክት ወይም ፋይል አይደለም",
+    "not_flagged": "የዚህ ክፍል ምንም ተቆጣጣሪ ያንን ነገር አልፈረጀም — የሚገለጥ ምንም ነገር የለም",
+    "reveal_failed": "ለማየት የተሰጠው ፈቃድ ሊመዘገብ አልቻለም፣ ስለዚህ ነገሩ ተደብቆ ይቆያል።",
+    "unknown_action": "በክፍል ውስጥ ያለ ነገር በ reveal ትእዛዝ ይገለጣል"
   },
   "operator": {
     "carriage": {
@@ -5890,7 +5933,8 @@
     "message_not_live": "ይህ መልዕክት አስቀድሞ ተነስቷል ወይም ተካዷል።",
     "not_author": "መልዕክቱን የጻፈው ሰው ብቻ ሊተካው፣ ሊያነሳው ወይም ሊክደው ይችላል",
     "reason_invalid": "ያ የምክንያት ኮድ በዚህ ክለሳ ላይ አይተገበርም",
-    "unknown_revision_op": "መልዕክት የሚሻሻለው በመተካት፣ በማንሳት ወይም በመካድ ነው"
+    "unknown_revision_op": "መልዕክት የሚሻሻለው በመተካት፣ በማንሳት ወይም በመካድ ነው",
+    "attachment_not_in_room": "ያ ፋይል በዚህ ክፍል ውስጥ የለም። መጀመሪያ ወደ ክፍሉ ያጋሩት፣ ከዚያ ይላኩት።"
   },
   "contacts": {
     "awaiting_consent": "እነሱ ገና አልተቀበሉም። ይህ በሰው ላይ የተመሠረተ በመጠበቅ ላይ ነው፣ ስለዚህ እንደገና መሞከር ምንም አይለውጥም።",
@@ -6020,7 +6064,9 @@
     "too_large_for_whole_read": "ይህ ፋይል በአንድ ቁራጭ ለማንበብ በጣም ትልቅ ነው። በዥረት መተላለፍ አለበት።",
     "withdraw_failed": "ፋይሉ ሊወገድ አልቻለም። እንደገና ይሞክሩ።",
     "withdrawn": "ጸሐፊው ይህን ፋይል አስወግዶታል። ባይቶቹ ከእንግዲህ የትም አይቀርቡም።",
-    "awaiting_key": "ባይቶቹ እዚህ አሉ፣ ነገር ግን የዚህ መሣሪያ ቁልፍ ለእነሱ እስካሁን አልደረሰም። በራሱ ይከተላል፤ ትንሽ ቆይተው እንደገና ይሞክሩ።"
+    "awaiting_key": "ባይቶቹ እዚህ አሉ፣ ነገር ግን የዚህ መሣሪያ ቁልፍ ለእነሱ እስካሁን አልደረሰም። በራሱ ይከተላል፤ ትንሽ ቆይተው እንደገና ይሞክሩ።",
+    "withheld_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን ፋይል ፈርጆታል፣ ስለዚህ እስኪመርጡ ድረስ ተደብቆ ይቆያል።",
+    "flagged_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን ፋይል ፈርጆታል፤ ምልክቱ እስካለ ድረስ ፋይሉ በክፍሉ ውስጥ ይቆያል"
   },
   "notes": {
     "author_signer_unavailable": "ይህ ኖድ አሁን እንደ እርስዎ መፈረም አይችልም፣ ስለዚህ ማስታወሻው አልተጻፈም።",

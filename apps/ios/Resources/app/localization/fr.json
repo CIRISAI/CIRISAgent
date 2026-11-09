@@ -3827,7 +3827,40 @@
     "add_device_unreachable_retrying": "Impossible de joindre votre autre appareil pour l'instant — nouvelle tentative en cours. Cela peut prendre quelques minutes après son démarrage.",
     "add_device_cancelling": "Annulation…",
     "add_device_cancel_failed": "La demande n'a pas pu être annulée.",
-    "add_device_cancelled": "Demande annulée. Votre autre appareil a été prévenu de l'abandonner."
+    "add_device_cancelled": "Demande annulée. Votre autre appareil a été prévenu de l'abandonner.",
+    "my_devices_claim": "Revendiquer un appareil",
+    "chat_unopened_withheld_by_moderation": "Un modérateur de ce salon a signalé ce message, il reste donc masqué jusqu'à ce que vous choisissiez de le voir.",
+    "chat_attach": "Joindre",
+    "chat_attached": "Joint : {name}",
+    "chat_attachment_remove": "Supprimer",
+    "chat_attachment_open": "Ouvrir le fichier joint",
+    "files_withheld": "Masqué par un modérateur",
+    "files_act_revealed": "Il vous est désormais accessible.",
+    "files_pick_hint": "Choisissez un fichier à joindre, ou ajoutez-en un d'abord.",
+    "moderation_reveal": "Révéler",
+    "moderation_reveal_title": "Voir cet élément ?",
+    "moderation_reveal_fact_flag": "Signalé comme",
+    "moderation_reveal_fact_effect": "Ce qui change",
+    "moderation_reveal_effect": "Il s'ouvre pour vous, sur vos propres appareils. Personne d'autre ne le voit de ce fait.",
+    "moderation_reveal_fact_signer": "Signé par",
+    "moderation_reveal_signer": "Votre propre clé, en tant que consentement pour afficher cet élément",
+    "moderation_note_flagged": "Un modérateur a signalé ceci comme {flag}.",
+    "moderation_note_revealed": "Un modérateur a signalé ceci comme {flag}. Vous avez choisi de le voir.",
+    "moderation_note_cleared": "Le signalement d'un modérateur sur ceci a été levé.",
+    "moderation_appeal_filed": "Un appel est en attente d'une décision.",
+    "moderation_appeal_upheld": "Le signalement a été confirmé en appel.",
+    "moderation_appeal_partial": "Le signalement a été partiellement confirmé en appel.",
+    "moderation_appeal_reversed": "Le signalement a été annulé en appel.",
+    "local_community_body": "La communauté locale est géographique : les personnes près de vous. Elle ne s'applique que si vous avez choisi de partager votre position et que vous la partagez actuellement.",
+    "local_community_not_on_this_node": "Ce nœud ne peut pas encore partager votre position, une salle locale n'est donc pas liée à un lieu pour l'instant et c'est vous qui choisissez qui la rejoint. Votre position n'est pas partagée.",
+    "setup_template_ally": "Ally, un assistant personnel. C'est le bon choix pour une installation personnelle.",
+    "setup_template_chosen": "À partir du modèle {name}.",
+    "setup_template_provisioned": "{name}, défini par l'enregistrement Portal de votre organisation.",
+    "community_section_title_local": "Vos salles locales",
+    "community_section_body_local": "Des salles pour les personnes près de vous. Pour l'instant, une salle n'apparaît comme locale que sur l'appareil qui l'a fondée. Les autres membres la voient sous Communautés.",
+    "community_empty_local": "Vous n'avez encore aucune salle locale. Fondez-en une et invitez les personnes près de vous.",
+    "community_create_open_local": "Fonder une salle locale",
+    "community_create_title_local": "Fonder une salle locale"
   },
   "prompts": {
     "dma": {
@@ -4721,7 +4754,12 @@
       "community_chats": "Pièces",
       "affiliations_chats": "Pièces",
       "node_self": "État propre",
-      "owned_agents": "Agents que vous possédez"
+      "owned_agents": "Agents que vous possédez",
+      "my_devices": "Mes appareils",
+      "layer_communities": "Communautés",
+      "layer_affiliations": "Affiliations",
+      "local_chats": "Salles locales",
+      "local_roster": "Membres locaux"
     },
     "circle": {
       "agent": "Moi seul",
@@ -4772,7 +4810,8 @@
       "record": "Rien ne s'est encore passé dans ce cercle.",
       "files_agent": "Rien ici pour l'instant. C'est ici que tout commence, et rien ici n'est annoncé.",
       "decisions_agent": "Il n'y a personne ici avec qui décider. Les décisions commencent en Famille.",
-      "chats_agent": "Il n'y a aucun agent sur ce nœud, il n'y a donc personne ici à qui parler. Configurez-en un et vos conversations avec lui apparaîtront ici."
+      "chats_agent": "Il n'y a aucun agent sur ce nœud, il n'y a donc personne ici à qui parler. Configurez-en un et vos conversations avec lui apparaîtront ici.",
+      "files_local": "Les fichiers résident dans chaque salle. Ouvrez une salle locale pour voir ses fichiers."
     },
     "my_things": "Mes affaires",
     "stop_everything": "Tout arrêter",
@@ -5425,7 +5464,11 @@
       "error": "Impossible de soulever ceci : {detail}. Rien n'a été déposé.",
       "not_on_this_node": "Ce nœud ne peut pas encore recevoir de proposition communautaire : il n'a pas de route /v1/safety/reports (nécessite CIRISServer#665). Rien n'a été déposé. Si vous détenez un devoir de modération, déposez plutôt sous Sécurité > Modération.",
       "refused_minor": "Votre enregistrement d'âge sur ce nœud indique que vous êtes mineur ; ceci est donc soulevé par l'intermédiaire de votre tuteur, et non directement. Rien n'a été déposé ; demandez à votre tuteur de le soulever."
-    }
+    },
+    "item_not_in_room": "ce n'est ni un message ni un fichier dans ce salon",
+    "not_flagged": "aucun modérateur de ce salon n'a signalé cet élément — il n'y a rien à révéler",
+    "reveal_failed": "Le consentement pour afficher n'a pas pu être enregistré, l'élément reste donc masqué.",
+    "unknown_action": "un élément dans un salon est révélé avec reveal"
   },
   "operator": {
     "carriage": {
@@ -5917,7 +5960,8 @@
     "message_not_live": "ce message a déjà été retiré ou rétracté",
     "not_author": "seule la personne qui a écrit un message peut le remplacer, le retirer ou le rétracter",
     "reason_invalid": "ce code de motif ne s'applique pas à cette révision",
-    "unknown_revision_op": "un message est révisé par remplacement, retrait ou rétractation"
+    "unknown_revision_op": "un message est révisé par remplacement, retrait ou rétractation",
+    "attachment_not_in_room": "Ce fichier n'est pas dans ce salon. Partagez-le d'abord dans le salon, puis envoyez-le."
   },
   "contacts": {
     "awaiting_consent": "Ils n'ont pas encore accepté. Cela dépend d'une personne, donc réessayer ne changera rien.",
@@ -6047,7 +6091,9 @@
     "too_large_for_whole_read": "Ce fichier est trop volumineux pour être lu en une seule fois. Il doit être diffusé en flux continu.",
     "withdraw_failed": "Le fichier n'a pas pu être retiré. Réessayez.",
     "withdrawn": "Son auteur a retiré ce fichier. Les octets ne sont plus servis nulle part.",
-    "awaiting_key": "Ses octets sont déjà présents, mais la clé de cet appareil pour eux n'est pas encore arrivée. Elle arrive automatiquement ; réessayez dans quelques instants."
+    "awaiting_key": "Ses octets sont déjà présents, mais la clé de cet appareil pour eux n'est pas encore arrivée. Elle arrive automatiquement ; réessayez dans quelques instants.",
+    "withheld_by_moderation": "Un modérateur de ce salon a signalé ce fichier, il reste donc masqué jusqu'à ce que vous choisissiez de le voir.",
+    "flagged_by_moderation": "un modérateur de ce salon a signalé ce fichier ; il reste dans le salon tant que le signalement est maintenu"
   },
   "notes": {
     "author_signer_unavailable": "Ce nœud ne peut pas signer en votre nom pour le moment, la note n'a donc pas été écrite.",

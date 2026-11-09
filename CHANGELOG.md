@@ -17,6 +17,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The SQL adapter's deletion proof is hybrid.** It's now `ed25519+ml-dsa-65:<key_id>:<ed25519>:<ml_dsa_65>`. A build that can't produce the ML-DSA-65 half gives no proof.
 - **Root signing is retired in the agent; emergency shutdown needs the seated Wise Authority's hybrid signature.** `POST /emergency/shutdown` stays, but the command now carries both halves (`signature` and `signature_pqc`, over the JCS form of the command) and names its signer's key id (`signer_key_id`) instead of carrying a public key. The agent resolves the signer in the federation directory, checks both halves strictly, and accepts only the node's seated Wise Authority (its owner), within a 5-minute window. Accord holders (A1, B1, C1) are refused here; their emergency act is the accord halt. The old single Ed25519 root key and its roster are gone, and so is the second verifier in runtime control. The Wise Authority mint route (`POST /v1/users/{user_id}/mint-wa`, which checked a root signature and could sign from `~/.ciris/wa_keys`) is gone, along with `GET /v1/users/wa/key-check`, `GET /emergency/test` and the SDK's `client.emergency`. `POST /v1/system/shutdown` is unchanged. Unused single-key Ed25519 code is removed too: `sign_task`, `verify_task_signature`, `sign_data`, `rotate_keys` and `import_portal_key` on the authentication service, Ed25519-signed authority tokens (now refused), the observer keypair nothing kept, `tools/security/sign_wa_mint.py`, the unused `wa_cli_*` sub-services, and the startup load of a root certificate from a path that never existed. Budget grants still verify on their current Ed25519 path until the server ships a pen verb.
 
+## [2.19.3-stable] - 2026-11-04
+
+### Fixed
+
+- **Upgrading while CIRIS runs no longer breaks a Windows install.** `pip install -U` with CIRIS open replaced the client and the server, then failed with `WinError 32` on the launcher or the desktop JAR. That left an agent that died at import before it could log anything, and `~iris_*` directories that a later pip run warned about for good. Nothing of ours holds those files now: on Windows `ciris-agent` hands off to the plain interpreter and exits, and the desktop app runs from a copy of its JAR under `CIRIS_HOME`. A running CIRIS notices the upgrade and closes, so old and new code never mix. `windows-upgrade-while-running.yml` proves all of this on a real Windows runner. A service wrapper that watches the process it started can set `CIRIS_LAUNCHER_HANDOFF=0`.
+- **`ciris-agent --server` works.** It failed with `No such option '--server'` on every version, despite the docs.
+- **The newest desktop JAR always wins.** A repaired install keeps the old JAR on disk, and the launcher could run it.
+
+### Added
+
+- **`ciris-agent upgrade [--to VERSION] [--no-restart]`** closes CIRIS, upgrades it from a helper outside the install, and starts it again. Progress goes to `logs/upgrade.log`.
+
+### Changed
+
+- **ciris-client 0.5.238.** My keys, My devices and Agents you own are now separate cards. Rooms can take attachments, flagged items show their moderation status, and Ally is the setup default. Known issue: add-device can time out at 30 seconds, fixed in client 0.5.239.
+
 ## [2.19.2-stable] - 2026-11-04
 
 ### Fixed

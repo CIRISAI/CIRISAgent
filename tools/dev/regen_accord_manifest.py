@@ -38,7 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "ciris_engine" / "data"
 LOCALIZED = DATA / "localized"
-MANIFEST = ROOT / "seed" / "accord_manifest.json"
+MANIFEST = DATA / "seed" / "accord_manifest.json"
 SIG = MANIFEST.with_suffix(".sig")
 
 
@@ -108,7 +108,7 @@ def check() -> int:
         print("  cannot verify: `cryptography` is not installed (this is not a verdict on the signature)")
         return 2
 
-    pub = json.loads((ROOT / "seed" / "root_pub.json").read_text(encoding="utf-8"))["pubkey"]
+    pub = json.loads((DATA / "seed" / "root_pub.json").read_text(encoding="utf-8"))["pubkey"]
     raw = base64.urlsafe_b64decode(pub + "=" * (-len(pub) % 4))
     try:
         Ed25519PublicKey.from_public_bytes(raw).verify(SIG.read_bytes(), MANIFEST.read_bytes())

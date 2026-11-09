@@ -447,7 +447,7 @@ class AccordMetricsTests:
     async def _test_root_key_load(self) -> tuple[bool, str]:
         """Test that root public key can be loaded from seed/."""
         try:
-            seed_path = Path(__file__).parent.parent.parent.parent / "seed" / "root_pub.json"
+            seed_path = Path(__file__).parent.parent.parent.parent / "ciris_engine" / "data" / "seed" / "root_pub.json"
 
             if not seed_path.exists():
                 return False, f"Root public key not found at {seed_path}"

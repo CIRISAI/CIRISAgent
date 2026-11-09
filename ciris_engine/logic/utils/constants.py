@@ -192,6 +192,10 @@ ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 
+#: Signed accord manifest, its signature, and the root key, shipped in the package.
+ACCORD_SEED_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "seed"
+
+
 def _verify_accord_manifest_signature() -> None:
     """Verify ACCORD manifest signature using Ed25519 (H11/M1 fix).
 
@@ -206,22 +210,19 @@ def _verify_accord_manifest_signature() -> None:
         RuntimeError: If manifest exists but signature verification fails (security-critical)
     """
     try:
-        manifest_path = Path(__file__).parent.parent.parent.parent / "seed" / "accord_manifest.json"
+        manifest_path = ACCORD_SEED_DIR / "accord_manifest.json"
         sig_path = manifest_path.with_suffix(".sig")
+        root_pub_path = ACCORD_SEED_DIR / "root_pub.json"
 
-        if not manifest_path.exists():
-            logger.debug("[ACCORD] No signed manifest found - using hash verification only")
-            return  # Fall back to hash-only for backwards compatibility
-
-        if not sig_path.exists():
-            logger.warning("[ACCORD] Manifest exists but no signature - verification skipped")
-            return  # Tolerate missing signature for development
-
-        # Load root public key
-        root_pub_path = Path(__file__).parent.parent.parent.parent / "seed" / "root_pub.json"
-        if not root_pub_path.exists():
-            logger.warning("[ACCORD] No root public key found")
-            return  # Tolerate missing key for development
+        # Fail closed (CC: no fail-open where a signature or key is missing):
+        # the accord text governs from the first decision, so nothing runs on
+        # a text whose manifest can't be verified.
+        missing = [p.name for p in (manifest_path, sig_path, root_pub_path) if not p.exists()]
+        if missing:
+            raise RuntimeError(
+                f"[ACCORD] Cannot verify the accord manifest: missing {', '.join(missing)} in {ACCORD_SEED_DIR}. "
+                "The install is incomplete; refusing to run on unverified accord text."
+            )
 
         try:
             import base64
@@ -283,7 +284,8 @@ def _verify_accord_manifest_signature() -> None:
         # Re-raise security failures
         raise
     except Exception as exc:
-        logger.error(f"[ACCORD] Signature verification error (non-critical): {exc}")
+        # Fail closed: an error verifying is not a verified text.
+        raise RuntimeError(f"[ACCORD] Signature verification error: {type(exc).__name__}: {exc}") from exc
 
 
 def _verify_ethics_text_integrity(filename: str, content: str) -> None:

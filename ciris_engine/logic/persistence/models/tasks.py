@@ -78,7 +78,7 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
     # context so load-time round-trips correctly (legacy parity).
     ctx = task_dict.get("context")
     images = task_dict.get("images") or []
-    if ctx is None and (images or task.preferred_language is not None):
+    if ctx is None and (images or task.preferred_language is not None or task.signature_pqc):
         ctx = {}
     if ctx is not None:
         ctx = dict(ctx)
@@ -86,6 +86,9 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
             ctx["preferred_language"] = task.preferred_language
         if images:
             ctx["__agent_images__"] = images
+        # Persist's task row has one signature column; the PQC half rides here.
+        if task.signature_pqc:
+            ctx["__agent_signature_pqc__"] = task.signature_pqc
         payload["context"] = ctx
 
     outcome = task_dict.get("outcome")
@@ -214,10 +217,16 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
         signed_by=row.get("signed_by"),
         signature=row.get("signature"),
         signed_at=row.get("signed_at"),
+        signature_pqc=_signature_pqc(ctx_data),
         updated_info_available=updated_info_available,
         updated_info_content=row.get("updated_info_content"),
         images=images,
     )
+
+
+def _signature_pqc(ctx_data: Any) -> Optional[str]:
+    raw = ctx_data.get("__agent_signature_pqc__") if isinstance(ctx_data, dict) else None
+    return raw if isinstance(raw, str) and raw else None
 
 
 def _list_with_filter(
@@ -556,6 +565,7 @@ def update_task_context_and_signing(
     signed_by: Optional[str] = None,
     signature: Optional[str] = None,
     signed_at: Optional[str] = None,
+    signature_pqc: Optional[str] = None,
 ) -> bool:
     """Update the context and signing metadata for an existing task."""
     engine = _get_engine()
@@ -574,6 +584,7 @@ def update_task_context_and_signing(
     existing.signed_by = signed_by
     existing.signature = signature
     existing.signed_at = signed_at
+    existing.signature_pqc = signature_pqc
     existing.updated_at = time_service.now_iso()
 
     try:
@@ -629,7 +640,9 @@ async def add_system_task(
     """Add a system task, signed by the agent: tasks are the agent's work."""
     if auth_service:
         try:
-            task.signed_by, task.signature, task.signed_at = await auth_service.sign_system_task(task)
+            task.signed_by, task.signature, task.signed_at, task.signature_pqc = await auth_service.sign_system_task(
+                task
+            )
             logger.info(f"Signed system task {task.task_id} as the agent ({task.signed_by})")
         except Exception as e:
             logger.error(f"Failed to sign system task: {e}")

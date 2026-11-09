@@ -1359,7 +1359,7 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         }
         return json.dumps(task_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
-    async def sign_system_task(self, task: "Task") -> Tuple[str, str, str]:
+    async def sign_system_task(self, task: "Task") -> Tuple[str, str, str, str]:
         """Sign a system task (WAKEUP, DREAM, shared SHUTDOWN) as the AGENT.
 
         Tasks are the agent's work, so the agent signs them with its own key --
@@ -1368,8 +1368,9 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         there is no local "CIRIS System Authority" certificate and no local ROOT
         to parent one (the owner's ROOT lives with the owner on the node).
 
-        Returns ``(signing_key_id, signature_b64, signed_at)``. Raises when the
-        engine cannot sign: an unsigned task must not read as signed.
+        Returns ``(signing_key_id, signature_b64, signed_at, signature_pqc_b64)``:
+        both halves, since the verifier is hybrid-required (CIRISAgent#1348).
+        Raises when the engine cannot sign: an unsigned task must not read as signed.
         """
         from ciris_engine.logic.persistence.models.graph import get_persist_engine
         from ciris_engine.logic.utils import substrate_signing
@@ -1378,8 +1379,13 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         if engine is None:
             raise RuntimeError("persist engine not initialized — cannot sign system task")
         signing_key_id = str(engine.local_derived_key_id())
-        signature = substrate_signing.sign_classical(engine, self._task_canonical_bytes(task))
-        return signing_key_id, base64.b64encode(signature).decode("ascii"), self._get_current_time().isoformat()
+        signature, pqc = substrate_signing.sign_hybrid_required(engine, self._task_canonical_bytes(task))
+        return (
+            signing_key_id,
+            base64.b64encode(signature).decode("ascii"),
+            self._get_current_time().isoformat(),
+            base64.b64encode(pqc).decode("ascii"),
+        )
 
     async def sign_task(self, task: "Task", wa_id: str) -> Tuple[str, str]:
         """Sign a task with a WA's private key.
@@ -1570,11 +1576,11 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         # the deployments it was written to help.
         from ciris_engine.logic.utils import substrate_signing
 
-        classical_sig, pqc_sig = substrate_signing.sign_hybrid(engine, canonical)
+        # Hybrid-required (CIRISAgent#1348): no classical-only resolution is
+        # produced, because no verifier will accept one.
+        classical_sig, pqc_sig = substrate_signing.sign_hybrid_required(engine, canonical)
         classical = base64.b64encode(classical_sig).decode("ascii")
-        pqc: Optional[str] = base64.b64encode(pqc_sig).decode("ascii") if pqc_sig else None
-        if pqc is None:
-            logger.info("Signing deferral resolution %s hybrid-pending (no PQC signer)", deferral_id)
+        pqc = base64.b64encode(pqc_sig).decode("ascii")
 
         return response.model_copy(
             update={
@@ -1627,20 +1633,15 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
             return False
         ed_pubkey, pqc_pubkey = pubkeys
 
-        # The PQC signature and pubkey are paired: both present for a full
-        # hybrid verify, both absent for a hybrid-pending row.
-        if response.signature_pqc and pqc_pubkey:
-            pqc_sig: Optional[str] = response.signature_pqc
-            pqc_key: Optional[str] = pqc_pubkey
-            policy = "strict"
-        else:
-            pqc_sig = None
-            pqc_key = None
-            policy = "ed25519_fallback"
+        # Hybrid-required (CC 5.3.2.4.3.1, CIRISAgent#1348): an Ed25519-only
+        # resolution is refused, not checked on its classical half alone.
+        from ciris_engine.logic.utils import substrate_signing
 
         canonical = self._deferral_canonical_bytes(deferral_id, response, signed_at)
         try:
-            engine.verify_hybrid(canonical, response.signature, pqc_sig, ed_pubkey, pqc_key, policy)
+            substrate_signing.verify_hybrid_required(
+                engine, canonical, response.signature, response.signature_pqc, ed_pubkey, pqc_pubkey
+            )
         except Exception as exc:
             logger.warning("Deferral resolution %s failed signature verification: %s", deferral_id, exc)
             return False
@@ -1689,8 +1690,12 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         pubkeys = self._signing_pubkeys(engine, task.signed_by)
         if pubkeys is None:
             return False
+        from ciris_engine.logic.utils import substrate_signing
+
         try:
-            engine.verify_hybrid(canonical, task.signature, None, pubkeys[0], None, "ed25519_fallback")
+            substrate_signing.verify_hybrid_required(
+                engine, canonical, task.signature, task.signature_pqc, pubkeys[0], pubkeys[1]
+            )
         except Exception as exc:
             logger.warning("System task %s failed signature verification: %s", task.task_id, exc)
             return False

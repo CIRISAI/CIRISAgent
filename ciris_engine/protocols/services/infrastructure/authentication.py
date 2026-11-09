@@ -169,8 +169,8 @@ class AuthenticationServiceProtocol(ServiceProtocol, Protocol):
         ...
 
     @abstractmethod
-    async def sign_system_task(self, task: "Task") -> Tuple[str, str, str]:
-        """Sign a system task as the agent: ``(signing_key_id, signature_b64, signed_at)``."""
+    async def sign_system_task(self, task: "Task") -> Tuple[str, str, str, str]:
+        """Sign a system task as the agent: ``(signing_key_id, signature_b64, signed_at, signature_pqc_b64)``."""
         ...
 
     # Attestation methods (CIRISVerify integration)

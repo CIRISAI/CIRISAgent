@@ -598,6 +598,7 @@ class ShutdownProcessor(BaseProcessor):
                     claimed_task.signed_by,
                     claimed_task.signature,
                     claimed_task.signed_at,
+                    claimed_task.signature_pqc,
                 ) = await self.auth_service.sign_system_task(claimed_task)
             except Exception as signing_error:
                 logger.error(f"Failed to sign shared shutdown task: {signing_error}")
@@ -612,6 +613,7 @@ class ShutdownProcessor(BaseProcessor):
             signed_by=claimed_task.signed_by,
             signature=claimed_task.signature,
             signed_at=claimed_task.signed_at,
+            signature_pqc=claimed_task.signature_pqc,
         )
 
         # Update task status in __shared__ namespace

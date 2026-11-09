@@ -5,6 +5,12 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **Signatures verify hybrid-required, with no Ed25519-only posture (CC 5.3.2.4.3.1, #1348).** Deferral resolutions, agent-signed system tasks and DSAR deletion proofs used to verify on the Ed25519 half alone when the ML-DSA-65 half was missing. Now all three need both halves, and the agent no longer produces a signature without its PQC half: a build that can't make one refuses to sign. System tasks keep the PQC half in their persisted context, and deletion proofs gain a `signature_pqc` field. A deletion proof issued before this change no longer verifies at `/v1/verification`. Deferral resolutions are verified only when they're resolved, so ones already acted on are unaffected. Every call site goes through `substrate_signing.verify_hybrid_required`, so when edge and persist drop the policy argument, one line changes.
+
 ## [2.19.2-stable] - 2026-11-04
 
 ### Fixed

@@ -759,19 +759,22 @@ class TestAuthenticationServiceIntegration:
                 return "qa-runner-ciris-agent-test"
 
             def local_sign_hybrid(self, data):
-                return {"classical_sig": sk.sign(data), "pqc_sig": None}
+                return {"classical_sig": sk.sign(data), "pqc_sig": b"pqc:" + data}
 
             def wa_cert_get(self, *_a, **_k):
                 return None  # the signer is no WA: verification takes the agent-key path
 
             def verify_hybrid(self, data, sig_b64, pqc_sig, ed_pub_b64, pqc_pub, policy):
+                assert policy == "strict" and pqc_sig and pqc_pub, "hybrid required (#1348)"
                 Ed25519PublicKey.from_public_bytes(_b64.b64decode(ed_pub_b64)).verify(_b64.b64decode(sig_b64), data)
+                if _b64.b64decode(pqc_sig) != b"pqc:" + data:
+                    raise ValueError("pqc half does not verify")
 
         monkeypatch.setattr(graph_mod, "get_persist_engine", lambda: _Engine())
         monkeypatch.setattr(
             type(auth_service),
             "_signing_pubkeys",
-            staticmethod(lambda engine, key_id: (pub_b64, None) if key_id == "qa-runner-ciris-agent-test" else None),
+            staticmethod(lambda engine, key_id: (pub_b64, "pqc-pub") if key_id == "qa-runner-ciris-agent-test" else None),
         )
 
         task = Task(
@@ -783,9 +786,14 @@ class TestAuthenticationServiceIntegration:
             created_at=datetime.now(timezone.utc).isoformat(),
             updated_at=datetime.now(timezone.utc).isoformat(),
         )
-        task.signed_by, task.signature, task.signed_at = await auth_service.sign_system_task(task)
+        task.signed_by, task.signature, task.signed_at, task.signature_pqc = await auth_service.sign_system_task(task)
         assert task.signed_by == "qa-runner-ciris-agent-test"
         assert await auth_service.verify_task_signature(task) is True
+
+        pqc = task.signature_pqc
+        task.signature_pqc = None
+        assert await auth_service.verify_task_signature(task) is False, "Ed25519 alone is not accepted (#1348)"
+        task.signature_pqc = pqc
 
         task.description = "Tampered description"
         assert await auth_service.verify_task_signature(task) is False

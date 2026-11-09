@@ -175,6 +175,7 @@ class WakeupProcessor(BaseProcessor):
         startup_channel_id: str,
         time_service: TimeServiceProtocol,
         auth_service: Optional[Any] = None,
+        agent_occurrence_id: str = "default",
         **kwargs: Any,
     ) -> None:
         """Initialize wakeup processor.
@@ -186,6 +187,7 @@ class WakeupProcessor(BaseProcessor):
         super().__init__(*args, **kwargs)
         self.time_service = time_service
         self.auth_service = auth_service
+        self.agent_occurrence_id = agent_occurrence_id
         # Keep startup_channel_id for compatibility but don't use it
         self.startup_channel_id = startup_channel_id
         self.wakeup_tasks: List[Task] = []
@@ -616,7 +618,7 @@ class WakeupProcessor(BaseProcessor):
 
         # CRITICAL: Single-occurrence agents must always claim, even if task already exists
         # Multi-occurrence agents use was_created to determine claiming vs monitoring
-        occurrence_id = getattr(self, "occurrence_id", "default")
+        occurrence_id = self.agent_occurrence_id
         is_single_occurrence = occurrence_id == "default"
 
         if not was_created and not is_single_occurrence:

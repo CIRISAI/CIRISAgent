@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The SQL adapter's deletion proof is hybrid.** It's now `ed25519+ml-dsa-65:<key_id>:<ed25519>:<ml_dsa_65>`. A build that can't produce the ML-DSA-65 half gives no proof.
 - **Root signing is retired in the agent; emergency shutdown needs the seated Wise Authority's hybrid signature.** `POST /emergency/shutdown` stays, but the command now carries both halves (`signature` and `signature_pqc`, over the JCS form of the command) and names its signer's key id (`signer_key_id`) instead of carrying a public key. The agent resolves the signer in the federation directory, checks both halves strictly, and accepts only the node's seated Wise Authority (its owner), within a 5-minute window. Accord holders (A1, B1, C1) are refused here; their emergency act is the accord halt. The old single Ed25519 root key and its roster are gone, and so is the second verifier in runtime control. The Wise Authority mint route (`POST /v1/users/{user_id}/mint-wa`, which checked a root signature and could sign from `~/.ciris/wa_keys`) is gone, along with `GET /v1/users/wa/key-check`, `GET /emergency/test` and the SDK's `client.emergency`. `POST /v1/system/shutdown` is unchanged. Unused single-key Ed25519 code is removed too: `sign_task`, `verify_task_signature`, `sign_data`, `rotate_keys` and `import_portal_key` on the authentication service, Ed25519-signed authority tokens (now refused), the observer keypair nothing kept, `tools/security/sign_wa_mint.py`, the unused `wa_cli_*` sub-services, and the startup load of a root certificate from a path that never existed. Budget grants still verify on their current Ed25519 path until the server ships a pen verb.
 
+### Fixed
+
+- **Only an ADMIN or Wise Authority can change a blocked ticket.** Any logged-in user could resolve a deferral through `PATCH /v1/tickets/{id}`. Leaving `blocked` now records who did it, and `expected_status` answers 409 if the ticket has moved.
+- **Non-default occurrences finish wakeup.** They never received their own id, so they stayed stuck in WAKEUP.
+
 ## [2.19.3-stable] - 2026-11-04
 
 ### Fixed

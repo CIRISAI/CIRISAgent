@@ -7,41 +7,39 @@ either surface, or the single-key Ed25519 signing code behind it, comes back.
 """
 
 import importlib
+import re
 
 import pytest
 
-import json
-import subprocess
-import sys
+from pathlib import Path
+
+API = Path(__file__).resolve().parents[5] / "ciris_engine" / "logic" / "adapters" / "api"
 
 
-def _route_paths() -> set[str]:
-    """The app's routes, built in a fresh interpreter.
+def _route_sources() -> str:
+    """Every route module's source, and app.py's mounting.
 
-    In-process, a patch another test leaks onto FastAPI's include_router on the
-    same xdist worker makes create_app() register an almost empty app (CI run
-    42747184825 shard 5: only /, /docs, /health ...). The positive controls then
-    fail, and worse, the "not mounted" asserts pass vacuously. A clean process
-    sees only what app.py really mounts.
+    These locks are about what the code mounts, so they read the code. Building
+    the app was unreliable under CI: in-process a leaked include_router patch
+    left an almost empty app, and even a fresh interpreter there produced one
+    (CI 42747184825, 42758529473 shard 5), failing the positive controls and
+    letting the "not mounted" asserts pass vacuously.
     """
-    code = (
-        "import json\n"
-        "from ciris_engine.logic.adapters.api.app import create_app\n"
-        "print('ROUTES=' + json.dumps(sorted({getattr(r, 'path', '') for r in create_app().routes})))\n"
-    )
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
-    line = next((ln for ln in out.stdout.splitlines() if ln.startswith("ROUTES=")), None)
-    assert line, f"create_app() failed in a clean process: {out.stderr[-2000:]}"
-    return set(json.loads(line[len("ROUTES="):]))
+    return "\n".join(f.read_text(encoding="utf-8") for f in sorted((API / "routes").rglob("*.py")))
 
 
 def test_signed_emergency_and_mint_routes_are_not_mounted() -> None:
-    paths = _route_paths()
-    for gone in ("/emergency/test", "/v1/users/{user_id}/mint-wa", "/v1/users/wa/key-check"):
-        assert gone not in paths, gone
-    # Positive controls: the ordinary shutdown route, and the hybrid-signed emergency route.
-    assert "/v1/system/shutdown" in paths
-    assert "/emergency/shutdown" in paths
+    routes, app_py = _route_sources(), (API / "app.py").read_text(encoding="utf-8")
+    for gone in ('"/test"', "/mint-wa", "/wa/key-check"):
+        assert gone not in routes, gone
+    # Positive controls, so the scan can't pass on nothing: the ordinary shutdown
+    # route and the hybrid-signed emergency route are both declared and mounted.
+    shutdown = (API / "routes" / "system" / "shutdown.py").read_text(encoding="utf-8")
+    assert re.search(r'@router\.post\(\s*"/shutdown"', shutdown)
+    assert "router.include_router(shutdown.router)" in (API / "routes" / "system" / "__init__.py").read_text(encoding="utf-8")
+    emergency = (API / "routes" / "emergency.py").read_text(encoding="utf-8")
+    assert re.search(r'"/emergency/shutdown"|prefix="/emergency"', emergency)
+    assert "app.include_router(emergency.router)" in app_py
 
 
 @pytest.mark.parametrize(

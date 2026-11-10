@@ -5,11 +5,11 @@
 # file git considers "text" gets LF rewritten to CRLF at checkout. Until this
 # file existed, nothing in the repo said otherwise:
 #
-#     $ git check-attr text eol -- seed/accord_manifest.json
-#     seed/accord_manifest.json: text: unspecified
-#     seed/accord_manifest.json: eol: unspecified
+#     $ git check-attr text eol -- ciris_engine/data/seed/accord_manifest.json
+#     ciris_engine/data/seed/accord_manifest.json: text: unspecified
+#     ciris_engine/data/seed/accord_manifest.json: eol: unspecified
 #
-# `seed/accord_manifest.json` is Ed25519-signed over its EXACT BYTES, and it has
+# `ciris_engine/data/seed/accord_manifest.json` is A1-signed over its EXACT BYTES (size + sha256), and it has
 # 19 newlines. Rewriting them changes 19 bytes:
 #
 #     7c7c7e3a24d89b4b82893849c4077b96   as committed (LF)
@@ -35,10 +35,9 @@
 * text=auto
 
 # ── SIGNED / HASHED ARTIFACTS — byte-exact, never translated ────────────────
-# The manifest, its detached signature, and the root public key.
-seed/**                                   -text
-seed/*.json                               -text
-seed/*.sig                                -text
+# The manifest and A1's hybrid signature over it (seed/ moved into the package
+# in 2.20.0; the 2025 root's .sig and root_pub.json retired with it).
+ciris_engine/data/seed/**                 -text
 
 # The four files the manifest hashes. Listed by name rather than by glob so that
 # adding a fifth to the manifest without adding it here is a visible omission

@@ -1,4 +1,4 @@
-"""Direct-link proposing is off by default; an opt-in uses the canonical's facilitator (CIRISEdge#915)."""
+"""Room peers propose direct links via the canonical's facilitator by default (CIRISEdge#915, v44)."""
 
 from __future__ import annotations
 
@@ -25,13 +25,12 @@ HINTS = [
 ]
 
 
-def test_an_agent_node_proposes_no_direct_links_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A one-sided punch strands the link until ChannelExhausted; hold proposing until the two-sided commit."""
+def test_an_agent_node_proposes_through_the_canonicals_signed_ip_dial_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CIRIS_DIRECT_LINK_FACILITATOR", raising=False)
-    assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) is None
+    assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) == "108.61.242.236:4242"
 
 
-def test_bootstrap_opts_in_to_the_canonicals_signed_ip_dial(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bootstrap_names_the_same_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CIRIS_DIRECT_LINK_FACILITATOR", "bootstrap")
     assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) == "108.61.242.236:4242"
 
@@ -49,5 +48,5 @@ def test_the_env_can_name_another_facilitator(monkeypatch: pytest.MonkeyPatch) -
 
 @pytest.mark.parametrize("hints", [[], [{"kind": "reticulum", "destination": "ab"}], RuntimeError("db"), "not-a-list"])
 def test_no_ip_hint_or_unreadable_hints_mean_no_facilitator(monkeypatch: pytest.MonkeyPatch, hints: object) -> None:
-    monkeypatch.setenv("CIRIS_DIRECT_LINK_FACILITATOR", "bootstrap")
+    monkeypatch.delenv("CIRIS_DIRECT_LINK_FACILITATOR", raising=False)
     assert edge_runtime._direct_link_facilitator(_Engine(hints)) is None

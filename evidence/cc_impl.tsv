@@ -188,7 +188,9 @@ decimal_id	claim_id	repo	path#symbol	status
 # (#995 P0-1). Binding the module constant put it past corpus substitution and
 # ACCORD_MODE, so a values-ablation arm still delivered the full accord to
 # entropy/coherence/optimization-veto/epistemic-humility and reported clean.
-8.8.7	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/accord/authorities.py#EmergencyAuthorities.public_key_for	impl
+# (The pointer used to name the retired emergency authority roster, a rename
+# leftover from the stego verifier; the seam this row describes is get_accord_text.)
+8.8.7	CLM-await-accord-seam-faculties	CIRISAgent	ciris_engine/logic/utils/constants.py#get_accord_text	impl
 # No prompt-bound text reaches a model except through a loader (#995). Text
 # written in Python is English forever and invisible to every research manifest;
 # this is the structural rule behind the localization and override guarantees.
@@ -272,7 +274,11 @@ decimal_id	claim_id	repo	path#symbol	status
 # in seed/root_pub.json; False -> 401 before mint_wise_authority is reached
 # (routes/users.py:887). Without it an ADMIN-role API caller can promote arbitrary
 # users into deferral-resolution and guidance authority.
-8.8.7	CLM-await-root-signature-mints-wa	CIRISAgent	ciris_engine/logic/adapters/api/services/auth_service.py#APIAuthService.verify_root_signature	impl
+# RETIRED HERE (2026-11-08, root signing retired in the agent): the agent no longer
+# mints Wise Authorities. The route, verify_root_signature and the ~/.ciris/wa_keys
+# auto-sign are deleted; the WA seat comes from the node's owner binding, which the
+# server owns. The claim's evidence moved with it.
+8.8.7	CLM-await-root-signature-mints-wa	—	—	substrate
 # The OAuth callback is refused (400) unless its `state` carries a CSRF token this
 # process issued, still unexpired and not already used — the token is popped, so a
 # replay of the same callback fails. The pre-#847 behaviour was to log and
@@ -378,7 +384,12 @@ decimal_id	claim_id	repo	path#symbol	status
 # reads a HARDCODED ROOT_WA_AUTHORITY_KEYS list (emergency.py:40-45), a DIFFERENT
 # trust root from the accord verifier the service layer now uses. "One authority
 # source, two entry surfaces" was the stated #998 goal; the route was not converted.
-8.8.7	CLM-await-emergency-signature-is-auth	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#emergency_shutdown	impl
+# 2026-11-08 (Eric): the root-key-signed route is gone; POST /emergency/shutdown
+# stays, and the signature IS the authorisation: a hybrid (Ed25519 + ML-DSA-65)
+# signature by the seated Wise Authority (the node owner), verified hybrid-required,
+# inside a 5-minute window. Accord holders A1/B1/C1 are refused here; they act via
+# the HUMANITY_ACCORD halt the server verifies and the act gate reads via halt-status.
+8.8.7	CLM-await-emergency-signature-is-auth	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#verify_command	impl
 #
 # ── Prohibited capability, and content the agent must not fabricate ──
 #
@@ -652,7 +663,10 @@ decimal_id	claim_id	repo	path#symbol	status
 # whose single entry did not match the steward's actual root key, so the
 # endpoint rejected the person holding the key while a comment claimed the key
 # came from that file. Failed closed, and was a non-functional safety control.
-3.2	CLM-await-one-emergency-trust-root	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#is_authorized_key	impl
+# 2026-11-08: the agent holds no emergency key of its own. The one signer its
+# emergency route admits is the seated Wise Authority, resolved from the node's
+# owner binding (the server's); the accord halt is the server's.
+3.2	CLM-await-one-emergency-trust-root	CIRISAgent	ciris_engine/logic/adapters/api/routes/emergency.py#_seated_wa	impl
 # The independent variable is content-addressed (#999, FSD §15.3): sha256 over
 # JCS-canonical manifest bytes, so two arms cannot claim distinct identities
 # while carrying the same manifest. Without it a manifest edited in place left
@@ -873,3 +887,17 @@ decimal_id	claim_id	repo	path#symbol	status
 1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_dream_state_enabled_by_default	impl
 1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_play_state_enabled_by_default	impl
 1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_solitude_state_enabled_by_default	impl
+#
+# CLM-agent-accord-manifest-hybrid-strict (CC 5.3.2.4.3.1, 2.20.0). The accord
+# manifest is verified strict hybrid against the signing accord holder's record
+# (A1/B1/C1, identity_type accord_holder, both halves required) when the engine
+# is wired, before any decision, and startup fails closed on a missing, bad,
+# re-attributed or missing-PQC signature; no root fallback. The holder signs sha256(JCS({domain: ciris.accord_manifest.v1,
+# manifest_sha256, manifest_size, signer_identity})), the CC 3.1.2 form; the
+# verifier checks size, then digest, rebuilding the statement from the shipped bytes.
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	ciris_engine/logic/utils/accord_manifest_hybrid.py#verify_accord_manifest_hybrid	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	ciris_engine/logic/utils/accord_manifest_hybrid.py#accord_manifest_signed_bytes	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_manifest_hybrid.py#test_a_statement_naming_another_holder_is_refused	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_manifest_hybrid.py#test_a1_without_its_ml_dsa_half_stops_startup	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_manifest_fail_closed.py#test_engine_start_refuses_a_missing_a1_signature	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_manifest_hybrid.py#test_a_record_that_is_not_an_accord_holder_is_refused	impl

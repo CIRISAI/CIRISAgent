@@ -4005,7 +4005,92 @@
     "add_device_stopped_retrying": "Stopped trying. No request reached your other device.",
     "add_device_withdraw_here": "Stops waiting, and discards this request's keys and any approval already received.",
     "add_device_withdraw_other": "It is told to drop the request, or to undo its approval if it already gave one. If it can't be reached, the request expires there after 15 minutes.",
-    "add_device_withdraw_held": "Nothing joins. You can choose again, or send a new request."
+    "add_device_withdraw_held": "Nothing joins. You can choose again, or send a new request.",
+    "my_devices_claim": "Claim a device",
+    "chat_unopened_withheld_by_moderation": "A moderator of this room flagged this message, so it stays hidden until you choose to see it.",
+    "chat_attach": "Attach",
+    "chat_attached": "Attached: {name}",
+    "chat_attachment_remove": "Remove",
+    "chat_attachment_open": "Open attached file",
+    "files_withheld": "Withheld by a moderator",
+    "files_act_revealed": "It is open to you now.",
+    "files_pick_hint": "Choose a file to attach, or add one first.",
+    "moderation_reveal": "Reveal",
+    "moderation_reveal_title": "See this item?",
+    "moderation_reveal_fact_flag": "Flagged as",
+    "moderation_reveal_fact_effect": "What changes",
+    "moderation_reveal_effect": "It opens for you, on your own devices. Nobody else sees it because of this.",
+    "moderation_reveal_fact_signer": "Signed by",
+    "moderation_reveal_signer": "Your own key, as your consent to view this one item",
+    "moderation_note_flagged": "A moderator flagged this as {flag}.",
+    "moderation_note_revealed": "A moderator flagged this as {flag}. You chose to see it.",
+    "moderation_note_cleared": "A moderator's flag on this was cleared.",
+    "moderation_appeal_filed": "An appeal is waiting for a ruling.",
+    "moderation_appeal_upheld": "The flag was upheld on appeal.",
+    "moderation_appeal_partial": "The flag was partly upheld on appeal.",
+    "moderation_appeal_reversed": "The flag was reversed on appeal.",
+    "local_community_body": "Local community is geographic: the people near you. It applies only if you opted in to share your location and are sharing it right now.",
+    "local_community_not_on_this_node": "This node can't share your location yet, so a local room isn't tied to a place for now and you choose who joins. Your location is not being shared.",
+    "setup_template_ally": "Ally, a personal assistant. This is the right choice for a personal install.",
+    "setup_template_chosen": "Starting from the {name} template.",
+    "setup_template_provisioned": "{name}, set by your organisation's Portal record.",
+    "community_section_title_local": "Your local rooms",
+    "community_section_body_local": "Rooms for the people near you. For now, a room shows as local only on the device that founded it. Other members see it under Communities.",
+    "community_empty_local": "You have no local rooms yet. Found one and invite the people near you.",
+    "community_create_open_local": "Found a local room",
+    "community_create_title_local": "Found a local room",
+    "server_local_desc": "Manage the node running on this device.",
+    "server_remote_desc": "Connect to a node running somewhere else.",
+    "server_url_label": "Node address",
+    "server_current": "Current",
+    "add_device_no_session": "This device joined your CIRIS ID, but it could not finish signing in. Set this device up again, then approve it from your other device.",
+    "chat_call": "Call",
+    "call_title": "Call",
+    "call_choose": "How do you want to call?",
+    "call_voice": "Voice call",
+    "call_video": "Video call",
+    "call_asking_microphone": "Allow the microphone so the people in this room can hear you.",
+    "call_asking_camera": "Allow the camera so the people in this room can see you.",
+    "call_microphone_denied": "A call needs the microphone. Turn it on for CIRIS in your device's settings, then try again.",
+    "call_try_again": "Try again",
+    "call_ready_voice": "Your microphone is ready.",
+    "call_ready_video": "Your microphone and camera are ready.",
+    "call_audio_only": "The camera is off, so this will be a voice call.",
+    "call_not_connecting": "Calls can't connect from this app yet.",
+    "call_unavailable_platform": "Calls aren't available on this device yet.",
+    "call_unavailable_no_device": "This device has no microphone, so it can't make calls.",
+    "call_not_saved": "Not saved",
+    "call_save": "Save my side of this call",
+    "call_save_unavailable": "Saving calls isn't ready yet.",
+    "trust_hosts_verified": "{verified} of {checked} trust-root hosts verified",
+    "trust_hosts_unreachable": "{count} trust-root hosts could not be reached. That is not a failure: they may be down or blocked from this network.",
+    "trust_hosts_disagree": "Two trust-root hosts gave different answers, so no trust root was chosen. This node is restricted until they agree.",
+    "trust_host_verified": "Verified",
+    "trust_host_unreachable": "Unreachable",
+    "trust_host_not_verified": "Reached, not verified",
+    "wa_update_not_allowed": "Only an admin or a Wise Authority can decide a waiting proposal. This account cannot.",
+    "wa_update_changed": "Someone decided this proposal before you did, so nothing changed. The list now shows where it stands.",
+    "wa_update_failed": "The agent did not take that change. Try again.",
+    "trace_consent_unanswered_note": "You can leave this unanswered. Nothing is sent until you say yes, and you can answer later.",
+    "files_uploading_progress": "Adding {name}: {sent} of {total}",
+    "files_add_cancel": "Stop",
+    "remote_node_view": "View",
+    "remote_node_title": "Your node",
+    "remote_node_snapshot_at": "Read at {time}. This is a snapshot: refresh to read it again.",
+    "remote_node_metrics": "Network",
+    "remote_node_logs": "Recent logs",
+    "remote_node_refresh": "Refresh",
+    "remote_node_unreachable": "That node can't be reached right now. It may be off or out of range.",
+    "remote_node_timeout": "That node didn't answer in time. Try again in a moment.",
+    "remote_node_send_failed": "The request couldn't be sent to that node. Try again.",
+    "remote_node_no_transport": "This node can't reach your other nodes. Check its network settings.",
+    "remote_node_needs_update": "That node needs an update before it can show this.",
+    "remote_node_not_owner": "That node didn't accept this request. Only its owner's devices can read it.",
+    "remote_node_failed": "That node's answer couldn't be read.",
+    "add_device_contact_hint_2": "On your other device, open Share my ID. Scan its QR code, or paste the long or short form here. Your federation ID on its own also works when your other device is announced.",
+    "contacts_reach_sent": "Sent: waiting for them to answer",
+    "contacts_reach_waiting": "Waiting to reach them",
+    "contacts_stale_since": "Not heard from since {date}"
   },
   "conscience": {
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
@@ -4723,7 +4808,12 @@
       "community_chats": "Rooms",
       "affiliations_chats": "Rooms",
       "node_self": "Own standing",
-      "owned_agents": "Agents you own"
+      "owned_agents": "Agents you own",
+      "my_devices": "My devices",
+      "layer_communities": "Communities",
+      "layer_affiliations": "Affiliations",
+      "local_chats": "Local rooms",
+      "local_roster": "Local members"
     },
     "circle": {
       "agent": "Just me",
@@ -4774,7 +4864,8 @@
       "files_agent": "Nothing here yet. This is where everything starts, and nothing here is advertised.",
       "decisions_agent": "There is nobody here to decide with. Decisions start in Family.",
       "decisions_family": "A family decides by talking. There is nothing to vote on here.",
-      "chats_agent": "There is no agent on this node, so there is nobody here to talk to. Set one up and your conversations with it will be here."
+      "chats_agent": "There is no agent on this node, so there is nobody here to talk to. Set one up and your conversations with it will be here.",
+      "files_local": "Files live in each room. Open a local room to see its files."
     },
     "my_things": "My things",
     "stop_everything": "Stop everything",
@@ -5245,7 +5336,8 @@
     "voting": {
       "description": "The full ballot plane: M-of-N accord thresholds verified at the wire, and quorum-above-time ordering in the substrate. The Commons' objection ballots already ship — this is voting as a first-class, verifiable primitive.",
       "title": "Voting"
-    }
+    },
+    "announce_costs": "If you don't announce, nobody can reach you through the mesh in this version: your contact code identifies you but doesn't yet carry a way to reach your devices. You can't take part in public groups. A private room needs both of you to have announced."
   },
   "mesh_config": {
     "consumption": {
@@ -5427,7 +5519,11 @@
       "error": "Could not raise this: {detail}. Nothing was filed.",
       "not_on_this_node": "This node can't take a community proposal yet: it has no /v1/safety/reports route (needs CIRISServer#665). Nothing was filed. If you hold a moderation duty, file under Safety > Moderation instead.",
       "refused_minor": "Your age record on this node says minor, so this is raised through your steward, not directly. Nothing was filed; ask your steward to raise it."
-    }
+    },
+    "item_not_in_room": "that is not a message or a file in this room",
+    "not_flagged": "no moderator of this room has flagged that item — there is nothing to reveal",
+    "reveal_failed": "The consent to view could not be recorded, so the item stays hidden.",
+    "unknown_action": "an item in a room is revealed with reveal"
   },
   "operator": {
     "carriage": {
@@ -5788,7 +5884,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Sign-in wasn't completed in the browser, so nothing was changed. Try again, or use a local account instead.",
-      "waiting": "Finish signing in with Google in your browser, then come back here."
+      "waiting": "Finish signing in with Google in your browser, then come back here.",
+      "no_browser": "Couldn't open a browser. To sign in, open this address in your browser: {url}",
+      "never_arrived": "Your browser never reached the sign-in page, so nothing was changed. Check that a browser window opened, then try again."
     },
     "claim": {
       "not_armed": "this node is not armed for a first-run claim (no one-time PIN) — ownership may already be claimed",
@@ -5827,7 +5925,8 @@
       "provider_unavailable": "This node cannot sign you in with that provider — no such sign-in is configured on this build. Sign in with a username and password instead.",
       "state_invalid": "invalid or expired oauth state",
       "store_unavailable": "The node could not read its identity store, so sign-in could not be completed. This is a problem with the node, not with your account.",
-      "unsafe_redirect": "unsafe redirect_uri"
+      "unsafe_redirect": "unsafe redirect_uri",
+      "flow_unknown": "Your browser never reached the sign-in page, so nothing was changed. Try again."
     },
     "oauth_link": {
       "already_has_identity": "That account already has a linked sign-in identity. Remove it first if you mean to replace it.",
@@ -5908,7 +6007,8 @@
     "message_not_live": "this message was already withdrawn or recanted",
     "not_author": "only the person who wrote a message may supersede, withdraw or recant it",
     "reason_invalid": "that reason code does not apply to this revision",
-    "unknown_revision_op": "a message is revised by supersede, withdraw or recant"
+    "unknown_revision_op": "a message is revised by supersede, withdraw or recant",
+    "attachment_not_in_room": "That file is not in this room. Share it into the room first, then send it."
   },
   "claim": {
     "bad_request": "That claim request couldn't be read.",
@@ -6065,7 +6165,9 @@
     "too_large_for_whole_read": "This file is too large to read in one piece. It has to be streamed.",
     "withdraw_failed": "The file couldn't be withdrawn. Try again.",
     "withdrawn": "Its author withdrew this file. The bytes are no longer served anywhere.",
-    "awaiting_key": "Its bytes are here, but this device's key for them hasn't arrived yet. It follows on its own; try again shortly."
+    "awaiting_key": "Its bytes are here, but this device's key for them hasn't arrived yet. It follows on its own; try again shortly.",
+    "withheld_by_moderation": "A moderator of this room flagged this file, so it stays hidden until you choose to see it.",
+    "flagged_by_moderation": "a moderator of this room flagged this file; it stays in the room while the flag stands"
   },
   "notes": {
     "author_signer_unavailable": "This node can't sign as you right now, so the note wasn't written.",
@@ -6338,7 +6440,8 @@
     "rng": "no randomness for the challenge",
     "unexpected": "unexpected answer from your other device",
     "unknown_identity": "could not find that identity",
-    "unreachable": "could not reach your other device"
+    "unreachable": "could not reach your other device",
+    "node_proof": "this device could not prove which node it is"
   },
   "owner_requests": {
     "bad_request": "The request from your node was not in the expected shape, so nothing was signed.",

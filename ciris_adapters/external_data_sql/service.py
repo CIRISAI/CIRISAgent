@@ -1032,7 +1032,8 @@ class SQLToolService(BaseService, ToolService):
             # Normalise both to a trailing Z so the signed payload is stable.
             timestamp = timestamp.replace("+00:00", "Z")
 
-            # Generate Ed25519 signature for GDPR Article 17 deletion verification
+            # Hybrid signature for GDPR Article 17 deletion verification (100% PQC):
+            # `ed25519+ml-dsa-65:<key_id>:<ed25519_b64>:<ml_dsa_65_b64>`.
             cryptographic_proof = None
             if sign and zero_data_confirmed:
                 if self._signer is not None:
@@ -1043,21 +1044,18 @@ class SQLToolService(BaseService, ToolService):
                         )
                         data_hash = hashlib.sha256(verification_data.encode("utf-8")).digest()
 
-                        # Sign the hash via the persist Engine's local signer
-                        # (2.9.7: the ONE federation-registered signer identity).
-                        # Through substrate_signing because that ONE identity's
-                        # classical half is keystore-sealed, and the sync verb
-                        # refuses a sealed key permanently. Same 64 Ed25519 bytes,
-                        # so the `ed25519:<key_id>:<sig>` proof format is unchanged.
+                        # Both halves via the persist Engine's local signer; a build
+                        # that can't produce the ML-DSA-65 half yields no proof.
                         from ciris_engine.logic.utils import substrate_signing
 
-                        signature_bytes = substrate_signing.sign_classical(self._signer, data_hash)
+                        signature_bytes, pqc_bytes = substrate_signing.sign_hybrid_required(self._signer, data_hash)
                         import base64 as _b64
 
                         signature_b64 = _b64.b64encode(signature_bytes).decode("ascii")
+                        pqc_b64 = _b64.b64encode(pqc_bytes).decode("ascii")
                         key_id = str(self._signer.local_derived_key_id())
-                        algo = "ed25519"
-                        cryptographic_proof = f"{algo}:{key_id}:{signature_b64}"
+                        algo = "ed25519+ml-dsa-65"
+                        cryptographic_proof = f"{algo}:{key_id}:{signature_b64}:{pqc_b64}"
 
                         logger.info(
                             f"Generated deletion verification signature for {user_identifier} "

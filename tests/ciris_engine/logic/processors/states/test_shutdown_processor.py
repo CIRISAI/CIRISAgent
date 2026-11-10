@@ -1550,7 +1550,7 @@ class TestSystemWASigning:
 
         # The agent signs its own shutdown task
         shutdown_processor.auth_service.sign_system_task = AsyncMock(
-            return_value=("qa-runner-ciris-agent-x", "signature_abc", "2025-10-07T12:00:00+00:00")
+            return_value=("qa-runner-ciris-agent-x", "signature_abc", "2025-10-07T12:00:00+00:00", "pqc_abc")
         )
 
         # Execute
@@ -1560,6 +1560,7 @@ class TestSystemWASigning:
         shutdown_processor.auth_service.sign_system_task.assert_called_once()
         assert task.signed_by == "qa-runner-ciris-agent-x"
         assert task.signature == "signature_abc"
+        assert task.signature_pqc == "pqc_abc"
 
     @pytest.mark.asyncio
     @patch("ciris_engine.logic.processors.states.shutdown_processor.get_shutdown_manager")

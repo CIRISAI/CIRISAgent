@@ -495,7 +495,7 @@ Consent Service는 14일 자동 만료의 **TEMPORARY 동의**를 기본값으�
 - `POST /v1/billing/purchase/initiate` — 결제 시작
 
 ### 응급
-- `POST /emergency/shutdown` — 응급 종료(Ed25519 서명 필요)
+- `POST /emergency/shutdown` — 응급 종료(Ed25519 + ML-DSA-65 서명 필요)
 
 ---
 
@@ -514,7 +514,7 @@ GDPR/DSAR 준수를 위한 런타임 구성 가능한 데이터베이스 커넥�
 
 **9개 SQL 도구**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-지원되는 방언: SQLite, PostgreSQL, MySQL. 삭제 검증은 Ed25519 서명된 암호화 증명을 생성합니다.
+지원되는 방언: SQLite, PostgreSQL, MySQL. 삭제 검증은 Ed25519 + ML-DSA-65 서명된 암호화 증명을 생성합니다.
 
 ---
 
@@ -524,7 +524,7 @@ GDPR/DSAR 준수를 위한 런타임 구성 가능한 데이터베이스 커넥�
 
 1. **Proposal**: 생성자가 이름, 목적, 정당화, 윤리적 고려 사항 제공
 2. **Template Selection**: 사용 가능한 템플릿에서 선택(scout, sage, datum, echo 등)
-3. **Wise Authority Review**: Ed25519 서명 필요
+3. **Wise Authority Review**: Ed25519 + ML-DSA-65 서명 필요
 4. **Creation**: 그래프 데이터베이스의 신원 루트, 불변 계보 기록, 런타임 구성
 5. **Activation**: 에이전트가 생성 컨텍스트에 대한 완전한 지식으로 시작
 
@@ -534,7 +534,7 @@ GDPR/DSAR 준수를 위한 런타임 구성 가능한 데이터베이스 커넥�
 
 ## 보안
 
-- **Ed25519 서명**: 인증, 감사 서명, 응급 종료
+- **Ed25519 + ML-DSA-65 서명**: 인증, 감사 서명, 응급 종료
 - **JWT 토큰**: 24시간 만료(구성 가능)
 - **Service 토큰**: 시스템 간 통신을 위한 `Bearer service:TOKEN_VALUE` 형식
 - **OAuth 토큰**: 잠금 기능이 있는 자동 새로 고침

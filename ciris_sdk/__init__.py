@@ -47,7 +47,6 @@ from .resources.consent import (
     ConsentScope,
     ConsentStatus,
 )
-from .resources.emergency import EmergencyCommandType, EmergencyShutdownResponse, WASignedCommand
 from .resources.memory import GraphNode, MemoryQueryResponse, MemoryStoreResponse, TimelineResponse
 from .resources.system import (
     ResourceUsageResponse,
@@ -91,10 +90,6 @@ __all__ = [
     "ConsentRequest",
     "ConsentResponse",
     "ConsentRecord",
-    # Emergency types
-    "EmergencyShutdownResponse",
-    "WASignedCommand",
-    "EmergencyCommandType",
     # Legacy models
     "MemoryEntry",
     "MemoryScope",

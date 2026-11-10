@@ -3827,7 +3827,92 @@
     "add_device_stopped_retrying": "መሞከር ቆሟል። ምንም ጥያቄ ወደ ሌላ መሣሪያዎ አልደረሰም።",
     "add_device_withdraw_here": "መጠበቅን ያቆማል፣ እና የዚህን ጥያቄ ቁልፎች እና አስቀድሞ የተገኘ ማንኛውንም ማጽደቅ ይጥላል።",
     "add_device_withdraw_other": "ጥያቄውን እንዲተው ተነግሮታል፣ ወይም ቀድሞውኑ ካጸደቀ ማጽደቁን እንዲሽር ተነግሮታል። ሊደረስበት ካልቻለ፣ ጥያቄው እዚያ ከ15 ደቂቃዎች በኋላ ያልቃል።",
-    "add_device_withdraw_held": "ምንም አይቀላቀልም። እንደገና መምረጥ፣ ወይም አዲስ ጥያቄ መላክ ይችላሉ።"
+    "add_device_withdraw_held": "ምንም አይቀላቀልም። እንደገና መምረጥ፣ ወይም አዲስ ጥያቄ መላክ ይችላሉ።",
+    "my_devices_claim": "መሣሪያ ይያዙ",
+    "chat_unopened_withheld_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን መልዕክት ፈርጆታል፣ ስለዚህ እስኪመርጡ ድረስ ተደብቆ ይቆያል።",
+    "chat_attach": "አያይዝ",
+    "chat_attached": "ተያይዟል፦ {name}",
+    "chat_attachment_remove": "አስወግድ",
+    "chat_attachment_open": "የተያያዘ ፋይል ክፈት",
+    "files_withheld": "በተቆጣጣሪ ተደብቋል",
+    "files_act_revealed": "አሁን ለእርስዎ ተከፍቷል።",
+    "files_pick_hint": "ለማያያዝ ፋይል ይምረጡ፣ ወይም መጀመሪያ አንድ ይጨምሩ።",
+    "moderation_reveal": "አሳይ",
+    "moderation_reveal_title": "ይህን ነገር ይመልከቱ?",
+    "moderation_reveal_fact_flag": "እንደ ተፈረጀው",
+    "moderation_reveal_fact_effect": "የሚለወጠው ነገር",
+    "moderation_reveal_effect": "ለእርስዎ ይከፈታል፣ በራስዎ መሣሪያዎች ላይ። በዚህ ምክንያት ማንም ሌላ ሰው አያየውም።",
+    "moderation_reveal_fact_signer": "የፈረመው",
+    "moderation_reveal_signer": "የራስዎ ቁልፍ፣ ይህን አንድ ነገር ለማየት የእርስዎ ፈቃድ ሆኖ",
+    "moderation_note_flagged": "ተቆጣጣሪ ይህን እንደ {flag} ፈርጆታል።",
+    "moderation_note_revealed": "ተቆጣጣሪ ይህን እንደ {flag} ፈርጆታል። እርስዎ ለማየት መርጠዋል።",
+    "moderation_note_cleared": "በዚህ ላይ የነበረው የተቆጣጣሪ ምልክት ተወግዷል።",
+    "moderation_appeal_filed": "ይግባኝ ውሳኔ እየጠበቀ ነው።",
+    "moderation_appeal_upheld": "ምልክቱ በይግባኝ ጸድቋል።",
+    "moderation_appeal_partial": "ምልክቱ በይግባኝ በከፊል ጸድቋል።",
+    "moderation_appeal_reversed": "ምልክቱ በይግባኝ ተሽሯል።",
+    "local_community_body": "የአካባቢ ማህበረሰብ ጂኦግራፊያዊ ነው፦ በአቅራቢያዎ ያሉ ሰዎች። የሚተገበረው ቦታዎን ለማጋራት ከፈቀዱ እና አሁን እያጋሩት ከሆነ ብቻ ነው።",
+    "local_community_not_on_this_node": "ይህ ኖድ የእርስዎን ቦታ ገና ማጋራት አይችልም፣ ስለዚህ የአካባቢ ክፍል ለአሁኑ ከቦታ ጋር አልተቆራኘም እና ማን እንደሚቀላቀል እርስዎ ይመርጣሉ። ቦታዎ እየተጋራ አይደለም።",
+    "setup_template_ally": "Ally፣ የግል ረዳት። ይህ ለግል ጭነት ትክክለኛው ምርጫ ነው።",
+    "setup_template_chosen": "ከ{name} ቴምፕሌት ይጀምራል።",
+    "setup_template_provisioned": "{name}፣ በድርጅትዎ Portal መዝገብ የተዋቀረ።",
+    "community_section_title_local": "የእርስዎ የአካባቢ ክፍሎች",
+    "community_section_body_local": "ክፍሎች በአቅራቢያዎ ላሉ ሰዎች ናቸው። ለአሁኑ፣ ክፍል የአካባቢ ተብሎ የሚታየው በመሠረተው መሣሪያ ላይ ብቻ ነው። ሌሎች አባላት ከማህበረሰቦች ስር ያዩታል።",
+    "community_empty_local": "እስካሁን ምንም የአካባቢ ክፍሎች የሉዎትም። አንዱን መሥርተው በአቅራቢያዎ ያሉ ሰዎችን ይጋብዙ።",
+    "community_create_open_local": "የአካባቢ ክፍል መሥርት",
+    "community_create_title_local": "የአካባቢ ክፍል መሥርት",
+    "server_local_desc": "በዚህ መሣሪያ ላይ የሚሰራውን ኖድ አስተዳድር።",
+    "server_remote_desc": "በሌላ ቦታ የሚሰራ ኖድ ጋር ተገናኝ።",
+    "server_url_label": "የኖድ አድራሻ",
+    "server_current": "የአሁኑ",
+    "add_device_no_session": "ይህ መሣሪያ ወደ የእርስዎ CIRIS ID ተቀላቅሏል፣ ነገር ግን መግባቱን ማጠናቀቅ አልቻለም። ይህን መሣሪያ እንደገና ያዋቅሩ፣ ከዚያ ከሌላ መሣሪያዎ ያጽድቁት።",
+    "chat_call": "ጥሪ",
+    "call_title": "ጥሪ",
+    "call_choose": "እንዴት መደወል ይፈልጋሉ?",
+    "call_voice": "የድምፅ ጥሪ",
+    "call_video": "የቪዲዮ ጥሪ",
+    "call_asking_microphone": "በዚህ ክፍል ያሉ ሰዎች እንዲሰሙዎት ማይክሮፎኑን ይፍቀዱ።",
+    "call_asking_camera": "በዚህ ክፍል ያሉ ሰዎች እንዲያዩዎት ካሜራውን ይፍቀዱ።",
+    "call_microphone_denied": "ጥሪ ማይክሮፎን ያስፈልገዋል። በመሣሪያዎ ቅንብሮች ውስጥ ለ CIRIS ያብሩት፣ ከዚያ እንደገና ይሞክሩ።",
+    "call_try_again": "እንደገና ይሞክሩ",
+    "call_ready_voice": "ማይክሮፎንዎ ዝግጁ ነው።",
+    "call_ready_video": "ማይክሮፎንዎ እና ካሜራዎ ዝግጁ ናቸው።",
+    "call_audio_only": "ካሜራው ጠፍቷል፣ ስለዚህ ይህ የድምፅ ጥሪ ይሆናል።",
+    "call_not_connecting": "ከዚህ መተግበሪያ ጥሪዎች እስካሁን መገናኘት አይችሉም።",
+    "call_unavailable_platform": "ጥሪዎች በዚህ መሣሪያ ላይ እስካሁን አይገኙም።",
+    "call_unavailable_no_device": "ይህ መሣሪያ ማይክሮፎን የለውም፣ ስለዚህ ጥሪዎችን ማድረግ አይችልም።",
+    "call_not_saved": "አልተቀመጠም",
+    "call_save": "የዚህን ጥሪ የራሴን ክፍል አስቀምጥ",
+    "call_save_unavailable": "ጥሪዎችን ማስቀመጥ እስካሁን ዝግጁ አይደለም።",
+    "trust_hosts_verified": "ከ{checked} የመተማመኛ-ሥር አስተናጋጆች ውስጥ {verified} ተረጋግጠዋል",
+    "trust_hosts_unreachable": "{count} የመተማመኛ-ሥር አስተናጋጆች ሊደረስባቸው አልቻለም። ይህ ውድቀት አይደለም፦ ጠፍተው ወይም ከዚህ አውታረ መረብ ታግደው ሊሆኑ ይችላሉ።",
+    "trust_hosts_disagree": "ሁለት የመተማመኛ-ሥር አስተናጋጆች የተለያዩ መልሶች ሰጥተዋል፣ ስለዚህ ምንም የመተማመኛ ሥር አልተመረጠም። እነሱ እስኪስማሙ ድረስ ይህ ኖድ የተገደበ ነው።",
+    "trust_host_verified": "ተረጋግጧል",
+    "trust_host_unreachable": "ሊደረስበት የማይችል",
+    "trust_host_not_verified": "ደርሷል፣ አልተረጋገጠም",
+    "wa_update_not_allowed": "የሚጠብቅ ሃሳብ መወሰን የሚችለው አስተዳዳሪ ወይም የጥበብ ባለስልጣን ብቻ ነው። ይህ መለያ ግን አይችልም።",
+    "wa_update_changed": "አንድ ሰው ከእርስዎ በፊት ይህን ሃሳብ ወስኖበታል፣ ስለዚህ ምንም አልተለወጠም። ዝርዝሩ አሁን ያለበትን ደረጃ ያሳያል።",
+    "wa_update_failed": "ወኪሉ ያን ለውጥ አልተቀበለም። እንደገና ይሞክሩ።",
+    "trace_consent_unanswered_note": "ይህን ሳይመለስ መተው ይችላሉ። አዎ እስኪሉ ድረስ ምንም አይላክም፣ እና በኋላም መመለስ ይችላሉ።",
+    "files_uploading_progress": "{name}ን በመጨመር ላይ፦ {sent} ከ {total}",
+    "files_add_cancel": "አቁም",
+    "remote_node_view": "ተመልከት",
+    "remote_node_title": "ኖድዎ",
+    "remote_node_snapshot_at": "በ{time} ላይ ተነቧል። ይህ ቅጽበታዊ እይታ ነው፦ እንደገና ለማንበብ ያድሱ።",
+    "remote_node_metrics": "አውታረ መረብ",
+    "remote_node_logs": "የቅርብ ጊዜ ምዝግቦች",
+    "remote_node_refresh": "አድስ",
+    "remote_node_unreachable": "ያ ኖድ አሁን ላይ ሊደረስበት አይችልም። የተዘጋ ወይም ከክልሉ ውጪ ሆኖ ሊሆን ይችላል።",
+    "remote_node_timeout": "ያ ኖድ በጊዜው አልመለሰም። ከትንሽ ቆይታ በኋላ እንደገና ይሞክሩ።",
+    "remote_node_send_failed": "ጥያቄው ወደ ያ ኖድ መላክ አልተቻለም። እንደገና ይሞክሩ።",
+    "remote_node_no_transport": "ይህ ኖድ ሌሎች ኖዶችዎን ማግኘት አይችልም። የአውታረ መረብ ቅንብሮቹን ያረጋግጡ።",
+    "remote_node_needs_update": "ይህን ከማሳየቱ በፊት ያ ኖድ መዘመን ያስፈልገዋል።",
+    "remote_node_not_owner": "ያ ኖድ ይህን ጥያቄ አልተቀበለም። የባለቤቱ መሣሪያዎች ብቻ ሊያነቡት ይችላሉ።",
+    "remote_node_failed": "የዚያ ኖድ ምላሽ ሊነበብ አልቻለም።",
+    "add_device_contact_hint_2": "በሌላ መሣሪያዎ ላይ፣ «የእኔን መታወቂያ አጋራ»ን ይክፈቱ። QR ኮዱን ይቃኙ፣ ወይም ረጅም ወይም አጭር ቅጹን እዚህ ይለጥፉ። ሌላ መሣሪያዎ ሲገለጽ፣ የፌዴሬሽን መታወቂያዎ ብቻውን እንኳ ይሰራል።",
+    "contacts_reach_sent": "ተልኳል፦ እነሱ ምላሽ እንዲሰጡ በመጠበቅ ላይ ነው",
+    "contacts_reach_waiting": "እነሱን ለመድረስ በመጠበቅ ላይ ነው",
+    "contacts_stale_since": "ከ{date} ጀምሮ ከእነሱ ምንም አልተሰማም"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4779,12 @@
       "community_chats": "ክፍሎች",
       "affiliations_chats": "ክፍሎች",
       "node_self": "የራስ ሁኔታ",
-      "owned_agents": "የእርስዎ ወኪሎች"
+      "owned_agents": "የእርስዎ ወኪሎች",
+      "my_devices": "የእኔ መሣሪያዎች",
+      "layer_communities": "ማህበረሰቦች",
+      "layer_affiliations": "አባልነቶች",
+      "local_chats": "የአካባቢ ክፍሎች",
+      "local_roster": "የአካባቢ አባላት"
     },
     "circle": {
       "agent": "እኔ ብቻ",
@@ -4745,7 +4835,8 @@
       "files_agent": "እዚህ እስካሁን ምንም ነገር የለም። ሁሉም ነገር የሚጀምረው እዚህ ነው፣ እና እዚህ ያለው ምንም ነገር አይታወጅም።",
       "decisions_agent": "እዚህ ውሳኔ የሚደረግበት ማንም የለም። ውሳኔዎች የሚጀምሩት በቤተሰብ ውስጥ ነው።",
       "decisions_family": "ቤተሰብ በመነጋገር ይወስናል። እዚህ ድምፅ የሚሰጥበት ነገር የለም።",
-      "chats_agent": "በዚህ ኖድ ላይ ወኪል የለም፤ ስለዚህ እዚህ የሚያወራው ማንም የለም። አንድ ወኪል ያዋቅሩ እና ከእሱ ጋር የሚያደርጉት ውይይቶች እዚህ ይሆናሉ።"
+      "chats_agent": "በዚህ ኖድ ላይ ወኪል የለም፤ ስለዚህ እዚህ የሚያወራው ማንም የለም። አንድ ወኪል ያዋቅሩ እና ከእሱ ጋር የሚያደርጉት ውይይቶች እዚህ ይሆናሉ።",
+      "files_local": "ፋይሎች በእያንዳንዱ ክፍል ውስጥ ይገኛሉ። ፋይሎቹን ለማየት የአካባቢ ክፍል ይክፈቱ።"
     },
     "my_things": "የእኔ ነገሮች",
     "stop_everything": "ሁሉንም አቁም",
@@ -5216,7 +5307,8 @@
     "voting": {
       "description": "ሙሉው የምርጫ ወረቀት ንብርብር፦ በሽቦው ላይ የተረጋገጡ የM-of-N ስምምነት ገደቦች፣ እና በመሠረት ንብርብር ውስጥ ከጊዜ-በላይ የኮራም ቅደም ተከተል። የCommons' ተቃውሞ ምርጫ ወረቀቶች አስቀድሞ ተልቀዋል — ይህ ድምጽ መስጫ እንደ አንደኛ-ደረጃ፣ የሚረጋገጥ መሠረታዊ ነገር ነው።",
       "title": "ድምጽ መስጫ"
-    }
+    },
+    "announce_costs": "ካላስታወቁ፣ በዚህ ስሪት ውስጥ በመረቡ አማካኝነት ማንም ሊደርስብዎት አይችልም፦ የመገናኛ ኮድዎ ይለይዎታል እንጂ ገና ወደ መሣሪያዎችዎ የመድረሻ መንገድ አይይዝም። በህዝብ ቡድኖች ውስጥ መሳተፍ አይችሉም። የግል ክፍል ሁለታችሁም አስታውቃችሁ እንዲኖር ይፈልጋል።"
   },
   "mesh_config": {
     "consumption": {
@@ -5398,7 +5490,11 @@
       "error": "ይህን ማቅረብ አልተቻለም፦ {detail}። ምንም አልተመዘገበም።",
       "not_on_this_node": "ይህ ኖድ እስካሁን የማህበረሰብ ሀሳብ መቀበል አይችልም፦ /v1/safety/reports መንገድ የለውም (CIRISServer#665 ይፈልጋል)። ምንም አልተመዘገበም። የመቆጣጠር ግዴታ ካለዎት፣ በምትኩ በ Safety > Moderation ስር ያመልክቱ።",
       "refused_minor": "በዚህ ኖድ ላይ ያለው የዕድሜ መዝገብዎ ታዳጊ እንደሆኑ ይገልጻል፣ ስለዚህ ይህ በቀጥታ ሳይሆን በጠባቂዎ በኩል ይቀርባል። ምንም አልተመዘገበም፤ ጠባቂዎን ይህን እንዲያቀርብ ይጠይቁ።"
-    }
+    },
+    "item_not_in_room": "ያ በዚህ ክፍል ውስጥ መልዕክት ወይም ፋይል አይደለም",
+    "not_flagged": "የዚህ ክፍል ምንም ተቆጣጣሪ ያንን ነገር አልፈረጀም — የሚገለጥ ምንም ነገር የለም",
+    "reveal_failed": "ለማየት የተሰጠው ፈቃድ ሊመዘገብ አልቻለም፣ ስለዚህ ነገሩ ተደብቆ ይቆያል።",
+    "unknown_action": "በክፍል ውስጥ ያለ ነገር በ reveal ትእዛዝ ይገለጣል"
   },
   "operator": {
     "carriage": {
@@ -5759,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "መግቢያው በአሳሹ ውስጥ አልተጠናቀቀም፣ ስለዚህ ምንም አልተቀየረም። እንደገና ይሞክሩ፣ ወይም በምትኩ የአካባቢ መለያ ይጠቀሙ።",
-      "waiting": "በአሳሽዎ ውስጥ በGoogle መግባትዎን ያጠናቅቁ፣ ከዚያ ወደዚህ ይመለሱ።"
+      "waiting": "በአሳሽዎ ውስጥ በGoogle መግባትዎን ያጠናቅቁ፣ ከዚያ ወደዚህ ይመለሱ።",
+      "no_browser": "አሳሽ መክፈት አልተቻለም። ለመግባት፣ ይህን አድራሻ በአሳሽዎ ውስጥ ይክፈቱ፦ {url}",
+      "never_arrived": "አሳሽዎ ወደ መግቢያ ገጹ በፍጹም አልደረሰም፣ ስለዚህ ምንም አልተቀየረም። የአሳሽ መስኮት እንደተከፈተ ያረጋግጡ፣ ከዚያ እንደገና ይሞክሩ።"
     },
     "claim": {
       "not_armed": "ይህ ኖድ ለመጀመሪያ-ጊዜ የባለቤትነት ጥያቄ ዝግጁ አይደለም (የአንድ-ጊዜ ፒን የለም) — ባለቤትነቱ ቀድሞ ተይዞ ሊሆን ይችላል",
@@ -5798,7 +5896,8 @@
       "provider_unavailable": "ይህ ኖድ በዚያ አቅራቢ ሊያስገባዎት አይችልም — በዚህ ግንባታ ላይ እንደዚህ ያለ መግቢያ አልተዋቀረም። በምትኩ በተጠቃሚ ስም እና በይለፍ ቃል ይግቡ።",
       "state_invalid": "ልክ ያልሆነ ወይም ጊዜው ያለፈበት oauth state",
       "store_unavailable": "ኖዱ የማንነት ማከማቻውን ማንበብ አልቻለም፣ ስለዚህ መግባት ሊጠናቀቅ አልቻለም። ይህ የኖዱ ችግር ነው፣ የመለያዎ አይደለም።",
-      "unsafe_redirect": "ደህንነቱ ያልተጠበቀ redirect_uri"
+      "unsafe_redirect": "ደህንነቱ ያልተጠበቀ redirect_uri",
+      "flow_unknown": "አሳሽዎ ወደ መግቢያ ገጹ በፍጹም አልደረሰም፣ ስለዚህ ምንም አልተቀየረም። እንደገና ይሞክሩ።"
     },
     "oauth_link": {
       "already_has_identity": "ያ መለያ አስቀድሞ የተገናኘ የመግቢያ ማንነት አለው። ሊተኩት ከፈለጉ በመጀመሪያ ያስወግዱት።",
@@ -5890,7 +5989,8 @@
     "message_not_live": "ይህ መልዕክት አስቀድሞ ተነስቷል ወይም ተካዷል።",
     "not_author": "መልዕክቱን የጻፈው ሰው ብቻ ሊተካው፣ ሊያነሳው ወይም ሊክደው ይችላል",
     "reason_invalid": "ያ የምክንያት ኮድ በዚህ ክለሳ ላይ አይተገበርም",
-    "unknown_revision_op": "መልዕክት የሚሻሻለው በመተካት፣ በማንሳት ወይም በመካድ ነው"
+    "unknown_revision_op": "መልዕክት የሚሻሻለው በመተካት፣ በማንሳት ወይም በመካድ ነው",
+    "attachment_not_in_room": "ያ ፋይል በዚህ ክፍል ውስጥ የለም። መጀመሪያ ወደ ክፍሉ ያጋሩት፣ ከዚያ ይላኩት።"
   },
   "contacts": {
     "awaiting_consent": "እነሱ ገና አልተቀበሉም። ይህ በሰው ላይ የተመሠረተ በመጠበቅ ላይ ነው፣ ስለዚህ እንደገና መሞከር ምንም አይለውጥም።",
@@ -6020,7 +6120,9 @@
     "too_large_for_whole_read": "ይህ ፋይል በአንድ ቁራጭ ለማንበብ በጣም ትልቅ ነው። በዥረት መተላለፍ አለበት።",
     "withdraw_failed": "ፋይሉ ሊወገድ አልቻለም። እንደገና ይሞክሩ።",
     "withdrawn": "ጸሐፊው ይህን ፋይል አስወግዶታል። ባይቶቹ ከእንግዲህ የትም አይቀርቡም።",
-    "awaiting_key": "ባይቶቹ እዚህ አሉ፣ ነገር ግን የዚህ መሣሪያ ቁልፍ ለእነሱ እስካሁን አልደረሰም። በራሱ ይከተላል፤ ትንሽ ቆይተው እንደገና ይሞክሩ።"
+    "awaiting_key": "ባይቶቹ እዚህ አሉ፣ ነገር ግን የዚህ መሣሪያ ቁልፍ ለእነሱ እስካሁን አልደረሰም። በራሱ ይከተላል፤ ትንሽ ቆይተው እንደገና ይሞክሩ።",
+    "withheld_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን ፋይል ፈርጆታል፣ ስለዚህ እስኪመርጡ ድረስ ተደብቆ ይቆያል።",
+    "flagged_by_moderation": "የዚህ ክፍል ተቆጣጣሪ ይህን ፋይል ፈርጆታል፤ ምልክቱ እስካለ ድረስ ፋይሉ በክፍሉ ውስጥ ይቆያል"
   },
   "notes": {
     "author_signer_unavailable": "ይህ ኖድ አሁን እንደ እርስዎ መፈረም አይችልም፣ ስለዚህ ማስታወሻው አልተጻፈም።",
@@ -6311,7 +6413,8 @@
     "rng": "ለማረጋገጫ ፈተናው የዘፈቀደ ውሂብ የለም።",
     "unexpected": "ከሌላ መሣሪያዎ ያልተጠበቀ መልስ።",
     "unknown_identity": "ያንን ማንነት ማግኘት አልተቻለም።",
-    "unreachable": "ሌላ መሣሪያዎ ላይ መድረስ አልተቻለም።"
+    "unreachable": "ሌላ መሣሪያዎ ላይ መድረስ አልተቻለም።",
+    "node_proof": "ይህ መሣሪያ የትኛው ኖድ እንደሆነ ማረጋገጥ አልቻለም።"
   },
   "sign_owner_binding": {
     "bad_request": "ያ የባለቤት-ማሰሪያ ጥያቄ ሊነበብ አልቻለም።",

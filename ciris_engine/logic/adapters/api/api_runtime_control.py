@@ -164,28 +164,6 @@ class APIRuntimeControlService(Service):
 
         return status
 
-    async def handle_emergency_shutdown(self, command: Any) -> Any:
-        """Handle emergency shutdown command."""
-        logger.critical(f"Emergency shutdown requested via API: {command.reason}")
-
-        # Delegate to runtime's shutdown service
-        if hasattr(self.runtime, "shutdown_service"):
-            await self.runtime.shutdown_service.request_shutdown(f"EMERGENCY API: {command.reason}")
-        else:
-            # Fallback to runtime shutdown
-            if hasattr(self.runtime, "shutdown"):
-                await self.runtime.shutdown(f"EMERGENCY API: {command.reason}")
-
-        return {
-            "shutdown_initiated": datetime.now(timezone.utc),
-            "command_verified": True,
-            "services_stopped": ["all"],
-            "data_persisted": True,
-            "final_message_sent": True,
-            "shutdown_completed": datetime.now(timezone.utc),
-            "exit_code": 0,
-        }
-
     # Service interface methods
 
     async def start(self) -> None:
@@ -233,7 +211,6 @@ class APIRuntimeControlService(Service):
                 "resume_processing",
                 "request_state_transition",
                 "get_runtime_status",
-                "handle_emergency_shutdown",
             ],
             version="1.0.0",
             dependencies=[],

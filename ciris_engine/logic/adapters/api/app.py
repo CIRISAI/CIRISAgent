@@ -391,7 +391,8 @@ def create_app(runtime: Any = None, adapter_config: Any = None) -> FastAPI:
     # BYOK. See routes/node_proxy.py.
     app.include_router(node_proxy.router, prefix="/v1")
 
-    # Mount emergency routes at root level (no /v1 prefix)
+    # Emergency shutdown at root level (no /v1 prefix): a seated-WA hybrid
+    # signature is the authentication.
     app.include_router(emergency.router)
 
     print("[STARTUP] Routes registered successfully")

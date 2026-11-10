@@ -655,9 +655,8 @@ class CrossChatStage:
                 step,
                 LAYER_CONTACTS,
                 f"{requester.name}'s grant never reached {observer.name}'s contact_requests within "
-                f"{self.d.request_s:.0f}s (the grant reaches the other node only by replication; when the "
-                "requester's log says the contact \"resolves to no node\", it cannot learn the other person's "
-                "owner->node binding from the canonical, tracked: CIRISEdge#907)",
+                f"{self.d.request_s:.0f}s (the grant reaches the other node only by replication, so it may "
+                "still be on its way; read the requester's CONTACT lines for why)",
                 last,
             )
         return got
@@ -714,8 +713,8 @@ class CrossChatStage:
             raise self._fail(
                 f"mutual:{requester.name}",
                 LAYER_CONTACTS,
-                f"{observer.name} added {requester.name} back but {requester.name}'s row never read mutual "
-                f"within {self.d.mutual_s:.0f}s",
+                f"{requester.name}'s row for {observer.name} never read mutual within {self.d.mutual_s:.0f}s "
+                f"(this side can't see whether {observer.name} added it back)",
                 seen,
             )
         return got

@@ -495,7 +495,7 @@ Consent Service کے پاس پہلے سے طے شدہ **TEMPORARY consent** ہے
 - `POST /v1/billing/purchase/initiate` — ادائیگی کا آغاز
 
 ### ہنگامی
-- `POST /emergency/shutdown` — ہنگامی بند کرنا (Ed25519 دستخط ضروری)
+- `POST /emergency/shutdown` — ہنگامی بند کرنا (Ed25519 + ML-DSA-65 دستخط ضروری)
 
 ---
 
@@ -514,7 +514,7 @@ GDPR/DSAR compliance کے لیے رن ٹائم قابل ترتیب ڈیٹا بی
 
 **9 SQL آلات**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-معاون بولیاں: SQLite، PostgreSQL، MySQL۔ حذف کی تصدیق Ed25519-signed cryptographic ثبوت پیدا کرتی ہے۔
+معاون بولیاں: SQLite، PostgreSQL، MySQL۔ حذف کی تصدیق Ed25519 + ML-DSA-65-signed cryptographic ثبوت پیدا کرتی ہے۔
 
 ---
 
@@ -524,7 +524,7 @@ GDPR/DSAR compliance کے لیے رن ٹائم قابل ترتیب ڈیٹا بی
 
 1. **Proposal**: تخلیق کار نام، مقصد، justification، اخلاقی غور و فکر بیان کرتا ہے
 2. **Template Selection**: دستیاب templates سے (scout, sage, datum, echo, وغیرہ)
-3. **Wise Authority جائزہ**: Ed25519 دستخط ضروری
+3. **Wise Authority جائزہ**: Ed25519 + ML-DSA-65 دستخط ضروری
 4. **تخلیق**: Graph database میں شناخت کی جڑ، ناقابل تغیر نسب کا اندراج، رن ٹائم ترتیب
 5. **فعال کرنا**: ایجنٹ اپنے تخلیقی سیاق کے مکمل علم کے ساتھ شروع ہوتا ہے
 
@@ -534,7 +534,7 @@ GDPR/DSAR compliance کے لیے رن ٹائم قابل ترتیب ڈیٹا بی
 
 ## سیکیورٹی
 
-- **Ed25519 دستخط**: تصدیق، Audit signing، ہنگامی بند کرنا
+- **Ed25519 + ML-DSA-65 دستخط**: تصدیق، Audit signing، ہنگامی بند کرنا
 - **JWT Tokens**: 24 گھنٹے کی مدت ختم (قابل ترتیب)
 - **Service Tokens**: فارمیٹ `Bearer service:TOKEN_VALUE` سسٹم سے سسٹم مواصلات کے لیے
 - **OAuth Tokens**: locking کے ساتھ خودکار refresh

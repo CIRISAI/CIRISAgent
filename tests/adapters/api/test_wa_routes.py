@@ -35,9 +35,18 @@ def _make_observer_auth() -> AuthContext:
 
 
 @pytest.fixture
-def wa_client():
+def wa_client(monkeypatch):
     """Create test client with WA service and auth overrides."""
     app = create_app()
+
+    # The WA's own signed answer row is required (100% PQC); its node seam is
+    # covered in test_wa_resolve_rows.py, so here it just answers.
+    from ciris_engine.logic.adapters.api.routes import wa as wa_routes
+
+    async def _answer_row(request, deferral_id, pending, approved):
+        return "att-response-1"
+
+    monkeypatch.setattr(wa_routes, "_sign_response_row", _answer_row)
 
     # Override auth dependencies
     app.dependency_overrides[require_observer] = _make_observer_auth
@@ -245,6 +254,7 @@ class TestResolveDeferralEndpoint:
         assert recorded.signature_pqc == "cHFjLXNpZ25hdHVyZQ=="
         assert recorded.signing_key_id == "agent-testkey01"
         assert recorded.owner_key_id == "owner-testkey01"
+        assert recorded.response_attestation_id == "att-response-1"
 
     def test_refuses_to_record_an_unsigned_resolution(self):
         """Fails closed when nothing can sign.

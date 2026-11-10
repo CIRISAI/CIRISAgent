@@ -248,19 +248,33 @@ class TestOwnerBinding:
 
 class TestHybridDowngrade:
     @pytest.mark.asyncio
-    async def test_stripping_the_pqc_half_does_not_yield_a_forgery(
-        self, auth: AuthenticationService, engine: Any
-    ) -> None:
-        """Documents the downgrade honestly: dropping the ML-DSA-65 half falls
-        back to Ed25519, so it still requires the classical key. It buys an
-        attacker nothing today; it is the reason the PQC half is bound to the
-        classical one rather than standing alone."""
+    async def test_stripping_the_pqc_half_is_refused(self, auth: AuthenticationService, engine: Any) -> None:
+        """CC 5.3.2.4.3.1 / CIRISAgent#1348: no posture below hybrid-required.
+        A resolution without its ML-DSA-65 half does not verify, even though
+        its Ed25519 half is genuine."""
         signed = await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
-        signed.signature_pqc = None
+        assert signed.signature_pqc
         assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is True
-
-        signed.approved = False  # still cannot alter the decision
+        signed.signature_pqc = None
         assert await auth.verify_deferral_resolution(DEFERRAL_ID, signed, SIGNED_AT) is False
+
+    @pytest.mark.asyncio
+    async def test_no_resolution_is_signed_without_a_pqc_half(
+        self, auth: AuthenticationService, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A build with no PQC signer refuses to sign rather than write an Ed25519-only row."""
+        from ciris_engine.logic.persistence.models import graph as graph_mod
+
+        class _ClassicalOnly:
+            def local_derived_key_id(self) -> str:
+                return "classical-only"
+
+            def local_sign_hybrid(self, data: bytes) -> dict:
+                return {"classical_sig": b"\x00" * 64, "pqc_sig": None}
+
+        monkeypatch.setattr(graph_mod, "get_persist_engine", lambda: _ClassicalOnly())
+        with pytest.raises(RuntimeError, match="ML-DSA-65"):
+            await auth.sign_deferral_resolution(DEFERRAL_ID, _response(), SIGNED_AT)
 
 
 class TestCrossOccurrenceVerification:

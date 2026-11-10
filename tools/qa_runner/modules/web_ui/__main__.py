@@ -272,9 +272,24 @@ class DesktopAppTestRunner:
         # come marked a correct hand-off as failed. The assertion this leg
         # exists for is the CREDENTIAL login against that backend, so log out
         # and drive it rather than accepting the auto-login as the answer.
+        # The home for a signed-in session depends on the mode: Interact with an
+        # agent, Contacts without one (homeScreen(hasAgent), CIRISApp.kt). With
+        # server 0.5.245 the post-setup claimed-session collect succeeds, so a
+        # run-without-AI install lands on Contacts ALREADY SIGNED IN (CIRISClient,
+        # 2026-11-10) -- treating that as "no prior session" waited 30 s for a
+        # Login screen that never comes.
         async def release_auto_login():
             screen = await self.helper.get_screen()
-            if screen != "Interact":
+            # Startup is transient: the client is still probing and has not
+            # chosen Login or a home yet. Deciding there read "no session" on
+            # Android, then the app landed on Interact signed in and the Login
+            # wait timed out (run 42758326718). Let it settle first.
+            settle_until = datetime.now().timestamp() + 30
+            while screen == "Startup" and datetime.now().timestamp() < settle_until:
+                await asyncio.sleep(0.5)
+                screen = await self.helper.get_screen()
+            signed_in_homes = ("Interact", "Contacts") if run_without_ai else ("Interact",)
+            if screen not in signed_in_homes:
                 self._log(f"no prior session (screen={screen}); the credential login is driven from here")
                 return
             self._log(

@@ -495,7 +495,7 @@ Chaque instance traite uniquement ses propres tâches mais contribue à la mémo
 - `POST /v1/billing/purchase/initiate` — Initiation de paiement
 
 ### Urgence
-- `POST /emergency/shutdown` — Arrêt d'urgence (signature Ed25519 requise)
+- `POST /emergency/shutdown` — Arrêt d'urgence (signature Ed25519 + ML-DSA-65 requise)
 
 ---
 
@@ -514,7 +514,7 @@ Fournit des connecteurs de base de données configurables à l'exécution pour l
 
 **9 Outils SQL** : initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Dialectes pris en charge : SQLite, PostgreSQL, MySQL. La vérification de suppression produit des preuves cryptographiques signées Ed25519.
+Dialectes pris en charge : SQLite, PostgreSQL, MySQL. La vérification de suppression produit des preuves cryptographiques signées Ed25519 + ML-DSA-65.
 
 ---
 
@@ -524,7 +524,7 @@ Chaque agent CIRIS est créé via un processus formel :
 
 1. **Proposition** : Le créateur fournit le nom, l'objectif, la justification, les considérations éthiques
 2. **Sélection de Modèle** : Parmi les modèles disponibles (scout, sage, datum, echo, etc.)
-3. **Examen de l'Autorité Sage** : Signature Ed25519 requise
+3. **Examen de l'Autorité Sage** : Signature Ed25519 + ML-DSA-65 requise
 4. **Création** : Racine d'identité dans la base de données Graph, enregistrement de lignage immuable, configuration d'exécution
 5. **Activation** : L'agent démarre avec une connaissance complète de son contexte de création
 
@@ -534,7 +534,7 @@ Chaque agent a une connaissance immuable de : déclaration d'intention du créat
 
 ## Sécurité
 
-- **Signatures Ed25519** : Authentification, signature d'audit, arrêt d'urgence
+- **Signatures Ed25519 + ML-DSA-65** : Authentification, signature d'audit, arrêt d'urgence
 - **Jetons JWT** : Expiration de 24 heures (configurable)
 - **Jetons de service** : Format `Bearer service:TOKEN_VALUE` pour la communication système à système
 - **Jetons OAuth** : Rafraîchissement automatique avec verrouillage

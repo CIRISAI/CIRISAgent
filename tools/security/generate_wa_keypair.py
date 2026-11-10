@@ -42,7 +42,7 @@ def generate_root_wa_keypair():
     }
 
     # Save public key to seed directory
-    seed_dir = Path("seed")
+    seed_dir = Path("ciris_engine") / "data" / "seed"
     seed_dir.mkdir(exist_ok=True)
 
     with open(seed_dir / "root_pub.json", "w") as f:
@@ -71,7 +71,7 @@ def generate_root_wa_keypair():
     metadata_file.chmod(0o600)
 
     print("[OK] Generated new root WA key pair")
-    print(" Public key saved to: seed/root_pub.json")
+    print(" Public key saved to: ciris_engine/data/seed/root_pub.json")
     print(f" Private key saved to: {private_key_file}")
     print(f" Metadata saved to: {metadata_file}")
     print("\n[WARN] IMPORTANT: The private key must NEVER be committed to git!")

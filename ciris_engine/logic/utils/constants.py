@@ -121,8 +121,9 @@ GUIDE_EXPECTED_HASHES: Dict[str, str] = {
     # hash unchanged (no edits to that variant yet). Base hash updated 2026-10-15:
     # its localization line names the served constitution_ethics_1.3 files.
     # Both updated 2026-10-27: the "Never Allowed" section (CC 7.4 and plain
-    # rules 9a/9b), CIRISAgent#1323 / #1325.
-    "CIRIS_COMPREHENSIVE_GUIDE.txt": "6d9796fdc30545c675ec033c5cec07545e7ec03026e285c3c42ca851e45df457",
+    # rules 9a/9b), CIRISAgent#1323 / #1325. Base updated 2026-11-08: four
+    # signature lines name Ed25519 + ML-DSA-65 (100% PQC).
+    "CIRIS_COMPREHENSIVE_GUIDE.txt": "d79e76a13240a2faea64e15ecaaf19b303e928e6b58f8732b67647b61e49e612",
     "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": "68a1f6f4fdab0944f7fdf29bcc3a7f1b831af2923065a2740c3be1b2e8d9a7bb",
 }
 
@@ -192,98 +193,31 @@ ETHICS_TEXT_EXPECTED_HASHES: Dict[str, str] = {
 }
 
 
+#: The accord manifest and A1's hybrid signature over it, shipped in the package.
+ACCORD_SEED_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "seed"
+
+
 def _verify_accord_manifest_signature() -> None:
-    """Verify ACCORD manifest signature using Ed25519 (H11/M1 fix).
+    """Refuse to load accord text unless A1's hybrid manifest signature ships (CC 3.1.2).
 
-    This addresses security issues H11 and M1:
-    - H11: ACCORD hash shares trust domain with the file it certifies
-    - M1: Comprehensive guide appended to ACCORD has no integrity check
-
-    By signing the manifest with the root Ed25519 key, we establish a
-    separate trust domain for integrity verification.
+    A1 (the accord holder) signs the manifest bound hybrid; the 2025 WA root that
+    used to sign it is retired in 2.20.0, so there is no classical fallback. Nothing
+    at import verifies ML-DSA-65, so this checks the files are there and the engine
+    verifies the signature strictly as soon as it is wired, before any decision
+    (accord_manifest_hybrid.verify_accord_manifest_hybrid).
 
     Raises:
-        RuntimeError: If manifest exists but signature verification fails (security-critical)
+        RuntimeError: if the manifest or A1's signature is missing.
     """
-    try:
-        manifest_path = Path(__file__).parent.parent.parent.parent / "seed" / "accord_manifest.json"
-        sig_path = manifest_path.with_suffix(".sig")
-
-        if not manifest_path.exists():
-            logger.debug("[ACCORD] No signed manifest found - using hash verification only")
-            return  # Fall back to hash-only for backwards compatibility
-
-        if not sig_path.exists():
-            logger.warning("[ACCORD] Manifest exists but no signature - verification skipped")
-            return  # Tolerate missing signature for development
-
-        # Load root public key
-        root_pub_path = Path(__file__).parent.parent.parent.parent / "seed" / "root_pub.json"
-        if not root_pub_path.exists():
-            logger.warning("[ACCORD] No root public key found")
-            return  # Tolerate missing key for development
-
-        try:
-            import base64
-            import json
-
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
-            with open(root_pub_path) as f:
-                root_pub = json.load(f)
-
-            # Decode URL-safe base64 public key (may be missing padding)
-            pubkey_b64 = root_pub["pubkey"]
-            padding_needed = 4 - (len(pubkey_b64) % 4)
-            if padding_needed != 4:
-                pubkey_b64 += "=" * padding_needed
-            pubkey_bytes = base64.urlsafe_b64decode(pubkey_b64)
-
-            public_key = Ed25519PublicKey.from_public_bytes(pubkey_bytes)
-
-            manifest_bytes = manifest_path.read_bytes()
-            signature = sig_path.read_bytes()
-
-            public_key.verify(signature, manifest_bytes)
-            logger.info("[ACCORD] Manifest signature verified successfully (H11/M1 protection active)")
-
-        except Exception as e:
-            # This is a CRITICAL security failure - the manifest has been tampered with
-            error_msg = (
-                f"[ACCORD] SIGNATURE VERIFICATION FAILED: {type(e).__name__}\n"
-                f"The ACCORD manifest signature is invalid!\n"
-                f"This indicates possible tampering with ACCORD files or the comprehensive guide.\n"
-                f"H11/M1 protection: Ed25519 signature verification failed."
-            )
-            logger.critical(error_msg)
-
-            # Log to audit trail if available
-            try:
-                from ciris_engine.schemas.audit.core import EventPayload
-
-                # We can't use the audit service here (circular import), but we can
-                # log the critical security event for later audit trail pickup
-                logger.critical(
-                    "[AUDIT] SECURITY_EVENT: accord_signature_verification_failure",
-                    extra={
-                        "event_type": "security_event",
-                        "event_data": EventPayload(
-                            action="verify_accord_signature",
-                            result="failure",
-                            error=str(e),
-                        ).model_dump(),
-                    },
-                )
-            except Exception:
-                pass  # Don't fail if audit logging fails
-
-            raise RuntimeError(error_msg)
-
-    except RuntimeError:
-        # Re-raise security failures
-        raise
-    except Exception as exc:
-        logger.error(f"[ACCORD] Signature verification error (non-critical): {exc}")
+    manifest_path = ACCORD_SEED_DIR / "accord_manifest.json"
+    hybrid_path = ACCORD_SEED_DIR / "accord_manifest.hybrid.json"
+    missing = [p.name for p in (manifest_path, hybrid_path) if not p.exists()]
+    if missing:
+        raise RuntimeError(
+            f"[ACCORD] Cannot verify the accord manifest: missing {', '.join(missing)} in {ACCORD_SEED_DIR}. "
+            "The install is incomplete; refusing to run on unverified accord text."
+        )
+    logger.info("[ACCORD] A1 hybrid manifest signature present; verified strictly when the engine starts")
 
 
 def _verify_ethics_text_integrity(filename: str, content: str) -> None:

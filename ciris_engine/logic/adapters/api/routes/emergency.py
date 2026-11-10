@@ -1,29 +1,23 @@
-"""
-Emergency Shutdown endpoint for CIRIS API.
+"""Emergency shutdown, signed by the seated Wise Authority (Eric, 2026-11-08).
 
-Provides cryptographically signed emergency shutdown functionality
-that operates outside normal authentication (signature IS the auth).
+No session is needed: the signature is the authentication. The command must
+carry a valid hybrid signature (Ed25519 + ML-DSA-65, verified strict) from the
+node's seated Wise Authority, which today is the node's owner. The signer's key
+is resolved from the federation directory, and a record without its ML-DSA-65
+half is refused.
+
+Accord holders (A1, B1, C1) are refused here even with a valid signature:
+their emergency act is the HUMANITY_ACCORD halt (POST /v1/accord/halt and its
+cosign), not this route.
 """
 
 import base64
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
-
-from ciris_engine.schemas.types import JSONDict
-
-try:
-    # Try to import Ed25519 verification
-    from cryptography.exceptions import InvalidSignature
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
-    CRYPTO_AVAILABLE = True
-except ImportError:
-    CRYPTO_AVAILABLE = False
-    logging.warning("Ed25519 crypto not available - emergency shutdown will be disabled")
 
 from ciris_engine.schemas.api.responses import SuccessResponse
 from ciris_engine.schemas.services.shutdown import EmergencyCommandType, EmergencyShutdownStatus, WASignedCommand
@@ -32,310 +26,125 @@ from ..constants import ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE
 
 logger = logging.getLogger(__name__)
 
-# Create router without prefix - this is mounted at root level
 router = APIRouter(tags=["emergency"])
 
-# #998/#999 — this route's authority comes from EmergencyAuthorities
-# (accord/authorities.py), the same trust root the service layer uses.
-#
-# It used to carry its own hardcoded list, commented "Root WA key from
-# ~/.ciris/wa_keys/root_wa_metadata.json". That key was
-# 7Bp-e4M4M-eLzwiwuoMLb4aoKZJuXDsQ8NamVJzveAk; the steward's actual root key in
-# that file is QK0ZQ9FhWKMtP8YL3wXU_n0cmqYyV3HoDi-AIJgSHi0. They do not match.
-# So the emergency-shutdown endpoint REJECTED THE PERSON HOLDING THE KEY, while
-# a comment asserted a provenance that was false. It failed closed, which is the
-# safe direction, and it was still a non-functional safety control.
-#
-# #998 fixed the service layer and stated the goal as "one authority source, two
-# entry surfaces". This route was the surface that did not get converted — a
-# half-done unification is two trust roots wearing one name, which is worse than
-# two that admit it.
+#: Accord-holder keys: they act through the accord halt, never this route.
+ACCORD_HOLDER_KEY_IDS = frozenset({"A1", "B1", "C1"})
+_ACCORD_HOLDER_IDENTITY = "accord_holder"
+
+COMMAND_WINDOW = timedelta(minutes=5)
+CLOCK_SKEW = timedelta(minutes=1)
 
 
-def verify_signature(command: WASignedCommand) -> bool:
-    """
-    Verify Ed25519 signature on the command.
+class EmergencyRefused(Exception):
+    def __init__(self, status: int, reason: str) -> None:
+        super().__init__(reason)
+        self.status, self.reason = status, reason
 
-    Args:
-        command: The signed command to verify
 
-    Returns:
-        True if signature is valid, False otherwise
-    """
-    if not CRYPTO_AVAILABLE:
-        logger.error("Crypto not available - cannot verify signature")
-        return False
+def canonical_command_bytes(command: WASignedCommand) -> bytes:
+    """The bytes both halves cover: JCS over every field but the signatures."""
+    from ciris_adapters.ciris_verify.ffi_bindings import jcs_canonicalize  # substrate-provided canonicalizer
 
+    body = command.model_dump(mode="json", exclude={"signature", "signature_pqc"})
+    canonical: bytes = jcs_canonicalize(body)
+    return canonical
+
+
+def _check_window(command: WASignedCommand, now: datetime) -> None:
+    issued = command.issued_at if command.issued_at.tzinfo else command.issued_at.replace(tzinfo=timezone.utc)
+    if now - issued > COMMAND_WINDOW:
+        raise EmergencyRefused(403, "Command is older than the 5-minute window")
+    if issued > now + CLOCK_SKEW:
+        raise EmergencyRefused(403, "Command is issued in the future")
+    if command.expires_at is not None:
+        expires = command.expires_at if command.expires_at.tzinfo else command.expires_at.replace(tzinfo=timezone.utc)
+        if now > expires:
+            raise EmergencyRefused(403, "Command has expired")
+
+
+def _signer_record(engine: Any, key_id: str) -> Tuple[str, str, Optional[str]]:
+    raw = engine.lookup_public_key(key_id)
+    record = json.loads(raw) if raw else None
+    if not isinstance(record, dict):
+        raise EmergencyRefused(403, "Signer is not in the federation directory")
+    ed, pqc = record.get("pubkey_ed25519_base64"), record.get("pubkey_ml_dsa_65_base64")
+    if not (isinstance(ed, str) and ed and isinstance(pqc, str) and pqc):
+        raise EmergencyRefused(403, "Signer's key record has no ML-DSA-65 half")
+    identity_type = record.get("identity_type")
+    return ed, pqc, identity_type if isinstance(identity_type, str) else None
+
+
+def _seated_wa(engine: Any) -> Optional[str]:
+    """The node's seated Wise Authority: its owner (Eric, 2026-10-22)."""
+    from ciris_engine.logic.services.infrastructure.authentication.service import AuthenticationService
+
+    return AuthenticationService._owner_key_id(engine, str(engine.local_derived_key_id()))
+
+
+def verify_command(engine: Any, command: WASignedCommand, now: Optional[datetime] = None) -> None:
+    """Raise EmergencyRefused unless the command is in date, from the seated WA, and verifies hybrid."""
+    from ciris_engine.logic.utils import substrate_signing
+
+    if command.command_type != EmergencyCommandType.SHUTDOWN_NOW:
+        raise EmergencyRefused(400, f"Invalid command type: {command.command_type}")
+    _check_window(command, now or datetime.now(timezone.utc))
+    if command.signer_key_id in ACCORD_HOLDER_KEY_IDS:
+        raise EmergencyRefused(403, "Accord holders act through the accord halt (POST /v1/accord/halt), not this route")
+    ed_pub, pqc_pub, identity_type = _signer_record(engine, command.signer_key_id)
+    if identity_type == _ACCORD_HOLDER_IDENTITY:
+        raise EmergencyRefused(403, "Accord holders act through the accord halt (POST /v1/accord/halt), not this route")
     try:
-        # Decode the public key (handle URL-safe base64)
-        # Add padding if needed
-        key_b64 = command.wa_public_key
-        key_b64 += "=" * (4 - len(key_b64) % 4) if len(key_b64) % 4 else ""
-        public_key_bytes = base64.urlsafe_b64decode(key_b64)
-        public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
-
-        # Build the message that was signed
-        # This must match exactly what was signed on the client side
-        message_data: JSONDict = {
-            "command_id": command.command_id,
-            "command_type": command.command_type.value,  # Use enum value
-            "wa_id": command.wa_id,
-            "issued_at": command.issued_at.isoformat(),
-            "reason": command.reason,
-            "target_agent_id": command.target_agent_id,
-        }
-        if command.expires_at:
-            message_data["expires_at"] = command.expires_at.isoformat()
-        if command.target_tree_path:
-            # target_tree_path is List[str], not str
-            message_data["target_tree_path"] = command.target_tree_path
-
-        message = json.dumps(message_data, sort_keys=True).encode()
-
-        # Decode and verify signature (handle URL-safe base64)
-        sig_b64 = command.signature
-        sig_b64 += "=" * (4 - len(sig_b64) % 4) if len(sig_b64) % 4 else ""
-        signature_bytes = base64.urlsafe_b64decode(sig_b64)
-
-        # Debug logging
-        logger.info(f"Message to verify: {message.decode()}")
-        logger.info(f"Message bytes length: {len(message)}")
-        logger.info(f"Signature bytes length: {len(signature_bytes)}")
-        logger.info(f"Public key bytes length: {len(public_key_bytes)}")
-
-        public_key.verify(signature_bytes, message)
-
-        return True
-
-    except InvalidSignature:
-        logger.warning("Signature verification failed - Invalid signature")
-        logger.warning(f"Public key (raw): {command.wa_public_key}")
-        logger.warning(f"Signature (raw): {command.signature}")
-        logger.warning(f"Message: {message.decode()}")
-        return False
-    except (ValueError, KeyError) as e:
-        logger.warning(f"Signature verification failed - Decode error: {type(e).__name__}: {e}")
-        logger.warning(f"Public key (raw): {command.wa_public_key}")
-        logger.warning(f"Signature (raw): {command.signature}")
-        return False
-    except Exception as e:
-        logger.error(f"Unexpected error during signature verification: {type(e).__name__}: {e}")
-        import traceback
-
-        logger.error(traceback.format_exc())
-        return False
-
-
-def verify_timestamp(command: WASignedCommand, window_minutes: int = 5) -> bool:
-    """
-    Verify command timestamp is within acceptable window.
-
-    Args:
-        command: The command to verify
-        window_minutes: Maximum age of command in minutes
-
-    Returns:
-        True if timestamp is valid, False otherwise
-    """
-    now = datetime.now(timezone.utc)
-
-    # Check if command is too old
-    if now - command.issued_at > timedelta(minutes=window_minutes):
-        logger.warning(f"Command too old: issued at {command.issued_at}, now {now}")
-        return False
-
-    # Check if command is from the future (clock skew)
-    if command.issued_at > now + timedelta(minutes=1):
-        logger.warning(f"Command from future: issued at {command.issued_at}, now {now}")
-        return False
-
-    # Check expiration if set
-    if command.expires_at and now > command.expires_at:
-        logger.warning(f"Command expired at {command.expires_at}, now {now}")
-        return False
-
-    return True
-
-
-def _decode_b64_key(public_key: str) -> bytes:
-    """Base64url/base64 -> raw Ed25519 key bytes, or b"" if undecodable.
-
-    Returns empty rather than raising: an unparseable key is an unauthorized
-    key, and this sits on an unauthenticated endpoint where a decode error must
-    not become a 500.
-    """
-    import base64
-
-    for decoder in (base64.urlsafe_b64decode, base64.b64decode):
-        try:
-            raw = decoder(public_key + "=" * (-len(public_key) % 4))
-            if len(raw) == 32:
-                return raw
-        except Exception:  # noqa: BLE001,S110
-            continue
-    return b""
-
-
-def is_authorized_key(public_key: str) -> bool:
-    """
-    Check if the public key is authorized for emergency shutdown.
-
-    In production, this would check against:
-    - Root WA authority keys
-    - Keys in the trust tree
-    - Dynamically configured emergency keys
-
-    Args:
-        public_key: Base64 encoded public key
-
-    Returns:
-        True if key is authorized
-    """
-    from ciris_engine.logic.accord.authorities import EmergencyAuthorities
-
-    verifier = EmergencyAuthorities()
-    for authority in verifier.list_authorities():
-        if verifier.public_key_for(authority["wa_id"]) == _decode_b64_key(public_key):
-            return True
-    logger.warning("[EMERGENCY] key not among the %d accord authorities", len(verifier.list_authorities()))
-    return False
+        substrate_signing.verify_hybrid_required(
+            engine, canonical_command_bytes(command), command.signature, command.signature_pqc, ed_pub, pqc_pub
+        )
+    except Exception as exc:
+        logger.warning("[EMERGENCY] signature refused: %s", type(exc).__name__)
+        raise EmergencyRefused(403, "Invalid signature") from exc
+    seated = _seated_wa(engine)
+    if seated is None or command.signer_key_id != seated:
+        raise EmergencyRefused(403, "Signer is not this node's seated Wise Authority")
 
 
 @router.post(
     "/emergency/shutdown",
     responses={
         400: {"description": "Invalid command type"},
-        403: {"description": "Command verification failed - timestamp, signature, or authorization error"},
+        403: {"description": "Window, signature, or seat check failed"},
         500: {"description": "Emergency shutdown execution failed"},
-        503: {"description": "Runtime or shutdown service not available"},
+        503: {"description": "Engine, runtime, or shutdown service not available"},
     },
 )
 async def emergency_shutdown(command: WASignedCommand, request: Request) -> SuccessResponse[EmergencyShutdownStatus]:
-    """
-    Execute emergency shutdown with cryptographically signed command.
+    """Shut the agent down now, on a hybrid-signed command from the seated Wise Authority."""
+    from ciris_engine.logic.persistence.models.graph import get_persist_engine
 
-    This endpoint requires no authentication - the signature IS the authentication.
-    Only accepts SHUTDOWN_NOW commands signed by authorized Wise Authorities.
-
-    Security checks:
-    1. Valid Ed25519 signature
-    2. Timestamp within 5-minute window
-    3. Public key is authorized (ROOT WA or in trust tree)
-    4. Command type is SHUTDOWN_NOW
-
-    Args:
-        command: Cryptographically signed shutdown command
-
-    Returns:
-        Status of the emergency shutdown process
-
-    Raises:
-        HTTPException: If any security check fails
-    """
-    logger.critical(f"Emergency shutdown requested by WA {command.wa_id}")
-    logger.info(f"Command details: type={command.command_type}, issued_at={command.issued_at}, reason={command.reason}")
-
-    # Initialize status
+    logger.critical("Emergency shutdown requested, signer %s", command.signer_key_id)
     status = EmergencyShutdownStatus(command_received=datetime.now(timezone.utc), command_verified=False)
-
-    # Verify command type
-    if command.command_type != EmergencyCommandType.SHUTDOWN_NOW:
-        status.verification_error = f"Invalid command type: {command.command_type}"
-        logger.error(status.verification_error)
-        raise HTTPException(status_code=400, detail=status.verification_error)
-
-    # Verify timestamp
-    if not verify_timestamp(command):
-        status.verification_error = "Command timestamp outside acceptable window"
-        logger.error(status.verification_error)
-        raise HTTPException(status_code=403, detail=status.verification_error)
-
-    # Verify signature
-    if not verify_signature(command):
-        status.verification_error = "Invalid signature"
-        logger.error(status.verification_error)
-        raise HTTPException(status_code=403, detail=status.verification_error)
-
-    # Verify authority
-    if not is_authorized_key(command.wa_public_key):
-        status.verification_error = "Unauthorized public key"
-        logger.error(status.verification_error)
-        raise HTTPException(status_code=403, detail=status.verification_error)
-
-    # All checks passed
-    status.command_verified = True
-    logger.info("Emergency shutdown command verified successfully")
-
-    # Get runtime control service if available
-    runtime_service = None
-    service_registry = getattr(request.app.state, "service_registry", None)
-    if service_registry:
-        try:
-            from ciris_engine.schemas.runtime.enums import ServiceType
-
-            runtime_service = await service_registry.get_service(
-                handler="emergency", service_type=ServiceType.RUNTIME_CONTROL
-            )
-        except Exception as e:
-            logger.warning(f"RuntimeControlService not available: {e}")
-
-    # If we have runtime control service, use it
-    if runtime_service and hasattr(runtime_service, "handle_emergency_shutdown"):
-        try:
-            logger.info("Delegating to RuntimeControlService for emergency shutdown")
-            status = await runtime_service.handle_emergency_shutdown(command)
-            return SuccessResponse(data=status)
-        except Exception as e:
-            logger.error(f"RuntimeControlService emergency shutdown failed: {e}")
-            # Fall through to direct shutdown
-
-    # Otherwise, perform direct shutdown
-    logger.warning("No RuntimeControlService - performing direct shutdown")
-
+    engine = get_persist_engine()
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Cannot verify: the persist engine is not running")
     try:
-        # Get shutdown service directly from runtime
-        runtime = getattr(request.app.state, "runtime", None)
-        if not runtime:
-            raise HTTPException(status_code=503, detail="Runtime not available")
+        verify_command(engine, command)
+    except EmergencyRefused as refused:
+        logger.error("[EMERGENCY] refused: %s", refused.reason)
+        raise HTTPException(status_code=refused.status, detail=refused.reason)
+    status.command_verified = True
 
-        shutdown_service = getattr(runtime, "shutdown_service", None)
-        if not shutdown_service:
-            raise HTTPException(status_code=503, detail=ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE)
-
-        # Mark shutdown initiated
+    runtime = getattr(request.app.state, "runtime", None)
+    shutdown_service = getattr(runtime, "shutdown_service", None) if runtime else None
+    if shutdown_service is None:
+        raise HTTPException(status_code=503, detail=ERROR_SHUTDOWN_SERVICE_NOT_AVAILABLE)
+    try:
         status.shutdown_initiated = datetime.now(timezone.utc)
-
-        # Request immediate emergency shutdown (forced termination)
-        reason = f"EMERGENCY: {command.reason} (WA: {command.wa_id})"
-        await shutdown_service.emergency_shutdown(reason)
-
-        # Update status
+        await shutdown_service.emergency_shutdown(f"EMERGENCY: {command.reason} (WA: {command.signer_key_id})")
         status.services_stopped = ["shutdown_requested"]
         status.data_persisted = True
         status.final_message_sent = True
         status.shutdown_completed = datetime.now(timezone.utc)
         status.exit_code = 0
-
-        logger.critical("Emergency shutdown initiated successfully")
+        logger.critical("Emergency shutdown initiated")
         return SuccessResponse(data=status)
-
     except Exception as e:
-        logger.error(f"Emergency shutdown failed: {e}")
-        status.verification_error = f"Shutdown failed: {str(e)}"
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/emergency/test")
-async def test_emergency_endpoint() -> JSONDict:
-    """
-    Test endpoint to verify emergency routes are mounted.
-
-    This endpoint requires no authentication and simply confirms
-    the emergency routes are accessible.
-    """
-    return {
-        "status": "ok",
-        "message": "Emergency endpoint accessible",
-        "crypto_available": CRYPTO_AVAILABLE,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+        logger.error("Emergency shutdown failed: %s", e)
+        raise HTTPException(status_code=500, detail="Emergency shutdown failed")

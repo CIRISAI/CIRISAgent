@@ -10,7 +10,6 @@ import pytest
 
 from ciris_engine.schemas.services.agent_credits import (
     AgentCreditSummary,
-    CreditGenerationPolicy,
     CreditRecord,
     CreditRecordBatch,
     DomainCategory,
@@ -189,36 +188,6 @@ class TestAgentCreditSummary:
         )
         assert summary.unique_partners == 12
         assert summary.domain_expertise["MEDICAL"] == 10
-
-
-class TestCreditGenerationPolicy:
-    def test_default_policy(self) -> None:
-        policy = CreditGenerationPolicy(policy_version="2026-04-08")
-        assert policy.cooldown_seconds == 60
-        assert policy.max_daily_interactions_per_pair == 10
-        assert policy.coherence_threshold == 0.3
-        assert policy.circular_deferral_window_seconds == 300
-        assert policy.min_attestation_level == 2
-
-    def test_custom_policy(self) -> None:
-        policy = CreditGenerationPolicy(
-            policy_version="2026-04-08",
-            cooldown_seconds=120,
-            max_daily_interactions_per_pair=5,
-            coherence_threshold=0.5,
-            policy_signature="signed_by_l3c",
-            policy_key_id="ciris-l3c-root",
-        )
-        assert policy.cooldown_seconds == 120
-        assert policy.policy_signature == "signed_by_l3c"
-
-    def test_coherence_threshold_validation(self) -> None:
-        """Coherence threshold must be 0-1."""
-        with pytest.raises(Exception):
-            CreditGenerationPolicy(
-                policy_version="2026-04-08",
-                coherence_threshold=1.5,
-            )
 
 
 class TestDomainDeferralRequired:
@@ -612,31 +581,6 @@ class TestWiseBusDomainFiltering:
 
         assert result is True
         service.send_deferral.assert_called_once()
-
-
-# =========================================================================
-# Anti-Gaming Policy Tests
-# =========================================================================
-
-
-class TestAntiGamingPolicy:
-    def test_policy_serialization(self) -> None:
-        """Policy should round-trip through JSON."""
-        policy = CreditGenerationPolicy(
-            policy_version="2026-04-08",
-            cooldown_seconds=120,
-            max_daily_interactions_per_pair=5,
-        )
-        data = policy.model_dump(mode="json")
-        restored = CreditGenerationPolicy(**data)
-        assert restored.cooldown_seconds == 120
-        assert restored.max_daily_interactions_per_pair == 5
-
-    def test_policy_signature_optional(self) -> None:
-        """Policy should work without signature (for local defaults)."""
-        policy = CreditGenerationPolicy(policy_version="2026-04-08")
-        assert policy.policy_signature is None
-        assert policy.policy_key_id is None
 
 
 # =========================================================================

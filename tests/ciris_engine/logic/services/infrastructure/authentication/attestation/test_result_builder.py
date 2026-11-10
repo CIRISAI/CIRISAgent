@@ -91,23 +91,28 @@ class TestExtractModuleIntegrity:
 class TestCountAgreeSources:
     """Tests for _count_agreeing_sources function."""
 
-    def test_counts_all_agreeing(self):
-        """Test counting all agreeing sources."""
-        sources = {
-            "dns_us_valid": True,
-            "dns_eu_valid": True,
-            "https_valid": True,
+    @staticmethod
+    def _sources(*checks):
+        return {
+            "sources": [
+                {"endpoint": f"https://h{n}", "reachable": r, "verified": v, "bundle_fingerprint": fp}
+                for n, (r, v, fp) in enumerate(checks)
+            ],
+            "trust_root": {"version": 4, "bundle_fingerprint": "sha256:a"},
+            "validation_status": "AllSourcesAgree",
         }
-        assert _count_agreeing_sources(sources) == 3
 
-    def test_counts_partial_agreeing(self):
-        """Test counting partial agreeing sources."""
-        sources = {
-            "dns_us_valid": True,
-            "dns_eu_valid": False,
-            "https_valid": True,
-        }
+    def test_counts_hosts_that_verified_the_selected_root(self):
+        sources = self._sources((True, True, "sha256:a"), (True, True, "sha256:a"), (True, False, None))
         assert _count_agreeing_sources(sources) == 2
+
+    def test_a_different_bundle_does_not_agree(self):
+        assert _count_agreeing_sources(self._sources((True, True, "sha256:b"))) == 0
+
+    def test_no_selected_root_means_no_agreement(self):
+        sources = self._sources((True, True, "sha256:a"))
+        del sources["trust_root"]
+        assert _count_agreeing_sources(sources) == 0
 
     def test_counts_none_agreeing(self):
         """Test counting no agreeing sources."""
@@ -244,7 +249,13 @@ class TestBuildAttestationResult:
                 "attestation": {
                     "valid": True,
                     "level": 4,
-                    "sources": {"dns_us_valid": True},
+                    "sources": {
+                        "sources": [
+                            {"endpoint": "https://h", "reachable": True, "verified": True, "bundle_fingerprint": "sha256:a"}
+                        ],
+                        "trust_root": {"version": 4, "bundle_fingerprint": "sha256:a"},
+                        "validation_status": "AllSourcesAgree",
+                    },
                     "key_attestation": {"key_type": "portal"},
                     "self_verification": {"binary_valid": True},
                 },
@@ -254,6 +265,13 @@ class TestBuildAttestationResult:
 
         assert result.loaded is True
         assert result.version == "1.0.0"
+        # An unreachable reading here would skip the tamper check every cycle (#862).
+        assert result.registry_reachable is True
+        assert result.sources_agreeing == 1
+        assert result.https_us_ok is True
+        assert result.dns_us_ok is False
+        assert [(h.endpoint, h.reachable, h.verified) for h in result.sources] == [("https://h", True, True)]
+        assert result.source_validation_status == "AllSourcesAgree"
         assert result.max_level == 4
         assert result.attestation_status == "verified"
 

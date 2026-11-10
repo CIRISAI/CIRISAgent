@@ -495,7 +495,7 @@ Ogni istanza elabora solo le proprie attività ma contribuisce alla memoria cond
 - `POST /v1/billing/purchase/initiate` — Avvio pagamento
 
 ### Emergenza
-- `POST /emergency/shutdown` — Spegnimento di emergenza (richiesta firma Ed25519)
+- `POST /emergency/shutdown` — Spegnimento di emergenza (richiesta firma Ed25519 + ML-DSA-65)
 
 ---
 
@@ -514,7 +514,7 @@ Fornisce connettori di database configurabili a runtime per la conformità GDPR/
 
 **9 Strumenti SQL**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Dialetti supportati: SQLite, PostgreSQL, MySQL. La verifica dell'eliminazione produce prove crittografiche firmate con Ed25519.
+Dialetti supportati: SQLite, PostgreSQL, MySQL. La verifica dell'eliminazione produce prove crittografiche firmate con Ed25519 + ML-DSA-65.
 
 ---
 
@@ -524,7 +524,7 @@ Ogni agente CIRIS viene creato attraverso un processo formale:
 
 1. **Proposal**: Il creatore fornisce nome, scopo, giustificazione, considerazioni etiche
 2. **Template Selection**: Da template disponibili (scout, sage, datum, echo, ecc.)
-3. **Wise Authority Review**: Richiesta firma Ed25519
+3. **Wise Authority Review**: Richiesta firma Ed25519 + ML-DSA-65
 4. **Creation**: Radice dell'identità nel database grafo, record di discendenza immutabile, configurazione runtime
 5. **Activation**: L'agente inizia con piena conoscenza del suo contesto di creazione
 
@@ -534,7 +534,7 @@ Ogni agente ha conoscenza immutabile di: dichiarazione di intento del creatore, 
 
 ## Sicurezza
 
-- **Firme Ed25519**: Autenticazione, firma dell'audit, spegnimento di emergenza
+- **Firme Ed25519 + ML-DSA-65**: Autenticazione, firma dell'audit, spegnimento di emergenza
 - **Token JWT**: Scadenza a 24 ore (configurabile)
 - **Token di servizio**: Formato `Bearer service:TOKEN_VALUE` per comunicazione sistema-a-sistema
 - **Token OAuth**: Aggiornamento automatico con locking

@@ -2,16 +2,17 @@
 
 Provides public verification of DSAR deletion proofs.
 
-Proofs are signed by the substrate's local Ed25519 signing identity
-(ciris-persist ``Engine.local_sign``) over the RFC 8785 (JCS) canonical
-bytes of the deletion data, and verified via ``Engine.verify_hybrid``.
+Proofs carry a hybrid (Ed25519 + ML-DSA-65) signature by the substrate's local
+signing identity over the RFC 8785 (JCS) canonical bytes of the deletion data,
+and verify hybrid-required (CIRISAgent#1348): a proof without its ML-DSA-65
+half does not verify.
 The homegrown RSA-PSS signer was deleted in the 2.9.7 DRY purge.
 """
 
 import base64
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -27,14 +28,19 @@ router = APIRouter(prefix="/verification", tags=["Verification"])
 
 
 class DeletionProof(BaseModel):
-    """Cryptographically signed proof of data deletion (Ed25519)."""
+    """Cryptographically signed proof of data deletion (hybrid Ed25519 + ML-DSA-65)."""
 
     deletion_id: str = Field(..., description="Unique deletion request ID")
     user_identifier: str = Field(..., description="User identifier for deleted data")
     sources_deleted: Dict[str, Any] = Field(..., description="Sources and records deleted")
     deleted_at: str = Field(..., description="ISO 8601 deletion timestamp")
     signature: str = Field(..., description="Ed25519 signature (base64) over JCS canonical deletion data")
-    public_key_id: str = Field(..., description="Derived key ID of the local Ed25519 signing identity")
+    public_key_id: str = Field(..., description="Derived key ID of the local signing identity")
+    signature_pqc: Optional[str] = Field(
+        None,
+        description="ML-DSA-65 signature (base64) over canonical || Ed25519 signature. Required to verify; "
+        "optional here only so a proof without it parses and is reported invalid.",
+    )
 
 
 class SignatureVerificationResult(BaseModel):
@@ -65,6 +71,7 @@ class ManualSignatureVerificationRequest(BaseModel):
     deleted_at: str = Field(..., description="ISO 8601 deletion timestamp")
     signature: str = Field(..., description="Base64-encoded Ed25519 signature")
     public_key_id: str = Field(..., description="Public key ID used for signing")
+    signature_pqc: Optional[str] = Field(None, description="Base64-encoded ML-DSA-65 signature; required to verify")
 
 
 def _require_engine() -> Any:
@@ -111,13 +118,10 @@ def sign_deletion_proof(
     deleted_at_iso = deleted_at.isoformat()
     canonical = _canonical_proof_bytes(deletion_id, user_identifier, sources_deleted, deleted_at_iso)
     try:
-        # sign_classical, not engine.local_sign: the classical key is sealed on
-        # any node with one federation identity, and the sync verb refuses it
-        # permanently. Same 64 Ed25519 bytes, so DeletionProof's wire shape is
-        # unchanged.
+        # Both halves: the proof's verifier is hybrid-required (CIRISAgent#1348).
         from ciris_engine.logic.utils import substrate_signing
 
-        signature_bytes = substrate_signing.sign_classical(engine, canonical)
+        signature_bytes, pqc_bytes = substrate_signing.sign_hybrid_required(engine, canonical)
         public_key_id = engine.local_derived_key_id()
     except ValueError as e:
         raise HTTPException(
@@ -132,6 +136,7 @@ def sign_deletion_proof(
         deleted_at=deleted_at_iso,
         signature=base64.b64encode(signature_bytes).decode("ascii"),
         public_key_id=public_key_id,
+        signature_pqc=base64.b64encode(pqc_bytes).decode("ascii"),
     )
 
 
@@ -148,12 +153,21 @@ def _verify_proof(proof: DeletionProof) -> SignatureVerificationResult:
             detail=f"Local signing identity not configured: {e}",
         )
 
+    try:
+        pqc_public_key_b64: Optional[str] = engine.local_pqc_public_key_b64()
+    except Exception:
+        pqc_public_key_b64 = None  # no ML-DSA-65 key: nothing here verifies hybrid-required
+
     canonical = _canonical_proof_bytes(
         proof.deletion_id, proof.user_identifier, proof.sources_deleted, proof.deleted_at
     )
 
     try:
-        engine.verify_hybrid(canonical, proof.signature, None, public_key_b64, None, "ed25519_fallback")
+        from ciris_engine.logic.utils import substrate_signing
+
+        substrate_signing.verify_hybrid_required(
+            engine, canonical, proof.signature, proof.signature_pqc, public_key_b64, pqc_public_key_b64
+        )
         valid = True
         message = "Deletion proof verified - signature valid"
     except ValueError as e:
@@ -399,7 +413,7 @@ async def manual_signature_verification(
 
     Users can verify signatures manually by:
     1. Canonicalizing deletion data per RFC 8785 (JCS)
-    2. Verifying the Ed25519 signature using the public key
+    2. Verifying both halves: Ed25519, then ML-DSA-65 over canonical || Ed25519 signature
     3. Comparing with this endpoint's result
     """
     deletion_proof = DeletionProof(
@@ -409,6 +423,7 @@ async def manual_signature_verification(
         deleted_at=request.deleted_at,
         signature=request.signature,
         public_key_id=request.public_key_id,
+        signature_pqc=request.signature_pqc,
     )
 
     verification_result = _verify_proof(deletion_proof)

@@ -27,6 +27,8 @@ artifact and hands the locals' to the workflow as a dispatch input.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import secrets
@@ -35,6 +37,8 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -63,6 +67,9 @@ ROLE_REQUESTER = "requester"
 ROLE_RESPONDER = "responder"
 REPO = "CIRISAI/CIRISAgent"
 NODE_C = "node-c"
+# The A/V step: a 60 s call, one stream each way (Eric, via edge).
+AV_SECONDS, AV_RATE_HZ, AV_FRAME_BYTES = 60, 30, 256  # audio-sized: 400 B A/V MDU today (leviculum#104)
+AV_JOIN_S, AV_DRAIN_S = 60.0, 15.0
 
 
 @dataclass
@@ -107,6 +114,7 @@ class PeerHalf(CrossChatStage):
         super().__init__(me, remote, clock=clock, deadlines=deadlines, log=log, nonce=nonce)
         self.me, self.peer, self.role = me, remote, role
         self.report = StageReport(pair=[me.name, peer.name])
+        self.av_record: Dict[str, object] = {}
 
     # -- one-sided steps the two-node stage does not have --
 
@@ -236,6 +244,60 @@ class PeerHalf(CrossChatStage):
             raise self._fail("reopen", LAYER_ROOM, f"re-open answered room {p.get('community_id')!r}, not {cid}")
         return f"re-open returned the same room {cid}"
 
+    def file_body(self, src: str, size: int) -> bytes:
+        """The file `src` sends: the same bytes on both runners, so each can check the other's."""
+        block = hashlib.sha256(f"{self.nonce} {src} {size}".encode()).digest()
+        return (block * (size // len(block) + 1))[:size]
+
+    def files_one_side(self, cid: str, label: str) -> str:
+        """Each side puts a file in the room, then opens the peer's and checks every byte."""
+        me, peer, size, step = self.me.name, self.peer.name, FILE_SIZES[label], f"files:{label}"
+        r = self._call(
+            self.me,
+            "POST",
+            "/v1/files",
+            {
+                "cohort": "community",
+                "room_id": cid,
+                "bytes_base64": base64.b64encode(self.file_body(me, size)).decode(),
+                "media_type": "application/octet-stream",
+                "filename": f"nat-peer-{me}-{label}-{self.nonce}.bin",
+            },
+        )
+        if not r.ok:
+            raise self._fail(step, LAYER_MESSAGE, f"{me} could not put a {size} byte file in the room: {r.brief()}")
+        started = self.clock.now()
+        name, want = f"nat-peer-{peer}-{label}-{self.nonce}.bin", self.file_body(peer, size)
+        room = f"cohort=community&room_id={urllib.parse.quote(cid, safe='')}"
+        seen: List[str] = []
+
+        def attempt(_: int) -> Optional[str]:
+            listed = self._call(self.me, "GET", f"/v1/drive?{room}&limit=200")
+            page = _payload(listed.body) if listed.ok else None
+            for entry in page.get("entries", []) if isinstance(page, dict) else []:
+                # A row held but not opened here lists no name, so it isn't a missing row.
+                if entry.get("filename") is None and entry.get("author_key_id") != self.me.fed_id:
+                    seen[:] = [f"listed sealed, {entry.get('description')}, bytes={entry.get('bytes')}"]
+                if entry.get("filename") != name:
+                    continue
+                seen[:] = [f"listed, bytes={entry.get('bytes')}"]
+                got = self._call(self.me, "GET", f"/v1/files/{entry.get('attestation_id')}?{room}")
+                opened = _payload(got.body) if got.ok else None
+                if not isinstance(opened, dict):
+                    seen[:] = [f"listed, open answered {got.brief()}"]
+                    return None
+                if base64.b64decode(str(opened.get("bytes_base64", ""))) != want:
+                    raise self._fail(step, LAYER_MESSAGE, f"{peer}'s {size} byte file opened with different bytes")
+                return "opened"
+            return None
+
+        if self._poll(self.d.receive_s, attempt) is None:
+            raise self._fail(
+                step, LAYER_MESSAGE,
+                f"{me} never opened {peer}'s {size} byte file within {self.d.receive_s:.0f}s ({seen[0] if seen else 'never listed'})",
+            )
+        return f"{size} bytes each way; {peer}'s opened and matched {self.clock.now() - started:.0f}s after mine went up"
+
     def timed_one_side(self, cid: str) -> str:
         """After the direct-link window: send, then time the peer's arrival from my send."""
         wait = (self.room_ready_at or self.clock.now()) + self.DIRECT_WINDOW_S - self.clock.now()
@@ -246,6 +308,107 @@ class PeerHalf(CrossChatStage):
         self.send(cid, self.text("timed", me, peer), "timed")
         took = self.read(cid, self.text("timed", peer, me), "timed")
         return f"{peer}->{me} opened {took:.1f}s after {me} sent (both send at room-ready + {self.DIRECT_WINDOW_S:.0f}s)"
+
+    def direct_round_trip(self, cid: str, ceiling_secs: float) -> str:
+        """Run once the link is punched: one round trip, timed by the requester.
+
+        The two runners' clocks can't be compared, so the requester sends, the
+        responder answers the moment it reads that, and the requester times the
+        round trip against twice the one-way ceiling. Each side reports its own legs,
+        so a slow total says which part to look at; the ceiling is on the total.
+
+        A warm-up exchange goes first and is not timed. The two runners reach this
+        step seconds apart, so a single timed ping measured how late the responder
+        started listening (8 s on run 42734460384), not the link. After the warm-up
+        both sides are already reading, and the timed exchange is the link's.
+        """
+        me, peer = self.me.name, self.peer.name
+        warm_ping, warm_pong = f"nat-peer direct warm ping {self.nonce}", f"nat-peer direct warm pong {self.nonce}"
+        ping, pong = f"nat-peer direct ping {self.nonce}", f"nat-peer direct pong {self.nonce}"
+        if self.role == ROLE_RESPONDER:
+            self.read(cid, warm_ping, "direct")
+            self.send(cid, warm_pong, "direct")
+            took = self.read(cid, ping, "direct")
+            answering = self.clock.now()
+            self.send(cid, pong, "direct")
+            return (
+                f"{me} answered {peer}'s timed ping {took:.1f}s after the warm-up reply; "
+                f"send call {self.clock.now() - answering:.2f}s"
+            )
+        self.send(cid, warm_ping, "direct")
+        self.read(cid, warm_pong, "direct")
+        started = self.clock.now()
+        self.send(cid, ping, "direct")
+        sent = self.clock.now()
+        self.read(cid, pong, "direct")
+        round_trip = self.clock.now() - started
+        detail = (
+            f"{me}->{peer}->{me} round trip {round_trip:.2f}s (ceiling {2 * ceiling_secs:.0f}s, after a warm-up): "
+            f"send call {sent - started:.2f}s, then {round_trip - (sent - started):.2f}s until the reply opened"
+        )
+        if round_trip > 2 * ceiling_secs:
+            raise self._fail("direct", LAYER_MESSAGE, detail)
+        return detail
+
+    def av_call(self, cid: str, seconds: int = AV_SECONDS, rate_hz: int = AV_RATE_HZ, frame_bytes: int = AV_FRAME_BYTES) -> str:
+        """A call in the pair room: one generated stream each way, then the stats edge kept.
+
+        Server 0.5.245's QA call routes (node runs with CIRIS_QA_CALLS=1). Both
+        sides join, wait until the call has a leg, stream for `seconds`, keep
+        listening for the drain, then leave. The peer's frames arriving here is
+        the pass; the rest (late, stale, leg kind) is recorded for edge in
+        `self.av_record`, whether or not the step passed.
+        """
+        me, peer, step = self.me.name, self.peer.name, "av"
+        started = self._call(self.me, "POST", "/v1/qa/call/start", {"room": cid, "relay": False})  # type: ignore[dict-item]
+        if not started.ok:
+            self.av_record = {"joined": started.brief()}
+            raise self._fail(step, LAYER_MESSAGE, f"{me} could not join the call: {started.brief()}")
+        joined_at = self.clock.now()
+        last: Dict[str, object] = {}
+
+        def stats() -> Dict[str, object]:
+            r = self._call(self.me, "GET", f"/v1/qa/call/stats?room={urllib.parse.quote(cid, safe='')}")
+            got = _payload(r.body) if r.ok else None
+            if isinstance(got, dict):
+                last.clear()
+                last.update(got)
+            return last
+
+        def has_leg(_: int) -> Optional[str]:
+            call = stats().get("call")
+            return "leg up" if isinstance(call, dict) and call.get("legs") else None
+
+        leg_wait = self._poll(AV_JOIN_S, has_leg)
+        # A leg's budget is its link's Channel limit less chunk overhead; over it, publish is refused.
+        budget = _dig(last, "call", "frame_budget_bytes")
+        if isinstance(budget, int) and budget > 0:
+            frame_bytes = max(16, min(frame_bytes, budget))
+        stream = self._call(
+            self.me, "POST", "/v1/qa/call/stream",
+            {"room": cid, "rate_hz": rate_hz, "frame_bytes": frame_bytes, "seconds": seconds},  # type: ignore[dict-item]
+        )
+        if not stream.ok:
+            self._call(self.me, "POST", "/v1/qa/call/stop", {"room": cid})
+            raise self._fail(step, LAYER_MESSAGE, f"{me} could not start its stream: {stream.brief()}")
+        self.clock.sleep(seconds + AV_DRAIN_S)
+        stats()
+        stop = self._call(self.me, "POST", "/v1/qa/call/stop", {"room": cid})
+        final = _payload(stop.body) if stop.ok else None
+        self.av_record = record = {
+            "joined": _payload(started.body),
+            "leg_up_s": None if leg_wait is None else round(self.clock.now() - joined_at - seconds - AV_DRAIN_S, 1),
+            "last_stats": dict(last),
+            "stop": final if isinstance(final, dict) else stop.brief(),
+            "asked": {"seconds": seconds, "rate_hz": rate_hz, "frame_bytes": frame_bytes, "frame_budget_bytes": budget},
+        }
+        # The stop body carries the stats at its top level, beside "room" and "summary".
+        body = final if isinstance(final, dict) else last
+        detail = av_summary(body if isinstance(body, dict) else {}, seconds * rate_hz)
+        received = _dig(body, "received", "frames")
+        if not isinstance(received, int) or received <= 0:
+            raise self._fail(step, LAYER_MESSAGE, f"{me} heard none of {peer}'s frames: {detail}")
+        return f"{peer}->{me}: {detail}"
 
     # -- the half --
 
@@ -276,6 +439,8 @@ class PeerHalf(CrossChatStage):
         for name, layer, fn2 in (
             ("messages", LAYER_MESSAGE, lambda: self.messages_one_side(cid)),
             ("reopen", LAYER_ROOM, lambda: self.reopen_one_side(cid)),
+            ("files:small", LAYER_MESSAGE, lambda: self.files_one_side(cid, "small")),
+            ("files:large", LAYER_MESSAGE, lambda: self.files_one_side(cid, "large")),
         ):
             if not self._step(name, layer, fn2).ok:
                 return self._finish_half(rep)
@@ -344,6 +509,37 @@ def _write(path: Optional[Path], obj: object) -> None:
         path.write_text(json.dumps(obj, indent=2, sort_keys=True, default=lambda o: asdict(o)))
 
 
+_FETCH_LOCK = threading.Lock()
+#: One under the node's 1 MiB inline cap, one over it, which the edge seals as a chunk DAG.
+FILE_SIZES = {"small": 64 * 1024, "large": 8 * 1024 * 1024}
+
+
+def _dig(obj: object, *keys: str) -> object:
+    for k in keys:
+        if not isinstance(obj, dict):
+            return None
+        obj = obj.get(k)
+    return obj
+
+
+def av_summary(stats: Dict[str, object], expected: int) -> str:
+    """One line edge reads: frames each way, delay, late/stale, and the leg each stream rode."""
+    streams = _dig(stats, "call", "streams")
+    legs = ", ".join(
+        f"{s.get('leg')}(parent_changes={s.get('parent_changes')})" for s in streams if isinstance(s, dict)
+    ) if isinstance(streams, list) else "no streams"
+    return (
+        f"sent {_dig(stats, 'sent', 'frames')} (refused {_dig(stats, 'sent', 'publish_refused')}"
+        f" last_error {_dig(stats, 'sent', 'last_publish_error')}, "
+        f"legs {_dig(stats, 'sent', 'legs')}); received {_dig(stats, 'received', 'frames')}/{expected} "
+        f"p50 {_dig(stats, 'received', 'delay_ms_p50')} p95 {_dig(stats, 'received', 'delay_ms_p95')} "
+        f"max {_dig(stats, 'received', 'delay_ms_max')} ms (incl. clock skew); "
+        f"expired_late {_dig(stats, 'call', 'reorder', 'expired_late')}, "
+        f"stale_dropped {_dig(stats, 'call', 'alm', 'stale_dropped')}; streams: {legs}; "
+        f"tier {_dig(stats, 'call', 'service_tier')}"
+    )
+
+
 def _gh(*args: str) -> str:
     return subprocess.run(["gh", *args], check=True, capture_output=True, text=True).stdout
 
@@ -370,8 +566,9 @@ def _push_request(ref: str, branch: str, request: Dict[str, object]) -> None:
     def git(*args: str, env: Optional[Dict[str, str]] = None, stdin: Optional[str] = None) -> str:
         return subprocess.run(["git", *args], check=True, capture_output=True, text=True, env=env, input=stdin).stdout.strip()
 
-    subprocess.run(["git", "fetch", "-q", "origin", ref], check=True)
-    base = git("rev-parse", "FETCH_HEAD")
+    with _FETCH_LOCK:  # FETCH_HEAD is one file, and pairs can start together.
+        subprocess.run(["git", "fetch", "-q", "origin", ref], check=True)
+        base = git("rev-parse", "FETCH_HEAD")
     blob = git("hash-object", "-w", "--stdin", stdin=json.dumps(request, indent=2) + "\n")
     with tempfile.TemporaryDirectory() as tmp:
         env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
@@ -446,6 +643,17 @@ def _drive_run(branch: str, nonce: str, local_specs: List[str], out: Path, usern
     return 0 if ok else 1
 
 
+def _wait_for_run(run_id: str, poll_s: float = 30.0) -> None:
+    """Until the run ends. `gh run watch` can return early, and the branch goes when this does."""
+    while True:
+        try:
+            if json.loads(_gh("run", "view", run_id, "-R", REPO, "--json", "status"))["status"] == "completed":
+                return
+        except subprocess.CalledProcessError:
+            pass  # a passing GitHub error is not the end of the run
+        time.sleep(poll_s)
+
+
 def pair(server_tag: str, ref: str, out: Path) -> int:
     """Both nodes in CI (cross-nat-pair.yml), each on its own runner; collect both sides."""
     nonce = secrets.token_hex(4)
@@ -461,8 +669,10 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
         if not run_id:
             print(f"[pair] no run started for {branch}")
             return 2
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "run-id.txt").write_text(run_id + "\n", encoding="utf-8")
         print(f"[pair] https://github.com/{REPO}/actions/runs/{run_id} (nonce {nonce}, server {server_tag or 'the pin'})", flush=True)
-        subprocess.run(["gh", "run", "watch", run_id, "-R", REPO, "--interval", "30"], capture_output=True)
+        _wait_for_run(run_id)
         out.mkdir(parents=True, exist_ok=True)
         ok = True
         for name in ("node-a", "node-b"):
@@ -475,6 +685,14 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
                 print(f"[pair] {h['me']}<->{h['peer']} ({h['role']}): {'PASS' if h.get('ok') else 'FAIL at ' + str(h.get('failed_step'))}")
                 for st in h.get("steps", []):
                     print(f"    {st['step']:28} {'ok' if st['ok'] else 'FAIL'} {st['elapsed_s']:5.0f}s {st['detail'][:150]}")
+            print(f"[pair] {name} time to contact: {contact_times(halves)}")
+            timed = out / name / "direct-timed.json"
+            if timed.exists():
+                print(f"[pair] {name} direct: {json.loads(timed.read_text()).get('detail', '')}")
+            av = out / name / "av.json"
+            if av.exists():
+                got = json.loads(av.read_text())
+                print(f"[pair] {name} av: {'ok' if got.get('ok') else 'FAIL'} {got.get('detail', '')[:400]}")
             gate = out / name / "trace-gate.log"
             tail = gate.read_text().strip().splitlines()[-1:] if gate.exists() else ["no trace-gate log"]
             print(f"[pair] {name} trace gate: {tail[0][:200]}")
@@ -483,6 +701,26 @@ def pair(server_tag: str, ref: str, out: Path) -> int:
         return 0 if ok and conclusion == "success" else 1
     finally:
         subprocess.run(["git", "push", "-q", "origin", "--delete", branch], capture_output=True)
+
+
+def contact_times(halves: Sequence[dict]) -> str:
+    """Seconds each contact step took, measured against the 30 s target for a relayed add."""
+    parts = []
+    for half in halves:
+        for st in half.get("steps", []):
+            if st["step"].split(":")[0] in ("add", "request", "mutual"):
+                parts.append(f"{st['step']} {st['elapsed_s']:.0f}s{'' if st['ok'] else ' FAILED'}")
+    return ", ".join(parts) or "no contact steps recorded"
+
+
+def pair_repeated(server_tag: str, ref: str, out: Path, repeat: int, parallel: int = 1) -> int:
+    """One sample can't give a rate: run every pair, and fail if any of them did."""
+    if repeat <= 1:
+        return pair(server_tag, ref, out)
+    with ThreadPoolExecutor(max_workers=max(parallel, 1)) as pool:
+        codes = list(pool.map(lambda n: pair(server_tag, ref, out / f"run-{n}"), range(1, repeat + 1)))
+    print(f"[pair] {codes.count(0)} of {repeat} passed: {codes}")
+    return 0 if not any(codes) else 1
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -500,14 +738,32 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     h.add_argument("--nonce", required=True)
     h.add_argument("--out", type=Path, default=None)
     h.add_argument("--summary", type=Path, default=None)
+    t = sub.add_parser("direct-timed", help="one timed round trip after the link went direct")
+    t.add_argument("--node", required=True)
+    t.add_argument("--role", choices=[ROLE_REQUESTER, ROLE_RESPONDER], required=True)
+    t.add_argument("--peers", type=Path, required=True)
+    t.add_argument("--nonce", required=True)
+    t.add_argument("--result", type=Path, required=True, help="this node's half result, for the room id")
+    t.add_argument("--ceiling-secs", type=float, default=2.0, help="one-way ceiling")
+    t.add_argument("--out", type=Path, default=None)
+    v = sub.add_parser("av", help="a 60 s call in the pair room, one stream each way (needs CIRIS_QA_CALLS=1)")
+    v.add_argument("--node", required=True)
+    v.add_argument("--role", choices=[ROLE_REQUESTER, ROLE_RESPONDER], required=True)
+    v.add_argument("--peers", type=Path, required=True)
+    v.add_argument("--nonce", required=True)
+    v.add_argument("--result", type=Path, required=True, help="this node's half result, for the room id")
+    v.add_argument("--seconds", type=int, default=AV_SECONDS)
+    v.add_argument("--out", type=Path, default=None)
     d = sub.add_parser("drive", help="dispatch node-c in CI and run the local halves against it")
     d.add_argument("--node", action="append", required=True)
     d.add_argument("--server-tag", default="")
-    d.add_argument("--ref", default="fix/qa-harness-announce")
+    d.add_argument("--ref", default="main")
     d.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-peer-{int(time.time())}")
     pr = sub.add_parser("pair", help="both nodes in CI, each on its own runner (cross-nat-pair.yml)")
     pr.add_argument("--server-tag", default="")
-    pr.add_argument("--ref", default="fix/qa-harness-announce")
+    pr.add_argument("--ref", default="main")
+    pr.add_argument("--repeat", type=int, default=1, help="run the pair this many times")
+    pr.add_argument("--parallel", type=int, default=1, help="how many of them run at once")
     pr.add_argument("--out", type=Path, default=Path(tempfile.gettempdir()) / f"nat-pair-{int(time.time())}")
     args = ap.parse_args(argv)
 
@@ -516,6 +772,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         _write(args.out, contact)
         print(json.dumps(asdict(contact)))
         return 0
+    if args.cmd == "direct-timed":
+        peer = PeerContact(**json.loads(args.peers.read_text())[0])
+        me = _node(args.node, args.username, args.password)
+        half = PeerHalf(me, peer, args.role, args.nonce, deadlines=Deadlines(poll_s=0.2, send_s=30.0, receive_s=300.0))
+        half._login(me)
+        cid = str(json.loads(args.result.read_text())[0]["community_id"])
+        step = half._step("direct", LAYER_MESSAGE, lambda: half.direct_round_trip(cid, args.ceiling_secs))
+        _write(args.out, asdict(step))
+        return 0 if step.ok else 1
+    if args.cmd == "av":
+        peer = PeerContact(**json.loads(args.peers.read_text())[0])
+        me = _node(args.node, args.username, args.password)
+        half = PeerHalf(me, peer, args.role, args.nonce, deadlines=Deadlines(poll_s=2.0, send_s=30.0, receive_s=300.0))
+        half._login(me)
+        cid = str(json.loads(args.result.read_text())[0]["community_id"])
+        step = half._step("av", LAYER_MESSAGE, lambda: half.av_call(cid, seconds=args.seconds))
+        _write(args.out, {**asdict(step), "record": half.av_record})
+        return 0 if step.ok else 1
     if args.cmd == "half":
         peers = [PeerContact(**p) for p in json.loads(args.peers.read_text())]
         reports = run_halves(args.node, peers, args.role, args.nonce, args.username, args.password)
@@ -532,7 +806,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 fh.write("\n".join(lines) + "\n")
         return 0 if reports and all(r.ok for r in reports) else 1
     if args.cmd == "pair":
-        return pair(args.server_tag, args.ref, args.out)
+        return pair_repeated(args.server_tag, args.ref, args.out, args.repeat, args.parallel)
     return drive(args.node, args.server_tag, args.ref, args.out, args.username, args.password)
 
 

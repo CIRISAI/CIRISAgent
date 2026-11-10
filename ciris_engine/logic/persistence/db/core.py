@@ -789,3 +789,10 @@ def _bootstrap_persist_engine(db_path: Optional[str]) -> None:
     from ciris_engine.logic.persistence.models import graph as graph_persistence
 
     graph_persistence.set_persist_engine(engine, dsn)
+
+    # Before anything decides: the accord manifest's hybrid signature (A1),
+    # which needs the engine to verify ML-DSA-65. Raises and stops startup on
+    # a signature that fails; returns quietly while none ships yet.
+    from ciris_engine.logic.utils.accord_manifest_hybrid import verify_accord_manifest_hybrid
+
+    verify_accord_manifest_hybrid(engine)

@@ -495,7 +495,7 @@ Cada instancia procesa solo sus propias tareas pero contribuye a memoria compart
 - `POST /v1/billing/purchase/initiate` — Iniciación de pago
 
 ### Emergencia
-- `POST /emergency/shutdown` — Apagado de emergencia (firma Ed25519 requerida)
+- `POST /emergency/shutdown` — Apagado de emergencia (firma Ed25519 + ML-DSA-65 requerida)
 
 ---
 
@@ -514,7 +514,7 @@ Proporciona conectores de base de datos configurables en tiempo de ejecución pa
 
 **9 Herramientas SQL**: initialize_sql_connector, get_sql_service_metadata, sql_find_user_data, sql_export_user, sql_delete_user, sql_anonymize_user, sql_verify_deletion, sql_get_stats, sql_query
 
-Dialectos soportados: SQLite, PostgreSQL, MySQL. La verificación de eliminación produce pruebas criptográficas firmadas con Ed25519.
+Dialectos soportados: SQLite, PostgreSQL, MySQL. La verificación de eliminación produce pruebas criptográficas firmadas con Ed25519 + ML-DSA-65.
 
 ---
 
@@ -524,7 +524,7 @@ Cada agente CIRIS se crea a través de un proceso formal:
 
 1. **Propuesta**: Creador proporciona nombre, propósito, justificación, consideraciones éticas
 2. **Selección de Plantilla**: De plantillas disponibles (scout, sage, datum, echo, etc.)
-3. **Revisión de Autoridad Sabia**: Firma Ed25519 requerida
+3. **Revisión de Autoridad Sabia**: Firma Ed25519 + ML-DSA-65 requerida
 4. **Creación**: Raíz de identidad en base de datos de grafo, registro de linaje inmutable, configuración de tiempo de ejecución
 5. **Activación**: Agente inicia con conocimiento completo de su contexto de creación
 
@@ -534,7 +534,7 @@ Cada agente tiene conocimiento inmutable de: declaración de intención del crea
 
 ## Seguridad
 
-- **Firmas Ed25519**: Autenticación, firma de auditoría, apagado de emergencia
+- **Firmas Ed25519 + ML-DSA-65**: Autenticación, firma de auditoría, apagado de emergencia
 - **Tokens JWT**: Expiración de 24 horas (configurable)
 - **Tokens de servicio**: Formato `Bearer service:TOKEN_VALUE` para comunicación sistema-a-sistema
 - **Tokens OAuth**: Actualización automática con bloqueo

@@ -40,6 +40,16 @@ class AttestationGateOutcome(str, Enum):
         return self is not AttestationGateOutcome.READY
 
 
+class TrustRootSource(BaseModel):
+    """One trust-root host's result in an attestation (CIRISVerify 21+, CC 5.3.4)."""
+
+    endpoint: str = Field(..., description="The host's base URL")
+    reachable: bool = Field(default=False, description="Did the host answer?")
+    verified: bool = Field(default=False, description="Did it serve a GenesisBundle that verifies?")
+    bundle_fingerprint: Optional[str] = Field(default=None, description="sha256:<hex> of the verified bundle")
+    error: Optional[str] = Field(default=None, description="Failure message, if any")
+
+
 class AttestationResult(BaseModel):
     """Result of a full attestation check.
 
@@ -201,7 +211,10 @@ class AttestationResult(BaseModel):
     )
 
     # v0.8.5: Registry sources agreement and attestation proof
-    sources_agreeing: int = Field(default=0, description="Number of registry sources that agree (0-3)")
+    sources_agreeing: int = Field(default=0, description="Trust-root hosts that verified the selected root")
+    sources: List[TrustRootSource] = Field(
+        default_factory=list, description="Every trust-root host checked; empty before CIRISVerify 21"
+    )
     attestation_proof: Optional[Dict[str, Any]] = Field(
         default=None, description="Full attestation proof from CIRISVerify"
     )

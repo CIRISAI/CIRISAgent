@@ -3827,7 +3827,92 @@
     "add_device_stopped_retrying": "已停止尝试。没有任何请求到达您的其他设备。",
     "add_device_withdraw_here": "停止等待，并丢弃此请求的密钥以及已收到的批准。",
     "add_device_withdraw_other": "该设备会被告知放弃此请求；如果它已批准，则撤销其批准。如果无法联系到它，该请求将在 15 分钟后在那里过期。",
-    "add_device_withdraw_held": "不会有任何设备加入。您可以重新选择，或发送新请求。"
+    "add_device_withdraw_held": "不会有任何设备加入。您可以重新选择，或发送新请求。",
+    "my_devices_claim": "认领设备",
+    "chat_unopened_withheld_by_moderation": "此房间的管理员标记了此消息，因此在您选择查看之前，它将保持隐藏。",
+    "chat_attach": "附加",
+    "chat_attached": "已附加：{name}",
+    "chat_attachment_remove": "移除",
+    "chat_attachment_open": "打开附加文件",
+    "files_withheld": "已被管理员隐藏",
+    "files_act_revealed": "现在您可以查看它了。",
+    "files_pick_hint": "选择一个文件进行附加，或先添加一个文件。",
+    "moderation_reveal": "显示",
+    "moderation_reveal_title": "要查看此项内容吗？",
+    "moderation_reveal_fact_flag": "标记为",
+    "moderation_reveal_fact_effect": "将发生的变化",
+    "moderation_reveal_effect": "它会在您自己的设备上为您打开。不会因此让其他任何人看到它。",
+    "moderation_reveal_fact_signer": "签名者",
+    "moderation_reveal_signer": "您自己的密钥，作为您同意查看此单项内容的凭证",
+    "moderation_note_flagged": "管理员将此标记为{flag}。",
+    "moderation_note_revealed": "管理员将此标记为{flag}。您选择了查看它。",
+    "moderation_note_cleared": "管理员对此的标记已被清除。",
+    "moderation_appeal_filed": "申诉正在等待裁决。",
+    "moderation_appeal_upheld": "该标记在申诉中被维持。",
+    "moderation_appeal_partial": "该标记在申诉中被部分维持。",
+    "moderation_appeal_reversed": "该标记在申诉中被撤销。",
+    "local_community_body": "本地社区基于地理位置：即您附近的人。仅当您选择共享位置并且当前正在共享时，此功能才适用。",
+    "local_community_not_on_this_node": "此节点尚无法共享您的位置，因此本地房间目前不与地点绑定，由您选择谁可以加入。您的位置信息未被共享。",
+    "setup_template_ally": "Ally，个人助手。对于个人安装而言，这是正确的选择。",
+    "setup_template_chosen": "从 {name} 模板开始。",
+    "setup_template_provisioned": "{name}，由您所属组织的 Portal 记录设置。",
+    "community_section_title_local": "您的本地房间",
+    "community_section_body_local": "面向您附近的人的本地房间。目前，房间仅在创建它的设备上显示为本地。其他成员会在“社区”下看到它。",
+    "community_empty_local": "您还没有任何本地房间。创建一个房间，并邀请您附近的人。",
+    "community_create_open_local": "创建本地房间",
+    "community_create_title_local": "创建本地房间",
+    "server_local_desc": "管理在此设备上运行的节点。",
+    "server_remote_desc": "连接到在其他地方运行的节点。",
+    "server_url_label": "节点地址",
+    "server_current": "当前",
+    "add_device_no_session": "此设备已加入您的 CIRIS ID，但未能完成登录。请重新设置此设备，然后在您的另一台设备上批准它。",
+    "chat_call": "通话",
+    "call_title": "通话",
+    "call_choose": "您想如何呼叫？",
+    "call_voice": "语音通话",
+    "call_video": "视频通话",
+    "call_asking_microphone": "请允许使用麦克风，以便此房间内的其他人能听到您。",
+    "call_asking_camera": "请允许使用摄像头，以便此房间内的其他人能看到您。",
+    "call_microphone_denied": "通话需要使用麦克风。请在设备设置中为 CIRIS 开启麦克风权限，然后重试。",
+    "call_try_again": "重试",
+    "call_ready_voice": "您的麦克风已就绪。",
+    "call_ready_video": "您的麦克风和摄像头已就绪。",
+    "call_audio_only": "摄像头已关闭，此次通话将为语音通话。",
+    "call_not_connecting": "此应用目前还无法建立通话连接。",
+    "call_unavailable_platform": "此设备暂不支持通话功能。",
+    "call_unavailable_no_device": "此设备没有麦克风，因此无法拨打通话。",
+    "call_not_saved": "未保存",
+    "call_save": "保存我在此次通话中的内容",
+    "call_save_unavailable": "保存通话功能尚未就绪。",
+    "trust_hosts_verified": "{checked} 个信任根主机中有 {verified} 个已验证",
+    "trust_hosts_unreachable": "{count} 个信任根主机无法被联系到。这并不是失败：它们可能处于离线状态，或被本网络屏蔽。",
+    "trust_hosts_disagree": "两个信任根主机给出了不同的答案，因此未选定任何信任根。在它们达成一致之前，本节点将受到限制。",
+    "trust_host_verified": "已验证",
+    "trust_host_unreachable": "无法联系",
+    "trust_host_not_verified": "已联系，未验证",
+    "wa_update_not_allowed": "只有管理员或智慧权威才能裁定一项等待中的提案。此账户无法执行此操作。",
+    "wa_update_changed": "有人在您之前就已经对此提案做出了裁定，因此未发生任何更改。列表现在显示的是其当前状态。",
+    "wa_update_failed": "智能体未接受该更改。请重试。",
+    "trace_consent_unanswered_note": "您可以暂不回答此问题。在您同意之前，不会发送任何内容，您也可以稍后再回答。",
+    "files_uploading_progress": "正在添加 {name}：{sent} / {total}",
+    "files_add_cancel": "停止",
+    "remote_node_view": "查看",
+    "remote_node_title": "您的节点",
+    "remote_node_snapshot_at": "读取于 {time}。这是一个快照：刷新以再次读取。",
+    "remote_node_metrics": "网络",
+    "remote_node_logs": "最近的日志",
+    "remote_node_refresh": "刷新",
+    "remote_node_unreachable": "目前无法连接到该节点。它可能已关机或不在范围内。",
+    "remote_node_timeout": "该节点未能及时应答。请稍后重试。",
+    "remote_node_send_failed": "请求无法发送到该节点。请重试。",
+    "remote_node_no_transport": "此节点无法连接到您的其他节点。请检查其网络设置。",
+    "remote_node_needs_update": "该节点需要先更新才能显示此内容。",
+    "remote_node_not_owner": "该节点未接受此请求。只有其所有者的设备才能读取该请求。",
+    "remote_node_failed": "该节点的应答无法读取。",
+    "add_device_contact_hint_2": "在您的其他设备上，打开“分享我的 ID”。扫描其二维码，或在此处粘贴长格式或短格式。当您的其他设备已被公告时，仅凭您的联邦 ID 也同样有效。",
+    "contacts_reach_sent": "已发送：正在等待对方应答",
+    "contacts_reach_waiting": "正在等待联系到对方",
+    "contacts_stale_since": "自 {date} 起未收到对方消息"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4779,12 @@
       "community_chats": "聊天室",
       "affiliations_chats": "聊天室",
       "node_self": "自身状态",
-      "owned_agents": "您拥有的智能体"
+      "owned_agents": "您拥有的智能体",
+      "my_devices": "我的设备",
+      "layer_communities": "社区",
+      "layer_affiliations": "隶属关系",
+      "local_chats": "本地房间",
+      "local_roster": "本地成员"
     },
     "circle": {
       "agent": "仅我本人",
@@ -4745,7 +4835,8 @@
       "files_agent": "这里还没有内容。一切都从这里开始，且这里的内容不会被公开。",
       "decisions_agent": "这里没有可以共同决策的人。决策从“家族”开始。",
       "decisions_family": "家族通过交谈做出决策。这里没有需要投票的事项。",
-      "chats_agent": "此节点上没有智能体，因此这里没有可以交流的对象。设置一个后，您与它的对话记录将显示在这里。"
+      "chats_agent": "此节点上没有智能体，因此这里没有可以交流的对象。设置一个后，您与它的对话记录将显示在这里。",
+      "files_local": "文件保存在各个房间中。打开一个本地房间以查看其文件。"
     },
     "my_things": "我的内容",
     "stop_everything": "停止一切",
@@ -5216,7 +5307,8 @@
     "voting": {
       "description": "完整的投票平面：M-of-N 一致性阈值在链上验证，法定人数超时排序在基层。Commons 的异议投票已提供 — 这是作为一级、可验证原语的投票。",
       "title": "投票"
-    }
+    },
+    "announce_costs": "如果您不进行通告，在当前版本中将没有人能够通过网格联系到您：您的联系码可以标识您，但尚未携带联系您设备的方式。您无法参与公开群组。私密房间要求双方都已完成通告。"
   },
   "mesh_config": {
     "consumption": {
@@ -5398,7 +5490,11 @@
       "error": "无法提出此事：{detail}。未提交任何内容。",
       "not_on_this_node": "本节点尚不能接受社区提议：它没有 /v1/safety/reports 路由（需要 CIRISServer#665）。未提交任何内容。如果您持有管理职责，请改在“安全 > 管理”下提交。",
       "refused_minor": "您在本节点上的年龄记录显示为未成年人，因此此事需通过您的监护人提出，而非直接提出。未提交任何内容；请让您的监护人代为提出。"
-    }
+    },
+    "item_not_in_room": "那不是此房间中的消息或文件",
+    "not_flagged": "此房间的管理员未标记该项内容 — 没有可显示的内容",
+    "reveal_failed": "无法记录查看同意，因此该项内容仍保持隐藏。",
+    "unknown_action": "房间中的项目可通过 reveal 来显示"
   },
   "operator": {
     "carriage": {
@@ -5759,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "未在浏览器中完成登录，因此未做任何更改。请重试，或改用本地账户。",
-      "waiting": "请在浏览器中完成 Google 登录，然后返回此处。"
+      "waiting": "请在浏览器中完成 Google 登录，然后返回此处。",
+      "no_browser": "无法打开浏览器。要登录，请在浏览器中打开以下地址：{url}",
+      "never_arrived": "您的浏览器未能打开登录页面，因此未做任何更改。请检查是否已打开浏览器窗口，然后重试。"
     },
     "claim": {
       "not_armed": "此节点未进入首次运行认领状态（没有一次性 PIN）——所有权可能已被认领",
@@ -5798,7 +5896,8 @@
       "provider_unavailable": "此节点无法通过该提供方为你登录——当前版本未配置这种登录方式。请改用用户名和密码登录。",
       "state_invalid": "OAuth state 无效或已过期",
       "store_unavailable": "节点无法读取其身份存储，因此无法完成登录。这是节点的问题，与您的账户无关。",
-      "unsafe_redirect": "不安全的 redirect_uri"
+      "unsafe_redirect": "不安全的 redirect_uri",
+      "flow_unknown": "您的浏览器未能打开登录页面，因此未做任何更改。请重试。"
     },
     "oauth_link": {
       "already_has_identity": "该账号已关联登录身份。如需替换，请先移除现有身份。",
@@ -5890,7 +5989,8 @@
     "message_not_live": "此消息已被撤回或撤销",
     "not_author": "只有撰写该消息的人才能取代、撤回或撤销它",
     "reason_invalid": "该原因代码不适用于此修订",
-    "unknown_revision_op": "消息的修订方式为取代、撤回或撤销"
+    "unknown_revision_op": "消息的修订方式为取代、撤回或撤销",
+    "attachment_not_in_room": "该文件不在此房间中。请先将其分享到房间中，然后再发送。"
   },
   "contacts": {
     "awaiting_consent": "对方尚未接受。这一步取决于对方，因此重试不会改变任何结果。",
@@ -6020,7 +6120,9 @@
     "too_large_for_whole_read": "此文件过大，无法整块读取，必须以流式方式读取。",
     "withdraw_failed": "文件撤回失败。请重试。",
     "withdrawn": "其作者已撤回此文件。这些字节已不再在任何地方提供。",
-    "awaiting_key": "其字节已在此，但本设备用于解密它们的密钥尚未到达。它会自行送达；请稍后重试。"
+    "awaiting_key": "其字节已在此，但本设备用于解密它们的密钥尚未到达。它会自行送达；请稍后重试。",
+    "withheld_by_moderation": "此房间的管理员标记了此文件，因此在您选择查看之前，它将保持隐藏。",
+    "flagged_by_moderation": "此房间的管理员标记了此文件；在标记有效期间，它仍保留在房间中"
   },
   "notes": {
     "author_signer_unavailable": "此节点当前无法以您的身份签名，因此笔记未能写入。",
@@ -6311,7 +6413,8 @@
     "rng": "没有可用于该质询的随机数",
     "unexpected": "您的另一台设备返回了意外的应答",
     "unknown_identity": "找不到该身份",
-    "unreachable": "无法连接到您的另一台设备"
+    "unreachable": "无法连接到您的另一台设备",
+    "node_proof": "此设备无法证明自己是哪个节点"
   },
   "sign_owner_binding": {
     "bad_request": "该所有者绑定请求无法被读取。",

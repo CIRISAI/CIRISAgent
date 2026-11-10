@@ -335,49 +335,18 @@ class TestTaskSigning:
         return observer
 
     @pytest.mark.asyncio
-    async def test_task_signing_success(self, observer_with_auth, mock_auth_service):
-        """Test successful task signing with WA certificate."""
-        # Create a mock task
-        mock_task = Mock()
-        mock_task.task_id = "task_to_sign_123"
+    async def test_observer_tasks_are_not_wa_signed(self, observer_with_auth, mock_auth_service):
+        """The single-key observer-WA signing is retired: even with an auth
+        service and a WA id present, the task is added unsigned."""
+        from ciris_engine.schemas.runtime.models import Task
 
-        # Patch persistence.add_task
+        mock_task = Mock(spec=Task)
+        mock_task.task_id = "task_not_signed_123"
+
         with patch("ciris_engine.logic.persistence.add_task") as mock_add_task:
             await observer_with_auth._sign_and_add_task(mock_task)
 
-        # Verify auth service was called
-        mock_auth_service.sign_task.assert_called_once_with(mock_task, "observer_wa_001")
-
-        # Verify task was signed
-        assert mock_task.signed_by == "observer_wa_001"
-        assert mock_task.signature == "signature_abc123"
-        assert mock_task.signed_at == "2025-01-01T12:00:00"
-
-        # Verify task was added to persistence
-        mock_add_task.assert_called_once_with(mock_task)
-
-    @pytest.mark.asyncio
-    async def test_task_signing_failure_continues(self, observer_with_auth, mock_auth_service):
-        """Test that task signing failure doesn't prevent task addition."""
-        # Create a mock task
-        mock_task = Mock()
-        mock_task.task_id = "task_fail_sign_456"
-
-        # Make auth service raise exception
-        mock_auth_service.sign_task.side_effect = RuntimeError("Certificate expired")
-
-        # Patch persistence.add_task
-        with patch("ciris_engine.logic.persistence.add_task") as mock_add_task:
-            await observer_with_auth._sign_and_add_task(mock_task)
-
-        # Verify auth service was called
-        mock_auth_service.sign_task.assert_called_once_with(mock_task, "observer_wa_001")
-
-        # Verify task was NOT signed (attributes not set)
-        assert not hasattr(mock_task, "signed_by") or mock_task.signed_by != "observer_wa_001"
-        assert not hasattr(mock_task, "signature") or mock_task.signature != "signature_abc123"
-
-        # Verify task was still added to persistence despite signing failure
+        mock_auth_service.sign_task.assert_not_called()
         mock_add_task.assert_called_once_with(mock_task)
 
     @pytest.mark.asyncio

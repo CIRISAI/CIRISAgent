@@ -3978,7 +3978,92 @@
     "add_device_stopped_retrying": "Berhenti mencoba. Tidak ada permintaan yang sampai ke perangkat lain Anda.",
     "add_device_withdraw_here": "Menghentikan penantian, dan membuang kunci permintaan ini beserta persetujuan apa pun yang sudah diterima.",
     "add_device_withdraw_other": "Perangkat tersebut diberi tahu untuk mengabaikan permintaan ini, atau membatalkan persetujuannya jika sudah diberikan. Jika tidak dapat dijangkau, permintaan akan kedaluwarsa di sana setelah 15 menit.",
-    "add_device_withdraw_held": "Tidak ada yang bergabung. Anda dapat memilih lagi, atau mengirim permintaan baru."
+    "add_device_withdraw_held": "Tidak ada yang bergabung. Anda dapat memilih lagi, atau mengirim permintaan baru.",
+    "my_devices_claim": "Klaim perangkat",
+    "chat_unopened_withheld_by_moderation": "Seorang moderator ruang ini menandai pesan ini, sehingga tetap tersembunyi sampai Anda memilih untuk melihatnya.",
+    "chat_attach": "Lampirkan",
+    "chat_attached": "Terlampir: {name}",
+    "chat_attachment_remove": "Hapus",
+    "chat_attachment_open": "Buka berkas lampiran",
+    "files_withheld": "Ditahan oleh moderator",
+    "files_act_revealed": "Sekarang terbuka untuk Anda.",
+    "files_pick_hint": "Pilih berkas untuk dilampirkan, atau tambahkan satu terlebih dahulu.",
+    "moderation_reveal": "Tampilkan",
+    "moderation_reveal_title": "Lihat item ini?",
+    "moderation_reveal_fact_flag": "Ditandai sebagai",
+    "moderation_reveal_fact_effect": "Apa yang berubah",
+    "moderation_reveal_effect": "Ini terbuka untuk Anda, di perangkat Anda sendiri. Tidak ada orang lain yang melihatnya karena ini.",
+    "moderation_reveal_fact_signer": "Ditandatangani oleh",
+    "moderation_reveal_signer": "Kunci Anda sendiri, sebagai persetujuan Anda untuk melihat item ini",
+    "moderation_note_flagged": "Seorang moderator menandai ini sebagai {flag}.",
+    "moderation_note_revealed": "Seorang moderator menandai ini sebagai {flag}. Anda memilih untuk melihatnya.",
+    "moderation_note_cleared": "Tanda moderator pada ini telah dihapus.",
+    "moderation_appeal_filed": "Sebuah banding sedang menunggu putusan.",
+    "moderation_appeal_upheld": "Tanda tersebut dipertahankan dalam banding.",
+    "moderation_appeal_partial": "Tanda tersebut sebagian dipertahankan dalam banding.",
+    "moderation_appeal_reversed": "Tanda tersebut dibatalkan dalam banding.",
+    "local_community_body": "Komunitas lokal bersifat geografis: orang-orang di dekat Anda. Ini hanya berlaku jika Anda memilih untuk membagikan lokasi dan sedang membagikannya sekarang.",
+    "local_community_not_on_this_node": "Node ini belum dapat membagikan lokasi Anda, sehingga ruang lokal belum terikat pada suatu tempat untuk saat ini dan Anda yang memilih siapa yang bergabung. Lokasi Anda tidak sedang dibagikan.",
+    "setup_template_ally": "Ally, asisten pribadi. Ini adalah pilihan yang tepat untuk instalasi pribadi.",
+    "setup_template_chosen": "Memulai dari template {name}.",
+    "setup_template_provisioned": "{name}, ditetapkan oleh catatan Portal organisasi Anda.",
+    "community_section_title_local": "Ruang lokal Anda",
+    "community_section_body_local": "Ruang untuk orang-orang di dekat Anda. Untuk saat ini, sebuah ruang tampil sebagai lokal hanya pada perangkat yang mendirikannya. Anggota lain melihatnya di bawah Komunitas.",
+    "community_empty_local": "Anda belum memiliki ruang lokal. Dirikan satu dan undang orang-orang di dekat Anda.",
+    "community_create_open_local": "Dirikan Ruang Lokal",
+    "community_create_title_local": "Dirikan Ruang Lokal",
+    "server_local_desc": "Kelola node yang berjalan di perangkat ini.",
+    "server_remote_desc": "Hubungkan ke node yang berjalan di tempat lain.",
+    "server_url_label": "Alamat node",
+    "server_current": "Saat Ini",
+    "add_device_no_session": "Perangkat ini telah bergabung dengan CIRIS ID Anda, tetapi tidak dapat menyelesaikan proses masuk. Siapkan perangkat ini lagi, lalu setujui dari perangkat lain Anda.",
+    "chat_call": "Telepon",
+    "call_title": "Panggilan",
+    "call_choose": "Bagaimana Anda ingin menelepon?",
+    "call_voice": "Panggilan suara",
+    "call_video": "Panggilan video",
+    "call_asking_microphone": "Izinkan mikrofon agar orang-orang di ruang ini dapat mendengar Anda.",
+    "call_asking_camera": "Izinkan kamera agar orang-orang di ruang ini dapat melihat Anda.",
+    "call_microphone_denied": "Panggilan membutuhkan mikrofon. Aktifkan mikrofon untuk CIRIS di pengaturan perangkat Anda, lalu coba lagi.",
+    "call_try_again": "Coba lagi",
+    "call_ready_voice": "Mikrofon Anda sudah siap.",
+    "call_ready_video": "Mikrofon dan kamera Anda sudah siap.",
+    "call_audio_only": "Kamera sedang mati, sehingga ini akan menjadi panggilan suara.",
+    "call_not_connecting": "Panggilan belum dapat tersambung dari aplikasi ini.",
+    "call_unavailable_platform": "Panggilan belum tersedia di perangkat ini.",
+    "call_unavailable_no_device": "Perangkat ini tidak memiliki mikrofon, sehingga tidak dapat melakukan panggilan.",
+    "call_not_saved": "Tidak disimpan",
+    "call_save": "Simpan sisi saya dari panggilan ini",
+    "call_save_unavailable": "Menyimpan panggilan belum tersedia.",
+    "trust_hosts_verified": "{verified} dari {checked} host akar kepercayaan terverifikasi",
+    "trust_hosts_unreachable": "{count} host akar kepercayaan tidak dapat dijangkau. Itu bukan kegagalan: host tersebut mungkin sedang tidak aktif atau diblokir dari jaringan ini.",
+    "trust_hosts_disagree": "Dua host akar kepercayaan memberikan jawaban yang berbeda, sehingga tidak ada akar kepercayaan yang dipilih. Node ini dibatasi hingga keduanya sepakat.",
+    "trust_host_verified": "Terverifikasi",
+    "trust_host_unreachable": "Tidak dapat dijangkau",
+    "trust_host_not_verified": "Terjangkau, belum terverifikasi",
+    "wa_update_not_allowed": "Hanya admin atau Otoritas Bijak yang dapat memutuskan proposal yang sedang menunggu. Akun ini tidak bisa.",
+    "wa_update_changed": "Seseorang telah memutuskan proposal ini sebelum Anda, sehingga tidak ada yang berubah. Daftar ini sekarang menampilkan statusnya.",
+    "wa_update_failed": "Agen tidak menerima perubahan tersebut. Coba lagi.",
+    "trace_consent_unanswered_note": "Anda boleh membiarkan ini tanpa jawaban. Tidak ada yang akan dikirim sampai Anda mengatakan ya, dan Anda dapat menjawabnya nanti.",
+    "files_uploading_progress": "Menambahkan {name}: {sent} dari {total}",
+    "files_add_cancel": "Hentikan",
+    "remote_node_view": "Lihat",
+    "remote_node_title": "Node Anda",
+    "remote_node_snapshot_at": "Dibaca pada {time}. Ini adalah snapshot: segarkan untuk membacanya lagi.",
+    "remote_node_metrics": "Jaringan",
+    "remote_node_logs": "Log terbaru",
+    "remote_node_refresh": "Segarkan",
+    "remote_node_unreachable": "Node tersebut tidak dapat dijangkau saat ini. Node mungkin sedang nonaktif atau di luar jangkauan.",
+    "remote_node_timeout": "Node tersebut tidak menjawab tepat waktu. Coba lagi sesaat lagi.",
+    "remote_node_send_failed": "Permintaan tidak dapat dikirim ke node tersebut. Coba lagi.",
+    "remote_node_no_transport": "Node ini tidak dapat menjangkau node Anda yang lain. Periksa pengaturan jaringannya.",
+    "remote_node_needs_update": "Node tersebut perlu diperbarui sebelum dapat menampilkan ini.",
+    "remote_node_not_owner": "Node tersebut tidak menerima permintaan ini. Hanya perangkat pemiliknya yang dapat membacanya.",
+    "remote_node_failed": "Jawaban node tersebut tidak dapat dibaca.",
+    "add_device_contact_hint_2": "Pada perangkat lain Anda, buka Bagikan ID Saya. Pindai kode QR-nya, atau tempel bentuk panjang atau pendeknya di sini. ID federasi Anda saja juga berfungsi ketika perangkat lain Anda telah diumumkan.",
+    "contacts_reach_sent": "Terkirim: menunggu mereka merespons",
+    "contacts_reach_waiting": "Menunggu untuk menjangkau mereka",
+    "contacts_stale_since": "Tidak ada kabar sejak {date}"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -4694,7 +4779,12 @@
       "community_chats": "Ruangan",
       "affiliations_chats": "Ruangan",
       "node_self": "Status Sendiri",
-      "owned_agents": "Agen milik Anda"
+      "owned_agents": "Agen milik Anda",
+      "my_devices": "Perangkat saya",
+      "layer_communities": "Komunitas",
+      "layer_affiliations": "Afiliasi",
+      "local_chats": "Ruang lokal",
+      "local_roster": "Anggota lokal"
     },
     "circle": {
       "agent": "Hanya saya",
@@ -4745,7 +4835,8 @@
       "files_agent": "Belum ada apa pun di sini. Di sinilah semuanya dimulai, dan tidak ada yang diumumkan ke luar.",
       "decisions_agent": "Tidak ada siapa pun di sini untuk memutuskan bersama. Keputusan dimulai di Keluarga.",
       "decisions_family": "Keluarga memutuskan dengan berbicara. Tidak ada yang perlu dipungut suara di sini.",
-      "chats_agent": "Tidak ada agen di node ini, sehingga tidak ada siapa pun di sini untuk diajak bicara. Siapkan satu, dan percakapan Anda dengannya akan ada di sini."
+      "chats_agent": "Tidak ada agen di node ini, sehingga tidak ada siapa pun di sini untuk diajak bicara. Siapkan satu, dan percakapan Anda dengannya akan ada di sini.",
+      "files_local": "File berada di setiap ruang. Buka ruang lokal untuk melihat filenya."
     },
     "my_things": "Milik saya",
     "stop_everything": "Hentikan semuanya",
@@ -5216,7 +5307,8 @@
     "voting": {
       "description": "Bidang pemungutan suara lengkap: ambang kesepakatan M-dari-N diverifikasi di kawat, dan pengurutan kuorum-di-atas-waktu dalam substrat. Pemungutan suara keberatan Commons sudah dikirim — ini adalah pemungutan suara sebagai primitif terverifikasi kelas satu.",
       "title": "Pemungutan Suara"
-    }
+    },
+    "announce_costs": "Jika Anda tidak mengumumkan, tidak ada yang dapat menjangkau Anda melalui mesh pada versi ini: kode kontak Anda mengidentifikasi Anda, tetapi belum membawa cara untuk menjangkau perangkat Anda. Anda tidak dapat ikut serta dalam grup publik. Ruang privat mengharuskan Anda berdua sudah mengumumkan."
   },
   "mesh_config": {
     "consumption": {
@@ -5398,7 +5490,11 @@
       "error": "Tidak dapat mengajukan ini: {detail}. Tidak ada yang diarsipkan.",
       "not_on_this_node": "Node ini belum dapat menerima usulan komunitas: node ini tidak memiliki rute /v1/safety/reports (memerlukan CIRISServer#665). Tidak ada yang diarsipkan. Jika Anda memegang tugas moderasi, ajukan melalui Safety > Moderation sebagai gantinya.",
       "refused_minor": "Catatan usia Anda pada node ini menyatakan Anda masih di bawah umur, sehingga hal ini diajukan melalui steward Anda, bukan secara langsung. Tidak ada yang diarsipkan; mintalah steward Anda untuk mengajukannya."
-    }
+    },
+    "item_not_in_room": "itu bukan pesan atau berkas di ruang ini",
+    "not_flagged": "tidak ada moderator ruang ini yang menandai item itu — tidak ada yang perlu ditampilkan",
+    "reveal_failed": "Persetujuan untuk melihat tidak dapat dicatat, sehingga item tetap tersembunyi.",
+    "unknown_action": "item dalam ruang ditampilkan dengan reveal"
   },
   "operator": {
     "carriage": {
@@ -5759,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Proses masuk tidak diselesaikan di peramban, jadi tidak ada yang diubah. Coba lagi, atau gunakan akun lokal.",
-      "waiting": "Selesaikan proses masuk dengan Google di peramban Anda, lalu kembali ke sini."
+      "waiting": "Selesaikan proses masuk dengan Google di peramban Anda, lalu kembali ke sini.",
+      "no_browser": "Tidak dapat membuka peramban. Untuk masuk, buka alamat ini di peramban Anda: {url}",
+      "never_arrived": "Peramban Anda tidak pernah mencapai halaman masuk, jadi tidak ada yang diubah. Periksa apakah jendela peramban terbuka, lalu coba lagi."
     },
     "claim": {
       "not_armed": "node ini tidak disiapkan untuk klaim kepemilikan awal (tidak ada PIN sekali pakai) — kepemilikan mungkin sudah diklaim",
@@ -5798,7 +5896,8 @@
       "provider_unavailable": "Node ini tidak dapat memproses masuk Anda dengan penyedia tersebut — tidak ada metode masuk seperti itu yang dikonfigurasikan pada build ini. Gunakan nama pengguna dan kata sandi untuk masuk.",
       "state_invalid": "status oauth tidak valid atau telah kedaluwarsa",
       "store_unavailable": "Node tidak dapat membaca penyimpanan identitasnya, sehingga proses masuk tidak dapat diselesaikan. Ini adalah masalah pada node, bukan pada akun Anda.",
-      "unsafe_redirect": "redirect_uri tidak aman"
+      "unsafe_redirect": "redirect_uri tidak aman",
+      "flow_unknown": "Peramban Anda tidak pernah mencapai halaman masuk, jadi tidak ada yang diubah. Coba lagi."
     },
     "oauth_link": {
       "already_has_identity": "Akun tersebut sudah memiliki identitas masuk yang tertaut. Hapus dulu jika Anda ingin menggantinya.",
@@ -5890,7 +5989,8 @@
     "message_not_live": "pesan ini sudah ditarik atau dicabut pernyataannya",
     "not_author": "hanya orang yang menulis pesan yang dapat menggantikan, menarik, atau mencabutnya",
     "reason_invalid": "kode alasan tersebut tidak berlaku untuk revisi ini",
-    "unknown_revision_op": "pesan direvisi dengan tindakan menggantikan, menarik, atau meralat"
+    "unknown_revision_op": "pesan direvisi dengan tindakan menggantikan, menarik, atau meralat",
+    "attachment_not_in_room": "Berkas itu tidak ada di ruang ini. Bagikan dulu ke ruang ini, lalu kirim."
   },
   "contacts": {
     "awaiting_consent": "Mereka belum menerima. Ini menunggu keputusan orang lain, sehingga mencoba lagi tidak akan mengubah apa pun.",
@@ -6020,7 +6120,9 @@
     "too_large_for_whole_read": "Berkas ini terlalu besar untuk dibaca dalam satu bagian. Berkas ini harus dialirkan (streaming).",
     "withdraw_failed": "Berkas tidak dapat ditarik. Coba lagi.",
     "withdrawn": "Penulisnya telah menarik berkas ini. Bita-bitanya tidak lagi disajikan di mana pun.",
-    "awaiting_key": "Byte-nya sudah ada di sini, tetapi kunci perangkat ini untuknya belum tiba. Kunci itu akan menyusul dengan sendirinya; coba lagi sebentar lagi."
+    "awaiting_key": "Byte-nya sudah ada di sini, tetapi kunci perangkat ini untuknya belum tiba. Kunci itu akan menyusul dengan sendirinya; coba lagi sebentar lagi.",
+    "withheld_by_moderation": "Seorang moderator ruang ini menandai berkas ini, sehingga tetap tersembunyi sampai Anda memilih untuk melihatnya.",
+    "flagged_by_moderation": "seorang moderator ruang ini menandai berkas ini; berkas tetap berada di ruang selama tanda tersebut berlaku"
   },
   "notes": {
     "author_signer_unavailable": "Node ini tidak dapat menandatangani sebagai Anda saat ini, sehingga catatan tidak ditulis.",
@@ -6311,7 +6413,8 @@
     "rng": "tidak ada data acak untuk tantangan kriptografis",
     "unexpected": "jawaban tidak terduga dari perangkat lain Anda",
     "unknown_identity": "tidak dapat menemukan identitas tersebut",
-    "unreachable": "tidak dapat menjangkau perangkat lain Anda"
+    "unreachable": "tidak dapat menjangkau perangkat lain Anda",
+    "node_proof": "perangkat ini tidak dapat membuktikan identitas node-nya"
   },
   "sign_owner_binding": {
     "bad_request": "Permintaan owner binding tersebut tidak dapat dibaca.",

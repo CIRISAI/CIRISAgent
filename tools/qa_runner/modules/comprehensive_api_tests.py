@@ -296,22 +296,6 @@ class ComprehensiveAPITestModule:
         ]
 
     @staticmethod
-    def get_emergency_tests() -> List[QATestCase]:
-        """Get emergency endpoint tests."""
-        return [
-            QATestCase(
-                name="Emergency test endpoint",
-                module=QAModule.SYSTEM,
-                endpoint="/emergency/test",
-                method="GET",
-                expected_status=200,
-                requires_auth=False,
-                description="Test emergency system test endpoint",
-            ),
-            # Note: Emergency shutdown requires cryptographic signature - skipping in basic tests
-        ]
-
-    @staticmethod
     def get_websocket_tests() -> List[QATestCase]:
         """Get WebSocket endpoint tests - currently disabled as WebSocket endpoints are not REST endpoints."""
         return []  # WebSocket endpoints don't work with regular HTTP testing
@@ -327,7 +311,6 @@ class ComprehensiveAPITestModule:
         tests.extend(ComprehensiveAPITestModule.get_extended_audit_tests())
         tests.extend(ComprehensiveAPITestModule.get_extended_tools_tests())
         tests.extend(ComprehensiveAPITestModule.get_extended_auth_tests())
-        tests.extend(ComprehensiveAPITestModule.get_emergency_tests())
         # Skip WebSocket tests - they don't work with HTTP testing
         # tests.extend(ComprehensiveAPITestModule.get_websocket_tests())
         return tests

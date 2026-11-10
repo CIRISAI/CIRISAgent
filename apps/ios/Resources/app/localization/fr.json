@@ -3827,7 +3827,92 @@
     "add_device_unreachable_retrying": "Impossible de joindre votre autre appareil pour l'instant — nouvelle tentative en cours. Cela peut prendre quelques minutes après son démarrage.",
     "add_device_cancelling": "Annulation…",
     "add_device_cancel_failed": "La demande n'a pas pu être annulée.",
-    "add_device_cancelled": "Demande annulée. Votre autre appareil a été prévenu de l'abandonner."
+    "add_device_cancelled": "Demande annulée. Votre autre appareil a été prévenu de l'abandonner.",
+    "my_devices_claim": "Revendiquer un appareil",
+    "chat_unopened_withheld_by_moderation": "Un modérateur de ce salon a signalé ce message, il reste donc masqué jusqu'à ce que vous choisissiez de le voir.",
+    "chat_attach": "Joindre",
+    "chat_attached": "Joint : {name}",
+    "chat_attachment_remove": "Supprimer",
+    "chat_attachment_open": "Ouvrir le fichier joint",
+    "files_withheld": "Masqué par un modérateur",
+    "files_act_revealed": "Il vous est désormais accessible.",
+    "files_pick_hint": "Choisissez un fichier à joindre, ou ajoutez-en un d'abord.",
+    "moderation_reveal": "Révéler",
+    "moderation_reveal_title": "Voir cet élément ?",
+    "moderation_reveal_fact_flag": "Signalé comme",
+    "moderation_reveal_fact_effect": "Ce qui change",
+    "moderation_reveal_effect": "Il s'ouvre pour vous, sur vos propres appareils. Personne d'autre ne le voit de ce fait.",
+    "moderation_reveal_fact_signer": "Signé par",
+    "moderation_reveal_signer": "Votre propre clé, en tant que consentement pour afficher cet élément",
+    "moderation_note_flagged": "Un modérateur a signalé ceci comme {flag}.",
+    "moderation_note_revealed": "Un modérateur a signalé ceci comme {flag}. Vous avez choisi de le voir.",
+    "moderation_note_cleared": "Le signalement d'un modérateur sur ceci a été levé.",
+    "moderation_appeal_filed": "Un appel est en attente d'une décision.",
+    "moderation_appeal_upheld": "Le signalement a été confirmé en appel.",
+    "moderation_appeal_partial": "Le signalement a été partiellement confirmé en appel.",
+    "moderation_appeal_reversed": "Le signalement a été annulé en appel.",
+    "local_community_body": "La communauté locale est géographique : les personnes près de vous. Elle ne s'applique que si vous avez choisi de partager votre position et que vous la partagez actuellement.",
+    "local_community_not_on_this_node": "Ce nœud ne peut pas encore partager votre position, une salle locale n'est donc pas liée à un lieu pour l'instant et c'est vous qui choisissez qui la rejoint. Votre position n'est pas partagée.",
+    "setup_template_ally": "Ally, un assistant personnel. C'est le bon choix pour une installation personnelle.",
+    "setup_template_chosen": "À partir du modèle {name}.",
+    "setup_template_provisioned": "{name}, défini par l'enregistrement Portal de votre organisation.",
+    "community_section_title_local": "Vos salles locales",
+    "community_section_body_local": "Des salles pour les personnes près de vous. Pour l'instant, une salle n'apparaît comme locale que sur l'appareil qui l'a fondée. Les autres membres la voient sous Communautés.",
+    "community_empty_local": "Vous n'avez encore aucune salle locale. Fondez-en une et invitez les personnes près de vous.",
+    "community_create_open_local": "Fonder une salle locale",
+    "community_create_title_local": "Fonder une salle locale",
+    "server_local_desc": "Gérez le nœud en cours d'exécution sur cet appareil.",
+    "server_remote_desc": "Connectez-vous à un nœud en cours d'exécution ailleurs.",
+    "server_url_label": "Adresse du nœud",
+    "server_current": "Actuel",
+    "add_device_no_session": "Cet appareil a rejoint votre CIRIS ID, mais il n'a pas pu terminer la connexion. Reconfigurez cet appareil, puis approuvez-le depuis votre autre appareil.",
+    "chat_call": "Appeler",
+    "call_title": "Appel",
+    "call_choose": "Comment souhaitez-vous appeler ?",
+    "call_voice": "Appel vocal",
+    "call_video": "Appel vidéo",
+    "call_asking_microphone": "Autorisez le microphone pour que les personnes présentes dans ce salon puissent vous entendre.",
+    "call_asking_camera": "Autorisez la caméra pour que les personnes présentes dans ce salon puissent vous voir.",
+    "call_microphone_denied": "Un appel nécessite le microphone. Activez-le pour CIRIS dans les réglages de votre appareil, puis réessayez.",
+    "call_try_again": "Réessayer",
+    "call_ready_voice": "Votre microphone est prêt.",
+    "call_ready_video": "Votre microphone et votre caméra sont prêts.",
+    "call_audio_only": "La caméra est désactivée, il s'agira donc d'un appel vocal.",
+    "call_not_connecting": "Les appels ne peuvent pas encore se connecter depuis cette application.",
+    "call_unavailable_platform": "Les appels ne sont pas encore disponibles sur cet appareil.",
+    "call_unavailable_no_device": "Cet appareil n'a pas de microphone, il ne peut donc pas passer d'appels.",
+    "call_not_saved": "Non enregistré",
+    "call_save": "Enregistrer ma partie de cet appel",
+    "call_save_unavailable": "L'enregistrement des appels n'est pas encore disponible.",
+    "trust_hosts_verified": "{verified} sur {checked} hôtes de racine de confiance vérifiés",
+    "trust_hosts_unreachable": "{count} hôtes de racine de confiance n'ont pas pu être joints. Ce n'est pas un échec : ils peuvent être hors ligne ou bloqués depuis ce réseau.",
+    "trust_hosts_disagree": "Deux hôtes de racine de confiance ont donné des réponses différentes ; aucune racine de confiance n'a donc été choisie. Ce nœud est restreint tant qu'ils ne sont pas en accord.",
+    "trust_host_verified": "Vérifié",
+    "trust_host_unreachable": "Injoignable",
+    "trust_host_not_verified": "Joint, non vérifié",
+    "wa_update_not_allowed": "Seul un administrateur ou une Wise Authority peut statuer sur une proposition en attente. Ce compte ne le peut pas.",
+    "wa_update_changed": "Quelqu'un a statué sur cette proposition avant vous, rien n'a donc changé. La liste affiche désormais son état.",
+    "wa_update_failed": "L'agent n'a pas pris en compte cette modification. Réessayez.",
+    "trace_consent_unanswered_note": "Vous pouvez laisser cette question sans réponse. Rien n'est envoyé tant que vous ne dites pas oui, et vous pourrez répondre plus tard.",
+    "files_uploading_progress": "Ajout de {name} : {sent} sur {total}",
+    "files_add_cancel": "Arrêter",
+    "remote_node_view": "Afficher",
+    "remote_node_title": "Votre nœud",
+    "remote_node_snapshot_at": "Lu à {time}. Il s'agit d'un instantané : actualisez pour le relire.",
+    "remote_node_metrics": "Réseau",
+    "remote_node_logs": "Journaux récents",
+    "remote_node_refresh": "Actualiser",
+    "remote_node_unreachable": "Ce nœud est actuellement injoignable. Il est peut-être éteint ou hors de portée.",
+    "remote_node_timeout": "Ce nœud n'a pas répondu à temps. Réessayez dans un instant.",
+    "remote_node_send_failed": "La demande n'a pas pu être envoyée à ce nœud. Réessayez.",
+    "remote_node_no_transport": "Ce nœud ne peut pas joindre vos autres nœuds. Vérifiez ses paramètres réseau.",
+    "remote_node_needs_update": "Ce nœud doit être mis à jour avant de pouvoir afficher ceci.",
+    "remote_node_not_owner": "Ce nœud n'a pas accepté cette demande. Seuls les appareils de son propriétaire peuvent la lire.",
+    "remote_node_failed": "La réponse de ce nœud n'a pas pu être lue.",
+    "add_device_contact_hint_2": "Sur votre autre appareil, ouvrez « Partager mon ID ». Scannez son code QR, ou collez la forme longue ou courte ici. Votre ID de fédération seul fonctionne aussi lorsque votre autre appareil est annoncé.",
+    "contacts_reach_sent": "Envoyé : en attente de leur réponse",
+    "contacts_reach_waiting": "En attente de pouvoir les joindre",
+    "contacts_stale_since": "Aucune nouvelle depuis {date}"
   },
   "prompts": {
     "dma": {
@@ -4721,7 +4806,12 @@
       "community_chats": "Pièces",
       "affiliations_chats": "Pièces",
       "node_self": "État propre",
-      "owned_agents": "Agents que vous possédez"
+      "owned_agents": "Agents que vous possédez",
+      "my_devices": "Mes appareils",
+      "layer_communities": "Communautés",
+      "layer_affiliations": "Affiliations",
+      "local_chats": "Salles locales",
+      "local_roster": "Membres locaux"
     },
     "circle": {
       "agent": "Moi seul",
@@ -4772,7 +4862,8 @@
       "record": "Rien ne s'est encore passé dans ce cercle.",
       "files_agent": "Rien ici pour l'instant. C'est ici que tout commence, et rien ici n'est annoncé.",
       "decisions_agent": "Il n'y a personne ici avec qui décider. Les décisions commencent en Famille.",
-      "chats_agent": "Il n'y a aucun agent sur ce nœud, il n'y a donc personne ici à qui parler. Configurez-en un et vos conversations avec lui apparaîtront ici."
+      "chats_agent": "Il n'y a aucun agent sur ce nœud, il n'y a donc personne ici à qui parler. Configurez-en un et vos conversations avec lui apparaîtront ici.",
+      "files_local": "Les fichiers résident dans chaque salle. Ouvrez une salle locale pour voir ses fichiers."
     },
     "my_things": "Mes affaires",
     "stop_everything": "Tout arrêter",
@@ -5243,7 +5334,8 @@
     "voting": {
       "description": "Le plan de scrutin complet : seuils d'accord M-sur-N vérifiés au fil, et classement quorum-au-delà-du-temps dans le substrat. Les bulletins d'objection de la Commons sont déjà expédiés — ceci est le vote en tant que primitif vérifiable de première classe.",
       "title": "Scrutin"
-    }
+    },
+    "announce_costs": "Si vous ne vous annoncez pas, personne ne peut vous joindre via le maillage dans cette version : votre code de contact vous identifie, mais ne comporte pas encore de moyen d'atteindre vos appareils. Vous ne pouvez pas participer aux groupes publics. Une salle privée exige que vous vous soyez tous deux annoncés."
   },
   "mesh_config": {
     "consumption": {
@@ -5425,7 +5517,11 @@
       "error": "Impossible de soulever ceci : {detail}. Rien n'a été déposé.",
       "not_on_this_node": "Ce nœud ne peut pas encore recevoir de proposition communautaire : il n'a pas de route /v1/safety/reports (nécessite CIRISServer#665). Rien n'a été déposé. Si vous détenez un devoir de modération, déposez plutôt sous Sécurité > Modération.",
       "refused_minor": "Votre enregistrement d'âge sur ce nœud indique que vous êtes mineur ; ceci est donc soulevé par l'intermédiaire de votre tuteur, et non directement. Rien n'a été déposé ; demandez à votre tuteur de le soulever."
-    }
+    },
+    "item_not_in_room": "ce n'est ni un message ni un fichier dans ce salon",
+    "not_flagged": "aucun modérateur de ce salon n'a signalé cet élément — il n'y a rien à révéler",
+    "reveal_failed": "Le consentement pour afficher n'a pas pu être enregistré, l'élément reste donc masqué.",
+    "unknown_action": "un élément dans un salon est révélé avec reveal"
   },
   "operator": {
     "carriage": {
@@ -5786,7 +5882,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "La connexion n'a pas été terminée dans le navigateur, aucune modification n'a donc été effectuée. Réessayez ou utilisez plutôt un compte local.",
-      "waiting": "Terminez la connexion avec Google dans votre navigateur, puis revenez ici."
+      "waiting": "Terminez la connexion avec Google dans votre navigateur, puis revenez ici.",
+      "no_browser": "Impossible d'ouvrir un navigateur. Pour vous connecter, ouvrez cette adresse dans votre navigateur : {url}",
+      "never_arrived": "Votre navigateur n'a jamais atteint la page de connexion, aucune modification n'a donc été effectuée. Vérifiez qu'une fenêtre de navigateur s'est ouverte, puis réessayez."
     },
     "claim": {
       "not_armed": "ce nœud n'est pas armé pour une revendication de premier démarrage (pas de PIN à usage unique) — la propriété a peut-être déjà été revendiquée",
@@ -5825,7 +5923,8 @@
       "provider_unavailable": "Ce nœud ne peut pas vous connecter avec ce fournisseur — aucune connexion de ce type n'est configurée sur cette version. Connectez-vous plutôt avec un nom d'utilisateur et un mot de passe.",
       "state_invalid": "état oauth invalide ou expiré",
       "store_unavailable": "Le nœud n'a pas pu lire son magasin d'identités, la connexion n'a donc pas pu aboutir. Le problème vient du nœud, pas de votre compte.",
-      "unsafe_redirect": "redirect_uri non sécurisé"
+      "unsafe_redirect": "redirect_uri non sécurisé",
+      "flow_unknown": "Votre navigateur n'a jamais atteint la page de connexion, aucune modification n'a donc été effectuée. Réessayez."
     },
     "oauth_link": {
       "already_has_identity": "Ce compte possède déjà une identité de connexion liée. Supprimez-la d'abord si vous souhaitez la remplacer.",
@@ -5917,7 +6016,8 @@
     "message_not_live": "ce message a déjà été retiré ou rétracté",
     "not_author": "seule la personne qui a écrit un message peut le remplacer, le retirer ou le rétracter",
     "reason_invalid": "ce code de motif ne s'applique pas à cette révision",
-    "unknown_revision_op": "un message est révisé par remplacement, retrait ou rétractation"
+    "unknown_revision_op": "un message est révisé par remplacement, retrait ou rétractation",
+    "attachment_not_in_room": "Ce fichier n'est pas dans ce salon. Partagez-le d'abord dans le salon, puis envoyez-le."
   },
   "contacts": {
     "awaiting_consent": "Ils n'ont pas encore accepté. Cela dépend d'une personne, donc réessayer ne changera rien.",
@@ -6047,7 +6147,9 @@
     "too_large_for_whole_read": "Ce fichier est trop volumineux pour être lu en une seule fois. Il doit être diffusé en flux continu.",
     "withdraw_failed": "Le fichier n'a pas pu être retiré. Réessayez.",
     "withdrawn": "Son auteur a retiré ce fichier. Les octets ne sont plus servis nulle part.",
-    "awaiting_key": "Ses octets sont déjà présents, mais la clé de cet appareil pour eux n'est pas encore arrivée. Elle arrive automatiquement ; réessayez dans quelques instants."
+    "awaiting_key": "Ses octets sont déjà présents, mais la clé de cet appareil pour eux n'est pas encore arrivée. Elle arrive automatiquement ; réessayez dans quelques instants.",
+    "withheld_by_moderation": "Un modérateur de ce salon a signalé ce fichier, il reste donc masqué jusqu'à ce que vous choisissiez de le voir.",
+    "flagged_by_moderation": "un modérateur de ce salon a signalé ce fichier ; il reste dans le salon tant que le signalement est maintenu"
   },
   "notes": {
     "author_signer_unavailable": "Ce nœud ne peut pas signer en votre nom pour le moment, la note n'a donc pas été écrite.",
@@ -6338,7 +6440,8 @@
     "rng": "aucune source d'aléa pour le défi",
     "unexpected": "réponse inattendue de votre autre appareil",
     "unknown_identity": "impossible de trouver cette identité",
-    "unreachable": "impossible de joindre votre autre appareil"
+    "unreachable": "impossible de joindre votre autre appareil",
+    "node_proof": "cet appareil n'a pas pu prouver de quel nœud il s'agit"
   },
   "sign_owner_binding": {
     "bad_request": "Cette demande de liaison de propriétaire n'a pas pu être lue.",

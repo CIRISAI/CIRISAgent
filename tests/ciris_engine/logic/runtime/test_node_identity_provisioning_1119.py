@@ -177,20 +177,17 @@ async def test_authorship_does_not_follow_the_transport(
 
 
 
-def test_older_wheel_does_not_pass_unknown_kwargs(
+def test_a_wheel_without_the_provisioner_is_refused(
     monkeypatch: pytest.MonkeyPatch, calls: Dict[str, Any], engine: Any, tmp_path: Path
 ) -> None:
-    """<0.5.189 has no provisioner and no such kwargs — passing them TypeErrors
-    the whole boot. Degrade to pre-split behaviour instead, loudly."""
+    """Under persist v61 an agent-key transport publishes no route: the node would
+    run and nothing could reach it. Refused, not degraded."""
     from ciris_engine.logic.runtime.edge_runtime import initialize_edge_runtime
 
     _install_fake_substrate(monkeypatch, calls, None)  # no provision_node_identity
-    initialize_edge_runtime(tmp_path / "identity")
-
-    assert calls["order"] == ["init_edge_runtime"]
-    kwargs = calls["edge_kwargs"]
-    assert "use_node_identity" not in kwargs
-    assert "node_identity_dir" not in kwargs
+    with pytest.raises(RuntimeError, match="provision_node_identity is missing"):
+        initialize_edge_runtime(tmp_path / "identity")
+    assert "init_edge_runtime" not in calls["order"]
 
 
 def test_provisioning_failure_is_not_swallowed(

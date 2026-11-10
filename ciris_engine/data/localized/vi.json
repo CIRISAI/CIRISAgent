@@ -4213,7 +4213,92 @@
     "add_device_stopped_retrying": "Đã ngừng thử. Không có yêu cầu nào đến được thiết bị khác của bạn.",
     "add_device_withdraw_here": "Ngừng chờ, đồng thời xóa các khóa của yêu cầu này và mọi chấp thuận đã nhận.",
     "add_device_withdraw_other": "Thiết bị đó được báo để bỏ yêu cầu, hoặc hoàn tác chấp thuận nếu đã chấp thuận. Nếu không liên lạc được, yêu cầu sẽ hết hạn ở đó sau 15 phút.",
-    "add_device_withdraw_held": "Không có gì tham gia. Bạn có thể chọn lại, hoặc gửi một yêu cầu mới."
+    "add_device_withdraw_held": "Không có gì tham gia. Bạn có thể chọn lại, hoặc gửi một yêu cầu mới.",
+    "my_devices_claim": "Nhận quyền sở hữu thiết bị",
+    "chat_unopened_withheld_by_moderation": "Một người kiểm duyệt của phòng này đã gắn cờ tin nhắn này, nên tin nhắn vẫn ẩn cho đến khi bạn chọn xem nó.",
+    "chat_attach": "Đính kèm",
+    "chat_attached": "Đã đính kèm: {name}",
+    "chat_attachment_remove": "Xóa",
+    "chat_attachment_open": "Mở tệp đính kèm",
+    "files_withheld": "Bị giữ lại bởi người kiểm duyệt",
+    "files_act_revealed": "Giờ đây nó đã mở cho bạn.",
+    "files_pick_hint": "Chọn một tệp để đính kèm, hoặc thêm một tệp trước.",
+    "moderation_reveal": "Hiển thị",
+    "moderation_reveal_title": "Xem mục này?",
+    "moderation_reveal_fact_flag": "Được gắn cờ là",
+    "moderation_reveal_fact_effect": "Điều gì thay đổi",
+    "moderation_reveal_effect": "Nó sẽ mở ra cho bạn, trên chính các thiết bị của bạn. Không ai khác thấy nó vì việc này.",
+    "moderation_reveal_fact_signer": "Được ký bởi",
+    "moderation_reveal_signer": "Khóa của chính bạn, như sự đồng ý của bạn để xem riêng mục này",
+    "moderation_note_flagged": "Một người kiểm duyệt đã gắn cờ mục này là {flag}.",
+    "moderation_note_revealed": "Một người kiểm duyệt đã gắn cờ mục này là {flag}. Bạn đã chọn xem nó.",
+    "moderation_note_cleared": "Cờ của người kiểm duyệt trên mục này đã được gỡ bỏ.",
+    "moderation_appeal_filed": "Một kháng nghị đang chờ phán quyết.",
+    "moderation_appeal_upheld": "Cờ đã được giữ nguyên sau kháng nghị.",
+    "moderation_appeal_partial": "Cờ đã được giữ nguyên một phần sau kháng nghị.",
+    "moderation_appeal_reversed": "Cờ đã bị bác bỏ sau kháng nghị.",
+    "local_community_body": "Cộng đồng địa phương mang tính địa lý: những người gần bạn. Nó chỉ áp dụng nếu bạn đã chọn chia sẻ vị trí của mình và đang chia sẻ vị trí đó ngay bây giờ.",
+    "local_community_not_on_this_node": "Nút này chưa thể chia sẻ vị trí của bạn, nên hiện tại một phòng địa phương không gắn với một địa điểm nào và bạn tự chọn ai được tham gia. Vị trí của bạn hiện không được chia sẻ.",
+    "setup_template_ally": "Ally, một trợ lý cá nhân. Đây là lựa chọn phù hợp cho một bản cài đặt cá nhân.",
+    "setup_template_chosen": "Bắt đầu từ mẫu {name}.",
+    "setup_template_provisioned": "{name}, được đặt bởi hồ sơ Portal của tổ chức bạn.",
+    "community_section_title_local": "Phòng địa phương của bạn",
+    "community_section_body_local": "Phòng dành cho những người gần bạn. Hiện tại, một phòng chỉ hiển thị là địa phương trên thiết bị đã sáng lập nó. Các thành viên khác sẽ thấy nó trong mục Cộng đồng.",
+    "community_empty_local": "Bạn chưa có phòng địa phương nào. Hãy sáng lập một phòng và mời những người gần bạn.",
+    "community_create_open_local": "Sáng lập một phòng địa phương",
+    "community_create_title_local": "Sáng lập một phòng địa phương",
+    "server_local_desc": "Quản lý nút đang chạy trên thiết bị này.",
+    "server_remote_desc": "Kết nối tới một nút đang chạy ở nơi khác.",
+    "server_url_label": "Địa chỉ nút",
+    "server_current": "Hiện tại",
+    "add_device_no_session": "Thiết bị này đã tham gia CIRIS ID của bạn, nhưng không thể hoàn tất đăng nhập. Hãy thiết lập lại thiết bị này, sau đó chấp thuận nó từ thiết bị khác của bạn.",
+    "chat_call": "Gọi",
+    "call_title": "Cuộc gọi",
+    "call_choose": "Bạn muốn gọi bằng cách nào?",
+    "call_voice": "Cuộc gọi thoại",
+    "call_video": "Cuộc gọi video",
+    "call_asking_microphone": "Cho phép micrô để mọi người trong phòng này có thể nghe thấy bạn.",
+    "call_asking_camera": "Cho phép camera để mọi người trong phòng này có thể thấy bạn.",
+    "call_microphone_denied": "Cuộc gọi cần micrô. Hãy bật micrô cho CIRIS trong cài đặt thiết bị của bạn, rồi thử lại.",
+    "call_try_again": "Thử lại",
+    "call_ready_voice": "Micrô của bạn đã sẵn sàng.",
+    "call_ready_video": "Micrô và camera của bạn đã sẵn sàng.",
+    "call_audio_only": "Camera đang tắt, nên đây sẽ là cuộc gọi thoại.",
+    "call_not_connecting": "Ứng dụng này chưa thể kết nối cuộc gọi.",
+    "call_unavailable_platform": "Cuộc gọi chưa khả dụng trên thiết bị này.",
+    "call_unavailable_no_device": "Thiết bị này không có micrô, nên không thể thực hiện cuộc gọi.",
+    "call_not_saved": "Chưa được lưu",
+    "call_save": "Lưu phần cuộc gọi của tôi",
+    "call_save_unavailable": "Tính năng lưu cuộc gọi chưa sẵn sàng.",
+    "trust_hosts_verified": "{verified} trong số {checked} máy chủ gốc tin cậy đã được xác minh",
+    "trust_hosts_unreachable": "{count} máy chủ gốc tin cậy không thể liên hệ được. Đó không phải là một lỗi: chúng có thể đang ngừng hoạt động hoặc bị chặn khỏi mạng này.",
+    "trust_hosts_disagree": "Hai máy chủ gốc tin cậy đưa ra câu trả lời khác nhau, nên không có gốc tin cậy nào được chọn. Nút này bị hạn chế cho đến khi chúng đồng thuận.",
+    "trust_host_verified": "Đã xác minh",
+    "trust_host_unreachable": "Không thể liên hệ được",
+    "trust_host_not_verified": "Đã liên hệ được, chưa xác minh",
+    "wa_update_not_allowed": "Chỉ quản trị viên hoặc Cơ Quan Sáng Suốt mới có thể quyết định một đề xuất đang chờ. Tài khoản này không thể.",
+    "wa_update_changed": "Ai đó đã quyết định đề xuất này trước bạn, nên không có gì thay đổi. Danh sách hiện đang hiển thị trạng thái hiện tại của nó.",
+    "wa_update_failed": "Tác nhân không chấp nhận thay đổi đó. Hãy thử lại.",
+    "trace_consent_unanswered_note": "Bạn có thể không cần trả lời. Không có gì được gửi đi cho đến khi bạn đồng ý, và bạn có thể trả lời sau.",
+    "files_uploading_progress": "Đang thêm {name}: {sent} trên {total}",
+    "files_add_cancel": "Dừng",
+    "remote_node_view": "Xem",
+    "remote_node_title": "Nút của bạn",
+    "remote_node_snapshot_at": "Đọc lúc {time}. Đây là ảnh chụp nhanh: hãy làm mới để đọc lại.",
+    "remote_node_metrics": "Mạng",
+    "remote_node_logs": "Nhật ký gần đây",
+    "remote_node_refresh": "Làm mới",
+    "remote_node_unreachable": "Hiện không thể kết nối tới nút đó. Nút có thể đang tắt hoặc ngoài phạm vi.",
+    "remote_node_timeout": "Nút đó không trả lời kịp thời gian. Hãy thử lại sau một lát.",
+    "remote_node_send_failed": "Không thể gửi yêu cầu tới nút đó. Hãy thử lại.",
+    "remote_node_no_transport": "Nút này không thể kết nối tới các nút khác của bạn. Hãy kiểm tra cài đặt mạng của nút.",
+    "remote_node_needs_update": "Nút đó cần được cập nhật trước khi có thể hiển thị nội dung này.",
+    "remote_node_not_owner": "Nút đó không chấp nhận yêu cầu này. Chỉ các thiết bị của chủ sở hữu của nó mới có thể đọc được.",
+    "remote_node_failed": "Không thể đọc được câu trả lời của nút đó.",
+    "add_device_contact_hint_2": "Trên thiết bị khác của bạn, hãy mở Chia sẻ ID của tôi. Quét mã QR của nó, hoặc dán mã dạng dài hoặc dạng ngắn vào đây. Chỉ riêng ID liên bang của bạn cũng hoạt động khi thiết bị khác của bạn được công bố.",
+    "contacts_reach_sent": "Đã gửi: đang chờ họ trả lời",
+    "contacts_reach_waiting": "Đang chờ liên hệ được với họ",
+    "contacts_stale_since": "Không nghe tin gì từ {date}"
   },
   "network": {
     "title": "Mạng",
@@ -4694,7 +4779,12 @@
       "community_chats": "Phòng",
       "affiliations_chats": "Phòng",
       "node_self": "Trạng Thái Riêng",
-      "owned_agents": "Tác nhân bạn sở hữu"
+      "owned_agents": "Tác nhân bạn sở hữu",
+      "my_devices": "Thiết bị của tôi",
+      "layer_communities": "Cộng đồng",
+      "layer_affiliations": "Liên kết",
+      "local_chats": "Phòng địa phương",
+      "local_roster": "Thành viên địa phương"
     },
     "circle": {
       "agent": "Chỉ mình tôi",
@@ -4745,7 +4835,8 @@
       "files_agent": "Chưa có gì ở đây. Đây là nơi mọi thứ bắt đầu, và không gì ở đây được công bố.",
       "decisions_agent": "Không có ai ở đây để cùng quyết định. Quyết định bắt đầu từ Gia đình.",
       "decisions_family": "Một gia đình quyết định bằng cách trò chuyện. Không có gì để bỏ phiếu ở đây.",
-      "chats_agent": "Không có tác nhân nào trên nút này, nên không có ai ở đây để nói chuyện. Hãy thiết lập một tác nhân và các cuộc trò chuyện của bạn với nó sẽ ở đây."
+      "chats_agent": "Không có tác nhân nào trên nút này, nên không có ai ở đây để nói chuyện. Hãy thiết lập một tác nhân và các cuộc trò chuyện của bạn với nó sẽ ở đây.",
+      "files_local": "Tệp tồn tại trong từng phòng. Hãy mở một phòng địa phương để xem tệp của nó."
     },
     "my_things": "Của tôi",
     "stop_everything": "Dừng tất cả",
@@ -5216,7 +5307,8 @@
     "voting": {
       "description": "Toàn bộ mặt phẳng phiếu bầu: ngưỡng thỏa thuận M-of-N được xác minh tại dây, và thứ tự quorum-above-time trong substrate. Các phiếu bầu phản đối của Commons đã được gửi — đây là bỏ phiếu như một nguyên thủy hạng nhất, có thể xác minh.",
       "title": "Bỏ phiếu"
-    }
+    },
+    "announce_costs": "Nếu bạn không công bố, không ai có thể liên hệ bạn qua mạng lưới trong phiên bản này: mã liên hệ của bạn xác định bạn nhưng chưa mang theo cách để liên hệ các thiết bị của bạn. Bạn không thể tham gia các nhóm công khai. Một phòng riêng tư cần cả hai bên đều đã công bố."
   },
   "mesh_config": {
     "consumption": {
@@ -5398,7 +5490,11 @@
       "error": "Không thể đưa ra vấn đề này: {detail}. Không có gì được nộp.",
       "not_on_this_node": "Nút này chưa thể nhận đề xuất cộng đồng: nó không có tuyến /v1/safety/reports (cần CIRISServer#665). Không có gì được nộp. Nếu bạn giữ nhiệm vụ kiểm duyệt, hãy nộp dưới mục Safety > Moderation thay vào đó.",
       "refused_minor": "Hồ sơ tuổi của bạn trên nút này ghi là trẻ vị thành niên, nên vấn đề này phải được đưa ra qua người giám hộ của bạn, không trực tiếp. Không có gì được nộp; hãy nhờ người giám hộ của bạn đưa ra vấn đề này."
-    }
+    },
+    "item_not_in_room": "đó không phải là tin nhắn hoặc tệp trong phòng này",
+    "not_flagged": "không có người kiểm duyệt nào của phòng này gắn cờ mục đó — không có gì để hiển thị",
+    "reveal_failed": "Sự đồng ý xem không thể được ghi lại, nên mục này vẫn ẩn.",
+    "unknown_action": "một mục trong phòng được hiển thị bằng lệnh reveal"
   },
   "operator": {
     "carriage": {
@@ -5759,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Quá trình đăng nhập trong trình duyệt chưa hoàn tất nên không có gì thay đổi. Hãy thử lại, hoặc dùng tài khoản cục bộ.",
-      "waiting": "Hãy hoàn tất đăng nhập bằng Google trong trình duyệt của bạn, rồi quay lại đây."
+      "waiting": "Hãy hoàn tất đăng nhập bằng Google trong trình duyệt của bạn, rồi quay lại đây.",
+      "no_browser": "Không thể mở trình duyệt. Để đăng nhập, hãy mở địa chỉ này trong trình duyệt của bạn: {url}",
+      "never_arrived": "Trình duyệt của bạn chưa bao giờ đến được trang đăng nhập, nên không có gì thay đổi. Hãy kiểm tra xem một cửa sổ trình duyệt đã mở chưa, rồi thử lại."
     },
     "claim": {
       "not_armed": "node này chưa sẵn sàng cho việc xác lập quyền sở hữu lần đầu (không có mã PIN dùng một lần) — quyền sở hữu có thể đã được xác lập",
@@ -5798,7 +5896,8 @@
       "provider_unavailable": "Nút này không thể đăng nhập cho bạn bằng nhà cung cấp đó — bản dựng này không cấu hình hình thức đăng nhập như vậy. Hãy đăng nhập bằng tên người dùng và mật khẩu.",
       "state_invalid": "trạng thái oauth không hợp lệ hoặc đã hết hạn",
       "store_unavailable": "Nút không thể đọc kho danh tính của mình, nên không thể hoàn tất việc đăng nhập. Đây là sự cố của nút, không phải của tài khoản bạn.",
-      "unsafe_redirect": "redirect_uri không an toàn"
+      "unsafe_redirect": "redirect_uri không an toàn",
+      "flow_unknown": "Trình duyệt của bạn chưa bao giờ đến được trang đăng nhập, nên không có gì thay đổi. Hãy thử lại."
     },
     "oauth_link": {
       "already_has_identity": "Tài khoản đó đã có danh tính đăng nhập được liên kết. Hãy gỡ bỏ trước nếu bạn muốn thay thế.",
@@ -5890,7 +5989,8 @@
     "message_not_live": "tin nhắn này đã được rút lại hoặc thu hồi trước đó",
     "not_author": "chỉ người đã viết tin nhắn mới có thể thay thế, rút lại hoặc thu hồi tin nhắn đó",
     "reason_invalid": "mã lý do đó không áp dụng cho bản sửa đổi này",
-    "unknown_revision_op": "một tin nhắn được sửa đổi bằng cách thay thế, rút lại hoặc thu hồi"
+    "unknown_revision_op": "một tin nhắn được sửa đổi bằng cách thay thế, rút lại hoặc thu hồi",
+    "attachment_not_in_room": "Tệp đó không có trong phòng này. Hãy chia sẻ nó vào phòng trước, sau đó gửi nó."
   },
   "contacts": {
     "awaiting_consent": "Họ chưa chấp thuận. Điều này đang chờ một người, nên thử lại sẽ không thay đổi được gì.",
@@ -6020,7 +6120,9 @@
     "bad_media_type": "Đó không phải là một loại tệp hợp lệ (type/subtype).",
     "bad_move_target": "Đó không phải là nơi tệp này có thể được di chuyển đến.",
     "declared_length_mismatch": "Kích thước tệp không khớp với kích thước đã khai báo. Không có gì được ghi; hãy gửi lại.",
-    "delegate_may_not_author": "người được ủy quyền không thể ghi, thay đổi hoặc rút lại một tệp: hàng dữ liệu được ký vào đồ thị như hành động của chính chủ sở hữu, và một ủy quyền dù đã kết thúc cũng không thể gỡ bỏ chữ ký đó"
+    "delegate_may_not_author": "người được ủy quyền không thể ghi, thay đổi hoặc rút lại một tệp: hàng dữ liệu được ký vào đồ thị như hành động của chính chủ sở hữu, và một ủy quyền dù đã kết thúc cũng không thể gỡ bỏ chữ ký đó",
+    "withheld_by_moderation": "Một người kiểm duyệt của phòng này đã gắn cờ tệp này, nên tệp vẫn ẩn cho đến khi bạn chọn xem nó.",
+    "flagged_by_moderation": "một người kiểm duyệt của phòng này đã gắn cờ tệp này; tệp vẫn ở trong phòng trong khi cờ còn hiệu lực"
   },
   "notes": {
     "author_signer_unavailable": "Nút này hiện không thể ký với tư cách bạn, nên ghi chú đã không được ghi lại.",
@@ -6311,7 +6413,8 @@
     "rng": "không có độ ngẫu nhiên cho thử thách",
     "unexpected": "câu trả lời không mong đợi từ thiết bị khác của bạn",
     "unknown_identity": "không thể tìm thấy danh tính đó",
-    "unreachable": "không thể kết nối tới thiết bị khác của bạn"
+    "unreachable": "không thể kết nối tới thiết bị khác của bạn",
+    "node_proof": "thiết bị này không thể chứng minh nó là nút nào"
   },
   "sign_owner_binding": {
     "bad_request": "Không thể đọc yêu cầu liên kết chủ sở hữu đó.",

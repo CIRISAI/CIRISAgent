@@ -35,7 +35,6 @@ Welcome to the CIRIS (Core Identity, Integrity, Resilience, Incompleteness, and 
 - [Security: Agent IDs](SECURITY_AGENT_IDS.md) - Cryptographically secure ID generation
 - [Security: Temp Files](SECURITY_TEMP_FILES.md) - Secure temporary file handling
 - [Secrets Management](SECRETS_MANAGEMENT.md) - Secure credential and secret handling
-- [Emergency Shutdown](EMERGENCY_SHUTDOWN.md) - Critical system shutdown procedures
 - [Deferral System](DEFERRAL_SYSTEM.md) - Human oversight and escalation system
 
 ## Additional Resources

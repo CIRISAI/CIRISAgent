@@ -3827,7 +3827,92 @@
     "add_device_stopped_retrying": "Parou de tentar. Nenhuma solicitação chegou ao seu outro dispositivo.",
     "add_device_withdraw_here": "Para de esperar, e descarta as chaves desta solicitação e qualquer aprovação já recebida.",
     "add_device_withdraw_other": "Ele é informado para descartar a solicitação, ou para desfazer sua aprovação caso já a tenha dado. Se não puder ser alcançado, a solicitação expira lá após 15 minutos.",
-    "add_device_withdraw_held": "Nada é adicionado. Você pode escolher novamente, ou enviar uma nova solicitação."
+    "add_device_withdraw_held": "Nada é adicionado. Você pode escolher novamente, ou enviar uma nova solicitação.",
+    "my_devices_claim": "Reivindicar um dispositivo",
+    "chat_unopened_withheld_by_moderation": "Um moderador desta sala sinalizou esta mensagem, portanto ela permanece oculta até que você escolha vê-la.",
+    "chat_attach": "Anexar",
+    "chat_attached": "Anexado: {name}",
+    "chat_attachment_remove": "Remover",
+    "chat_attachment_open": "Abrir arquivo anexado",
+    "files_withheld": "Retido por um moderador",
+    "files_act_revealed": "Agora está aberto para você.",
+    "files_pick_hint": "Escolha um arquivo para anexar, ou adicione um primeiro.",
+    "moderation_reveal": "Revelar",
+    "moderation_reveal_title": "Ver este item?",
+    "moderation_reveal_fact_flag": "Sinalizado como",
+    "moderation_reveal_fact_effect": "O que muda",
+    "moderation_reveal_effect": "Ele se abre para você, nos seus próprios dispositivos. Mais ninguém o vê por causa disso.",
+    "moderation_reveal_fact_signer": "Assinado por",
+    "moderation_reveal_signer": "Sua própria chave, como seu consentimento para ver este item",
+    "moderation_note_flagged": "Um moderador sinalizou isto como {flag}.",
+    "moderation_note_revealed": "Um moderador sinalizou isto como {flag}. Você optou por vê-lo.",
+    "moderation_note_cleared": "A sinalização de um moderador sobre isto foi removida.",
+    "moderation_appeal_filed": "Um recurso está aguardando uma decisão.",
+    "moderation_appeal_upheld": "A sinalização foi mantida no recurso.",
+    "moderation_appeal_partial": "A sinalização foi parcialmente mantida no recurso.",
+    "moderation_appeal_reversed": "A sinalização foi revertida no recurso.",
+    "local_community_body": "Comunidade local é geográfica: as pessoas perto de você. Ela se aplica somente se você optou por compartilhar sua localização e está compartilhando-a agora.",
+    "local_community_not_on_this_node": "Este nó ainda não pode compartilhar sua localização, portanto, por enquanto, uma sala local não está vinculada a um lugar e você escolhe quem entra. Sua localização não está sendo compartilhada.",
+    "setup_template_ally": "Ally, um assistente pessoal. Essa é a escolha certa para uma instalação pessoal.",
+    "setup_template_chosen": "Começando a partir do modelo {name}.",
+    "setup_template_provisioned": "{name}, definido pelo registro do Portal da sua organização.",
+    "community_section_title_local": "Suas salas locais",
+    "community_section_body_local": "Salas para as pessoas perto de você. Por enquanto, uma sala aparece como local apenas no dispositivo que a fundou. Outros membros a veem em Comunidades.",
+    "community_empty_local": "Você ainda não tem salas locais. Crie uma e convide as pessoas perto de você.",
+    "community_create_open_local": "Fundar sala local",
+    "community_create_title_local": "Fundar sala local",
+    "server_local_desc": "Gerencie o nó executando neste dispositivo.",
+    "server_remote_desc": "Conecte-se a um nó executando em outro lugar.",
+    "server_url_label": "Endereço do nó",
+    "server_current": "Atual",
+    "add_device_no_session": "Este dispositivo entrou na sua CIRIS ID, mas não conseguiu concluir o início de sessão. Configure este dispositivo novamente e depois aprove-o a partir do seu outro dispositivo.",
+    "chat_call": "Ligar",
+    "call_title": "Chamada",
+    "call_choose": "Como você quer ligar?",
+    "call_voice": "Chamada de voz",
+    "call_video": "Chamada de vídeo",
+    "call_asking_microphone": "Permita o microfone para que as pessoas nesta sala possam ouvir você.",
+    "call_asking_camera": "Permita a câmera para que as pessoas nesta sala possam ver você.",
+    "call_microphone_denied": "Uma chamada precisa do microfone. Ative-o para o CIRIS nas configurações do seu dispositivo e tente novamente.",
+    "call_try_again": "Tentar novamente",
+    "call_ready_voice": "Seu microfone está pronto.",
+    "call_ready_video": "Seu microfone e sua câmera estão prontos.",
+    "call_audio_only": "A câmera está desligada, então esta será uma chamada de voz.",
+    "call_not_connecting": "As chamadas ainda não conseguem se conectar a partir deste app.",
+    "call_unavailable_platform": "As chamadas ainda não estão disponíveis neste dispositivo.",
+    "call_unavailable_no_device": "Este dispositivo não tem microfone, então não pode fazer chamadas.",
+    "call_not_saved": "Não salvo",
+    "call_save": "Salvar meu lado desta chamada",
+    "call_save_unavailable": "Salvar chamadas ainda não está disponível.",
+    "trust_hosts_verified": "{verified} de {checked} hosts de raiz de confiança verificados",
+    "trust_hosts_unreachable": "{count} hosts de raiz de confiança não puderam ser alcançados. Isso não é uma falha: eles podem estar fora do ar ou bloqueados nesta rede.",
+    "trust_hosts_disagree": "Dois hosts de raiz de confiança deram respostas diferentes, portanto nenhuma raiz de confiança foi escolhida. Este nó fica restrito até que eles concordem.",
+    "trust_host_verified": "Verificado",
+    "trust_host_unreachable": "Inalcançável",
+    "trust_host_not_verified": "Alcançado, não verificado",
+    "wa_update_not_allowed": "Somente um administrador ou uma Autoridade Sábia pode decidir uma proposta pendente. Esta conta não pode.",
+    "wa_update_changed": "Alguém decidiu esta proposta antes de você, portanto nada mudou. A lista agora mostra onde ela está.",
+    "wa_update_failed": "O agente não aceitou essa alteração. Tente novamente.",
+    "trace_consent_unanswered_note": "Você pode deixar isso sem resposta. Nada será enviado até que você diga sim, e você pode responder depois.",
+    "files_uploading_progress": "Adicionando {name}: {sent} de {total}",
+    "files_add_cancel": "Parar",
+    "remote_node_view": "Visualizar",
+    "remote_node_title": "Seu nó",
+    "remote_node_snapshot_at": "Lido às {time}. Esta é uma captura: atualize para lê-la novamente.",
+    "remote_node_metrics": "Rede",
+    "remote_node_logs": "Registros recentes",
+    "remote_node_refresh": "Atualizar",
+    "remote_node_unreachable": "Esse nó não pode ser alcançado no momento. Ele pode estar desligado ou fora de alcance.",
+    "remote_node_timeout": "Esse nó não respondeu a tempo. Tente novamente em instantes.",
+    "remote_node_send_failed": "A solicitação não pôde ser enviada para esse nó. Tente novamente.",
+    "remote_node_no_transport": "Este nó não consegue alcançar seus outros nós. Verifique as configurações de rede dele.",
+    "remote_node_needs_update": "Esse nó precisa de uma atualização antes de poder mostrar isso.",
+    "remote_node_not_owner": "Esse nó não aceitou esta solicitação. Somente os dispositivos do proprietário dele podem lê-la.",
+    "remote_node_failed": "A resposta desse nó não pôde ser lida.",
+    "add_device_contact_hint_2": "No seu outro dispositivo, abra Compartilhar meu ID. Escaneie o código QR dele, ou cole a forma longa ou curta aqui. Seu ID de federação sozinho também funciona quando seu outro dispositivo estiver anunciado.",
+    "contacts_reach_sent": "Enviado: aguardando a resposta da outra pessoa",
+    "contacts_reach_waiting": "Aguardando poder alcançar a outra pessoa",
+    "contacts_stale_since": "Sem notícias desde {date}"
   },
   "prompts": {
     "dma": {
@@ -4721,7 +4806,12 @@
       "community_chats": "Salas",
       "affiliations_chats": "Salas",
       "node_self": "Situação própria",
-      "owned_agents": "Agentes que você possui"
+      "owned_agents": "Agentes que você possui",
+      "my_devices": "Meus dispositivos",
+      "layer_communities": "Comunidades",
+      "layer_affiliations": "Afiliações",
+      "local_chats": "Salas locais",
+      "local_roster": "Membros locais"
     },
     "circle": {
       "agent": "Só eu",
@@ -4772,7 +4862,8 @@
       "files_agent": "Ainda não há nada aqui. É aqui que tudo começa, e nada aqui é divulgado.",
       "decisions_agent": "Não há ninguém aqui com quem decidir. As decisões começam em Família.",
       "decisions_family": "Uma família decide conversando. Não há nada para votar aqui.",
-      "chats_agent": "Não há agente neste nó, portanto não há ninguém aqui com quem conversar. Configure um e suas conversas com ele estarão aqui."
+      "chats_agent": "Não há agente neste nó, portanto não há ninguém aqui com quem conversar. Configure um e suas conversas com ele estarão aqui.",
+      "files_local": "Os arquivos ficam em cada sala. Abra uma sala local para ver seus arquivos."
     },
     "my_things": "Minhas coisas",
     "stop_everything": "Parar tudo",
@@ -5243,7 +5334,8 @@
     "voting": {
       "description": "O plano de votação completo: limites de acordo M-de-N verificados no fio, e ordenação de quórum-acima-tempo no substrato. As cédulas de objeção da Commons já chegam — esta é a votação como primitiva verificável de primeira classe.",
       "title": "Votação"
-    }
+    },
+    "announce_costs": "Se você não se anunciar, ninguém pode alcançá-lo pela rede mesh nesta versão: seu código de contato o identifica, mas ainda não carrega uma forma de alcançar seus dispositivos. Você não pode participar de grupos públicos. Uma sala privada exige que vocês dois tenham se anunciado."
   },
   "mesh_config": {
     "consumption": {
@@ -5425,7 +5517,11 @@
       "error": "Não foi possível abrir isto: {detail}. Nada foi registrado.",
       "not_on_this_node": "Este nó ainda não pode receber uma proposta da comunidade: não possui a rota /v1/safety/reports (precisa do CIRISServer#665). Nada foi registrado. Se você detém um dever de moderação, registre em Segurança > Moderação.",
       "refused_minor": "Seu registro de idade neste nó indica menor de idade, portanto isto é aberto por meio do seu guardião, não diretamente. Nada foi registrado; peça ao seu guardião para abrir isto."
-    }
+    },
+    "item_not_in_room": "isso não é uma mensagem ou um arquivo nesta sala",
+    "not_flagged": "nenhum moderador desta sala sinalizou esse item — não há nada a revelar",
+    "reveal_failed": "O consentimento para visualizar não pôde ser registrado, portanto o item permanece oculto.",
+    "unknown_action": "um item em uma sala é revelado com reveal"
   },
   "operator": {
     "carriage": {
@@ -5786,7 +5882,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "O início de sessão não foi concluído no navegador, portanto nada foi alterado. Tente novamente ou use uma conta local.",
-      "waiting": "Conclua o início de sessão com a Google no seu navegador e depois volte aqui."
+      "waiting": "Conclua o início de sessão com a Google no seu navegador e depois volte aqui.",
+      "no_browser": "Não foi possível abrir um navegador. Para entrar, abra este endereço no seu navegador: {url}",
+      "never_arrived": "Seu navegador nunca chegou à página de início de sessão, portanto nada foi alterado. Verifique se uma janela do navegador foi aberta e tente novamente."
     },
     "claim": {
       "cohort_missing": "a reivindicação ROOT de primeira execução deve incluir `cohort_scope` (um dos: self|family|community)",
@@ -5825,7 +5923,8 @@
       "provider_unavailable": "Este nó não pode autenticar você com esse provedor — nenhum login desse tipo está configurado nesta versão. Entre com nome de usuário e senha.",
       "state_invalid": "estado oauth inválido ou expirado",
       "store_unavailable": "O nó não conseguiu ler o seu repositório de identidades, pelo que não foi possível concluir o início de sessão. O problema é do nó, não da sua conta.",
-      "unsafe_redirect": "redirect_uri não seguro"
+      "unsafe_redirect": "redirect_uri não seguro",
+      "flow_unknown": "Seu navegador nunca chegou à página de início de sessão, portanto nada foi alterado. Tente novamente."
     },
     "oauth_link": {
       "already_has_identity": "Essa conta já tem uma identidade de início de sessão vinculada. Remova-a primeiro se quiser substituí-la.",
@@ -5917,7 +6016,8 @@
     "message_not_live": "esta mensagem já foi retirada ou retratada",
     "not_author": "somente a pessoa que escreveu uma mensagem pode substituí-la, retirá-la ou retratá-la",
     "reason_invalid": "esse código de motivo não se aplica a esta revisão",
-    "unknown_revision_op": "uma mensagem é revisada por substituição, retirada ou retratação"
+    "unknown_revision_op": "uma mensagem é revisada por substituição, retirada ou retratação",
+    "attachment_not_in_room": "Esse arquivo não está nesta sala. Compartilhe-o na sala primeiro e depois envie-o."
   },
   "contacts": {
     "awaiting_consent": "Ainda não aceitaram. Isto está à espera de uma pessoa, por isso tentar novamente não vai mudar nada.",
@@ -6047,7 +6147,9 @@
     "too_large_for_whole_read": "Este arquivo é grande demais para ser lido em uma única peça. Ele precisa ser transmitido em fluxo.",
     "withdraw_failed": "O arquivo não pôde ser retirado. Tente novamente.",
     "withdrawn": "Seu autor retirou este arquivo. Os bytes não são mais servidos em lugar nenhum.",
-    "awaiting_key": "Os bytes dele estão aqui, mas a chave deste dispositivo para eles ainda não chegou. Ela chega por conta própria; tente novamente em breve."
+    "awaiting_key": "Os bytes dele estão aqui, mas a chave deste dispositivo para eles ainda não chegou. Ela chega por conta própria; tente novamente em breve.",
+    "withheld_by_moderation": "Um moderador desta sala sinalizou este arquivo, portanto ele permanece oculto até que você escolha vê-lo.",
+    "flagged_by_moderation": "um moderador desta sala sinalizou este arquivo; ele permanece na sala enquanto a sinalização estiver válida"
   },
   "notes": {
     "author_signer_unavailable": "Este nó não consegue assinar como você agora, portanto a nota não foi escrita.",
@@ -6338,7 +6440,8 @@
     "rng": "não há aleatoriedade para o desafio",
     "unexpected": "resposta inesperada do seu outro dispositivo",
     "unknown_identity": "não foi possível encontrar essa identidade",
-    "unreachable": "não foi possível alcançar seu outro dispositivo"
+    "unreachable": "não foi possível alcançar seu outro dispositivo",
+    "node_proof": "este dispositivo não conseguiu provar qual nó é"
   },
   "sign_owner_binding": {
     "bad_request": "Essa solicitação de vínculo de titularidade não pôde ser lida.",

@@ -298,7 +298,6 @@ class TestRateLimitMiddlewareInitialization:
         assert "/openapi.json" in middleware.exempt_paths
         assert "/docs" in middleware.exempt_paths
         assert "/redoc" in middleware.exempt_paths
-        assert "/emergency/shutdown" in middleware.exempt_paths
         assert "/v1/system/health" in middleware.exempt_paths
 
 

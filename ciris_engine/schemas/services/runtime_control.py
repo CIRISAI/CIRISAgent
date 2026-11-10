@@ -358,36 +358,6 @@ class ServiceRegistryInfoResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message if query failed")
 
 
-class WAPublicKeyMap(BaseModel):
-    """Map of Wise Authority IDs to their public keys."""
-
-    model_config = ConfigDict(defer_build=True)
-
-    keys: Dict[str, str] = Field(
-        default_factory=dict, description="Mapping of WA ID to Ed25519 public key (PEM format)"
-    )
-
-    def add_key(self, wa_id: str, public_key_pem: str) -> None:
-        """Add a WA public key."""
-        self.keys[wa_id] = public_key_pem
-
-    def get_key(self, wa_id: str) -> Optional[str]:
-        """Get a WA public key by ID."""
-        return self.keys.get(wa_id)
-
-    def has_key(self, wa_id: str) -> bool:
-        """Check if a WA ID has a registered key."""
-        return wa_id in self.keys
-
-    def clear(self) -> None:
-        """Clear all keys."""
-        self.keys.clear()
-
-    def count(self) -> int:
-        """Get the number of registered keys."""
-        return len(self.keys)
-
-
 class ConfigBackupData(BaseModel):
     """Data structure for configuration backups."""
 

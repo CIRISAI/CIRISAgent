@@ -61,7 +61,10 @@ jobs:
         id: boot
         env:
           MESH_BOOT_ONLY: '1'
+          CIRIS_QA_CALLS: '1'
           MESH_KEEP: '1'
+          # Enough to see which side of a punch stops moving a link.
+          RUST_LOG: info,ciris_edge::replication::bridge=debug,ciris_edge::transport::reticulum=debug,leviculum_core=debug,leviculum_std=debug
           MESH_LLM_MODEL: qwen/qwen3.6-35b-a3b
           MESH_LLM_BASE_URL: https://openrouter.ai/api/v1
           MESH_LLM_PROVIDER: openai
@@ -95,6 +98,7 @@ jobs:
           jq -r '.[] | "peer \(.name): \(.key_id)"' "$RUNNER_TEMP/mesh/$NAME/peers.json"
 
       - name: This node's half of the chat
+        id: half
         run: |
           mkdir -p results
           rc=0
@@ -103,6 +107,44 @@ jobs:
             --nonce "$NONCE" --out /mesh/home/result.json --summary /mesh/home/summary.md || rc=$?
           cp "$RUNNER_TEMP/mesh/$NAME/result.json" results/ 2>/dev/null || true
           cat "$RUNNER_TEMP/mesh/$NAME/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          exit $rc
+
+      # Proposed only after acceptance, so a failed contact can't produce a link.
+      - name: Wait for the direct link
+        id: direct
+        if: always() && steps.half.outcome == 'success'
+        run: |
+          # Proposed only after the contact is accepted, then retried on a backoff.
+          deadline=$((SECONDS + 300))
+          until sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/mesh/$NAME/ciris/logs/"ciris-server.log.* 2>/dev/null \
+                | grep -q -E 'direct link ESTABLISHED|direct link: established'; do
+            [ $SECONDS -lt $deadline ] || { echo "::error::no direct link on $NAME within 300 s"; exit 1; }
+            sleep 5
+          done
+
+      # After the link moved, on the direct path. Ceiling from edge: 2 s each way.
+      - name: Timed round trip over the direct link
+        if: always() && steps.direct.outcome == 'success'
+        run: |
+          rc=0
+          docker exec -w /app "ciris-$NAME" python -m tools.qa_runner.nat_peer direct-timed \
+            --node "$NAME=http://127.0.0.1:8080" --role "$ROLE" --peers /mesh/home/peers.json \
+            --nonce "$NONCE" --result /mesh/home/result.json --out /mesh/home/direct-timed.json || rc=$?
+          cp "$RUNNER_TEMP/mesh/$NAME/direct-timed.json" results/ 2>/dev/null || true
+          exit $rc
+
+      # Server 0.5.245's QA call routes: a 60 s call, one generated stream each
+      # way. Not gating yet (join needs edge 44.1); `pair` prints its result.
+      - name: A/V call
+        if: always() && steps.half.outcome == 'success'
+        continue-on-error: true
+        run: |
+          rc=0
+          docker exec -w /app "ciris-$NAME" python -m tools.qa_runner.nat_peer av \
+            --node "$NAME=http://127.0.0.1:8080" --role "$ROLE" --peers /mesh/home/peers.json \
+            --nonce "$NONCE" --result /mesh/home/result.json --out /mesh/home/av.json || rc=$?
+          cp "$RUNNER_TEMP/mesh/$NAME/av.json" results/ 2>/dev/null || true
+          jq -r '"av: \(.ok) \(.detail)"' results/av.json 2>/dev/null || true
           exit $rc
 
       - name: Trace reaches the canonical
@@ -121,6 +163,19 @@ jobs:
             --require-authored | tee results/trace-gate.log
           cp "$RUNNER_TEMP/mesh/$NAME/receipt.json" results/ 2>/dev/null || true
 
+      # The same family-keyed maps as PyEdge.metrics_snapshot(): direct_link,
+      # direct_links_active and link_stall live here, not in the logs.
+      - name: Edge metrics
+        if: always() && steps.boot.outcome == 'success'
+        continue-on-error: true
+        run: |
+          mkdir -p results
+          tok=$(curl -s -m 15 -X POST http://127.0.0.1:18083/v1/auth/login -H 'Content-Type: application/json' \
+                -d '{"username":"qaadmin","password":"qa_test_password_12345"}' | jq -r '.access_token // .data.access_token')
+          curl -s -m 30 -w '\n%{http_code}\n' -H "Authorization: Bearer $tok" \
+               http://127.0.0.1:18083/v1/federation/metrics > results/edge-metrics.json
+          tail -1 results/edge-metrics.json
+
       - name: Collect logs
         if: always()
         run: |
@@ -134,3 +189,16 @@ jobs:
         with:
           name: results-${{ matrix.name }}
           path: results/
+
+  direct-link:
+    name: Direct link, both sides
+    needs: node
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: logs
+      - name: One punched link on both sides, after mutual
+        run: PYTHONPATH=. python3 -I tools/qa_runner/check_direct_links.py logs/results-node-a/logs logs/results-node-b/logs

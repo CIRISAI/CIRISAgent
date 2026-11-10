@@ -495,7 +495,7 @@ agent 可以作为针对共享数据库的多个实例运行:
 - `POST /v1/billing/purchase/initiate` — 付款启动
 
 ### 紧急
-- `POST /emergency/shutdown` — 紧急关闭(需要 Ed25519 签名)
+- `POST /emergency/shutdown` — 紧急关闭(需要 Ed25519 + ML-DSA-65 签名)
 
 ---
 
@@ -514,7 +514,7 @@ agent 可以作为针对共享数据库的多个实例运行:
 
 **9 个 SQL 工具**: initialize_sql_connector、get_sql_service_metadata、sql_find_user_data、sql_export_user、sql_delete_user、sql_anonymize_user、sql_verify_deletion、sql_get_stats、sql_query
 
-支持的方言: SQLite、PostgreSQL、MySQL。删除验证生成 Ed25519 签名的密码学证明。
+支持的方言: SQLite、PostgreSQL、MySQL。删除验证生成 Ed25519 + ML-DSA-65 签名的密码学证明。
 
 ---
 
@@ -524,7 +524,7 @@ agent 可以作为针对共享数据库的多个实例运行:
 
 1. **提案**: 创建者提供名称、目的、理由、伦理考虑
 2. **模板选择**: 从可用模板(scout、sage、datum、echo 等)中选择
-3. **Wise Authority 审查**: 需要 Ed25519 签名
+3. **Wise Authority 审查**: 需要 Ed25519 + ML-DSA-65 签名
 4. **创建**: 图数据库中的身份根、不可变的血统记录、运行时配置
 5. **激活**: agent 启动时完全了解其创建上下文
 
@@ -534,7 +534,7 @@ agent 可以作为针对共享数据库的多个实例运行:
 
 ## 安全
 
-- **Ed25519 签名**: 认证、审计签名、紧急关闭
+- **Ed25519 + ML-DSA-65 签名**: 认证、审计签名、紧急关闭
 - **JWT 令牌**: 24 小时过期(可配置)
 - **服务令牌**: 格式 `Bearer service:TOKEN_VALUE`,用于系统间通信
 - **OAuth 令牌**: 带锁定的自动刷新

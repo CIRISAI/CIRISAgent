@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from ciris_engine.schemas.api.responses import SuccessResponse
-from ciris_engine.schemas.services.attestation import AttestationResult
+from ciris_engine.schemas.services.attestation import AttestationResult, TrustRootSource
 
 from .constants import CIRISVERIFY_NOT_AVAILABLE
 
@@ -110,6 +110,10 @@ class VerifyStatusResponse(BaseModel):
     mobile_excluded_count: Optional[int] = Field(default=None)
     mobile_excluded_list: Optional[list[str]] = Field(default=None)
     sources_agreeing: int = Field(default=0)
+    # Every trust-root host checked (CIRISVerify 21+). Empty on older substrates,
+    # where the dns_*/https_* flags still carry the answer.
+    sources: List[TrustRootSource] = Field(default_factory=list)
+    source_validation_status: Optional[str] = Field(default=None)
     attestation_proof: Optional[Dict[str, Any]] = Field(default=None)
     per_file_results: Optional[Dict[str, str]] = Field(default=None)
     # Two-phase attestation
@@ -250,6 +254,8 @@ def _attestation_to_response(result: AttestationResult) -> VerifyStatusResponse:
         mobile_excluded_count=result.mobile_excluded_count,
         mobile_excluded_list=result.mobile_excluded_list,
         sources_agreeing=result.sources_agreeing,
+        sources=result.sources,
+        source_validation_status=result.source_validation_status,
         attestation_proof=result.attestation_proof,
         per_file_results=result.per_file_results,
         level_pending=result.level_pending,

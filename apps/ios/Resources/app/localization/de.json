@@ -3827,7 +3827,92 @@
     "contacts_pending_stopped": "Anfrage vorerst gestoppt. Aktualisieren Sie, oder tippen Sie auf „Erneut versuchen“.",
     "contacts_pending_refused": "Nicht hinzugefügt: {why}",
     "contacts_pending_retry": "Erneut versuchen",
-    "contacts_pending_forget": "Vergessen"
+    "contacts_pending_forget": "Vergessen",
+    "my_devices_claim": "Ein Gerät beanspruchen",
+    "chat_unopened_withheld_by_moderation": "Ein Moderator dieses Raums hat diese Nachricht markiert, daher bleibt sie verborgen, bis Sie sich entscheiden, sie anzusehen.",
+    "chat_attach": "Anhängen",
+    "chat_attached": "Angehängt: {name}",
+    "chat_attachment_remove": "Entfernen",
+    "chat_attachment_open": "Angehängte Datei öffnen",
+    "files_withheld": "Von einem Moderator zurückgehalten",
+    "files_act_revealed": "Sie ist jetzt für Sie geöffnet.",
+    "files_pick_hint": "Wählen Sie eine Datei zum Anhängen aus, oder fügen Sie zuerst eine hinzu.",
+    "moderation_reveal": "Anzeigen",
+    "moderation_reveal_title": "Dieses Element ansehen?",
+    "moderation_reveal_fact_flag": "Markiert als",
+    "moderation_reveal_fact_effect": "Was sich ändert",
+    "moderation_reveal_effect": "Es öffnet sich für Sie, auf Ihren eigenen Geräten. Niemand sonst sieht es dadurch.",
+    "moderation_reveal_fact_signer": "Signiert von",
+    "moderation_reveal_signer": "Ihr eigener Schlüssel, als Ihre Zustimmung, dieses eine Element anzusehen",
+    "moderation_note_flagged": "Ein Moderator hat dies als {flag} markiert.",
+    "moderation_note_revealed": "Ein Moderator hat dies als {flag} markiert. Sie haben sich entschieden, es anzusehen.",
+    "moderation_note_cleared": "Die Markierung eines Moderators hierfür wurde aufgehoben.",
+    "moderation_appeal_filed": "Ein Einspruch wartet auf eine Entscheidung.",
+    "moderation_appeal_upheld": "Die Markierung wurde im Einspruch bestätigt.",
+    "moderation_appeal_partial": "Die Markierung wurde im Einspruch teilweise bestätigt.",
+    "moderation_appeal_reversed": "Die Markierung wurde im Einspruch aufgehoben.",
+    "local_community_body": "Lokale Gemeinschaft ist geografisch: die Menschen in Ihrer Nähe. Sie gilt nur, wenn Sie zugestimmt haben, Ihren Standort zu teilen, und ihn gerade teilen.",
+    "local_community_not_on_this_node": "Dieser Knoten kann Ihren Standort noch nicht teilen, daher ist ein lokaler Raum vorerst nicht an einen Ort gebunden, und Sie entscheiden, wer beitritt. Ihr Standort wird nicht geteilt.",
+    "setup_template_ally": "Ally, ein persönlicher Assistent. Dies ist die richtige Wahl für eine persönliche Installation.",
+    "setup_template_chosen": "Ausgehend von der Vorlage {name}.",
+    "setup_template_provisioned": "{name}, festgelegt durch den Portal-Eintrag Ihrer Organisation.",
+    "community_section_title_local": "Ihre lokalen Räume",
+    "community_section_body_local": "Räume für die Menschen in Ihrer Nähe. Vorerst wird ein Raum nur auf dem Gerät, das ihn gegründet hat, als lokal angezeigt. Andere Mitglieder sehen ihn unter Communities.",
+    "community_empty_local": "Sie haben noch keine lokalen Räume. Gründen Sie einen und laden Sie die Personen in Ihrer Nähe ein.",
+    "community_create_open_local": "Lokalen Raum gründen",
+    "community_create_title_local": "Lokalen Raum gründen",
+    "server_local_desc": "Verwalten Sie den Knoten, der auf diesem Gerät läuft.",
+    "server_remote_desc": "Verbinden Sie sich mit einem Knoten, der an einem anderen Ort läuft.",
+    "server_url_label": "Knotenadresse",
+    "server_current": "Aktuell",
+    "add_device_no_session": "Dieses Gerät ist Ihrer CIRIS-ID beigetreten, konnte die Anmeldung jedoch nicht abschließen. Richten Sie dieses Gerät erneut ein und genehmigen Sie es anschließend von Ihrem anderen Gerät aus.",
+    "chat_call": "Anrufen",
+    "call_title": "Anruf",
+    "call_choose": "Wie möchten Sie anrufen?",
+    "call_voice": "Sprachanruf",
+    "call_video": "Videoanruf",
+    "call_asking_microphone": "Erlauben Sie den Zugriff auf das Mikrofon, damit die anderen Personen in diesem Raum Sie hören können.",
+    "call_asking_camera": "Erlauben Sie den Zugriff auf die Kamera, damit die anderen Personen in diesem Raum Sie sehen können.",
+    "call_microphone_denied": "Ein Anruf benötigt das Mikrofon. Aktivieren Sie es für CIRIS in den Einstellungen Ihres Geräts und versuchen Sie es erneut.",
+    "call_try_again": "Erneut versuchen",
+    "call_ready_voice": "Ihr Mikrofon ist bereit.",
+    "call_ready_video": "Ihr Mikrofon und Ihre Kamera sind bereit.",
+    "call_audio_only": "Die Kamera ist ausgeschaltet, daher wird dies ein Sprachanruf.",
+    "call_not_connecting": "Anrufe können über diese App noch nicht verbunden werden.",
+    "call_unavailable_platform": "Anrufe sind auf diesem Gerät noch nicht verfügbar.",
+    "call_unavailable_no_device": "Dieses Gerät hat kein Mikrofon und kann daher keine Anrufe tätigen.",
+    "call_not_saved": "Nicht gespeichert",
+    "call_save": "Meine Seite dieses Anrufs speichern",
+    "call_save_unavailable": "Das Speichern von Anrufen ist noch nicht verfügbar.",
+    "trust_hosts_verified": "{verified} von {checked} Vertrauenswurzel-Hosts verifiziert",
+    "trust_hosts_unreachable": "{count} Vertrauenswurzel-Hosts konnten nicht erreicht werden. Das ist kein Fehler: Sie könnten offline sein oder von diesem Netzwerk blockiert werden.",
+    "trust_hosts_disagree": "Zwei Vertrauenswurzel-Hosts gaben unterschiedliche Antworten, daher wurde keine Vertrauenswurzel gewählt. Dieser Knoten ist eingeschränkt, bis sie übereinstimmen.",
+    "trust_host_verified": "Verifiziert",
+    "trust_host_unreachable": "Nicht erreichbar",
+    "trust_host_not_verified": "Erreicht, nicht verifiziert",
+    "wa_update_not_allowed": "Nur ein Administrator oder eine Wise Authority kann über einen wartenden Vorschlag entscheiden. Dieses Konto kann das nicht.",
+    "wa_update_changed": "Jemand hat über diesen Vorschlag entschieden, bevor Sie es taten, daher hat sich nichts geändert. Die Liste zeigt nun den aktuellen Stand.",
+    "wa_update_failed": "Der Agent hat diese Änderung nicht übernommen. Versuchen Sie es erneut.",
+    "trace_consent_unanswered_note": "Sie können dies unbeantwortet lassen. Es wird nichts gesendet, bis Sie zustimmen, und Sie können später antworten.",
+    "files_uploading_progress": "{name} wird hinzugefügt: {sent} von {total}",
+    "files_add_cancel": "Stoppen",
+    "remote_node_view": "Anzeigen",
+    "remote_node_title": "Ihr Knoten",
+    "remote_node_snapshot_at": "Gelesen um {time}. Dies ist eine Momentaufnahme: Aktualisieren Sie, um sie erneut zu lesen.",
+    "remote_node_metrics": "Netzwerk",
+    "remote_node_logs": "Letzte Protokolle",
+    "remote_node_refresh": "Aktualisieren",
+    "remote_node_unreachable": "Dieser Knoten ist derzeit nicht erreichbar. Er ist möglicherweise ausgeschaltet oder außer Reichweite.",
+    "remote_node_timeout": "Dieser Knoten hat nicht rechtzeitig geantwortet. Versuchen Sie es gleich noch einmal.",
+    "remote_node_send_failed": "Die Anfrage konnte nicht an diesen Knoten gesendet werden. Versuchen Sie es erneut.",
+    "remote_node_no_transport": "Dieser Knoten kann Ihre anderen Knoten nicht erreichen. Überprüfen Sie seine Netzwerkeinstellungen.",
+    "remote_node_needs_update": "Dieser Knoten benötigt ein Update, um dies anzuzeigen.",
+    "remote_node_not_owner": "Dieser Knoten hat diese Anfrage nicht akzeptiert. Nur die Geräte seines Eigentümers können sie lesen.",
+    "remote_node_failed": "Die Antwort dieses Knotens konnte nicht gelesen werden.",
+    "add_device_contact_hint_2": "Öffnen Sie auf Ihrem anderen Gerät „Meine ID teilen“. Scannen Sie den QR-Code oder fügen Sie die Lang- oder Kurzform hier ein. Ihre Föderations-ID allein funktioniert auch, wenn Ihr anderes Gerät angekündigt ist.",
+    "contacts_reach_sent": "Gesendet: Warte auf ihre Antwort",
+    "contacts_reach_waiting": "Warte darauf, sie zu erreichen",
+    "contacts_stale_since": "Seit {date} nichts mehr von ihnen gehört"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4779,12 @@
       "community_chats": "Räume",
       "affiliations_chats": "Räume",
       "node_self": "Eigener Stand",
-      "owned_agents": "Eigene Agenten"
+      "owned_agents": "Eigene Agenten",
+      "my_devices": "Meine Geräte",
+      "layer_communities": "Gemeinschaften",
+      "layer_affiliations": "Zugehörigkeiten",
+      "local_chats": "Lokale Räume",
+      "local_roster": "Lokale Mitglieder"
     },
     "circle": {
       "agent": "Nur ich",
@@ -4745,7 +4835,8 @@
       "files_agent": "Noch nichts hier. Hier beginnt alles, und nichts davon wird angekündigt.",
       "decisions_agent": "Hier ist niemand, mit dem Sie entscheiden könnten. Entscheidungen beginnen in Familie.",
       "decisions_family": "Eine Familie entscheidet durch Gespräche. Hier gibt es nichts, worüber abgestimmt werden könnte.",
-      "chats_agent": "Dieser Knoten hat keinen Agenten, daher ist hier niemand, mit dem Sie sprechen könnten. Richten Sie einen ein, und Ihre Unterhaltungen mit ihm werden hier erscheinen."
+      "chats_agent": "Dieser Knoten hat keinen Agenten, daher ist hier niemand, mit dem Sie sprechen könnten. Richten Sie einen ein, und Ihre Unterhaltungen mit ihm werden hier erscheinen.",
+      "files_local": "Dateien gehören zu jedem Raum. Öffnen Sie einen lokalen Raum, um seine Dateien zu sehen."
     },
     "my_things": "Meine Sachen",
     "stop_everything": "Alles stoppen",
@@ -5216,7 +5307,8 @@
     "voting": {
       "description": "Die vollständige Abstimmungsebene: M-of-N-Schwellwerte für Übereinstimmung, überprüft auf der Leitung, und Quorum-über-Zeit-Ordnung im Substrat. Die Abstimmungsballots der Commons werden bereits ausgeliefert — dies ist Abstimmung als primitives Element erster Klasse, überprüfbar.",
       "title": "Abstimmung"
-    }
+    },
+    "announce_costs": "Wenn Sie nicht ankündigen, kann Sie in dieser Version niemand über das Mesh erreichen: Ihr Kontaktcode identifiziert Sie, trägt aber noch keine Möglichkeit, Ihre Geräte zu erreichen. Sie können nicht an öffentlichen Gruppen teilnehmen. Ein privater Raum erfordert, dass Sie beide angekündigt haben."
   },
   "mesh_config": {
     "consumption": {
@@ -5398,7 +5490,11 @@
       "raised": "Vorgebracht. Das 48-Stunden-Fenster der Community ist geöffnet; ein Moderator oder Steward kann früher eingreifen.",
       "error": "Konnte dies nicht vorbringen: {detail}. Es wurde nichts eingereicht.",
       "not_on_this_node": "Dieser Knoten kann noch keinen Community-Vorschlag entgegennehmen: Er verfügt über keine /v1/safety/reports-Route (benötigt CIRISServer#665). Es wurde nichts eingereicht. Wenn Sie eine Moderationspflicht haben, reichen Sie es stattdessen unter Sicherheit > Moderation ein."
-    }
+    },
+    "item_not_in_room": "das ist weder eine Nachricht noch eine Datei in diesem Raum",
+    "not_flagged": "kein Moderator dieses Raums hat dieses Element markiert — es gibt nichts anzuzeigen",
+    "reveal_failed": "Die Zustimmung zur Ansicht konnte nicht erfasst werden, daher bleibt das Element verborgen.",
+    "unknown_action": "ein Element in einem Raum wird mit „reveal“ sichtbar gemacht"
   },
   "operator": {
     "carriage": {
@@ -5759,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Die Anmeldung wurde im Browser nicht abgeschlossen, daher wurde nichts geändert. Versuche es erneut oder verwende stattdessen ein lokales Konto.",
-      "waiting": "Schließe die Anmeldung mit Google in deinem Browser ab und kehre dann hierher zurück."
+      "waiting": "Schließe die Anmeldung mit Google in deinem Browser ab und kehre dann hierher zurück.",
+      "no_browser": "Konnte keinen Browser öffnen. Um sich anzumelden, öffnen Sie diese Adresse in Ihrem Browser: {url}",
+      "never_arrived": "Ihr Browser hat die Anmeldeseite nie erreicht, daher wurde nichts geändert. Prüfen Sie, ob sich ein Browserfenster geöffnet hat, und versuchen Sie es dann erneut."
     },
     "claim": {
       "not_armed": "dieser Node ist nicht für eine Erstübernahme scharfgeschaltet (keine Einmal-PIN) — die Eigentümerschaft wurde möglicherweise bereits beansprucht",
@@ -5798,7 +5896,8 @@
       "provider_unavailable": "Dieser Node kann Sie mit diesem Anbieter nicht anmelden — eine solche Anmeldung ist in diesem Build nicht konfiguriert. Melden Sie sich stattdessen mit Benutzername und Passwort an.",
       "state_invalid": "ungültiger oder abgelaufener OAuth-State",
       "store_unavailable": "Der Knoten konnte seinen Identitätsspeicher nicht lesen, daher konnte die Anmeldung nicht abgeschlossen werden. Dies ist ein Problem des Knotens, nicht Ihres Kontos.",
-      "unsafe_redirect": "unsichere redirect_uri"
+      "unsafe_redirect": "unsichere redirect_uri",
+      "flow_unknown": "Ihr Browser hat die Anmeldeseite nie erreicht, daher wurde nichts geändert. Versuchen Sie es erneut."
     },
     "oauth_link": {
       "already_has_identity": "Für dieses Konto ist bereits eine Anmeldeidentität verknüpft. Entfernen Sie sie zuerst, wenn Sie sie ersetzen möchten.",
@@ -5890,7 +5989,8 @@
     "message_not_live": "diese Nachricht wurde bereits zurückgezogen oder widerrufen",
     "not_author": "nur die Person, die eine Nachricht geschrieben hat, darf sie ersetzen, zurückziehen oder widerrufen",
     "reason_invalid": "dieser Begründungscode gilt nicht für diese Revision",
-    "unknown_revision_op": "eine Nachricht wird durch Ersetzen, Zurückziehen oder Widerrufen revidiert"
+    "unknown_revision_op": "eine Nachricht wird durch Ersetzen, Zurückziehen oder Widerrufen revidiert",
+    "attachment_not_in_room": "Diese Datei befindet sich nicht in diesem Raum. Teilen Sie sie zuerst in den Raum, dann senden Sie sie."
   },
   "contacts": {
     "awaiting_consent": "Diese Person hat noch nicht zugestimmt. Dies wartet auf einen Menschen, ein erneuter Versuch wird daher nichts ändern.",
@@ -6020,7 +6120,9 @@
     "format_mismatch": "Die Datei entspricht nicht dem angegebenen Dateityp, daher wurde sie nicht hinzugefügt.",
     "not_author": "Nur der Autor kann eine Datei ändern oder zurückziehen. Eine Datei, die Sie auf einem anderen Ihrer Geräte geschrieben haben, wird von jenem Gerät aus geändert.",
     "range_not_satisfiable": "Der angeforderte Bereich liegt außerhalb dieser Datei.",
-    "same_room": "die Datei ist bereits in jenem Raum — zum Verschieben braucht es einen anderen Raum"
+    "same_room": "die Datei ist bereits in jenem Raum — zum Verschieben braucht es einen anderen Raum",
+    "withheld_by_moderation": "Ein Moderator dieses Raums hat diese Datei markiert, daher bleibt sie verborgen, bis Sie sich entscheiden, sie anzusehen.",
+    "flagged_by_moderation": "ein Moderator dieses Raums hat diese Datei markiert; sie bleibt im Raum, solange die Markierung besteht"
   },
   "notes": {
     "author_signer_unavailable": "Dieser Knoten kann derzeit nicht als Sie signieren, daher wurde die Notiz nicht geschrieben.",
@@ -6311,7 +6413,8 @@
     "rng": "Keine Zufallswerte für die Challenge verfügbar",
     "unexpected": "Unerwartete Antwort von Ihrem anderen Gerät",
     "unknown_identity": "Diese Identität konnte nicht gefunden werden",
-    "unreachable": "Ihr anderes Gerät konnte nicht erreicht werden"
+    "unreachable": "Ihr anderes Gerät konnte nicht erreicht werden",
+    "node_proof": "Dieses Gerät konnte nicht nachweisen, welcher Knoten es ist"
   },
   "sign_owner_binding": {
     "bad_request": "Diese Owner-Binding-Anfrage konnte nicht gelesen werden.",

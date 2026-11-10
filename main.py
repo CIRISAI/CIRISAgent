@@ -795,6 +795,16 @@ def main(
     if _node_only is not None:
         node_only.run_headless(_node_only)
 
+    # An upgrade under a running install fails part way on Windows (WinError 32)
+    # and mixes old and new code everywhere else, so stop when one starts. Not on
+    # a phone: the app is the host's process, and pip doesn't touch it.
+    from ciris_engine.logic.utils.path_resolution import get_ciris_home, is_android, is_ios
+
+    if not (is_android() or is_ios()):
+        from ciris_engine.upgrade import start_watch, stop_this_process
+
+        start_watch(stop_this_process, get_ciris_home())
+
     # One name for this process in ps/top/pgrep, before the node serves.
     from ciris_engine.logic.utils.substrate_logging import set_process_label
 

@@ -89,24 +89,26 @@ def get_federation_alias_for_log() -> str:
 def _direct_link_facilitator(engine: Any) -> Optional[str]:
     """``host:port`` of the facilitator room peers probe, or None.
 
-    OFF by default: an agent node proposes no direct links. A punch that
-    succeeds on one side only moves that side to UDP while the other stays
-    relayed, and the link then lands nothing until ChannelExhausted; proposing
-    waits for leviculum's two-sided punch commit (ciris-server 0.5.243 defaults
-    its own facilitator to None the same way).
+    ON by default: an agent node proposes direct links to peers that have
+    accepted each other, through the canonical's ``ip`` dial from persist's signed
+    canonical records (``engine.canonical_bootstrap_hints()``). A server serves its
+    facilitator on UDP at the same port number as its TCP listener, so that dial
+    is the facilitator's address. Unreadable hints mean no facilitator, never a guess.
 
-    ``CIRIS_DIRECT_LINK_FACILITATOR`` opts in: ``bootstrap`` takes the
-    canonical's ``ip`` dial from persist's signed canonical records
-    (``engine.canonical_bootstrap_hints()``; a server serves its facilitator on
-    UDP at the same port number as its TCP listener, so that dial is the
-    facilitator's address), or a ``host:port`` names one. Unreadable hints mean
-    no facilitator, never a guess.
+    Needs edge v44: leviculum's two-sided punch commit and the stall guard
+    (CIRISEdge#926). Before those, a punch that succeeded on one side moved that
+    side to UDP while the other stayed relayed, and the link carried nothing.
+
+    ``CIRIS_DIRECT_LINK_FACILITATOR`` overrides: ``off`` / ``0`` / empty proposes
+    none, ``bootstrap`` is the default, and a ``host:port`` names another.
     """
-    value = (os.environ.get("CIRIS_DIRECT_LINK_FACILITATOR") or "").strip()
-    if value.lower() in ("", "0", "off", "false", "none", "no"):
-        return None
-    if value.lower() != "bootstrap":
-        return value
+    override = os.environ.get("CIRIS_DIRECT_LINK_FACILITATOR")
+    if override is not None:
+        value = override.strip()
+        if value.lower() in ("", "0", "off", "false", "none", "no"):
+            return None
+        if value.lower() != "bootstrap":
+            return value
     try:
         import json as _json
 
@@ -192,13 +194,12 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
 
         _provision = getattr(_cs_prov, "provision_node_identity", None)
         if _provision is None:
-            # <0.5.189. The edge then carries the ACTOR key's transport identity,
-            # which is the pre-split behaviour: safe, but the lightnet door is
-            # walked by an agency-bearing key. Say so rather than pass silently.
-            logger.warning(
-                "[NODE-KEY] ciris_server.provision_node_identity absent (<0.5.189) — "
-                "this edge will carry the ACTOR key's transport identity. CC 3.4.7.3 "
-                "wants a node-only key on that door; upgrade the substrate to split them."
+            # Refused, not warned: under persist v61 an agent-key transport publishes
+            # no route, so this node would run and nothing could reach it.
+            raise RuntimeError(
+                "ciris_server.provision_node_identity is missing: this substrate can't "
+                "split the node key from the agent key (CC 3.4.7.3), and an agent-key "
+                "transport publishes no route. Upgrade ciris-server."
             )
         else:
             # actor_key_id is deliberately omitted — see CIRISAgent#1119. Passing it
@@ -447,14 +448,11 @@ def initialize_edge_runtime(identity_dir: Path) -> None:
                 _edge_kwargs["direct_link_facilitator"] = facilitator
                 logger.info(
                     "[DIRECT-LINK] room peers propose direct links via facilitator %s "
-                    "(opted in by CIRIS_DIRECT_LINK_FACILITATOR; unset it to keep every room step on the canonical)",
+                    "(CIRIS_DIRECT_LINK_FACILITATOR=off to keep every room step on the canonical)",
                     facilitator,
                 )
             else:
-                logger.info(
-                    "[DIRECT-LINK] off (the default until two-sided punch commit); room traffic stays on the "
-                    "canonical path. CIRIS_DIRECT_LINK_FACILITATOR=bootstrap opts in"
-                )
+                logger.info("[DIRECT-LINK] no facilitator; room traffic stays on the canonical path")
 
         edge = init_edge_runtime(
             engine,

@@ -175,6 +175,7 @@ class TestManualSignatureVerification:
             "deleted_at": proof.deleted_at,
             "signature": proof.signature,
             "public_key_id": proof.public_key_id,
+            "signature_pqc": proof.signature_pqc,
         }
 
     def test_manual_verification_success(self, client, valid_deletion_proof):
@@ -257,6 +258,7 @@ class TestVerificationIntegration:
                 "deleted_at": proof.deleted_at,
                 "signature": proof.signature,
                 "public_key_id": proof.public_key_id,
+                "signature_pqc": proof.signature_pqc,
             },
         )
         assert manual_response.status_code == status.HTTP_200_OK
@@ -313,3 +315,16 @@ class TestVerificationErrorHandling:
         response = client.post("/v1/verification/verify-signature", json=request_data)
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+class TestHybridRequired:
+    """CIRISAgent#1348: a proof verifies only with its ML-DSA-65 half."""
+
+    def test_a_proof_carries_both_halves(self, valid_deletion_proof):
+        assert valid_deletion_proof.signature_pqc
+
+    def test_a_proof_without_its_pqc_half_is_invalid(self, client, valid_deletion_proof):
+        stripped = valid_deletion_proof.model_copy(update={"signature_pqc": None})
+        response = client.post("/v1/verification/deletion", json={"deletion_proof": stripped.model_dump()})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"]["valid"] is False

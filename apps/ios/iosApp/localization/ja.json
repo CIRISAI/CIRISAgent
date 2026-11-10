@@ -3827,7 +3827,92 @@
     "add_device_stopped_retrying": "再試行を停止しました。リクエストは他のデバイスに届きませんでした。",
     "add_device_withdraw_here": "待機を停止し、このリクエストの鍵と、すでに受け取った承認を破棄します。",
     "add_device_withdraw_other": "他のデバイスにはリクエストを破棄するよう、または既に承認済みの場合はその承認を取り消すよう通知されます。到達できない場合、そちらでは15分後にリクエストが期限切れになります。",
-    "add_device_withdraw_held": "何も参加しません。再度選択するか、新しいリクエストを送信できます。"
+    "add_device_withdraw_held": "何も参加しません。再度選択するか、新しいリクエストを送信できます。",
+    "my_devices_claim": "デバイスの所有権取得",
+    "chat_unopened_withheld_by_moderation": "このルームのモデレーターがこのメッセージにフラグを立てたため、あなたが表示を選択するまで非表示のままになります。",
+    "chat_attach": "添付",
+    "chat_attached": "添付済み: {name}",
+    "chat_attachment_remove": "削除",
+    "chat_attachment_open": "添付ファイルを開く",
+    "files_withheld": "モデレーターにより非表示",
+    "files_act_revealed": "これで表示できるようになりました。",
+    "files_pick_hint": "添付するファイルを選択するか、先にファイルを追加してください。",
+    "moderation_reveal": "表示",
+    "moderation_reveal_title": "この項目を表示しますか？",
+    "moderation_reveal_fact_flag": "フラグの種類",
+    "moderation_reveal_fact_effect": "変更内容",
+    "moderation_reveal_effect": "あなた自身のデバイス上で、あなたに対して開かれます。これによって他の人に見られることはありません。",
+    "moderation_reveal_fact_signer": "署名者",
+    "moderation_reveal_signer": "この項目1件を表示することへの同意として、あなた自身の鍵",
+    "moderation_note_flagged": "モデレーターがこれに「{flag}」のフラグを立てました。",
+    "moderation_note_revealed": "モデレーターがこれに「{flag}」のフラグを立てましたが、あなたは表示を選択しました。",
+    "moderation_note_cleared": "これに対するモデレーターのフラグは解除されました。",
+    "moderation_appeal_filed": "異議申し立てが裁定を待っています。",
+    "moderation_appeal_upheld": "異議申し立てにより、フラグは維持されました。",
+    "moderation_appeal_partial": "異議申し立てにより、フラグは部分的に維持されました。",
+    "moderation_appeal_reversed": "異議申し立てにより、フラグは取り消されました。",
+    "local_community_body": "ローカルコミュニティは地理的範囲です：あなたの近くにいる人々を指します。これは、位置情報の共有にオプトインし、現在も共有している場合にのみ適用されます。",
+    "local_community_not_on_this_node": "このノードはまだ位置情報を共有できないため、現在のところローカルルームは場所に紐づいておらず、参加者はあなたが選びます。あなたの位置情報は共有されていません。",
+    "setup_template_ally": "Ally、個人アシスタントです。個人用インストールにはこちらが正しい選択です。",
+    "setup_template_chosen": "{name}テンプレートから開始します。",
+    "setup_template_provisioned": "{name} — 組織のPortalレコードによって設定されています。",
+    "community_section_title_local": "あなたのローカルルーム",
+    "community_section_body_local": "近くにいる人々のためのルームです。現在のところ、ルームは創設したデバイス上でのみローカルとして表示されます。他のメンバーには、コミュニティの下に表示されます。",
+    "community_empty_local": "まだローカルルームがありません。ルームを創設し、近くにいる人を招待してください。",
+    "community_create_open_local": "ローカルルームを創設",
+    "community_create_title_local": "ローカルルームを創設",
+    "server_local_desc": "このデバイスで稼働しているノードを管理します。",
+    "server_remote_desc": "別の場所で稼働しているノードに接続します。",
+    "server_url_label": "ノードアドレス",
+    "server_current": "現在",
+    "add_device_no_session": "このデバイスはあなたのCIRIS IDに参加しましたが、サインインを完了できませんでした。このデバイスをもう一度セットアップし、他のデバイスから承認してください。",
+    "chat_call": "通話",
+    "call_title": "通話",
+    "call_choose": "どちらの方法で通話しますか？",
+    "call_voice": "音声通話",
+    "call_video": "ビデオ通話",
+    "call_asking_microphone": "このルームの参加者があなたの声を聞けるように、マイクへのアクセスを許可してください。",
+    "call_asking_camera": "このルームの参加者があなたを見られるように、カメラへのアクセスを許可してください。",
+    "call_microphone_denied": "通話にはマイクが必要です。デバイスの設定でCIRISのマイクをオンにしてから、もう一度お試しください。",
+    "call_try_again": "再試行",
+    "call_ready_voice": "マイクの準備ができています。",
+    "call_ready_video": "マイクとカメラの準備ができています。",
+    "call_audio_only": "カメラがオフのため、音声通話になります。",
+    "call_not_connecting": "このアプリからはまだ通話を接続できません。",
+    "call_unavailable_platform": "このデバイスではまだ通話を利用できません。",
+    "call_unavailable_no_device": "このデバイスにはマイクがないため、通話できません。",
+    "call_not_saved": "保存されていません",
+    "call_save": "この通話の自分側を保存する",
+    "call_save_unavailable": "通話の保存機能はまだ利用できません。",
+    "trust_hosts_verified": "{checked}件中{verified}件の信頼ルートホストが確認されました",
+    "trust_hosts_unreachable": "{count}件の信頼ルートホストに到達できませんでした。これは失敗ではありません：ダウンしているか、このネットワークからブロックされている可能性があります。",
+    "trust_hosts_disagree": "2つの信頼ルートホストが異なる回答を返したため、信頼ルートは選択されませんでした。両者が一致するまで、このノードは制限されます。",
+    "trust_host_verified": "確認済み",
+    "trust_host_unreachable": "到達不可",
+    "trust_host_not_verified": "到達済み・未確認",
+    "wa_update_not_allowed": "保留中の提案を決定できるのは、管理者または賢明な権威のみです。このアカウントではできません。",
+    "wa_update_changed": "あなたより先に別の人がこの提案について決定したため、何も変更されていません。一覧には現在の状況が表示されています。",
+    "wa_update_failed": "エージェントはその変更を受け付けませんでした。もう一度お試しください。",
+    "trace_consent_unanswered_note": "これは未回答のままにしておくこともできます。あなたが「はい」と言うまで何も送信されず、後で回答することもできます。",
+    "files_uploading_progress": "{name} を追加中: {sent} / {total}",
+    "files_add_cancel": "停止",
+    "remote_node_view": "表示",
+    "remote_node_title": "あなたのノード",
+    "remote_node_snapshot_at": "{time} に読み取りました。これはスナップショットです。再度読み取るには更新してください。",
+    "remote_node_metrics": "ネットワーク",
+    "remote_node_logs": "最近のログ",
+    "remote_node_refresh": "更新",
+    "remote_node_unreachable": "そのノードには現在接続できません。電源が入っていないか、範囲外である可能性があります。",
+    "remote_node_timeout": "そのノードは時間内に応答しませんでした。しばらくしてから再試行してください。",
+    "remote_node_send_failed": "そのノードにリクエストを送信できませんでした。もう一度お試しください。",
+    "remote_node_no_transport": "このノードは他のノードに接続できません。ネットワーク設定を確認してください。",
+    "remote_node_needs_update": "そのノードはこれを表示する前に更新が必要です。",
+    "remote_node_not_owner": "そのノードはこのリクエストを受け付けませんでした。読み取れるのは所有者のデバイスのみです。",
+    "remote_node_failed": "そのノードの応答を読み取れませんでした。",
+    "add_device_contact_hint_2": "他のデバイスで「自分のIDを共有」を開いてください。そのQRコードをスキャンするか、長形式または短形式をここに貼り付けてください。他のデバイスがアナウンス済みであれば、フェデレーションIDだけでも機能します。",
+    "contacts_reach_sent": "送信済み：相手の応答を待っています",
+    "contacts_reach_waiting": "相手に到達するのを待っています",
+    "contacts_stale_since": "{date}以降、連絡がありません"
   },
   "prompts": {
     "dma": {
@@ -4694,7 +4779,12 @@
       "community_chats": "ルーム",
       "affiliations_chats": "ルーム",
       "node_self": "自身の状態",
-      "owned_agents": "所有するエージェント"
+      "owned_agents": "所有するエージェント",
+      "my_devices": "自分のデバイス",
+      "layer_communities": "コミュニティ",
+      "layer_affiliations": "所属",
+      "local_chats": "ローカルルーム",
+      "local_roster": "ローカルメンバー"
     },
     "circle": {
       "agent": "自分のみ",
@@ -4745,7 +4835,8 @@
       "files_agent": "ここにはまだ何もありません。ここはすべての出発点であり、ここにあるものは公開されません。",
       "decisions_agent": "ここには一緒に決める相手がいません。決定はファミリーから始まります。",
       "decisions_family": "ファミリーは話し合いで決めます。ここには投票すべきものはありません。",
-      "chats_agent": "このノードにはエージェントがいないため、話す相手がここにはいません。エージェントを設定すると、そのエージェントとの会話がここに表示されます。"
+      "chats_agent": "このノードにはエージェントがいないため、話す相手がここにはいません。エージェントを設定すると、そのエージェントとの会話がここに表示されます。",
+      "files_local": "ファイルは各ルームに保存されます。ファイルを見るには、ローカルルームを開いてください。"
     },
     "my_things": "自分のもの",
     "stop_everything": "すべてを停止",
@@ -5216,7 +5307,8 @@
     "voting": {
       "description": "完全な投票プレーン: M-of-N アコード閾値をワイヤで検証し、基盤に時間上のクォーラム順序付け。コモンズの異議投票はすでに配信されており、これは一級の検証可能なプリミティブとしての投票です。",
       "title": "投票"
-    }
+    },
+    "announce_costs": "アナウンスを行わない場合、このバージョンではメッシュを通じて誰もあなたに到達できません：連絡先コードはあなたを識別しますが、まだデバイスへの到達手段を伴いません。公開グループには参加できません。プライベートルームには双方がアナウンス済みである必要があります。"
   },
   "mesh_config": {
     "consumption": {
@@ -5398,7 +5490,11 @@
       "error": "これを提起できませんでした: {detail}。何も提出されていません。",
       "not_on_this_node": "このノードはまだコミュニティ提案を受け付けられません。/v1/safety/reports ルートがないためです（CIRISServer#665 が必要）。何も提出されていません。モデレーションの職務をお持ちの場合は、代わりに「安全性 > モデレーション」から提出してください。",
       "refused_minor": "このノード上のあなたの年齢記録は未成年となっているため、これは直接ではなく、あなたのスチュワードを通じて提起されます。何も提出されていません。スチュワードに提起を依頼してください。"
-    }
+    },
+    "item_not_in_room": "それはこのルームのメッセージでもファイルでもありません",
+    "not_flagged": "このルームのモデレーターはその項目にフラグを立てていません — 表示するものはありません",
+    "reveal_failed": "表示への同意を記録できなかったため、項目は非表示のままです。",
+    "unknown_action": "ルーム内の項目は「reveal」で開示されます"
   },
   "operator": {
     "carriage": {
@@ -5759,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "ブラウザでサインインが完了しなかったため、変更は行われませんでした。もう一度お試しいただくか、ローカルアカウントをご利用ください。",
-      "waiting": "ブラウザで Google へのサインインを完了してから、この画面に戻ってください。"
+      "waiting": "ブラウザで Google へのサインインを完了してから、この画面に戻ってください。",
+      "no_browser": "ブラウザを開けませんでした。サインインするには、ブラウザで次のアドレスを開いてください：{url}",
+      "never_arrived": "ブラウザがサインインページに到達しなかったため、変更は行われませんでした。ブラウザのウィンドウが開いているか確認してから、もう一度お試しください。"
     },
     "claim": {
       "not_armed": "このノードは初回起動時の所有権取得を受け付ける状態ではありません（ワンタイム PIN がありません）— 既に所有権が取得されている可能性があります",
@@ -5798,7 +5896,8 @@
       "provider_unavailable": "このノードではそのプロバイダーでサインインできません。このビルドには該当するサインイン方法が構成されていません。代わりにユーザー名とパスワードでサインインしてください。",
       "state_invalid": "oauth state が無効か、有効期限が切れています",
       "store_unavailable": "ノードがアイデンティティストアを読み取れなかったため、サインインを完了できませんでした。これはノード側の問題であり、お使いのアカウントの問題ではありません。",
-      "unsafe_redirect": "安全でない redirect_uri です"
+      "unsafe_redirect": "安全でない redirect_uri です",
+      "flow_unknown": "ブラウザがサインインページに到達しなかったため、変更は行われませんでした。もう一度お試しください。"
     },
     "oauth_link": {
       "already_has_identity": "そのアカウントには既にサインインIDが連携されています。置き換える場合は、先に解除してください。",
@@ -5890,7 +5989,8 @@
     "message_not_live": "このメッセージはすでに撤回または取り消されています",
     "not_author": "メッセージの差し替え、撤回、取り消しを行えるのは、それを書いた本人のみです",
     "reason_invalid": "その理由コードはこの改訂には適用されません",
-    "unknown_revision_op": "メッセージの改訂は、差し替え、撤回、または取り消しによって行われます"
+    "unknown_revision_op": "メッセージの改訂は、差し替え、撤回、または取り消しによって行われます",
+    "attachment_not_in_room": "そのファイルはこのルームにありません。先にルームに共有してから送信してください。"
   },
   "contacts": {
     "awaiting_consent": "相手はまだ承諾していません。これは人の対応を待っている状態のため、再試行しても何も変わりません。",
@@ -6020,7 +6120,9 @@
     "format_mismatch": "ファイルの内容が、指定されたタイプと一致しないため、追加されませんでした。",
     "not_author": "ファイルを変更または取り下げられるのは作成者のみです。別のデバイスで書き込んだファイルは、そのデバイスから変更してください。",
     "range_not_satisfiable": "リクエストされた範囲は、このファイルの範囲外です。",
-    "same_room": "ファイルはすでにそのルームにあります — 移動するには別のルームを指定してください"
+    "same_room": "ファイルはすでにそのルームにあります — 移動するには別のルームを指定してください",
+    "withheld_by_moderation": "このルームのモデレーターがこのファイルにフラグを立てたため、あなたが表示を選択するまで非表示のままになります。",
+    "flagged_by_moderation": "このルームのモデレーターがこのファイルにフラグを立てました。フラグが有効な間、ファイルはルームに残ります。"
   },
   "notes": {
     "author_signer_unavailable": "このノードは現在あなたとして署名できないため、ノートは書き込まれませんでした。",
@@ -6311,7 +6413,8 @@
     "rng": "チャレンジ用の乱数を生成できませんでした",
     "unexpected": "他のデバイスから予期しない応答がありました",
     "unknown_identity": "そのアイデンティティが見つかりませんでした",
-    "unreachable": "他のデバイスに到達できませんでした"
+    "unreachable": "他のデバイスに到達できませんでした",
+    "node_proof": "このデバイスがどのノードであるかを証明できませんでした"
   },
   "sign_owner_binding": {
     "bad_request": "その所有者バインディングリクエストを読み取れませんでした。",

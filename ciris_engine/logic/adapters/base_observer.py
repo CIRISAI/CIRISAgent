@@ -744,23 +744,15 @@ class BaseObserver(Generic[MessageT], ABC):
             )
 
     async def _sign_and_add_task(self, task: Any) -> None:
-        """Sign the task with observer's WA certificate before adding."""
-        # If auth service and observer WA ID are available, sign the task
-        if self.auth_service and self.observer_wa_id:
-            try:
-                signature, signed_at = await self.auth_service.sign_task(task, self.observer_wa_id)
-                task.signed_by = self.observer_wa_id
-                task.signature = signature
-                task.signed_at = signed_at
-                logger.debug(f"Signed observer task {task.task_id} with observer WA {self.observer_wa_id}")
-            except Exception as e:
-                logger.error(f"Failed to sign observer task: {e}")
-                # Continue without signature
+        """Issue the task's authorization envelope, then add it.
 
+        Observer tasks are not signed here. The old observer-WA signing used a
+        single Ed25519 key and never ran (no observer is given a WA id); the
+        agent's own signatures are hybrid Ed25519 + ML-DSA-65.
+        """
         # Issue the task-scoped authorization envelope before the task is
         # persisted, so it lands in the same row and shares the task's lifetime
-        # (CIRISAgent#938). Signing runs first so the envelope's requester can
-        # record whether the task carries observer-WA standing.
+        # (CIRISAgent#938).
         await self._issue_task_envelope(task)
 
         # Import persistence here to avoid circular import

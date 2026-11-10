@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Dict, Generic, List, Optional, TypeVar
 
-import aiofiles
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,15 +23,12 @@ from ..services.auth_service import (
     PERMISSION_USERS_DELETE,
     PERMISSION_USERS_READ,
     PERMISSION_USERS_WRITE,
-    PERMISSION_WA_MINT,
     APIAuthService,
     User,
 )
 from ._common import (
-    RESPONSES_400,
     RESPONSES_400_404_500,
     RESPONSES_403,
-    RESPONSES_404,
     RESPONSES_404_500,
     RESPONSES_404_500_503,
     RESPONSES_500,
@@ -45,7 +41,6 @@ from ._common import (
 CheckUsersReadDep = Annotated[None, Depends(check_permissions([PERMISSION_USERS_READ]))]
 CheckUsersWriteDep = Annotated[None, Depends(check_permissions([PERMISSION_USERS_WRITE]))]
 CheckUsersDeleteDep = Annotated[None, Depends(check_permissions([PERMISSION_USERS_DELETE]))]
-CheckWAMintDep = Annotated[None, Depends(check_permissions([PERMISSION_WA_MINT]))]
 CheckManagePermsDep = Annotated[None, Depends(check_permissions([PERMISSION_MANAGE_USER_PERMISSIONS]))]
 
 # Error message constants
@@ -56,12 +51,6 @@ ERROR_CHANGE_PASSWORD_FAILED = "Failed to change password. Check current passwor
 ERROR_CANNOT_DEMOTE_SELF = "Cannot demote your own role"
 ERROR_CANNOT_DEACTIVATE_SELF = "Cannot deactivate your own account"
 ERROR_OWNER_RECORD_UNREADABLE = "The node owner's record could not be read"
-
-
-ERROR_ONLY_ADMIN_MINT_WA = "Only ADMIN or higher can mint Wise Authorities"
-ERROR_CANNOT_MINT_ROOT = "Cannot mint new ROOT authorities. ROOT is singular."
-ERROR_INVALID_SIGNATURE = "Invalid ROOT signature"
-ERROR_SIGNATURE_OR_KEY_REQUIRED = "Either signature or private_key_path must be provided"
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -310,34 +299,12 @@ class CreateUserRequest(BaseModel):
     api_role: APIRole = APIRole.OBSERVER
 
 
-class MintWARequest(BaseModel):
-    """Request to mint user as Wise Authority."""
-
-    model_config = ConfigDict(
-        json_schema_extra={"example": {"wa_role": "AUTHORITY", "signature": "base64_encoded_signature"}}
-    )
-
-    wa_role: WARole = Field(description="Role to grant: AUTHORITY or OBSERVER")
-    signature: Optional[str] = Field(None, description="Ed25519 signature from ROOT private key")
-    private_key_path: Optional[str] = Field(None, description="Path to ROOT private key for auto-signing")
-
-
 class UpdatePermissionsRequest(BaseModel):
     """Request to update user's custom permissions."""
 
     model_config = ConfigDict(json_schema_extra={"example": {"permissions": ["send_messages", "custom_permission_1"]}})
 
     permissions: List[str] = Field(description="List of permission strings to grant")
-
-
-class WAKeyCheckResponse(BaseModel):
-    """Response for WA key existence check."""
-
-    exists: bool = Field(..., description="Whether the key file exists")
-    filename: str = Field(..., description="The filename that was checked")
-    error: Optional[str] = Field(None, description="Error message if any")
-    valid_size: Optional[bool] = Field(None, description="Whether the key has valid size (if exists)")
-    size: Optional[int] = Field(None, description="File size in bytes (if exists)")
 
 
 class DeactivateUserResponse(BaseModel):
@@ -876,167 +843,6 @@ async def unlink_oauth_account(
         raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
 
     return _build_user_detail(user_id, user, auth_service)
-
-
-@router.post("/{user_id}/mint-wa", responses={**RESPONSES_400, **RESPONSES_403, **RESPONSES_404, **RESPONSES_500})
-async def mint_wise_authority(
-    user_id: str,
-    request: MintWARequest,
-    auth: AuthDep,
-    auth_service: AuthServiceDep,
-) -> UserDetail:
-    """
-    Mint a user as a Wise Authority.
-
-    Requires: ADMIN role or higher and valid Ed25519 signature from ROOT private key.
-
-    The signature should be over the message:
-    "MINT_WA:{user_id}:{wa_role}:{timestamp}"
-
-    If no signature is provided and private_key_path is specified, will attempt
-    to sign automatically using the key at that path.
-    """
-    # Check if user is ADMIN or higher
-    if auth.role.level < APIRole.ADMIN.level:
-        raise HTTPException(status_code=403, detail=ERROR_ONLY_ADMIN_MINT_WA)
-
-    # Validate that request.wa_role is not ROOT
-    if request.wa_role == WARole.ROOT:
-        raise HTTPException(status_code=400, detail=ERROR_CANNOT_MINT_ROOT)
-
-    # If no signature provided but private key path is given, try to auto-sign
-    signature = request.signature
-    if not signature and request.private_key_path:
-        # Auto-sign using the provided private key
-        import base64
-        import os
-
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-
-        try:
-            # Security: Validate the private key path
-            # Only allow alphanumeric characters, dots, dashes, and underscores in filename
-            import re
-
-            if not request.private_key_path:
-                raise HTTPException(status_code=400, detail="Private key path is required")
-
-            # Extract just the filename, no path components allowed
-            filename = os.path.basename(request.private_key_path)
-            if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid key filename. Only alphanumeric characters, dots, dashes, and underscores are allowed",
-                )
-
-            # Construct the safe path - no user input in directory path
-            allowed_base = os.path.expanduser("~/.ciris/wa_keys/")
-            safe_path = os.path.join(allowed_base, filename)
-
-            # Double-check with realpath to prevent any symlink attacks
-            resolved_path = os.path.realpath(safe_path)
-            allowed_base_resolved = os.path.realpath(allowed_base)
-            if not resolved_path.startswith(allowed_base_resolved):
-                raise HTTPException(status_code=403, detail="Access denied: path traversal detected")
-
-            # Read the private key
-            async with aiofiles.open(resolved_path, "rb") as f:
-                private_key_bytes = await f.read()
-
-            # Create Ed25519 private key object
-            private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key_bytes)
-
-            # Sign the message
-            message = f"MINT_WA:{user_id}:{request.wa_role.value}"
-            signature_bytes = private_key.sign(message.encode())
-
-            # Encode to base64
-            signature = base64.b64encode(signature_bytes).decode()
-
-            logger.info(
-                "Auto-signed WA mint request for user=%s using key file: %s",
-                _sanitize_for_log(user_id),
-                _sanitize_for_log(filename),
-            )
-
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail=f"Private key file not found: {filename}")
-        except Exception as e:
-            logger.error(f"Failed to auto-sign: {e}")
-            raise HTTPException(status_code=500, detail="Failed to auto-sign with provided private key")
-
-    if not signature:
-        raise HTTPException(status_code=400, detail=ERROR_SIGNATURE_OR_KEY_REQUIRED)
-
-    # Verify the ROOT signature
-    verified = await auth_service.verify_root_signature(user_id=user_id, wa_role=request.wa_role, signature=signature)
-
-    if not verified:
-        raise HTTPException(status_code=401, detail=ERROR_INVALID_SIGNATURE)
-
-    # Mint the user as WA
-    user = await auth_service.mint_wise_authority(user_id=user_id, wa_role=request.wa_role, minted_by=auth.user_id)
-
-    if not user:
-        raise HTTPException(status_code=404, detail=ERROR_USER_NOT_FOUND)
-
-    # Return updated user details
-    return await get_user(user_id, auth, auth_service, None)
-
-
-@router.get("/wa/key-check", responses=RESPONSES_500)
-async def check_wa_key_exists(
-    auth: AuthDep,
-    _: CheckWAMintDep,
-    path: str = Query(..., description="Filename of private key to check"),
-) -> WAKeyCheckResponse:
-    """
-    Check if a WA private key exists at the given filename.
-
-    Requires: wa.mint permission (SYSTEM_ADMIN only)
-
-    This is used by the UI to determine if auto-signing is available.
-    Only checks files within ~/.ciris/wa_keys/ for security.
-    """
-    import os
-    import re
-
-    try:
-        # Security: Validate the filename
-        # Extract just the filename, no path components allowed
-        filename = os.path.basename(path)
-        if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
-            return WAKeyCheckResponse(
-                exists=False,
-                filename=filename,
-                error="Invalid filename. Only alphanumeric characters, dots, dashes, and underscores are allowed",
-            )
-
-        # Construct the safe path - no user input in directory path
-        allowed_base = os.path.expanduser("~/.ciris/wa_keys/")
-        safe_path = os.path.join(allowed_base, filename)
-
-        # Double-check with realpath to prevent any symlink attacks
-        resolved_path = os.path.realpath(safe_path)
-        allowed_base_resolved = os.path.realpath(allowed_base)
-        if not resolved_path.startswith(allowed_base_resolved):
-            return WAKeyCheckResponse(exists=False, filename=filename, error="Access denied: path traversal detected")
-
-        # Check if file exists and is readable
-        exists = os.path.isfile(resolved_path) and os.access(resolved_path, os.R_OK)
-
-        # If exists, check if it's a valid key size (32 bytes for Ed25519)
-        if exists:
-            file_size = os.path.getsize(resolved_path)
-            valid_size = file_size == 32  # Ed25519 private key is 32 bytes
-
-            return WAKeyCheckResponse(exists=True, valid_size=valid_size, size=file_size, filename=filename)
-        else:
-            return WAKeyCheckResponse(exists=False, filename=filename)
-
-    except Exception as e:
-        logger.error(f"Error checking key file {filename}: {e}")
-        return WAKeyCheckResponse(exists=False, error="Failed to check key file", filename=filename)
 
 
 @router.delete("/{user_id}", responses=RESPONSES_400_404_500)

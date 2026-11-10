@@ -237,30 +237,40 @@ def _row_refusal_status(refusal: DeferralRowRefusal) -> tuple[int, str]:
 
 async def _sign_response_row(
     request: Request, deferral_id: str, pending: Optional[PendingDeferral], approved: bool
-) -> Optional[str]:
+) -> str:
     """Have the node sign the Wise Authority's answer with their own key (#1316); its attestation_id.
 
-    None, and the resolution proceeds as before #1316, when the node has no
-    deferral rows, or when this deferral has no signed request row to answer
-    (its emit failed, or it predates rows). Such an answer is recorded but
-    carries no response row, so an identity change it approves is NOT applied
-    where the node authors rows (MemorizeHandler). Every node refusal raises,
-    so the resolution is not recorded.
+    REQUIRED (100% PQC, 2026-11-08): the answer row, hybrid-signed by the WA's
+    own pen, is the only record of a WA's decision. With no deferral rows on
+    the node, or no signed request row to answer, the resolution is refused,
+    never recorded on the agent's delegate signature alone. Every node refusal
+    raises, so the resolution is not recorded.
     """
     if not rows_available():
-        return None
+        raise_wa_error(
+            "Cannot resolve deferral: this node has no deferral rows, so the Wise Authority's answer "
+            "cannot be signed with their own key",
+            status_code=503,
+        )
     request_id = pending.request_attestation_id if pending is not None else None
     if not request_id:
         logger.warning(  # NOSONAR - deferral_id sanitized via sanitize_for_log()
-            "Deferral %s has no signed request row; resolving it without a response row "
-            "(an identity change it approves will not be applied)",
+            "Deferral %s NOT resolved: it has no signed request row for the Wise Authority to answer",
             sanitize_for_log(deferral_id),
         )
-        return None
+        raise_wa_error(
+            "Cannot resolve deferral: it has no signed request row, so there is nothing for the "
+            "Wise Authority's signed answer to answer",
+            status_code=409,
+        )
     try:
         return await emit_deferral_response(request_id, approved, _presented_session_token(request))
     except DeferralRowsUnavailable:
-        return None
+        raise_wa_error(
+            "Cannot resolve deferral: this node has no deferral rows, so the Wise Authority's answer "
+            "cannot be signed with their own key",
+            status_code=503,
+        )
     except DeferralRowRefused as refused:
         refusal = refused.refusal
         code, error_code = _row_refusal_status(refusal)
@@ -465,18 +475,16 @@ async def resolve_deferral(
         # THE WA'S OWN SIGNED ANSWER (#1316), before anything is recorded: if the
         # node refuses it, the resolution is not recorded at all.
         response_row = await _sign_response_row(request, deferral_id, _pending, approved)
-        if response_row is not None:
-            deferral_response = deferral_response.model_copy(update={"response_attestation_id": response_row})
+        deferral_response = deferral_response.model_copy(update={"response_attestation_id": response_row})
 
         success = await wa_service.resolve_deferral(deferral_id, deferral_response)
 
         if not success:
-            if response_row is not None:
-                logger.warning(  # NOSONAR - all request-derived values sanitized via sanitize_for_log()
-                    "Deferral %s: the node signed response row %s but the resolution was not recorded",
-                    sanitize_for_log(deferral_id),
-                    sanitize_for_log(response_row),
-                )
+            logger.warning(  # NOSONAR - all request-derived values sanitized via sanitize_for_log()
+                "Deferral %s: the node signed response row %s but the resolution was not recorded",
+                sanitize_for_log(deferral_id),
+                sanitize_for_log(response_row),
+            )
             raise_wa_error("Failed to resolve deferral - it may have already been resolved", status_code=400)
 
         response = ResolveDeferralResponse(

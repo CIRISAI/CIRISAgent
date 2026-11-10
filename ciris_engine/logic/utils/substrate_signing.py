@@ -32,7 +32,7 @@ from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["sign_classical", "sign_hybrid"]
+__all__ = ["sign_classical", "sign_hybrid", "sign_hybrid_required", "verify_hybrid_required"]
 
 
 def sign_hybrid(engine: Any, canonical: bytes) -> Tuple[bytes, Optional[bytes]]:
@@ -63,3 +63,43 @@ def sign_classical(engine: Any, canonical: bytes) -> bytes:
     """
     classical, _ = sign_hybrid(engine, canonical)
     return classical
+
+
+#: The only verifier policy this repo passes (CC 5.3.2.4.3.1, CIRISAgent#1348):
+#: both halves present and both verify. There is no classical-only posture to
+#: select; when persist/edge drop the policy argument, this is the one line to go.
+_HYBRID_REQUIRED = "strict"
+
+
+def sign_hybrid_required(engine: Any, canonical: bytes) -> Tuple[bytes, bytes]:
+    """Sign `canonical` with both halves, or raise: a classical-only signature is not produced.
+
+    For records whose verifier is hybrid-required. A build with no PQC signer
+    cannot make one, and saying so beats writing a row nothing will accept.
+    """
+    classical, pqc = sign_hybrid(engine, canonical)
+    if not pqc:
+        raise RuntimeError("no ML-DSA-65 half was produced; a hybrid-required record cannot be signed")
+    return classical, pqc
+
+
+def verify_hybrid_required(
+    engine: Any,
+    canonical: bytes,
+    classical_sig_b64: str,
+    pqc_sig_b64: Optional[str],
+    ed25519_pubkey_b64: str,
+    pqc_pubkey_b64: Optional[str],
+) -> None:
+    """Verify both halves of a hybrid signature. Raises ValueError on anything less.
+
+    A missing PQC signature or key is a failure, never a reason to check the
+    classical half alone.
+    """
+    if not pqc_sig_b64:
+        raise ValueError("signature carries no ML-DSA-65 half (hybrid required)")
+    if not pqc_pubkey_b64:
+        raise ValueError("signer has no ML-DSA-65 public key (hybrid required)")
+    engine.verify_hybrid(
+        canonical, classical_sig_b64, pqc_sig_b64, ed25519_pubkey_b64, pqc_pubkey_b64, _HYBRID_REQUIRED
+    )

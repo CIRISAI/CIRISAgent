@@ -13,7 +13,7 @@ from ciris_engine.logic.utils.mobile_exclusions import (
     compute_mobile_excluded_count,
     compute_mobile_excluded_list,
 )
-from ciris_engine.schemas.services.attestation import AttestationResult
+from ciris_engine.schemas.services.attestation import AttestationResult, TrustRootSource
 
 from .types import VerifyThreadResult
 
@@ -62,15 +62,38 @@ def _extract_module_integrity(attestation: Dict[str, Any]) -> Dict[str, Any]:
     return module_integrity
 
 
+def _source_checks(sources: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """One entry per trust-root host (CIRISVerify 21+, CC 5.3.4). DNS is not a source."""
+    return [check for check in sources.get("sources") or [] if isinstance(check, dict)]
+
+
 def _count_agreeing_sources(sources: Dict[str, Any]) -> int:
-    """Count number of agreeing DNS/HTTPS sources."""
+    """Count the hosts that verified the selected trust root."""
+    fingerprint = (sources.get("trust_root") or {}).get("bundle_fingerprint")
+    if not fingerprint:
+        return 0
     return sum(
-        [
-            sources.get("dns_us_valid", False),
-            sources.get("dns_eu_valid", False),
-            sources.get("https_valid", False),
-        ]
+        1
+        for check in _source_checks(sources)
+        if check.get("verified") and check.get("bundle_fingerprint") == fingerprint
     )
+
+
+def _trust_root_sources(sources: Dict[str, Any]) -> List[TrustRootSource]:
+    return [
+        TrustRootSource(
+            endpoint=str(check.get("endpoint") or ""),
+            reachable=bool(check.get("reachable")),
+            verified=bool(check.get("verified")),
+            bundle_fingerprint=check.get("bundle_fingerprint"),
+            error=check.get("error"),
+        )
+        for check in _source_checks(sources)
+    ]
+
+
+def _any_source_verified(sources: Dict[str, Any]) -> bool:
+    return any(check.get("verified") for check in _source_checks(sources))
 
 
 def _build_file_integrity_fields(
@@ -270,10 +293,9 @@ def build_attestation_result(
         # Level from run_attestation_sync
         max_level=level,
         # Source validation (Level 3)
-        dns_us_ok=sources.get("dns_us_valid", False),
-        dns_eu_ok=sources.get("dns_eu_valid", False),
-        https_us_ok=sources.get("https_valid", False),
-        https_eu_ok=sources.get("https_valid", False),
+        # DNS stopped being a source in CIRISVerify 21, so the dns_* fields stay False.
+        https_us_ok=_any_source_verified(sources),
+        https_eu_ok=_any_source_verified(sources),
         # Binary/key attestation (Level 1-2)
         binary_ok=self_verification.get("binary_valid", False),
         env_ok=not key_attestation.get("running_in_vm", False),
@@ -281,16 +303,13 @@ def build_attestation_result(
         registry_ok=key_attestation.get("registry_key_status") == "active",
         registry_key_status=key_attestation.get("registry_key_status") or attestation.get("registry_key_status"),
         sources_agreeing=_count_agreeing_sources(sources),
+        sources=_trust_root_sources(sources),
         # #862: registry reachability is reported by CIRISVerify SEPARATELY from
         # validity (a source can be reachable but disagree = tamper, or unreachable
         # = network failure). `validation_status` is the multi-source classifier
         # (NoSourcesReachable vs SourcesDisagree). Carry both so the degradation
         # check can tell "couldn't verify" from "verified bad".
-        registry_reachable=bool(
-            sources.get("dns_us_reachable", False)
-            or sources.get("dns_eu_reachable", False)
-            or sources.get("https_reachable", False)
-        ),
+        registry_reachable=any(check.get("reachable") for check in _source_checks(sources)),
         source_validation_status=sources.get("validation_status"),
         # File integrity (Level 4)
         **file_fields,

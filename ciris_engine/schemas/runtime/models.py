@@ -194,6 +194,9 @@ class Task(BaseModel):
     signed_by: Optional[str] = Field(None, description="WA ID that signed this task")
     signature: Optional[str] = Field(None, description="Cryptographic signature of task")
     signed_at: Optional[str] = Field(None, description="ISO8601 timestamp when signed")
+    signature_pqc: Optional[str] = Field(
+        None, description="ML-DSA-65 half (base64) of an agent-signed task; its verifier is hybrid-required"
+    )
     # Updated info tracking
     updated_info_available: bool = Field(
         default=False, description="Flag indicating new observation arrived for this task"

@@ -77,32 +77,6 @@ class ApprovalContext(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
-class WADecision(BaseModel):
-    """A decision made by a Wise Authority."""
-
-    decision_id: str = Field(..., description="Unique decision ID")
-    wa_id: str = Field(..., description="WA who made the decision")
-    decision: str = Field(..., description="The decision: approve, deny, defer")
-    reasoning: str = Field(..., description="Explanation for the decision")
-
-    # Context
-    request_type: str = Field(..., description="What was being decided")
-    request_id: str = Field(..., description="ID of the request")
-
-    # Timestamps
-    requested_at: datetime = Field(..., description="When request was made")
-    decided_at: datetime = Field(..., description="When decision was made")
-
-    # Conditions or modifications
-    conditions: List[str] = Field(default_factory=list, description="Any conditions on approval")
-    modifications: Dict[str, str] = Field(default_factory=dict, description="Any modifications to request")
-
-    # Signature
-    signature: str = Field(..., description="Digital signature of decision")
-
-    model_config = ConfigDict(extra="forbid", defer_build=True)
-
-
 class WAInteractionLog(BaseModel):
     """Log entry for WA interactions."""
 
@@ -131,4 +105,4 @@ class WAInteractionLog(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
-__all__ = ["GuidanceContext", "DeferralContext", "ApprovalContext", "WADecision", "WAInteractionLog"]
+__all__ = ["GuidanceContext", "DeferralContext", "ApprovalContext", "WAInteractionLog"]

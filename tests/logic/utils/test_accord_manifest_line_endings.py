@@ -41,12 +41,12 @@ import subprocess
 import pytest
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
-MANIFEST = REPO / "seed" / "accord_manifest.json"
+MANIFEST = REPO / "ciris_engine" / "data" / "seed" / "accord_manifest.json"
 
 #: Every artifact whose bytes are signed, hashed, or otherwise authenticated.
 BYTE_EXACT = [
-    "seed/accord_manifest.json",
-    "seed/accord_manifest.sig",
+    "ciris_engine/data/seed/accord_manifest.json",
+    "ciris_engine/data/seed/accord_manifest.hybrid.json",
     "ciris_engine/data/accord_1.2b_POLYGLOT.txt",
     "ciris_engine/data/accord_1.2b_POLYGLOT_compressed.txt",
     # The served 1.3 edition (CIRISAgent#1252); 1.2b above is the research control.

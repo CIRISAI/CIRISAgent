@@ -4011,7 +4011,59 @@
     "community_section_body_local": "Ɗakuna don mutanen da ke kusa da ku. A yanzu, ɗaki yana nunawa a matsayin na gida ne kawai a kan na'urar da ta kafa shi. Sauran mambobi suna ganinsa a ƙarƙashin Al'ummomi.",
     "community_empty_local": "Ba ku da wani ɗaki na gida tukuna. Ku kafa ɗaya sannan ku gayyaci mutanen da ke kusa da ku.",
     "community_create_open_local": "Kafa ɗaki na gida",
-    "community_create_title_local": "Kafa ɗaki na gida"
+    "community_create_title_local": "Kafa ɗaki na gida",
+    "server_local_desc": "Sarrafa kumburin da ke gudana a wannan na'ura.",
+    "server_remote_desc": "Haɗa da kumburin da ke gudana a wani wuri.",
+    "server_url_label": "Adireshin kumburi",
+    "server_current": "Na yanzu",
+    "add_device_no_session": "Wannan na'ura ta shiga CIRIS ID naku, amma ba ta iya kammala shiga ba. Ku sake kafa wannan na'ura, sannan ku amince da ita daga wata na'urarku.",
+    "chat_call": "Kira",
+    "call_title": "Kira",
+    "call_choose": "Yaya kuke son yin kiran?",
+    "call_voice": "Kiran murya",
+    "call_video": "Kiran bidiyo",
+    "call_asking_microphone": "Ku ba da izinin makirifo domin mutanen da ke cikin wannan ɗakin su ji ku.",
+    "call_asking_camera": "Ku ba da izinin kamara domin mutanen da ke cikin wannan ɗakin su gan ku.",
+    "call_microphone_denied": "Kiran yana buƙatar makirifo. Kunna shi don CIRIS a cikin saitunan na'urarku, sannan ku sake gwadawa.",
+    "call_try_again": "Sake gwadawa",
+    "call_ready_voice": "Makirifon ku a shirye yake.",
+    "call_ready_video": "Makirifo da kamararku a shirye suke.",
+    "call_audio_only": "An kashe kamara, don haka wannan zai zama kiran murya.",
+    "call_not_connecting": "Ba a iya yin kira daga wannan app tukuna ba.",
+    "call_unavailable_platform": "Kira ba ya samuwa a kan wannan na'urar tukuna.",
+    "call_unavailable_no_device": "Wannan na'urar ba ta da makirifo, don haka ba za ta iya yin kira ba.",
+    "call_not_saved": "Ba a ajiye ba",
+    "call_save": "Ajiye sashena na wannan kiran",
+    "call_save_unavailable": "Ajiye kira ba a shirya ba tukuna.",
+    "trust_hosts_verified": "An tabbatar da {verified} daga cikin {checked} na cibiyoyin tushen amincewa",
+    "trust_hosts_unreachable": "Ba a iya kaiwa ga {count} cibiyoyin tushen amincewa ba. Wannan ba gazawa ba ce: wataƙila ba sa aiki ko an toshe su daga wannan hanyar sadarwa.",
+    "trust_hosts_disagree": "Cibiyoyin tushen amincewa guda biyu sun bayar da amsoshi daban-daban, don haka ba a zaɓi tushen amincewa ba. Wannan kumburi yana ƙarƙashin ƙuntatawa har sai sun yarda da juna.",
+    "trust_host_verified": "An tabbatar",
+    "trust_host_unreachable": "Ba a iya kaiwa ba",
+    "trust_host_not_verified": "An kai, ba a tabbatar ba",
+    "wa_update_not_allowed": "Mai gudanarwa ko Hukumar Hikima kaɗai ne zai iya yanke hukunci kan shawarar da ke jira. Wannan asusun ba zai iya ba.",
+    "wa_update_changed": "Wani ya riga ya yanke hukunci kan wannan shawarar kafin ku, don haka babu abin da ya canza. Jerin yanzu yana nuna matsayinta.",
+    "wa_update_failed": "Wakili bai karɓi wannan canjin ba. Sake gwadawa.",
+    "trace_consent_unanswered_note": "Kuna iya barin wannan ba tare da amsa ba. Ba za a aika komai ba sai kun ce eh, kuma kuna iya amsawa daga baya.",
+    "files_uploading_progress": "Ana ƙara {name}: {sent} na {total}",
+    "files_add_cancel": "Tsaya",
+    "remote_node_view": "Duba",
+    "remote_node_title": "Kumburinku",
+    "remote_node_snapshot_at": "An karanta a {time}. Wannan hoto ne na ɗan lokaci: ku sabunta don sake karanta shi.",
+    "remote_node_metrics": "Hanyar sadarwa",
+    "remote_node_logs": "Rajistar kwanan nan",
+    "remote_node_refresh": "Sabunta",
+    "remote_node_unreachable": "Ba a iya isa wannan kumburi a yanzu ba. Yana iya kasancewa a kashe ko kuma ba shi cikin kewayo.",
+    "remote_node_timeout": "Wannan kumburi bai amsa a kan lokaci ba. Ku sake gwadawa nan ba da jimawa ba.",
+    "remote_node_send_failed": "An kasa aika buƙatar zuwa wannan kumburi. Ku sake gwadawa.",
+    "remote_node_no_transport": "Wannan kumburi ba zai iya isa ga sauran kumburorinku ba. Ku duba saitunan hanyar sadarwarsa.",
+    "remote_node_needs_update": "Wannan kumburi yana buƙatar sabuntawa kafin ya iya nuna wannan.",
+    "remote_node_not_owner": "Wannan kumburi bai karɓi wannan buƙata ba. Na'urorin mai shi ne kaɗai za su iya karanta ta.",
+    "remote_node_failed": "An kasa karanta amsar wannan kumburi.",
+    "add_device_contact_hint_2": "A wata na'urarku, buɗe Raba ID na. Ɗauki hoton QR ɗinta, ko ku manna dogon ko gajeren salo a nan. ID ɗin tarayyarku shi kaɗai ma yana aiki idan an sanar da sauran na'urarku.",
+    "contacts_reach_sent": "An aika: ana jiran su amsa",
+    "contacts_reach_waiting": "Ana jiran isa gare su",
+    "contacts_stale_since": "Ba a ji labarinsu ba tun {date}"
   },
   "conscience": {
     "ponder_attempted": "Na yi ƙoƙarin {action}",
@@ -5255,7 +5307,8 @@
     "voting": {
       "description": "Cikakken tsarin zaɓe: iyakokin yarjejeniya na M-daga-N da ake tabbatarwa a wire, da tsarin oda na quorum-sama-lokaci a cikin substrate. Zaɓen ƴan-adawa na Commons ya riga ya fara aiki — wannan zaɓe ne a matsayin asali na farko, mai tabbatarwa.",
       "title": "Zaɓe"
-    }
+    },
+    "announce_costs": "Idan ba ku sanar ba, babu wanda zai iya isa gare ku ta cikin mesh a wannan sigar: lambar tuntuɓarku tana gano ku ne, amma har yanzu ba ta ɗauke da hanyar isa ga na'urorinku ba. Ba za ku iya shiga ƙungiyoyin jama'a ba. Ɗakin keɓaɓɓe yana buƙatar ku biyu ku sanar."
   },
   "mesh_config": {
     "consumption": {
@@ -5802,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Ba a kammala shiga ba a cikin burauza, don haka ba a canza komai ba. Sake gwadawa, ko a yi amfani da asusun cikin gida maimakon haka.",
-      "waiting": "Kammala shiga da Google a cikin burauzarka, sannan ka dawo nan."
+      "waiting": "Kammala shiga da Google a cikin burauzarka, sannan ka dawo nan.",
+      "no_browser": "An kasa buɗe burauza. Don shiga, ka buɗe wannan adireshin a cikin burauzarka: {url}",
+      "never_arrived": "Burauzarka bai taɓa kaiwa shafin shiga ba, don haka ba a canza komai ba. Tabbata an buɗe taga burauza, sannan ka sake gwadawa."
     },
     "claim": {
       "not_armed": "ba a shirya wannan node don da'awar farkon amfani ba (babu PIN na lokaci ɗaya) — mai yiwuwa an riga an yi da'awar mallaka",
@@ -5841,7 +5896,8 @@
       "provider_unavailable": "Wannan na'urar ba za ta iya shigar da kai ta wannan mai bada sabis ba — ba a saita irin wannan shiga a wannan sigar ba. Maimakon haka, ka shiga da sunan mai amfani da kalmar sirri.",
       "state_invalid": "yanayin oauth mara inganci ko wanda ya ƙare",
       "store_unavailable": "Node ɗin bai iya karanta ma'ajiyar shaidarsa ba, don haka ba a iya kammala shiga ba. Wannan matsala ce ta node, ba ta asusunka ba.",
-      "unsafe_redirect": "redirect_uri mara aminci"
+      "unsafe_redirect": "redirect_uri mara aminci",
+      "flow_unknown": "Burauzarka bai taɓa kaiwa shafin shiga ba, don haka ba a canza komai ba. Sake gwadawa."
     },
     "oauth_link": {
       "already_has_identity": "Wannan asusun ya riga yana da shaidar shiga da aka haɗa. Ka fara cire ta idan kana son maye gurbinta.",
@@ -6357,7 +6413,8 @@
     "rng": "babu lambobi bazuwar don ƙalubalen tabbatarwa",
     "unexpected": "amsa da ba a zata ba daga sauran na'urarku",
     "unknown_identity": "an kasa samun wannan shaidar",
-    "unreachable": "an kasa isa ga sauran na'urarku"
+    "unreachable": "an kasa isa ga sauran na'urarku",
+    "node_proof": "wannan na'ura ta kasa tabbatar da wane kumburi take"
   },
   "sign_owner_binding": {
     "bad_request": "Ba a iya karanta wannan buƙatar owner binding ba.",

@@ -3860,7 +3860,59 @@
     "files_pick_hint": "첨부할 파일을 선택하거나, 먼저 파일을 추가하세요.",
     "moderation_reveal": "공개",
     "moderation_reveal_title": "이 항목을 볼까요?",
-    "moderation_reveal_fact_flag": "플래그 유형"
+    "moderation_reveal_fact_flag": "플래그 유형",
+    "call_save_unavailable": "통화 저장 기능은 아직 준비되지 않았습니다.",
+    "trust_hosts_verified": "신뢰 루트 호스트 {checked}개 중 {verified}개 확인됨",
+    "trust_hosts_unreachable": "신뢰 루트 호스트 {count}개에 도달할 수 없었습니다. 이는 실패가 아닙니다: 해당 호스트가 다운되었거나 이 네트워크에서 차단되었을 수 있습니다.",
+    "trust_hosts_disagree": "두 신뢰 루트 호스트가 서로 다른 응답을 하여, 신뢰 루트가 선택되지 않았습니다. 두 호스트가 합의할 때까지 이 노드는 제한됩니다.",
+    "trust_host_verified": "확인됨",
+    "trust_host_unreachable": "도달할 수 없음",
+    "trust_host_not_verified": "도달함, 확인되지 않음",
+    "wa_update_not_allowed": "대기 중인 제안을 결정할 수 있는 것은 관리자 또는 Wise Authority뿐입니다. 이 계정은 할 수 없습니다.",
+    "wa_update_changed": "다른 누군가가 사용자보다 먼저 이 제안을 결정했으므로, 변경된 것은 없습니다. 목록은 이제 현재 상태를 보여줍니다.",
+    "wa_update_failed": "에이전트가 그 변경 사항을 반영하지 않았습니다. 다시 시도하세요.",
+    "trace_consent_unanswered_note": "답하지 않은 채로 두어도 됩니다. 동의하기 전까지는 아무것도 전송되지 않으며, 나중에 답할 수 있습니다.",
+    "files_uploading_progress": "{name} 추가 중: {total} 중 {sent}",
+    "files_add_cancel": "중지",
+    "remote_node_view": "보기",
+    "remote_node_title": "사용자 노드",
+    "remote_node_snapshot_at": "{time}에 읽었습니다. 이는 스냅샷입니다: 다시 읽으려면 새로고침하세요.",
+    "remote_node_metrics": "네트워크",
+    "remote_node_logs": "최근 로그",
+    "remote_node_refresh": "새로고침",
+    "remote_node_unreachable": "그 노드에 지금은 연결할 수 없습니다. 꺼져 있거나 범위를 벗어났을 수 있습니다.",
+    "remote_node_timeout": "그 노드가 제시간에 응답하지 않았습니다. 잠시 후 다시 시도하세요.",
+    "remote_node_send_failed": "그 노드로 요청을 보낼 수 없습니다. 다시 시도하세요.",
+    "remote_node_no_transport": "이 노드는 사용자의 다른 노드에 연결할 수 없습니다. 네트워크 설정을 확인하세요.",
+    "remote_node_needs_update": "그 노드는 이를 표시하려면 먼저 업데이트가 필요합니다.",
+    "remote_node_not_owner": "그 노드는 이 요청을 수락하지 않았습니다. 소유자의 기기만 이를 읽을 수 있습니다.",
+    "remote_node_failed": "그 노드의 응답을 읽을 수 없습니다.",
+    "add_device_contact_hint_2": "다른 기기에서 '내 ID 공유'를 여세요. QR 코드를 스캔하거나, 긴 형식이나 짧은 형식을 여기에 붙여넣으세요. 다른 기기가 공지된 경우에는 페더레이션 ID만으로도 작동합니다.",
+    "contacts_reach_sent": "전송됨: 상대방의 응답을 기다리는 중",
+    "contacts_reach_waiting": "상대방에게 연결을 시도하는 중",
+    "contacts_stale_since": "{date} 이후로 소식이 없습니다",
+    "server_local_desc": "이 기기에서 실행 중인 노드를 관리합니다.",
+    "server_remote_desc": "다른 곳에서 실행 중인 노드에 연결합니다.",
+    "server_url_label": "노드 주소",
+    "server_current": "현재",
+    "add_device_no_session": "이 기기가 사용자의 CIRIS ID에 합류했지만, 로그인을 완료할 수 없었습니다. 이 기기를 다시 설정한 다음, 다른 기기에서 승인하세요.",
+    "chat_call": "통화",
+    "call_title": "통화",
+    "call_choose": "어떻게 전화하시겠습니까?",
+    "call_voice": "음성 통화",
+    "call_video": "영상 통화",
+    "call_asking_microphone": "이 방에 있는 사람들이 사용자의 말을 들을 수 있도록 마이크를 허용하세요.",
+    "call_asking_camera": "이 방에 있는 사람들이 사용자를 볼 수 있도록 카메라를 허용하세요.",
+    "call_microphone_denied": "통화에는 마이크가 필요합니다. 기기 설정에서 CIRIS의 마이크를 켠 다음 다시 시도하세요.",
+    "call_try_again": "다시 시도",
+    "call_ready_voice": "마이크가 준비되었습니다.",
+    "call_ready_video": "마이크와 카메라가 준비되었습니다.",
+    "call_audio_only": "카메라가 꺼져 있어 음성 통화로 진행됩니다.",
+    "call_not_connecting": "이 앱에서는 아직 통화를 연결할 수 없습니다.",
+    "call_unavailable_platform": "이 기기에서는 아직 통화를 사용할 수 없습니다.",
+    "call_unavailable_no_device": "이 기기에는 마이크가 없어 통화를 할 수 없습니다.",
+    "call_not_saved": "저장되지 않음",
+    "call_save": "이 통화에서 내 쪽 저장"
   },
   "prompts": {
     "dma": {
@@ -5255,7 +5307,8 @@
     "voting": {
       "description": "완전한 투표 플레인: M-of-N 합의 임계값이 전송 중에 검증되고, 기판에서 정족수 초과 시간 순서가 정렬됩니다. Commons의 이의 투표는 이미 제공됨 — 이것은 투표를 일급 검증 가능한 기본 요소로서 제공합니다.",
       "title": "투표"
-    }
+    },
+    "announce_costs": "공지하지 않으면 이 버전에서는 아무도 메시를 통해 사용자에게 연결할 수 없습니다: 연락처 코드는 사용자를 식별하지만 아직 기기에 연결할 방법을 전달하지 않습니다. 공개 그룹에는 참여할 수 없습니다. 비공개 방에는 양쪽 모두 공지해야 합니다."
   },
   "mesh_config": {
     "consumption": {
@@ -5802,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "브라우저에서 로그인이 완료되지 않아 변경된 내용이 없습니다. 다시 시도하거나 로컬 계정을 사용하세요.",
-      "waiting": "브라우저에서 Google 로그인을 완료한 후 여기로 돌아오세요."
+      "waiting": "브라우저에서 Google 로그인을 완료한 후 여기로 돌아오세요.",
+      "no_browser": "브라우저를 열 수 없었습니다. 로그인하려면 브라우저에서 다음 주소를 여세요: {url}",
+      "never_arrived": "브라우저가 로그인 페이지에 도달하지 못해 변경된 내용이 없습니다. 브라우저 창이 열렸는지 확인한 후 다시 시도하세요."
     },
     "claim": {
       "not_armed": "이 노드는 최초 실행 소유권 등록을 위해 준비되어 있지 않습니다(일회용 PIN 없음) — 소유권이 이미 등록되었을 수 있습니다",
@@ -5841,7 +5896,8 @@
       "provider_unavailable": "이 노드는 해당 제공자로 로그인할 수 없습니다. 이 빌드에는 그러한 로그인 방식이 구성되어 있지 않습니다. 대신 사용자 이름과 비밀번호로 로그인해 주세요.",
       "state_invalid": "유효하지 않거나 만료된 oauth 상태",
       "store_unavailable": "노드가 신원 저장소를 읽지 못해 로그인을 완료할 수 없습니다. 계정이 아니라 노드 쪽 문제입니다.",
-      "unsafe_redirect": "안전하지 않은 redirect_uri"
+      "unsafe_redirect": "안전하지 않은 redirect_uri",
+      "flow_unknown": "브라우저가 로그인 페이지에 도달하지 못해 변경된 내용이 없습니다. 다시 시도하세요."
     },
     "oauth_link": {
       "already_has_identity": "해당 계정에는 이미 연결된 로그인 ID가 있습니다. 교체하려면 먼저 삭제하세요.",
@@ -6357,7 +6413,8 @@
     "rng": "챌린지에 사용할 난수가 없습니다",
     "unexpected": "다른 기기로부터 예기치 않은 응답을 받았습니다",
     "unknown_identity": "해당 신원을 찾을 수 없습니다",
-    "unreachable": "다른 기기에 연결할 수 없습니다"
+    "unreachable": "다른 기기에 연결할 수 없습니다",
+    "node_proof": "이 기기는 자신이 어떤 노드인지 증명할 수 없었습니다"
   },
   "sign_owner_binding": {
     "bad_request": "그 소유자 바인딩 요청을 읽을 수 없습니다.",

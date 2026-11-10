@@ -3860,7 +3860,59 @@
     "community_section_body_local": "Size yakın kişiler için odalar. Şimdilik bir oda, yalnızca onu kuran cihazda yerel olarak görünür. Diğer üyeler onu Topluluklar altında görür.",
     "community_empty_local": "Henüz hiç yerel odanız yok. Bir tane kurun ve size yakın kişileri davet edin.",
     "community_create_open_local": "Yerel bir oda kurun",
-    "community_create_title_local": "Yerel bir oda kurun"
+    "community_create_title_local": "Yerel bir oda kurun",
+    "server_local_desc": "Bu cihazda çalışan düğümü yönetin.",
+    "server_remote_desc": "Başka bir yerde çalışan bir düğüme bağlanın.",
+    "server_url_label": "Düğüm adresi",
+    "server_current": "Mevcut",
+    "add_device_no_session": "Bu cihaz CIRIS ID'nize katıldı, ancak oturum açma işlemini tamamlayamadı. Bu cihazı yeniden kurun, ardından diğer cihazınızdan onaylayın.",
+    "chat_call": "Ara",
+    "call_title": "Arama",
+    "call_choose": "Nasıl aramak istersiniz?",
+    "call_voice": "Sesli arama",
+    "call_video": "Görüntülü arama",
+    "call_asking_microphone": "Bu odadaki kişilerin sizi duyabilmesi için mikrofona izin verin.",
+    "call_asking_camera": "Bu odadaki kişilerin sizi görebilmesi için kameraya izin verin.",
+    "call_microphone_denied": "Bir arama için mikrofon gereklidir. Cihaz ayarlarınızdan CIRIS için mikrofonu açın, ardından tekrar deneyin.",
+    "call_try_again": "Tekrar deneyin",
+    "call_ready_voice": "Mikrofonunuz hazır.",
+    "call_ready_video": "Mikrofonunuz ve kameranız hazır.",
+    "call_audio_only": "Kamera kapalı, bu yüzden bu bir sesli arama olacak.",
+    "call_not_connecting": "Aramalar bu uygulamadan henüz bağlanamıyor.",
+    "call_unavailable_platform": "Aramalar bu cihazda henüz kullanılamıyor.",
+    "call_unavailable_no_device": "Bu cihazda mikrofon yok, bu yüzden arama yapamaz.",
+    "call_not_saved": "Kaydedilmedi",
+    "call_save": "Bu aramadaki kendi tarafımı kaydet",
+    "call_save_unavailable": "Aramaları kaydetme henüz hazır değil.",
+    "trust_hosts_verified": "{checked} güven kökü sunucusundan {verified} tanesi doğrulandı",
+    "trust_hosts_unreachable": "{count} güven kökü sunucusuna erişilemedi. Bu bir başarısızlık değildir: kapalı olabilirler ya da bu ağdan engellenmiş olabilirler.",
+    "trust_hosts_disagree": "İki güven kökü sunucusu farklı yanıtlar verdi, bu yüzden bir güven kökü seçilmedi. Bu düğüm, onlar hemfikir olana dek kısıtlıdır.",
+    "trust_host_verified": "Doğrulandı",
+    "trust_host_unreachable": "Erişilemiyor",
+    "trust_host_not_verified": "Ulaşıldı, doğrulanmadı",
+    "wa_update_not_allowed": "Bekleyen bir öneriye yalnızca bir yönetici veya bir Bilge Otorite karar verebilir. Bu hesap karar veremez.",
+    "wa_update_changed": "Biri bu öneriye sizden önce karar verdi, bu yüzden hiçbir şey değişmedi. Liste artık durumunu gösteriyor.",
+    "wa_update_failed": "Ajan bu değişikliği kabul etmedi. Tekrar deneyin.",
+    "trace_consent_unanswered_note": "Bunu yanıtsız bırakabilirsiniz. Siz evet demeden hiçbir şey gönderilmez ve daha sonra yanıtlayabilirsiniz.",
+    "files_uploading_progress": "{name} ekleniyor: {sent} / {total}",
+    "files_add_cancel": "Durdur",
+    "remote_node_view": "Görüntüle",
+    "remote_node_title": "Düğümünüz",
+    "remote_node_snapshot_at": "{time}'de okundu. Bu bir anlık görüntüdür: tekrar okumak için yenileyin.",
+    "remote_node_metrics": "Ağ",
+    "remote_node_logs": "Son kayıtlar",
+    "remote_node_refresh": "Yenile",
+    "remote_node_unreachable": "O düğüme şu anda erişilemiyor. Kapalı olabilir veya menzil dışında olabilir.",
+    "remote_node_timeout": "O düğüm zamanında yanıt vermedi. Birazdan tekrar deneyin.",
+    "remote_node_send_failed": "İstek o düğüme gönderilemedi. Tekrar deneyin.",
+    "remote_node_no_transport": "Bu düğüm diğer düğümlerinize ulaşamıyor. Ağ ayarlarını kontrol edin.",
+    "remote_node_needs_update": "Bunu gösterebilmesi için o düğümün güncellenmesi gerekir.",
+    "remote_node_not_owner": "O düğüm bu isteği kabul etmedi. Yalnızca sahibinin cihazları bunu okuyabilir.",
+    "remote_node_failed": "O düğümün yanıtı okunamadı.",
+    "add_device_contact_hint_2": "Diğer cihazınızda Kimliğimi paylaş'ı açın. QR kodunu tarayın veya uzun ya da kısa biçimini buraya yapıştırın. Diğer cihazınız duyurulmuşsa, federasyon kimliğiniz tek başına da işe yarar.",
+    "contacts_reach_sent": "Gönderildi: yanıt vermeleri bekleniyor",
+    "contacts_reach_waiting": "Onlara ulaşılması bekleniyor",
+    "contacts_stale_since": "{date} tarihinden bu yana onlardan haber alınamadı"
   },
   "prompts": {
     "dma": {
@@ -5255,7 +5307,8 @@
     "voting": {
       "description": "Tam oy düzlemi: M-of-N uzlaşma eşikleri tel üzerinde doğrulanır ve kuorum-zaman-üstü sıralaması alt katmanda yer alır. Commons'ın itiraz oyları zaten gönderilir — bu, birinci sınıf, doğrulanabilir bir ilkel olarak oylama.",
       "title": "Oylama"
-    }
+    },
+    "announce_costs": "Duyurmazsanız, bu sürümde kimse mesh üzerinden size ulaşamaz: iletişim kodunuz sizi tanımlar ancak henüz cihazlarınıza ulaşmanın bir yolunu taşımaz. Genel gruplara katılamazsınız. Özel bir oda için ikinizin de duyurmuş olması gerekir."
   },
   "mesh_config": {
     "consumption": {
@@ -5802,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Oturum açma işlemi tarayıcıda tamamlanmadı, bu nedenle hiçbir şey değiştirilmedi. Tekrar deneyin veya bunun yerine yerel bir hesap kullanın.",
-      "waiting": "Tarayıcınızda Google ile oturum açma işlemini tamamlayın, ardından buraya geri dönün."
+      "waiting": "Tarayıcınızda Google ile oturum açma işlemini tamamlayın, ardından buraya geri dönün.",
+      "no_browser": "Bir tarayıcı açılamadı. Oturum açmak için bu adresi tarayıcınızda açın: {url}",
+      "never_arrived": "Tarayıcınız oturum açma sayfasına hiç ulaşmadı, bu nedenle hiçbir şey değiştirilmedi. Bir tarayıcı penceresinin açıldığını kontrol edin, ardından tekrar deneyin."
     },
     "claim": {
       "not_armed": "bu düğüm ilk çalıştırma sahiplenmesi için hazırlanmamış (tek kullanımlık PIN yok) — sahiplik zaten talep edilmiş olabilir",
@@ -5841,7 +5896,8 @@
       "provider_unavailable": "Bu düğüm sizi o sağlayıcıyla oturum açtıramaz — bu derlemede böyle bir oturum açma yöntemi yapılandırılmamış. Bunun yerine kullanıcı adı ve parolayla oturum açın.",
       "state_invalid": "geçersiz veya süresi dolmuş oauth durumu",
       "store_unavailable": "Düğüm kimlik deposunu okuyamadı, bu nedenle oturum açma tamamlanamadı. Bu, hesabınızla değil düğümle ilgili bir sorundur.",
-      "unsafe_redirect": "güvenli olmayan redirect_uri"
+      "unsafe_redirect": "güvenli olmayan redirect_uri",
+      "flow_unknown": "Tarayıcınız oturum açma sayfasına hiç ulaşmadı, bu nedenle hiçbir şey değiştirilmedi. Tekrar deneyin."
     },
     "oauth_link": {
       "already_has_identity": "Bu hesabın zaten bağlı bir oturum açma kimliği var. Değiştirmek istiyorsanız önce onu kaldırın.",
@@ -6357,7 +6413,8 @@
     "rng": "sınama için rastgelelik yok",
     "unexpected": "diğer cihazınızdan beklenmeyen bir yanıt geldi",
     "unknown_identity": "bu kimlik bulunamadı",
-    "unreachable": "diğer cihazınıza ulaşılamadı"
+    "unreachable": "diğer cihazınıza ulaşılamadı",
+    "node_proof": "bu cihaz hangi düğüm olduğunu kanıtlayamadı"
   },
   "sign_owner_binding": {
     "bad_request": "Bu sahiplik bağlaması isteği okunamadı.",

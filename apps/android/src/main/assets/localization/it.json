@@ -3860,7 +3860,59 @@
     "chat_attachment_remove": "Rimuovi",
     "chat_attachment_open": "Apri il file allegato",
     "files_withheld": "Trattenuto da un moderatore",
-    "files_act_revealed": "Ora è aperto per te."
+    "files_act_revealed": "Ora è aperto per te.",
+    "server_local_desc": "Gestisci il nodo in esecuzione su questo dispositivo.",
+    "server_remote_desc": "Connettiti a un nodo in esecuzione altrove.",
+    "server_url_label": "Indirizzo del nodo",
+    "server_current": "Attuale",
+    "add_device_no_session": "Questo dispositivo si è unito al tuo CIRIS ID, ma non è riuscito a completare l'accesso. Configura di nuovo questo dispositivo, poi approvalo dall'altro dispositivo.",
+    "chat_call": "Chiama",
+    "call_title": "Chiamata",
+    "call_choose": "Come vuoi chiamare?",
+    "call_voice": "Chiamata vocale",
+    "call_video": "Videochiamata",
+    "call_asking_microphone": "Consenti l'accesso al microfono, così le persone in questa stanza possono sentirti.",
+    "call_asking_camera": "Consenti l'accesso alla fotocamera, così le persone in questa stanza possono vederti.",
+    "call_microphone_denied": "Una chiamata richiede il microfono. Attivalo per CIRIS nelle impostazioni del dispositivo, poi riprova.",
+    "call_try_again": "Riprova",
+    "call_ready_voice": "Il tuo microfono è pronto.",
+    "call_ready_video": "Il tuo microfono e la tua fotocamera sono pronti.",
+    "call_audio_only": "La fotocamera è spenta, quindi questa sarà una chiamata vocale.",
+    "call_not_connecting": "Le chiamate non possono ancora connettersi da questa app.",
+    "call_unavailable_platform": "Le chiamate non sono ancora disponibili su questo dispositivo.",
+    "call_unavailable_no_device": "Questo dispositivo non ha un microfono, quindi non può effettuare chiamate.",
+    "call_not_saved": "Non salvata",
+    "call_save": "Salva la mia parte di questa chiamata",
+    "call_save_unavailable": "Il salvataggio delle chiamate non è ancora disponibile.",
+    "trust_hosts_verified": "{verified} di {checked} host radice di fiducia verificati",
+    "trust_hosts_unreachable": "Non è stato possibile raggiungere {count} host radice di fiducia. Non si tratta di un errore: potrebbero essere offline o bloccati da questa rete.",
+    "trust_hosts_disagree": "Due host radice di fiducia hanno fornito risposte diverse, quindi non è stata scelta alcuna radice di fiducia. Questo nodo è limitato finché non concordano.",
+    "trust_host_verified": "Verificato",
+    "trust_host_unreachable": "Non raggiungibile",
+    "trust_host_not_verified": "Raggiunto, non verificato",
+    "wa_update_not_allowed": "Solo un amministratore o una Wise Authority può decidere una proposta in attesa. Questo account non può.",
+    "wa_update_changed": "Qualcuno ha deciso questa proposta prima di te, quindi nulla è cambiato. L'elenco ora mostra a che punto si trova.",
+    "wa_update_failed": "L'agente non ha accettato quella modifica. Riprova.",
+    "trace_consent_unanswered_note": "Puoi lasciare questo senza risposta. Non verrà inviato nulla finché non dici di sì, e puoi rispondere in seguito.",
+    "files_uploading_progress": "Aggiunta di {name}: {sent} di {total}",
+    "files_add_cancel": "Ferma",
+    "remote_node_view": "Visualizza",
+    "remote_node_title": "Il tuo nodo",
+    "remote_node_snapshot_at": "Letto alle {time}. Questa è un'istantanea: aggiorna per leggerla di nuovo.",
+    "remote_node_metrics": "Rete",
+    "remote_node_logs": "Log recenti",
+    "remote_node_refresh": "Aggiorna",
+    "remote_node_unreachable": "Al momento non è possibile raggiungere quel nodo. Potrebbe essere spento o fuori portata.",
+    "remote_node_timeout": "Quel nodo non ha risposto in tempo. Riprova tra poco.",
+    "remote_node_send_failed": "Non è stato possibile inviare la richiesta a quel nodo. Riprova.",
+    "remote_node_no_transport": "Questo nodo non riesce a raggiungere i tuoi altri nodi. Controlla le sue impostazioni di rete.",
+    "remote_node_needs_update": "Quel nodo deve essere aggiornato prima di poter mostrare questo contenuto.",
+    "remote_node_not_owner": "Quel nodo non ha accettato questa richiesta. Solo i dispositivi del suo proprietario possono leggerla.",
+    "remote_node_failed": "Non è stato possibile leggere la risposta di quel nodo.",
+    "add_device_contact_hint_2": "Sul tuo altro dispositivo, apri Condividi il mio ID. Scansiona il suo codice QR, oppure incolla qui la forma estesa o breve. Anche il solo ID di federazione funziona quando il tuo altro dispositivo è annunciato.",
+    "contacts_reach_sent": "Inviato: in attesa che rispondano",
+    "contacts_reach_waiting": "In attesa di raggiungerli",
+    "contacts_stale_since": "Nessuna notizia da {date}"
   },
   "prompts": {
     "dma": {
@@ -5282,7 +5334,8 @@
     "voting": {
       "description": "L'intero piano ballottare: soglie di accordo M-of-N verificate al filo, e ordinamento quorum-above-time nel substrate. I ballottari di obiezione dei Commons già spediscono — questo è il voto come primitiva verificabile di prima classe.",
       "title": "Voto"
-    }
+    },
+    "announce_costs": "Se non ti annunci, nessuno può raggiungerti attraverso la mesh in questa versione: il tuo codice di contatto ti identifica, ma non porta ancora con sé un modo per raggiungere i tuoi dispositivi. Non puoi partecipare a gruppi pubblici. Una stanza privata richiede che entrambi vi siate annunciati."
   },
   "mesh_config": {
     "consumption": {
@@ -5829,7 +5882,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "L'accesso non è stato completato nel browser, quindi non è stato modificato nulla. Riprova oppure usa un account locale.",
-      "waiting": "Completa l'accesso con Google nel browser, poi torna qui."
+      "waiting": "Completa l'accesso con Google nel browser, poi torna qui.",
+      "no_browser": "Non è stato possibile aprire un browser. Per accedere, apri questo indirizzo nel tuo browser: {url}",
+      "never_arrived": "Il browser non ha mai raggiunto la pagina di accesso, quindi non è stato modificato nulla. Verifica che si sia aperta una finestra del browser, poi riprova."
     },
     "claim": {
       "not_armed": "questo nodo non è predisposto per una rivendicazione iniziale (nessun PIN monouso) — la proprietà potrebbe essere già stata rivendicata",
@@ -5868,7 +5923,8 @@
       "provider_unavailable": "Questo nodo non può autenticarti con quel provider — in questa build non è configurato un accesso di questo tipo. Accedi invece con nome utente e password.",
       "state_invalid": "stato oauth non valido o scaduto",
       "store_unavailable": "Il nodo non è riuscito a leggere il proprio archivio delle identità, quindi l'accesso non è stato completato. Si tratta di un problema del nodo, non del tuo account.",
-      "unsafe_redirect": "redirect_uri non sicuro"
+      "unsafe_redirect": "redirect_uri non sicuro",
+      "flow_unknown": "Il browser non ha mai raggiunto la pagina di accesso, quindi non è stato modificato nulla. Riprova."
     },
     "oauth_link": {
       "already_has_identity": "Quell'account ha già un'identità di accesso collegata. Rimuovila prima, se intendi sostituirla.",
@@ -6384,7 +6440,8 @@
     "rng": "nessun valore casuale disponibile per la sfida",
     "unexpected": "risposta inattesa dal tuo altro dispositivo",
     "unknown_identity": "non è stato possibile trovare quell'identità",
-    "unreachable": "non è stato possibile raggiungere il tuo altro dispositivo"
+    "unreachable": "non è stato possibile raggiungere il tuo altro dispositivo",
+    "node_proof": "questo dispositivo non è riuscito a dimostrare quale nodo sia"
   },
   "sign_owner_binding": {
     "bad_request": "Non è stato possibile leggere quella richiesta di associazione di proprietà.",

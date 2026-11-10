@@ -4011,7 +4011,59 @@
     "community_section_body_local": "Ruang untuk orang-orang di dekat Anda. Untuk saat ini, sebuah ruang tampil sebagai lokal hanya pada perangkat yang mendirikannya. Anggota lain melihatnya di bawah Komunitas.",
     "community_empty_local": "Anda belum memiliki ruang lokal. Dirikan satu dan undang orang-orang di dekat Anda.",
     "community_create_open_local": "Dirikan Ruang Lokal",
-    "community_create_title_local": "Dirikan Ruang Lokal"
+    "community_create_title_local": "Dirikan Ruang Lokal",
+    "server_local_desc": "Kelola node yang berjalan di perangkat ini.",
+    "server_remote_desc": "Hubungkan ke node yang berjalan di tempat lain.",
+    "server_url_label": "Alamat node",
+    "server_current": "Saat Ini",
+    "add_device_no_session": "Perangkat ini telah bergabung dengan CIRIS ID Anda, tetapi tidak dapat menyelesaikan proses masuk. Siapkan perangkat ini lagi, lalu setujui dari perangkat lain Anda.",
+    "chat_call": "Telepon",
+    "call_title": "Panggilan",
+    "call_choose": "Bagaimana Anda ingin menelepon?",
+    "call_voice": "Panggilan suara",
+    "call_video": "Panggilan video",
+    "call_asking_microphone": "Izinkan mikrofon agar orang-orang di ruang ini dapat mendengar Anda.",
+    "call_asking_camera": "Izinkan kamera agar orang-orang di ruang ini dapat melihat Anda.",
+    "call_microphone_denied": "Panggilan membutuhkan mikrofon. Aktifkan mikrofon untuk CIRIS di pengaturan perangkat Anda, lalu coba lagi.",
+    "call_try_again": "Coba lagi",
+    "call_ready_voice": "Mikrofon Anda sudah siap.",
+    "call_ready_video": "Mikrofon dan kamera Anda sudah siap.",
+    "call_audio_only": "Kamera sedang mati, sehingga ini akan menjadi panggilan suara.",
+    "call_not_connecting": "Panggilan belum dapat tersambung dari aplikasi ini.",
+    "call_unavailable_platform": "Panggilan belum tersedia di perangkat ini.",
+    "call_unavailable_no_device": "Perangkat ini tidak memiliki mikrofon, sehingga tidak dapat melakukan panggilan.",
+    "call_not_saved": "Tidak disimpan",
+    "call_save": "Simpan sisi saya dari panggilan ini",
+    "call_save_unavailable": "Menyimpan panggilan belum tersedia.",
+    "trust_hosts_verified": "{verified} dari {checked} host akar kepercayaan terverifikasi",
+    "trust_hosts_unreachable": "{count} host akar kepercayaan tidak dapat dijangkau. Itu bukan kegagalan: host tersebut mungkin sedang tidak aktif atau diblokir dari jaringan ini.",
+    "trust_hosts_disagree": "Dua host akar kepercayaan memberikan jawaban yang berbeda, sehingga tidak ada akar kepercayaan yang dipilih. Node ini dibatasi hingga keduanya sepakat.",
+    "trust_host_verified": "Terverifikasi",
+    "trust_host_unreachable": "Tidak dapat dijangkau",
+    "trust_host_not_verified": "Terjangkau, belum terverifikasi",
+    "wa_update_not_allowed": "Hanya admin atau Otoritas Bijak yang dapat memutuskan proposal yang sedang menunggu. Akun ini tidak bisa.",
+    "wa_update_changed": "Seseorang telah memutuskan proposal ini sebelum Anda, sehingga tidak ada yang berubah. Daftar ini sekarang menampilkan statusnya.",
+    "wa_update_failed": "Agen tidak menerima perubahan tersebut. Coba lagi.",
+    "trace_consent_unanswered_note": "Anda boleh membiarkan ini tanpa jawaban. Tidak ada yang akan dikirim sampai Anda mengatakan ya, dan Anda dapat menjawabnya nanti.",
+    "files_uploading_progress": "Menambahkan {name}: {sent} dari {total}",
+    "files_add_cancel": "Hentikan",
+    "remote_node_view": "Lihat",
+    "remote_node_title": "Node Anda",
+    "remote_node_snapshot_at": "Dibaca pada {time}. Ini adalah snapshot: segarkan untuk membacanya lagi.",
+    "remote_node_metrics": "Jaringan",
+    "remote_node_logs": "Log terbaru",
+    "remote_node_refresh": "Segarkan",
+    "remote_node_unreachable": "Node tersebut tidak dapat dijangkau saat ini. Node mungkin sedang nonaktif atau di luar jangkauan.",
+    "remote_node_timeout": "Node tersebut tidak menjawab tepat waktu. Coba lagi sesaat lagi.",
+    "remote_node_send_failed": "Permintaan tidak dapat dikirim ke node tersebut. Coba lagi.",
+    "remote_node_no_transport": "Node ini tidak dapat menjangkau node Anda yang lain. Periksa pengaturan jaringannya.",
+    "remote_node_needs_update": "Node tersebut perlu diperbarui sebelum dapat menampilkan ini.",
+    "remote_node_not_owner": "Node tersebut tidak menerima permintaan ini. Hanya perangkat pemiliknya yang dapat membacanya.",
+    "remote_node_failed": "Jawaban node tersebut tidak dapat dibaca.",
+    "add_device_contact_hint_2": "Pada perangkat lain Anda, buka Bagikan ID Saya. Pindai kode QR-nya, atau tempel bentuk panjang atau pendeknya di sini. ID federasi Anda saja juga berfungsi ketika perangkat lain Anda telah diumumkan.",
+    "contacts_reach_sent": "Terkirim: menunggu mereka merespons",
+    "contacts_reach_waiting": "Menunggu untuk menjangkau mereka",
+    "contacts_stale_since": "Tidak ada kabar sejak {date}"
   },
   "conscience": {
     "ponder_attempted": "Saya mencoba untuk {action}",
@@ -5255,7 +5307,8 @@
     "voting": {
       "description": "Bidang pemungutan suara lengkap: ambang kesepakatan M-dari-N diverifikasi di kawat, dan pengurutan kuorum-di-atas-waktu dalam substrat. Pemungutan suara keberatan Commons sudah dikirim — ini adalah pemungutan suara sebagai primitif terverifikasi kelas satu.",
       "title": "Pemungutan Suara"
-    }
+    },
+    "announce_costs": "Jika Anda tidak mengumumkan, tidak ada yang dapat menjangkau Anda melalui mesh pada versi ini: kode kontak Anda mengidentifikasi Anda, tetapi belum membawa cara untuk menjangkau perangkat Anda. Anda tidak dapat ikut serta dalam grup publik. Ruang privat mengharuskan Anda berdua sudah mengumumkan."
   },
   "mesh_config": {
     "consumption": {
@@ -5802,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Proses masuk tidak diselesaikan di peramban, jadi tidak ada yang diubah. Coba lagi, atau gunakan akun lokal.",
-      "waiting": "Selesaikan proses masuk dengan Google di peramban Anda, lalu kembali ke sini."
+      "waiting": "Selesaikan proses masuk dengan Google di peramban Anda, lalu kembali ke sini.",
+      "no_browser": "Tidak dapat membuka peramban. Untuk masuk, buka alamat ini di peramban Anda: {url}",
+      "never_arrived": "Peramban Anda tidak pernah mencapai halaman masuk, jadi tidak ada yang diubah. Periksa apakah jendela peramban terbuka, lalu coba lagi."
     },
     "claim": {
       "not_armed": "node ini tidak disiapkan untuk klaim kepemilikan awal (tidak ada PIN sekali pakai) — kepemilikan mungkin sudah diklaim",
@@ -5841,7 +5896,8 @@
       "provider_unavailable": "Node ini tidak dapat memproses masuk Anda dengan penyedia tersebut — tidak ada metode masuk seperti itu yang dikonfigurasikan pada build ini. Gunakan nama pengguna dan kata sandi untuk masuk.",
       "state_invalid": "status oauth tidak valid atau telah kedaluwarsa",
       "store_unavailable": "Node tidak dapat membaca penyimpanan identitasnya, sehingga proses masuk tidak dapat diselesaikan. Ini adalah masalah pada node, bukan pada akun Anda.",
-      "unsafe_redirect": "redirect_uri tidak aman"
+      "unsafe_redirect": "redirect_uri tidak aman",
+      "flow_unknown": "Peramban Anda tidak pernah mencapai halaman masuk, jadi tidak ada yang diubah. Coba lagi."
     },
     "oauth_link": {
       "already_has_identity": "Akun tersebut sudah memiliki identitas masuk yang tertaut. Hapus dulu jika Anda ingin menggantinya.",
@@ -6357,7 +6413,8 @@
     "rng": "tidak ada data acak untuk tantangan kriptografis",
     "unexpected": "jawaban tidak terduga dari perangkat lain Anda",
     "unknown_identity": "tidak dapat menemukan identitas tersebut",
-    "unreachable": "tidak dapat menjangkau perangkat lain Anda"
+    "unreachable": "tidak dapat menjangkau perangkat lain Anda",
+    "node_proof": "perangkat ini tidak dapat membuktikan identitas node-nya"
   },
   "sign_owner_binding": {
     "bad_request": "Permintaan owner binding tersebut tidak dapat dibaca.",

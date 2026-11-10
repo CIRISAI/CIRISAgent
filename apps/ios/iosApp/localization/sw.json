@@ -3860,7 +3860,59 @@
     "community_section_body_local": "Vyumba kwa ajili ya watu walio karibu nawe. Kwa sasa, chumba huonekana kuwa cha ndani tu kwenye kifaa kilichokianzisha. Wanachama wengine wanakiona chini ya Jamii.",
     "community_empty_local": "Huna vyumba vya ndani bado. Anzisha kimoja na uwaalike watu walio karibu nawe.",
     "community_create_open_local": "Anzisha chumba cha ndani",
-    "community_create_title_local": "Anzisha chumba cha ndani"
+    "community_create_title_local": "Anzisha chumba cha ndani",
+    "contacts_reach_waiting": "Inasubiri kuwafikia",
+    "contacts_stale_since": "Hakuna taarifa kutoka kwao tangu {date}",
+    "trust_hosts_unreachable": "{count} hosti za mzizi wa uaminifu hazikuweza kufikiwa. Hilo si hitilafu: huenda zimezimwa au zimezuiliwa kutoka mtandao huu.",
+    "trust_hosts_disagree": "Host mbili za mzizi wa uaminifu zilitoa majibu tofauti, hivyo hakuna mzizi wa uaminifu uliochaguliwa. Nodi hii imezuiliwa hadi zitakapokubaliana.",
+    "trust_host_verified": "Imethibitishwa",
+    "trust_host_unreachable": "Haifikiki",
+    "trust_host_not_verified": "Imefikiwa, haijathibitishwa",
+    "wa_update_not_allowed": "Ni msimamizi au Wise Authority pekee anayeweza kuamua pendekezo linalosubiri. Akaunti hii haiwezi.",
+    "wa_update_changed": "Mtu fulani ameamua pendekezo hili kabla yako, kwa hivyo hakuna kilichobadilika. Orodha sasa inaonyesha hali yake.",
+    "wa_update_failed": "Wakala hakukubali mabadiliko hayo. Jaribu tena.",
+    "trace_consent_unanswered_note": "Unaweza kuacha hili bila kujibu. Hakuna kitakachotumwa mpaka useme ndiyo, na unaweza kujibu baadaye.",
+    "files_uploading_progress": "Inaongeza {name}: {sent} kati ya {total}",
+    "files_add_cancel": "Simamisha",
+    "remote_node_view": "Tazama",
+    "remote_node_title": "Nodi yako",
+    "remote_node_snapshot_at": "Imesomwa saa {time}. Hii ni mwonekano wa papo hapo: pakia upya ili kuisoma tena.",
+    "remote_node_metrics": "Mtandao",
+    "remote_node_logs": "Kumbukumbu za hivi karibuni",
+    "remote_node_refresh": "Pakia upya",
+    "remote_node_unreachable": "Nodi hiyo haiwezi kufikiwa kwa sasa. Huenda imezimwa au iko nje ya mawanda.",
+    "remote_node_timeout": "Nodi hiyo haikujibu kwa wakati. Jaribu tena baada ya muda mfupi.",
+    "remote_node_send_failed": "Ombi halikuweza kutumwa kwa nodi hiyo. Jaribu tena.",
+    "remote_node_no_transport": "Nodi hii haiwezi kufikia nodi zako nyingine. Angalia mipangilio yake ya mtandao.",
+    "remote_node_needs_update": "Nodi hiyo inahitaji sasisho kabla ya kuonyesha hili.",
+    "remote_node_not_owner": "Nodi hiyo haikukubali ombi hili. Vifaa vya mmiliki wake pekee ndivyo vinavyoweza kulisoma.",
+    "remote_node_failed": "Jibu la nodi hiyo halikuweza kusomwa.",
+    "add_device_contact_hint_2": "Kwenye kifaa chako kingine, fungua Shiriki Kitambulisho Changu. Changanua msimbo wake wa QR, au bandika muundo mrefu au mfupi hapa. Kitambulisho chako cha shirikisho peke yake pia hufanya kazi wakati kifaa chako kingine kimetangazwa.",
+    "server_local_desc": "Dhibiti nodi inayoendesha kwenye kifaa hiki.",
+    "server_remote_desc": "Unganisha na nodi inayoendesha mahali pengine.",
+    "server_url_label": "Anwani ya nodi",
+    "server_current": "Ya sasa",
+    "add_device_no_session": "Kifaa hiki kimejiunga na CIRIS ID yako, lakini hakikuweza kumaliza kuingia. Sanidi kifaa hiki tena, kisha ukiidhinishe kutoka kifaa chako kingine.",
+    "chat_call": "Piga simu",
+    "call_title": "Simu",
+    "call_choose": "Unataka kupiga simu vipi?",
+    "call_voice": "Simu ya sauti",
+    "call_video": "Simu ya video",
+    "call_asking_microphone": "Ruhusu maikrofoni ili watu waliomo chumbani humu waweze kukusikia.",
+    "call_asking_camera": "Ruhusu kamera ili watu waliomo chumbani humu waweze kukuona.",
+    "call_microphone_denied": "Simu inahitaji maikrofoni. Iwashe kwa ajili ya CIRIS katika mipangilio ya kifaa chako, kisha jaribu tena.",
+    "call_try_again": "Jaribu tena",
+    "call_ready_voice": "Maikrofoni yako iko tayari.",
+    "call_ready_video": "Maikrofoni na kamera yako ziko tayari.",
+    "call_audio_only": "Kamera imezimwa, hivyo hii itakuwa simu ya sauti.",
+    "call_not_connecting": "Simu haziwezi kuunganishwa kutoka programu hii bado.",
+    "call_unavailable_platform": "Simu bado hazipatikani kwenye kifaa hiki.",
+    "call_unavailable_no_device": "Kifaa hiki hakina maikrofoni, hivyo hakiwezi kupiga simu.",
+    "call_not_saved": "Haijahifadhiwa",
+    "call_save": "Hifadhi upande wangu wa simu hii",
+    "call_save_unavailable": "Kuhifadhi simu bado hakuko tayari.",
+    "trust_hosts_verified": "{verified} kati ya {checked} wenyeji wa mzizi wa uaminifu wamethibitishwa",
+    "contacts_reach_sent": "Imetumwa: inasubiri jibu lao"
   },
   "prompts": {
     "dma": {
@@ -5255,7 +5307,8 @@
     "voting": {
       "description": "Ndege kamili ya kura: M-of-N makubaliano yanayothibitishwa katika waya, na utaratibu wa quorum-juu-ya-muda katika substrate. Kura za upinga za Commons tayari zinajifanya — hii ni kura kama primitive ya daraja la kwanza, inayothibitishwa.",
       "title": "Kura"
-    }
+    },
+    "announce_costs": "Ikiwa hujitangazi, hakuna mtu anayeweza kukufikia kupitia mesh katika toleo hili: msimbo wako wa mawasiliano unakutambulisha lakini bado haubebi njia ya kufikia vifaa vyako. Huwezi kushiriki katika vikundi vya umma. Chumba cha faragha kinahitaji nyote wawili mmejitangaza."
   },
   "mesh_config": {
     "consumption": {
@@ -5802,7 +5855,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "Kuingia hakukukamilika katika kivinjari, kwa hivyo hakuna kilichobadilishwa. Jaribu tena, au tumia akaunti ya karibu badala yake.",
-      "waiting": "Maliza kuingia kwa kutumia Google katika kivinjari chako, kisha urudi hapa."
+      "waiting": "Maliza kuingia kwa kutumia Google katika kivinjari chako, kisha urudi hapa.",
+      "no_browser": "Haikuweza kufungua kivinjari. Ili kuingia, fungua anwani hii kwenye kivinjari chako: {url}",
+      "never_arrived": "Kivinjari chako hakikufika kwenye ukurasa wa kuingia, kwa hivyo hakuna kilichobadilishwa. Hakikisha dirisha la kivinjari lilifunguka, kisha jaribu tena."
     },
     "claim": {
       "not_armed": "nodi hii haijaandaliwa kwa dai la matumizi ya kwanza (hakuna PIN ya matumizi moja) — huenda umiliki tayari umedaiwa",
@@ -5841,7 +5896,8 @@
       "provider_unavailable": "Nodi hii haiwezi kukuingiza kwa kutumia mtoa huduma huyo — hakuna njia hiyo ya kuingia iliyosanidiwa katika toleo hili. Ingia kwa jina la mtumiaji na nenosiri badala yake.",
       "state_invalid": "hali ya oauth si sahihi au imeisha muda",
       "store_unavailable": "Nodi haikuweza kusoma hifadhi yake ya utambulisho, hivyo kuingia hakukukamilika. Hili ni tatizo la nodi, si la akaunti yako.",
-      "unsafe_redirect": "redirect_uri isiyo salama"
+      "unsafe_redirect": "redirect_uri isiyo salama",
+      "flow_unknown": "Kivinjari chako hakikufika kwenye ukurasa wa kuingia, kwa hivyo hakuna kilichobadilishwa. Jaribu tena."
     },
     "oauth_link": {
       "already_has_identity": "Akaunti hiyo tayari ina utambulisho wa kuingia uliounganishwa. Iondoe kwanza ikiwa unakusudia kuibadilisha.",
@@ -6357,7 +6413,8 @@
     "rng": "hakuna nasibu kwa ajili ya changamoto hii",
     "unexpected": "jibu lisilotarajiwa kutoka kwa kifaa chako kingine",
     "unknown_identity": "haikuweza kupata utambulisho huo",
-    "unreachable": "haikuweza kufikia kifaa chako kingine"
+    "unreachable": "haikuweza kufikia kifaa chako kingine",
+    "node_proof": "kifaa hiki hakikuweza kuthibitisha ni nodi gani kilicho"
   },
   "sign_owner_binding": {
     "bad_request": "Ombi hilo la kiunganisho cha umiliki halikuweza kusomwa.",

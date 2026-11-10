@@ -3860,7 +3860,59 @@
     "community_section_body_local": "Des salles pour les personnes près de vous. Pour l'instant, une salle n'apparaît comme locale que sur l'appareil qui l'a fondée. Les autres membres la voient sous Communautés.",
     "community_empty_local": "Vous n'avez encore aucune salle locale. Fondez-en une et invitez les personnes près de vous.",
     "community_create_open_local": "Fonder une salle locale",
-    "community_create_title_local": "Fonder une salle locale"
+    "community_create_title_local": "Fonder une salle locale",
+    "server_local_desc": "Gérez le nœud en cours d'exécution sur cet appareil.",
+    "server_remote_desc": "Connectez-vous à un nœud en cours d'exécution ailleurs.",
+    "server_url_label": "Adresse du nœud",
+    "server_current": "Actuel",
+    "add_device_no_session": "Cet appareil a rejoint votre CIRIS ID, mais il n'a pas pu terminer la connexion. Reconfigurez cet appareil, puis approuvez-le depuis votre autre appareil.",
+    "chat_call": "Appeler",
+    "call_title": "Appel",
+    "call_choose": "Comment souhaitez-vous appeler ?",
+    "call_voice": "Appel vocal",
+    "call_video": "Appel vidéo",
+    "call_asking_microphone": "Autorisez le microphone pour que les personnes présentes dans ce salon puissent vous entendre.",
+    "call_asking_camera": "Autorisez la caméra pour que les personnes présentes dans ce salon puissent vous voir.",
+    "call_microphone_denied": "Un appel nécessite le microphone. Activez-le pour CIRIS dans les réglages de votre appareil, puis réessayez.",
+    "call_try_again": "Réessayer",
+    "call_ready_voice": "Votre microphone est prêt.",
+    "call_ready_video": "Votre microphone et votre caméra sont prêts.",
+    "call_audio_only": "La caméra est désactivée, il s'agira donc d'un appel vocal.",
+    "call_not_connecting": "Les appels ne peuvent pas encore se connecter depuis cette application.",
+    "call_unavailable_platform": "Les appels ne sont pas encore disponibles sur cet appareil.",
+    "call_unavailable_no_device": "Cet appareil n'a pas de microphone, il ne peut donc pas passer d'appels.",
+    "call_not_saved": "Non enregistré",
+    "call_save": "Enregistrer ma partie de cet appel",
+    "call_save_unavailable": "L'enregistrement des appels n'est pas encore disponible.",
+    "trust_hosts_verified": "{verified} sur {checked} hôtes de racine de confiance vérifiés",
+    "trust_hosts_unreachable": "{count} hôtes de racine de confiance n'ont pas pu être joints. Ce n'est pas un échec : ils peuvent être hors ligne ou bloqués depuis ce réseau.",
+    "trust_hosts_disagree": "Deux hôtes de racine de confiance ont donné des réponses différentes ; aucune racine de confiance n'a donc été choisie. Ce nœud est restreint tant qu'ils ne sont pas en accord.",
+    "trust_host_verified": "Vérifié",
+    "trust_host_unreachable": "Injoignable",
+    "trust_host_not_verified": "Joint, non vérifié",
+    "wa_update_not_allowed": "Seul un administrateur ou une Wise Authority peut statuer sur une proposition en attente. Ce compte ne le peut pas.",
+    "wa_update_changed": "Quelqu'un a statué sur cette proposition avant vous, rien n'a donc changé. La liste affiche désormais son état.",
+    "wa_update_failed": "L'agent n'a pas pris en compte cette modification. Réessayez.",
+    "trace_consent_unanswered_note": "Vous pouvez laisser cette question sans réponse. Rien n'est envoyé tant que vous ne dites pas oui, et vous pourrez répondre plus tard.",
+    "files_uploading_progress": "Ajout de {name} : {sent} sur {total}",
+    "files_add_cancel": "Arrêter",
+    "remote_node_view": "Afficher",
+    "remote_node_title": "Votre nœud",
+    "remote_node_snapshot_at": "Lu à {time}. Il s'agit d'un instantané : actualisez pour le relire.",
+    "remote_node_metrics": "Réseau",
+    "remote_node_logs": "Journaux récents",
+    "remote_node_refresh": "Actualiser",
+    "remote_node_unreachable": "Ce nœud est actuellement injoignable. Il est peut-être éteint ou hors de portée.",
+    "remote_node_timeout": "Ce nœud n'a pas répondu à temps. Réessayez dans un instant.",
+    "remote_node_send_failed": "La demande n'a pas pu être envoyée à ce nœud. Réessayez.",
+    "remote_node_no_transport": "Ce nœud ne peut pas joindre vos autres nœuds. Vérifiez ses paramètres réseau.",
+    "remote_node_needs_update": "Ce nœud doit être mis à jour avant de pouvoir afficher ceci.",
+    "remote_node_not_owner": "Ce nœud n'a pas accepté cette demande. Seuls les appareils de son propriétaire peuvent la lire.",
+    "remote_node_failed": "La réponse de ce nœud n'a pas pu être lue.",
+    "add_device_contact_hint_2": "Sur votre autre appareil, ouvrez « Partager mon ID ». Scannez son code QR, ou collez la forme longue ou courte ici. Votre ID de fédération seul fonctionne aussi lorsque votre autre appareil est annoncé.",
+    "contacts_reach_sent": "Envoyé : en attente de leur réponse",
+    "contacts_reach_waiting": "En attente de pouvoir les joindre",
+    "contacts_stale_since": "Aucune nouvelle depuis {date}"
   },
   "prompts": {
     "dma": {
@@ -5282,7 +5334,8 @@
     "voting": {
       "description": "Le plan de scrutin complet : seuils d'accord M-sur-N vérifiés au fil, et classement quorum-au-delà-du-temps dans le substrat. Les bulletins d'objection de la Commons sont déjà expédiés — ceci est le vote en tant que primitif vérifiable de première classe.",
       "title": "Scrutin"
-    }
+    },
+    "announce_costs": "Si vous ne vous annoncez pas, personne ne peut vous joindre via le maillage dans cette version : votre code de contact vous identifie, mais ne comporte pas encore de moyen d'atteindre vos appareils. Vous ne pouvez pas participer aux groupes publics. Une salle privée exige que vous vous soyez tous deux annoncés."
   },
   "mesh_config": {
     "consumption": {
@@ -5829,7 +5882,9 @@
   "auth": {
     "browser_signin": {
       "timed_out": "La connexion n'a pas été terminée dans le navigateur, aucune modification n'a donc été effectuée. Réessayez ou utilisez plutôt un compte local.",
-      "waiting": "Terminez la connexion avec Google dans votre navigateur, puis revenez ici."
+      "waiting": "Terminez la connexion avec Google dans votre navigateur, puis revenez ici.",
+      "no_browser": "Impossible d'ouvrir un navigateur. Pour vous connecter, ouvrez cette adresse dans votre navigateur : {url}",
+      "never_arrived": "Votre navigateur n'a jamais atteint la page de connexion, aucune modification n'a donc été effectuée. Vérifiez qu'une fenêtre de navigateur s'est ouverte, puis réessayez."
     },
     "claim": {
       "not_armed": "ce nœud n'est pas armé pour une revendication de premier démarrage (pas de PIN à usage unique) — la propriété a peut-être déjà été revendiquée",
@@ -5868,7 +5923,8 @@
       "provider_unavailable": "Ce nœud ne peut pas vous connecter avec ce fournisseur — aucune connexion de ce type n'est configurée sur cette version. Connectez-vous plutôt avec un nom d'utilisateur et un mot de passe.",
       "state_invalid": "état oauth invalide ou expiré",
       "store_unavailable": "Le nœud n'a pas pu lire son magasin d'identités, la connexion n'a donc pas pu aboutir. Le problème vient du nœud, pas de votre compte.",
-      "unsafe_redirect": "redirect_uri non sécurisé"
+      "unsafe_redirect": "redirect_uri non sécurisé",
+      "flow_unknown": "Votre navigateur n'a jamais atteint la page de connexion, aucune modification n'a donc été effectuée. Réessayez."
     },
     "oauth_link": {
       "already_has_identity": "Ce compte possède déjà une identité de connexion liée. Supprimez-la d'abord si vous souhaitez la remplacer.",
@@ -6384,7 +6440,8 @@
     "rng": "aucune source d'aléa pour le défi",
     "unexpected": "réponse inattendue de votre autre appareil",
     "unknown_identity": "impossible de trouver cette identité",
-    "unreachable": "impossible de joindre votre autre appareil"
+    "unreachable": "impossible de joindre votre autre appareil",
+    "node_proof": "cet appareil n'a pas pu prouver de quel nœud il s'agit"
   },
   "sign_owner_binding": {
     "bad_request": "Cette demande de liaison de propriétaire n'a pas pu être lue.",

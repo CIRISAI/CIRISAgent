@@ -25,8 +25,17 @@ What the Python layer adds on top of the Rust core:
 # the macro-registered ``#[pymodule]`` adds to the module dict. The explicit
 # ``main`` re-export below guarantees ``ciris_server.main`` resolves even if a
 # future ext drops it from ``__all__``.
-from ._native import *  # noqa: F401,F403
-from ._native import main, import_traces  # noqa: F401
+import sys as _sys
+
+try:
+    from ._native import *  # noqa: F401,F403
+    from ._native import main, import_traces  # noqa: F401
+except ImportError:
+    # `python -m ciris_server.upgrade` must run from a broken install: importing
+    # a submodule imports this package first, and an interrupted pip can leave
+    # the native library unloadable. Nothing else may import past this.
+    if "ciris_server.upgrade" not in getattr(_sys, "orig_argv", ()):
+        raise
 
 # Make the substrate submodules importable as ``ciris_server.persist`` /
 # ``ciris_server.edge``. The Rust ``#[pymodule]`` registers these into

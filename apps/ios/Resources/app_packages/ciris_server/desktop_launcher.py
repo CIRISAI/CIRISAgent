@@ -75,9 +75,12 @@ def find_desktop_jar() -> Optional[Path]:
     # Legacy: bundled in the wheel (<= 0.5.188).
     jar_dir = package_dir / "desktop_app"
     if jar_dir.exists():
-        jars = sorted(jar_dir.glob("CIRIS-*.jar"))
-        if jars:
-            return jars[0]
+        from ciris_server.upgrade import newest_jar
+
+        # By VERSION: a plain sort took the oldest, and a repaired install has both.
+        jar = newest_jar(jar_dir.glob("CIRIS-*.jar"))
+        if jar is not None:
+            return jar
 
     # The package that owns it.
     try:
@@ -248,11 +251,15 @@ def launch_desktop_app(server_url: str = DEFAULT_SERVER_URL) -> int:
     # node started under an overridden HOME wrote its claim PIN somewhere the UI
     # would never look. We know the answer here; state it.
     from ciris_server.cli import _default_user_home
+    from ciris_server.upgrade import private_jar
 
     env.setdefault("CIRIS_HOME", _default_user_home())
+    # Run a private copy: a JVM holding a file in site-packages is what makes
+    # `pip install -U` fail with WinError 32 while the desktop is open.
+    run_jar = private_jar(Path(jar_path), Path(env["CIRIS_HOME"]))
 
     try:
-        result = subprocess.run([java, "-jar", str(jar_path)], env=env)
+        result = subprocess.run([java, "-jar", str(run_jar)], env=env)
         return result.returncode
     except KeyboardInterrupt:
         print("\nShutting down...")

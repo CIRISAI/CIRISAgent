@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **ciris-server 0.5.245** (edge v44.1.1, persist v61.0.5, verify v22.0.0; long-term support). Contacts that have accepted each other link directly, calls have a QA route, and uploads stream up to about 2.5 GiB. The first boot runs persist v61's migrations, which only go forward, so back up the store before upgrading. Known, fixed in 0.5.246: adding a contact by code can take about 90 s to key, and node codes are still `CIRIS-V1-` (the v3 code with its ML-DSA-65 commitment comes with 0.5.246 and client 0.5.239). ciris-client stays at 0.5.238.
+
 - **ciris-client 0.5.238.** My keys, My devices and Agents you own are now separate cards. Rooms can take attachments, flagged items show their moderation status, and Ally is the setup default. Known issue: add-device can time out at 30 seconds, fixed in client 0.5.239.
 
 ## [2.19.2-stable] - 2026-11-04

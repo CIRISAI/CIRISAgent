@@ -101,9 +101,6 @@ class AccordMetricsTests:
         "ACTION_RESULT",
     ]
 
-    # Root public key from seed/root_pub.json
-    ROOT_KEY_ID = "wa-2025-06-14-ROOT00"
-
     # Required fields for CIRIS scoring (generic trace level)
     # These power the 5-factor CIRIS Capacity Score: C · I_int · R · I_inc · S
     # - C (Core Identity): action_was_overridden, agent_id_hash, agent_name
@@ -360,7 +357,6 @@ class AccordMetricsTests:
 
         tests = [
             ("Service Status Check", self._test_service_status),
-            ("Root Public Key Load", self._test_root_key_load),
             ("Load Multi-Level Adapters", self._test_load_multi_level_adapters),
             ("Agent Interaction Trace", self._test_interaction_triggers_trace),
             ("Verb Second Pass Trace", self._test_verb_second_pass_traces),
@@ -440,31 +436,6 @@ class AccordMetricsTests:
                 return True, f"Services online: {health.services_online}"
 
             return True, "System healthy"
-
-        except Exception as e:
-            return False, str(e)
-
-    async def _test_root_key_load(self) -> tuple[bool, str]:
-        """Test that root public key can be loaded from seed/."""
-        try:
-            seed_path = Path(__file__).parent.parent.parent.parent / "ciris_engine" / "data" / "seed" / "root_pub.json"
-
-            if not seed_path.exists():
-                return False, f"Root public key not found at {seed_path}"
-
-            with open(seed_path) as f:
-                root_key_data = json.load(f)
-
-            root_pubkey = root_key_data.get("pubkey")
-            root_key_id = root_key_data.get("wa_id")
-
-            if not root_pubkey:
-                return False, "No pubkey in root_pub.json"
-
-            if root_key_id != self.ROOT_KEY_ID:
-                return False, f"Key ID mismatch: expected {self.ROOT_KEY_ID}, got {root_key_id}"
-
-            return True, f"Root key loaded: {root_key_id}"
 
         except Exception as e:
             return False, str(e)

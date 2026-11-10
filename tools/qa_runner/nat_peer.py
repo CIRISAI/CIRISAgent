@@ -316,24 +316,34 @@ class PeerHalf(CrossChatStage):
         responder answers the moment it reads that, and the requester times the
         round trip against twice the one-way ceiling. Each side reports its own legs,
         so a slow total says which part to look at; the ceiling is on the total.
+
+        A warm-up exchange goes first and is not timed. The two runners reach this
+        step seconds apart, so a single timed ping measured how late the responder
+        started listening (8 s on run 42734460384), not the link. After the warm-up
+        both sides are already reading, and the timed exchange is the link's.
         """
         me, peer = self.me.name, self.peer.name
+        warm_ping, warm_pong = f"nat-peer direct warm ping {self.nonce}", f"nat-peer direct warm pong {self.nonce}"
         ping, pong = f"nat-peer direct ping {self.nonce}", f"nat-peer direct pong {self.nonce}"
         if self.role == ROLE_RESPONDER:
+            self.read(cid, warm_ping, "direct")
+            self.send(cid, warm_pong, "direct")
             took = self.read(cid, ping, "direct")
             answering = self.clock.now()
             self.send(cid, pong, "direct")
             return (
-                f"{me} answered {peer}'s ping {took:.1f}s after it started listening; "
+                f"{me} answered {peer}'s timed ping {took:.1f}s after the warm-up reply; "
                 f"send call {self.clock.now() - answering:.2f}s"
             )
+        self.send(cid, warm_ping, "direct")
+        self.read(cid, warm_pong, "direct")
         started = self.clock.now()
         self.send(cid, ping, "direct")
         sent = self.clock.now()
         self.read(cid, pong, "direct")
         round_trip = self.clock.now() - started
         detail = (
-            f"{me}->{peer}->{me} round trip {round_trip:.2f}s (ceiling {2 * ceiling_secs:.0f}s): "
+            f"{me}->{peer}->{me} round trip {round_trip:.2f}s (ceiling {2 * ceiling_secs:.0f}s, after a warm-up): "
             f"send call {sent - started:.2f}s, then {round_trip - (sent - started):.2f}s until the reply opened"
         )
         if round_trip > 2 * ceiling_secs:

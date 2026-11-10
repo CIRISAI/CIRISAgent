@@ -1,21 +1,19 @@
 """The accord manifest's hybrid signature, checked once the persist engine is up.
 
-Eric's decision (2026-11-08, via the CC): A1, his accord-holder key, signs the
-accord manifest in the bound hybrid form of CC 5.3.2.4.3.1, over sha256 of a short JCS
+Eric's decision (2026-11-08, via the CC; widened 2026-11-09): an accord holder
+(A1, B1 or C1, the HUMANITY_ACCORD family) signs the accord manifest in the bound hybrid form of CC 5.3.2.4.3.1, over sha256 of a short JCS
 statement of the manifest's size and sha256 (``accord_manifest_signed_bytes``).
 Ed25519 covers those 32 bytes; ML-DSA-65 covers them followed by the Ed25519
-signature. The 2025 WA root that signs ``accord_manifest.sig`` retires once
-that signature ships.
+signature.
 
 The check can't run at import: nothing there verifies ML-DSA-65. It runs as
 soon as the engine is wired (``initialize_database``), which is before any
-decision, and that ordering is what the CC asks for. A1's key comes from the
+decision, and that ordering is what the CC asks for. The holder's key comes from the
 federation directory, where persist's genesis bundle seeds it as a hybrid key
 record, so a record without its ML-DSA-65 half fails.
 
-Until the hybrid signature ships, the import-time Ed25519 check
-(``constants._verify_accord_manifest_signature``) is the one that applies; a
-release that reads both forms is the candidate before the switch (CC 2.6.1.8).
+There is no fallback: the 2025 WA root that signed ``accord_manifest.sig``
+is retired, and a missing signature stops startup (CC 3.1.2).
 """
 
 from __future__ import annotations
@@ -30,11 +28,15 @@ from ciris_engine.logic.utils.constants import ACCORD_SEED_DIR
 
 logger = logging.getLogger(__name__)
 
-#: Keys allowed to sign the accord manifest: the pinned trust set (CC 4.4.3.8).
-ACCORD_MANIFEST_SIGNERS = ("A1",)
+#: Keys allowed to sign the accord manifest: any HUMANITY_ACCORD holder (Eric,
+#: 2026-11-09: "It can be anyone in the humanity accord family"). The ids are
+#: pinned here AND the directory record must say identity_type "accord_holder"
+#: (persist's baked genesis roster), so a stray record named B1 can't pass.
+ACCORD_MANIFEST_SIGNERS = ("A1", "B1", "C1")
+ACCORD_HOLDER_IDENTITY_TYPE = "accord_holder"
 
-#: What A1 signs is a short typed statement of the manifest's digest, not the
-#: file. A1's Ed25519 half lives on a YubiKey, whose PKCS#11 EdDSA is single-part
+#: What a holder signs is a short typed statement of the manifest's digest, not the
+#: file. A holder's Ed25519 half lives on a YubiKey, whose PKCS#11 EdDSA is single-part
 #: and refuses multi-KB inputs (CKR_DATA_LEN_RANGE, CIRISVerify#113). The form is
 #: the CC's own (3.1.2, SkillImportManifest canonical bytes v2): a JCS object with
 #: a pinned "domain", lowercase-hex digests (2.6.3), the blob's size (5.3.2.5) and
@@ -52,7 +54,7 @@ def accord_manifest_statement(manifest_bytes: bytes, signer: str) -> Dict[str, A
 
 
 def accord_manifest_signed_bytes(manifest_bytes: bytes, signer: str) -> bytes:
-    """The 32 bytes A1 signs: sha256 of the statement's JCS.
+    """The 32 bytes the holder signs: sha256 of the statement's JCS.
 
     signer_identity is inside them, so the signature can't be re-attributed to
     another holder.
@@ -71,6 +73,8 @@ def _signer_keys(engine: Any, signer: str) -> Tuple[str, str]:
     record = json.loads(raw) if raw else None
     if not isinstance(record, dict):
         raise RuntimeError(f"[ACCORD] {signer} is not in the federation directory")
+    if record.get("identity_type") != ACCORD_HOLDER_IDENTITY_TYPE:
+        raise RuntimeError(f"[ACCORD] {signer}'s directory record is not an accord holder ({record.get('identity_type')!r})")
     ed, pqc = record.get("pubkey_ed25519_base64"), record.get("pubkey_ml_dsa_65_base64")
     if not (isinstance(ed, str) and ed and isinstance(pqc, str) and pqc):
         raise RuntimeError(f"[ACCORD] {signer}'s key record has no ML-DSA-65 half; hybrid resolution fails closed")
@@ -78,17 +82,17 @@ def _signer_keys(engine: Any, signer: str) -> Tuple[str, str]:
 
 
 def verify_accord_manifest_hybrid(engine: Any, seed_dir: Optional[Path] = None) -> bool:
-    """Verify the manifest's hybrid signature strictly. Returns False only when none ships yet.
+    """Verify the manifest's hybrid signature strictly; returns True or raises.
 
-    Raises RuntimeError on a signature that's present and fails, a signer outside
+    Raises RuntimeError on a missing signature, one that fails, a signer outside
     the pinned set, or a signer with no hybrid key record: startup stops.
     """
     from ciris_engine.logic.utils import substrate_signing
 
     sig_path = hybrid_signature_path(seed_dir)
     if not sig_path.exists():
-        logger.info("[ACCORD] No hybrid manifest signature yet; the WA-root signature applies until A1 signs")
-        return False
+        # No fallback: the 2025 WA root is retired (CC 3.1.2 — a missing signature stops the agent).
+        raise RuntimeError(f"[ACCORD] No A1 hybrid manifest signature at {sig_path}; refusing to run on unverified accord text")
     manifest = sig_path.parent / "accord_manifest.json"
     try:
         doc = json.loads(sig_path.read_text(encoding="utf-8"))

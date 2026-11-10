@@ -1,4 +1,4 @@
-"""Rebuild seed/accord_manifest.json from disk and re-sign it with the root key.
+"""Rebuild ciris_engine/data/seed/accord_manifest.json from disk and have an accord holder sign it.
 
 WHAT THE MANIFEST IS FOR. `ETHICS_TEXT_EXPECTED_HASHES` in constants.py is a
 fail-safe against a file changing under us; the manifest is the *signed*
@@ -13,22 +13,22 @@ exist on disk any more (`CIRIS_COMPREHENSIVE_GUIDE.md`; the guides moved to
 action-selection DMAs actually put in front of the model -- were covered by
 nothing. This regenerates all of it from the files that ship.
 
-The signature is raw Ed25519 over the manifest's EXACT BYTES
-(constants.py `_verify_accord_manifest_signature`), so the JSON is written
-LF-only with a trailing newline and signed exactly as written. Every file
+A1's bound hybrid signature names the manifest's EXACT BYTES by size and
+sha256 (accord_manifest_hybrid.py, CC 3.1.2), so the JSON is written LF-only
+with a trailing newline and signed exactly as written. Every file
 named here must also be byte-exact in .gitattributes, or a Windows checkout
 CRLFs it and the hash check fails -- `tests/logic/utils/
 test_accord_manifest_line_endings.py` holds that line.
 
     python3 tools/dev/regen_accord_manifest.py [--check]
 
---check verifies the on-disk manifest and signature without writing.
+--check verifies the hashes and that A1's signature names this manifest, without writing.
 
-A1 (the accord holder) signs on the holder's own machine, keys never leaving
+An accord holder (A1, B1 or C1) signs on the holder's own machine, keys never leaving
 the YubiKey and the USB drive:
 
     python3 tools/dev/regen_accord_manifest.py --sign-hybrid \
-        --server-bin <ciris-server> --usb <A1 usb dir> [--module <ykcs11.so>]
+        --server-bin <ciris-server> --usb <holder usb dir> [--key-id A1|B1|C1] [--module <ykcs11.so>]
 """
 
 from __future__ import annotations
@@ -51,7 +51,6 @@ if str(ROOT) not in sys.path:
 DATA = ROOT / "ciris_engine" / "data"
 LOCALIZED = DATA / "localized"
 MANIFEST = DATA / "seed" / "accord_manifest.json"
-SIG = MANIFEST.with_suffix(".sig")
 
 
 def manifest_files() -> dict[str, Path]:
@@ -80,14 +79,14 @@ def build() -> bytes:
         "version": "1.3",
         "files": {name: {"sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for name, p in manifest_files().items()},
         "signed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "signer": prev.get("signer", "wa-ROOT-00"),
+        "signer": "accord holder",
     }
     return (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def check() -> int:
-    if not MANIFEST.exists() or not SIG.exists():
-        print("manifest or signature missing")
+    if not MANIFEST.exists() or not HYBRID.exists():
+        print("manifest or A1's hybrid signature missing")
         return 1
     doc = json.loads(MANIFEST.read_text(encoding="utf-8"))
     bad = []
@@ -102,42 +101,21 @@ def check() -> int:
             bad.append(f"{name}: named by the manifest but not on disk")
         elif hashlib.sha256(p.read_bytes()).hexdigest() != rec["sha256"]:
             bad.append(f"{name}: hash differs from the manifest")
-    if HYBRID.exists():
-        # A1's bound hybrid signature supersedes the WA-root one. Its ML-DSA-65
-        # half is verified by the agent at startup, against A1's federation
-        # directory record (accord_manifest_hybrid.py); here, the file only.
-        for b in bad:
-            print(f"  {b}")
-        if not bad:
-            print(f"hashes ok over {len(doc['files'])} files; A1 hybrid signature present (verified at agent startup)")
-        return 1 if bad else 0
-    # Verify with `cryptography`, the same library the agent's own startup check
-    # uses (logic/utils/constants.py), not PyNaCl. PyNaCl is only needed to SIGN
-    # -- which happens on a key holder's machine -- and requiring it to *check*
-    # made this guard fail in CI with ModuleNotFoundError, reported as "manifest
-    # is stale or unsigned". A verification path that cannot run is not a check.
-    import base64
+    # A1's signature names the manifest by size and sha256; its two halves are
+    # verified by the agent at startup against A1's directory record (ML-DSA-65
+    # needs the engine). Here: the statement must name these exact bytes.
+    sig = json.loads(HYBRID.read_text(encoding="utf-8"))
+    body = MANIFEST.read_bytes()
+    from ciris_engine.logic.utils.accord_manifest_hybrid import ACCORD_MANIFEST_SIGNERS
 
-    try:
-        from cryptography.exceptions import InvalidSignature
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-    except ImportError:
-        # "Cannot verify" and "does not verify" are different claims, and this
-        # said the second when it meant the first: a missing module was reported
-        # as "manifest is stale or unsigned", which reads as tampering. Say what
-        # is true and exit distinctly (2), so a caller can tell them apart.
-        print("  cannot verify: `cryptography` is not installed (this is not a verdict on the signature)")
-        return 2
-
-    pub = json.loads((DATA / "seed" / "root_pub.json").read_text(encoding="utf-8"))["pubkey"]
-    raw = base64.urlsafe_b64decode(pub + "=" * (-len(pub) % 4))
-    try:
-        Ed25519PublicKey.from_public_bytes(raw).verify(SIG.read_bytes(), MANIFEST.read_bytes())
-        print(f"signature ok over {len(doc['files'])} files")
-    except InvalidSignature:
-        bad.append("signature does NOT verify against seed/root_pub.json")
+    if sig.get("signer_key_id") not in ACCORD_MANIFEST_SIGNERS:
+        bad.append(f"hybrid signature names signer {sig.get('signer_key_id')!r}, not an accord holder {ACCORD_MANIFEST_SIGNERS}")
+    if sig.get("manifest_size") != len(body) or sig.get("manifest_sha256") != hashlib.sha256(body).hexdigest():
+        bad.append("the holder's signature is over a different manifest (size or sha256 differs): re-run --sign-hybrid")
     for b in bad:
         print(f"  {b}")
+    if not bad:
+        print(f"hashes ok over {len(doc['files'])} files; {sig.get('signer_key_id')}'s signature names this manifest (both halves verified at agent startup)")
     return 1 if bad else 0
 
 
@@ -200,7 +178,7 @@ _SCRATCH_VERIFY = (
     "import os\n"
     "initialize_database(db_path=os.environ['CIRIS_DB_PATH'])\n"
     "assert verify_accord_manifest_hybrid(g.get_persist_engine()) is True\n"
-    "print('A1_HYBRID_VERIFIED')\n"
+    "print('HOLDER_HYBRID_VERIFIED')\n"
 )
 
 #: Every data-path key the agent resolves, pinned to the scratch home so the
@@ -233,14 +211,14 @@ def verify_in_scratch_home() -> int:
             [sys.executable, "-c", _SCRATCH_VERIFY], cwd=ROOT, env=env, capture_output=True, text=True, timeout=300
         )
         db_in_scratch = (pathlib.Path(home) / "data" / "ciris_engine.db").exists()
-        ok = proc.returncode == 0 and "A1_HYBRID_VERIFIED" in proc.stdout and db_in_scratch
+        ok = proc.returncode == 0 and "HOLDER_HYBRID_VERIFIED" in proc.stdout and db_in_scratch
         if not ok:
-            print("FAIL: the startup check did not verify A1's signature in a scratch home")
+            print("FAIL: the startup check did not verify the holder's signature in a scratch home")
             if not db_in_scratch:
                 print("  (the engine did not open its database under the scratch home)")
             print("\n".join(proc.stderr.strip().splitlines()[-15:]))
             return 1
-    print("verified: the agent's startup check resolves A1 and accepts both halves")
+    print("verified: the agent's startup check resolves the holder and accepts both halves")
     return 0
 
 
@@ -264,9 +242,15 @@ def sign_hybrid() -> int:
     """
     import subprocess
 
+    from ciris_engine.logic.utils.accord_manifest_hybrid import ACCORD_MANIFEST_SIGNERS
+
     server_bin, usb = _opt("--server-bin"), _opt("--usb")
+    key_id = _opt("--key-id") or "A1"
+    if key_id not in ACCORD_MANIFEST_SIGNERS:
+        print(f"FAIL: {key_id!r} is not an accord holder {ACCORD_MANIFEST_SIGNERS}")
+        return 1
     if not server_bin or not usb:
-        print("usage: regen_accord_manifest.py --sign-hybrid --server-bin <ciris-server> --usb <dir> [--module <ykcs11.so>]")
+        print("usage: regen_accord_manifest.py --sign-hybrid --server-bin <ciris-server> --usb <dir> [--key-id A1|B1|C1] [--module <ykcs11.so>]")
         return 1
     prior_manifest = MANIFEST.read_bytes()
     prior_hybrid = HYBRID.read_bytes() if HYBRID.exists() else None
@@ -290,18 +274,18 @@ def sign_hybrid() -> int:
     print(f"manifest frozen: {len(body)} bytes, sha256 {hashlib.sha256(body).hexdigest()}")
     # A1 signs a short statement of the manifest's digest: the YubiKey's EdDSA
     # refuses multi-KB inputs (CKR_DATA_LEN_RANGE, CIRISVerify#113).
-    statement = accord_manifest_statement(body, "A1")
-    signed = accord_manifest_signed_bytes(body, "A1")
+    statement = accord_manifest_statement(body, key_id)
+    signed = accord_manifest_signed_bytes(body, key_id)
     digest = hashlib.sha256(signed).hexdigest()
     print(f"statement: {json.dumps(statement, sort_keys=True)}")
-    print(f"A1 signs sha256(JCS(statement)) = {signed.hex()}")
-    print("A1 signs next: enter the YubiKey PIN and touch the key when asked", file=sys.stderr)
+    print(f"{key_id} signs sha256(JCS(statement)) = {signed.hex()}")
+    print(f"{key_id} signs next: enter the YubiKey PIN and touch the key when asked", file=sys.stderr)
     tmp = tempfile.NamedTemporaryFile(prefix="accord-statement-", suffix=".bin", delete=False)
     tmp.write(signed)
     tmp.close()
     statement_path = pathlib.Path(tmp.name)
 
-    cmd = [server_bin, "accord", "sign-bytes", "--key-id", "A1", "--usb", usb, "--in", str(statement_path)]
+    cmd = [server_bin, "accord", "sign-bytes", "--key-id", key_id, "--usb", usb, "--in", str(statement_path)]
     for flag in ("--module", "--piv-slot"):
         val = _opt(flag)
         if val:
@@ -317,15 +301,15 @@ def sign_hybrid() -> int:
         return restore(f"the signer exited {proc.returncode}")
     try:
         out = json.loads(proc.stdout)
-        key_id, got = out["key_id"], out["sha256"]
+        out_key_id, got = out["key_id"], out["sha256"]
         ed_b64, pqc_b64 = out["ed25519_signature_base64"], out["mldsa65_signature_base64"]
     except (ValueError, KeyError, TypeError):
         return restore("the signer's output is not the expected JSON")
-    if key_id != "A1":
-        return restore(f"the signer signed as {key_id!r}, not A1")
+    if out_key_id != key_id:
+        return restore(f"the signer signed as {out_key_id!r}, not {key_id}")
     if got != digest or MANIFEST.read_bytes() != body:
         return restore("the signed bytes are not the frozen manifest's statement")
-    if attach_hybrid(ed_b64, pqc_b64, signer="A1") != 0:
+    if attach_hybrid(ed_b64, pqc_b64, signer=key_id) != 0:
         return restore("the signature halves did not attach")
     if verify_in_scratch_home() != 0:
         return restore("the agent's startup check refused the signature")
@@ -344,27 +328,9 @@ def main() -> int:
     if "--attach-hybrid" in sys.argv:
         i = sys.argv.index("--attach-hybrid")
         return attach_hybrid(sys.argv[i + 1], sys.argv[i + 2])
-    # Signing key path comes from the operator, not from this source file.
-    env = os.environ.get("CIRIS_ROOT_WA_KEY")
-    if not env:
-        print("FAIL: set CIRIS_ROOT_WA_KEY to the path of the 32-byte root signing key")
-        return 1
-    key = pathlib.Path(env).expanduser()
-    if not key.is_file():
-        print("FAIL: CIRIS_ROOT_WA_KEY does not point at a file")
-        return 1
-    raw = key.read_bytes()
-    if len(raw) != 32:
-        print(f"FAIL: signing key is {len(raw)} bytes, expected 32")
-        return 1
-    from nacl.signing import SigningKey
-
-    body = build()
-    MANIFEST.write_bytes(body)
-    SIG.write_bytes(SigningKey(raw).sign(body).signature)
-    n = len(json.loads(body.decode())["files"])
-    print(f"manifest rebuilt over {n} files and re-signed ({len(body)} bytes)")
-    return check()
+    print("usage: regen_accord_manifest.py --check | --sign-hybrid --server-bin <ciris-server> --usb <dir>")
+    print("  (the 2025 WA root that signed this manifest is retired; A1 signs it, CC 3.1.2)")
+    return 1
 
 
 if __name__ == "__main__":

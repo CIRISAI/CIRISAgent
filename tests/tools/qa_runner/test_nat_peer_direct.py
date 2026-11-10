@@ -37,7 +37,7 @@ def test_a_round_trip_inside_the_ceiling_passes() -> None:
 
     half.read = read  # type: ignore[method-assign]
     detail = half.direct_round_trip("c", 2.0)
-    assert "round trip 1.50s" in detail
+    assert "round trip 1.50s" in detail and "after a warm-up" in detail
     assert "send call 0.00s, then 1.50s until the reply opened" in detail
 
 
@@ -62,7 +62,22 @@ def test_the_responder_answers_what_it_read() -> None:
     half.send = lambda cid, text, step: sent.append(text)  # type: ignore[method-assign]
     half.read = lambda cid, text, step: 0.1  # type: ignore[method-assign]
     half.direct_round_trip("c", 2.0)
-    assert sent == ["nat-peer direct pong n1"]
+    assert sent == ["nat-peer direct warm pong n1", "nat-peer direct pong n1"]
+
+
+def test_a_late_responder_is_not_timed() -> None:
+    """Run 42734460384: the responder started reading 8 s after the ping. The warm-up absorbs that."""
+    clock = _Clock()
+    half = _half(ROLE_REQUESTER, clock)
+    half.send = lambda cid, text, step: None  # type: ignore[method-assign]
+
+    def read(cid: str, text: str, step: str) -> float:
+        took = 9.0 if "warm" in text else 1.0
+        clock.t += took
+        return took
+
+    half.read = read  # type: ignore[method-assign]
+    assert "round trip 1.00s" in half.direct_round_trip("c", 2.0)
 
 
 def test_repeated_pairs_keep_every_run_and_fail_if_any_failed(monkeypatch, tmp_path) -> None:

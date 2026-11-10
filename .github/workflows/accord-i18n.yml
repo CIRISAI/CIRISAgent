@@ -191,13 +191,13 @@ jobs:
           {
             echo "### Pushed \`$BR\`"
             echo
-            echo "**A key holder must re-sign before this merges.** The localized"
-            echo "texts are inside the signed manifest, so changing them invalidates"
-            echo "\`seed/accord_manifest.sig\`, and the root key is not in CI:"
+            echo "**A1 must re-sign before this merges.** The localized texts are"
+            echo "inside the signed manifest, so changing them invalidates A1's"
+            echo "\`accord_manifest.hybrid.json\`, and A1's keys are on the holder's YubiKey and USB drive:"
             echo
             echo '```bash'
             echo "git fetch origin $BR && git checkout $BR"
-            echo "python3 tools/dev/regen_accord_manifest.py   # rebuilds + re-signs"
-            echo "git commit -am 'accord: re-sign the manifest over the refreshed texts'"
+            echo "python3 tools/dev/regen_accord_manifest.py --sign-hybrid --server-bin <ciris-server> --usb <A1 usb dir>"
+            echo "git commit -am 'accord: A1 re-signs the manifest over the refreshed texts'"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

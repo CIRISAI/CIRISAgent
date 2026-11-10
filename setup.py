@@ -156,7 +156,6 @@ setup(
             # Signed accord manifest + root key: the integrity check fails
             # closed without them, so every install must ship them.
             "seed/*.json",
-            "seed/*.sig",
         ],
         "ciris_engine.config": [
             "*.json",  # Pricing and configuration data

@@ -23,7 +23,7 @@ class _Engine:
         self.record = record
 
     def lookup_public_key(self, key_id):
-        return json.dumps(self.record) if self.record and key_id == "A1" else None
+        return json.dumps(self.record) if self.record and key_id in ("A1", "B1", "C1") else None
 
     def verify_hybrid(self, msg, ed_b64, pqc_b64, ed_pub, pqc_pub, policy):
         assert policy == "strict"
@@ -32,7 +32,7 @@ class _Engine:
             raise ValueError("bad signature")
 
 
-A1 = {"pubkey_ed25519_base64": "ZWQ=", "pubkey_ml_dsa_65_base64": "cHFj"}
+A1 = {"identity_type": "accord_holder", "pubkey_ed25519_base64": "ZWQ=", "pubkey_ml_dsa_65_base64": "cHFj"}
 
 
 def _seed(tmp_path, signer="A1", tamper=False, signed_as=None, domain=ACCORD_MANIFEST_DOMAIN, raw_file=False):
@@ -56,8 +56,9 @@ def _seed(tmp_path, signer="A1", tamper=False, signed_as=None, domain=ACCORD_MAN
     return tmp_path
 
 
-def test_none_shipped_yet_is_not_a_failure() -> None:
-    assert verify_accord_manifest_hybrid(_Engine(A1)) is False
+def test_the_shipped_seed_carries_a1s_signature() -> None:
+    """2.20.0 ships A1's signature; a missing one is a failure, not a fallback (CC 3.1.2)."""
+    assert (constants.ACCORD_SEED_DIR / "accord_manifest.hybrid.json").exists()
 
 
 def test_an_a1_hybrid_signature_verifies(tmp_path) -> None:
@@ -76,7 +77,7 @@ def test_a_signer_outside_the_pinned_set_stops_startup(tmp_path) -> None:
 
 def test_a1_without_its_ml_dsa_half_stops_startup(tmp_path) -> None:
     with pytest.raises(RuntimeError, match="no ML-DSA-65 half"):
-        verify_accord_manifest_hybrid(_Engine({"pubkey_ed25519_base64": "ZWQ="}), _seed(tmp_path))
+        verify_accord_manifest_hybrid(_Engine({"identity_type": "accord_holder", "pubkey_ed25519_base64": "ZWQ="}), _seed(tmp_path))
 
 
 def test_a1_signs_a_short_digest_statement_not_the_file(tmp_path) -> None:
@@ -118,3 +119,15 @@ def test_a_manifest_of_a_different_size_is_refused_before_hashing(tmp_path) -> N
     (seed / "accord_manifest.hybrid.json").write_text(json.dumps(doc))
     with pytest.raises(RuntimeError, match="signed for"):
         verify_accord_manifest_hybrid(_Engine(A1), seed)
+
+
+@pytest.mark.parametrize("holder", ["B1", "C1"])
+def test_any_accord_holder_can_sign(tmp_path, holder) -> None:
+    """Eric 2026-11-09: "It can be anyone in the humanity accord family"."""
+    assert verify_accord_manifest_hybrid(_Engine(A1), _seed(tmp_path, signer=holder)) is True
+
+
+def test_a_record_that_is_not_an_accord_holder_is_refused(tmp_path) -> None:
+    record = dict(A1, identity_type="wise_authority")
+    with pytest.raises(RuntimeError, match="not an accord holder"):
+        verify_accord_manifest_hybrid(_Engine(record), _seed(tmp_path))

@@ -214,8 +214,8 @@ async def bootstrap_if_needed() -> None:
     """Initialize root certificate and system WA if needed."""
 ```
 
-1. **Root Certificate Loading**: Loads `seed/root_pub.json` if no ROOT WA exists
-2. **System WA Creation**: Creates system authority as child of root certificate
+1. **No root certificate**: root signing is retired in the agent (2.20.0); the WA seat comes from the node's owner binding
+2. **System WA Creation**: Creates the system authority
 3. **Key Storage**: Securely stores system WA private key for task signing
 
 ### Credentials (Development)

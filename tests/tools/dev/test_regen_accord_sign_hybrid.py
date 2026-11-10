@@ -39,18 +39,18 @@ def tool(tmp_path, monkeypatch):
     return mod
 
 
-def _signer(tmp_path: Path, *, exit_code: int = 0, key_id: str = "A1", digest_of_input: bool = True) -> Path:
+def _signer(tmp_path: Path, *, exit_code: int = 0, key_id: str = "", digest_of_input: bool = True) -> Path:
     script = tmp_path / "fake-ciris-server"
     script.write_text(
         f"""#!{sys.executable}
 import hashlib, json, sys
 args = sys.argv[1:]
-assert args[:4] == ["accord", "sign-bytes", "--key-id", "A1"], args
+assert args[:3] == ["accord", "sign-bytes", "--key-id"] and args[3] in ("A1", "B1", "C1"), args
 data = open(args[args.index("--in") + 1], "rb").read()
 digest = hashlib.sha256(data).hexdigest() if {digest_of_input!r} else "0" * 64
 if {exit_code}:
     sys.exit({exit_code})
-print(json.dumps({{"key_id": {key_id!r}, "sha256": digest,
+print(json.dumps({{"key_id": {key_id!r} or args[3], "sha256": digest,
                    "ed25519_signature_base64": {ED!r}, "mldsa65_signature_base64": {PQC!r}}}))
 """
     )
@@ -58,8 +58,8 @@ print(json.dumps({{"key_id": {key_id!r}, "sha256": digest,
     return script
 
 
-def _run(tool, monkeypatch, signer: Path, tmp_path: Path) -> int:
-    monkeypatch.setattr(sys, "argv", ["x", "--sign-hybrid", "--server-bin", str(signer), "--usb", str(tmp_path)])
+def _run(tool, monkeypatch, signer: Path, tmp_path: Path, *extra: str) -> int:
+    monkeypatch.setattr(sys, "argv", ["x", "--sign-hybrid", "--server-bin", str(signer), "--usb", str(tmp_path), *extra])
     return tool.main()
 
 
@@ -123,4 +123,14 @@ def test_the_signer_is_handed_32_bytes_not_the_manifest(tool, monkeypatch, tmp_p
 def test_missing_arguments_change_nothing(tool, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["x", "--sign-hybrid"])
     assert tool.main() == 1
+    assert tool.MANIFEST.read_bytes() == OLD
+
+
+def test_another_holder_can_sign_with_key_id(tool, monkeypatch, tmp_path):
+    assert _run(tool, monkeypatch, _signer(tmp_path), tmp_path, "--key-id", "B1") == 0
+    assert json.loads(tool.HYBRID.read_text())["signer_key_id"] == "B1"
+
+
+def test_a_non_holder_key_id_is_refused_before_the_token(tool, monkeypatch, tmp_path):
+    assert _run(tool, monkeypatch, _signer(tmp_path), tmp_path, "--key-id", "wa-ROOT-00") == 1
     assert tool.MANIFEST.read_bytes() == OLD

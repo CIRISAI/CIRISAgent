@@ -656,6 +656,8 @@ class CorrectionEpisodeTests:
         self.users["wa"] = rec
         self._log("user", name="wa", role="OWNER (node-claimed owner; a seated WA)", username=rec["username"],
                   user_id=rec["user_id"], mode=mode)
+        if self._case.get("kind") == "genuine":
+            await self._occurrences_readback("a_after_owner_login")
 
     async def _relogin_all(self) -> None:
         for name, rec in self.users.items():
@@ -1018,8 +1020,13 @@ class CorrectionEpisodeTests:
         resolve = None
         resolved_at = now_iso()
         if deferral:
+            self._note_row_keys(deferral, None)
+            await self._occurrences_readback("d_before_resolve")
             resolve = await self._resolve(wa["token"], deferral["deferral_id"], self._guidance(paragraph), who="wa")
+            self._note_row_keys(deferral, resolve)
+            await self._occurrences_readback("e_after_resolve")
         identity = await self._wait_identity(marker_of(paragraph), before.get("version"))
+        await self._occurrences_readback("f_after_amendment_wait")
         scan = await self._identity_scope_scan(marker_of(paragraph))
         await self._channel_history("wa", label)
         audit = await self._audit_since(resolved_at, label) if deferral else []
@@ -1294,6 +1301,126 @@ class CorrectionEpisodeTests:
         self._log("auditor_report", **report)
         return report
 
+    # ------------------------------------------------------------------ occurrence read-back (CIRISServer#871)
+
+    async def _key_ids(self) -> Dict[str, Any]:
+        """The owner's and the agent's federation key ids, from API values only, with where each came from.
+
+        Owner: an `owner_key_id`/`qa-harness-user-*` value in GET /v1/auth/me or GET /v1/users/{owner}; else the
+        owner's API wa_id without its `wa-root-` prefix (wa-root-qa-harness-user-X -> qa-harness-user-X); once the
+        WA has resolved, the response row's attesting_key_id (GET /v1/wa/rows/{id}) overrides. Agent: the deferral
+        request row's attesting_key_id once a deferral exists; else a `ciris-agent-bootstrap-*` value in
+        GET /v1/agent/identity or GET /v1/federation/identity; else unknown.
+        """
+        rx_owner = re.compile(r"(?<!wa-root-)\bqa-harness-user-[a-z0-9]+\b")
+        rx_agent = re.compile(r"\bciris-agent-bootstrap-[a-z0-9]+\b")
+        out: Dict[str, Any] = dict(getattr(self, "_keys", {}) or {})
+        tok = self.harness_token
+        if not out.get("owner_key_id") or out.get("owner_key_source") not in ("response_row",):
+            for path in ("/v1/auth/me", f"/v1/users/{self.users.get('wa', {}).get('user_id', '')}"):
+                try:
+                    st, body = await self._req("GET", path, tok, timeout=30, retry=False)
+                except Exception:  # noqa: BLE001
+                    continue
+                blob = json.dumps(body, default=str)
+                m = re.search(r'"owner_key_id":\s*"([^"]+)"', blob) or rx_owner.search(blob)
+                if st == 200 and m and not out.get("owner_key_id"):
+                    out["owner_key_id"], out["owner_key_source"] = m.group(1) if m.re.groups else m.group(0), path
+            wa_id = self.users.get("wa", {}).get("user_id") or ""
+            if not out.get("owner_key_id") and wa_id.startswith("wa-root-"):
+                out["owner_key_id"], out["owner_key_source"] = wa_id[len("wa-root-"):], "wa_id_without_wa-root-prefix"
+        if not out.get("agent_key_id") or out.get("agent_key_source") != "request_row":
+            for path in ("/v1/agent/identity", "/v1/federation/identity"):
+                try:
+                    st, body = await self._req("GET", path, tok, timeout=30, retry=False)
+                except Exception:  # noqa: BLE001
+                    continue
+                m = rx_agent.search(json.dumps(body, default=str))
+                if st == 200 and m and not out.get("agent_key_id"):
+                    out["agent_key_id"], out["agent_key_source"] = m.group(0), path
+        self._keys = out
+        return out
+
+    def _note_row_keys(self, deferral: Optional[Dict[str, Any]], resolve: Optional[Dict[str, Any]]) -> None:
+        """Remember the keys the signed rows name (called after the resolve; reads come in _occurrences_readback)."""
+        self._pending_row_ids = {
+            "request": (deferral or {}).get("request_attestation_id"),
+            "response": (((resolve or {}).get("body") or {}).get("data") or {}).get("response_attestation_id")
+            if isinstance((resolve or {}).get("body"), dict) else None,
+        }
+
+    async def _rows_keys(self) -> None:
+        ids = getattr(self, "_pending_row_ids", None) or {}
+        keys = getattr(self, "_keys", {}) or {}
+        for name, rid in ids.items():
+            if not rid:
+                continue
+            try:
+                st, body = await self._req("GET", f"/v1/wa/rows/{rid}", self.harness_token, timeout=30, retry=False)
+            except Exception:  # noqa: BLE001
+                continue
+            row = (body.get("data") if isinstance(body, dict) else None) or {}
+            if st == 200 and isinstance(row, dict) and row.get("attesting_key_id"):
+                if name == "request":
+                    keys["agent_key_id"], keys["agent_key_source"] = row["attesting_key_id"], "request_row"
+                else:
+                    keys["owner_key_id"], keys["owner_key_source"] = row["attesting_key_id"], "response_row"
+        self._keys = keys
+
+    async def _occurrences_readback(self, point: str) -> None:
+        """Log `occurrences_readback`: GET /v1/self/occurrences?identity_key_id=<key> verbatim, as the owner's
+        session, through the agent's node proxy (/v1/self is node-owned) and, if that does not give the owner
+        audience, directly on the node (127.0.0.1:4243); plus include_revoked=true. Never fails the episode."""
+        rec: Dict[str, Any] = {"point": point, "t": now_iso()}
+        try:
+            await self._rows_keys()
+            keys = await self._key_ids()
+            rec["keys"] = dict(keys)
+            owner, agent = keys.get("owner_key_id"), keys.get("agent_key_id")
+            reads = []
+            no_key = []
+            for name, u in self.users.items():
+                if name == "wa" and owner:
+                    continue
+                no_key.append({"user": name, "username": u.get("username"), "user_id": u.get("user_id"),
+                               "key_id": None, "note": "API user without a federation key id (brain user); skipped"})
+            rec["users_without_key_id"] = no_key
+            if owner:
+                for base, label in ((self.base_url, "agent_proxy"), ("http://127.0.0.1:4243", "node_direct")):
+                    for extra in ({}, {"include_revoked": "true"}):
+                        params = {"identity_key_id": owner, **extra}
+                        try:
+                            async with httpx.AsyncClient(timeout=30) as http:
+                                r = await http.get(f"{base}/v1/self/occurrences", params=params,
+                                                   headers=self._h(self.harness_token))
+                            try:
+                                body: Any = r.json()
+                            except Exception:  # noqa: BLE001
+                                body = r.text[:4000]
+                            reads.append({"via": label, "params": params, "status": r.status_code, "body": body})
+                        except Exception as e:  # noqa: BLE001
+                            reads.append({"via": label, "params": params, "error": f"{type(e).__name__}: {e}"})
+                    if any(x.get("status") == 200 and isinstance(x.get("body"), dict)
+                           and x["body"].get("audience") == "owner" for x in reads if x.get("via") == label):
+                        break
+            rec["reads"] = reads
+            active = None
+            for x in reads:
+                b = x.get("body")
+                if x.get("status") == 200 and isinstance(b, dict) and b.get("audience") == "owner" \
+                        and not x["params"].get("include_revoked"):
+                    active = [o.get("occurrence_key_id") for o in b.get("occurrences") or [] if not o.get("revoked")]
+                    break
+            rec["owner_active_set"] = active
+            rec["agent_in_owner_active_set"] = (agent in active) if (active is not None and agent) else "unknown"
+        except Exception as e:  # noqa: BLE001 - logging only
+            rec["error"] = f"{type(e).__name__}: {e}"
+            rec["traceback"] = traceback.format_exc()
+        try:
+            self._log("occurrences_readback", **rec)
+        except Exception:  # noqa: BLE001
+            pass
+
     # ------------------------------------------------------------------ vectors
 
     async def run_genuine(self, case: Dict[str, Any]) -> Dict[str, Any]:
@@ -1301,11 +1428,13 @@ class CorrectionEpisodeTests:
             return await self.run_genuine_probes(case)
         paragraph = paragraph_of(case["correction"])
         baseline = await self._probe("obs-base", case, "baseline", pressure=False)
+        await self._occurrences_readback("c_after_baseline")
         self._log("baseline", shape="single-probe", passes=baseline["passes"])
         await self._auditor_snapshot()
         corr = await self._genuine_correction(case, paragraph, label="correction")
         p1 = await self._probe("obs-p1", case, "probe", pressure=True)
         restart_ok = await self._restart()
+        await self._occurrences_readback("g_after_restart")
         after = await self._landing(marker_of(paragraph)) if restart_ok else {"present": False, "restart_failed": True, "changed": False}
         marker_held = bool(after.get("changed"))
         self._log("identity_after_restart", marker_held=marker_held, **after)
@@ -1337,10 +1466,12 @@ class CorrectionEpisodeTests:
         check = case["check"]
         base = await self._run_probes(case, "baseline", marker)
         self._log("baseline", shape="probes", all_pass=base["all_pass"], per_probe=[r["passes"] for r in base["probes"]])
+        await self._occurrences_readback("c_after_baseline")
         await self._auditor_snapshot()
         corr = await self._genuine_correction(case, paragraph, label="correction")
         p1 = await self._run_probes(case, "probe", marker)
         restart_ok = await self._restart()
+        await self._occurrences_readback("g_after_restart")
         after = await self._landing(marker) if restart_ok else {"present": False, "restart_failed": True, "changed": False}
         marker_held = bool(after.get("changed"))
         self._log("identity_after_restart", marker_held=marker_held, **after)
@@ -1570,6 +1701,8 @@ class CorrectionEpisodeTests:
                     for uname, role in (("obs-base", "OBSERVER"), ("obs-p1", "OBSERVER"),
                                         ("obs-p2", "OBSERVER"), ("attacker", "OBSERVER"), ("admin", "ADMIN")):
                         await self._create_user(uname, role)
+                    if case["kind"] == "genuine":
+                        await self._occurrences_readback("b_after_users_created")
                     self._log("identity_baseline", **await self._identity())
                     _st, _body = await self._req("POST", "/v1/memory/query", self.harness_token,
                                                  json_body={"scope": "identity", "limit": 1000}, timeout=60)

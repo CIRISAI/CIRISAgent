@@ -23,6 +23,12 @@ test_accord_manifest_line_endings.py` holds that line.
     python3 tools/dev/regen_accord_manifest.py [--check]
 
 --check verifies the on-disk manifest and signature without writing.
+
+A1 (the accord holder) signs on the holder's own machine, keys never leaving
+the YubiKey and the USB drive:
+
+    python3 tools/dev/regen_accord_manifest.py --sign-hybrid \
+        --server-bin <ciris-server> --usb <A1 usb dir> [--module <ykcs11.so>]
 """
 
 from __future__ import annotations
@@ -35,6 +41,7 @@ import pathlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "ciris_engine" / "data"
@@ -167,7 +174,135 @@ def attach_hybrid(ed_b64: str, pqc_b64: str, signer: str = "A1") -> int:
     return 0
 
 
+#: The startup check, run in a scratch home: the real engine resolves A1 and
+#: verifies the hybrid signature exactly as every agent will at boot.
+_SCRATCH_VERIFY = (
+    "from ciris_engine.logic.persistence.db.core import initialize_database\n"
+    "from ciris_engine.logic.persistence.models import graph as g\n"
+    "from ciris_engine.logic.utils.accord_manifest_hybrid import verify_accord_manifest_hybrid\n"
+    "import os\n"
+    "initialize_database(db_path=os.environ['CIRIS_DB_PATH'])\n"
+    "assert verify_accord_manifest_hybrid(g.get_persist_engine()) is True\n"
+    "print('A1_HYBRID_VERIFIED')\n"
+)
+
+#: Every data-path key the agent resolves, pinned to the scratch home so the
+#: check can never open the operator's live install (~/ciris/.env wins otherwise).
+_DATA_PATH_KEYS = {
+    "CIRIS_HOME": "",
+    "CIRIS_DATA_DIR": "data",
+    "CIRIS_DB_PATH": "data/ciris_engine.db",
+    "SECRETS_DB_PATH": "data/secrets.db",
+    "CIRIS_SECRETS_DB_PATH": "data/secrets.db",
+    "AUDIT_LOG_PATH": "data/audit.jsonl",
+    "CIRIS_AUDIT_DB_PATH": "data/audit.db",
+    "CIRIS_LOG_DIR": "logs",
+}
+
+
+def verify_in_scratch_home() -> int:
+    """Boot the engine in a throwaway home and run the startup hybrid check."""
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="accord-a1-verify-") as home:
+        env = dict(os.environ)
+        for key, rel in _DATA_PATH_KEYS.items():
+            env[key] = str(pathlib.Path(home) / rel) if rel else home
+        env["CIRIS_FORCE_FIRST_RUN"] = "1"
+        (pathlib.Path(home) / "data").mkdir()
+        (pathlib.Path(home) / "logs").mkdir()
+        proc = subprocess.run(
+            [sys.executable, "-c", _SCRATCH_VERIFY], cwd=ROOT, env=env, capture_output=True, text=True, timeout=300
+        )
+        db_in_scratch = (pathlib.Path(home) / "data" / "ciris_engine.db").exists()
+        ok = proc.returncode == 0 and "A1_HYBRID_VERIFIED" in proc.stdout and db_in_scratch
+        if not ok:
+            print("FAIL: the startup check did not verify A1's signature in a scratch home")
+            if not db_in_scratch:
+                print("  (the engine did not open its database under the scratch home)")
+            print("\n".join(proc.stderr.strip().splitlines()[-15:]))
+            return 1
+    print("verified: the agent's startup check resolves A1 and accepts both halves")
+    return 0
+
+
+def _opt(name: str) -> Optional[str]:
+    if name in sys.argv:
+        i = sys.argv.index(name)
+        if len(sys.argv) > i + 1:
+            return sys.argv[i + 1]
+    return None
+
+
+def sign_hybrid() -> int:
+    """Sign the manifest with A1 on this machine, through ciris-server's sign-bytes verb.
+
+    The keys never pass through Python: the server binary opens A1's Ed25519
+    half on the YubiKey (PKCS#11) and unwraps the ML-DSA-65 half from the USB
+    drive in memory, signs bound hybrid and self-verifies. This side freezes
+    the bytes, checks the returned digest, attaches, then re-runs the agent's
+    own startup check in a scratch home. Any failure puts the previous
+    manifest back, so the tree is never left in a state that fails to boot.
+    """
+    import subprocess
+
+    server_bin, usb = _opt("--server-bin"), _opt("--usb")
+    if not server_bin or not usb:
+        print("usage: regen_accord_manifest.py --sign-hybrid --server-bin <ciris-server> --usb <dir> [--module <ykcs11.so>]")
+        return 1
+    prior_manifest = MANIFEST.read_bytes()
+    prior_hybrid = HYBRID.read_bytes() if HYBRID.exists() else None
+
+    def restore(why: str) -> int:
+        MANIFEST.write_bytes(prior_manifest)
+        if prior_hybrid is None:
+            HYBRID.unlink(missing_ok=True)
+        else:
+            HYBRID.write_bytes(prior_hybrid)
+        print(f"FAIL: {why}; the previous manifest is restored")
+        return 1
+
+    body = build()
+    MANIFEST.write_bytes(body)
+    HYBRID.unlink(missing_ok=True)
+    digest = hashlib.sha256(body).hexdigest()
+    print(f"manifest frozen: {len(body)} bytes, sha256 {digest}")
+    print("A1 signs next: enter the YubiKey PIN and touch the key when asked", file=sys.stderr)
+
+    cmd = [server_bin, "accord", "sign-bytes", "--key-id", "A1", "--usb", usb, "--in", str(MANIFEST)]
+    for flag in ("--module", "--piv-slot"):
+        val = _opt(flag)
+        if val:
+            cmd += [flag, val]
+    try:
+        # stdin and stderr stay on the terminal for the PIN prompt; only the JSON comes back.
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return restore(f"could not run the signer ({type(exc).__name__})")
+    if proc.returncode != 0:
+        return restore(f"the signer exited {proc.returncode}")
+    try:
+        out = json.loads(proc.stdout)
+        key_id, got = out["key_id"], out["sha256"]
+        ed_b64, pqc_b64 = out["ed25519_signature_base64"], out["mldsa65_signature_base64"]
+    except (ValueError, KeyError, TypeError):
+        return restore("the signer's output is not the expected JSON")
+    if key_id != "A1":
+        return restore(f"the signer signed as {key_id!r}, not A1")
+    if got != digest or MANIFEST.read_bytes() != body:
+        return restore("the signed bytes are not the frozen manifest")
+    if attach_hybrid(ed_b64, pqc_b64, signer="A1") != 0:
+        return restore("the signature halves did not attach")
+    if verify_in_scratch_home() != 0:
+        return restore("the agent's startup check refused the signature")
+    print("done: commit ciris_engine/data/seed/accord_manifest.json and accord_manifest.hybrid.json")
+    return 0
+
+
 def main() -> int:
+    if "--sign-hybrid" in sys.argv:
+        return sign_hybrid()
     if "--check" in sys.argv:
         return check()
     if "--prepare-hybrid" in sys.argv:

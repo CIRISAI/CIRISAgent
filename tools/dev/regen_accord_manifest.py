@@ -84,6 +84,17 @@ def build() -> bytes:
     return (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def _manifest_signers() -> tuple:
+    """The pinned holder set, read from source: --check runs where the agent's deps aren't installed."""
+    import ast
+
+    src = (ROOT / "ciris_engine" / "logic" / "utils" / "accord_manifest_hybrid.py").read_text(encoding="utf-8")
+    for node in ast.parse(src).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "ACCORD_MANIFEST_SIGNERS" for t in node.targets):
+            return tuple(ast.literal_eval(node.value))
+    raise RuntimeError("ACCORD_MANIFEST_SIGNERS not found in accord_manifest_hybrid.py")
+
+
 def check() -> int:
     if not MANIFEST.exists() or not HYBRID.exists():
         print("manifest or A1's hybrid signature missing")
@@ -106,10 +117,9 @@ def check() -> int:
     # needs the engine). Here: the statement must name these exact bytes.
     sig = json.loads(HYBRID.read_text(encoding="utf-8"))
     body = MANIFEST.read_bytes()
-    from ciris_engine.logic.utils.accord_manifest_hybrid import ACCORD_MANIFEST_SIGNERS
-
-    if sig.get("signer_key_id") not in ACCORD_MANIFEST_SIGNERS:
-        bad.append(f"hybrid signature names signer {sig.get('signer_key_id')!r}, not an accord holder {ACCORD_MANIFEST_SIGNERS}")
+    signers = _manifest_signers()
+    if sig.get("signer_key_id") not in signers:
+        bad.append(f"hybrid signature names signer {sig.get('signer_key_id')!r}, not an accord holder {signers}")
     if sig.get("manifest_size") != len(body) or sig.get("manifest_sha256") != hashlib.sha256(body).hexdigest():
         bad.append("the holder's signature is over a different manifest (size or sha256 differs): re-run --sign-hybrid")
     for b in bad:

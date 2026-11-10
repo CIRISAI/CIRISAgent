@@ -188,12 +188,12 @@
       "sha256": "1c6f97e1a4ce2dc2d422f4eb396fdc803d75d95a8f15e929b4997c60c7522d92"
     },
     "CIRIS_COMPREHENSIVE_GUIDE.txt": {
-      "sha256": "6d9796fdc30545c675ec033c5cec07545e7ec03026e285c3c42ca851e45df457"
+      "sha256": "d79e76a13240a2faea64e15ecaaf19b303e928e6b58f8732b67647b61e49e612"
     },
     "CIRIS_COMPREHENSIVE_GUIDE_MOBILE.txt": {
       "sha256": "68a1f6f4fdab0944f7fdf29bcc3a7f1b831af2923065a2740c3be1b2e8d9a7bb"
     }
   },
-  "signed_at": "2026-10-27T12:45:57Z",
+  "signed_at": "2026-11-10T01:26:23Z",
   "signer": "wa-ROOT-00"
 }

@@ -887,3 +887,15 @@ decimal_id	claim_id	repo	path#symbol	status
 1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_dream_state_enabled_by_default	impl
 1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_play_state_enabled_by_default	impl
 1.13.2	CLM-agent-rest-states	CIRISAgent	tests/ciris_engine/logic/processors/support/test_state_manager_helpers.py#TestIsOptionalStateEnabled.test_solitude_state_enabled_by_default	impl
+#
+# CLM-agent-accord-manifest-hybrid-strict (CC 5.3.2.4.3.1, 2.20.0). The accord
+# manifest is verified strict hybrid against A1's pinned accord-holder record
+# (lookup_public_key, both halves required) when the engine is wired, before
+# any decision, and startup fails closed on a bad, re-attributed or missing-PQC
+# signature. A1 signs sha256(JCS({domain: ciris.accord_manifest.v1,
+# manifest_sha256, manifest_size, signer_identity})), the CC 3.1.2 form; the
+# verifier checks size, then digest, rebuilding the statement from the shipped bytes.
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	ciris_engine/logic/utils/accord_manifest_hybrid.py#verify_accord_manifest_hybrid	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	ciris_engine/logic/utils/accord_manifest_hybrid.py#accord_manifest_signed_bytes	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_manifest_hybrid.py#test_a_statement_naming_another_holder_is_refused	impl
+5.3.2.4.3.1	CLM-agent-accord-manifest-hybrid-strict	CIRISAgent	tests/ciris_engine/logic/utils/test_accord_manifest_hybrid.py#test_a1_without_its_ml_dsa_half_stops_startup	impl

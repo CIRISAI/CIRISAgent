@@ -44,6 +44,10 @@ from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[2]
+# Import this checkout's ciris_engine, never an installed copy: the startup
+# check and the statement it signs must be the ones this tree ships.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 DATA = ROOT / "ciris_engine" / "data"
 LOCALIZED = DATA / "localized"
 MANIFEST = DATA / "seed" / "accord_manifest.json"
@@ -152,9 +156,12 @@ def prepare_hybrid(out_dir: pathlib.Path) -> int:
     MANIFEST.write_bytes(build())
     if HYBRID.exists():
         HYBRID.unlink()
+    from ciris_engine.logic.utils.accord_manifest_hybrid import accord_manifest_signed_bytes
+
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "accord_manifest.json").write_bytes(MANIFEST.read_bytes())
-    print(f"wrote {out_dir / 'accord_manifest.json'} (sha256 {hashlib.sha256(MANIFEST.read_bytes()).hexdigest()})")
+    signed = accord_manifest_signed_bytes(MANIFEST.read_bytes(), "A1")
+    (out_dir / "accord_manifest.signed.bin").write_bytes(signed)
+    print(f"wrote {out_dir / 'accord_manifest.signed.bin'} (32 bytes: sha256 of the JCS statement, {signed.hex()})")
     print("sign it with A1: ed25519 over these bytes; ml-dsa-65 over these bytes || the ed25519 signature")
     print("then: regen_accord_manifest.py --attach-hybrid <ed25519_b64> <ml_dsa_65_b64>")
     return 0
@@ -168,7 +175,17 @@ def attach_hybrid(ed_b64: str, pqc_b64: str, signer: str = "A1") -> int:
         except ValueError:
             print(f"FAIL: the {name} half is not base64")
             return 1
-    doc = {"signer_key_id": signer, "ed25519_sig": ed_b64, "ml_dsa_65_sig": pqc_b64}
+    from ciris_engine.logic.utils.accord_manifest_hybrid import accord_manifest_statement
+
+    statement = accord_manifest_statement(MANIFEST.read_bytes(), signer)
+    doc = {
+        "signer_key_id": signer,
+        "domain": statement["domain"],
+        "manifest_sha256": statement["manifest_sha256"],
+        "manifest_size": statement["manifest_size"],
+        "ed25519_sig": ed_b64,
+        "ml_dsa_65_sig": pqc_b64,
+    }
     HYBRID.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {HYBRID}; the agent verifies it against {signer}'s directory record when the engine starts")
     return 0
@@ -241,7 +258,7 @@ def sign_hybrid() -> int:
     The keys never pass through Python: the server binary opens A1's Ed25519
     half on the YubiKey (PKCS#11) and unwraps the ML-DSA-65 half from the USB
     drive in memory, signs bound hybrid and self-verifies. This side freezes
-    the bytes, checks the returned digest, attaches, then re-runs the agent's
+    the bytes, has A1 sign a short statement of their digest, checks the returned digest, attaches, then re-runs the agent's
     own startup check in a scratch home. Any failure puts the previous
     manifest back, so the tree is never left in a state that fails to boot.
     """
@@ -263,14 +280,28 @@ def sign_hybrid() -> int:
         print(f"FAIL: {why}; the previous manifest is restored")
         return 1
 
+    import tempfile
+
+    from ciris_engine.logic.utils.accord_manifest_hybrid import accord_manifest_signed_bytes, accord_manifest_statement
+
     body = build()
     MANIFEST.write_bytes(body)
     HYBRID.unlink(missing_ok=True)
-    digest = hashlib.sha256(body).hexdigest()
-    print(f"manifest frozen: {len(body)} bytes, sha256 {digest}")
+    print(f"manifest frozen: {len(body)} bytes, sha256 {hashlib.sha256(body).hexdigest()}")
+    # A1 signs a short statement of the manifest's digest: the YubiKey's EdDSA
+    # refuses multi-KB inputs (CKR_DATA_LEN_RANGE, CIRISVerify#113).
+    statement = accord_manifest_statement(body, "A1")
+    signed = accord_manifest_signed_bytes(body, "A1")
+    digest = hashlib.sha256(signed).hexdigest()
+    print(f"statement: {json.dumps(statement, sort_keys=True)}")
+    print(f"A1 signs sha256(JCS(statement)) = {signed.hex()}")
     print("A1 signs next: enter the YubiKey PIN and touch the key when asked", file=sys.stderr)
+    tmp = tempfile.NamedTemporaryFile(prefix="accord-statement-", suffix=".bin", delete=False)
+    tmp.write(signed)
+    tmp.close()
+    statement_path = pathlib.Path(tmp.name)
 
-    cmd = [server_bin, "accord", "sign-bytes", "--key-id", "A1", "--usb", usb, "--in", str(MANIFEST)]
+    cmd = [server_bin, "accord", "sign-bytes", "--key-id", "A1", "--usb", usb, "--in", str(statement_path)]
     for flag in ("--module", "--piv-slot"):
         val = _opt(flag)
         if val:
@@ -280,6 +311,8 @@ def sign_hybrid() -> int:
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, timeout=600)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return restore(f"could not run the signer ({type(exc).__name__})")
+    finally:
+        statement_path.unlink(missing_ok=True)
     if proc.returncode != 0:
         return restore(f"the signer exited {proc.returncode}")
     try:
@@ -291,7 +324,7 @@ def sign_hybrid() -> int:
     if key_id != "A1":
         return restore(f"the signer signed as {key_id!r}, not A1")
     if got != digest or MANIFEST.read_bytes() != body:
-        return restore("the signed bytes are not the frozen manifest")
+        return restore("the signed bytes are not the frozen manifest's statement")
     if attach_hybrid(ed_b64, pqc_b64, signer="A1") != 0:
         return restore("the signature halves did not attach")
     if verify_in_scratch_home() != 0:

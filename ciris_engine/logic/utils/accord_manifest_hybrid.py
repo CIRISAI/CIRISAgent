@@ -1,8 +1,9 @@
 """The accord manifest's hybrid signature, checked once the persist engine is up.
 
 Eric's decision (2026-11-08, via the CC): A1, his accord-holder key, signs the
-accord manifest in the bound hybrid form of CC 5.3.2.4.3.1. Ed25519 covers the
-manifest bytes; ML-DSA-65 covers the manifest bytes followed by the Ed25519
+accord manifest in the bound hybrid form of CC 5.3.2.4.3.1, over sha256 of a short JCS
+statement of the manifest's size and sha256 (``accord_manifest_signed_bytes``).
+Ed25519 covers those 32 bytes; ML-DSA-65 covers them followed by the Ed25519
 signature. The 2025 WA root that signs ``accord_manifest.sig`` retires once
 that signature ships.
 
@@ -19,10 +20,11 @@ release that reads both forms is the candidate before the switch (CC 2.6.1.8).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from ciris_engine.logic.utils.constants import ACCORD_SEED_DIR
 
@@ -30,6 +32,34 @@ logger = logging.getLogger(__name__)
 
 #: Keys allowed to sign the accord manifest: the pinned trust set (CC 4.4.3.8).
 ACCORD_MANIFEST_SIGNERS = ("A1",)
+
+#: What A1 signs is a short typed statement of the manifest's digest, not the
+#: file. A1's Ed25519 half lives on a YubiKey, whose PKCS#11 EdDSA is single-part
+#: and refuses multi-KB inputs (CKR_DATA_LEN_RANGE, CIRISVerify#113). The form is
+#: the CC's own (3.1.2, SkillImportManifest canonical bytes v2): a JCS object with
+#: a pinned "domain", lowercase-hex digests (2.6.3), the blob's size (5.3.2.5) and
+#: "signer_identity"; the signed bytes are sha256(JCS(object)).
+ACCORD_MANIFEST_DOMAIN = "ciris.accord_manifest.v1"
+
+
+def accord_manifest_statement(manifest_bytes: bytes, signer: str) -> Dict[str, Any]:
+    return {
+        "domain": ACCORD_MANIFEST_DOMAIN,
+        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "manifest_size": len(manifest_bytes),
+        "signer_identity": signer,
+    }
+
+
+def accord_manifest_signed_bytes(manifest_bytes: bytes, signer: str) -> bytes:
+    """The 32 bytes A1 signs: sha256 of the statement's JCS.
+
+    signer_identity is inside them, so the signature can't be re-attributed to
+    another holder.
+    """
+    from ciris_adapters.ciris_verify.ffi_bindings import jcs_canonicalize
+
+    return hashlib.sha256(jcs_canonicalize(accord_manifest_statement(manifest_bytes, signer))).digest()
 
 
 def hybrid_signature_path(seed_dir: Optional[Path] = None) -> Path:
@@ -68,9 +98,19 @@ def verify_accord_manifest_hybrid(engine: Any, seed_dir: Optional[Path] = None) 
         raise RuntimeError(f"[ACCORD] Unreadable hybrid manifest signature: {type(exc).__name__}") from exc
     if signer not in ACCORD_MANIFEST_SIGNERS:
         raise RuntimeError(f"[ACCORD] {signer!r} is not a pinned accord manifest signer")
+    if doc.get("domain") != ACCORD_MANIFEST_DOMAIN:
+        raise RuntimeError(f"[ACCORD] Hybrid manifest signature names domain {doc.get('domain')!r}, not {ACCORD_MANIFEST_DOMAIN!r}")
+    manifest_bytes = manifest.read_bytes()
+    # Size first, then digest (CC 5.3.2.5); the statement is always rebuilt from
+    # the shipped bytes, never taken from the signature file.
+    if doc.get("manifest_size") != len(manifest_bytes):
+        raise RuntimeError(f"[ACCORD] HYBRID MANIFEST SIGNATURE FAILED ({signer}): manifest is {len(manifest_bytes)} bytes, signed for {doc.get('manifest_size')}")
+    if doc.get("manifest_sha256") != hashlib.sha256(manifest_bytes).hexdigest():
+        raise RuntimeError(f"[ACCORD] HYBRID MANIFEST SIGNATURE FAILED ({signer}): manifest sha256 differs from the signed statement")
     ed_pub, pqc_pub = _signer_keys(engine, signer)
     try:
-        substrate_signing.verify_hybrid_required(engine, manifest.read_bytes(), ed_sig, pqc_sig, ed_pub, pqc_pub)
+        signed = accord_manifest_signed_bytes(manifest_bytes, signer)
+        substrate_signing.verify_hybrid_required(engine, signed, ed_sig, pqc_sig, ed_pub, pqc_pub)
     except Exception as exc:
         raise RuntimeError(
             f"[ACCORD] HYBRID MANIFEST SIGNATURE FAILED ({signer}): {type(exc).__name__}: {exc}. "

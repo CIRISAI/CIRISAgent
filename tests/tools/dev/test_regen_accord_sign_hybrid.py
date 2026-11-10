@@ -67,7 +67,14 @@ def test_signed_frozen_bytes_are_attached(tool, monkeypatch, tmp_path):
     assert _run(tool, monkeypatch, _signer(tmp_path), tmp_path) == 0
     assert tool.MANIFEST.read_bytes() == FROZEN
     doc = json.loads(tool.HYBRID.read_text())
-    assert doc == {"signer_key_id": "A1", "ed25519_sig": ED, "ml_dsa_65_sig": PQC}
+    assert doc == {
+        "signer_key_id": "A1",
+        "domain": "ciris.accord_manifest.v1",
+        "manifest_sha256": hashlib.sha256(FROZEN).hexdigest(),
+        "manifest_size": len(FROZEN),
+        "ed25519_sig": ED,
+        "ml_dsa_65_sig": PQC,
+    }
 
 
 @pytest.mark.parametrize(
@@ -92,6 +99,25 @@ def test_a_previous_hybrid_signature_comes_back_on_failure(tool, monkeypatch, tm
     tool.HYBRID.write_text('{"prior": true}\n')
     assert _run(tool, monkeypatch, _signer(tmp_path, exit_code=1), tmp_path) == 1
     assert tool.HYBRID.read_text() == '{"prior": true}\n'
+
+
+def test_the_signer_is_handed_32_bytes_not_the_manifest(tool, monkeypatch, tmp_path):
+    """The token's EdDSA refuses multi-KB inputs: A1 signs sha256(JCS(statement)) (CC 3.1.2 form)."""
+    from ciris_adapters.ciris_verify.ffi_bindings import jcs_canonicalize
+
+    seen = tmp_path / "seen"
+    signer = _signer(tmp_path)
+    signer.write_text(signer.read_text().replace(
+        'data = open(args[args.index("--in") + 1], "rb").read()',
+        f'data = open(args[args.index("--in") + 1], "rb").read(); open({str(seen)!r}, "wb").write(data)'))
+    assert _run(tool, monkeypatch, signer, tmp_path) == 0
+    statement = {
+        "domain": "ciris.accord_manifest.v1",
+        "manifest_sha256": hashlib.sha256(FROZEN).hexdigest(),
+        "manifest_size": len(FROZEN),
+        "signer_identity": "A1",
+    }
+    assert seen.read_bytes() == hashlib.sha256(jcs_canonicalize(statement)).digest()
 
 
 def test_missing_arguments_change_nothing(tool, monkeypatch):

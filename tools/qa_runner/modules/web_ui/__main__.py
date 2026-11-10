@@ -280,6 +280,14 @@ class DesktopAppTestRunner:
         # Login screen that never comes.
         async def release_auto_login():
             screen = await self.helper.get_screen()
+            # Startup is transient: the client is still probing and has not
+            # chosen Login or a home yet. Deciding there read "no session" on
+            # Android, then the app landed on Interact signed in and the Login
+            # wait timed out (run 42758326718). Let it settle first.
+            settle_until = datetime.now().timestamp() + 30
+            while screen == "Startup" and datetime.now().timestamp() < settle_until:
+                await asyncio.sleep(0.5)
+                screen = await self.helper.get_screen()
             signed_in_homes = ("Interact", "Contacts") if run_without_ai else ("Interact",)
             if screen not in signed_in_homes:
                 self._log(f"no prior session (screen={screen}); the credential login is driven from here")

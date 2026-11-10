@@ -75,10 +75,15 @@ class TestModelsCarryTheWholeDisclosure:
 
 
 class TestTheContractTheScreenDependsOn:
-    def test_announce_is_the_floor_not_a_choice(self, raw: Dict[str, Any]) -> None:
-        """Screen 2 states a REQUIREMENT here; it must not be rendered as optional."""
+    def test_announce_carries_the_substrates_own_wording(self, raw: Dict[str, Any]) -> None:
+        """Screen 2 renders what the substrate says about announcing, by its id.
+
+        Server 0.5.245 reworded it from a requirement ("mesh.announce_requirement")
+        to the costs of not announcing ("mesh.announce_costs"). Either id is the
+        substrate's; the screen must render the text it carries, never its own.
+        """
         model = ConsentDisclosure.model_validate(raw)
-        assert model.announce_requirement.id == "mesh.announce_requirement"
+        assert model.announce_requirement.id in ("mesh.announce_costs", "mesh.announce_requirement")
         assert model.announce_requirement.text.strip()
 
     def test_replication_is_required_and_analyze_is_not(self, raw: Dict[str, Any]) -> None:

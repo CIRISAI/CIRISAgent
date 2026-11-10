@@ -10,12 +10,29 @@ import importlib
 
 import pytest
 
-from ciris_engine.logic.adapters.api.app import create_app
+import json
+import subprocess
+import sys
 
 
 def _route_paths() -> set[str]:
-    app = create_app()
-    return {getattr(r, "path", "") for r in app.routes}
+    """The app's routes, built in a fresh interpreter.
+
+    In-process, a patch another test leaks onto FastAPI's include_router on the
+    same xdist worker makes create_app() register an almost empty app (CI run
+    42747184825 shard 5: only /, /docs, /health ...). The positive controls then
+    fail, and worse, the "not mounted" asserts pass vacuously. A clean process
+    sees only what app.py really mounts.
+    """
+    code = (
+        "import json\n"
+        "from ciris_engine.logic.adapters.api.app import create_app\n"
+        "print('ROUTES=' + json.dumps(sorted({getattr(r, 'path', '') for r in create_app().routes})))\n"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180)
+    line = next((ln for ln in out.stdout.splitlines() if ln.startswith("ROUTES=")), None)
+    assert line, f"create_app() failed in a clean process: {out.stderr[-2000:]}"
+    return set(json.loads(line[len("ROUTES="):]))
 
 
 def test_signed_emergency_and_mint_routes_are_not_mounted() -> None:

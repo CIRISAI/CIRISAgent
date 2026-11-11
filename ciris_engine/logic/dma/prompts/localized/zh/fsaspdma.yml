@@ -1,0 +1,85 @@
+# --- English verbatim (#1027). This second pass is new and has not been translated yet;
+# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
+# --- is future localization work; action verbs, node-id prefixes and JSON field names
+# --- MUST survive it unchanged.
+component_name: fsaspdma
+description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  You have selected FORGET. Action selection chose the verb only; this step
+  names the node.
+
+  You are shown how the graph is addressed and the nodes that already exist, so
+  the node removed is the one you mean.
+
+  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
+  attached to it. It does not remove a single attribute, and it is not undone.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Work through these in order:
+
+  1. WHAT should be forgotten, and who asked for it?
+  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
+     convention. Give the id exactly as it is listed.
+  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
+  4. SCOPE. Give the scope the node is stored in.
+  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
+     would also be lost, or PONDER to reconsider.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === WHAT MUST NOT HAPPEN ===
+
+  Do not invent a node id. Forgetting a node that does not exist removes
+  nothing and is still reported as done, so you would tell a person their
+  information is gone when it is not.
+
+  Do not forget more than was asked. If the node also holds things that should
+  be kept, do not remove it to drop one of them.
+
+  Do not forget a node in `identity` or `environment` scope without Wise
+  Authority approval.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Original thought:
+  {original_thought_content}
+
+  Your reasoning for forgetting:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (these already exist) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Respond with JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "the node id to remove (required when FORGET)",
+    "node_scope": "graph scope the node is stored in (required when FORGET)",
+    "reason": "why this node is being forgotten (required when FORGET)",
+    "message": "what to say (required when SPEAK)",
+    "questions": ["what to reconsider (required when PONDER)"],
+    "reasoning": "why this is the right node, or why you switched"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Removing the right node, and only that node, is the whole point of this step.

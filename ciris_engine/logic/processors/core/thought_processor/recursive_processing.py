@@ -216,6 +216,12 @@ class RecursiveProcessingPhase:
             return None
 
         logger.info(f"[RECURSIVE] Retry {retry_count} - ASPDMA selected action: {retry_result.selected_action}")
+
+        # A retry is an ASPDMA result like the first one: a verb, without the
+        # details its second pass supplies. This path used to skip the second
+        # pass, so a retried TOOL ran with no parameters and a retried MEMORIZE
+        # wrote to an unaddressed node (#1027).
+        retry_result = await self._run_verb_second_pass(thought_item, retry_result, thought_context)  # type: ignore[attr-defined]
         _log_speak_content(retry_result, retry_count)
 
         logger.info(f"[RECURSIVE] Retry {retry_count} - Running conscience checks...")

@@ -12,7 +12,6 @@ using convert_llm_result_to_action_result().
 """
 
 import logging
-import uuid
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier
@@ -266,8 +265,22 @@ class ActionSelectionDMAResult(PromptCarrier):
 class ASPDMALLMResult(PromptCarrier):
     """Gemini-compatible ASPDMA LLM output schema - NO Union types.
 
-    This flat schema is used as the response_model for LLM structured output
-    when using providers that don't support Union types (e.g., Google Gemini).
+    ASPDMA selects the VERB. It carries a parameter only where the parameter IS
+    the decision: what to say, what to ponder, why to refuse, which tool.
+
+    The four verbs whose parameters need knowledge ASPDMA does not have carry
+    nothing here, and are filled by their second pass (#1027):
+
+        TOOL      -> TSASPDMA  (tool documentation; ASPDMA names the tool only)
+        DEFER     -> DSASPDMA  (rights taxonomy, reason, reactivation time)
+        MEMORIZE  -> MSASPDMA  (graph addressing; ``memorize_scope`` stays, below)
+        RECALL    -> RSASPDMA  (graph addressing)
+        FORGET    -> FSASPDMA  (graph addressing)
+
+    Eleven optional fields left this schema with them. A model that picked SPEAK
+    used to be shown, three times per prompt, the field lists of every memory
+    verb; a model that picked MEMORIZE filled three fields that were then thrown
+    away, because the node it would write to had no field at all.
 
     Only the fields relevant to the selected_action should be populated.
     Use convert_llm_result_to_action_result() to convert to ActionSelectionDMAResult.
@@ -287,10 +300,6 @@ class ASPDMALLMResult(PromptCarrier):
     reject_reason: Optional[str] = Field(None, description="Reason for rejection (for REJECT action)")
     reject_create_filter: bool = Field(False, description="Whether to create adaptive filter (for REJECT)")
 
-    # === DEFER parameters ===
-    defer_reason: Optional[str] = Field(None, description="Reason for deferral (for DEFER action)")
-    defer_until: Optional[str] = Field(None, description="ISO timestamp to reactivate (for DEFER)")
-
     # === TOOL parameters ===
     # NOTE: ASPDMA only selects the tool NAME. TSASPDMA extracts parameters using full tool documentation.
     tool_name: Optional[str] = Field(
@@ -300,20 +309,16 @@ class ASPDMALLMResult(PromptCarrier):
     # === OBSERVE parameters ===
     observe_active: bool = Field(True, description="Whether observation is active (for OBSERVE)")
 
-    # === MEMORIZE parameters (flattened GraphNode) ===
-    memorize_node_type: Optional[str] = Field(None, description="Type of node to memorize (for MEMORIZE)")
-    memorize_content: Optional[str] = Field(None, description="Content to memorize (for MEMORIZE)")
-    memorize_scope: Optional[str] = Field(None, description="Scope: local, identity, environment, community")
-
-    # === RECALL parameters ===
-    recall_query: Optional[str] = Field(None, description="Search query (for RECALL)")
-    recall_node_type: Optional[str] = Field(None, description="Type of nodes to recall (for RECALL)")
-    recall_scope: Optional[str] = Field(None, description="Scope to search in (for RECALL)")
-    recall_limit: int = Field(10, description="Max results (for RECALL)")
-
-    # === FORGET parameters ===
-    forget_node_id: Optional[str] = Field(None, description="ID of node to forget (for FORGET)")
-    forget_reason: Optional[str] = Field(None, description="Reason for forgetting (for FORGET)")
+    # === MEMORIZE: the scope, and only the scope ===
+    # Kept because a CODE gate reads it before any second pass runs: an
+    # identity-scope MEMORIZE with no verified Wise Authority approval is turned
+    # into a PONDER without asking a model (#1320,
+    # ThoughtProcessor._refuse_unapproved_identity_memorize). Dropping this field
+    # would leave that decision to MSASPDMA, which is the model that once
+    # answered such a request with "the change has been applied".
+    memorize_scope: Optional[str] = Field(
+        None, description="Scope of a MEMORIZE: local, identity, environment, community"
+    )
 
     # === TASK_COMPLETE parameters ===
     completion_reason: Optional[str] = Field(None, description="Reason for task completion (for TASK_COMPLETE)")
@@ -323,63 +328,50 @@ class ASPDMALLMResult(PromptCarrier):
     # Production telemetry showed the action_rationale field already carries
     # that signal and the extra two optionals just increased schema burden,
     # correlating with the ASPDMA "Invalid JSON: input_value='}'" LLM failures
-    # that hung the pipeline. Reverted to the minimal 20-field shape.
+    # that hung the pipeline.
 
     model_config = ConfigDict(extra="ignore", defer_build=True)
 
 
-def _create_memorize_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> MemorizeParams:
-    """Create MemorizeParams from LLM result."""
-    node_type = NodeType.OBSERVATION
-    if llm_result.memorize_node_type:
-        try:
-            node_type = NodeType(llm_result.memorize_node_type)
-        except ValueError:
-            logger.warning(f"Unknown node type: {llm_result.memorize_node_type}, using OBSERVATION")
+#: The id of a node no second pass has addressed yet.
+#:
+#: ASPDMA selects MEMORIZE or FORGET without naming a node, and MemorizeParams /
+#: ForgetParams require one, so the action leaves ASPDMA carrying this id. It is
+#: a marker, never an address: the second pass replaces it, and
+#: ``ThoughtProcessor`` turns any action still carrying it into a PONDER rather
+#: than let a handler write to (or "forget") a node that does not exist.
+UNADDRESSED_NODE_ID = "unaddressed/awaiting-second-pass"
 
+
+def _unaddressed_node(scope: GraphScope = GraphScope.LOCAL) -> GraphNode:
+    """The placeholder node a memory verb carries until its second pass names one."""
+    return GraphNode(
+        id=UNADDRESSED_NODE_ID,
+        type=NodeType.OBSERVATION,
+        scope=scope,
+        attributes=GraphNodeAttributes(created_by="agent"),
+    )
+
+
+def _create_memorize_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> MemorizeParams:
+    """MEMORIZE as ASPDMA leaves it: a scope, and a node MSASPDMA has yet to name."""
     scope = GraphScope.LOCAL
     if llm_result.memorize_scope:
         try:
-            scope = GraphScope(llm_result.memorize_scope)
+            scope = GraphScope(llm_result.memorize_scope.strip().lower())
         except ValueError:
             logger.warning(f"Unknown scope: {llm_result.memorize_scope}, using LOCAL")
-
-    node = GraphNode(
-        id=str(uuid.uuid4()),
-        type=node_type,
-        scope=scope,
-        attributes=GraphNodeAttributes(created_by="agent", content=llm_result.memorize_content or ""),
-    )
-    return MemorizeParams(channel_id=channel_id, node=node)
+    return MemorizeParams(channel_id=channel_id, node=_unaddressed_node(scope))
 
 
 def _create_recall_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> RecallParams:
-    """Create RecallParams from LLM result."""
-    scope = None
-    if llm_result.recall_scope:
-        try:
-            scope = GraphScope(llm_result.recall_scope)
-        except ValueError:
-            logger.warning(f"Unknown scope: {llm_result.recall_scope}, using None")
-    return RecallParams(
-        channel_id=channel_id,
-        query=llm_result.recall_query,
-        node_type=llm_result.recall_node_type,
-        scope=scope,
-        limit=llm_result.recall_limit,
-    )
+    """RECALL as ASPDMA leaves it: no query. RSASPDMA supplies the query or node id."""
+    return RecallParams(channel_id=channel_id)
 
 
 def _create_forget_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> ForgetParams:
-    """Create ForgetParams from LLM result."""
-    node_id = llm_result.forget_node_id or str(uuid.uuid4())
-    node = GraphNode(
-        id=node_id,
-        type=NodeType.OBSERVATION,
-        scope=GraphScope.LOCAL,
-        attributes=GraphNodeAttributes(created_by="agent", content=""),
-    )
-    return ForgetParams(channel_id=channel_id, node=node, reason=llm_result.forget_reason or "No reason provided")
+    """FORGET as ASPDMA leaves it: a node FSASPDMA has yet to name."""
+    return ForgetParams(channel_id=channel_id, node=_unaddressed_node(), reason=llm_result.reasoning)
 
 
 def _create_task_complete_params(llm_result: "ASPDMALLMResult", channel_id: Optional[str]) -> TaskCompleteParams:
@@ -420,10 +412,10 @@ def _create_params_for_action(
             reason=llm_result.reject_reason or "Request rejected",
             create_filter=llm_result.reject_create_filter,
         ),
+        # ASPDMA's reasoning is the provisional reason; DSASPDMA writes the
+        # reason a human reads and sets any reactivation time.
         HandlerActionType.DEFER: lambda: DeferParams(
-            channel_id=channel_id,
-            reason=llm_result.defer_reason or "Deferring for later",
-            defer_until=llm_result.defer_until,
+            channel_id=channel_id, reason=llm_result.reasoning or "Deferring for later"
         ),
         HandlerActionType.TOOL: lambda: ToolParams(
             channel_id=channel_id,
@@ -482,5 +474,6 @@ __all__ = [
     "DSDMAResult",
     "ActionSelectionDMAResult",
     "ASPDMALLMResult",
+    "UNADDRESSED_NODE_ID",
     "convert_llm_result_to_action_result",
 ]

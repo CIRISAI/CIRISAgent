@@ -63,31 +63,28 @@ class TestActionInstructionGenerator:
         assert '"node": {' not in recall_schema
 
     def test_memorize_schema_format(self):
-        """Test that MEMORIZE schema is correctly formatted with flat field names."""
+        """MEMORIZE carries its scope and nothing else: MSASPDMA addresses the node (#1027)."""
         generator = ActionInstructionGenerator()
 
         memorize_schema = generator._generate_schema_for_action(HandlerActionType.MEMORIZE)
 
-        # Check that it has flat memorize_* field names
         assert "MEMORIZE:" in memorize_schema
-        assert "memorize_node_type" in memorize_schema or "memorize_content" in memorize_schema
         assert "memorize_scope" in memorize_schema
-
-        # Make sure it doesn't have RECALL-specific flat fields
+        assert "memorize_node_type" not in memorize_schema
+        assert "memorize_content" not in memorize_schema
         assert "recall_query" not in memorize_schema
 
     def test_defer_schema_format(self):
-        """Test that DEFER schema has flat field names with type guidance."""
+        """DEFER carries no fields: DSASPDMA writes the reason and the reactivation time (#1027)."""
         generator = ActionInstructionGenerator()
 
         defer_schema = generator._generate_schema_for_action(HandlerActionType.DEFER)
 
-        # Check for flat field names
-        assert "DEFER:" in defer_schema
-        assert "defer_reason" in defer_schema
-        assert "defer_until" in defer_schema
-        # ISO 8601 format guidance
-        assert "ISO 8601" in defer_schema or "2025-01-20T15:00:00Z" in defer_schema
+        assert defer_schema.startswith("DEFER: no additional fields.")
+        assert "defer_reason" not in defer_schema
+        assert "defer_until" not in defer_schema
+        # The policy on WHEN to defer is selection doctrine and stays with ASPDMA.
+        assert "DEFER is ONLY for situations the agent cannot resolve alone" in defer_schema
 
     def test_tool_schema_without_registry(self):
         """Test tool schema generation without service registry fails fast."""

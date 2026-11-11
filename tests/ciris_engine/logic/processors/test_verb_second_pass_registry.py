@@ -15,7 +15,12 @@ with another fresh UUID, and looped. ~73k tokens to not remember a colour.
 
 Neither mistake is a reasoning failure — they are missing conventions, exactly
 what a second pass exists to supply. MSASPDMA now does for MEMORIZE what TSASPDMA
-does for TOOL.
+does for TOOL, and RSASPDMA / FSASPDMA do the same for RECALL and FORGET, which
+share MEMORIZE's addressing problem (FORGET destructively).
+
+ASPDMA no longer carries those verbs' parameters at all: it selects the verb, and
+a memory action that leaves its second pass unfilled becomes a PONDER rather than
+running on a placeholder.
 
 This test exists so the NEXT gap is a CI failure rather than a production loop
 (#1027). A verb with no second pass is a legitimate state; a verb nobody has
@@ -38,10 +43,6 @@ NO_SECOND_PASS_NEEDED = {
     HandlerActionType.OBSERVE: "read-only; a malformed observe returns nothing rather than writing wrongly",
     HandlerActionType.REJECT: "terminal refusal, no parameters to get wrong",
     HandlerActionType.TASK_COMPLETE: "terminal, no parameters to get wrong",
-    HandlerActionType.RECALL: "read-only today — REVISIT: it shares MEMORIZE's node-addressing problem, "
-    "so a bad id silently returns nothing (#1027)",
-    HandlerActionType.FORGET: "REVISIT: destructive AND shares the addressing problem — strongest "
-    "remaining candidate for a second pass (#1027)",
 }
 
 
@@ -64,9 +65,16 @@ def test_a_verb_is_not_in_both_lists() -> None:
 
 
 @pytest.mark.parametrize(
-    "verb", [HandlerActionType.TOOL, HandlerActionType.DEFER, HandlerActionType.MEMORIZE]
+    "verb",
+    [
+        HandlerActionType.TOOL,
+        HandlerActionType.DEFER,
+        HandlerActionType.MEMORIZE,
+        HandlerActionType.RECALL,
+        HandlerActionType.FORGET,
+    ],
 )
-def test_the_three_evaluated_verbs_are_registered(verb: HandlerActionType) -> None:
+def test_the_evaluated_verbs_are_registered(verb: HandlerActionType) -> None:
     assert verb in ThoughtProcessor._VERB_SECOND_PASS
 
 

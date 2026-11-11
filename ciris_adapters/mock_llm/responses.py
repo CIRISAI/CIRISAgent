@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
 from ciris_engine.logic.dma.dsaspdma import DSASPDMALLMResult
+from ciris_engine.logic.dma.fsaspdma import FSASPDMALLMResult
 from ciris_engine.logic.dma.msaspdma import MSASPDMALLMResult
+from ciris_engine.logic.dma.rsaspdma import RSASPDMALLMResult
 from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.schemas.dma.results import (
     ActionSelectionDMAResult,
@@ -752,7 +754,9 @@ from .responses_action_selection import (
     action_selection,
     aspdma_llm_result,
     dsaspdma_llm_result,
+    fsaspdma_llm_result,
     msaspdma_llm_result,
+    rsaspdma_llm_result,
     tsaspdma_llm_result,
 )
 from .responses_epistemic import coherence, coherence_raw, entropy, entropy_raw
@@ -770,6 +774,8 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
     DSASPDMALLMResult: dsaspdma_llm_result,  # Deferral-specific action selection schema
     TSASPDMALLMResult: tsaspdma_llm_result,  # Gemini-compatible TSASPDMA schema
     MSASPDMALLMResult: msaspdma_llm_result,  # memorize second pass
+    RSASPDMALLMResult: rsaspdma_llm_result,  # recall second pass
+    FSASPDMALLMResult: fsaspdma_llm_result,  # forget second pass
     EntropyCheckResult: entropy,
     CoherenceCheckResult: coherence,
     EntropyResult: entropy_raw,  # what EntropyConscience actually requests

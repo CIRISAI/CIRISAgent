@@ -28,7 +28,14 @@ from ciris_engine.logic.utils.jsondict_helpers import get_bool, get_dict
 from ciris_engine.logic.utils.round_timing import RoundPhase, timed_phase
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.actions.parameters import DeferParams, MemorizeParams, PonderParams, ToolParams
+from ciris_engine.schemas.actions.parameters import (
+    DeferParams,
+    ForgetParams,
+    MemorizeParams,
+    PonderParams,
+    RecallParams,
+    ToolParams,
+)
 from ciris_engine.schemas.adapters.tools import ToolInfo
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import EpistemicData
@@ -470,6 +477,7 @@ class ThoughtProcessor(
         if handler is None:
             return action_result
         result: ActionSelectionDMAResult = await handler(self, thought_item, action_result, thought_context)
+        result = self._ponder_if_second_pass_left_it_unfilled(thought_item, result)
         # A second pass returns a NEW result that never saw the action-selection
         # prompts, and ASPDMA_RESULT is built from whatever result comes out of
         # here. Carry them across, or the trace loses the prompt on exactly the
@@ -843,6 +851,132 @@ class ThoughtProcessor(
             return msaspdma_result
         except Exception as e:
             logger.error("MSASPDMA: Failed for thought %s: %s", thought_item.thought_id, e, exc_info=True)
+            return action_result
+
+    @staticmethod
+    def _second_pass_left_unfilled(action_result: ActionSelectionDMAResult) -> bool:
+        """True when a memory verb still carries only what ASPDMA gave it.
+
+        ASPDMA selects MEMORIZE / FORGET without a node and RECALL without a
+        query (#1027); the second pass supplies them. An action that still has
+        the placeholder is one whose second pass did not run or did not answer.
+        """
+        from ciris_engine.schemas.dma.results import UNADDRESSED_NODE_ID
+
+        params = action_result.action_parameters
+        if isinstance(params, (MemorizeParams, ForgetParams)):
+            return params.node.id == UNADDRESSED_NODE_ID
+        if isinstance(params, RecallParams):
+            return not (params.node_id or params.query or params.node_type)
+        return False
+
+    def _ponder_if_second_pass_left_it_unfilled(
+        self, thought_item: ProcessingQueueItem, action_result: ActionSelectionDMAResult
+    ) -> ActionSelectionDMAResult:
+        """A PONDER in place of a memory action no second pass filled in.
+
+        Every path out of a memory verb's second pass comes through here — no
+        evaluator configured, the LLM call failed, the deadline passed. Before
+        #1027 those paths ran ASPDMA's own parameters, which for MEMORIZE meant
+        a write to a freshly minted UUID nothing ever reads. ASPDMA has no
+        parameters to fall back on now, so the fallback is to reconsider: an
+        unaddressed write, read or delete must not reach its handler.
+        """
+        if not self._second_pass_left_unfilled(action_result):
+            return action_result
+        verb = action_result.selected_action.value
+        logger.warning(
+            "VERB-SECOND-PASS: %s for thought %s was not filled in by its second pass; PONDER instead.",
+            verb,
+            thought_item.thought_id,
+        )
+        return ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=PonderParams(
+                questions=[
+                    f"I selected {verb.upper()} but the step that fills in its details did not complete.",
+                    "Is this action still the right one, and what exactly should it act on?",
+                ]
+            ),
+            rationale=f"{verb.upper()} second pass did not complete; reconsidering. {action_result.rationale or ''}".strip(),
+            resource_usage=action_result.resource_usage,
+        )
+
+    async def _maybe_run_rsaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Run RSASPDMA when ASPDMA selected RECALL: the step that says what to read."""
+        from ciris_engine.logic.dma.dma_executor import run_rsaspdma
+
+        return await self._run_addressing_second_pass(
+            thought_item, action_result, thought_context, HandlerActionType.RECALL, "rsaspdma_evaluator", run_rsaspdma
+        )
+
+    async def _maybe_run_fsaspdma(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any] = None,
+    ) -> ActionSelectionDMAResult:
+        """Run FSASPDMA when ASPDMA selected FORGET: the step that names the node."""
+        from ciris_engine.logic.dma.dma_executor import run_fsaspdma
+
+        return await self._run_addressing_second_pass(
+            thought_item, action_result, thought_context, HandlerActionType.FORGET, "fsaspdma_evaluator", run_fsaspdma
+        )
+
+    async def _run_addressing_second_pass(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any],
+        verb: HandlerActionType,
+        evaluator_attr: str,
+        runner: Callable[..., Coroutine[Any, Any, ActionSelectionDMAResult]],
+    ) -> ActionSelectionDMAResult:
+        """Shared body of the RECALL and FORGET second passes.
+
+        Returns ``action_result`` unchanged when the pass cannot run; the caller
+        (``_run_verb_second_pass``) turns an unfilled memory action into a
+        PONDER, so there is one fallback rather than one per verb.
+        """
+        if action_result.selected_action != verb:
+            return action_result
+        name = evaluator_attr.split("_")[0].upper()
+        evaluator = getattr(self.dma_orchestrator, evaluator_attr, None)
+        if not evaluator:
+            logger.warning("%s-SKIP: No %s evaluator configured", name, name)
+            return action_result
+        try:
+            result: ActionSelectionDMAResult = await _within_thought_deadline(
+                thought_item,
+                runner(
+                    evaluator=evaluator,
+                    aspdma_result=action_result,
+                    original_thought=thought_item,
+                    context=thought_context,
+                    time_service=self._time_service,
+                ),
+            )
+            params = result.action_parameters
+            node = getattr(params, "node", None)
+            await self._emit_verb_second_pass_result_event(
+                thought_item=thought_item,
+                verb=verb.value,
+                original_action=verb.value,
+                original_reasoning=action_result.rationale or "",
+                second_pass_result=result,
+                verb_specific_data={
+                    "final_node_id": getattr(node, "id", None) or getattr(params, "node_id", None),
+                    "final_query": getattr(params, "query", None),
+                },
+            )
+            return result
+        except Exception as e:
+            logger.error("%s: Failed for thought %s: %s", name, thought_item.thought_id, e, exc_info=True)
             return action_result
 
     async def _refuse_unapproved_identity_memorize(
@@ -2094,4 +2228,6 @@ class ThoughtProcessor(
         HandlerActionType.TOOL: _maybe_run_tsaspdma,
         HandlerActionType.DEFER: _maybe_run_dsaspdma,
         HandlerActionType.MEMORIZE: _maybe_run_msaspdma,
+        HandlerActionType.RECALL: _maybe_run_rsaspdma,
+        HandlerActionType.FORGET: _maybe_run_fsaspdma,
     }

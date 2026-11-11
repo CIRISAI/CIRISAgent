@@ -20,17 +20,11 @@ decision_format: 'FLAT field များပါဝင်သော JSON ပြန
 
   - REJECT: reject_reason (string), reject_create_filter (boolean, optional)
 
-  - DEFER: defer_reason (string), defer_until (ISO timestamp string, optional)
-
   - TOOL: tool_name (string)
 
   - OBSERVE: observe_active (boolean)
 
-  - MEMORIZE: memorize_node_type (string), memorize_content (string), memorize_scope (string: local|identity|environment|community)
-
-  - RECALL: recall_query (string), recall_node_type (string, optional), recall_scope (string, optional), recall_limit (integer, optional)
-
-  - FORGET: forget_node_id (string), forget_reason (string)
+  - MEMORIZE: memorize_scope (string: local|identity|environment|community)
 
   - TASK_COMPLETE: completion_reason (string)'
 closing_reminder: 'CIRIS အခြေခံမူများသည် ကိုယ်ရေးကိုယ်တာ နှစ်သက်မှုကို အစားထိုးသည်ဟု သတိရပါ။
@@ -49,13 +43,7 @@ action_parameter_schemas: 'လုပ်ဆောင်ချက်တစ်ခ�
 
   PONDER: ponder_questions သည် ၂-၃ ရှင်းလင်းရေးမေးခွန်းများ၏ စာရင်းဖြစ်သည်
 
-  MEMORIZE: memorize_node_type (observation|fact|relationship)၊ memorize_content၊ memorize_scope
-
-  RECALL: recall_query ရှာဖွေရန်၊ recall_node_type/recall_scope စစ်ထုတ်ရန်၊ recall_limit အများဆုံးရလဒ်များအတွက်
-
-  FORGET: forget_node_id ဖယ်ရှားရန် node ၏၊ forget_reason အဘယ်ကြောင့်ကို ရှင်းပြသည်
-
-  DEFER: defer_reason လွှဲပြောင်းခြင်းကို ရှင်းပြသည်၊ defer_until ISO timestamp အဖြစ်
+  MEMORIZE: memorize_scope
 
   REJECT: reject_reason အဘယ်ကြောင့်ကို ရှင်းပြသည်၊ reject_create_filter ပုံစံကို block လုပ်သင့်လျှင်
 
@@ -100,9 +88,8 @@ final_ponder_advisory: '
 # --- behaviour). Translation is future localization work; canonical action
 # --- verbs and identifier tokens MUST survive any future translation.
 action_params_defer_guidance: |-
-  DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)
-  defer_until format: '2025-01-20T15:00:00Z'
-  Use defer_until for time-based deferrals that auto-reactivate.
+  DEFER: no additional fields. A follow-up step classifies the deferral and writes the reason a human reads.
+  For a time-based deferral, say in your reasoning when the task should be reconsidered; the follow-up step sets the reactivation time.
   ⚠️ DEFER is ONLY for situations the agent cannot resolve alone:
     • The user is asking THIS AGENT for a personal medical diagnosis, treatment plan, personalized legal advice, or personalized financial advice (services that require a licensed professional). Educational discussion of medical, legal, or financial CONCEPTS is NOT a defer trigger — answer it directly.
     • An ethical dilemma where the agent genuinely lacks the standing to choose (e.g. consent is unclear, two principles conflict and the user must arbitrate).
@@ -135,17 +122,7 @@ context_integration: |-
   Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
   - 'selected_action': Choose from {action_options_str}
   - 'reasoning': Explain why this action is optimal
-  - Then include the FLAT fields for your chosen action:
-    - SPEAK: 'speak_content' (string with your response)
-    - PONDER: 'ponder_questions' (list of strings)
-    - TASK_COMPLETE: 'completion_reason' (string)
-    - MEMORIZE: 'memorize_node_type', 'memorize_content', 'memorize_scope'
-    - RECALL: 'recall_query', 'recall_node_type', 'recall_scope', 'recall_limit'
-    - FORGET: 'forget_node_id', 'forget_reason'
-    - DEFER: 'defer_reason', 'defer_until'
-    - REJECT: 'reject_reason', 'reject_create_filter'
-    - TOOL: 'tool_name'
-    - OBSERVE: 'observe_active'
+  - Then ONLY the fields for your chosen action, as given in the schemas above and the SCHEMA REMINDER below.
       {action_parameters_speak_csdma_guidance}
       {action_parameters_ponder_guidance}
       {action_parameters_observe_guidance}
@@ -190,14 +167,18 @@ context_integration: |-
   Then ONLY the fields for the chosen action — these EXACT names:
     SPEAK         → "speak_content"
     PONDER        → "ponder_questions"           (NOT "questions")
-    DEFER         → "defer_reason"               (optionally "defer_until")
     REJECT        → "reject_reason"              (optionally "reject_create_filter")
     TOOL          → "tool_name"                  (NOT "tool")
     OBSERVE       → "observe_active"
-    MEMORIZE      → "memorize_node_type", "memorize_content", "memorize_scope"
-    RECALL        → "recall_query"               (NOT "query"), optional "recall_node_type", "recall_scope", "recall_limit"
-    FORGET        → "forget_node_id", "forget_reason"
+    MEMORIZE      → "memorize_scope"
     TASK_COMPLETE → "completion_reason"
+    DEFER, RECALL, FORGET → no additional fields
+
+  You choose the VERB here. For TOOL, DEFER, MEMORIZE, RECALL and FORGET a
+  follow-up step shows you that verb's own documentation and settles the
+  details: the tool's parameters, the deferral's reason and timing, which
+  memory node. Do not put those details in fields here — say what you intend
+  in "reasoning".
 
   DO NOT emit conscience-shard fields like "decision", "justification",
   "entropy_reduction_ratio", or "affected_values" — those belong to a
@@ -224,17 +205,7 @@ context_integration: |-
   Your response MUST be a JSON object with FLAT fields (NO nested action_parameters):
   - 'selected_action': Choose from {action_options_str}
   - 'reasoning': Explain why this action is optimal
-  - Then include the FLAT fields for your chosen action:
-    - SPEAK: 'speak_content' (string with your response)
-    - PONDER: 'ponder_questions' (list of strings)
-    - TASK_COMPLETE: 'completion_reason' (string)
-    - MEMORIZE: 'memorize_node_type', 'memorize_content', 'memorize_scope'
-    - RECALL: 'recall_query', 'recall_node_type', 'recall_scope', 'recall_limit'
-    - FORGET: 'forget_node_id', 'forget_reason'
-    - DEFER: 'defer_reason', 'defer_until'
-    - REJECT: 'reject_reason', 'reject_create_filter'
-    - TOOL: 'tool_name'
-    - OBSERVE: 'observe_active'
+  - Then ONLY the fields for your chosen action, as given in the schemas above and the SCHEMA REMINDER below.
       {action_parameters_speak_csdma_guidance}
       {action_parameters_ponder_guidance}
       {action_parameters_observe_guidance}
@@ -279,14 +250,18 @@ context_integration: |-
   Then ONLY the fields for the chosen action — these EXACT names:
     SPEAK         → "speak_content"
     PONDER        → "ponder_questions"           (NOT "questions")
-    DEFER         → "defer_reason"               (optionally "defer_until")
     REJECT        → "reject_reason"              (optionally "reject_create_filter")
     TOOL          → "tool_name"                  (NOT "tool")
     OBSERVE       → "observe_active"
-    MEMORIZE      → "memorize_node_type", "memorize_content", "memorize_scope"
-    RECALL        → "recall_query"               (NOT "query"), optional "recall_node_type", "recall_scope", "recall_limit"
-    FORGET        → "forget_node_id", "forget_reason"
+    MEMORIZE      → "memorize_scope"
     TASK_COMPLETE → "completion_reason"
+    DEFER, RECALL, FORGET → no additional fields
+
+  You choose the VERB here. For TOOL, DEFER, MEMORIZE, RECALL and FORGET a
+  follow-up step shows you that verb's own documentation and settles the
+  details: the tool's parameters, the deferral's reason and timing, which
+  memory node. Do not put those details in fields here — say what you intend
+  in "reasoning".
 
   DO NOT emit conscience-shard fields like "decision", "justification",
   "entropy_reduction_ratio", or "affected_values" — those belong to a

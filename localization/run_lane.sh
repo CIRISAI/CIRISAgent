@@ -15,7 +15,7 @@
 #                   its shipped translation instead of a fresh draft (default false)
 #   EXTRA_TM        space-separated corpus roots (a ciris-website, CIRISClient or
 #                   CIRISAgent checkout) whose translated strings become extra
-#                   terminology anchors, never values (TARGET=accord; default none)
+#                   terminology anchors, never values (TARGET=accord or prompts; default none)
 #   UNITS           space-separated accord units; empty = every unit, one at a time
 #   KEYS            space-separated fnmatch patterns over flat dotted keys
 #   LANGS           space-separated locale codes; empty = all 28
@@ -52,6 +52,7 @@ case "${TARGET:-accord}" in
     python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
     cmd=(python3 localization/prompt_localize.py)
     if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
+    for d in ${EXTRA_TM:-}; do cmd+=(--extra-tm "$d"); done
     ;;
   *)
     echo "TARGET must be accord, ui or prompts, got '${TARGET}'" >&2

@@ -47,7 +47,7 @@ on:
         default: false
         type: boolean
       extra_tm:
-        description: "Also anchor terminology on the ciris-website and CIRISClient strings and the agent UI (target=accord): read-only checkouts at their default-branch commit, pinned and recorded. Anchors only, never values."
+        description: "Also anchor terminology on the ciris-website and CIRISClient strings and the agent UI (target=accord or prompts): read-only checkouts at their default-branch commit, pinned and recorded. Anchors only, never values."
         required: false
         default: true
         type: boolean

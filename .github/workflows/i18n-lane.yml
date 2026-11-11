@@ -81,7 +81,7 @@ on:
         default: false
         type: boolean
       extra_tm:
-        description: "target=accord: anchor terminology on the ciris-website + CIRISClient strings (pinned read-only checkouts) and the agent UI; anchors only, never values"
+        description: "target=accord or prompts: anchor terminology on the ciris-website + CIRISClient strings (pinned read-only checkouts) and the agent UI; anchors only, never values"
         required: false
         default: true
         type: boolean
@@ -182,7 +182,7 @@ jobs:
       # The SHAs go into the step summary, the plan log and the commit message.
       - name: Extra translation memory -- pin the default-branch commits
         id: extra_tm
-        if: inputs.extra_tm && inputs.target == 'accord'
+        if: inputs.extra_tm && (inputs.target == 'accord' || inputs.target == 'prompts')
         run: |
           set -euo pipefail
           website=$(git ls-remote https://github.com/CIRISAI/ciris-website.git HEAD | cut -f1)

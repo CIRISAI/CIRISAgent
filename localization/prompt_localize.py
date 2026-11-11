@@ -64,6 +64,7 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
+import accord_localize as acc  # noqa: E402
 import lane_backoff  # noqa: E402
 
 PROMPTS_REL = "ciris_engine/logic/dma/prompts"
@@ -472,6 +473,150 @@ def verify(prompts: Path = PROMPTS, *, changed_only: bool = False) -> Tuple[List
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Translation memory: everything this language already says well
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A translator working on a new prompt block is shown, for THIS language, what
+# CIRIS already ships in it -- retrieved by similarity to the block, because a
+# fuzzy match teaches more than a random example. Three sources, in the order a
+# reader should trust them for this kind of text:
+#
+#   prompt   the locale's other DMA prompt blocks. The same field of a sister
+#            template first (msaspdma.memory_prohibitions for
+#            rsaspdma.memory_prohibitions): same register, same section
+#            headings, same doubled-brace JSON. Then by shared vocabulary.
+#   accord   the shipped ethics text in this language, the lines that share
+#            vocabulary with the block. It fixes how the covenant's own terms
+#            read (Wise Authority, deferral, consent).
+#   extra    the CIRIS website's, the CIRISClient apps' and the agent UI's
+#            strings (--extra-tm), through accord_localize's loader, so its
+#            quality screen applies unchanged: a string its own MQM review
+#            flagged critical or major, a file whose status is rejected, a
+#            value in the wrong script or left in English, is not an exemplar.
+#
+# Anchors, never values: nothing here is written to a prompt file. A sibling
+# block that itself fails ``prompt_problems`` is not offered -- an example with
+# a broken placeholder teaches the break.
+
+PROMPT_ANCHOR_LIMIT = 8
+PROMPT_MAX_ANCHOR_CHARS = 1600
+PROMPT_MAX_BLOCK_CHARS = 14000
+ACCORD_ANCHOR_LIMIT = 6
+ACCORD_MAX_ANCHOR_CHARS = 320
+ACCORD_MAX_BLOCK_CHARS = 2400
+
+#: Shipped ethics texts to read as memory, newest first; the first one a
+#: language has is used.
+ACCORD_EDITIONS: Tuple[Tuple[str, str], ...] = (("1.3", "constitution_ethics"), ("1.2b", "accord"))
+
+ANCHOR_RULE = """
+WHERE THE ANCHOR TRANSLATIONS COME FROM. They are this language's shipped CIRIS
+text, retrieved because they resemble what you are translating:
+- Keys like "msaspdma.memory_prohibitions" are OTHER BLOCKS OF THE SAME PROMPT
+  FAMILY, already translated. They are your closest model: reuse their section
+  headings, their rendering of recurring phrases (CANDIDATE NODES, WHAT MUST NOT
+  HAPPEN, Respond with JSON), their register, and their handling of {{ }}.
+- Keys starting "accord:" are lines of the CIRIS ethics text in this language.
+  Use them for how the covenant's own terms are rendered.
+- Keys starting "website:", "client:" or "agent-ui:" are strings users already
+  read on the CIRIS website, in the apps and in the agent's interface. Use them
+  for shared TERMS; a UI label's brevity is not a model for a prompt block.
+None of them overrides the CANONICAL TERMINOLOGY block."""
+
+ANCHOR_RULE_REVIEW = (
+    ANCHOR_RULE + "\nA term rendered as those anchors render it is not a terminology finding on that ground alone."
+)
+
+
+def accord_memory(lang: str) -> "acc.TM":
+    """``{key: (english, shipped)}`` from the newest ethics text ``lang`` ships."""
+    localized = REPO_ROOT / "ciris_engine" / "data" / "localized"
+    for version, stem in ACCORD_EDITIONS:
+        try:
+            tm = acc.build_tm(localized, version, lang, stem)
+        except SystemExit:
+            tm = {}
+        if tm:
+            return tm
+    return {}
+
+
+def _jaccard(a: frozenset, b: frozenset) -> float:  # type: ignore[type-arg]
+    return len(a & b) / len(a | b) if a and b else 0.0
+
+
+def make_anchors(
+    stage: Path,
+    extra: Optional[Dict[str, List["acc.ExtraAnchor"]]] = None,
+    accord: Optional[Dict[str, "acc.TM"]] = None,
+) -> Any:
+    """An ``anchors_for`` with ``localize.py``'s signature, over all three memories."""
+    extra = extra or {}
+    accord_cache: Dict[str, "acc.TM"] = dict(accord or {})
+    reported: set = set()  # type: ignore[type-arg]
+
+    def anchors_for(
+        lang: str, needed: Sequence[str], en_flat: Dict[str, Any], *, limit: int = PROMPT_ANCHOR_LIMIT
+    ) -> List[Tuple[str, str, str]]:
+        staged_path = stage / f"{lang}.json"
+        have = flat(json.loads(staged_path.read_text(encoding="utf-8"))) if staged_path.is_file() else {}
+        need = set(needed)
+        want = frozenset(t for k in needed for t in acc._tokens(str(en_flat.get(k, ""))))
+        fields = {k.split(".", 1)[1] for k in needed if "." in k}
+
+        # 1. Sister prompt blocks: same field name first, then shared vocabulary.
+        scored = []
+        for key, shipped in have.items():
+            english = str(en_flat.get(key, ""))
+            if key in need or not english:
+                continue
+            if len(english) > PROMPT_MAX_ANCHOR_CHARS or len(shipped) > PROMPT_MAX_ANCHOR_CHARS:
+                continue
+            if prompt_problems(english, shipped):
+                continue
+            same_field = key.split(".", 1)[1] in fields
+            scored.append((not same_field, -_jaccard(want, frozenset(acc._tokens(english))), key, english, shipped))
+        prompt_out: List[Tuple[str, str, str]] = []
+        budget = PROMPT_MAX_BLOCK_CHARS
+        for _, _, key, english, shipped in sorted(scored)[:limit]:
+            cost = len(key) + len(english) + len(shipped) + 16
+            if cost <= budget:
+                prompt_out.append((key, english, shipped))
+                budget -= cost
+
+        # 2. The ethics text in this language, by shared vocabulary.
+        if lang not in accord_cache:
+            accord_cache[lang] = accord_memory(lang)
+        lines = []
+        for key, (english, shipped) in accord_cache[lang].items():
+            if len(english) > ACCORD_MAX_ANCHOR_CHARS or len(shipped) > ACCORD_MAX_ANCHOR_CHARS:
+                continue
+            score = _jaccard(want, frozenset(acc._tokens(english)))
+            if score > 0:
+                lines.append((-score, key, english, shipped))
+        accord_out: List[Tuple[str, str, str]] = []
+        budget = ACCORD_MAX_BLOCK_CHARS
+        for _, key, english, shipped in sorted(lines)[:ACCORD_ANCHOR_LIMIT]:
+            cost = len(key) + len(english) + len(shipped) + 24
+            if cost <= budget:
+                accord_out.append((f"accord:{key}", english, shipped))
+                budget -= cost
+
+        # 3. Website, client apps, agent UI: terms the block uses.
+        extra_out = acc.extra_anchors(extra.get(lang, []), needed, en_flat)
+
+        if lang not in reported:
+            reported.add(lang)
+            print(
+                f"[anchors] {lang}: {len(prompt_out)} sister prompt block(s), {len(accord_out)} ethics-text line(s), "
+                f"{len(extra_out)} website/client/agent-ui term(s)"
+            )
+        return prompt_out + accord_out + extra_out
+
+    return anchors_for
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Running the vendored lane
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -485,11 +630,13 @@ def import_localize(stage: Path) -> ModuleType:
     return importlib.import_module("localize")
 
 
-def install(L: ModuleType) -> None:
-    """Provider backoff, and the rules that make a prompt block not a button label."""
+def install(L: ModuleType, stage: Path, extra: Optional[Dict[str, List["acc.ExtraAnchor"]]] = None) -> None:
+    """Provider backoff, the prompt-block rules, and the three translation memories."""
     lane_backoff.install(L)
     for name in ("SYSTEM_TRANSLATE", "SYSTEM_REVIEW", "SYSTEM_REPAIR"):
-        setattr(L, name, getattr(L, name) + "\n" + PROMPT_RULES)
+        rule = ANCHOR_RULE_REVIEW if name == "SYSTEM_REVIEW" else ANCHOR_RULE
+        setattr(L, name, getattr(L, name) + "\n" + PROMPT_RULES + rule)
+    setattr(L, "anchors_for", make_anchors(stage, extra))
 
 
 def run_localize(L: ModuleType, argv: Sequence[str]) -> int:
@@ -534,6 +681,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--lang", action="append", default=[], metavar="CODE")
     ap.add_argument("--check", action="store_true", help="list fields still in English per language, then exit")
     ap.add_argument("--dry-run", action="store_true", help="plan only: no API call, nothing written")
+    ap.add_argument(
+        "--extra-tm",
+        action="append",
+        default=[],
+        type=Path,
+        metavar="DIR",
+        help="a ciris-website or CIRISClient checkout whose translated strings become terminology anchors "
+        "(repeatable; the agent's own UI bundle is always read)",
+    )
     args, rest = ap.parse_known_args(argv)
 
     if args.verify:
@@ -551,7 +707,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         stage = args.stage or Path(tmp)
         build_stage(stage)
         L = import_localize(stage)
-        install(L)
+        # The agent's own UI strings are always in reach; the website and the
+        # client need a checkout (CI pins both, see i18n-lane.yml).
+        roots = [REPO_ROOT] + [r for r in args.extra_tm if r.resolve() != REPO_ROOT]
+        extra, report = acc.load_extra_tm(roots, args.lang or languages()[1:])
+        acc.print_extra_report(report)
+        install(L, stage, extra)
 
         passed = ["--lane", args.lane, *rest]
         for lang in args.lang:

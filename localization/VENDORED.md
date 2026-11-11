@@ -63,7 +63,7 @@ moves. They are not drift-checked.
 
 | Here | Derived from | What changed |
 |---|---|---|
-| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui` / `prompts`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord), `prompt_localize.py --verify --changed` (DMA prompts) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. **Sharded** (agent-only): a `plan` job (whole-run dry-run, so `--max-keys` still bounds the run, plus the locale assignment), a `shard` matrix (`shards` input, default 7 = 4 locales each, `fail-fast: false`, read-only token, never commits), and one `collect` job that refuses foreign locale files, gates the combined tree, merges the reports and commits once. The commit additionally waits for the gate to pass. An `extra_tm` input (default on, Accord only) adds read-only checkouts of CIRISAI/ciris-website and CIRISAI/CIRISClient as `--extra-tm` anchor corpora: `plan` resolves each default branch's commit ONCE and every shard checks out exactly those SHAs (plan outputs); the SHAs go into the step summary and, via `collect`, the commit message. |
+| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui` / `prompts`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord), `prompt_localize.py --verify --changed` (DMA prompts) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. **Sharded** (agent-only): a `plan` job (whole-run dry-run, so `--max-keys` still bounds the run, plus the locale assignment), a `shard` matrix (`shards` input, default 7 = 4 locales each, `fail-fast: false`, read-only token, never commits), and one `collect` job that refuses foreign locale files, gates the combined tree, merges the reports and commits once. The commit additionally waits for the gate to pass. An `extra_tm` input (default on, Accord and DMA prompts) adds read-only checkouts of CIRISAI/ciris-website and CIRISAI/CIRISClient as `--extra-tm` anchor corpora: `plan` resolves each default branch's commit ONCE and every shard checks out exactly those SHAs (plan outputs); the SHAs go into the step summary and, via `collect`, the commit message. |
 | `.github/workflows/i18n-{translate,evaluate,repair}.yml` | same paths | Same `workflow_dispatch` callers, same `i18n-write-<ref>` one-writer concurrency group. They add the agent inputs, and `accord_units` defaults to one unit (`section0`). `mode` offers `fast` only (see "Local divergences"). They also take `shards`. |
 | `tools/dev/check_localize_vendoring.py` | `packaging/check_vendoring.py` | Same per-file-digest pattern, applied to this record instead of a `client/` tree digest. |
 
@@ -116,6 +116,16 @@ attribute that the vendored functions look up at call time.
     placeholders, same doubled braces, `str.format` succeeds, same JSON field
     names, no lost action verb or backticked identifier. A rejected value is
     not written, the field stays English, and the run exits non-zero.
+  - **Translation memory** (a replacement `anchors_for` hook): for the target
+    language, the locale's other DMA prompt blocks (same field of a sister
+    template first, then shared vocabulary; a block that fails
+    `prompt_problems` is not offered), lines of its shipped ethics text, and,
+    through `accord_localize.load_extra_tm` with its quality screen unchanged,
+    the website's, the CIRISClient apps' and the agent UI's strings. The agent
+    UI is always read; `--extra-tm DIR` adds a website or client checkout, and
+    the lane pins both exactly as it does for the Accord. Anchors only, never
+    values. The vendored default caps an anchor at 240 characters, which
+    excludes nearly every prompt block; this hook allows 1,600.
   - `--verify` is the lane's gate; with `--changed` it blocks only on fields
     whose value differs from HEAD, so standing debt is printed but cannot fail
     a run that did not write it. `--check`, `--dry-run`, `--verify` and the

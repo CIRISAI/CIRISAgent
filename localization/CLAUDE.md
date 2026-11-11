@@ -39,6 +39,8 @@ tests fail until it has. **A rewritten field** already has an (old) translation
 in each locale, so it is not missing: dispatch with the exact key and
 `overwrite: true`.
 
+What each part of the ratchet rests on, and where the prior art says it is weak: `localization/PRIOR_ART.md`.
+
 Real runs spend tokens. They go through the `i18n translate|evaluate|repair`
 workflows (dispatch only, one writer at a time). Never hand-edit vendored files:
 `tools/dev/check_localize_vendoring.py` fails on any drift.

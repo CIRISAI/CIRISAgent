@@ -234,3 +234,53 @@ def test_a_shard_owns_its_locales_prompt_files_and_nothing_else() -> None:
     assert len(owned) == 2 * len(PL.template_names())
     with pytest.raises(SystemExit):
         LS.owned_files("nonsense", ["es"])
+
+
+# ──────────────────────────────────────────────
+# Translation memory handed to the translator
+# ──────────────────────────────────────────────
+
+
+def test_a_new_block_is_anchored_on_the_same_field_of_its_sister_templates(tmp_path: Path) -> None:
+    """rsaspdma.memory_prohibitions is shown how msaspdma.memory_prohibitions reads in this language."""
+    en = PL.flat(PL.build_stage(tmp_path))
+    anchors = PL.make_anchors(tmp_path)("ja", ["rsaspdma.memory_prohibitions"], en)
+
+    keys = [k for k, _, _ in anchors]
+    assert keys[0] == "msaspdma.memory_prohibitions"
+    english, shipped = next((e, t) for k, e, t in anchors if k == keys[0])
+    assert english == en[keys[0]] and shipped != english
+    assert "rsaspdma.memory_prohibitions" not in keys  # never its own (English) value
+    assert any(k.startswith("accord:") for k in keys)  # the ethics text in this language
+
+
+def test_a_structurally_broken_sister_block_is_not_offered_as_an_example(tmp_path: Path) -> None:
+    """An anchor teaches by example; one with a broken placeholder teaches the break."""
+    en = PL.flat(PL.build_stage(tmp_path))
+    staged = json.loads((tmp_path / "vi.json").read_text(encoding="utf-8"))
+    broken = staged["tsaspdma"]["context_enrichment_section"]
+    assert PL.prompt_problems(en["tsaspdma.context_enrichment_section"], broken)  # standing debt in the tree
+
+    anchors = PL.make_anchors(tmp_path)("vi", ["rsaspdma.context_integration"], en, limit=200)
+    assert "tsaspdma.context_enrichment_section" not in [k for k, _, _ in anchors]
+
+
+def test_website_client_and_agent_ui_terms_follow_the_prompt_and_ethics_anchors(tmp_path: Path) -> None:
+    en = PL.flat(PL.build_stage(tmp_path))
+    pool = [PL.acc.ExtraAnchor(2, "client:memory.title", "Memory", "Memoria", frozenset({"memory"}))]
+    anchors = PL.make_anchors(tmp_path, {"es": pool})("es", ["rsaspdma.evaluation_steps"], en)
+
+    keys = [k for k, _, _ in anchors]
+    assert keys[-1] == "client:memory.title"
+    assert keys.index("client:memory.title") > max(i for i, k in enumerate(keys) if ":" not in k)
+
+
+def test_the_anchor_rules_reach_all_three_system_prompts(tmp_path: Path) -> None:
+    PL.build_stage(tmp_path)
+    L = PL.import_localize(tmp_path)
+    PL.install(L, tmp_path)
+    for name in ("SYSTEM_TRANSLATE", "SYSTEM_REVIEW", "SYSTEM_REPAIR"):
+        text = getattr(L, name)
+        assert "THESE STRINGS ARE NOT UI LABELS" in text
+        assert 'Keys starting "website:", "client:" or "agent-ui:"' in text
+    assert "not a terminology finding" in L.SYSTEM_REVIEW

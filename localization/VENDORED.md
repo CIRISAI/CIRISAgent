@@ -23,6 +23,10 @@ Every adapter mode is read-only except a real lane run. `--check`,
 throwaway directory and never write `ciris_engine/data/localized` or the
 committed stage. A test asserts this byte for byte.
 
+How the agent, client and website corpora relate (independent runs, mutual
+anchors) is in `CLAUDE.md`, "Three corpora, run independently, read by each
+other". This file is about the code.
+
 ## Upstream
 
 | | |

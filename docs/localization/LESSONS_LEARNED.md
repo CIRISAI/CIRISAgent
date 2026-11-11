@@ -1,5 +1,10 @@
 # Localization Lessons Learned
 
+> **Historical (written April 2026).** The numbers, paths and workflow below
+> describe how the first languages were bootstrapped with agent fan-outs. They
+> are kept as a record of what went wrong and why, not as instructions. Current
+> state and the current way to translate: [`localization/CLAUDE.md`](../../localization/CLAUDE.md).
+
 This document captures lessons learned from the CIRIS localization effort to help future agents work more efficiently.
 
 ## Summary Statistics

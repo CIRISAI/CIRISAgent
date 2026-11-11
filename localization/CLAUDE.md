@@ -92,6 +92,59 @@ line names where to re-check it, because this one will drift too.
   `i18n evaluate`, `i18n repair` (dispatch only), with targets `accord`, `ui`
   and `prompts`.
 
+## Three corpora, run independently, read by each other
+
+CIRIS text is translated in three repositories. Each runs its own localization
+on its own schedule, with its own review, and none waits for another.
+
+| Corpus | Repository | What it holds |
+|---|---|---|
+| Agent | `CIRISAI/CIRISAgent` (this one) | Agent and API strings, language primers, ethics text, guide, DMA and conscience prompts |
+| Client | `CIRISAI/CIRISClient` | The apps' interface strings (Android, iOS, desktop share one bundle) |
+| Website | `CIRISAI/ciris-website` | Site dictionaries and chrome |
+
+They are not merged and there is no shared bundle. They are kept coherent by
+reading each other's shipped translations as **analysis and terminology
+anchors**: when one corpus translates or reviews a string, the other corpora's
+rendering of the same terms in that language is in front of the translator and
+the reviewer. An anchor is never copied in as a value.
+
+What this repository does, which you can verify here:
+
+- `accord_localize.EXTRA_LAYOUTS` recognises a website checkout, a client
+  checkout and this repository's own UI bundle, ranked in that order.
+- The lanes check the website and the client out read-only at their
+  default-branch commit, pinned once per run, for the `accord` and `prompts`
+  targets, and put both commits in the commit message (`i18n-lane.yml`,
+  `extra_tm`).
+- The other corpus's own review is respected: a string its MQM review flagged
+  critical or major, a file whose status is rejected, a value left in English
+  or in the wrong script, is not used as an anchor (`_flagged_keys`,
+  `_file_status`, `_usable`).
+
+In the other direction, the client and the website include this repository's
+corpus in their own analysis the same way (maintainer, 2026-11-11). That side
+lives in those repositories and is not visible from here; the website carries
+its own `localization/localize.py`, `glossary.py` and `SITE_NOTES.md`.
+
+The pipeline code itself flows one way: `localize.py`, `glossary.py`, the
+translation guide and the 28 glossaries are vendored byte-identical from
+CIRISClient (`VENDORED.md`). A fix to the pipeline or to a glossary goes
+upstream to the client and comes back on the next re-vendor.
+
+Consequences worth knowing:
+
+- **A correction in one corpus does not propagate.** If a native speaker fixes
+  a term in the client, the agent's value is unchanged until its own lane runs
+  and sees the fix as an anchor. The glossary is the only thing all three are
+  bound by.
+- **Agreement between corpora is evidence, not proof.** Three pipelines of the
+  same lineage, with overlapping models, can agree on the same mistake.
+- **This repository has two glossary sets.** `localization/glossaries/` (from
+  the client, read by the pipeline) and `docs/localization/glossaries/` (the
+  agent's originals, read only by the completeness test) differ in all 29
+  files.
+
 ## What a language consists of
 
 | Component | Location | Checked by |
@@ -209,7 +262,7 @@ python3 localization/prompt_localize.py --verify                            # DM
 | Safety batteries, ledger, fixes | `tests/safety/` |
 | Safety guidance design and process | `FSD/SAFETY_GUIDANCE.md`, `FSD/SAFETY_GUIDANCE_PROCESS.md` |
 | Polyglot layer (not translation) | `ciris_engine/data/localized/polyglot/CLAUDE.md` |
-| Early lessons | `docs/localization/LESSONS_LEARNED.md` |
+| Early lessons (historical) | `docs/localization/LESSONS_LEARNED.md`, `docs/localization/README.md` |
 
 ---
 

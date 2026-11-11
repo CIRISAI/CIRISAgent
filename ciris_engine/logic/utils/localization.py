@@ -547,7 +547,7 @@ def _compose_parts(*part_lists: List[Tuple[str, str]]) -> str:
 def get_language_guidance(lang_code: str) -> str:
     """Return the per-language guidance block for LLM prompts.
 
-    Each ``localization/{lang}.json`` carries a ``prompts.language_guidance``
+    Each ``ciris_engine/data/localized/{lang}.json`` carries a ``prompts.language_guidance``
     entry: since #997 that is EITHER an ordered dict of single-class parts (en,
     es, fr, it, pt — see ``LANGUAGE_GUIDANCE_PART_KEYS``) or, for the 24
     locales whose prose does not partition on the same boundaries, the original

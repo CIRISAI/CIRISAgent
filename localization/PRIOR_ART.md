@@ -26,6 +26,29 @@ to lean on.
 | **A repaired class of defect cannot return; standing debt does not block** | `check_localization_integrity --fail-on`, `prompt_localize --verify --changed` | Lint ratchets with a baseline that may only shrink: Notion's ESLint ratcheting, `imbue-ai/ratchets`, and similar tools [12] | A static ratchet puts no pressure on existing debt. Some tools also fail when a count drops and the baseline was not lowered, to lock the gain in [12] |
 | **Machine review is not native review** | lane commits label their values `status=draft` / `machine_reviewed`; an existing value is replaced only when `overwrite` is set (DMA prompt files carry no status field) | Professional translators with full context rank systems differently from crowd raters, who tolerate subtle errors [1] | See below |
 
+## The theory behind it, and what it converges with
+
+The working theory: every pass draws latent grammar and vocabulary out of the
+models; each accepted improvement becomes context for the next pass and exposes
+the next gap; the loop only improves if it keeps being made to face reality
+(safety batteries, reports from deployments); and what survives is hardened so
+it cannot be lost. The same shape is applied to ethics as the coherence
+ratchet. Rows marked (m) are from memory and were not looked up for this note.
+
+| Claim | Convergent work | What it adds or warns |
+|---|---|---|
+| A model knows more of a language than a single prompt elicits, and the right context draws it out | MTOB: an LLM translating Kalamang from a grammar book and word list in context [13]; fuzzy-match exemplars [8] | A follow-up found most of MTOB's gain came from the parallel examples in the book, not the grammar prose [14]. Examples pump better than explanations |
+| Accepted outputs become the next pass's training signal | Bootstrapping and self-training (Yarowsky 1995) (m); iterative back-translation with filtering [15]; DSPy's bootstrapped demonstrations, kept only if they pass a metric [16]; Self-Refine, Voyager's verified skill library, STaR (m) | Every one of these keeps only what a check accepts. The loop is as good as the check: "the optimizer is only as good as your validation metric" |
+| The loop must face reality or it degrades | Model collapse under recursive training, avoided when real data is accumulated alongside synthetic, not replaced by it [17] | Disputed at the margins [17], but the direction is agreed: a loop fed only its own output drifts. Native-speaker edits and deployment reports are the real data here |
+| Gains must be made impossible to lose | Tomasello's ratchet effect in cumulative culture: invention is common, the stabilising ratchet is "the difficult feat" [18]; baseline ratchets in software [12]; regression tests (m) | Same name, same claim. The hard part is retention, not novelty |
+| Ethics improves through accumulated earnest attempts tested against cases | Reflective equilibrium, and its recent application to LLM alignment [19]; common-law precedent and casuistry (m); Popper and Lakatos on conjecture tested against reality (m) | Reflective equilibrium requires revision in BOTH directions: cases revise principles too. The critique of constitution-style alignment in [19] is that principles rarely move |
+| Measured against batteries | Evaluation-driven development (m) | Goodhart's and Campbell's laws (m): a battery that is optimised against stops measuring. #983 is this, already found in this repo |
+
+What looks unusual here is the combination, not any part: one ratchet over
+translation and ethics alike, with the hardening step deterministic and in CI,
+and the stated plan to make native speakers and deployments the source of real
+data rather than an afterthought.
+
 ## Where native speakers come in
 
 `ciris.ai/crowdsourcing-alignment` is the human half. It lets a native speaker
@@ -78,3 +101,10 @@ spent on judgment, not on finding a dropped placeholder.
 10. Weblate documentation, "Checks and fixups" (Python brace format). <https://docs.weblate.org/en/weblate-5.13/admin/checks.html>
 11. MediaWiki, "Help:Content translation/Translating/Translation quality", and the limit proposal. <https://www.mediawiki.org/wiki/Help:Content_translation/Translating/Translation_quality/sv>, <https://phabricator.wikimedia.org/T251887>
 12. Notion, "How we evolved our code: Notion's ratcheting system using custom ESLint rules". <https://www.notion.com/fr/blog/how-we-evolved-our-code-notions-ratcheting-system-using-custom-eslint-rules>; `ratchets` (imbue-ai). <https://docs.rs/crate/ratchets/0.2.6>
+13. Tanzer et al., "A Benchmark for Learning to Translate a New Language from One Grammar Book" (MTOB), ICLR 2024. <https://arxiv.org/abs/2309.16575>
+14. Aycock et al., "Can LLMs Really Learn to Translate a Low-Resource Language from One Grammar Book?", 2024. <https://arxiv.org/html/2409.19151v2>
+15. Imankulova et al., filtered pseudo-parallel corpora, WAT 2017. <https://aclanthology.org/W17-5704/>; Galiano-Jiménez et al., EAMT 2023. <https://aclanthology.org/2023.eamt-1.7.pdf>
+16. DSPy, BootstrapFewShot. <https://dspy.ai/api/optimizers/BootstrapFewShot/>
+17. Gerstgrasser et al., "Is Model Collapse Inevitable? Breaking the Curse of Recursion by Accumulating Real and Synthetic Data", 2024. <https://arxiv.org/abs/2404.01413>; follow-up "Collapse or Thrive?". <https://arxiv.org/html/2410.16713v1>
+18. Tennie, Call & Tomasello, "Ratcheting up the ratchet: on the evolution of cumulative culture", Phil. Trans. R. Soc. B 2009. <https://pmc.ncbi.nlm.nih.gov/articles/PMC2865079>
+19. Brophy, "Wide Reflective Equilibrium in LLM Alignment", 2025. <https://arxiv.org/abs/2506.00415>

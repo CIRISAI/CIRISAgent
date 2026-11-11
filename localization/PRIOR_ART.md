@@ -61,14 +61,16 @@ fails block a release for that locale; native-speaker review of the softer
 cases "is not in place yet"; a federated flow with consensus and voting
 (`rubric_proposal`, `arc_question`, `prompt_edit`) is planned in CIRISNodeCore.
 
-**What production says so far.** The app is live on the app stores, and the
-maintainer reports (2026-11-11) that user feedback on translation quality is
-positive, most of it from Amharic speakers. Amharic is the hardest case on the
-priority list and the one locale with a populated language primer, so this is
-evidence for the loop where it was least likely to work. It is evidence about
-what users read (interface strings and replies), for one language. It is not
-recorded per locale anywhere in this repository, and it says nothing yet about
-the other 27 or about the prompts users never see.
+**What reality says so far.** Two channels are running. The app is live on
+the app stores, and the maintainer reports (2026-11-11) that user feedback on
+translation quality is positive, most of it from Amharic speakers: the hardest
+case on the priority list. That feedback is not recorded per locale in this
+repository, and it covers what users read, not the prompts they never see. The
+second channel covers those: every one of the 29 languages has a safety
+battery with machine-applicable criteria, run weekly in CI, with about 300
+interpreted runs across all 29 as of 2026-10-15 and a findings ledger
+(`tests/safety/FINDINGS_LEDGER.md`) that tracks failures per criterion and
+locale and the guidance changes made in response.
 
 That division matches the literature. Deterministic checks and span-level
 machine review catch structure and gross meaning. They are weakest in exactly

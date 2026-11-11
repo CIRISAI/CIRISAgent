@@ -264,15 +264,17 @@ CIRIS supports 29 languages with full pipeline localization. The entire ethical 
 
 Together these reach roughly 95% of the world's population — chosen to maximize accessibility for the people who most need ethical, multilingual AI assistance.
 
-Source of truth: `localization/manifest.json`. To add or remove a language, update the manifest first.
+Source of truth: `ciris_engine/data/localized/manifest.json`. To add or remove a language, update the manifest first. (Never put a `*.json` directly in `localization/`: it hijacks the string loader; see `localization/VENDORED.md`.)
 
 `am` (Amharic), `ar` (Arabic, RTL), `bn` (Bengali), `de` (German), `en` (English, base), `es` (Spanish), `fa` (Persian, RTL), `fr` (French), `ha` (Hausa), `hi` (Hindi), `id` (Indonesian), `it` (Italian), `ja` (Japanese), `ko` (Korean), `mr` (Marathi), `my` (Burmese), `pa` (Punjabi), `pt` (Portuguese), `ru` (Russian), `sw` (Swahili), `ta` (Tamil), `te` (Telugu), `th` (Thai), `tr` (Turkish), `uk` (Ukrainian), `ur` (Urdu, RTL), `vi` (Vietnamese), `yo` (Yoruba), `zh` (Chinese, Simplified)
 
 ### Key Files
-- **UI Strings**: `localization/{lang}.json` - Mobile/API UI strings
+- **UI Strings and language primer**: `ciris_engine/data/localized/{lang}.json` - agent/API strings, plus `prompts.language_guidance` (every language has one)
 - **Ethics text** (accord slot): `ciris_engine/data/localized/constitution_ethics_1.3_{lang}.txt` (1.2b `accord_1.2b_{lang}.txt` kept as the research control arm)
 - **Guides**: `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{lang}.txt`
 - **DMA Prompts**: `ciris_engine/logic/dma/prompts/localized/{lang}/*.yml`
+- **Safety batteries**: `tests/safety/{language}_mental_health/` (all 29; findings in `tests/safety/FINDINGS_LEDGER.md`)
+- **Current status and how to translate**: `localization/CLAUDE.md`
 
 ### Setting Language
 ```bash

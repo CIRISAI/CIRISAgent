@@ -5,7 +5,7 @@
 # workflow inputs never get interpolated into a script body, then appends "$@"
 # (e.g. --dry-run, --mode batch, --report i18n-report.json).
 #
-#   TARGET          accord | ui
+#   TARGET          accord | ui | prompts
 #   LANE            translate | evaluate | repair
 #   ACCORD_VERSION  accord version (TARGET=accord)
 #   TM_VERSION      previous accord used as translation memory (TARGET=accord)
@@ -21,7 +21,7 @@
 #   LANGS           space-separated locale codes; empty = all 28
 #   MAX_KEYS        refuse runs larger than this many key-values (accord: per unit)
 #   OVERWRITE       true = the translate lane replaces values that already exist
-#                   (TARGET=ui; localize.py --overwrite). For a deliberate
+#                   (TARGET=ui or prompts; localize.py --overwrite). For a deliberate
 #                   retranslation after an English change: pair it with exact
 #                   KEYS, never a broad pattern, so hand-written overrules stay.
 set -euo pipefail
@@ -45,8 +45,16 @@ case "${TARGET:-accord}" in
     cmd=(python3 localization/lane_backoff.py)
     if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
     ;;
+  prompts)
+    # The DMA prompt templates (ciris_engine/logic/dma/prompts/localized/<lang>/*.yml),
+    # staged as a key bundle by prompt_localize.py. A field still byte-identical
+    # to English counts as missing, so empty KEYS = "whatever is untranslated".
+    python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+    cmd=(python3 localization/prompt_localize.py)
+    if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
+    ;;
   *)
-    echo "TARGET must be accord or ui, got '${TARGET}'" >&2
+    echo "TARGET must be accord, ui or prompts, got '${TARGET}'" >&2
     exit 2
     ;;
 esac

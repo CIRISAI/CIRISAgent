@@ -27,7 +27,17 @@ python3 localization/accord_localize.py $E13 --units section0 --lane translate -
 python3 localization/accord_localize.py $E13 --extra-tm ~/ciris-website --extra-tm ~/CIRISClient --extra-tm . \
     --units section0 --lane translate --dry-run
 python3 localization/localize.py --check                                     # UI/prompt bundle (LOCALIZE_TARGET=ui)
+python3 localization/prompt_localize.py --check                              # DMA prompt templates still in English, per locale
+python3 localization/prompt_localize.py --lane translate --keys 'rsaspdma.*' --dry-run
 ```
+
+**A new DMA prompt** (`ciris_engine/logic/dma/prompts/<name>.yml`): commit an
+English copy in each `localized/<lang>/` folder, then dispatch `i18n translate`
+with `target: prompts` and `keys: <name>.*`. A field still byte-identical to
+English counts as missing, so the lane picks it up and the chain-localization
+tests fail until it has. **A rewritten field** already has an (old) translation
+in each locale, so it is not missing: dispatch with the exact key and
+`overwrite: true`.
 
 Real runs spend tokens. They go through the `i18n translate|evaluate|repair`
 workflows (dispatch only, one writer at a time). Never hand-edit vendored files:

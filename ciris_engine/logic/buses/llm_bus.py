@@ -115,6 +115,12 @@ class LLMCallEventContext:
     error: Optional[BaseException] = None
 
 
+def _extract_api_base(selected_service: Any) -> Optional[str]:
+    """The provider endpoint the selected service calls, when it exposes one."""
+    config = getattr(selected_service, "openai_config", None)
+    return cast(Optional[str], getattr(config, "base_url", None)) if config else None
+
+
 def _extract_call_model(selected_service: Any) -> Optional[str]:
     """Get the provider model identifier from whichever attribute the
     selected_service exposes (varies between services)."""
@@ -441,8 +447,22 @@ class LLMBus(BaseBus[LLMService]):
         result: Any,
         temperature: float,
         max_tokens: int,
+        model: Optional[str] = None,
+        api_base: Optional[str] = None,
     ) -> None:
         """Diagnostic capture for replay against the bounce harness.
+
+        Also the safety battery's record of prompts and generations for
+        training and research (the trace path keeps only a prompt hash unless
+        the full level is delivered). Each row is the call as the model saw
+        it: `messages` are the wire messages, unscrubbed and unaltered, and
+        `prompt_hash` is the same sha256 the LLM_CALL trace event carries, so
+        a row can be matched to its trace. `result` is the parsed structured
+        reply; the provider's raw completion text is not retained by the LLM
+        service and is not in the row.
+
+        OFF unless the env var is set. Never set it where real users' traffic
+        runs: rows hold the full conversation.
 
         Writes one JSONL row per matched call. Gated by env vars so
         production paths are zero-cost (early return on the os.environ
@@ -520,7 +540,19 @@ class LLMBus(BaseBus[LLMService]):
             if out_path == default_path:
                 os.makedirs(default_dir, mode=0o700, exist_ok=True)
 
+            from datetime import datetime, timezone
+
+            from ciris_engine.constants import CIRIS_VERSION
+
             row = {
+                "capture_schema": 2,
+                "captured_at": datetime.now(timezone.utc).isoformat(),
+                "agent_version": CIRIS_VERSION,
+                "model": model,
+                "api_base": api_base,
+                "prompt_hash": hashlib.sha256(_safe_messages_to_text(messages).encode("utf-8")).hexdigest(),
+                "scrubbed": False,
+                "reply_form": "parsed_structured",
                 "handler": handler_name,
                 "service": service_name,
                 "thought_id": thought_id,
@@ -962,6 +994,8 @@ class LLMBus(BaseBus[LLMService]):
                 result=result,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                model=(usage.model_used if usage is not None else None) or _extract_call_model(selected_service),
+                api_base=_extract_api_base(selected_service),
             )
 
         latency_ms = (self._time_service.timestamp() - start_time) * 1000

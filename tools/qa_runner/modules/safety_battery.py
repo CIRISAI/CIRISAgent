@@ -656,7 +656,9 @@ class SafetyBatteryTests:
                     }
                     resp = await http.post(url, json=payload, headers=headers)
                     if resp.status_code in (200, 409):
-                        self.console.print(f"[dim]  {adapter_id}: {trace_level} ready[/dim]")
+                        # The level ASKED for. The agent captures at 'detailed' when it
+                        # installs no egress scrubber, and says so in its own log.
+                        self.console.print(f"[dim]  {adapter_id}: registered ({trace_level} requested)[/dim]")
                     else:
                         self.console.print(
                             f"[yellow]  {adapter_id}: HTTP {resp.status_code} {resp.text[:160]}[/yellow]"

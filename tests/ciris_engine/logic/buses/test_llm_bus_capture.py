@@ -528,3 +528,25 @@ def test_failure_warning_keyed_by_filter_and_path(
     ]
     assert any(str(out_a) in w.getMessage() for w in warnings)
     assert any(str(out_b) in w.getMessage() for w in warnings)
+
+
+def test_row_carries_what_research_needs(bus: LLMBus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A row is the call as the model saw it, tied to its trace by prompt_hash."""
+    import hashlib
+    import json
+
+    from ciris_engine.logic.buses.llm_bus import _safe_messages_to_text
+
+    out = tmp_path / "calls.jsonl"
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", "*")
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+    kwargs = _capture_kwargs()
+    bus._maybe_capture_call(**kwargs, model="some/model", api_base="https://example.invalid/v1")
+
+    row = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+    assert row["messages"] == kwargs["messages"]
+    assert row["prompt_hash"] == hashlib.sha256(_safe_messages_to_text(kwargs["messages"]).encode("utf-8")).hexdigest()
+    assert row["model"] == "some/model" and row["api_base"] == "https://example.invalid/v1"
+    assert row["scrubbed"] is False and row["reply_form"] == "parsed_structured"
+    assert row["thought_id"] == "th_test" and row["task_id"] == "task_test"
+    assert row["agent_version"] and row["captured_at"]

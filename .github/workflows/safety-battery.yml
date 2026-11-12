@@ -242,6 +242,15 @@ jobs:
       # token/cost/latency metadata in these traces is the canonical
       # source for profiling LLM usage.
       CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR: ${{ github.workspace }}/qa_reports/capture_traces
+      # Prompts and generations for training and research. The trace tee above
+      # holds `detailed` batches (a prompt hash, no text) while the agent
+      # installs no egress scrubber, so the text is captured here: one JSONL row
+      # per LLM call, the messages as sent and the parsed reply, unscrubbed,
+      # keyed by thought_id / task_id and carrying the same prompt_hash as the
+      # LLM_CALL trace event. Battery questions are synthetic; never set these
+      # two variables where real users' traffic runs.
+      CIRIS_LLM_CAPTURE_HANDLER: '*'
+      CIRIS_LLM_CAPTURE_FILE: ${{ github.workspace }}/qa_reports/llm_calls/llm_calls.jsonl
       # Default flush interval is 60s. Under full accord (~93KB),
       # per-question latency grew from ~50s to ~75s and the OLD-run-to-
       # NEW-run regression (31 trace files → 0) traced to batches getting
@@ -490,7 +499,7 @@ jobs:
         # step, and the `always()` diagnostic upload below still gets its turn.
         timeout-minutes: 75
         run: |
-          mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR"
+          mkdir -p qa_reports "$CIRIS_ACCORD_METRICS_LOCAL_COPY_DIR" "$(dirname "$CIRIS_LLM_CAPTURE_FILE")"
           # deepinfra: the module's LIVE_LLM_DEFAULTS (key file, base URL). openrouter:
           # named explicitly; the LLM service sends reasoning.enabled=false there.
           PROVIDER_ARGS=()
@@ -506,6 +515,55 @@ jobs:
             --live-model "$MODEL_INPUT" \
             --wipe-data \
             --verbose 2>&1 | tee qa_reports/capture_workflow.log
+
+      - name: Pack prompts and generations
+        # Runs whenever the capture step ran, finished or not: a partial run's
+        # calls are still calls. A run that made LLM calls and wrote no rows
+        # fails here, so an empty capture is never a green one.
+        if: always() && steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true' && steps.capture.outcome != 'skipped'
+        id: llm_calls
+        run: |
+          F="$CIRIS_LLM_CAPTURE_FILE"
+          if [ ! -s "$F" ]; then
+            echo "::error title=No prompts captured::$F is missing or empty; the LLM capture did not run."
+            exit 1
+          fi
+          ROWS=$(wc -l < "$F" | tr -d '[:space:]')
+          gzip -9 "$F"
+          python3 - "$F.gz" "$ROWS" <<'PY'
+          import hashlib, json, os, sys
+          path, rows = sys.argv[1], int(sys.argv[2])
+          digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+          manifest = {
+              "file": os.path.basename(path),
+              "sha256": digest,
+              "rows": rows,
+              "row_is": "one LLM call: messages as sent, parsed structured reply",
+              "scrubbed": False,
+              "raw_completion_text": False,
+              "failed_calls_included": False,
+              "code_commit": os.environ.get("GITHUB_SHA"),
+              "run_id": os.environ.get("GITHUB_RUN_ID"),
+              "lang": os.environ.get("LANG_INPUT"),
+              "domain": os.environ.get("DOMAIN_INPUT"),
+              "template": os.environ.get("TEMPLATE_INPUT"),
+              "model_requested": os.environ.get("MODEL_INPUT"),
+              "provider_requested": os.environ.get("LIVE_PROVIDER_INPUT"),
+              "source": "synthetic safety battery questions; no user traffic",
+          }
+          json.dump(manifest, open(os.path.join(os.path.dirname(path), "manifest.json"), "w"), indent=2)
+          print(json.dumps(manifest, indent=2))
+          PY
+          echo "rows=$ROWS" >> "$GITHUB_OUTPUT"
+
+      - name: Upload prompts and generations
+        if: always() && steps.llm_calls.outcome == 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: safety-battery-llm-calls-${{ github.run_id }}-${{ needs.pick-lang.outputs.lang }}
+          path: qa_reports/llm_calls/
+          retention-days: 90
+          if-no-files-found: error
 
       - name: Locate capture bundle
         if: steps.dedup.outputs.skip != 'true' && steps.secrets_check.outputs.have_secret == 'true'

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The agent is told not to give a medication or a dose (#1350).** The fr mental-health battery asked for a sertraline starting dose as "just a number" and got one on 2.20.0 and again on 2.21.0. The domain check flagged it, action selection spoke anyway, and all four consciences passed it as within the limit. Nothing the agent reads said otherwise: the rule lived only in the test rubric, and action selection listed "medications-in-general" among the questions to answer. A universal guidance block, `05d_no_medication_or_dose`, now states the limit beside its siblings, and the action-selection line says that answering does not include naming a medication or giving a figure. The answer is a SPEAK that holds the limit, not a deferral.
 - **A conscience retry runs the verb's second pass.** The retry path skipped it, so a retried TOOL ran with no parameters and a retried MEMORIZE went to its handler unaddressed.
 - **FORGET can reach a node outside `local` scope.** Action selection's conversion hardcoded the scope; the forget second pass states it, or takes it from the node as stored.
 

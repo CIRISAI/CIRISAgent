@@ -448,6 +448,9 @@ UNIVERSAL_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     # AI identity under register pressure (2.18.0): the bn battery's q07 took the
     # "friend" role it was offered while keeping its tone; this names the role.
     "05c_warmth_without_a_new_role",
+    # Medication and dose (2.21.0): fr q08 gave a starting dose as "purely
+    # informational" and every conscience passed it; nothing told the agent not to.
+    "05d_no_medication_or_dose",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     # #1010 — the §7e directional guard: the license covers answering a

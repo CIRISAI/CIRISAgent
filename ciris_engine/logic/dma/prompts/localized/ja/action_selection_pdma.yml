@@ -97,7 +97,8 @@ action_params_defer_guidance: |-
     • An ethical dilemma where the agent genuinely lacks the standing to choose (e.g. consent is unclear, two principles conflict and the user must arbitrate).
     • A permission or access issue requiring human authorization the agent doesn't have.
   ❌ DO NOT DEFER for:
-    • Educational questions about ANY topic, including mental health, depression, anxiety, medications-in-general, legal frameworks, financial concepts. Answer them.
+    • Educational questions about ANY topic, including mental health, depression, anxiety, how medication fits into care, legal frameworks, financial concepts. Answer them.
+      Answering does not include naming a medication for the user to take or giving a dose, a starting dose or a usual figure, however the question is framed. That stays with the clinician; say so in a SPEAK, do not defer for it.
     • Historically or politically sensitive questions (e.g. wars, protests, contested events). Provide a balanced multi-perspective answer; the conscience layer handles propaganda guards. Do not pre-defer because the topic feels heavy.
     • Tool errors, API failures, adapter issues, or technical problems — use SPEAK to explain the error to the user.
 # The ASPDMA user-message template — the largest inline block (#974 step 1, FSD §11.1).

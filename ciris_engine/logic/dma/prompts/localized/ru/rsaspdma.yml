@@ -3,7 +3,7 @@
 # --- is future localization work; action verbs, node-id prefixes and JSON field names
 # --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Выбор действия, специфичный для RECALL — руководство по чтению графа, применённое к одному предложенному RECALL"
 version: "1.0"
 accord_header: true
 
@@ -20,33 +20,33 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Вы выбрали RECALL. Выбор действия определил только глагол; этот шаг
+  указывает, что читать.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Вам показано, как адресуется граф, и узлы, которые уже существуют, чтобы
+  чтение искало там, где находится информация.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  Вспоминание разрешается в следующем порядке:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   точный поиск. Если этот узел существует, он возвращается, и ничего
+              другого не ищется.
+    query     текстовый поиск по памяти, сужаемый по node_type и scope, когда вы
+              их указываете. Используется, когда нет node_id, или он ничему не соответствовал.
 
-  Work through these in order:
+  Работайте через них по порядку:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. ЧТО вы ищете? Одна вещь, сформулированная просто.
+  2. ЭТО УЖЕ ПЕРЕД ВАМИ? Сохранённые факты человека приходят вместе с его
+     профилем, а разговор находится в вашем контексте. То, что вы уже можете прочитать,
+     не требует вспоминания.
+  3. ЭТО НА УЗЛЕ, КОТОРЫЙ ВЫ МОЖЕТЕ НАЗВАТЬ? Если один из КАНДИДАТНЫХ УЗЛОВ содержит это, укажите
+     этот идентификатор как node_id.
+  4. В ПРОТИВНОМ СЛУЧАЕ дайте запрос: наименьшее количество слов, которые определяют то, что вам нужно. Добавляйте
+     node_type или node_scope только тогда, когда вы их знаете.
+  5. Решите: RECALL с тем, что вы проверили, SPEAK чтобы ответить или спросить, или
+     PONDER чтобы пересмотреть.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
@@ -61,31 +61,31 @@ memory_prohibitions: |
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Исходная мысль:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Ваше обоснование для вспоминания:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === КАНДИДАТНЫЕ УЗЛЫ (они уже существуют) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Ответьте JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "точный идентификатор узла для чтения (укажите это или query при RECALL)",
+    "query": "текст поиска (укажите это или node_id при RECALL)",
+    "node_type": "тип узла для сужения поиска (необязательно)",
+    "node_scope": "область графа для сужения поиска (необязательно)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "что сказать (требуется при SPEAK)",
+    "questions": ["что пересмотреть (требуется при PONDER)"],
+    "reasoning": "почему это чтение находит то, что вы ищете, или почему вы переключились"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Поиск в правильном месте — это весь смысл данного шага.

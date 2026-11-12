@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "Seleção de ação específica para esquecimento — o guia de exclusão do grafo, aplicado a um FORGET proposto"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,66 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  Você selecionou FORGET. A seleção de ação escolheu apenas o verbo; esta etapa
+  nomeia o nó.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  É mostrado a você como o grafo é endereçado e os nós que já existem, para que
+  o nó removido seja aquele que você pretende.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  Um FORGET remove UM NÓ INTEIRO: todo atributo armazenado nele, e toda aresta
+  anexada a ele. Ele não remove um único atributo, e não pode ser desfeito.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  Trabalhe através destes em ordem:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. O QUE deve ser esquecido, e quem pediu isso?
+  2. QUAL NÓ contém isso? Compare contra NÓS CANDIDATOS e a convenção
+     de endereçamento. Dê a identificação exatamente como está listada.
+  3. O QUE MAIS está naquele nó? Tudo mostrado como já armazenado vai junto.
+  4. ESCOPO. Dê o escopo em que o nó está armazenado.
+  5. Decida: FORGET com o nó que você verificou, SPEAK para perguntar ou para dizer o
+     que também seria perdido, ou PONDER para reconsiderar.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === O QUE NÃO DEVE ACONTECER ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  Não invente uma identificação de nó. Esquecer um nó que não existe não remove
+  nada e ainda assim é reportado como feito, então você diria a uma pessoa que
+  sua informação se foi quando não é verdade.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  Não esqueça mais do que foi pedido. Se o nó também contém coisas que devem
+  ser mantidas, não o remova para descartar uma delas.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Não esqueça um nó no escopo `identity` ou `environment` sem aprovação de Wise
+  Authority.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Pensamento original:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  Seu raciocínio para esquecer:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === NÓS CANDIDATOS (esses já existem) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Responda com JSON:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "a identificação de nó a remover (obrigatória quando FORGET)",
+    "node_scope": "escopo do grafo em que o nó está armazenado (obrigatório quando FORGET)",
+    "reason": "por que este nó está sendo esquecido (obrigatório quando FORGET)",
+    "message": "o que dizer (obrigatório quando SPEAK)",
+    "questions": ["o que reconsiderar (obrigatório quando PONDER)"],
+    "reasoning": "por que este é o nó certo, ou por que você mudou"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  Remover o nó certo, e apenas esse nó, é o propósito inteiro desta etapa.

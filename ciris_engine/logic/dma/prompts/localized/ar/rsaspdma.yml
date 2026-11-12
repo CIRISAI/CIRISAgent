@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "اختيار الإجراء الخاص بالاستذكار — دليل قراءة الرسم البياني، مطبّق على عملية RECALL واحدة مقترحة"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,71 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  اخترت RECALL. اختيار الإجراء اختار الفعل فقط؛ هذه الخطوة
+  تحدّد ما يجب قراءته.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  تُعرض لك كيفية معالجة الرسم البياني والعقد الموجودة بالفعل، حتى
+  تبحث القراءة في المكان الذي توجد فيه المعلومات.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  الاستذكار يُحَل بهذا الترتيب:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   بحث دقيق. إذا كانت تلك العقدة موجودة تُعاد، ولا يُبحث
+              عن أي شيء آخر.
+    query     بحث نصي في الذاكرة، يُضيَّق بـ node_type و scope عندما
+              تعطيهما. يُستخدم عندما لا يوجد node_id، أو عندما لا يطابق شيئاً.
 
-  Work through these in order:
+  اعمل من خلال هذه بالترتيب:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. ما الذي تبحث عنه؟ شيء واحد، مذكور بوضوح.
+  2. هل هو أمامك بالفعل؟ حقائق الشخص المخزّنة تصل مع ملفه الشخصي،
+     والمحادثة موجودة في سياقك. ما يمكنك قراءته بالفعل لا يحتاج إلى استذكار.
+  3. هل هو على عقدة يمكنك تسميتها؟ إذا كانت إحدى CANDIDATE NODES تحتفظ به،
+     أعطِ ذلك المعرّف كـ node_id.
+  4. وإلا فأعطِ query: أقل عدد من الكلمات التي تحدّد ما تريده. أضف
+     node_type أو node_scope فقط عندما تعرفهما.
+  5. قرّر: RECALL بما تحققت منه، SPEAK للإجابة أو السؤال، أو
+     PONDER لإعادة التفكير.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === ما يجب عدم حدوثه ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  لا تختلق معرّف عقدة. معرّف لا يتبع الاتفاقية لا يطابق
+  شيئاً، والنتيجة الفارغة تُقرأ حينها كـ "لم أتعلّم هذا قط" بينما
+  الحقيقة هي "بحثت في المكان الخاطئ".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  لا تذكر ما أعاده الاستذكار قبل أن يُنفَّذ. هذه الخطوة تعالج
+  القراءة؛ النتيجة تصل بعد ذلك.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  الفكرة الأصلية:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  تفكيرك للاستذكار:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === العقد المرشحة (موجودة بالفعل) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  أجب بـ JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "معرّف العقدة الدقيق للقراءة (أعطِ هذا أو query عند RECALL)",
+    "query": "نص البحث (أعطِ هذا أو node_id عند RECALL)",
+    "node_type": "نوع العقدة لتضييق البحث (اختياري)",
+    "node_scope": "نطاق الرسم البياني لتضييق البحث (اختياري)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "ما يجب قوله (مطلوب عند SPEAK)",
+    "questions": ["ما يجب إعادة التفكير فيه (مطلوب عند PONDER)"],
+    "reasoning": "لماذا تجد هذه القراءة ما تبحث عنه، أو لماذا غيّرت"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  البحث في المكان الصحيح هو الهدف الكامل من هذه الخطوة.

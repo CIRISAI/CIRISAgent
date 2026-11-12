@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "想起固有のアクション選択 — グラフ読み取りガイドを、提案された一つの RECALL に適用したもの"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,71 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  あなたは RECALL を選択しました。アクション選択は動詞のみを選びました；このステップは
+  何を読み取るかを示します。
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  グラフがどのようにアドレスされるか、および既に存在するノードが表示されるため、
+  読み取りが情報のある場所を探すことができます。
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  想起は次の順序で解決されます：
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   正確な検索。そのノードが存在すれば返され、
+              それ以外は何も検索されません。
+    query     memory のテキスト検索で、与えられた場合は node_type と scope で
+              絞り込まれます。node_id がない場合、または一致しなかった場合に使用されます。
 
-  Work through these in order:
+  順番にこれらを実行してください：
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. あなたは何を探していますか？ 一つのことを、簡潔に述べてください。
+  2. それは既にあなたの目の前にありますか？ 人の保存された事実はそのプロフィールと共に
+     届き、会話はあなたのコンテキストにあります。既に読めるものには想起は不要です。
+  3. それはあなたが名指しできるノード上にありますか？ 候補ノードのいずれかが
+     それを保持している場合、その id を node_id として示してください。
+  4. それ以外の場合は query を示してください：あなたが求めているものを特定する最小限の語数です。
+     node_type または node_scope は、分かっている場合にのみ追加してください。
+  5. 決定：チェック済みのもので RECALL、答えるためまたは尋ねるために SPEAK、
+     または再検討するために PONDER。
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === 何が起きてはいけないか ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  ノード id を作り上げないでください。慣例に従わない id は何にも一致せず、
+  空の結果は「これを一度も学んだことがない」と読めてしまいますが、
+  真実は「間違った場所を探した」ということです。
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  想起が実行される前に、その結果を述べないでください。このステップは読み取りを
+  指定するものであり、結果はその後に届きます。
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  元の思考：
   {original_thought_content}
 
-  Your reasoning for recalling:
+  想起の理由：
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === 候補ノード（これらは既に存在する）===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON で応答します：
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "読み取る正確なノード id（RECALL 時はこれか query のいずれかを示す）",
+    "query": "検索テキスト（RECALL 時はこれか node_id のいずれかを示す）",
+    "node_type": "検索を絞り込むノードタイプ（任意）",
+    "node_scope": "検索を絞り込むグラフスコープ（任意）",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "言うこと（SPEAK 時は必須）",
+    "questions": ["再検討すること（PONDER 時は必須）"],
+    "reasoning": "この読み取りがあなたの探しているものを見つける理由、またはなぜ切り替えたのか"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  正しい場所を探すことが、このステップの要点です。

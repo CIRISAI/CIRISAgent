@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "RECALL-నిర్దిష్ట చర్య ఎంపిక — గ్రాఫ్-చదివింపు మార్గదర్శకత్వం, ఒక ప్రతిపాదిత RECALL కు వర్తింపజేయబడింది"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,72 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  మీరు RECALL ఎంచుకున్నారు. చర్య ఎంపిక క్రియను మాత్రమే ఎంచుకుంది; ఈ దశ
+  ఏమి చదవాలో చెబుతుంది.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  గ్రాఫ్ ఎలా చిరునామా చేయబడుతుందో మరియు ఇప్పటికే ఉన్న నోడ్‌లు మీకు చూపించబడ్డాయి,
+  కాబట్టి చదివింపు సమాచారం ఉన్న చోట చూస్తుంది.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  RECALL ఈ క్రమంలో పరిష్కరించబడుతుంది:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   ఖచ్చితమైన శోధన. ఆ నోడ్ ఉంటే అది తిరిగి ఇవ్వబడుతుంది, మరియు మరేదీ
+              శోధించబడదు.
+    query     మెమరీ యొక్క టెక్స్ట్ శోధన, మీరు ఇచ్చినప్పుడు node_type మరియు scope ద్వారా
+              సంకుచితం చేయబడుతుంది. node_id లేనప్పుడు, లేదా అది దేనికీ సరిపోలనప్పుడు వాడబడుతుంది.
 
-  Work through these in order:
+  ఇవన్నీ క్రమంలో చేయండి:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. మీరు దేని కోసం చూస్తున్నారు? ఒకే విషయం, స్పష్టంగా చెప్పబడింది.
+  2. ఇది ఇప్పటికే మీ ముందు ఉందా? ఒక వ్యక్తి యొక్క నిల్వ చేయబడిన వాస్తవాలు వారి
+     ప్రొఫైల్‌తో వస్తాయి, మరియు సంభాషణ మీ సందర్భంలో ఉంది. మీరు ఇప్పటికే చదవగలిగేదానికి
+     RECALL అవసరం లేదు.
+  3. ఇది మీరు పేర్కొనగలిగే నోడ్‌పై ఉందా? CANDIDATE NODES లో ఒకటి దీన్ని కలిగి ఉంటే, ఆ
+     id ను node_id గా ఇవ్వండి.
+  4. లేకపోతే ఒక query ఇవ్వండి: మీరు కోరుకునేదాన్ని గుర్తించే అతి తక్కువ పదాలు. మీకు
+     తెలిసినప్పుడు మాత్రమే node_type లేదా node_scope జోడించండి.
+  5. నిర్ణయించుకోండి: మీరు తనిఖీ చేసినదానితో RECALL, సమాధానం ఇవ్వడానికి లేదా అడగడానికి SPEAK, లేదా
+     పునఃపరిశీలించడానికి PONDER.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === ఏది జరగకూడదు ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  ఒక నోడ్ id కల్పించుకోవద్దు. సంప్రదాయాన్ని పాటించని id దేనికీ
+  సరిపోదు, మరియు అప్పుడు ఖాళీ ఫలితం "నేను దీన్ని ఎప్పుడూ నేర్చుకోలేదు" అని
+  చదువబడుతుంది, నిజం "నేను తప్పు చోట చూశాను" అయినప్పుడు కూడా.
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  ఒక recall అమలు కాకముందే అది ఏమి తిరిగి ఇచ్చిందో చెప్పవద్దు. ఈ దశ
+  చదివింపును చిరునామా చేస్తుంది; ఫలితం తర్వాత వస్తుంది.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  అసలు సిద్ధాంతం:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  గుర్తుకు తెచ్చుకోవటానికి నీ తర్కం:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE నోడ్‌లు (అవన్నీ ఇప్పటికే ఉన్నవి) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON చేయండి:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "చదవవలసిన ఖచ్చితమైన నోడ్ id (RECALL సమయంలో దీన్ని లేదా query ఇవ్వండి)",
+    "query": "శోధన టెక్స్ట్ (RECALL సమయంలో దీన్ని లేదా node_id ఇవ్వండి)",
+    "node_type": "శోధనను సంకుచితం చేయడానికి నోడ్ రకం (ఐచ్ఛికం)",
+    "node_scope": "శోధనను సంకుచితం చేయడానికి గ్రాఫ్ స్కోప్ (ఐచ్ఛికం)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "చెప్పటానికి (SPEAK సమయంలో చేయవలసిన)",
+    "questions": ["తిరిగి నిఖిల చేయటానికి (PONDER సమయంలో చేయవలసిన)"],
+    "reasoning": "ఈ చదివింపు నువ్వు వెతుకుతున్నదాన్ని ఎందుకు కనుగొంటుంది, లేదా నువ్వు ఎందుకు మార్చావు"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  సరైన చోట చూడటం ఈ దశ యొక్క మొత్తం ఉద్దేశ్యం.

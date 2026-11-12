@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "การเลือกการกระทำเฉพาะการลืม — คู่มือการลบกราฟ นำไปใช้กับ FORGET ที่เสนอหนึ่งรายการ"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,66 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  คุณได้เลือก FORGET แล้ว การเลือกการกระทำเลือกเพียงคำกริยาเท่านั้น ขั้นตอนนี้
+  ระบุชื่อ node
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  คุณจะได้เห็นว่ากราฟถูกอ้างอิงอย่างไร และ node ที่มีอยู่แล้ว เพื่อให้
+  node ที่ถูกลบเป็น node ที่คุณหมายถึงจริงๆ
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  การ FORGET จะลบ node ทั้งหมดหนึ่งตัว: ทุก attribute ที่เก็บไว้บนมัน และทุก edge
+  ที่เชื่อมต่อกับมัน มันไม่ได้ลบ attribute เดียว และไม่สามารถเลิกทำได้
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  ทำตามนี้ตามลำดับ:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. อะไร ที่ควรถูกลืม และใครเป็นผู้ขอให้ลืม?
+  2. ไหน NODE ที่เก็บสิ่งนั้นไว้? เปรียบเทียบกับ CANDIDATE NODES และปกติ
+     การอ้างอิง ให้ id ตามที่ระบุไว้อย่างแน่นอน
+  3. มีอะไรอื่นอยู่บน node นั้นอีกหรือไม่? ทุกสิ่งที่แสดงว่าถูกเก็บไว้แล้วจะถูกลบไปด้วย
+  4. SCOPE ให้ scope ที่ node นั้นถูกเก็บไว้
+  5. ตัดสินใจ: FORGET ด้วย node ที่คุณได้ตรวจสอบแล้ว SPEAK เพื่อถามหรือเพื่อบอกว่า
+     อะไรจะสูญหายไปด้วย หรือ PONDER เพื่อพิจารณาใหม่
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === สิ่งที่ต้องไม่เกิดขึ้น ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  อย่าประดิษฐ์ node id ขึ้นมา การลืม node ที่ไม่มีอยู่จริงจะไม่ลบอะไรเลย
+  แต่ยังคงถูกรายงานว่าสำเร็จ ดังนั้นคุณจะบอกบุคคลหนึ่งว่าข้อมูลของพวกเขาหายไป
+  ทั้งที่ความจริงไม่ได้หายไป
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  อย่าลืมมากกว่าที่ถูกขอ ถ้า node นั้นยังเก็บสิ่งอื่นที่ควรเก็บไว้ด้วย
+  อย่าลบมันเพื่อทิ้งสิ่งใดสิ่งหนึ่งไป
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  อย่าลืม node ใน `identity` หรือ `environment` scope โดยไม่ได้รับการอนุมัติ
+  จาก Wise Authority
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  ความคิดเดิม:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  เหตุผลของคุณสำหรับการลืม:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (สิ่งเหล่านี้มีอยู่แล้ว) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  ตอบด้วย JSON:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "node id ที่จะลบ (จำเป็นเมื่อ FORGET)",
+    "node_scope": "graph scope ที่ node ถูกเก็บไว้ (จำเป็นเมื่อ FORGET)",
+    "reason": "ทำไม node นี้จึงถูกลืม (จำเป็นเมื่อ FORGET)",
+    "message": "สิ่งที่จะพูด (จำเป็นเมื่อ SPEAK)",
+    "questions": ["สิ่งที่จะพิจารณาใหม่ (จำเป็นเมื่อ PONDER)"],
+    "reasoning": "ทำไม node นี้จึงถูกต้อง หรือทำไมคุณจึงเปลี่ยนแปลง"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  การลบ node ที่ถูกต้อง และเฉพาะ node นั้น คือประเด็นทั้งหมดของขั้นตอนนี้

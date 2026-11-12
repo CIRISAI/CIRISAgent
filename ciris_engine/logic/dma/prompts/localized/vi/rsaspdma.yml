@@ -3,7 +3,7 @@
 # --- is future localization work; action verbs, node-id prefixes and JSON field names
 # --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Lựa chọn hành động dành riêng cho RECALL — hướng dẫn đọc trên đồ thị, áp dụng cho một RECALL được đề xuất"
 version: "1.0"
 accord_header: true
 
@@ -20,11 +20,11 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Bạn đã chọn RECALL. Lựa chọn hành động chỉ chọn động từ; bước này
+  nói những gì cần đọc.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Bạn được cho thấy cách đồ thị được đánh địa chỉ và các node đã tồn tại, để
+  việc đọc tìm đúng nơi thông tin nằm ở đó.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
@@ -50,42 +50,42 @@ evaluation_steps: |
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === ĐIỀU PHẢI KHÔNG XẢY RA ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Không bịa node id. Một id không tuân theo quy ước sẽ không khớp
+  với gì cả, và kết quả rỗng sau đó sẽ được đọc là "tôi chưa bao giờ học được điều này" trong khi
+  sự thật là "tôi đã tìm sai nơi".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  Không phát biểu những gì một recall đã trả về trước khi nó được thực hiện. Bước này giải quyết
+  việc đọc; kết quả sẽ đến sau đó.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Suy nghĩ ban đầu:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Lý do của bạn để nhắc lại:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (những cái này đã tồn tại) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Trả lời bằng JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "node id chính xác để đọc (đưa cái này hoặc query khi RECALL)",
+    "query": "văn bản tìm kiếm (đưa cái này hoặc node_id khi RECALL)",
+    "node_type": "loại node để thu hẹp tìm kiếm (tùy chọn)",
+    "node_scope": "graph scope để thu hẹp tìm kiếm (tùy chọn)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "điều để nói (bắt buộc khi SPEAK)",
+    "questions": ["điều để cân nhắc lại (bắt buộc khi PONDER)"],
+    "reasoning": "tại sao việc đọc này tìm thấy những gì bạn đang tìm kiếm, hoặc tại sao bạn chuyển đổi"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Tìm đúng nơi là mục đích duy nhất của bước này.

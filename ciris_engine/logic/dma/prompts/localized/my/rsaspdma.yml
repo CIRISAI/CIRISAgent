@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "ပြန်သတိရခြင်း-အထူးပြု လုပ်ဆောင်ချက်ရွေးချယ်မှု — graph ဖတ်ခြင်း လမ်းညွှန်ကို အဆိုပြုထားသော RECALL တစ်ခုအပေါ် အသုံးချထားသည်"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,78 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  သင်သည် RECALL ကို ရွေးချယ်ပြီးပါပြီ။ Action Selection သည် ကြိယာကိုသာ
+  ရွေးချယ်ခဲ့ပြီး၊ ဤအဆင့်သည် မည်သည့်အရာကို ဖတ်ရှုရမည်ကို ဖော်ပြသည်။
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Graph ကို မည်သို့လိပ်စာပေးသည်နှင့် မည်သည့် node များ ရှိနှင့်ပြီးဖြစ်သည်ကို
+  သင့်အားပြသထားသည့်အတွက် ဖတ်ရှုမှုသည် အချက်အလက်ရှိရာနေရာကို ကြည့်မည်
+  ဖြစ်သည်။
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  ပြန်သတိရခြင်းသည် ဤအစဉ်အတိုင်း ဖြေရှင်းသည်:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   အတိအကျရှာဖွေခြင်း။ အဆိုပါ node ရှိလျှင် ၎င်းကို ပြန်ပေးမည်ဖြစ်ပြီး၊
+              အခြားမည်သည့်အရာကိုမျှ ရှာဖွေမည်မဟုတ်။
+    query     memory ၏ စာသားရှာဖွေမှု တစ်ခု ဖြစ်ပြီး၊ node_type နှင့် scope
+              ပေးထားပါက ၎င်းတို့ဖြင့် ကျဉ်းမြှောင်းပေးသည်။ node_id မရှိသောအခါ
+              သို့မဟုတ် ၎င်းနှင့် မည်သည့်အရာမျှ မကိုက်ညီသောအခါ အသုံးပြုသည်။
 
-  Work through these in order:
+  အောက်ပါအဆင့်များကို အစဥ်လိုက် ဆောင်ရွက်ပါ:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. သင် မည်သည့်အရာကို ရှာနေသနည်း? ရိုးရှင်းစွာ ဖော်ပြထားသော တစ်ခုတည်းသော အရာ။
+  2. ၎င်းသည် သင့်ရှေ့တွင် ရှိနှင့်ပြီးလား? ပုဂ္ဂိုလ်တစ်ဦး၏ သိမ်းဆည်းထားသော
+     အချက်အလက်များသည် ၎င်းတို့၏ profile နှင့်အတူ ရောက်ရှိလာပြီး၊ စကားဝိုင်းသည်
+     သင့် context ထဲတွင် ရှိနေသည်။ သင်ဖတ်ရှုနိုင်ပြီးသားဖြစ်သော အရာသည် ပြန်သတိရရန်
+     မလိုအပ်ပါ။
+  3. ၎င်းသည် သင်အမည်ပေးနိုင်သော node တစ်ခုပေါ်တွင် ရှိသလား? CANDIDATE NODES
+     များအနက် တစ်ခုက ၎င်းကို ပါဝင်လျှင်၊ ထို id ကို node_id အဖြစ် ပေးပါ။
+  4. သို့မဟုတ်ပါက query တစ်ခု ပေးပါ: သင်လိုချင်သည့်အရာကို ဖော်ပြသော
+     စကားလုံးအနည်းဆုံးဖြင့်။ node_type သို့မဟုတ် node_scope ကို သိသည့်အခါမှသာ
+     ထည့်သွင်းပါ။
+  5. ဆုံးဖြတ်ပါ: စစ်ဆေးပြီးသော အချက်များဖြင့် RECALL ပြုလုပ်ရန်၊ ဖြေဆိုရန်
+     သို့မဟုတ် မေးရန် SPEAK ပြုလုပ်ရန်၊ သို့မဟုတ် ပြန်လည်စဉ်းစားရန် PONDER
+     ပြုလုပ်ရန်။
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === မည်သည်မျှ ဖြစ်ပွားပေးမည်မဟုတ် ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Node id ကို ဖန်တီးမထားပါနှင့်။ အကျင့်စဉ်ကို မလိုက်နာသော id သည် မည်သည့်အရာနှင့်မျှ
+  မကိုက်ညီဘဲ၊ ရလဒ်ဗလာသည် "ကျွန်ုပ် ဤအရာကို ဘယ်တော့မှ မသင်ယူခဲ့ပါ" ဟူ၍
+  ဖတ်ရှုရမည်ဖြစ်သော်လည်း အမှန်တကယ်မှာ "ကျွန်ုပ်သည် မှားသောနေရာတွင်
+  ရှာဖွေခဲ့သည်" ဖြစ်သည်။
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  ပြန်သတိရမှုမပြုလုပ်မီ ၎င်း၏ ရလဒ်ကို ဖော်ပြမထားပါနှင့်။ ဤအဆင့်သည်
+  ဖတ်ရှုမှုကို ဦးတည်သည်; ရလဒ်သည် ထို့နောက်မှ ရောက်ရှိလာသည်။
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  မူလအတွေးအခေါ်:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  ပြန်သတိရရန်ခွင့်ပြုလုပ်ချက်ဆိုင်ရာ သင့်လျင်းပွားချက်:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (ဤ node များ ရှိနှင့်ပြီးဖြစ်သည်) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON အားဖြင့် အဆိုပြုသည်:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "ဖတ်ရှုရန် အတိအကျ node id (RECALL တွင် ဤအရာ သို့မဟုတ် query ကို ပေးပါ)",
+    "query": "ရှာဖွေရန် စာသား (RECALL တွင် ဤအရာ သို့မဟုတ် node_id ကို ပေးပါ)",
+    "node_type": "ရှာဖွေမှုကို ကျဉ်းမြှောင်းရန် node အမျိုးအစား (ရွေးချယ်နိုင်သည်)",
+    "node_scope": "ရှာဖွေမှုကို ကျဉ်းမြှောင်းရန် graph scope (ရွေးချယ်နိုင်သည်)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "ဖော်ပြသည့် အရာ (SPEAK နှင့်အတူ လိုအပ်သည်)",
+    "questions": ["ပြန်လည်စဉ်းစားမည့် အရာ (PONDER နှင့်အတူ လိုအပ်သည်)"],
+    "reasoning": "ဤဖတ်ရှုမှုက သင်ရှာဖွေနေသည့်အရာကို အဘယ်ကြောင့် ရှာတွေ့သည်၊ သို့မဟုတ် အဘယ်ကြောင့်သင်ကူးပြောင်းခဲ့သည်"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  မှန်ကန်သောနေရာတွင် ရှာဖွေခြင်းသည် ဤအဆင့်၏ အဓိကရည်ရွယ်ချက် ဖြစ်သည်။

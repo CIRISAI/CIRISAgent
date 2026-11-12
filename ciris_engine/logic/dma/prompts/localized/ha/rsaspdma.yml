@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Zaɓin Aiki na musamman don tunawa — jagorar karanta Zane na alaƙa, wanda aka yi amfani da shi ga shawarar RECALL guda ɗaya da aka gabatar"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,72 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Ka zaɓi RECALL. Zaɓin Aiki ya zaɓi kalmar aikin ne kawai; wannan mataki
+  yana faɗi abin da za a karanta.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  An nuna maka yadda ake yunakawa Zane na alaƙa da sakon da suke nan tuni, domin
+  karantawar ta duba inda bayanin yake.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  RECALL yana warwarewa a wannan tsari:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   bincike daidai ne. Idan kumburin yana nan, za a mayar da shi, kuma babu
+              wani abu da za a nema kuma.
+    query     bincike na rubutu a Ƙwaƙwalwa, wanda za a taƙaita ta node_type da node_scope idan kuka
+              bayar da su. Ana amfani da shi lokacin babu node_id, ko kuma bai dace da komai ba.
 
-  Work through these in order:
+  Wuce waɗannan juna-juna:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. MENE NE kuke nema? Abu ɗaya, a faɗi a sarari.
+  2. SHIN TUNI YANA GABAN KU NE? Bayanan da aka ajiye na mutum suna zuwa tare da
+     bayaninsa, kuma tattaunawar tana cikin mahallinku. Abin da kuka riga kuka iya karantawa
+     ba ya buƙatar RECALL.
+  3. SHIN YANA KAN KUMBURIN DA ZA KU IYA SUNANTA? Idan ɗaya daga cikin CANDIDATE NODES yana riƙe da shi, bayar
+     da wannan id a matsayin node_id.
+  4. IDAN HAKA BA NE, bayar da query: mafi ƙarancin kalmomi da suke bayyana abin da kuke so. Ƙara
+     node_type ko node_scope kawai idan kun san su.
+  5. Yanke shawara: RECALL tare da abin da kuka bincika, SPEAK don amsa ko tambaya, ko
+     PONDER don sake yin tunani.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === Abin da ba zu kaɗa ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Kada ka gina ID na sako. ID wanda ba ya biya ka'ida ba zai dace da
+  komai ba, kuma sakamako mara komai sai ya zama kamar "Ban taɓa koyon wannan ba" alhali
+  gaskiyar ita ce "Na nemi a wurin da bai dace ba".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  Kada ka faɗi abin da RECALL ya mayar kafin ya gudana. Wannan mataki yana magana a kan
+  karantawa; sakamakon yana zuwa bayan haka.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Tunanin farko:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Dalilin ka na tunawa:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === SAKON DA KE YANA (waɗannan sun kasance jiya) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Amsa tare da JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "sako id daidai don karantawa (bayar da wannan ko query lokacin RECALL)",
+    "query": "rubutun bincike (bayar da wannan ko node_id lokacin RECALL)",
+    "node_type": "nawa sako don taƙaita bincike (na zaɓi)",
+    "node_scope": "yankin Zane na alaƙa don taƙaita bincike (na zaɓi)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "abin da za a faɗi (yana buƙata lokacin SPEAK)",
+    "questions": ["abin da za a sake yin tunani a kai (yana buƙata lokacin PONDER)"],
+    "reasoning": "dalilin da ya sa wannan karatu ya samo abin da kake nema, ko dalilin sauyawa"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Neman a wurin da ya dace shine ainihin manufar wannan mataki.

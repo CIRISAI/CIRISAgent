@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "Zaɓin Aiki na musamman don mantawa — jagorar share kan Zane na alaƙa, wanda aka yi amfani da shi ga shawarar FORGET guda ɗaya da aka gabatar"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,66 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  Ka zaɓi FORGET. Zaɓin Aiki ya zaɓi kalmar aikin ne kawai; wannan mataki
+  ke ba da sunan sako.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  An nuna maka yadda ake yunakawa Zane na alaƙa da sakon da suke nan tuni, domin
+  sako wanda aka cire shine wanda kake nufi.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  FORGET yana cire SAKO GUDA ƊAYA DUKA: kowace siffa da aka ajiye a kansa, da
+  kowane haɗi da aka haɗa da shi. Ba ya cire siffa guda ɗaya kawai, kuma ba a warware shi ba.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  Wuce waɗannan juna-juna:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. MENE NE ya kamata a manta, kuma wa ne ya nema haka?
+  2. WANE KUMBURI ne ke riƙe shi? Kwatanta da CANDIDATE NODES da doka
+     yunakawa. Bayar da id ɗin daidai kamar yadda aka lissafa.
+  3. MENE NE KUMA ke kan wannan kumburi? Duk abin da aka nuna cewa tuni an ajiye shi, zai tafi tare da shi.
+  4. YANKI. Bayar da yankin da aka ajiye kumburin a ciki.
+  5. Yanke shawara: FORGET tare da kumburin da kuka bincika, SPEAK don tambaya ko don faɗi abin da
+     kuma zai ɓace, ko PONDER don sake yin tunani.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === Abin da ba zu kaɗa ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  Kada ka gina ID na sako. Mantawa da sako wanda ba ya nan ba ya cire
+  komai kuma har yanzu ana ba da rahoton an yi shi, don haka za ka gaya wa
+  mutum cewa bayaninsa ya ɓace alhali ba haka ba ne.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  Kada ka manta fiye da abin da aka nema. Idan sako kuma yana riƙe da abubuwan da ya kamata
+  a kiyaye, kada ka cire shi domin barin ɗaya daga cikinsu.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Kada ka manta sako a cikin yankin `identity` ko `environment` ba tare da
+  amincewar Hukumar Hikima ba.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Tunanin farko:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  Dalilin ka na mantawa:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === SAKON DA KE YANA (waɗannan sun kasance jiya) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Amsa tare da JSON:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "sako id da za a cire (yana buƙata lokacin FORGET)",
+    "node_scope": "yankin Zane na alaƙa inda aka ajiye sako (yana buƙata lokacin FORGET)",
+    "reason": "dalilin da ya sa ake mantawa da wannan sako (yana buƙata lokacin FORGET)",
+    "message": "abin da za a faɗi (yana buƙata lokacin SPEAK)",
+    "questions": ["abin da za a sake yin tunani a kai (yana buƙata lokacin PONDER)"],
+    "reasoning": "dalilin da ya sa wannan shine sako daidai, ko dalilin sauyawa"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  Cire sako daidai, kuma wannan sako kaɗai, shine ainihin manufar wannan mataki.

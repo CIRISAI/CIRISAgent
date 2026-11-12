@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "நினைவுபடுத்தல்-குறிப்பிட்ட செயல் தேர்வு — வரைபடம்-வாசிக்கும் வழிகாட்டி, ஒரு முன்மொழியப்பட்ட RECALL-க்குப் பயன்படுத்தப்பட்டது"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,72 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  நீ RECALL தேர்ந்தெடுத்தாய். செயல் தேர்வு வினைச்சொல்லை மட்டும் தேர்ந்தெடுத்தது; இந்த படி
+  எதை வாசிக்க வேண்டும் என்று கூறுகிறது.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  வரைபடம் எவ்வாறு முகவரி செய்யப்படுகிறது மற்றும் ஏற்கனவே இருக்கும் முனைகள் என்ன
+  என்பது உனக்குக் காட்டப்படுகிறது, எனவே வாசிப்பு தகவல் இருக்கும் இடத்தைப் பார்க்கிறது.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  ஒரு நினைவுபடுத்தல் இந்த வரிசையில் செயல்படுகிறது:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   ஒரு துல்லியமான தேடல். அந்த முனை இருந்தால் அது திருப்பப்படும், வேறு
+              எதுவும் தேடப்படாது.
+    query     node_type மற்றும் scope மூலம் குறுகலாக்கப்பட்ட நினைவக உரைத் தேடல், நீங்கள்
+              அவற்றைக் கொடுக்கும்போது. node_id இல்லாதபோது, அல்லது அது எதையும் பொருத்தாதபோது பயன்படுத்தப்படும்.
 
-  Work through these in order:
+  இவைகளை வரிசையில் வேலை செய்யவும்:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. நீங்கள் எதைத் தேடுகிறீர்கள்? ஒரே ஒரு விஷயம், தெளிவாகக் கூறப்பட்டது.
+  2. அது ஏற்கனவே உங்களுக்கு முன்னால் இருக்கிறதா? ஒரு நபரின் சேமிக்கப்பட்ட உண்மைகள் அவர்களின்
+     சுயவிவரத்துடன் வருகின்றன, மற்றும் உரையாடல் உங்கள் சூழலில் உள்ளது. நீங்கள் ஏற்கனவே வாசிக்கக்கூடியது
+     நினைவுபடுத்தல் தேவையில்லை.
+  3. அது நீங்கள் பெயரிடக்கூடிய ஒரு முனையில் உள்ளதா? CANDIDATE NODES-இல் ஒன்று அதை
+     வைத்திருந்தால், அந்த அடையாளத்தை node_id ஆக கொடுக்கவும்.
+  4. இல்லையெனில் ஒரு query கொடுக்கவும்: நீங்கள் விரும்புவதை அடையாளம் காணும் குறைந்தபட்ச
+     வார்த்தைகள். நீங்கள் அவற்றை அறிந்தால் மட்டும் node_type அல்லது node_scope சேர்க்கவும்.
+  5. நிச்சயிக்கவும்: நீங்கள் சரிபார்த்ததுடன் RECALL, பதிலளிக்க அல்லது கேட்க SPEAK, அல்லது
+     மறுபரிசீலனை செய்ய PONDER.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === எது நடக்க வேண்டாம் ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  ஒரு முனை அடையாளம் கற்பனை செய்ய வேண்டாம். வழுமொழியைப் பின்பற்றாத ஒரு அடையாளம்
+  எதையும் பொருத்தாது, மற்றும் ஒரு வெற்றுப் பலன் பிறகு "நான் இதை ஒருபோதும் கற்றதில்லை"
+  என்று படிக்கப்படும், உண்மை "நான் தவறான இடத்தில் தேடினேன்" என்றிருக்கும்போது.
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  ஒரு நினைவுபடுத்தல் இயங்குவதற்கு முன் அது என்ன திருப்பியது என்று கூற வேண்டாம். இந்த படி
+  வாசிப்பை முகவரி செய்கிறது; பலன் பிறகு வருகிறது.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  அசல் சிந்தனை:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  நினைவுபடுத்துவதற்கான உங்கள் நியாயம்:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE முனைகள் (இவை ஏற்கனவே உள்ளன) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON உடன் பதிலளிக்கவும்:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "வாசிக்க வேண்டிய துல்லியமான முனை அடையாளம் (RECALL போது இதை அல்லது query கொடுக்கவும்)",
+    "query": "தேடல் உரை (RECALL போது இதை அல்லது node_id கொடுக்கவும்)",
+    "node_type": "தேடலை குறுகலாக்க முனை ஒருங்கிணைப்பு (விருப்பம்)",
+    "node_scope": "தேடலை குறுகலாக்க வரைபட நோக்கம் (விருப்பம்)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "சொல்லலாம் (SPEAK போது தேவை)",
+    "questions": ["மீண்டும் கருத்தடங்க (PONDER போது தேவை)"],
+    "reasoning": "இந்த வாசிப்பு நீ தேடுவதை ஏன் கண்டுபிடிக்கிறது, அல்லது நீ ஏன் மாற்றாய்"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  சரியான இடத்தில் தேடுவதே இந்த படியின் முழு நோக்கம்.

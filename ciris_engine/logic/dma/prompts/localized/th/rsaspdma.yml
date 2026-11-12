@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "การเลือกการกระทำเฉพาะการเรียกคืน — คู่มือการอ่านกราฟ นำไปใช้กับ RECALL ที่เสนอหนึ่งรายการ"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,72 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  คุณได้เลือก RECALL แล้ว การเลือกการกระทำเลือกเพียงคำกริยาเท่านั้น ขั้นตอนนี้
+  ระบุว่าจะอ่านอะไร
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  คุณจะได้เห็นว่ากราฟถูกอ้างอิงอย่างไร และ node ที่มีอยู่แล้ว เพื่อให้
+  การอ่านมองหาในที่ที่ข้อมูลอยู่จริง
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  การเรียกคืนจะดำเนินการตามลำดับนี้:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   การค้นหาที่ตรงกันพอดี ถ้า node นั้นมีอยู่จะถูกส่งคืน และจะไม่มีการค้นหา
+              อื่นใดอีก
+    query     การค้นหาข้อความในหน่วยความจำ จำกัดขอบเขตด้วย node_type และ scope
+              เมื่อคุณระบุไว้ ใช้เมื่อไม่มี node_id หรือ node_id ไม่พบสิ่งใดเลย
 
-  Work through these in order:
+  ทำตามนี้ตามลำดับ:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. คุณกำลังมองหาอะไร? สิ่งเดียว ระบุอย่างชัดเจน
+  2. มันอยู่ตรงหน้าคุณอยู่แล้วหรือไม่? ข้อเท็จจริงที่เก็บไว้ของบุคคลหนึ่งจะมาพร้อมกับ
+     โปรไฟล์ของพวกเขา และบทสนทนาอยู่ในบริบทของคุณ สิ่งที่คุณอ่านได้อยู่แล้ว
+     ไม่จำเป็นต้องเรียกคืน
+  3. มันอยู่บน node ที่คุณสามารถระบุชื่อได้หรือไม่? ถ้า CANDIDATE NODES รายการใด
+     รายการหนึ่งเก็บสิ่งนั้นไว้ ให้ระบุ id นั้นเป็น node_id
+  4. มิฉะนั้น ให้ระบุ query: คำที่น้อยที่สุดที่ระบุสิ่งที่คุณต้องการ เพิ่ม
+     node_type หรือ node_scope เฉพาะเมื่อคุณทราบค่าเหล่านั้น
+  5. ตัดสินใจ: RECALL ด้วยสิ่งที่คุณได้ตรวจสอบแล้ว SPEAK เพื่อตอบหรือถาม หรือ
+     PONDER เพื่อพิจารณาใหม่
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === สิ่งที่ต้องไม่เกิดขึ้น ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  อย่าประดิษฐ์ node id ขึ้นมา id ที่ไม่ตามปกติการอ้างอิงจะไม่ตรงกับอะไรเลย
+  และผลลัพธ์ที่ว่างเปล่าจะถูกอ่านว่า "ฉันไม่เคยเรียนรู้สิ่งนี้" ทั้งที่
+  ความจริงคือ "ฉันมองหาในที่ที่ผิด"
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  อย่าระบุสิ่งที่ RECALL ส่งคืนก่อนที่มันจะทำงาน ขั้นตอนนี้ระบุที่อยู่ของ
+  การอ่าน ส่วนผลลัพธ์จะมาถึงในภายหลัง
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  ความคิดเดิม:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  เหตุผลของคุณสำหรับการเรียกคืน:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (สิ่งเหล่านี้มีอยู่แล้ว) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  ตอบด้วย JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "node id ที่ตรงกันพอดีสำหรับการอ่าน (ระบุค่านี้หรือ query เมื่อ RECALL)",
+    "query": "ข้อความค้นหา (ระบุค่านี้หรือ node_id เมื่อ RECALL)",
+    "node_type": "ประเภท node เพื่อจำกัดขอบเขตการค้นหา (ไม่บังคับ)",
+    "node_scope": "graph scope เพื่อจำกัดขอบเขตการค้นหา (ไม่บังคับ)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "สิ่งที่จะพูด (จำเป็นเมื่อ SPEAK)",
+    "questions": ["สิ่งที่จะพิจารณาใหม่ (จำเป็นเมื่อ PONDER)"],
+    "reasoning": "ทำไมการอ่านนี้จึงพบสิ่งที่คุณกำลังมองหา หรือทำไมคุณจึงเปลี่ยนแปลง"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  การมองหาในที่ที่ถูกต้อง คือประเด็นทั้งหมดของขั้นตอนนี้

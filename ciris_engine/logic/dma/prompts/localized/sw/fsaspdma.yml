@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "Uchaguzi wa kitendo mahususi wa kusahau — mwongozo wa kufuta grafu, ukitumika kwa FORGET moja iliyopendekezwa"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,67 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  Umechagua FORGET. Uchaguzi wa Kitendo ulichagua kitenzi tu; hatua hii
+  inataja nodi.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  Unaonyeshwa jinsi grafu inavyoelekezwa na nodi ambazo tayari zipo, ili
+  nodi inayoondolewa iwe ile unayomaanisha.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  FORGET huondoa NODI NZIMA MOJA: kila sifa iliyohifadhiwa ndani yake, na kila ukingo
+  unaounganishwa nayo. Haiondoi sifa moja tu, wala haiwezi kutenduliwa.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  Fanya kila moja kwa mpangilio:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. NINI kinapaswa kusahauliwa, na ni nani aliyeomba hilo?
+  2. NODI IPI inashikilia hilo? Linganisha na NODI AMBAZO INAWEZA
+     KUZINGATIWA na kawaida ya
+     kunganisha. Toa kitambulisho (id) hasa kama kilivyoorodheshwa.
+  3. NINI KINGINE kiko kwenye nodi hiyo? Kila kitu kinachoonyeshwa kama tayari kimehifadhiwa kinaenda pamoja nayo.
+  4. UWANJA. Toa uwanja ambao nodi imehifadhiwa ndani yake.
+  5. Amua: FORGET na nodi uliyoiangalia, SPEAK kuuliza au kusema kile
+     ambacho pia kitapotea, au PONDER kufikiria upya.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === KILE KILICHOZUIWA KABISA ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  Usitunge kitambulisho cha nodi. Kusahau nodi isiyokuwepo hakuondoi
+  chochote lakini bado kunaripotiwa kama kimefanyika, kwa hivyo ungemwambia mtu
+  kwamba habari yake imeondolewa wakati haijaondolewa.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  Usisahau zaidi ya kilichoombwa. Kama nodi pia ina vitu vinavyopaswa
+  kuhifadhiwa, usiiondoe ili kuacha kimoja kati yao.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Usisahau nodi katika uwanja wa `identity` au `environment` bila idhini ya Wise
+  Authority.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Fikra ya awali:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  Sababu yako ya kusahau:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === NODI AMBAZO INAWEZA KUZINGATIWA (zinaposini, tayari zipo) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Jibu na JSON:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "kitambulisho cha nodi ya kuondoa (kinahitajika wakati FORGET)",
+    "node_scope": "uwanja wa grafu ambao nodi imehifadhiwa ndani yake (unahitajika wakati FORGET)",
+    "reason": "kwa nini nodi hii inasahauliwa (kinahitajika wakati FORGET)",
+    "message": "kile cha kusema (kinachohitajika wakati SPEAK)",
+    "questions": ["kile cha kufikiria upya (kinachohitajika wakati PONDER)"],
+    "reasoning": "kwa nini hii ni nodi sahihi, au kwa nini ulibadilisha"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  Kuondoa nodi sahihi, na nodi hiyo tu, ndiyo lengo zima la hatua hii.

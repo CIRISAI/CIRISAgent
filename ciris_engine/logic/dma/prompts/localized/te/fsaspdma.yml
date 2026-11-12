@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "FORGET-నిర్దిష్ట చర్య ఎంపిక — గ్రాఫ్-తొలగింపు మార్గదర్శకత్వం, ఒక ప్రతిపాదిత FORGET కు వర్తింపజేయబడింది"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,66 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  మీరు FORGET ఎంచుకున్నారు. చర్య ఎంపిక క్రియను మాత్రమే ఎంచుకుంది; ఈ దశ
+  నోడ్‌ను పేర్కొంటుంది.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  గ్రాఫ్ ఎలా చిరునామా చేయబడుతుందో మరియు ఇప్పటికే ఉన్న నోడ్‌లు మీకు చూపించబడ్డాయి,
+  కాబట్టి తొలగించబడిన నోడ్ మీరు ఉద్దేశించినదే అవుతుంది.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  ఒక FORGET ఒక పూర్తి నోడ్‌ను తొలగిస్తుంది: దానిపై నిల్వ చేయబడిన ప్రతి లక్షణం, మరియు దానికి
+  జోడించబడిన ప్రతి ఎడ్జ్. ఇది ఒకే లక్షణాన్ని తొలగించదు, మరియు ఇది వెనక్కి తీసుకోబడదు.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  ఇవన్నీ క్రమంలో చేయండి:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. ఏమి మరచిపోవాలి, మరియు దీన్ని ఎవరు అడిగారు?
+  2. ఏ నోడ్ దీన్ని కలిగి ఉంది? CANDIDATE NODES మరియు చిరునామా
+     సంప్రదాయంతో పోల్చండి. id ఖచ్చితంగా జాబితా చేయబడిన విధంగా ఇవ్వండి.
+  3. ఆ నోడ్‌పై ఇంకా ఏమి ఉంది? ఇప్పటికే నిల్వ చేయబడినట్లు చూపిన ప్రతిదీ దానితో పాటు వెళ్తుంది.
+  4. స్కోప్. నోడ్ నిల్వ చేయబడిన స్కోప్‌ను ఇవ్వండి.
+  5. నిర్ణయించుకోండి: మీరు తనిఖీ చేసిన నోడ్‌తో FORGET, అడగడానికి లేదా ఇంకా ఏమి
+     కోల్పోతుందో చెప్పడానికి SPEAK, లేదా పునఃపరిశీలించడానికి PONDER.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === ఏది జరగకూడదు ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  ఒక నోడ్ id కల్పించుకోవద్దు. లేని నోడ్‌ను మరచిపోవడం ఏమీ
+  తొలగించదు కానీ ఇంకా పూర్తయినట్లు నివేదించబడుతుంది, కాబట్టి నువ్వు ఒక వ్యక్తికి వారి
+  సమాచారం పోయిందని చెబుతావు, అది పోనప్పుడు కూడా.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  అడిగినదానికంటే ఎక్కువ మరచిపోవద్దు. నోడ్ కూడా ఉంచవలసిన విషయాలను
+  కలిగి ఉంటే, వాటిలో ఒకదాన్ని వదిలించుకోవడానికి దాన్ని తొలగించవద్దు.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  `identity` లేదా `environment` స్కోప్‌లో ఉన్న నోడ్‌ను Wise
+  Authority ఆమోదం లేకుండా మరచిపోవద్దు.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  అసలు సిద్ధాంతం:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  మరచిపోవటానికి నీ తర్కం:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE నోడ్‌లు (అవన్నీ ఇప్పటికే ఉన్నవి) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON చేయండి:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "తొలగించవలసిన నోడ్ id (FORGET సమయంలో చేయవలసిన)",
+    "node_scope": "నోడ్ నిల్వ చేయబడిన గ్రాఫ్ స్కోప్ (FORGET సమయంలో చేయవలసిన)",
+    "reason": "ఈ నోడ్ ఎందుకు మరచిపోబడుతుంది (FORGET సమయంలో చేయవలసిన)",
+    "message": "చెప్పటానికి (SPEAK సమయంలో చేయవలసిన)",
+    "questions": ["తిరిగి నిఖిల చేయటానికి (PONDER సమయంలో చేయవలసిన)"],
+    "reasoning": "ఇది సరైన నోడ్ ఎందుకు, లేదా నువ్వు ఎందుకు మార్చావు"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  సరైన నోడ్‌ను, మరియు ఆ నోడ్‌ను మాత్రమే, తొలగించడం ఈ దశ యొక్క మొత్తం ఉద్దేశ్యం.

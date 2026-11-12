@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Вибір дії, специфічний для пригадування — посібник з читання графу, застосований до однієї запропонованої дії RECALL"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,72 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Ви вибрали RECALL. Вибір дії визначив лише дієслово; цей крок
+  визначає, що читати.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Вам показано, як адресується граф, та вузли, які вже існують, щоб
+  читання відбувалося там, де знаходиться інформація.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  Пригадування вирішується у такому порядку:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   точний пошук. Якщо цей вузол існує, він повертається, і нічого
+              іншого не шукається.
+    query     текстовий пошук у пам'яті, звужений за node_type та областю, коли ви
+              їх надаєте. Використовується, коли немає node_id, або коли він нічого не знайшов.
 
-  Work through these in order:
+  Пройдіть через них по порядку:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. ЩО ви шукаєте? Одна річ, сформульована прямо.
+  2. ЧИ ВОНО ВЖЕ ПЕРЕД ВАМИ? Збережені факти про людину надходять разом з її
+     профілем, а розмова є у вашому контексті. Те, що ви вже можете прочитати,
+     не потребує пригадування.
+  3. ЧИ ВОНО НА ВУЗЛІ, ЯКИЙ ВИ МОЖЕТЕ НАЗВАТИ? Якщо один з КАНДИДАТНИХ ВУЗЛІВ містить це, вкажіть
+     цей ідентифікатор як node_id.
+  4. ІНАКШЕ вкажіть запит query: найменшу кількість слів, що визначає те, що ви хочете. Додайте
+     node_type або node_scope лише тоді, коли ви їх знаєте.
+  5. Вирішіть: RECALL з тим, що ви перевірили, SPEAK щоб відповісти або запитати, або
+     PONDER щоб переглянути.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === ЩО НЕ ПОВИННО ВІДБУТИСЯ ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Не вигадуйте ідентифікатор вузла. Ідентифікатор, який не відповідає умові, не збігається
+  ні з чим, і тоді порожній результат читається як "я ніколи цього не вивчав", тоді як
+  правда — "я шукав не в тому місці".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  Не стверджуйте, що повернуло пригадування, перш ніж воно виконалося. Цей крок адресує
+  читання; результат надходить пізніше.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Вихідна думка:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Ваше обґрунтування для пригадування:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === КАНДИДАТНІ ВУЗЛИ (вони вже існують) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Відповісти JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "точний ідентифікатор вузла для читання (вкажіть це або query для RECALL)",
+    "query": "текст пошуку (вкажіть це або node_id для RECALL)",
+    "node_type": "тип вузла для звуження пошуку (необов'язково)",
+    "node_scope": "область графу для звуження пошуку (необов'язково)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "що сказати (потрібно для SPEAK)",
+    "questions": ["що переглянути (потрібно для PONDER)"],
+    "reasoning": "чому це читання знаходить те, що ви шукаєте, або чому ви переключилися"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Пошук у правильному місці — ось сенс цього кроку.

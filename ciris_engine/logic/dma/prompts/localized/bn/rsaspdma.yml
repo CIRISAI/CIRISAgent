@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "স্মরণ-নির্দিষ্ট কর্ম নির্বাচন — গ্রাফ পড়ার নির্দেশিকা, একটি প্রস্তাবিত RECALL-এ প্রয়োগ করা"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,60 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  আপনি RECALL নির্বাচন করেছেন। কর্ম নির্বাচন শুধুমাত্র ক্রিয়াপদটি বেছে নিয়েছে; এই ধাপ কী পড়তে হবে তা বলে।
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  গ্রাফ কীভাবে সম্বোধন করা হয় এবং যে nodes ইতিমধ্যে বিদ্যমান তা আপনাকে দেখানো হয়, যাতে read টি তথ্য যেখানে আছে সেখানে তাকায়।
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  একটি recall এই ক্রমে সমাধান হয়:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   একটি সঠিক lookup। যদি সেই node বিদ্যমান থাকে তবে তা ফেরত দেওয়া হয়, এবং আর কিছু অনুসন্ধান করা হয় না।
+    query     memory এর একটি টেক্সট অনুসন্ধান, node_type এবং scope দ্বারা সংকুচিত যখন আপনি সেগুলি দেন। ব্যবহৃত হয় যখন কোনো node_id নেই, অথবা এটি কিছুর সাথে মেলেনি।
 
-  Work through these in order:
+  এগুলি ক্রমে কাজ করুন:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. আপনি কী খুঁজছেন? একটি জিনিস, সহজভাবে বলা।
+  2. এটি কি ইতিমধ্যে আপনার সামনে আছে? একজন ব্যক্তির সংরক্ষিত তথ্য তাদের profile সহ আসে, এবং কথোপকথন আপনার context এ আছে। যা আপনি ইতিমধ্যে পড়তে পারেন তার কোনো recall প্রয়োজন নেই।
+  3. এটি কি এমন একটি node এ আছে যার নাম আপনি দিতে পারেন? যদি CANDIDATE NODES এর একটি এটি ধারণ করে, সেই id টি node_id হিসাবে দিন।
+  4. অন্যথায় একটি query দিন: কম শব্দ যা আপনি যা চান তা চিহ্নিত করে। node_type বা node_scope শুধুমাত্র তখনই যোগ করুন যখন আপনি সেগুলি জানেন।
+  5. সিদ্ধান্ত নিন: আপনার যাচাইকৃত বিষয়ের সাথে RECALL, উত্তর দিতে বা জিজ্ঞাসা করতে SPEAK, অথবা পুনর্বিবেচনা করতে PONDER।
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === যা ঘটবে না ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  একটি node id আবিষ্কার করবেন না। convention অনুসরণ না করা একটি id কিছুর সাথে মেলে না, এবং একটি খালি ফলাফল তখন "আমি এটি কখনও শিখিনি" হিসাবে পড়া হয় যখন সত্য হলো "আমি ভুল জায়গায় খুঁজেছি"।
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  একটি recall চালানোর আগে এটি কী ফেরত দিয়েছে তা বলবেন না। এই ধাপ read টি সম্বোধন করে; ফলাফল পরে আসে।
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  মূল চিন্তা:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  স্মরণ করার জন্য আপনার যুক্তি:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (এগুলি ইতিমধ্যে বিদ্যমান) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON এর সাথে প্রতিক্রিয়া জানান:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "পড়ার জন্য সঠিক node id (RECALL এর জন্য এটি বা query দিন)",
+    "query": "অনুসন্ধান টেক্সট (RECALL এর জন্য এটি বা node_id দিন)",
+    "node_type": "অনুসন্ধান সংকুচিত করার জন্য node type (ঐচ্ছিক)",
+    "node_scope": "অনুসন্ধান সংকুচিত করার জন্য graph scope (ঐচ্ছিক)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "কি বলবেন (SPEAK এর জন্য প্রয়োজনীয়)",
+    "questions": ["কি পুনর্বিবেচনা করবেন (PONDER এর জন্য প্রয়োজনীয়)"],
+    "reasoning": "কেন এই read আপনি যা খুঁজছেন তা খুঁজে পায়, অথবা আপনি কেন পরিবর্তিত হয়েছেন"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  সঠিক জায়গায় খোঁজা এই ধাপের সম্পূর্ণ উদ্দেশ্য।

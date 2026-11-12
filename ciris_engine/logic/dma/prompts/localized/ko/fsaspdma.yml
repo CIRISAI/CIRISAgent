@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "FORGET 전용 작업 선택 — 그래프 삭제 가이드, 하나의 제안된 FORGET에 적용됩니다"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,57 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  당신은 FORGET을 선택했습니다. 작업 선택은 동사만 선택했습니다; 이 단계는 노드를 지정합니다.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  그래프가 어떻게 주소 지정되는지와 이미 존재하는 노드가 표시되므로, 제거되는 노드가 당신이 의도한 바로 그 노드가 됩니다.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  FORGET는 노드 하나 전체를 제거합니다: 그 노드에 저장된 모든 속성과 그것에 연결된 모든 엣지가 포함됩니다. 단일 속성만 제거하지 않으며, 되돌릴 수 없습니다.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  순서대로 이 단계들을 작업하십시오:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. 무엇을 잊어야 하며, 누가 그것을 요청했습니까?
+  2. 어느 노드가 그것을 가지고 있습니까? 후보 노드 및 주소 지정 규약과 비교하십시오. 목록에 있는 그대로 정확히 id를 제시하십시오.
+  3. 그 노드에 그 밖에 무엇이 있습니까? 이미 저장된 것으로 표시된 모든 것이 함께 사라집니다.
+  4. 범위. 노드가 저장되어 있는 범위를 제시하십시오.
+  5. 결정: 확인한 노드로 FORGET, 함께 사라질 것을 묻거나 말하려면 SPEAK, 또는 재고려하려면 PONDER.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === 일어나면 안 되는 것 ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  노드 id를 만들어내지 마십시오. 존재하지 않는 노드를 잊으면 아무것도 제거되지 않지만 완료된 것으로 보고되므로, 당신은 실제로는 그렇지 않은데도 그 사람의 정보가 사라졌다고 말하게 됩니다.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  요청받은 것보다 더 많이 잊지 마십시오. 그 노드가 유지되어야 할 것들도 가지고 있다면, 그중 하나를 삭제하기 위해 그것을 제거하지 마십시오.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Wise Authority 승인 없이 `identity` 또는 `environment` 범위의 노드를 잊지 마십시오.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  원래 생각:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  잊는 이유:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === 후보 노드(이미 존재함) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON으로 응답하십시오:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "제거할 노드 id(FORGET일 때 필수)",
+    "node_scope": "노드가 저장된 그래프 범위(FORGET일 때 필수)",
+    "reason": "이 노드를 잊는 이유(FORGET일 때 필수)",
+    "message": "말할 것(SPEAK일 때 필수)",
+    "questions": ["재고려할 것(PONDER일 때 필수)"],
+    "reasoning": "이 노드가 올바른 이유, 또는 왜 전환했는지"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  올바른 노드, 오직 그 노드만을 제거하는 것이 이 단계의 전체 목적입니다.

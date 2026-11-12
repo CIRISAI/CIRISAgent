@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "Vergessen-spezifische Aktionsauswahl — der graphlöschende Leitfaden, angewendet auf ein vorgeschlagenes FORGET"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,67 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  Sie haben FORGET ausgewählt. Die Aktionsauswahl hat nur das Verb gewählt; dieser
+  Schritt benennt den Knoten.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  Ihnen wird gezeigt, wie der Graph adressiert wird und welche Knoten bereits
+  existieren, damit der entfernte Knoten der gemeinte ist.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  Ein FORGET entfernt EINEN GANZEN KNOTEN: jedes auf ihm gespeicherte Attribut und
+  jede mit ihm verbundene Kante. Es entfernt kein einzelnes Attribut, und es wird
+  nicht rückgängig gemacht.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  Arbeite dich durch diese der Reihe nach:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. WAS soll vergessen werden, und wer hat darum gebeten?
+  2. WELCHER KNOTEN enthält es? Vergleichen Sie es mit KANDIDATENKNOTEN und der
+     Adressierungskonvention. Geben Sie die Kennung genau so an, wie sie aufgeführt ist.
+  3. WAS SONST steht auf diesem Knoten? Alles, was bereits als gespeichert angezeigt wird, geht damit verloren.
+  4. UMFANG. Geben Sie den Umfang an, in dem der Knoten gespeichert ist.
+  5. Entscheiden Sie: FORGET mit dem Knoten, den Sie überprüft haben, SPEAK, um zu fragen
+     oder zu sagen, was sonst noch verloren ginge, oder PONDER, um zu überdenken.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === WAS NICHT PASSIEREN DARF ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  Erfinden Sie keine Knotenkennzeichnung. Das Vergessen eines Knotens, der nicht existiert,
+  entfernt nichts und wird dennoch als erledigt gemeldet, sodass Sie einer Person
+  sagen würden, ihre Informationen seien verschwunden, obwohl sie es nicht sind.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  Vergessen Sie nicht mehr, als verlangt wurde. Wenn der Knoten auch Dinge enthält, die
+  behalten werden sollten, entfernen Sie ihn nicht, um eines davon zu löschen.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Vergessen Sie keinen Knoten im Umfang `identity` oder `environment` ohne Genehmigung
+  durch Wise Authority.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Ursprünglicher Gedanke:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  Ihre Begründung zum Vergessen:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === KANDIDATENKNOTEN (diese existieren bereits) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Antworte mit JSON:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "die Knotenkennzeichnung zum Entfernen (erforderlich bei FORGET)",
+    "node_scope": "Graph-Umfang, in dem der Knoten gespeichert ist (erforderlich bei FORGET)",
+    "reason": "warum dieser Knoten vergessen wird (erforderlich bei FORGET)",
+    "message": "was zu sagen (erforderlich bei SPEAK)",
+    "questions": ["was zu überdenken (erforderlich bei PONDER)"],
+    "reasoning": "warum dies der richtige Knoten ist, oder warum Sie gewechselt haben"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  Das Entfernen des richtigen Knotens, und nur dieses Knotens, ist der ganze Sinn dieses Schritts.

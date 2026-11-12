@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Recall-विशिष्ट कृती निवड — graph-read करणारा मार्गदर्शक, एका प्रस्तावित RECALL वर लागू केलेला"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,60 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  आपणे RECALL निवडले आहे. कृती निवडाने फक्त verb निवडला; ही पायरी काय वाचायचे ते सांगते.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  आपल्याला दाखवले जाते की graph कसे address केले जाते आणि कोणते nodes आधीच अस्तित्वात आहेत, जेणेकरून read तिथे पाहतो जिथे माहिती आहे.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  RECALL खालील क्रमाने निकालावर पोचते:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   एक exact lookup. जर तो node अस्तित्वात असेल तर तो परत केला जातो, आणि आणखी काहीही शोधले जात नाही.
+    query     memory वरील एक text search, आपण दिल्यास node_type आणि scope ने संकुचित केलेला. जेव्हा node_id नसतो, किंवा त्याला काहीही जुळले नाही तेव्हा वापरला जातो.
 
-  Work through these in order:
+  या क्रमाने काम करा:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. आपण काय शोधत आहात? एक गोष्ट, स्पष्टपणे सांगितलेली.
+  2. ती आधीच आपल्यासमोर आहे का? एखाद्या व्यक्तीबद्दल साठवलेली तथ्ये त्यांच्या profile सोबत येतात, आणि संभाषण आपल्या context मध्ये आहे. जे आपण आधीच वाचू शकता त्यासाठी RECALL ची गरज नाही.
+  3. ती अशा node वर आहे का ज्याचे नाव आपण देऊ शकता? जर CANDIDATE NODES पैकी एखाद्या node मध्ये ती साठवलेली असेल, तर तो id node_id म्हणून द्या.
+  4. अन्यथा एक query द्या: कमीत कमी शब्द जे आपल्याला हवे ते ओळखून देतील. node_type किंवा node_scope फक्त तेव्हाच जोडा जेव्हा आपल्याला ते माहीत असतील.
+  5. निर्णय घ्या: आपण तपासलेल्या गोष्टीसह RECALL, उत्तर देण्यासाठी किंवा विचारण्यासाठी SPEAK, किंवा पुनर्विचारासाठी PONDER.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === जे घडू नये ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  एक node id invent करू नका. convention चे पालन न करणारा id कशालाही जुळत नाही, आणि मग एक रिकामे result असे वाचले जाते की "मी हे कधीही शिकलो नाही" जेव्हा सत्य हे आहे की "मी चुकीच्या ठिकाणी शोधले".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  एक recall चालण्यापूर्वी त्याने काय परत केले हे सांगू नका. ही पायरी read ला address करते; result नंतर येतो.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  मूळ विचार:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  आठवण्यासाठी आपला reasoning:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (हे आधीच अस्तित्वात आहेत) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON स्वरूपात उत्तर द्या:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "वाचायचा exact node id (RECALL साठी हे किंवा query द्या)",
+    "query": "search text (RECALL साठी हे किंवा node_id द्या)",
+    "node_type": "search ची व्याप्ती संकुचित करण्यासाठी node type (optional)",
+    "node_scope": "search ची व्याप्ती संकुचित करण्यासाठी graph scope (optional)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "काय सांगायचे (SPEAK साठी आवश्यक)",
+    "questions": ["काय पुनर्विचार करायचे (PONDER साठी आवश्यक)"],
+    "reasoning": "हे वाचन आपण जे शोधत आहात ते का शोधून काढते, किंवा आपण का switch केले"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  योग्य ठिकाणी शोधणे हाच या पायरीचा संपूर्ण उद्देश आहे.

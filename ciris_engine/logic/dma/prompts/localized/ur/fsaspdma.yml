@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "FORGET سے متعلق مخصوص عمل کا انتخاب — گراف کو حذف کرنے والی رہنمائی، ایک تجویز کردہ FORGET پر لاگو کی گئی"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,59 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  آپ نے FORGET منتخب کیا ہے۔ عمل کے انتخاب نے صرف فعل منتخب کیا ہے؛ یہ قدم node کا نام بتاتا ہے۔
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  آپ کو دکھایا جاتا ہے کہ گراف کو کس طرح address کیا جاتا ہے اور وہ nodes جو پہلے سے موجود ہیں، تاکہ جو node ہٹایا جائے وہ وہی ہو جس کا آپ ارادہ رکھتے ہیں۔
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  ایک FORGET ایک پورا NODE ہٹاتا ہے: اس پر store شدہ ہر attribute، اور اس سے منسلک ہر edge۔ یہ کسی ایک attribute کو نہیں ہٹاتا، اور یہ واپس نہیں ہوتا۔
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  ان کو ترتیب سے کریں:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. کیا بھلایا جانا چاہیے، اور یہ کس نے مانگا؟
+  2. کون سا NODE اسے رکھتا ہے؟ CANDIDATE NODES اور addressing
+     convention کے خلاف موازنہ کریں۔ id بالکل اسی طرح دیں جیسے وہ درج ہے۔
+  3. اس node پر اور کیا کچھ ہے؟ جو کچھ پہلے سے store شدہ دکھایا گیا ہے وہ سب اس کے ساتھ جائے گا۔
+  4. SCOPE۔ وہ scope دیں جس میں node store ہے۔
+  5. فیصلہ کریں: اپنے چیک کیے گئے node کے ساتھ FORGET، پوچھنے یا یہ بتانے کے لیے کہ کیا بھی
+     کھو جائے گا SPEAK، یا دوبارہ غور کرنے کے لیے PONDER۔
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === جو نہیں ہونا چاہیے ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  ایک node id تجویز نہ کریں۔ ایک node کو بھلانا جو موجود ہی نہیں کچھ نہیں ہٹاتا اور پھر بھی مکمل ہونے کی اطلاع دیتا ہے، اس لیے آپ کسی شخص کو بتائیں گے کہ اس کی معلومات ختم ہو چکی ہیں جبکہ ایسا نہیں ہے۔
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  جتنا مانگا گیا اس سے زیادہ نہ بھولیں۔ اگر node پر ایسی چیزیں بھی ہیں جنہیں رکھا جانا چاہیے، تو ان میں سے ایک کو ہٹانے کے لیے پورا node نہ ہٹائیں۔
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Wise Authority کی منظوری کے بغیر `identity` یا `environment` scope میں کسی node کو نہ بھولیں۔
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  اصل سوچ:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  بھولنے کے لیے آپ کی منطق:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (یہ پہلے سے موجود ہیں) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON کے ساتھ جواب دیں:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "وہ node id جو ہٹانا ہے (FORGET کے لیے ضروری)",
+    "node_scope": "graph scope جس میں node store ہے (FORGET کے لیے ضروری)",
+    "reason": "یہ node کیوں بھلایا جا رہا ہے (FORGET کے لیے ضروری)",
+    "message": "کیا کہنا ہے (SPEAK کے لیے ضروری)",
+    "questions": ["کیا reconsider کرنا ہے (PONDER کے لیے ضروری)"],
+    "reasoning": "یہ صحیح node کیوں ہے، یا آپ نے کیوں switch کیا"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  صحیح node کو ہٹانا، اور صرف اسی node کو، اس قدم کا پورا مقصد ہے۔

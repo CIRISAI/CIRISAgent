@@ -20,11 +20,11 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Has seleccionado RECALL. La selección de acción eligió solo el verbo; este paso
+  indica qué leer.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Se te muestra cómo se direcciona el grafo y los nodos que ya existen, para que
+  la lectura busque donde está la información.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
@@ -50,42 +50,42 @@ evaluation_steps: |
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === QUÉ NO DEBE SUCEDER ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  No inventes una identificación de nodo. Un id que no sigue la convención no coincide
+  con nada, y un resultado vacío entonces se lee como "nunca aprendí esto" cuando la
+  verdad es "busqué en el lugar equivocado".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  No afirmes lo que un recall devolvió antes de que se haya ejecutado. Este paso aborda
+  la lectura; el resultado llega después.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Pensamiento original:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Tu razonamiento para recordar:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === NODOS CANDIDATOS (ya existen) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Responde con JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "identificación exacta de nodo a leer (da esta o query cuando RECALL)",
+    "query": "texto de búsqueda (da este o node_id cuando RECALL)",
+    "node_type": "tipo de nodo para acotar una búsqueda (opcional)",
+    "node_scope": "ámbito de grafo para acotar una búsqueda (opcional)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "qué decir (requerido cuando SPEAK)",
+    "questions": ["qué reconsiderar (requerido cuando PONDER)"],
+    "reasoning": "por qué esta lectura encuentra lo que buscas, o por qué cambiaste"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Buscar en el lugar correcto es el objetivo de este paso.

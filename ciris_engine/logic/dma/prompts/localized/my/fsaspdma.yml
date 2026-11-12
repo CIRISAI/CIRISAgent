@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "မေ့ခြင်း-အထူးပြု လုပ်ဆောင်ချက်ရွေးချယ်မှု — graph ဖျက်ခြင်း လမ်းညွှန်ကို အဆိုပြုထားသော FORGET တစ်ခုအပေါ် အသုံးချထားသည်"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,68 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  သင်သည် FORGET ကို ရွေးချယ်ပြီးပါပြီ။ Action Selection သည် ကြိယာကိုသာ
+  ရွေးချယ်ခဲ့ပြီး၊ ဤအဆင့်သည် node ကို အမည်ပေးသည်။
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  Graph ကို မည်သို့လိပ်စာပေးသည်နှင့် မည်သည့် node များ ရှိနှင့်ပြီးဖြစ်သည်ကို
+  သင့်အားပြသထားသည့်အတွက် ဖယ်ရှားသော node သည် သင်ရည်ရွယ်သည့် node
+  အမှန်ဖြစ်သည်။
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  FORGET တစ်ခုသည် NODE တစ်ခုလုံးကို ဖယ်ရှားသည်: ၎င်းတွင် သိမ်းဆည်းထားသော
+  attribute အားလုံးနှင့် ၎င်းနှင့် ချိတ်ဆက်ထားသော edge အားလုံးပါ ပါဝင်သည်။
+  attribute တစ်ခုတည်းကို ဖယ်ရှားခြင်း မဟုတ်ဘဲ၊ ပြန်ပြင်၍လည်း မရပါ။
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  အောက်ပါအဆင့်များကို အစဥ်လိုက် ဆောင်ရွက်ပါ:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. မည်သည့်အရာကို မေ့သင့်သနည်း၊ မည်သူကတောင်းဆိုသနည်း?
+  2. မည်သည့် NODE တွင် ၎င်းရှိသနည်း? CANDIDATE NODES နှင့် လိပ်စာ ပုံသဏ္ဍာန်ကို နှိုင်းယှဉ်ပါ။ id ကို စာရင်းတွင် ဖော်ပြထားသည့်အတိုင်း တိကျစွာ ပေးပါ။
+  3. အဆိုပါ node တွင် အခြား မည်သည့်အရာ ရှိသနည်း? သိမ်းဆည်းပြီးဖြစ်ကြောင်း ပြသထားသည့် အရာအားလုံးသည် ၎င်းနှင့်အတူ ပါသွားမည်။
+  4. SCOPE. node သိမ်းဆည်းထားသည့် scope ကို ပေးပါ။
+  5. ဆုံးဖြတ်ပါ: စစ်ဆေးပြီးသော node ဖြင့် FORGET ပြုလုပ်ရန်၊ မေးရန် သို့မဟုတ် အခြားမည်သည့်အရာ ပျောက်ဆုံးသွားမည်ကို ပြောရန် SPEAK ပြုလုပ်ရန်၊ သို့မဟုတ် ပြန်လည်စဉ်းစားရန် PONDER ပြုလုပ်ရန်။
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === မည်သည်မျှ ဖြစ်ပွားပေးမည်မဟုတ် ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  Node id ကို ဖန်တီးမထားပါနှင့်။ မရှိသော node ကို မေ့ခြင်းသည် မည်သည့်အရာကိုမျှ
+  မဖယ်ရှားနိုင်ဘဲ ပြီးစီးပြီဟု အစီရင်ခံသွားမည်ဖြစ်ပြီး၊ ထို့ကြောင့် သင်သည်
+  ပုဂ္ဂိုလ်တစ်ဦးအား သူ၏ အချက်အလက် ပျောက်ဆုံးသွားပြီဟု ပြောလိုက်မည်ဖြစ်သော်လည်း
+  အမှန်မှာ ပျောက်ဆုံးသွားခြင်း မဟုတ်ပါ။
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  တောင်းဆိုသည်ထက် ပို၍ မေ့ပါနှင့်။ node တွင် ထိန်းသိမ်းထားသင့်သည့် အခြားအရာများ
+  ပါရှိနေပါက၊ ၎င်းတို့အနက် တစ်ခုကို ဖယ်ရှားရန်အတွက် node တစ်ခုလုံးကို
+  မဖယ်ရှားပါနှင့်။
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Wise Authority အတည်ပြုချက်မပါဘဲ `identity` သို့မဟုတ် `environment` scope ရှိ
+  node ကို မေ့ပါနှင့်။
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  မူလအတွေးအခေါ်:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  မေ့ရန်ခွင့်ပြုလုပ်ချက်ဆိုင်ရာ သင့်လျင်းပွားချက်:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (ဤ node များ ရှိနှင့်ပြီးဖြစ်သည်) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON အားဖြင့် အဆိုပြုသည်:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "ဖယ်ရှားရမည့် node id (FORGET နှင့်အတူ လိုအပ်သည်)",
+    "node_scope": "node သိမ်းဆည်းထားသည့် graph scope (FORGET နှင့်အတူ လိုအပ်သည်)",
+    "reason": "ဤ node ကို အဘယ်ကြောင့် မေ့နေသနည်း (FORGET နှင့်အတူ လိုအပ်သည်)",
+    "message": "ဖော်ပြသည့် အရာ (SPEAK နှင့်အတူ လိုအပ်သည်)",
+    "questions": ["ပြန်လည်စဉ်းစားမည့် အရာ (PONDER နှင့်အတူ လိုအပ်သည်)"],
+    "reasoning": "ဤ node မှန်ကန်ကြောင်း သို့မဟုတ် အဘယ်ကြောင့်သင်ကူးပြောင်းခဲ့သည်"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  မှန်ကန်သော node ကိုသာ ဖယ်ရှားခြင်းသည် ဤအဆင့်၏ အဓိကရည်ရွယ်ချက် ဖြစ်သည်။

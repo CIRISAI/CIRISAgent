@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "针对 FORGET 的动作选择——图删除指南，应用于一个被提议的 FORGET"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,60 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  你已选择 FORGET。动作选择只选择了动词；这一步要指明节点。
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  你会被展示图是如何寻址的，以及已经存在的节点，以便被移除的节点正是你所指的那个。
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  一次 FORGET 会移除整整一个节点：存储在它上面的每一个属性，以及连接到它的每一条边。
+  它不会只移除单个属性，而且无法撤回。
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  按顺序完成这些步骤：
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. 什么应该被遗忘，是谁要求的？
+  2. 哪个节点持有它？ 将其与候选节点和寻址约定进行比较。按列出的原样给出 id。
+  3. 该节点上还有什么？ 所有显示为已存储的内容都会随之一同失去。
+  4. 范围。 给出该节点存储所在的范围。
+  5. 决定：用你已检查的节点执行 FORGET，用 SPEAK 进行提问或说明还会失去什么，或用 PONDER 进行重新考虑。
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === 什么绝不应该发生 ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  不要编造节点 id。遗忘一个不存在的节点不会移除任何东西，却仍会被报告为已完成，
+  因此你会告诉某人他们的信息已经消失，而事实并非如此。
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  不要遗忘超出所要求的范围。如果该节点上还存有应当保留的内容，
+  不要为了丢弃其中一项而移除整个节点。
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  不要在没有智慧权威（Wise Authority）批准的情况下遗忘 `identity` 或 `environment` 范围中的节点。
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  原始思考：
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  你遗忘的理由：
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === 候选节点（这些已经存在）===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  用 JSON 回应：
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "要移除的节点 id（FORGET 时需要）",
+    "node_scope": "该节点存储所在的图范围（FORGET 时需要）",
+    "reason": "为什么要遗忘这个节点（FORGET 时需要）",
+    "message": "要说什么（SPEAK 时需要）",
+    "questions": ["要重新考虑什么（PONDER 时需要）"],
+    "reasoning": "为什么这是正确的节点，或为什么你切换了"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  移除正确的节点，且仅移除那个节点，正是这一步的全部要点。

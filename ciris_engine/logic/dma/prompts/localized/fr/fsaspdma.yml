@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "Sélection d'action spécifique à l'oubli — le guide de suppression du graphe, appliqué à une proposition de FORGET"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,66 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  Vous avez sélectionné FORGET. La sélection d'action a choisi seulement le verbe ; cette étape
+  nomme le nœud.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  On vous montre comment le graphe est adressé et les nœuds qui existent déjà, afin que
+  le nœud supprimé soit celui que vous voulez dire.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  Un FORGET supprime UN NŒUD ENTIER : chaque attribut stocké dessus, et chaque arête
+  attachée à lui. Il ne supprime pas un seul attribut, et il ne se défait pas.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  Travaillez à travers ceux-ci dans l'ordre :
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. QUOI devrait être oublié, et qui l'a demandé ?
+  2. QUEL NŒUD le détient ? Comparez-le aux NŒUDS CANDIDATS et à la
+     convention d'adressage. Donnez l'id exactement comme il est indiqué.
+  3. QUOI D'AUTRE se trouve sur ce nœud ? Tout ce qui est affiché comme déjà stocké part avec lui.
+  4. PORTÉE. Donnez la portée dans laquelle le nœud est stocké.
+  5. Décidez : FORGET avec le nœud que vous avez vérifié, SPEAK pour demander ou pour dire ce qui
+     serait aussi perdu, ou PONDER pour reconsidérer.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === CE QUI NE DOIT PAS ARRIVER ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  N'inventez pas d'identifiant de nœud. Oublier un nœud qui n'existe pas ne supprime
+  rien et est quand même signalé comme fait, donc vous diriez à une personne que son
+  information a disparu alors que ce n'est pas le cas.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  N'oubliez pas plus que ce qui a été demandé. Si le nœud contient aussi des éléments qui devraient
+  être conservés, ne le supprimez pas pour en abandonner un.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  N'oubliez pas un nœud de portée `identity` ou `environment` sans l'approbation de Wise
+  Authority.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Pensée originale :
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  Votre raison d'oublier :
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === NŒUDS CANDIDATS (ceux-ci existent déjà) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Répondez avec JSON :
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "l'identifiant de nœud à supprimer (obligatoire lors de FORGET)",
+    "node_scope": "portée du graphe où le nœud est stocké (obligatoire lors de FORGET)",
+    "reason": "pourquoi ce nœud est oublié (obligatoire lors de FORGET)",
+    "message": "ce à dire (obligatoire lors de SPEAK)",
+    "questions": ["ce à reconsidérer (obligatoire lors de PONDER)"],
+    "reasoning": "pourquoi c'est le bon nœud, ou pourquoi vous avez changé"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  Supprimer le bon nœud, et seulement celui-là, est tout l'objet de cette étape.

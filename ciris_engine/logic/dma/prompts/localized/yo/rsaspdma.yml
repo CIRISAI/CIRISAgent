@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Yíyàn iṣẹ́ pàtó fún RECALL — ìtọ́nisọ́nà kíkà nínú àtẹ̀jáde ìrántí, tí a lò sórí ìṣe RECALL kan tí a dábàá"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,73 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Ìwọ ti yan RECALL. YÍYÀN IṢẸ́ yan ọ̀rọ̀-ìṣe náà nìkan; ìgbésẹ̀ yìí ni ó ń
+  sọ ohun tí a óò kà.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  A fi bí a ṣe ń ṣàpèjúwe àwòrán náà àti àwọn ìpò tí ó ti wà tẹ́lẹ̀ hàn ọ́, kí
+  kíkà náà lè wá níbi tí ìmọ̀ náà wà.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  Ìṣe RECALL máa ń lọ ní ìlànà yìí:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   wíwá pẹ̀lú id tí ó gan-an. Tí ìpò náà bá wà, a óò dá a padà, a kì
+              yóò sì wá nǹkan mìíràn.
+    query     wíwá ọ̀rọ̀ nínú ìrántí, tí a lè dín kù pẹ̀lú node_type àti àyè nígbà
+              tí ìwọ bá pèsè wọn. A máa ń lò ó nígbà tí kò sí node_id, tàbí tí kò bá rí
+              nǹkan kan.
 
-  Work through these in order:
+  Ṣe àwọn wọ̀nyí lẹ́sẹẹsẹ:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. KÍNI ìwọ ń wá? Ohun kan, tí a sọ ní kedere.
+  2. ṢÉ Ó TI WÀ NÍWÁJÚ RẸ TẸ́LẸ̀? Àwọn òtítọ́ tí a fi pamọ́ sí ẹnì kan máa ń
+     dé pẹ̀lú profaili wọn, ìjíròrò náà sì wà nínú ÀYÍKÁ rẹ. Ohun tí ìwọ ti lè
+     kà náà kò nílò RECALL.
+  3. ṢÉ Ó WÀ LÓRÍ ÌPÒ TÍ ÌWỌ LÈ SỌ ORÚKỌ RẸ̀? Tí ọ̀kan lára ÌPÒ ÀPẸẸRẸ bá ní
+     ohun tí ìwọ ń wá, fún id yẹn gẹ́gẹ́ bí node_id.
+  4. BÍ KÒ ṢE BẸ́Ẹ̀, fún query: àwọn ọ̀rọ̀ tí ó dín jù tí ó sọ ohun tí ìwọ ń
+     wá. Fi node_type tàbí node_scope kún-un nìkan nígbà tí ìwọ bá mọ̀ wọ́n.
+  5. Pinnu: RECALL pẹ̀lú ohun tí ìwọ ti yẹ̀ wò, SPEAK láti dáhùn tàbí láti
+     béèrè, tàbí PONDER láti tún rò.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === OHUN TÍ KÒ GBỌDỌ̀ ṢẸLẸ̀ ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Má ṣe dá ìpò id kan sílẹ̀ láti orí ara rẹ. Id tí kò tẹ̀lé ìlànà àdírẹ́sì
+  kò ní bá nǹkan kan mu, àbájáde òfo sì á jẹ́ kí ó dà bí "n kò tí ì kọ́ èyí
+  rí" nígbà tí òtítọ́ jẹ́ "mo wá níbi tí kò tọ́".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  Má ṣe sọ ohun tí RECALL kan dá padà kí ó tó ṣiṣẹ́. Ìgbésẹ̀ yìí ń bá kíkà
+  sọ̀rọ̀; àbájáde náà a óò dé lẹ́yìn náà.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Ìrò àtọwọ́dọ́wọ́:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Ìdí rẹ fún RECALL:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === ÌPÒ ÀPẸẸRẸ (àwọn wọ̀nyí ti wà tẹ́lẹ̀) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Dáhùn ní JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "ìpò id gan-an láti kà (fún èyí tàbí query nígbà tí ó bá jẹ́ RECALL)",
+    "query": "ọ̀rọ̀ wíwá (fún èyí tàbí node_id nígbà tí ó bá jẹ́ RECALL)",
+    "node_type": "irú ìpò láti dín wíwá kù (aṣàyàn)",
+    "node_scope": "àyè ìrántí láti dín wíwá kù (aṣàyàn)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "ohun tí a óò sọ (a nílò rẹ̀ nígbà tí ó bá jẹ́ SPEAK)",
+    "questions": ["ohun tí a óò tún rò (a nílò rẹ̀ nígbà tí ó bá jẹ́ PONDER)"],
+    "reasoning": "ìdí tí kíkà yìí fi rí ohun tí ìwọ ń wá, tàbí ìdí tí ìwọ fi yí padà"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Wíwá níbi tí ó tọ́ ni gbogbo ète ìgbésẹ̀ yìí.

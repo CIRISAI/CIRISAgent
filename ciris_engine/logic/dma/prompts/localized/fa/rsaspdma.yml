@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "انتخاب عمل ویژهٔ به‌یادآوری — راهنمای خواندن گراف، اعمال‌شده بر یک RECALL پیشنهادی"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,72 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  شما RECALL را انتخاب کردید. انتخاب عمل تنها فعل را برگزید؛ این مرحله
+  مشخص می‌کند که چه چیزی خوانده شود.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  به شما نشان داده می‌شود که گراف چگونه آدرس‌دهی می‌شود و چه node‌هایی قبلاً وجود دارند، تا
+  خواندن در جایی انجام شود که اطلاعات در آن قرار دارد.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  یک recall به این ترتیب حل می‌شود:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   یک جست‌وجوی دقیق. اگر آن node وجود داشته باشد بازگردانده می‌شود، و چیز
+              دیگری جست‌وجو نمی‌شود.
+    query     یک جست‌وجوی متنی در حافظه، که هنگام دادن node_type و scope محدودتر
+              می‌شود. زمانی استفاده می‌شود که node_id وجود ندارد، یا با چیزی مطابقت نداشته است.
 
-  Work through these in order:
+  این مراحل را به ترتیب انجام دهید:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. به دنبال چه چیزی هستید؟ یک چیز، به‌روشنی بیان‌شده.
+  2. آیا آن از پیش جلوی شماست؟ واقعیت‌های ذخیره‌شدهٔ یک شخص همراه با پروفایل او
+     می‌رسند، و مکالمه در context شما قرار دارد. آنچه از پیش می‌توانید بخوانید
+     نیازی به recall ندارد.
+  3. آیا روی node‌ای است که می‌توانید نام ببرید؟ اگر یکی از CANDIDATE NODES آن را نگه می‌دارد، آن id را
+     به‌عنوان node_id بدهید.
+  4. در غیر این صورت یک query بدهید: کم‌ترین کلماتی که آنچه را می‌خواهید مشخص
+     می‌کند. node_type یا node_scope را تنها زمانی اضافه کنید که آن‌ها را می‌دانید.
+  5. تصمیم بگیرید: RECALL با آنچه بررسی کرده‌اید، SPEAK برای پاسخ یا پرسش، یا
+     PONDER برای بازاندیشی.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === آنچه نباید اتفاق بیفتد ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  یک node id اختراع نکنید. idای که از قرارداد پیروی نمی‌کند با چیزی مطابقت
+  ندارد، و در نتیجه یک نتیجهٔ خالی به‌صورت «من هرگز این را یاد نگرفتم» خوانده
+  می‌شود، در حالی که حقیقت این است که «من در جای غلط جست‌وجو کردم».
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  پیش از اجرا شدن recall، نگویید که چه چیزی بازگردانده است. این مرحله به خواندن
+  می‌پردازد؛ نتیجه پس از آن می‌رسد.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  فکر اصلی:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  استدلال شما برای به یاد آوردن:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (اینها قبلاً وجود دارند) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  با JSON پاسخ دهید:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "node id دقیق برای خواندن (این یا query را برای RECALL بدهید)",
+    "query": "متن جست‌وجو (این یا node_id را برای RECALL بدهید)",
+    "node_type": "نوع node برای محدودکردن جست‌وجو (اختیاری)",
+    "node_scope": "scope گراف برای محدودکردن جست‌وجو (اختیاری)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "چه باید گفته شود (برای SPEAK الزامی)",
+    "questions": ["چه چیزی باید بازنگری شود (برای PONDER الزامی)"],
+    "reasoning": "چرا این خواندن آنچه را به دنبالش هستید می‌یابد، یا چرا تصمیم خود را تغییر داده‌اید"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  جست‌وجو در جای درست تمام هدف این مرحله است.

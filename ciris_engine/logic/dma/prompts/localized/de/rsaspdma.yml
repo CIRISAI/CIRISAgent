@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Abrufen-spezifische Aktionsauswahl — der graphlesende Leitfaden, angewendet auf ein vorgeschlagenes RECALL"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,74 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Sie haben RECALL ausgewählt. Die Aktionsauswahl hat nur das Verb gewählt; dieser
+  Schritt legt fest, was gelesen wird.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Ihnen wird gezeigt, wie der Graph adressiert wird und welche Knoten bereits
+  existieren, damit der Lesevorgang dort sucht, wo sich die Information befindet.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  Ein Abruf löst sich in dieser Reihenfolge auf:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   eine exakte Suche. Existiert dieser Knoten, wird er zurückgegeben,
+              und es wird nichts anderes durchsucht.
+    query     eine Textsuche im Gedächtnis, eingegrenzt durch node_type und scope,
+              wenn Sie diese angeben. Wird verwendet, wenn es keine node_id gibt
+              oder diese nichts gefunden hat.
 
-  Work through these in order:
+  Arbeite dich durch diese der Reihe nach:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. WAS suchen Sie? Eine Sache, klar benannt.
+  2. HABEN SIE ES BEREITS VOR SICH? Die gespeicherten Fakten einer Person kommen
+     mit ihrem Profil, und die Konversation ist in Ihrem Kontext. Was Sie bereits
+     lesen können, braucht keinen Abruf.
+  3. STEHT ES AUF EINEM KNOTEN, DEN SIE BENENNEN KÖNNEN? Wenn einer der
+     KANDIDATENKNOTEN es enthält, geben Sie diese Kennung als node_id an.
+  4. ANDERNFALLS geben Sie eine query an: die wenigsten Wörter, die das Gewünschte
+     identifizieren. Fügen Sie node_type oder node_scope nur hinzu, wenn Sie diese
+     kennen.
+  5. Entscheiden Sie: RECALL mit dem, was Sie überprüft haben, SPEAK, um zu
+     antworten oder zu fragen, oder PONDER, um zu überdenken.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === WAS NICHT PASSIEREN DARF ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Erfinden Sie keine Knotenkennzeichnung. Eine Kennung, die nicht der Konvention
+  folgt, entspricht nichts, und ein leeres Ergebnis liest sich dann als „Das habe
+  ich nie gelernt", obwohl die Wahrheit lautet: „Ich habe am falschen Ort gesucht".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  Geben Sie nicht an, was ein Abruf ergeben hat, bevor er ausgeführt wurde. Dieser
+  Schritt adressiert den Lesevorgang; das Ergebnis kommt erst danach.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Ursprünglicher Gedanke:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Ihre Begründung zum Abrufen:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === KANDIDATENKNOTEN (diese existieren bereits) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Antworte mit JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "exakte Knotenkennzeichnung zum Lesen (geben Sie diese oder query an, wenn RECALL)",
+    "query": "Suchtext (geben Sie diesen oder node_id an, wenn RECALL)",
+    "node_type": "Knotentyp zur Eingrenzung einer Suche (optional)",
+    "node_scope": "Graph-Umfang zur Eingrenzung einer Suche (optional)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "was zu sagen (erforderlich bei SPEAK)",
+    "questions": ["was zu überdenken (erforderlich bei PONDER)"],
+    "reasoning": "warum dieser Lesevorgang das findet, wonach Sie suchen, oder warum Sie gewechselt haben"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Das Suchen am richtigen Ort ist der ganze Sinn dieses Schritts.

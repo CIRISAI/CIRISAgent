@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Pemilihan tindakan khusus-RECALL — panduan pembacaan graf, diterapkan pada satu RECALL yang diusulkan"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,72 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  Anda telah memilih RECALL. Pemilihan tindakan hanya memilih kata kerjanya; langkah ini
+  menyatakan apa yang akan dibaca.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Anda ditunjukkan bagaimana graf dialamatkan dan node yang sudah ada, sehingga
+  pembacaan mencari di tempat informasi tersebut berada.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  Sebuah recall diselesaikan dalam urutan ini:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   pencarian yang persis. Jika node tersebut ada, ia dikembalikan, dan tidak
+              ada yang lain yang dicari.
+    query     pencarian teks pada memori, dipersempit oleh node_type dan scope jika Anda
+              memberikannya. Digunakan ketika tidak ada node_id, atau tidak ada yang cocok.
 
-  Work through these in order:
+  Lakukan ini dalam urutan:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. APA yang Anda cari? Satu hal, dinyatakan dengan jelas.
+  2. APAKAH SUDAH ADA DI DEPAN ANDA? Fakta tersimpan seseorang datang bersama
+     profil mereka, dan percakapan ada dalam konteks Anda. Apa yang sudah dapat Anda baca
+     tidak memerlukan recall.
+  3. APAKAH ADA PADA NODE YANG DAPAT ANDA SEBUTKAN? Jika salah satu CANDIDATE NODES
+     menyimpannya, berikan id tersebut sebagai node_id.
+  4. JIKA TIDAK, berikan query: kata-kata paling sedikit yang mengidentifikasi apa yang Anda inginkan. Tambahkan
+     node_type atau node_scope hanya jika Anda mengetahuinya.
+  5. Putuskan: RECALL dengan apa yang telah Anda periksa, SPEAK untuk menjawab atau bertanya, atau
+     PONDER untuk mempertimbangkan kembali.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === APA YANG TIDAK BOLEH TERJADI ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Jangan mengarang id node. Id yang tidak mengikuti konvensi tidak cocok dengan
+  apa pun, dan hasil yang kosong kemudian terbaca seperti "Saya tidak pernah mempelajari ini" padahal
+  kenyataannya adalah "Saya mencari di tempat yang salah".
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  Jangan menyatakan apa yang dikembalikan oleh recall sebelum ia dijalankan. Langkah ini membahas
+  pembacaan; hasilnya tiba setelahnya.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Pemikiran awal:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Alasan Anda untuk mengingat kembali:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === CANDIDATE NODES (ini sudah ada) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  Merespons dengan JSON:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "id node persis yang akan dibaca (berikan ini atau query ketika RECALL)",
+    "query": "teks pencarian (berikan ini atau node_id ketika RECALL)",
+    "node_type": "tipe node untuk mempersempit pencarian (opsional)",
+    "node_scope": "graph scope untuk mempersempit pencarian (opsional)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "apa yang dikatakan (wajib ketika SPEAK)",
+    "questions": ["apa yang dipertimbangkan kembali (wajib ketika PONDER)"],
+    "reasoning": "mengapa pembacaan ini menemukan apa yang Anda cari, atau mengapa Anda beralih"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Mencari di tempat yang benar adalah keseluruhan tujuan dari langkah ini.

@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
-description: "Forget-specific action selection — the graph-deleting guide, applied to one proposed FORGET"
+description: "Unutmaya özgü eylem seçimi — grafik silme kılavuzu, önerilen bir FORGET eylemine uygulanmış"
 version: "1.0"
 accord_header: true
 
@@ -20,66 +16,67 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  FORGET seçtiniz. Eylem seçimi yalnızca fiili seçti; bu adım düğümü
+  adlandırır.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the node removed is the one you mean.
+  Grafiğin nasıl adreslendiği ve zaten var olan düğümler size gösterilir, böylece
+  kaldırılan düğüm kastettiğiniz düğüm olur.
 
-  A FORGET removes ONE WHOLE NODE: every attribute stored on it, and every edge
-  attached to it. It does not remove a single attribute, and it is not undone.
+  Bir FORGET, TÜM BİR DÜĞÜMÜ kaldırır: üzerinde saklanan her nitelik ve ona
+  bağlı her kenar. Tek bir niteliği kaldırmaz ve geri alınamaz.
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  Sırasıyla bunların içinden geçin:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. NE unutulmalı ve bunu kim istedi?
+  2. HANGİ DÜĞÜM bunu tutuyor? ADAY DÜĞÜMLER ve adresleme kuralıyla
+     karşılaştırın. Kimliği tam olarak listelendiği gibi verin.
+  3. O düğümde BAŞKA NE var? Zaten saklandığı gösterilen her şey onunla birlikte
+     gider.
+  4. KAPSAM. Düğümün saklandığı kapsamı verin.
+  5. Karar verin: kontrol ettiğiniz düğümle FORGET, sormak veya başka ne
+     kaybedileceğini söylemek için SPEAK, ya da yeniden düşünmek için PONDER.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === OLAN NE OLMAMALIDIR ===
 
-  Do not invent a node id. Forgetting a node that does not exist removes
-  nothing and is still reported as done, so you would tell a person their
-  information is gone when it is not.
+  Bir düğüm kimliği icat etmeyin. Var olmayan bir düğümü unutmak hiçbir şeyi
+  kaldırmaz ve yine de tamamlandı olarak bildirilir, bu yüzden bir kişiye
+  bilgisinin gittiğini söylersiniz, oysa gitmemiştir.
 
-  Do not forget more than was asked. If the node also holds things that should
-  be kept, do not remove it to drop one of them.
+  İstenenden fazlasını unutmayın. Düğüm, saklanması gereken başka şeyler de
+  tutuyorsa, bunlardan birini düşürmek için düğümü kaldırmayın.
 
-  Do not forget a node in `identity` or `environment` scope without Wise
-  Authority approval.
+  Wise Authority onayı olmadan `identity` veya `environment` kapsamındaki bir
+  düğümü unutmayın.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Orijinal düşünce:
   {original_thought_content}
 
-  Your reasoning for forgetting:
+  Unutma nedeniniz:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === ADAY DÜĞÜMLER (bunlar zaten var) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON ile yanıt verin:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "kaldırılacak düğüm kimliği (FORGET için gerekli)",
+    "node_scope": "düğümün saklandığı grafik kapsamı (FORGET için gerekli)",
+    "reason": "bu düğümün neden unutulduğu (FORGET için gerekli)",
+    "message": "söylenecek şey (SPEAK için gerekli)",
+    "questions": ["düşünülecek şey (PONDER için gerekli)"],
+    "reasoning": "bu düğümün neden doğru düğüm olduğu veya neden karar değiştirdiğiniz"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Removing the right node, and only that node, is the whole point of this step.
+  Doğru düğümü ve yalnızca o düğümü kaldırmak, bu adımın tüm amacıdır.

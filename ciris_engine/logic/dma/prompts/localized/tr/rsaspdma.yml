@@ -1,9 +1,5 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: rsaspdma
-description: "Recall-specific action selection — the graph-reading guide, applied to one proposed RECALL"
+description: "Hatırlamaya özgü eylem seçimi — grafik okuma kılavuzu, önerilen bir RECALL eylemine uygulanmış"
 version: "1.0"
 accord_header: true
 
@@ -20,72 +16,73 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  RECALL seçtiniz. Eylem seçimi yalnızca fiili seçti; bu adım ne okunacağını
+  söyler.
 
-  You are shown how the graph is addressed and the nodes that already exist, so
-  the read looks where the information is.
+  Grafiğin nasıl adreslendiği ve zaten var olan düğümler size gösterilir, böylece
+  okuma, bilginin olduğu yere bakar.
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  Bir recall şu sırayla çözümlenir:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   tam bir arama. Bu düğüm varsa döndürülür ve başka hiçbir şey
+              aranmaz.
+    query     node_type ve scope'u verdiğinizde bunlarla daraltılan, bellekte
+              yapılan bir metin araması. node_id olmadığında veya hiçbir şeyle
+              eşleşmediğinde kullanılır.
 
-  Work through these in order:
+  Sırasıyla bunların içinden geçin:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. NE arıyorsunuz? Açıkça belirtilmiş tek bir şey.
+  2. ZATEN ÖNÜNÜZDE Mİ? Bir kişinin saklanan gerçekleri profiliyle birlikte
+     size sunulur ve sohbet bağlamınızda yer alır. Zaten okuyabildiğiniz şey
+     recall gerektirmez.
+  3. ADLANDIRABİLECEĞİNİZ BİR DÜĞÜMDE Mİ? ADAY DÜĞÜMLERDEN biri bunu tutuyorsa,
+     o kimliği node_id olarak verin.
+  4. AKSİ HALDE bir "query" verin: istediğinizi tanımlayan en az sayıda kelime.
+     node_type veya node_scope'u yalnızca bildiğinizde ekleyin.
+  5. Karar verin: kontrol ettiğinizle RECALL, yanıtlamak veya sormak için SPEAK,
+     ya da yeniden düşünmek için PONDER.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === WHAT MUST NOT HAPPEN ===
+  === OLAN NE OLMAMALIDIR ===
 
-  Do not invent a node id. An id that does not follow the convention matches
-  nothing, and an empty result then reads as "I never learned this" when the
-  truth is "I looked in the wrong place".
+  Bir düğüm kimliği icat etmeyin. Kuralları izlemeyen bir kimlik hiçbir şeyle
+  eşleşmez ve boş bir sonuç, gerçek "yanlış yere baktım" iken "bunu hiç
+  öğrenmedim" olarak okunur.
 
-  Do not state what a recall returned before it has run. This step addresses
-  the read; the result arrives afterwards.
+  Bir recall çalışmadan önce ne döndürdüğünü belirtmeyin. Bu adım okumayı ele
+  alır; sonuç daha sonra gelir.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
-  Original thought:
+  Orijinal düşünce:
   {original_thought_content}
 
-  Your reasoning for recalling:
+  Hatırlama nedeniniz:
   {aspdma_reasoning}
 
-  === CANDIDATE NODES (these already exist) ===
+  === ADAY DÜĞÜMLER (bunlar zaten var) ===
   {candidate_nodes}
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON ile yanıt verin:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exact node id to read (give this or query when RECALL)",
-    "query": "search text (give this or node_id when RECALL)",
-    "node_type": "node type to narrow a search (optional)",
-    "node_scope": "graph scope to narrow a search (optional)",
+    "node_id": "okunacak tam düğüm kimliği (RECALL için bunu veya query'yi verin)",
+    "query": "arama metni (RECALL için bunu veya node_id'yi verin)",
+    "node_type": "aramayı daraltmak için düğüm türü (isteğe bağlı)",
+    "node_scope": "aramayı daraltmak için grafik kapsamı (isteğe bağlı)",
     "limit": 10,
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "message": "söylenecek şey (SPEAK için gerekli)",
+    "questions": ["düşünülecek şey (PONDER için gerekli)"],
+    "reasoning": "bu okumanın aradığınız şeyi neden bulacağı veya neden karar değiştirdiğiniz"
   }}
 
 # DEONTIC — the closing categorical.
 closing_reminder: |
-  Looking in the right place is the whole point of this step.
+  Doğru yerde bakmak, bu adımın tüm amacıdır.

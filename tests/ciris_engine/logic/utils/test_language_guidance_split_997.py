@@ -237,7 +237,8 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "tr": ("be3c8a1e4c7ac6c034a239f746b5a57d9de13d20c50e9e6c7aac95a9bc694d27", 18666),
+    # 05d_no_medication_or_dose hand-finished from the i18n lane reviewer's findings (#1350)
+    "tr": ("ea4062ca6b83e29ea2e0429e454850cf64f2ead065f885c38ed2e8b87af365a9", 19781),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
@@ -261,7 +262,8 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "ha": ("f3a5ff0af87288219e9f4321eda1c7be6fe908c5a4d95bbde9a10d2fd1d9216f", 22907),
+    # 05d_no_medication_or_dose hand-finished from the i18n lane reviewer's findings (#1350)
+    "ha": ("0534e879b60886d76721455e76232f7557711b3fa91712019c1af87ca4d46688", 24069),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)

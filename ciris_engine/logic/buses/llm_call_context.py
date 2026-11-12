@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Iterator, Tuple
+from typing import Dict, Iterator, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -89,3 +89,29 @@ def set_parent_event_context(parent_event_type: str, parent_attempt_index: int) 
         yield
     finally:
         _parent_event_context.reset(token)
+
+
+# Raw completion text, for the env-gated LLM capture only (LLMBus._maybe_capture_call).
+# The bus opens a holder before a provider call when capture is on; the LLM service
+# writes the provider's completion text into it. A mutable holder, not a plain
+# value, so the write is seen by the caller even where the call runs in a copied
+# context. With capture off the holder is None and nothing is kept.
+_raw_completion_holder: ContextVar[Optional[Dict[str, str]]] = ContextVar("llm_raw_completion_holder", default=None)
+
+
+def open_raw_completion_holder() -> Dict[str, str]:
+    """Start keeping the next provider completion's text for the capture file."""
+    holder: Dict[str, str] = {}
+    _raw_completion_holder.set(holder)
+    return holder
+
+
+def close_raw_completion_holder() -> None:
+    _raw_completion_holder.set(None)
+
+
+def record_raw_completion(text: Optional[str]) -> None:
+    """Called by the LLM service with the completion text as the provider returned it."""
+    holder = _raw_completion_holder.get()
+    if holder is not None and text is not None:
+        holder["text"] = text

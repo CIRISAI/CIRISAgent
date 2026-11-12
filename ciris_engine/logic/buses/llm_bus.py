@@ -47,6 +47,7 @@ from ciris_engine.schemas.services.capabilities import LLMCapabilities
 from .base_bus import BaseBus, BusMessage
 from .thought_resource_ledger import thought_resource_ledger
 
+from ciris_engine.logic.buses.llm_call_context import close_raw_completion_holder, open_raw_completion_holder
 logger = logging.getLogger(__name__)
 
 
@@ -449,6 +450,8 @@ class LLMBus(BaseBus[LLMService]):
         max_tokens: int,
         model: Optional[str] = None,
         api_base: Optional[str] = None,
+        raw_completion_text: Optional[str] = None,
+        error: Optional[BaseException] = None,
     ) -> None:
         """Diagnostic capture for replay against the bounce harness.
 
@@ -458,8 +461,10 @@ class LLMBus(BaseBus[LLMService]):
         it: `messages` are the wire messages, unscrubbed and unaltered, and
         `prompt_hash` is the same sha256 the LLM_CALL trace event carries, so
         a row can be matched to its trace. `result` is the parsed structured
-        reply; the provider's raw completion text is not retained by the LLM
-        service and is not in the row.
+        reply and `raw_completion_text` is the completion as the provider
+        returned it (the last one, when instructor re-asked; None when the
+        service did not hand one over). A failed call is a row too: `status`
+        is "error", with the error class and message and no reply.
 
         OFF unless the env var is set. Never set it where real users' traffic
         runs: rows hold the full conversation.
@@ -552,7 +557,10 @@ class LLMBus(BaseBus[LLMService]):
                 "api_base": api_base,
                 "prompt_hash": hashlib.sha256(_safe_messages_to_text(messages).encode("utf-8")).hexdigest(),
                 "scrubbed": False,
-                "reply_form": "parsed_structured",
+                "status": "ok" if error is None else "error",
+                "error_class": error.__class__.__name__ if error is not None else None,
+                "error": str(error)[:4000] if error is not None else None,
+                "raw_completion_text": raw_completion_text,
                 "handler": handler_name,
                 "service": service_name,
                 "thought_id": thought_id,
@@ -561,7 +569,9 @@ class LLMBus(BaseBus[LLMService]):
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "messages": messages,
-                "result": (result.model_dump() if hasattr(result, "model_dump") else str(result)),
+                "result": (
+                    None if result is None else (result.model_dump() if hasattr(result, "model_dump") else str(result))
+                ),
             }
 
             # O_NOFOLLOW: refuse to follow a symlink at out_path. If a
@@ -892,6 +902,20 @@ class LLMBus(BaseBus[LLMService]):
                 if hasattr(selected_service, "openai_config") and selected_service.openai_config:
                     api_base = getattr(selected_service.openai_config, "base_url", None)
                 attempt_duration_ms = (self._time_service.timestamp() - attempt_start_time) * 1000
+                self._maybe_capture_call(
+                    handler_name=handler_name,
+                    service_name=service_name,
+                    thought_id=thought_id,
+                    task_id=task_id,
+                    messages=normalized_messages,
+                    response_model=response_model,
+                    result=None,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    model=_extract_call_model(selected_service),
+                    api_base=api_base,
+                    error=e,
+                )
                 await _broadcast_llm_call_event(
                     LLMCallEventContext(
                         success=False,
@@ -969,6 +993,7 @@ class LLMBus(BaseBus[LLMService]):
         async with semaphore:
             logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
 
+            raw_holder = open_raw_completion_holder() if os.environ.get("CIRIS_LLM_CAPTURE_HANDLER") else None
             result, usage = await selected_service.call_llm_structured(
                 messages=normalized_messages,
                 response_model=response_model,
@@ -996,7 +1021,10 @@ class LLMBus(BaseBus[LLMService]):
                 max_tokens=max_tokens,
                 model=(usage.model_used if usage is not None else None) or _extract_call_model(selected_service),
                 api_base=_extract_api_base(selected_service),
+                raw_completion_text=raw_holder.get("text") if raw_holder is not None else None,
             )
+            if raw_holder is not None:
+                close_raw_completion_holder()
 
         latency_ms = (self._time_service.timestamp() - start_time) * 1000
         self._record_success(service_name, latency_ms)

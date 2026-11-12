@@ -547,6 +547,40 @@ def test_row_carries_what_research_needs(bus: LLMBus, tmp_path: Path, monkeypatc
     assert row["messages"] == kwargs["messages"]
     assert row["prompt_hash"] == hashlib.sha256(_safe_messages_to_text(kwargs["messages"]).encode("utf-8")).hexdigest()
     assert row["model"] == "some/model" and row["api_base"] == "https://example.invalid/v1"
-    assert row["scrubbed"] is False and row["reply_form"] == "parsed_structured"
+    assert row["scrubbed"] is False and row["status"] == "ok" and row["error"] is None
     assert row["thought_id"] == "th_test" and row["task_id"] == "task_test"
     assert row["agent_version"] and row["captured_at"]
+
+
+def test_failed_call_is_a_row(bus: LLMBus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A call that failed keeps its messages and its error, with no reply."""
+    import json
+
+    out = tmp_path / "calls.jsonl"
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_HANDLER", "*")
+    monkeypatch.setenv("CIRIS_LLM_CAPTURE_FILE", str(out))
+    kwargs = _capture_kwargs(result=None)
+    bus._maybe_capture_call(**kwargs, error=TimeoutError("provider did not answer"))
+
+    row = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+    assert row["status"] == "error" and row["error_class"] == "TimeoutError"
+    assert row["error"] == "provider did not answer"
+    assert row["result"] is None and row["raw_completion_text"] is None
+    assert row["messages"] == kwargs["messages"]
+
+
+def test_raw_completion_text_reaches_the_row() -> None:
+    """The service's completion text is seen by the caller that opened the holder."""
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.buses.llm_call_context import close_raw_completion_holder, open_raw_completion_holder
+    from ciris_engine.logic.services.runtime.llm_service.service import _record_raw_completion_text
+
+    completion = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"selected_action": "speak"}'))])
+    _record_raw_completion_text(completion)  # no holder open: kept nowhere, raises nothing
+    holder = open_raw_completion_holder()
+    try:
+        _record_raw_completion_text(completion)
+        assert holder == {"text": '{"selected_action": "speak"}'}
+    finally:
+        close_raw_completion_holder()

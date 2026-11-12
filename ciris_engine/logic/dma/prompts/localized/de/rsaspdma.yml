@@ -24,24 +24,24 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  Ein Abruf löst sich in dieser Reihenfolge auf:
+  Ein RECALL wird in dieser Reihenfolge aufgelöst:
 
-    node_id   eine exakte Suche. Existiert dieser Knoten, wird er zurückgegeben,
+    node_id   eine exakte Suche. Wenn dieser Knoten existiert, wird er zurückgegeben,
               und es wird nichts anderes durchsucht.
-    query     eine Textsuche im Gedächtnis, eingegrenzt durch node_type und scope,
-              wenn Sie diese angeben. Wird verwendet, wenn es keine node_id gibt
-              oder diese nichts gefunden hat.
+    query     eine Textsuche im Graphen, eingegrenzt durch node_type und scope, wenn Sie
+              diese angeben. Wird verwendet, wenn keine node_id vorliegt oder diese
+              nichts gefunden hat.
 
   Arbeite dich durch diese der Reihe nach:
 
   1. WAS suchen Sie? Eine Sache, klar benannt.
-  2. HABEN SIE ES BEREITS VOR SICH? Die gespeicherten Fakten einer Person kommen
-     mit ihrem Profil, und die Konversation ist in Ihrem Kontext. Was Sie bereits
-     lesen können, braucht keinen Abruf.
-  3. STEHT ES AUF EINEM KNOTEN, DEN SIE BENENNEN KÖNNEN? Wenn einer der
+  2. IST ES BEREITS VOR IHNEN? Die gespeicherten Fakten einer Person kommen mit
+     ihrem Profil, und die Konversation befindet sich in Ihrem Kontext. Was Sie
+     bereits lesen können, benötigt kein RECALL.
+  3. BEFINDET ES SICH AUF EINEM KNOTEN, DEN SIE BENENNEN KÖNNEN? Wenn einer der
      KANDIDATENKNOTEN es enthält, geben Sie diese Kennung als node_id an.
-  4. ANDERNFALLS geben Sie eine query an: die wenigsten Wörter, die das Gewünschte
-     identifizieren. Fügen Sie node_type oder node_scope nur hinzu, wenn Sie diese
+  4. ANDERNFALLS geben Sie eine query an: die wenigsten Wörter, die beschreiben,
+     was Sie suchen. Fügen Sie node_type oder node_scope nur hinzu, wenn Sie diese
      kennen.
   5. Entscheiden Sie: RECALL mit dem, was Sie überprüft haben, SPEAK, um zu
      antworten oder zu fragen, oder PONDER, um zu überdenken.
@@ -51,11 +51,12 @@ memory_prohibitions: |
   === WAS NICHT PASSIEREN DARF ===
 
   Erfinden Sie keine Knotenkennzeichnung. Eine Kennung, die nicht der Konvention
-  folgt, entspricht nichts, und ein leeres Ergebnis liest sich dann als „Das habe
-  ich nie gelernt", obwohl die Wahrheit lautet: „Ich habe am falschen Ort gesucht".
+  folgt, findet keine Übereinstimmung, und ein leeres Ergebnis liest sich dann als
+  „Das habe ich nie gelernt“, obwohl die Wahrheit lautet: „Ich habe an der falschen
+  Stelle gesucht“.
 
-  Geben Sie nicht an, was ein Abruf ergeben hat, bevor er ausgeführt wurde. Dieser
-  Schritt adressiert den Lesevorgang; das Ergebnis kommt erst danach.
+  Geben Sie nicht an, was ein RECALL zurückgegeben hat, bevor er ausgeführt wurde.
+  Dieser Schritt adressiert den Lesevorgang; das Ergebnis trifft erst danach ein.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -74,14 +75,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "exakte Knotenkennzeichnung zum Lesen (geben Sie diese oder query an, wenn RECALL)",
-    "query": "Suchtext (geben Sie diesen oder node_id an, wenn RECALL)",
+    "node_id": "exakte Knotenkennzeichnung zum Lesen (diese oder query bei RECALL angeben)",
+    "query": "Suchtext (diesen oder node_id bei RECALL angeben)",
     "node_type": "Knotentyp zur Eingrenzung einer Suche (optional)",
     "node_scope": "Graph-Umfang zur Eingrenzung einer Suche (optional)",
     "limit": 10,
     "message": "was zu sagen (erforderlich bei SPEAK)",
     "questions": ["was zu überdenken (erforderlich bei PONDER)"],
-    "reasoning": "warum dieser Lesevorgang das findet, wonach Sie suchen, oder warum Sie gewechselt haben"
+    "reasoning": "warum dieser Lesevorgang findet, was Sie suchen, oder warum Sie stattdessen SPEAK oder PONDER gewählt haben"
   }}
 
 # DEONTIC — the closing categorical.

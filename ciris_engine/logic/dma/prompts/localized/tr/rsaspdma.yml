@@ -24,24 +24,24 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  Bir recall şu sırayla çözümlenir:
+  Bir RECALL şu sırayla çözümlenir:
 
     node_id   tam bir arama. Bu düğüm varsa döndürülür ve başka hiçbir şey
               aranmaz.
-    query     node_type ve scope'u verdiğinizde bunlarla daraltılan, bellekte
-              yapılan bir metin araması. node_id olmadığında veya hiçbir şeyle
-              eşleşmediğinde kullanılır.
+    query     node_type ve kapsamı verdiğinizde bunlarla daraltılan, grafiğin
+              metin araması. node_id olmadığında veya hiçbir şeyle eşleşmediğinde
+              kullanılır.
 
   Sırasıyla bunların içinden geçin:
 
-  1. NE arıyorsunuz? Açıkça belirtilmiş tek bir şey.
+  1. NE arıyorsunuz? Tek bir şey, açıkça belirtilmiş.
   2. ZATEN ÖNÜNÜZDE Mİ? Bir kişinin saklanan gerçekleri profiliyle birlikte
-     size sunulur ve sohbet bağlamınızda yer alır. Zaten okuyabildiğiniz şey
-     recall gerektirmez.
-  3. ADLANDIRABİLECEĞİNİZ BİR DÜĞÜMDE Mİ? ADAY DÜĞÜMLERDEN biri bunu tutuyorsa,
-     o kimliği node_id olarak verin.
-  4. AKSİ HALDE bir "query" verin: istediğinizi tanımlayan en az sayıda kelime.
-     node_type veya node_scope'u yalnızca bildiğinizde ekleyin.
+     gelir ve sohbet bağlamınızdadır. Zaten okuyabildiğiniz şey için RECALL
+     gerekmez.
+  3. ADLANDIRABİLECEĞİNİZ BİR DÜĞÜMDE Mİ? ADAY DÜĞÜMLER'den biri bunu
+     tutuyorsa, o kimliği node_id olarak verin.
+  4. AKSİ HALDE bir query verin: istediğinizi tanımlayan en az kelime. node_type
+     veya node_scope'u yalnızca bunları bildiğinizde ekleyin.
   5. Karar verin: kontrol ettiğinizle RECALL, yanıtlamak veya sormak için SPEAK,
      ya da yeniden düşünmek için PONDER.
 
@@ -49,12 +49,12 @@ evaluation_steps: |
 memory_prohibitions: |
   === OLAN NE OLMAMALIDIR ===
 
-  Bir düğüm kimliği icat etmeyin. Kuralları izlemeyen bir kimlik hiçbir şeyle
-  eşleşmez ve boş bir sonuç, gerçek "yanlış yere baktım" iken "bunu hiç
-  öğrenmedim" olarak okunur.
+  Bir düğüm kimliği icat etmeyin. Kuralı izlemeyen bir kimlik hiçbir şeyle
+  eşleşmez ve boş bir sonuç o zaman "bunu hiç öğrenmedim" olarak okunur,
+  oysa gerçek "yanlış yere baktım"dır.
 
-  Bir recall çalışmadan önce ne döndürdüğünü belirtmeyin. Bu adım okumayı ele
-  alır; sonuç daha sonra gelir.
+  Bir RECALL'ın döndürdüğünü, o çalışmadan önce ifade etmeyin. Bu adım okumayı
+  ele alır; sonuç daha sonra gelir.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -75,12 +75,12 @@ response_format: |
     "final_action": "RECALL" | "SPEAK" | "PONDER",
     "node_id": "okunacak tam düğüm kimliği (RECALL için bunu veya query'yi verin)",
     "query": "arama metni (RECALL için bunu veya node_id'yi verin)",
-    "node_type": "aramayı daraltmak için düğüm türü (isteğe bağlı)",
-    "node_scope": "aramayı daraltmak için grafik kapsamı (isteğe bağlı)",
+    "node_type": "aramayı daraltacak düğüm türü (isteğe bağlı)",
+    "node_scope": "aramayı daraltacak grafik kapsamı (isteğe bağlı)",
     "limit": 10,
     "message": "söylenecek şey (SPEAK için gerekli)",
     "questions": ["düşünülecek şey (PONDER için gerekli)"],
-    "reasoning": "bu okumanın aradığınız şeyi neden bulacağı veya neden karar değiştirdiğiniz"
+    "reasoning": "bu okumanın neden aradığınızı bulduğu veya bunun yerine neden SPEAK ya da PONDER seçtiğiniz"
   }}
 
 # DEONTIC — the closing categorical.

@@ -28,10 +28,10 @@ evaluation_steps: |
   按顺序完成这些步骤：
 
   1. 什么应该被遗忘，是谁要求的？
-  2. 哪个节点持有它？ 将其与候选节点和寻址约定进行比较。按列出的原样给出 id。
-  3. 该节点上还有什么？ 所有显示为已存储的内容都会随之一同失去。
-  4. 范围。 给出该节点存储所在的范围。
-  5. 决定：用你已检查的节点执行 FORGET，用 SPEAK 进行提问或说明还会失去什么，或用 PONDER 进行重新考虑。
+  2. 哪个节点持有它？ 将其与候选节点和寻址约定进行比较。按列出的原样给出该 id。
+  3. 该节点上还有什么？ 显示为已存储在该节点上的所有内容都会随之被移除。
+  4. 范围。 给出该节点所存储的范围。
+  5. 决定：用你已检查的节点进行 FORGET，用 SPEAK 进行提问或说明还会丢失什么，或用 PONDER 进行重新考虑。
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -63,11 +63,11 @@ response_format: |
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
     "node_id": "要移除的节点 id（FORGET 时需要）",
-    "node_scope": "该节点存储所在的图范围（FORGET 时需要）",
+    "node_scope": "该节点所存储的图范围（FORGET 时需要）",
     "reason": "为什么要遗忘这个节点（FORGET 时需要）",
     "message": "要说什么（SPEAK 时需要）",
     "questions": ["要重新考虑什么（PONDER 时需要）"],
-    "reasoning": "为什么这是正确的节点，或为什么你切换了"
+    "reasoning": "为什么这是正确的节点，或为什么你选择了 SPEAK 或 PONDER"
   }}
 
 # DEONTIC — the closing categorical.

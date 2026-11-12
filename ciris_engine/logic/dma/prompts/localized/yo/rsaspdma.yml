@@ -75,12 +75,12 @@ response_format: |
     "final_action": "RECALL" | "SPEAK" | "PONDER",
     "node_id": "ìpò id gan-an láti kà (fún èyí tàbí query nígbà tí ó bá jẹ́ RECALL)",
     "query": "ọ̀rọ̀ wíwá (fún èyí tàbí node_id nígbà tí ó bá jẹ́ RECALL)",
-    "node_type": "irú ìpò láti dín wíwá kù (aṣàyàn)",
-    "node_scope": "àyè ìrántí láti dín wíwá kù (aṣàyàn)",
+    "node_type": "irú ìpò láti dín wíwá kù (àṣàyàn)",
+    "node_scope": "àyè gírafù láti dín wíwá kù (àṣàyàn)",
     "limit": 10,
     "message": "ohun tí a óò sọ (a nílò rẹ̀ nígbà tí ó bá jẹ́ SPEAK)",
     "questions": ["ohun tí a óò tún rò (a nílò rẹ̀ nígbà tí ó bá jẹ́ PONDER)"],
-    "reasoning": "ìdí tí kíkà yìí fi rí ohun tí ìwọ ń wá, tàbí ìdí tí ìwọ fi yí padà"
+    "reasoning": "ìdí tí kíkà yìí fi rí ohun tí ìwọ ń wá, tàbí ìdí tí ìwọ fi yan SPEAK tàbí PONDER dípò"
   }}
 
 # DEONTIC — the closing categorical.

@@ -1,7 +1,3 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
 description: "ਭੁੱਲਣ-ਵਿਸ਼ੇਸ਼ ਕਾਰਵਾਈ ਦੀ ਚੋਣ — ਗ੍ਰਾਫ਼-ਮਿਟਾਉਣ ਵਾਲੀ ਗਾਈਡ, ਇੱਕ ਪ੍ਰਸਤਾਵਿਤ FORGET ਉੱਤੇ ਲਾਗੂ ਕੀਤੀ ਗਈ"
 version: "1.0"
@@ -28,15 +24,13 @@ system_guidance_header: |
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  ਇਨ੍ਹਾਂ ਨੂੰ ਕ੍ਰਮ ਵਿੱਚ ਕਰੋ:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. ਕੀ ਭੁੱਲਣਾ ਚਾਹੀਦਾ ਹੈ, ਅਤੇ ਕਿਸ ਨੇ ਇਸ ਲਈ ਕਿਹਾ?
+  2. ਕਿਹੜਾ NODE ਇਸ ਨੂੰ ਰੱਖਦਾ ਹੈ? CANDIDATE NODES ਅਤੇ addressing convention ਦੇ ਵਿਰੁੱਧ compare ਕਰੋ। id ਬਿਲਕੁਲ ਉਸੇ ਤਰ੍ਹਾਂ ਦਿਓ ਜਿਵੇਂ ਇਹ ਸੂਚੀਬੱਧ ਹੈ।
+  3. ਉਸ node ਉੱਤੇ ਹੋਰ ਕੀ ਹੈ? ਜੋ ਵੀ ਪਹਿਲਾਂ ਤੋਂ ਉਸ ਉੱਤੇ store ਦਿਖਾਇਆ ਗਿਆ ਹੈ, ਉਹ ਇਸ ਦੇ ਨਾਲ ਹੀ ਹਟਾਇਆ ਜਾਂਦਾ ਹੈ।
+  4. SCOPE. ਉਹ scope ਦਿਓ ਜਿਸ ਵਿੱਚ node store ਹੈ।
+  5. Decide ਕਰੋ: ਆਪਣੇ checked node ਦੇ ਨਾਲ FORGET, ਪੁੱਛਣ ਲਈ ਜਾਂ ਇਹ ਦੱਸਣ ਲਈ ਕਿ ਹੋਰ ਕੀ ਗੁਆਚ ਜਾਵੇਗਾ SPEAK, ਜਾਂ reconsider ਲਈ PONDER।
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -61,16 +55,16 @@ context_integration: |
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  Respond with JSON:
+  JSON ਨਾਲ respond ਕਰੋ:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "the node id to remove (required when FORGET)",
-    "node_scope": "graph scope the node is stored in (required when FORGET)",
-    "reason": "why this node is being forgotten (required when FORGET)",
-    "message": "what to say (required when SPEAK)",
-    "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "node_id": "ਹਟਾਉਣ ਵਾਲਾ node id (FORGET ਲਈ ਜਰੂਰੀ)",
+    "node_scope": "graph scope ਜਿਸ ਵਿੱਚ node store ਹੈ (FORGET ਲਈ ਜਰੂਰੀ)",
+    "reason": "ਇਹ node ਕਿਉਂ ਭੁੱਲਿਆ ਜਾ ਰਿਹਾ ਹੈ (FORGET ਲਈ ਜਰੂਰੀ)",
+    "message": "ਕੀ ਕਹਿਣਾ ਹੈ (SPEAK ਲਈ ਜਰੂਰੀ)",
+    "questions": ["ਕੀ reconsider ਕਰਨਾ ਹੈ (PONDER ਲਈ ਜਰੂਰੀ)"],
+    "reasoning": "ਇਹ ਸਹੀ node ਕਿਉਂ ਹੈ, ਜਾਂ ਤੁਸੀਂ SPEAK ਜਾਂ PONDER ਕਿਉਂ ਚੁਣਿਆ"
   }}
 
 # DEONTIC — the closing categorical.

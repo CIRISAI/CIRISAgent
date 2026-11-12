@@ -22,26 +22,26 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  एक recall इस क्रम में resolve होता है:
+  एक RECALL इस क्रम में resolve होता है:
 
-    node_id   एक exact lookup। यदि वह node exists करता है तो वह return किया जाता है, और कुछ भी और search नहीं किया जाता।
-    query     memory की एक text search, जिसे आप node_type और scope देने पर narrow किया जाता है। इसका उपयोग तब होता है जब कोई node_id नहीं है, या वह किसी से match नहीं हुआ।
+    node_id   एक exact lookup। यदि वह node exist करता है तो वह return हो जाता है, और कुछ भी और search नहीं किया जाता।
+    query     graph की एक text search, जिसे आप node_type और scope देने पर narrow कर सकते हैं। इसका उपयोग तब होता है जब कोई node_id न हो, या उसने कुछ भी match न किया हो।
 
   इनको क्रम में काम करें:
 
   1. आप क्या ढूंढ रहे हैं? एक चीज़, स्पष्ट रूप से बताई गई।
-  2. क्या यह पहले से आपके सामने है? किसी व्यक्ति के stored facts उनके profile के साथ आते हैं, और conversation आपके context में है। जो आप पहले से पढ़ सकते हैं उसके लिए recall की जरूरत नहीं है।
-  3. क्या यह किसी ऐसे node पर है जिसे आप नाम दे सकते हैं? यदि CANDIDATE NODES में से कोई इसे रखता है, तो उस id को node_id के रूप में दें।
-  4. अन्यथा एक query दें: सबसे कम शब्द जो आपके चाहे गए को पहचानते हैं। node_type या node_scope तभी जोड़ें जब आप उन्हें जानते हों।
-  5. Decide करें: आपके checked किए हुए के साथ RECALL, उत्तर देने या पूछने के लिए SPEAK, या reconsider करने के लिए PONDER।
+  2. क्या यह पहले से ही आपके सामने है? किसी व्यक्ति के stored facts उनकी profile के साथ आते हैं, और conversation आपके context में है। जो आप पहले से पढ़ सकते हैं उसके लिए RECALL की आवश्यकता नहीं है।
+  3. क्या यह किसी ऐसे node पर है जिसे आप नाम दे सकते हैं? यदि CANDIDATE NODES में से कोई इसे रखता है, तो वह id node_id के रूप में दें।
+  4. अन्यथा एक query दें: सबसे कम शब्द जो यह बताते हैं कि आप क्या चाहते हैं। node_type या node_scope तभी जोड़ें जब आप उन्हें जानते हों।
+  5. Decide करें: जो आपने जांचा है उसके साथ RECALL, उत्तर देने या पूछने के लिए SPEAK, या reconsider करने के लिए PONDER।
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
   === जो नहीं होना चाहिए ===
 
-  एक node id invent न करें। एक id जो convention का पालन नहीं करता किसी से भी match नहीं होता, और फिर एक empty result "मैंने यह कभी नहीं सीखा" जैसा पढ़ा जाता है जबकि truth यह है कि "मैंने गलत जगह देखी"।
+  एक node id invent न करें। एक id जो convention का पालन नहीं करता कुछ भी match नहीं करता, और फिर एक खाली result "मैंने यह कभी नहीं सीखा" जैसा दिखता है जबकि सच यह है कि "मैंने गलत जगह देखी"।
 
-  एक recall के चलने से पहले यह न बताएं कि उसने क्या return किया। यह step read को address करता है; result बाद में आता है।
+  RECALL के चलने से पहले वह क्या लौटाएगा यह न बताएं। यह step read को address करता है; result बाद में आता है।
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -60,14 +60,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "पढ़ने के लिए exact node id (RECALL के समय यह या query दें)",
-    "query": "search text (RECALL के समय यह या node_id दें)",
-    "node_type": "search को narrow करने के लिए node type (वैकल्पिक)",
-    "node_scope": "search को narrow करने के लिए graph scope (वैकल्पिक)",
+    "node_id": "पढ़ने के लिए exact node id (RECALL के लिए यह या query दें)",
+    "query": "search text (RECALL के लिए यह या node_id दें)",
+    "node_type": "search को narrow करने के लिए node type (optional)",
+    "node_scope": "search को narrow करने के लिए graph scope (optional)",
     "limit": 10,
     "message": "क्या कहना है (SPEAK के लिए आवश्यक)",
     "questions": ["क्या reconsider करना है (PONDER के लिए आवश्यक)"],
-    "reasoning": "यह read वह क्यों खोजता है जो आप ढूंढ रहे हैं, या आपने क्यों switch किया"
+    "reasoning": "यह read वह क्यों ढूंढता है जो आप ढूंढ रहे हैं, या आपने SPEAK या PONDER क्यों चुना"
   }}
 
 # DEONTIC — the closing categorical.

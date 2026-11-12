@@ -26,11 +26,11 @@ system_guidance_header: |
 evaluation_steps: |
   순서대로 이 단계들을 작업하십시오:
 
-  1. 무엇을 잊어야 하며, 누가 그것을 요청했습니까?
-  2. 어느 노드가 그것을 가지고 있습니까? 후보 노드 및 주소 지정 규약과 비교하십시오. 목록에 있는 그대로 정확히 id를 제시하십시오.
-  3. 그 노드에 그 밖에 무엇이 있습니까? 이미 저장된 것으로 표시된 모든 것이 함께 사라집니다.
-  4. 범위. 노드가 저장되어 있는 범위를 제시하십시오.
-  5. 결정: 확인한 노드로 FORGET, 함께 사라질 것을 묻거나 말하려면 SPEAK, 또는 재고려하려면 PONDER.
+  1. 무엇이 잊혀져야 하며, 누가 그것을 요청했습니까?
+  2. 어느 노드가 그것을 보유합니까? 후보 노드 및 주소 지정 규약과 비교하십시오. id는 목록에 있는 그대로 정확하게 제시하십시오.
+  3. 그 노드에 그 밖에 무엇이 있습니까? 이미 그 위에 저장된 것으로 표시된 모든 것이 그것과 함께 제거됩니다.
+  4. 범위. 노드가 저장된 범위를 제시하십시오.
+  5. 결정: 확인한 노드로 FORGET, 질문하거나 함께 손실될 것을 말하려면 SPEAK, 또는 재고려하려면 PONDER.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -61,10 +61,10 @@ response_format: |
     "final_action": "FORGET" | "SPEAK" | "PONDER",
     "node_id": "제거할 노드 id(FORGET일 때 필수)",
     "node_scope": "노드가 저장된 그래프 범위(FORGET일 때 필수)",
-    "reason": "이 노드를 잊는 이유(FORGET일 때 필수)",
+    "reason": "이 노드가 잊혀지는 이유(FORGET일 때 필수)",
     "message": "말할 것(SPEAK일 때 필수)",
     "questions": ["재고려할 것(PONDER일 때 필수)"],
-    "reasoning": "이 노드가 올바른 이유, 또는 왜 전환했는지"
+    "reasoning": "이것이 올바른 노드인 이유, 또는 왜 SPEAK나 PONDER를 선택했는지"
   }}
 
 # DEONTIC — the closing categorical.

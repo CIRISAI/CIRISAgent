@@ -26,11 +26,11 @@ system_guidance_header: |
 evaluation_steps: |
   या क्रमाने काम करा:
 
-  1. काय विसरायला हवे, आणि ते कोणी मागितले?
-  2. कोणता NODE त्याला धरतो? CANDIDATE NODES आणि addressing convention विरुद्ध compare करा. id बरोबर तसाच द्या जसा तो सूचीबद्ध आहे.
-  3. त्या node वर आणखी काय आहे? आधीच store केलेले दाखवलेले सर्वकाही त्यासोबत जाते.
-  4. SCOPE. node जिथे store आहे ती scope द्या.
-  5. Decide करा: आपण तपासलेल्या node सह FORGET, विचारण्यासाठी किंवा काय गमावले जाईल ते सांगण्यासाठी SPEAK, किंवा reconsider साठी PONDER.
+  1. काय विसरायचे आहे, आणि ते विसरण्याची विनंती कोणी केली आहे?
+  2. कोणता NODE ते धारण करतो? CANDIDATE NODES आणि addressing convention यांच्याशी तुलना करा. id जसा सूचीबद्ध आहे तसाच अचूक द्या.
+  3. त्या node वर आणखी काय आहे? त्यावर आधीच साठवलेले जे काही दाखवले आहे ते सर्व त्याच्यासोबत काढले जाईल.
+  4. SCOPE. ज्या scope मध्ये node साठवलेला आहे तो scope सांगा.
+  5. Decide करा: आपण तपासलेल्या node सह FORGET, विचारण्यासाठी किंवा आणखी काय गमावले जाईल हे सांगण्यासाठी SPEAK, किंवा reconsider साठी PONDER.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -55,16 +55,16 @@ context_integration: |
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  JSON स्वरूपात उत्तर द्या:
+  JSON सह respond करा:
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "विसरायचा node id (FORGET साठी आवश्यक)",
-    "node_scope": "node ज्या graph scope मध्ये साठवले आहे (FORGET साठी आवश्यक)",
-    "reason": "हा node का विसरला (काढून टाकला) जात आहे (FORGET साठी आवश्यक)",
+    "node_id": "काढायचा node id (FORGET साठी आवश्यक)",
+    "node_scope": "node ज्या graph scope मध्ये साठवलेला आहे (FORGET साठी आवश्यक)",
+    "reason": "हा node का विसरला जात आहे (FORGET साठी आवश्यक)",
     "message": "काय सांगायचे (SPEAK साठी आवश्यक)",
-    "questions": ["काय पुनर्विचार करायचे (PONDER साठी आवश्यक)"],
-    "reasoning": "हाच योग्य node का आहे, किंवा आपण का switch केले"
+    "questions": ["काय reconsider करायचे (PONDER साठी आवश्यक)"],
+    "reasoning": "हा योग्य node का आहे, किंवा आपणे SPEAK किंवा PONDER का निवडले"
   }}
 
 # DEONTIC — the closing categorical.

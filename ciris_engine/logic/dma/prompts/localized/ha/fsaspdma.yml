@@ -27,15 +27,16 @@ system_guidance_header: |
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Wuce waɗannan juna-juna:
+  Bi waɗannan matakan a jere:
 
-  1. MENE NE ya kamata a manta, kuma wa ne ya nema haka?
-  2. WANE KUMBURI ne ke riƙe shi? Kwatanta da CANDIDATE NODES da doka
-     yunakawa. Bayar da id ɗin daidai kamar yadda aka lissafa.
-  3. MENE NE KUMA ke kan wannan kumburi? Duk abin da aka nuna cewa tuni an ajiye shi, zai tafi tare da shi.
-  4. YANKI. Bayar da yankin da aka ajiye kumburin a ciki.
-  5. Yanke shawara: FORGET tare da kumburin da kuka bincika, SPEAK don tambaya ko don faɗi abin da
-     kuma zai ɓace, ko PONDER don sake yin tunani.
+  1. MENE NE ya kamata a manta, kuma wa ya nema?
+  2. WANE KUMBURI ke riƙe da shi? Kwatanta da CANDIDATE NODES da kuma doka
+     yunakawa. Ba da id ɗin daidai yadda aka jera shi.
+  3. MENE NE KUMA ke kan wannan kumburi? Duk abin da aka nuna a matsayin
+     an riga an ajiye a kansa za a cire shi tare da shi.
+  4. YANKI. Ba da yankin da aka ajiye kumburin a ciki.
+  5. Yanke shawara: FORGET tare da kumburin da ka duba, SPEAK don tambaya ko don
+     faɗi abin da kuma za a rasa, ko PONDER don sake tunani.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -68,12 +69,12 @@ response_format: |
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "sako id da za a cire (yana buƙata lokacin FORGET)",
-    "node_scope": "yankin Zane na alaƙa inda aka ajiye sako (yana buƙata lokacin FORGET)",
-    "reason": "dalilin da ya sa ake mantawa da wannan sako (yana buƙata lokacin FORGET)",
+    "node_id": "id na kumburin da za a cire (yana buƙata lokacin FORGET)",
+    "node_scope": "yankin zane na alaƙa da aka ajiye kumburin a ciki (yana buƙata lokacin FORGET)",
+    "reason": "dalilin da ya sa ake mantawa da wannan kumburi (yana buƙata lokacin FORGET)",
     "message": "abin da za a faɗi (yana buƙata lokacin SPEAK)",
-    "questions": ["abin da za a sake yin tunani a kai (yana buƙata lokacin PONDER)"],
-    "reasoning": "dalilin da ya sa wannan shine sako daidai, ko dalilin sauyawa"
+    "questions": ["abin da za a sake tunani a kai (yana buƙata lokacin PONDER)"],
+    "reasoning": "dalilin da ya sa wannan shi ne kumburin da ya dace, ko dalilin da ya sa ka zaɓi SPEAK ko PONDER maimakon"
   }}
 
 # DEONTIC — the closing categorical.

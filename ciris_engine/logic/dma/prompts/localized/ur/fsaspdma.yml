@@ -27,12 +27,10 @@ evaluation_steps: |
   ان کو ترتیب سے کریں:
 
   1. کیا بھلایا جانا چاہیے، اور یہ کس نے مانگا؟
-  2. کون سا NODE اسے رکھتا ہے؟ CANDIDATE NODES اور addressing
-     convention کے خلاف موازنہ کریں۔ id بالکل اسی طرح دیں جیسے وہ درج ہے۔
-  3. اس node پر اور کیا کچھ ہے؟ جو کچھ پہلے سے store شدہ دکھایا گیا ہے وہ سب اس کے ساتھ جائے گا۔
-  4. SCOPE۔ وہ scope دیں جس میں node store ہے۔
-  5. فیصلہ کریں: اپنے چیک کیے گئے node کے ساتھ FORGET، پوچھنے یا یہ بتانے کے لیے کہ کیا بھی
-     کھو جائے گا SPEAK، یا دوبارہ غور کرنے کے لیے PONDER۔
+  2. کون سا NODE اسے رکھتا ہے؟ اپنے id کو CANDIDATE NODES اور addressing convention کے خلاف compare کریں۔ id بالکل ویسے ہی دیں جیسے وہ درج ہے۔
+  3. اس node پر اور کیا ہے؟ ہر وہ چیز جو اس پر پہلے سے stored دکھائی جاتی ہے اس کے ساتھ ہی ہٹا دی جاتی ہے۔
+  4. SCOPE. وہ scope دیں جس میں node store ہے۔
+  5. Decide کریں: جس node کو آپ نے check کیا ہے اس کے ساتھ FORGET، پوچھنے کے لیے یا یہ بتانے کے لیے کہ اور کیا کھو جائے گا SPEAK، یا reconsider کے لیے PONDER۔
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -62,11 +60,11 @@ response_format: |
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
     "node_id": "وہ node id جو ہٹانا ہے (FORGET کے لیے ضروری)",
-    "node_scope": "graph scope جس میں node store ہے (FORGET کے لیے ضروری)",
+    "node_scope": "وہ graph scope جس میں node store ہے (FORGET کے لیے ضروری)",
     "reason": "یہ node کیوں بھلایا جا رہا ہے (FORGET کے لیے ضروری)",
     "message": "کیا کہنا ہے (SPEAK کے لیے ضروری)",
     "questions": ["کیا reconsider کرنا ہے (PONDER کے لیے ضروری)"],
-    "reasoning": "یہ صحیح node کیوں ہے، یا آپ نے کیوں switch کیا"
+    "reasoning": "یہ node درست کیوں ہے، یا آپ نے SPEAK یا PONDER کیوں منتخب کیا"
   }}
 
 # DEONTIC — the closing categorical.

@@ -32,11 +32,11 @@ evaluation_steps: |
   1. NE unutulmalı ve bunu kim istedi?
   2. HANGİ DÜĞÜM bunu tutuyor? ADAY DÜĞÜMLER ve adresleme kuralıyla
      karşılaştırın. Kimliği tam olarak listelendiği gibi verin.
-  3. O düğümde BAŞKA NE var? Zaten saklandığı gösterilen her şey onunla birlikte
-     gider.
+  3. O düğümde BAŞKA NE var? Üzerinde zaten saklı olarak gösterilen her şey
+     onunla birlikte kaldırılır.
   4. KAPSAM. Düğümün saklandığı kapsamı verin.
-  5. Karar verin: kontrol ettiğiniz düğümle FORGET, sormak veya başka ne
-     kaybedileceğini söylemek için SPEAK, ya da yeniden düşünmek için PONDER.
+  5. Karar verin: kontrol ettiğiniz düğümle FORGET, sormak veya neyin de
+     kaybolacağını söylemek için SPEAK, ya da yeniden düşünmek için PONDER.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -74,7 +74,7 @@ response_format: |
     "reason": "bu düğümün neden unutulduğu (FORGET için gerekli)",
     "message": "söylenecek şey (SPEAK için gerekli)",
     "questions": ["düşünülecek şey (PONDER için gerekli)"],
-    "reasoning": "bu düğümün neden doğru düğüm olduğu veya neden karar değiştirdiğiniz"
+    "reasoning": "bunun neden doğru düğüm olduğu veya bunun yerine neden SPEAK ya da PONDER seçtiğiniz"
   }}
 
 # DEONTIC — the closing categorical.

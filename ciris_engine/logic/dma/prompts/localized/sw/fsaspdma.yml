@@ -29,14 +29,14 @@ system_guidance_header: |
 evaluation_steps: |
   Fanya kila moja kwa mpangilio:
 
-  1. NINI kinapaswa kusahauliwa, na ni nani aliyeomba hilo?
-  2. NODI IPI inashikilia hilo? Linganisha na NODI AMBAZO INAWEZA
-     KUZINGATIWA na kawaida ya
-     kunganisha. Toa kitambulisho (id) hasa kama kilivyoorodheshwa.
-  3. NINI KINGINE kiko kwenye nodi hiyo? Kila kitu kinachoonyeshwa kama tayari kimehifadhiwa kinaenda pamoja nayo.
-  4. UWANJA. Toa uwanja ambao nodi imehifadhiwa ndani yake.
-  5. Amua: FORGET na nodi uliyoiangalia, SPEAK kuuliza au kusema kile
-     ambacho pia kitapotea, au PONDER kufikiria upya.
+  1. KITU GANI kinapaswa kusahauliwa, na ni nani aliyeomba hilo?
+  2. NODI IPI inaihifadhi? Linganisha dhidi ya NODI AMBAZO INAWEZA KUZINGATIWA
+     na kawaida ya kuelekeza. Toa kitambulisho cha nodi hasa kama kilivyoorodheshwa.
+  3. NINI KINGINE kiko kwenye nodi hiyo? Kila kitu kinachoonyeshwa kuwa tayari
+     kimehifadhiwa humo kinaondolewa pamoja nayo.
+  4. UWANJA WA GRAFU. Toa uwanja wa grafu ambao nodi imehifadhiwa ndani yake.
+  5. Amua: FORGET na nodi uliyoangalia, SPEAK kuuliza au kusema ni nini kingine
+     ambacho pia kingepotea, au PONDER kufikiria upya.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -69,12 +69,12 @@ response_format: |
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "kitambulisho cha nodi ya kuondoa (kinahitajika wakati FORGET)",
+    "node_id": "kitambulisho cha nodi cha kuondoa (kinahitajika wakati FORGET)",
     "node_scope": "uwanja wa grafu ambao nodi imehifadhiwa ndani yake (unahitajika wakati FORGET)",
-    "reason": "kwa nini nodi hii inasahauliwa (kinahitajika wakati FORGET)",
+    "reason": "kwa nini nodi hii inasahauliwa (inahitajika wakati FORGET)",
     "message": "kile cha kusema (kinachohitajika wakati SPEAK)",
     "questions": ["kile cha kufikiria upya (kinachohitajika wakati PONDER)"],
-    "reasoning": "kwa nini hii ni nodi sahihi, au kwa nini ulibadilisha"
+    "reasoning": "kwa nini hii ndiyo nodi sahihi, au kwa nini ulichagua SPEAK au PONDER badala yake"
   }}
 
 # DEONTIC — the closing categorical.

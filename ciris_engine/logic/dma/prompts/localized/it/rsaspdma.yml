@@ -24,36 +24,37 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  Un richiamo si risolve in quest'ordine:
+  Una RECALL si risolve in quest'ordine:
 
-    node_id   una ricerca esatta. Se quel nodo esiste viene restituito, e non viene
-              cercato nient'altro.
-    query     una ricerca testuale nella memoria, ristretta da node_type e scope quando li
-              fornisci. Usata quando non c'è node_id, o non ha trovato corrispondenze.
+    node_id   una ricerca esatta. Se quel nodo esiste viene restituito, e non
+              viene cercato nient'altro.
+    query     una ricerca testuale nel grafo, ristretta da node_type e scope quando
+              li fornisci. Usata quando non c'è un node_id, o questo non ha trovato
+              nulla.
 
   Lavora attraverso questi in ordine:
 
-  1. COSA stai cercando? Una cosa sola, dichiarata chiaramente.
+  1. COSA stai cercando? Una sola cosa, dichiarata chiaramente.
   2. È GIÀ DAVANTI A TE? I fatti archiviati di una persona arrivano con il suo
      profilo, e la conversazione è nel tuo contesto. Ciò che puoi già leggere
-     non richiede alcun richiamo.
-  3. È SU UN NODO CHE PUOI NOMINARE? Se uno dei NODI CANDIDATI lo contiene, fornisci
-     quell'id come node_id.
-  4. ALTRIMENTI fornisci una query: il minor numero di parole che identifica ciò che vuoi. Aggiungi
-     node_type o node_scope solo quando li conosci.
-  5. Decidi: RECALL con ciò che hai verificato, SPEAK per rispondere o chiedere, o
-     PONDER per riconsiderare.
+     non richiede alcuna RECALL.
+  3. SI TROVA SU UN NODO CHE PUOI NOMINARE? Se uno dei NODI CANDIDATI lo
+     contiene, fornisci quell'id come node_id.
+  4. ALTRIMENTI fornisci una query: il minor numero di parole che identifica
+     ciò che vuoi. Aggiungi node_type o node_scope solo quando li conosci.
+  5. Decidi: RECALL con ciò che hai verificato, SPEAK per rispondere o chiedere,
+     o PONDER per riconsiderare.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
   === COSA NON DEVE ACCADERE ===
 
-  Non inventare un identificativo di nodo. Un id che non segue la convenzione non corrisponde
-  a nulla, e un risultato vuoto viene quindi letto come "non l'ho mai imparato" quando la
-  verità è "ho cercato nel posto sbagliato".
+  Non inventare un identificativo di nodo. Un id che non segue la convenzione
+  non corrisponde a nulla, e un risultato vuoto viene allora letto come "non ho
+  mai appreso questo" quando la verità è "ho cercato nel posto sbagliato".
 
-  Non dichiarare cosa un richiamo ha restituito prima che sia stato eseguito. Questo passo indirizza
-  la lettura; il risultato arriva dopo.
+  Non dichiarare cosa una RECALL ha restituito prima che sia stata eseguita.
+  Questo passo indirizza la lettura; il risultato arriva in seguito.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -79,7 +80,7 @@ response_format: |
     "limit": 10,
     "message": "cosa dire (richiesto quando SPEAK)",
     "questions": ["cosa riconsiderare (richiesto quando PONDER)"],
-    "reasoning": "perché questa lettura trova ciò che stai cercando, o perché hai cambiato"
+    "reasoning": "perché questa lettura trova ciò che stai cercando, o perché hai scelto SPEAK o PONDER invece"
   }}
 
 # DEONTIC — the closing categorical.

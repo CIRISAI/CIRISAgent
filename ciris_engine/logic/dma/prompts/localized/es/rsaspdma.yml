@@ -28,36 +28,36 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  Un RECALL se resuelve en este orden:
 
-    node_id   an exact lookup. If that node exists it is returned, and nothing
-              else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
-              give them. Used when there is no node_id, or it matched nothing.
+    node_id   una búsqueda exacta. Si ese nodo existe, es devuelto, y nada
+              más es buscado.
+    query     una búsqueda de texto en el grafo, acotada por node_type y ámbito cuando
+              los proporcionas. Se usa cuando no hay node_id, o este no coincidió con nada.
 
-  Work through these in order:
+  Trabaja a través de estos en orden:
 
-  1. WHAT are you looking for? One thing, stated plainly.
-  2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
-     profile, and the conversation is in your context. What you can already read
-     needs no recall.
-  3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
-     that id as node_id.
-  4. OTHERWISE give a query: the fewest words that identify what you want. Add
-     node_type or node_scope only when you know them.
-  5. Decide: RECALL with what you have checked, SPEAK to answer or ask, or
-     PONDER to reconsider.
+  1. ¿QUÉ estás buscando? Una sola cosa, expresada claramente.
+  2. ¿YA ESTÁ FRENTE A TI? Los hechos almacenados de una persona llegan con su
+     perfil, y la conversación está en tu contexto. Lo que ya puedes leer
+     no necesita RECALL.
+  3. ¿ESTÁ EN UN NODO QUE PUEDES NOMBRAR? Si uno de los NODOS CANDIDATOS lo contiene,
+     da ese id como node_id.
+  4. DE LO CONTRARIO da un query: las menos palabras posibles que identifiquen lo que quieres. Agrega
+     node_type o node_scope solo cuando los conozcas.
+  5. Decide: RECALL con lo que has verificado, SPEAK para responder o preguntar, o
+     PONDER para reconsiderar.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
   === QUÉ NO DEBE SUCEDER ===
 
-  No inventes una identificación de nodo. Un id que no sigue la convención no coincide
-  con nada, y un resultado vacío entonces se lee como "nunca aprendí esto" cuando la
-  verdad es "busqué en el lugar equivocado".
+  No inventes una identificación de nodo. Un id que no sigue la convención no
+  coincide con nada, y un resultado vacío entonces se lee como "nunca aprendí esto"
+  cuando la verdad es "busqué en el lugar equivocado".
 
-  No afirmes lo que un recall devolvió antes de que se haya ejecutado. Este paso aborda
-  la lectura; el resultado llega después.
+  No afirmes lo que un RECALL devolvió antes de que se haya ejecutado. Este paso
+  aborda la lectura; el resultado llega después.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -76,14 +76,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "identificación exacta de nodo a leer (da esta o query cuando RECALL)",
-    "query": "texto de búsqueda (da este o node_id cuando RECALL)",
+    "node_id": "identificación exacta del nodo a leer (da esto o query cuando RECALL)",
+    "query": "texto de búsqueda (da esto o node_id cuando RECALL)",
     "node_type": "tipo de nodo para acotar una búsqueda (opcional)",
-    "node_scope": "ámbito de grafo para acotar una búsqueda (opcional)",
+    "node_scope": "alcance de grafo para acotar una búsqueda (opcional)",
     "limit": 10,
     "message": "qué decir (requerido cuando SPEAK)",
     "questions": ["qué reconsiderar (requerido cuando PONDER)"],
-    "reasoning": "por qué esta lectura encuentra lo que buscas, o por qué cambiaste"
+    "reasoning": "por qué esta lectura encuentra lo que buscas, o por qué elegiste SPEAK o PONDER en su lugar"
   }}
 
 # DEONTIC — the closing categorical.

@@ -1,7 +1,3 @@
-# --- English verbatim (#1027). This second pass is new and has not been translated yet;
-# --- the shared graph blocks it composes from msaspdma.yml ARE localized. Translation
-# --- is future localization work; action verbs, node-id prefixes and JSON field names
-# --- MUST survive it unchanged.
 component_name: fsaspdma
 description: "Lựa chọn hành động dành riêng cho FORGET — hướng dẫn xóa trên đồ thị, áp dụng cho một FORGET được đề xuất"
 version: "1.0"
@@ -31,15 +27,16 @@ system_guidance_header: |
 
 # PROCEDURAL — the method.
 evaluation_steps: |
-  Work through these in order:
+  Thực hiện các bước này theo thứ tự:
 
-  1. WHAT should be forgotten, and who asked for it?
-  2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
-     convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
-  4. SCOPE. Give the scope the node is stored in.
-  5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
-     would also be lost, or PONDER to reconsider.
+  1. CÁI GÌ nên được quên, và ai đã yêu cầu điều đó?
+  2. NODE NÀO lưu trữ nó? So sánh với CANDIDATE NODES và quy ước
+     ĐỊA CHỈ. Đưa ra id chính xác như được liệt kê.
+  3. CÒN GÌ KHÁC trên node đó? Mọi thứ được hiển thị là đã lưu trữ trên đó đều
+     bị xóa cùng với nó.
+  4. PHẠM VI. Cho biết phạm vi mà node được lưu trữ trong đó.
+  5. Quyết định: FORGET với node bạn đã kiểm tra, SPEAK để hỏi hoặc để nói điều
+     cũng sẽ bị mất, hoặc PONDER để cân nhắc lại.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -72,12 +69,12 @@ response_format: |
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "node id để xóa (bắt buộc khi FORGET)",
-    "node_scope": "graph scope mà node được lưu trữ (bắt buộc khi FORGET)",
-    "reason": "tại sao node này đang bị quên (bắt buộc khi FORGET)",
+    "node_id": "node id cần xóa (bắt buộc khi FORGET)",
+    "node_scope": "graph scope mà node được lưu trữ trong đó (bắt buộc khi FORGET)",
+    "reason": "tại sao node này bị quên (bắt buộc khi FORGET)",
     "message": "điều để nói (bắt buộc khi SPEAK)",
     "questions": ["điều để cân nhắc lại (bắt buộc khi PONDER)"],
-    "reasoning": "tại sao đây là node đúng, hoặc tại sao bạn chuyển đổi"
+    "reasoning": "tại sao đây là node đúng, hoặc tại sao bạn chọn SPEAK hoặc PONDER thay vào đó"
   }}
 
 # DEONTIC — the closing categorical.

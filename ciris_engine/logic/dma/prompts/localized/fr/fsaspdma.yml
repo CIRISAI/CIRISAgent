@@ -30,12 +30,13 @@ evaluation_steps: |
   Travaillez à travers ceux-ci dans l'ordre :
 
   1. QUOI devrait être oublié, et qui l'a demandé ?
-  2. QUEL NŒUD le détient ? Comparez-le aux NŒUDS CANDIDATS et à la
-     convention d'adressage. Donnez l'id exactement comme il est indiqué.
-  3. QUOI D'AUTRE se trouve sur ce nœud ? Tout ce qui est affiché comme déjà stocké part avec lui.
+  2. QUEL NŒUD le contient ? Comparez par rapport aux NŒUDS CANDIDATS et à la
+     convention d'adressage. Donnez l'id exactement tel qu'il est listé.
+  3. QUOI D'AUTRE se trouve sur ce nœud ? Tout ce qui est indiqué comme déjà stocké dessus
+     est supprimé avec lui.
   4. PORTÉE. Donnez la portée dans laquelle le nœud est stocké.
-  5. Décidez : FORGET avec le nœud que vous avez vérifié, SPEAK pour demander ou pour dire ce qui
-     serait aussi perdu, ou PONDER pour reconsidérer.
+  5. Décidez : FORGET avec le nœud que vous avez vérifié, SPEAK pour demander ou pour dire ce
+     qui serait aussi perdu, ou PONDER pour reconsidérer.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -69,11 +70,11 @@ response_format: |
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
     "node_id": "l'identifiant de nœud à supprimer (obligatoire lors de FORGET)",
-    "node_scope": "portée du graphe où le nœud est stocké (obligatoire lors de FORGET)",
+    "node_scope": "portée du graphe dans laquelle le nœud est stocké (obligatoire lors de FORGET)",
     "reason": "pourquoi ce nœud est oublié (obligatoire lors de FORGET)",
     "message": "ce à dire (obligatoire lors de SPEAK)",
     "questions": ["ce à reconsidérer (obligatoire lors de PONDER)"],
-    "reasoning": "pourquoi c'est le bon nœud, ou pourquoi vous avez changé"
+    "reasoning": "pourquoi c'est le bon nœud, ou pourquoi vous avez choisi SPEAK ou PONDER à la place"
   }}
 
 # DEONTIC — the closing categorical.

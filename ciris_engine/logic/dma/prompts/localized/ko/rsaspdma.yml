@@ -22,28 +22,28 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  회상은 다음 순서로 해결됩니다:
+  RECALL 은 다음 순서로 해결됩니다:
 
-    node_id   정확한 조회입니다. 그 노드가 존재하면 반환되며, 다른
-              것은 검색되지 않습니다.
-    query     node_type과 범위를 제시하면 그것으로 좁혀지는 메모리의
-              텍스트 검색입니다. node_id가 없거나 일치하는 것이 없을 때 사용됩니다.
+    node_id   정확한 조회입니다. 그 노드가 존재하면 반환되며,
+              그 외에는 아무것도 검색되지 않습니다.
+    query     node_type과 scope를 제시하면 그것으로 좁혀지는 그래프의 텍스트 검색입니다.
+              node_id가 없거나 일치하는 것이 없을 때 사용됩니다.
 
   순서대로 이 단계들을 작업하십시오:
 
-  1. 무엇을 찾고 있습니까? 하나의 것을, 명확하게 말하십시오.
-  2. 그것이 이미 당신 앞에 있습니까? 한 사람의 저장된 사실은 그 사람의 프로필과 함께 도착하며, 대화는 당신의 컨텍스트에 있습니다. 이미 읽을 수 있는 것은 회상이 필요하지 않습니다.
-  3. 그것이 당신이 이름을 붙일 수 있는 노드에 있습니까? 후보 노드 중 하나가 그것을 가지고 있다면, 그 id를 node_id로 제시하십시오.
-  4. 그렇지 않다면 query를 제시하십시오: 당신이 원하는 것을 식별하는 가장 적은 단어입니다. 알고 있을 때만 node_type 또는 node_scope를 추가하십시오.
-  5. 결정: 확인한 것으로 RECALL, 답하거나 묻으려면 SPEAK, 또는 재고려하려면 PONDER.
+  1. 무엇을 찾고 있습니까? 한 가지를, 명확하게 서술하십시오.
+  2. 그것이 이미 당신 앞에 있습니까? 사람의 저장된 사실은 그 사람의 프로필과 함께 도착하며, 대화는 당신의 맥락 안에 있습니다. 이미 읽을 수 있는 것에는 RECALL이 필요하지 않습니다.
+  3. 그것이 당신이 이름을 댈 수 있는 노드에 있습니까? 후보 노드 중 하나가 그것을 보유하고 있다면, 그 id를 node_id로 제시하십시오.
+  4. 그렇지 않다면 query를 제시하십시오: 원하는 것을 식별하는 가장 적은 단어입니다. node_type이나 node_scope는 알고 있을 때만 추가하십시오.
+  5. 결정: 확인한 것으로 RECALL, 답하거나 질문하려면 SPEAK, 또는 재고려하려면 PONDER.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
   === 일어나면 안 되는 것 ===
 
-  노드 id를 만들어내지 마십시오. 규칙을 따르지 않는 id는 아무것도 일치시키지 않으며, 그러면 빈 결과는 진실이 "잘못된 곳을 찾아보았다"인데도 "나는 이것을 배운 적이 없다"로 읽히게 됩니다.
+  노드 id를 만들어내지 마십시오. 규약을 따르지 않는 id는 아무것도 일치시키지 못하며, 그러면 빈 결과는 "나는 이것을 배운 적이 없다"로 읽히지만 진실은 "나는 잘못된 곳을 찾아보았다"입니다.
 
-  회상이 실행되기 전에 그것이 무엇을 반환했는지 말하지 마십시오. 이 단계는 읽기를 처리합니다; 결과는 그 이후에 도착합니다.
+  RECALL이 실행되기 전에 그것이 반환한 것을 진술하지 마십시오. 이 단계는 읽기를 다루며, 결과는 그 이후에 도착합니다.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -62,14 +62,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "읽을 정확한 노드 id(RECALL일 때 이것 또는 query 중 하나 제시)",
-    "query": "검색 텍스트(RECALL일 때 이것 또는 node_id 중 하나 제시)",
-    "node_type": "검색을 좁힐 노드 유형(선택 사항)",
-    "node_scope": "검색을 좁힐 그래프 범위(선택 사항)",
+    "node_id": "읽을 정확한 노드 id(RECALL일 때 이것 또는 query를 제시)",
+    "query": "검색 텍스트(RECALL일 때 이것 또는 node_id를 제시)",
+    "node_type": "검색을 좁히기 위한 노드 유형(선택 사항)",
+    "node_scope": "검색을 좁히기 위한 그래프 범위(선택 사항)",
     "limit": 10,
     "message": "말할 것(SPEAK일 때 필수)",
     "questions": ["재고려할 것(PONDER일 때 필수)"],
-    "reasoning": "이 읽기가 당신이 찾고 있는 것을 찾는 이유, 또는 왜 전환했는지"
+    "reasoning": "이 읽기가 찾고 있는 것을 찾는 이유, 또는 왜 SPEAK나 PONDER를 선택했는지"
   }}
 
 # DEONTIC — the closing categorical.

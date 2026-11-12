@@ -30,12 +30,13 @@ evaluation_steps: |
   Trabalhe através destes em ordem:
 
   1. O QUE deve ser esquecido, e quem pediu isso?
-  2. QUAL NÓ contém isso? Compare contra NÓS CANDIDATOS e a convenção
-     de endereçamento. Dê a identificação exatamente como está listada.
-  3. O QUE MAIS está naquele nó? Tudo mostrado como já armazenado vai junto.
-  4. ESCOPO. Dê o escopo em que o nó está armazenado.
-  5. Decida: FORGET com o nó que você verificou, SPEAK para perguntar ou para dizer o
-     que também seria perdido, ou PONDER para reconsiderar.
+  2. QUAL NÓ o contém? Compare contra NÓS CANDIDATOS e a convenção
+     de endereçamento. Forneça a identificação exatamente como está listada.
+  3. O QUE MAIS está nesse nó? Tudo que é mostrado como já armazenado nele
+     é removido junto com ele.
+  4. ESCOPO. Forneça o escopo em que o nó está armazenado.
+  5. Decida: FORGET com o nó que você verificou, SPEAK para perguntar ou dizer o que
+     também seria perdido, ou PONDER para reconsiderar.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -68,12 +69,12 @@ response_format: |
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "a identificação de nó a remover (obrigatória quando FORGET)",
+    "node_id": "a identificação do nó a remover (obrigatória quando FORGET)",
     "node_scope": "escopo do grafo em que o nó está armazenado (obrigatório quando FORGET)",
     "reason": "por que este nó está sendo esquecido (obrigatório quando FORGET)",
     "message": "o que dizer (obrigatório quando SPEAK)",
     "questions": ["o que reconsiderar (obrigatório quando PONDER)"],
-    "reasoning": "por que este é o nó certo, ou por que você mudou"
+    "reasoning": "por que este é o nó correto, ou por que você escolheu SPEAK ou PONDER"
   }}
 
 # DEONTIC — the closing categorical.

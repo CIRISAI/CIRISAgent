@@ -24,36 +24,38 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  Sebuah recall diselesaikan dalam urutan ini:
+  RECALL diselesaikan dalam urutan berikut:
 
-    node_id   pencarian yang persis. Jika node tersebut ada, ia dikembalikan, dan tidak
-              ada yang lain yang dicari.
-    query     pencarian teks pada memori, dipersempit oleh node_type dan scope jika Anda
-              memberikannya. Digunakan ketika tidak ada node_id, atau tidak ada yang cocok.
+    node_id   pencarian yang tepat. Jika node tersebut ada, node itu dikembalikan,
+              dan tidak ada yang lain dicari.
+    query     pencarian teks pada graf, dipersempit oleh node_type dan scope
+              jika Anda memberikannya. Digunakan ketika tidak ada node_id, atau
+              tidak cocok dengan apa pun.
 
   Lakukan ini dalam urutan:
 
   1. APA yang Anda cari? Satu hal, dinyatakan dengan jelas.
-  2. APAKAH SUDAH ADA DI DEPAN ANDA? Fakta tersimpan seseorang datang bersama
-     profil mereka, dan percakapan ada dalam konteks Anda. Apa yang sudah dapat Anda baca
-     tidak memerlukan recall.
-  3. APAKAH ADA PADA NODE YANG DAPAT ANDA SEBUTKAN? Jika salah satu CANDIDATE NODES
-     menyimpannya, berikan id tersebut sebagai node_id.
-  4. JIKA TIDAK, berikan query: kata-kata paling sedikit yang mengidentifikasi apa yang Anda inginkan. Tambahkan
-     node_type atau node_scope hanya jika Anda mengetahuinya.
-  5. Putuskan: RECALL dengan apa yang telah Anda periksa, SPEAK untuk menjawab atau bertanya, atau
-     PONDER untuk mempertimbangkan kembali.
+  2. APAKAH ITU SUDAH ADA DI DEPAN ANDA? Fakta tersimpan seseorang datang bersama
+     profil mereka, dan percakapan ada dalam konteks Anda. Apa yang sudah dapat
+     Anda baca tidak memerlukan RECALL.
+  3. APAKAH ITU ADA PADA NODE YANG DAPAT ANDA SEBUTKAN NAMANYA? Jika salah satu
+     dari CANDIDATE NODES menyimpannya, berikan id tersebut sebagai node_id.
+  4. JIKA TIDAK, berikan query: kata-kata paling sedikit yang mengidentifikasi apa
+     yang Anda inginkan. Tambahkan node_type atau node_scope hanya jika Anda
+     mengetahuinya.
+  5. Putuskan: RECALL dengan apa yang telah Anda periksa, SPEAK untuk menjawab
+     atau bertanya, atau PONDER untuk mempertimbangkan kembali.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
   === APA YANG TIDAK BOLEH TERJADI ===
 
   Jangan mengarang id node. Id yang tidak mengikuti konvensi tidak cocok dengan
-  apa pun, dan hasil yang kosong kemudian terbaca seperti "Saya tidak pernah mempelajari ini" padahal
-  kenyataannya adalah "Saya mencari di tempat yang salah".
+  apa pun, dan hasil yang kosong kemudian dibaca sebagai "saya tidak pernah
+  mempelajari ini" padahal kebenarannya adalah "saya mencari di tempat yang salah".
 
-  Jangan menyatakan apa yang dikembalikan oleh recall sebelum ia dijalankan. Langkah ini membahas
-  pembacaan; hasilnya tiba setelahnya.
+  Jangan menyatakan apa yang dikembalikan oleh RECALL sebelum RECALL dijalankan.
+  Langkah ini menangani pembacaan; hasilnya tiba sesudahnya.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -72,14 +74,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "id node persis yang akan dibaca (berikan ini atau query ketika RECALL)",
+    "node_id": "id node yang tepat untuk dibaca (berikan ini atau query ketika RECALL)",
     "query": "teks pencarian (berikan ini atau node_id ketika RECALL)",
     "node_type": "tipe node untuk mempersempit pencarian (opsional)",
     "node_scope": "graph scope untuk mempersempit pencarian (opsional)",
     "limit": 10,
     "message": "apa yang dikatakan (wajib ketika SPEAK)",
     "questions": ["apa yang dipertimbangkan kembali (wajib ketika PONDER)"],
-    "reasoning": "mengapa pembacaan ini menemukan apa yang Anda cari, atau mengapa Anda beralih"
+    "reasoning": "mengapa pembacaan ini menemukan apa yang Anda cari, atau mengapa Anda memilih SPEAK atau PONDER sebagai gantinya"
   }}
 
 # DEONTIC — the closing categorical.

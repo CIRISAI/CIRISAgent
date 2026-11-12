@@ -24,22 +24,22 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  Um RECALL se resolve nesta ordem:
+  A RECALL resolve nesta ordem:
 
-    node_id   uma busca exata. Se esse nó existir, ele é retornado, e nada
+    node_id   uma busca exata. Se esse nó existe, ele é retornado, e nada
               mais é pesquisado.
-    query     uma busca textual na memória, restringida por node_type e scope quando
-              você os fornece. Usada quando não há node_id, ou quando ele não correspondeu a nada.
+    query     uma busca textual no grafo, restringida por node_type e scope quando você
+              os fornece. Usado quando não há node_id, ou ele não corresponde a nada.
 
   Trabalhe através destes em ordem:
 
   1. O QUE você está procurando? Uma coisa, declarada claramente.
-  2. JÁ ESTÁ DIANTE DE VOCÊ? Os fatos armazenados de uma pessoa chegam com seu
+  2. ISSO JÁ ESTÁ DIANTE DE VOCÊ? Os fatos armazenados de uma pessoa chegam com seu
      perfil, e a conversa está no seu contexto. O que você já pode ler
-     não precisa de recall.
-  3. ESTÁ EM UM NÓ QUE VOCÊ PODE NOMEAR? Se um dos NÓS CANDIDATOS contém isso, dê
+     não precisa de RECALL.
+  3. ISSO ESTÁ EM UM NÓ QUE VOCÊ PODE NOMEAR? Se um dos NÓS CANDIDATOS o contém, forneça
      essa identificação como node_id.
-  4. CASO CONTRÁRIO, forneça uma query: o menor número de palavras que identifique o que você deseja. Adicione
+  4. CASO CONTRÁRIO forneça uma query: as menos palavras possíveis que identifiquem o que você quer. Adicione
      node_type ou node_scope apenas quando você os souber.
   5. Decida: RECALL com o que você verificou, SPEAK para responder ou perguntar, ou
      PONDER para reconsiderar.
@@ -49,11 +49,11 @@ memory_prohibitions: |
   === O QUE NÃO DEVE ACONTECER ===
 
   Não invente uma identificação de nó. Uma identificação que não segue a convenção não corresponde
-  a nada, e um resultado vazio então soa como "eu nunca aprendi isso" quando a
+  a nada, e um resultado vazio então é lido como "eu nunca aprendi isso" quando a
   verdade é "eu procurei no lugar errado".
 
-  Não declare o que um recall retornou antes dele ter sido executado. Esta etapa trata
-  do endereçamento da leitura; o resultado chega depois.
+  Não declare o que um RECALL retornou antes de ele ter sido executado. Esta etapa trata
+  da leitura; o resultado chega depois.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -72,14 +72,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "identificação exata do nó a ler (dê isto ou query quando RECALL)",
-    "query": "texto de busca (dê isto ou node_id quando RECALL)",
+    "node_id": "identificação exata do nó a ler (forneça isto ou query quando RECALL)",
+    "query": "texto de busca (forneça isto ou node_id quando RECALL)",
     "node_type": "tipo de nó para restringir uma busca (opcional)",
     "node_scope": "escopo do grafo para restringir uma busca (opcional)",
     "limit": 10,
     "message": "o que dizer (obrigatório quando SPEAK)",
     "questions": ["o que reconsiderar (obrigatório quando PONDER)"],
-    "reasoning": "por que esta leitura encontra o que você está procurando, ou por que você mudou"
+    "reasoning": "por que esta leitura encontra o que você está procurando, ou por que você escolheu SPEAK ou PONDER"
   }}
 
 # DEONTIC — the closing categorical.

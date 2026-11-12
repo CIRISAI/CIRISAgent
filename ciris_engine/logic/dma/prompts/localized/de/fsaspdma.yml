@@ -31,12 +31,14 @@ evaluation_steps: |
   Arbeite dich durch diese der Reihe nach:
 
   1. WAS soll vergessen werden, und wer hat darum gebeten?
-  2. WELCHER KNOTEN enthält es? Vergleichen Sie es mit KANDIDATENKNOTEN und der
+  2. WELCHER KNOTEN enthält es? Vergleichen Sie mit KANDIDATENKNOTEN und der
      Adressierungskonvention. Geben Sie die Kennung genau so an, wie sie aufgeführt ist.
-  3. WAS SONST steht auf diesem Knoten? Alles, was bereits als gespeichert angezeigt wird, geht damit verloren.
+  3. WAS SONST befindet sich auf diesem Knoten? Alles, was bereits als auf ihm
+     gespeichert angezeigt wird, wird mit ihm entfernt.
   4. UMFANG. Geben Sie den Umfang an, in dem der Knoten gespeichert ist.
-  5. Entscheiden Sie: FORGET mit dem Knoten, den Sie überprüft haben, SPEAK, um zu fragen
-     oder zu sagen, was sonst noch verloren ginge, oder PONDER, um zu überdenken.
+  5. Entscheiden Sie: FORGET mit dem Knoten, den Sie überprüft haben, SPEAK, um
+     zu fragen oder zu sagen, was ebenfalls verloren ginge, oder PONDER, um zu
+     überdenken.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -74,7 +76,7 @@ response_format: |
     "reason": "warum dieser Knoten vergessen wird (erforderlich bei FORGET)",
     "message": "was zu sagen (erforderlich bei SPEAK)",
     "questions": ["was zu überdenken (erforderlich bei PONDER)"],
-    "reasoning": "warum dies der richtige Knoten ist, oder warum Sie gewechselt haben"
+    "reasoning": "warum dies der richtige Knoten ist, oder warum Sie stattdessen SPEAK oder PONDER gewählt haben"
   }}
 
 # DEONTIC — the closing categorical.

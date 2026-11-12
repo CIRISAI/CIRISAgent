@@ -22,26 +22,34 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  RECALL खालील क्रमाने निकालावर पोचते:
+  एक RECALL या क्रमाने सोडवला जातो:
 
-    node_id   एक exact lookup. जर तो node अस्तित्वात असेल तर तो परत केला जातो, आणि आणखी काहीही शोधले जात नाही.
-    query     memory वरील एक text search, आपण दिल्यास node_type आणि scope ने संकुचित केलेला. जेव्हा node_id नसतो, किंवा त्याला काहीही जुळले नाही तेव्हा वापरला जातो.
+    node_id   एक अचूक lookup. जर तो node अस्तित्वात असेल तर तो परत केला जातो, आणि आणखी
+              काहीही शोधले जात नाही.
+    query     graph चा एक text search, आपण दिल्यास node_type आणि scope ने संकुचित केलेला.
+              node_id नसताना, किंवा तो काहीही जुळला नाही तेव्हा वापरला जातो.
 
   या क्रमाने काम करा:
 
-  1. आपण काय शोधत आहात? एक गोष्ट, स्पष्टपणे सांगितलेली.
-  2. ती आधीच आपल्यासमोर आहे का? एखाद्या व्यक्तीबद्दल साठवलेली तथ्ये त्यांच्या profile सोबत येतात, आणि संभाषण आपल्या context मध्ये आहे. जे आपण आधीच वाचू शकता त्यासाठी RECALL ची गरज नाही.
-  3. ती अशा node वर आहे का ज्याचे नाव आपण देऊ शकता? जर CANDIDATE NODES पैकी एखाद्या node मध्ये ती साठवलेली असेल, तर तो id node_id म्हणून द्या.
-  4. अन्यथा एक query द्या: कमीत कमी शब्द जे आपल्याला हवे ते ओळखून देतील. node_type किंवा node_scope फक्त तेव्हाच जोडा जेव्हा आपल्याला ते माहीत असतील.
-  5. निर्णय घ्या: आपण तपासलेल्या गोष्टीसह RECALL, उत्तर देण्यासाठी किंवा विचारण्यासाठी SPEAK, किंवा पुनर्विचारासाठी PONDER.
+  1. आपण काय शोधत आहात? एक गोष्ट, स्पष्टपणे मांडलेली.
+  2. ते आधीच आपल्यासमोर आहे का? एखाद्या व्यक्तीचे साठवलेले facts त्यांच्या profile सह येतात,
+     आणि संभाषण आपल्या context मध्ये आहे. जे आपण आधीच वाचू शकता त्याला RECALL ची गरज नाही.
+  3. ते आपण नाव देऊ शकता अशा node वर आहे का? जर CANDIDATE NODES पैकी एक ते धारण करत असेल,
+     तो id node_id म्हणून द्या.
+  4. अन्यथा एक query द्या: आपल्याला हवे ते ओळखणारे कमीत कमी शब्द. node_type किंवा
+     node_scope फक्त तेव्हाच जोडा जेव्हा ते आपल्याला माहीत असतील.
+  5. Decide करा: आपण तपासलेल्या गोष्टीसह RECALL, उत्तर देण्यासाठी किंवा विचारण्यासाठी SPEAK,
+     किंवा reconsider साठी PONDER.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
   === जे घडू नये ===
 
-  एक node id invent करू नका. convention चे पालन न करणारा id कशालाही जुळत नाही, आणि मग एक रिकामे result असे वाचले जाते की "मी हे कधीही शिकलो नाही" जेव्हा सत्य हे आहे की "मी चुकीच्या ठिकाणी शोधले".
+  एक node id invent करू नका. convention पालन न करणारा id काहीही जुळत नाही, आणि मग रिकामा
+  result "मला हे कधीच कळले नाही" असे वाचले जाते जेव्हा सत्य असते "मी चुकीच्या ठिकाणी शोधले".
 
-  एक recall चालण्यापूर्वी त्याने काय परत केले हे सांगू नका. ही पायरी read ला address करते; result नंतर येतो.
+  RECALL ने काय परत केले हे ते चालण्यापूर्वी सांगू नका. हा टप्पा read ला संबोधित करतो;
+  result नंतर येतो.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -56,18 +64,18 @@ context_integration: |
 
 # PRAGMATIC — the wire contract.
 response_format: |
-  JSON स्वरूपात उत्तर द्या:
+  JSON सह respond करा:
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "वाचायचा exact node id (RECALL साठी हे किंवा query द्या)",
+    "node_id": "वाचायचा अचूक node id (RECALL साठी हे किंवा query द्या)",
     "query": "search text (RECALL साठी हे किंवा node_id द्या)",
-    "node_type": "search ची व्याप्ती संकुचित करण्यासाठी node type (optional)",
-    "node_scope": "search ची व्याप्ती संकुचित करण्यासाठी graph scope (optional)",
+    "node_type": "search संकुचित करण्यासाठी node type (optional)",
+    "node_scope": "search संकुचित करण्यासाठी graph scope (optional)",
     "limit": 10,
     "message": "काय सांगायचे (SPEAK साठी आवश्यक)",
-    "questions": ["काय पुनर्विचार करायचे (PONDER साठी आवश्यक)"],
-    "reasoning": "हे वाचन आपण जे शोधत आहात ते का शोधून काढते, किंवा आपण का switch केले"
+    "questions": ["काय reconsider करायचे (PONDER साठी आवश्यक)"],
+    "reasoning": "हा read आपण जे शोधत आहात ते का सापडवतो, किंवा आपणे SPEAK किंवा PONDER का निवडले"
   }}
 
 # DEONTIC — the closing categorical.

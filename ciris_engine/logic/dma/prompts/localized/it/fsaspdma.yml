@@ -29,13 +29,14 @@ system_guidance_header: |
 evaluation_steps: |
   Lavora attraverso questi in ordine:
 
-  1. COSA dovrebbe essere dimenticato, e chi lo ha chiesto?
+  1. COSA dovrebbe essere dimenticato, e chi lo ha richiesto?
   2. QUALE NODO lo contiene? Confrontalo con i NODI CANDIDATI e la convenzione
      di indirizzamento. Fornisci l'id esattamente come è elencato.
-  3. COS'ALTRO è su quel nodo? Tutto ciò che è mostrato come già archiviato va insieme ad esso.
+  3. COS'ALTRO si trova su quel nodo? Tutto ciò che è mostrato come già
+     archiviato su di esso viene rimosso insieme a esso.
   4. SCOPE. Fornisci lo scope in cui il nodo è archiviato.
-  5. Decidi: FORGET con il nodo che hai verificato, SPEAK per chiedere o per dire cosa
-     andrebbe perso, o PONDER per riconsiderare.
+  5. Decidi: FORGET con il nodo che hai verificato, SPEAK per chiedere o per
+     dire cosa andrebbe perso anche, o PONDER per riconsiderare.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -68,12 +69,12 @@ response_format: |
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "l'identificativo del nodo da rimuovere (richiesto quando FORGET)",
+    "node_id": "l'identificativo di nodo da rimuovere (richiesto quando FORGET)",
     "node_scope": "scope del grafo in cui il nodo è archiviato (richiesto quando FORGET)",
     "reason": "perché questo nodo viene dimenticato (richiesto quando FORGET)",
     "message": "cosa dire (richiesto quando SPEAK)",
     "questions": ["cosa riconsiderare (richiesto quando PONDER)"],
-    "reasoning": "perché questo è il nodo giusto, o perché hai cambiato"
+    "reasoning": "perché questo è il nodo giusto, o perché hai scelto SPEAK o PONDER invece"
   }}
 
 # DEONTIC — the closing categorical.

@@ -24,37 +24,37 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  Ombi la RECALL hutatuliwa kwa mpangilio huu:
+  RECALL hutatuliwa kwa mpangilio huu:
 
-    node_id   utafutaji hasa. Kama nodi hiyo ipo, inarudishwa, na hakuna
+    node_id   utafutaji sahihi. Kama nodi hiyo ipo inarudishwa, na hakuna kitu
               kingine kinachotafutwa.
-    query     utafutaji wa maandishi wa kumbukumbu, unaopunguzwa na node_type na scope unapovitoa.
-              Hutumika pale hakuna node_id, au haikupata kitu chochote.
+    query     utafutaji wa maandishi wa grafu, unaopunguzwa na node_type na
+              uwanja unapoyatoa. Unatumika wakati hakuna node_id, au
+              haikulingana na chochote.
 
   Fanya kila moja kwa mpangilio:
 
-  1. NINI unachotafuta? Kitu kimoja, kilichoelezwa wazi.
-  2. JE, TAYARI KIKO MBELE YAKO? Ukweli wa mtu uliohifadhiwa unafika pamoja na
-     wasifu wake, na mazungumzo yako yako katika muktadha wako. Kile unachoweza tayari kusoma
-     hakihitaji kurudishwa kupitia RECALL.
-  3. JE, KIKO KWENYE NODI UNAYOWEZA KUITAJA? Kama mojawapo ya NODI AMBAZO
-     INAWEZA KUZINGATIWA inakishikilia, toa
-     kitambulisho hicho kama node_id.
-  4. VINGINEVYO toa query: maneno machache kabisa yanayoainisha kile unachotaka. Ongeza
-     node_type au node_scope tu unapoyajua.
-  5. Amua: RECALL na kile ulichokagua, SPEAK kujibu au kuuliza, au
-     PONDER kufikiria upya.
+  1. KITU GANI unachotafuta? Kitu kimoja, kilichosemwa waziwazi.
+  2. JE KIPO TAYARI MBELE YAKO? Ukweli uliohifadhiwa wa mtu unafika pamoja na
+     wasifu wao, na mazungumzo yako tayari katika muktadha wako. Kile unachoweza
+     kusoma tayari hakihitaji RECALL.
+  3. JE KIPO KWENYE NODI UNAYOWEZA KUITAJA? Kama mojawapo ya NODI AMBAZO
+     INAWEZA KUZINGATIWA inaihifadhi, toa kitambulisho hicho kama node_id.
+  4. VINGINEVYO toa query: maneno machache zaidi yanayotambulisha kile
+     unachotaka. Ongeza node_type au node_scope tu unapoyajua.
+  5. Amua: RECALL na kile ulichoangalia, SPEAK kujibu au kuuliza, au PONDER
+     kufikiria upya.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
   === KILE KILICHOZUIWA KABISA ===
 
   Usitunge kitambulisho cha nodi. Kitambulisho kisichofuata kawaida hakilingani
-  na chochote, na matokeo tupu kisha husomwa kama "Sijawahi kujifunza hili" wakati
-  ukweli ni "Nilitazama mahali pasipofaa".
+  na chochote, na matokeo tupu basi yanasomeka kama "sikuwahi kujifunza hili"
+  wakati ukweli ni "nilitazama mahali pasipo sahihi".
 
-  Usieleze kile ambacho RECALL imerudisha kabla haijatekelezwa. Hatua hii inahusu
-  usomaji; matokeo linafika baadaye.
+  Usieleze kile RECALL ilichorudisha kabla haijatekelezwa. Hatua hii inashughulikia
+  usomaji; matokeo yanafika baadaye.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -73,14 +73,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "kitambulisho hasa cha nodi ya kusoma (toa hiki au query wakati RECALL)",
-    "query": "maandishi ya kutafuta (toa hiki au node_id wakati RECALL)",
-    "node_type": "aina ya nodi ya kupunguza utafutaji (hiari)",
-    "node_scope": "uwanja wa grafu wa kupunguza utafutaji (hiari)",
+    "node_id": "kitambulisho cha nodi hasa cha kusoma (toa hiki au query wakati RECALL)",
+    "query": "maandishi ya utafutaji (toa hiki au node_id wakati RECALL)",
+    "node_type": "aina ya nodi kupunguza utafutaji (si lazima)",
+    "node_scope": "uwanja wa grafu kupunguza utafutaji (si lazima)",
     "limit": 10,
     "message": "kile cha kusema (kinachohitajika wakati SPEAK)",
     "questions": ["kile cha kufikiria upya (kinachohitajika wakati PONDER)"],
-    "reasoning": "kwa nini usomaji huu unapata kile unachotafuta, au kwa nini ulibadilisha"
+    "reasoning": "kwa nini usomaji huu unapata kile unachotafuta, au kwa nini ulichagua SPEAK au PONDER badala yake"
   }}
 
 # DEONTIC — the closing categorical.

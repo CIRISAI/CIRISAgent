@@ -32,10 +32,12 @@ evaluation_steps: |
   1. APA yang harus dilupakan, dan siapa yang memintanya?
   2. NODE MANA yang menyimpannya? Bandingkan dengan CANDIDATE NODES dan konvensi
      PENGALAMATAN. Berikan id persis seperti yang tercantum.
-  3. APA LAGI yang ada pada node tersebut? Semua yang ditampilkan sebagai sudah tersimpan ikut terhapus.
+  3. APA LAGI yang ada pada node tersebut? Semua yang ditampilkan sebagai sudah
+     tersimpan di dalamnya akan terhapus bersamanya.
   4. RUANG LINGKUP. Berikan ruang lingkup tempat node tersebut disimpan.
-  5. Putuskan: FORGET dengan node yang telah Anda periksa, SPEAK untuk bertanya atau untuk mengatakan apa
-     yang juga akan hilang, atau PONDER untuk mempertimbangkan kembali.
+  5. Putuskan: FORGET dengan node yang telah Anda periksa, SPEAK untuk bertanya
+     atau untuk mengatakan apa yang juga akan hilang, atau PONDER untuk
+     mempertimbangkan kembali.
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -73,7 +75,7 @@ response_format: |
     "reason": "mengapa node ini dilupakan (wajib ketika FORGET)",
     "message": "apa yang dikatakan (wajib ketika SPEAK)",
     "questions": ["apa yang dipertimbangkan kembali (wajib ketika PONDER)"],
-    "reasoning": "mengapa ini adalah node yang benar, atau mengapa Anda beralih"
+    "reasoning": "mengapa ini adalah node yang benar, atau mengapa Anda memilih SPEAK atau PONDER sebagai gantinya"
   }}
 
 # DEONTIC — the closing categorical.

@@ -24,23 +24,23 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  Un rappel (recall) se résout dans cet ordre :
+  Un RECALL se résout dans cet ordre :
 
     node_id   une recherche exacte. Si ce nœud existe, il est retourné, et rien
               d'autre n'est recherché.
-    query     une recherche textuelle dans la mémoire, restreinte par node_type et portée lorsque vous
-              les indiquez. Utilisé quand il n'y a pas de node_id, ou qu'il n'a rien trouvé.
+    query     une recherche textuelle du graphe, restreinte par node_type et scope quand vous
+              les fournissez. Utilisé lorsqu'il n'y a pas de node_id, ou qu'il n'a rien trouvé.
 
   Travaillez à travers ceux-ci dans l'ordre :
 
-  1. QUE cherchez-vous ? Une seule chose, énoncée clairement.
+  1. QUE cherchez-vous ? Une seule chose, énoncée simplement.
   2. EST-CE DÉJÀ DEVANT VOUS ? Les faits stockés d'une personne arrivent avec son
      profil, et la conversation est dans votre contexte. Ce que vous pouvez déjà lire
-     n'a besoin d'aucun rappel.
+     ne nécessite pas de RECALL.
   3. EST-CE SUR UN NŒUD QUE VOUS POUVEZ NOMMER ? Si l'un des NŒUDS CANDIDATS le contient, donnez
      cet id comme node_id.
-  4. SINON donnez une query : le moins de mots possible identifiant ce que vous voulez. Ajoutez
-     node_type ou node_scope seulement si vous les connaissez.
+  4. SINON, donnez une query : le moins de mots possible qui identifie ce que vous voulez. Ajoutez
+     node_type ou node_scope uniquement si vous les connaissez.
   5. Décidez : RECALL avec ce que vous avez vérifié, SPEAK pour répondre ou demander, ou
      PONDER pour reconsidérer.
 
@@ -52,7 +52,7 @@ memory_prohibitions: |
   rien, et un résultat vide se lit alors comme « Je n'ai jamais appris cela » alors que la
   vérité est « J'ai cherché au mauvais endroit ».
 
-  N'affirmez pas ce qu'un rappel a retourné avant qu'il n'ait été exécuté. Cette étape adresse
+  N'énoncez pas ce qu'un RECALL a retourné avant qu'il n'ait été exécuté. Cette étape concerne
   la lecture ; le résultat arrive ensuite.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
@@ -72,14 +72,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "identifiant de nœud exact à lire (donnez ceci ou query lors de RECALL)",
-    "query": "texte de recherche (donnez ceci ou node_id lors de RECALL)",
-    "node_type": "type de nœud pour restreindre une recherche (optionnel)",
-    "node_scope": "portée du graphe pour restreindre une recherche (optionnel)",
+    "node_id": "identifiant exact du nœud à lire (fournissez ceci ou query lors de RECALL)",
+    "query": "texte de recherche (fournissez ceci ou node_id lors de RECALL)",
+    "node_type": "type de nœud pour restreindre une recherche (facultatif)",
+    "node_scope": "portée du graphe pour restreindre une recherche (facultatif)",
     "limit": 10,
     "message": "ce à dire (obligatoire lors de SPEAK)",
     "questions": ["ce à reconsidérer (obligatoire lors de PONDER)"],
-    "reasoning": "pourquoi cette lecture trouve ce que vous cherchez, ou pourquoi vous avez changé"
+    "reasoning": "pourquoi cette lecture trouve ce que vous cherchez, ou pourquoi vous avez choisi SPEAK ou PONDER à la place"
   }}
 
 # DEONTIC — the closing categorical.

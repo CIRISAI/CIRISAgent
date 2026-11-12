@@ -27,10 +27,10 @@ evaluation_steps: |
   এগুলি ক্রমে কাজ করুন:
 
   1. কী ভুলে যাওয়া উচিত, এবং কে এটি অনুরোধ করেছে?
-  2. কোন NODE এটি ধারণ করে? CANDIDATE NODES এবং addressing convention এর বিপরীতে তুলনা করুন। id ঠিক যেমন তালিকাভুক্ত আছে তেমন দিন।
-  3. সেই node এ আর কী আছে? ইতিমধ্যে সংরক্ষিত হিসাবে প্রদর্শিত সবকিছু এর সাথেই যাবে।
-  4. SCOPE। node যে scope এ সংরক্ষিত আছে তা দিন।
-  5. সিদ্ধান্ত নিন: আপনার যাচাইকৃত node এর সাথে FORGET, জিজ্ঞাসা করতে বা কী হারাবে তা বলতে SPEAK, অথবা পুনর্বিবেচনা করতে PONDER।
+  2. কোন NODE এটি ধারণ করে? CANDIDATE NODES এবং addressing convention-এর বিপরীতে তুলনা করুন। id ঠিক যেমন তালিকাভুক্ত আছে তেমন দিন।
+  3. সেই node-এ আর কী আছে? ইতিমধ্যে এতে সংরক্ষিত হিসেবে দেখানো সবকিছু এটির সাথে অপসারিত হয়।
+  4. SCOPE। node যে scope-এ সংরক্ষিত আছে তা দিন।
+  5. সিদ্ধান্ত নিন: আপনার যাচাইকৃত node-এর সাথে FORGET, জিজ্ঞাসা করতে বা কী হারিয়ে যাবে তা বলতে SPEAK, অথবা পুনর্বিবেচনা করতে PONDER।
 
 # DEONTIC — what must not happen. Categorical, and safety-reviewable.
 memory_prohibitions: |
@@ -59,12 +59,12 @@ response_format: |
 
   {{
     "final_action": "FORGET" | "SPEAK" | "PONDER",
-    "node_id": "অপসারণ করার node id (FORGET এর জন্য প্রয়োজনীয়)",
-    "node_scope": "node যে graph scope এ সংরক্ষিত (FORGET এর জন্য প্রয়োজনীয়)",
+    "node_id": "অপসারণের জন্য node id (FORGET এর জন্য প্রয়োজনীয়)",
+    "node_scope": "node যে graph scope-এ সংরক্ষিত আছে (FORGET এর জন্য প্রয়োজনীয়)",
     "reason": "কেন এই node ভুলে যাওয়া হচ্ছে (FORGET এর জন্য প্রয়োজনীয়)",
     "message": "কি বলবেন (SPEAK এর জন্য প্রয়োজনীয়)",
     "questions": ["কি পুনর্বিবেচনা করবেন (PONDER এর জন্য প্রয়োজনীয়)"],
-    "reasoning": "কেন এটি সঠিক node, অথবা আপনি কেন পরিবর্তিত হয়েছেন"
+    "reasoning": "কেন এটি সঠিক node, অথবা কেন আপনি SPEAK বা PONDER বেছে নিয়েছেন"
   }}
 
 # DEONTIC — the closing categorical.

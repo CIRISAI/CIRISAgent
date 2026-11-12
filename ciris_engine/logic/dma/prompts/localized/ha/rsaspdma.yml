@@ -26,34 +26,35 @@ system_guidance_header: |
 evaluation_steps: |
   RECALL yana warwarewa a wannan tsari:
 
-    node_id   bincike daidai ne. Idan kumburin yana nan, za a mayar da shi, kuma babu
-              wani abu da za a nema kuma.
-    query     bincike na rubutu a Ƙwaƙwalwa, wanda za a taƙaita ta node_type da node_scope idan kuka
-              bayar da su. Ana amfani da shi lokacin babu node_id, ko kuma bai dace da komai ba.
+    node_id   bincike daidai gwargwado. Idan wannan kumburin ya wanzu za a mayar
+              da shi, kuma ba za a bincika wani abu ba.
+    query     bincike na rubutu a cikin Zane na alaƙa, wanda za a takaita shi da
+              node_type da scope idan ka ba da su. Ana amfani da shi lokacin
+              babu node_id, ko kuma bai dace da komai ba.
 
-  Wuce waɗannan juna-juna:
+  Bi waɗannan matakan a jere:
 
-  1. MENE NE kuke nema? Abu ɗaya, a faɗi a sarari.
-  2. SHIN TUNI YANA GABAN KU NE? Bayanan da aka ajiye na mutum suna zuwa tare da
-     bayaninsa, kuma tattaunawar tana cikin mahallinku. Abin da kuka riga kuka iya karantawa
-     ba ya buƙatar RECALL.
-  3. SHIN YANA KAN KUMBURIN DA ZA KU IYA SUNANTA? Idan ɗaya daga cikin CANDIDATE NODES yana riƙe da shi, bayar
-     da wannan id a matsayin node_id.
-  4. IDAN HAKA BA NE, bayar da query: mafi ƙarancin kalmomi da suke bayyana abin da kuke so. Ƙara
-     node_type ko node_scope kawai idan kun san su.
-  5. Yanke shawara: RECALL tare da abin da kuka bincika, SPEAK don amsa ko tambaya, ko
-     PONDER don sake yin tunani.
+  1. MENE NE kake nema? Abu ɗaya, a bayyane.
+  2. SHIN YANA RIGA YANA GABANKA? Hujjojin da aka ajiye na mutum suna zuwa tare
+     da bayaninsa (profile), kuma tattaunawar tana cikin mahallinku (context).
+     Abin da za ka iya karantawa tuni ba ya buƙatar RECALL.
+  3. SHIN YANA KAN KUMBURI DA ZA KA IYA AMBATA? Idan ɗaya daga cikin
+     CANDIDATE NODES yana riƙe da shi, ba da wannan id a matsayin node_id.
+  4. IDAN BA HAKA BA, ba da query: mafi ƙarancin kalmomi da ke nuna abin da
+     kake so. Kara node_type ko node_scope kawai idan ka san su.
+  5. Yanke shawara: RECALL tare da abin da ka duba, SPEAK don amsa ko tambaya,
+     ko PONDER don sake tunani.
 
 # DEONTIC — what must not happen.
 memory_prohibitions: |
-  === Abin da ba zu kaɗa ===
+  === ABIN DA BAI KAMATA YA FARU BA ===
 
-  Kada ka gina ID na sako. ID wanda ba ya biya ka'ida ba zai dace da
-  komai ba, kuma sakamako mara komai sai ya zama kamar "Ban taɓa koyon wannan ba" alhali
-  gaskiyar ita ce "Na nemi a wurin da bai dace ba".
+  Kada ka gina ID na kumburi. ID wanda ba ya bin ka'ida ba ya dace da komai,
+  kuma sakamako marar kome sai ya zama kamar "ban taɓa koyon wannan ba" alhali
+  gaskiyar ita ce "na duba wurin da ba daidai ba".
 
-  Kada ka faɗi abin da RECALL ya mayar kafin ya gudana. Wannan mataki yana magana a kan
-  karantawa; sakamakon yana zuwa bayan haka.
+  Kada ka faɗi abin da RECALL ya dawo da shi kafin a gudanar da shi. Wannan
+  mataki yana daidaita inda za a karanta; sakamakon yana zuwa daga baya.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
 context_integration: |
@@ -72,14 +73,14 @@ response_format: |
 
   {{
     "final_action": "RECALL" | "SPEAK" | "PONDER",
-    "node_id": "sako id daidai don karantawa (bayar da wannan ko query lokacin RECALL)",
-    "query": "rubutun bincike (bayar da wannan ko node_id lokacin RECALL)",
-    "node_type": "nawa sako don taƙaita bincike (na zaɓi)",
-    "node_scope": "yankin Zane na alaƙa don taƙaita bincike (na zaɓi)",
+    "node_id": "ainihin id na kumburin da za a karanta (ba da wannan ko query lokacin RECALL)",
+    "query": "rubutun bincike (ba da wannan ko node_id lokacin RECALL)",
+    "node_type": "nau'in kumburi don takaita bincike (na zaɓi)",
+    "node_scope": "yankin zane na alaƙa don takaita bincike (na zaɓi)",
     "limit": 10,
     "message": "abin da za a faɗi (yana buƙata lokacin SPEAK)",
-    "questions": ["abin da za a sake yin tunani a kai (yana buƙata lokacin PONDER)"],
-    "reasoning": "dalilin da ya sa wannan karatu ya samo abin da kake nema, ko dalilin sauyawa"
+    "questions": ["abin da za a sake tunani a kai (yana buƙata lokacin PONDER)"],
+    "reasoning": "dalilin da ya sa wannan karatun ya samo abin da kake nema, ko dalilin da ya sa ka zaɓi SPEAK ko PONDER maimakon"
   }}
 
 # DEONTIC — the closing categorical.

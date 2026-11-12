@@ -33,3 +33,21 @@ def test_withheld_arm_shows_no_placeholder_verdict() -> None:
     inputs, task = rs.item_inputs("t", "th")
     messages = asyncio.run(rs.compose(inputs, cached_task=task, withheld=True))
     assert "unused" not in messages[-1]["content"]
+
+
+def test_default_template_changes_the_prompt_and_is_recorded(tmp_path: Path, monkeypatch) -> None:
+    """Under an agent template the prompt is the template's, and the manifest says which."""
+    monkeypatch.setenv("CIRIS_PREFERRED_LANGUAGE", "en")
+    src = tmp_path / "items.jsonl"
+    src.write_text(json.dumps({"id": "a", "task": "TASK-ALPHA", "thought": "THOUGHT-ALPHA"}) + "\n", encoding="utf-8")
+
+    base = rs.render_files(tmp_path / "base", [("s", src)])
+    templated = rs.render_files(tmp_path / "tpl", [("s", src)], rs.load_stack(rs.DEFAULT_TEMPLATE))
+
+    assert base["agent_template"]["template"] is None
+    described = templated["agent_template"]
+    assert described["template"] and described["sha256"] and described["action_selection_pdma_overrides"]
+    assert templated["prefix"]["sha256"] != base["prefix"]["sha256"]
+    assert templated["permitted_actions"] == described["permitted_actions"] != []
+    row = json.loads((tmp_path / "tpl" / "s.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert "TASK-ALPHA" in row["user"] and "THOUGHT-ALPHA" in row["user"]

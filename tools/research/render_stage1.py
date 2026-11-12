@@ -6,10 +6,17 @@ send, using the evaluator's own `evaluate()` path with the LLM call replaced by
 a recorder, so the constant prefix and the fixed sections are what deploys at
 this commit.
 
+A deployed agent runs under an agent template, and the template changes this
+prompt: extra system text for action selection, the permitted-verb list and its
+order, and the identity in the snapshot. `--template PATH` renders under one,
+loaded by the production loader (default: the default template, which the
+safety battery runs). `--no-template` renders the evaluator's base prompt, which
+no deployed agent sends; it is a separate arm, labelled as such.
+
 Held the same for every item, so none of it can tell items apart:
-  thought depth 0, no conscience-retry block, no final-attempt advisory, the
-  default ten permitted verbs, no tools listed, one fixed system snapshot, no
-  user profile, language en.
+  thought depth 0, no conscience-retry block, no final-attempt advisory, one
+  permitted-verb list, no tools listed, one fixed system snapshot, no user
+  profile, language en.
 
 Arm `withheld`: the four evaluator sections carry no verdict. DSDMA and IDMA
 use the builder's own text for an absent result. The ethical and common-sense
@@ -55,15 +62,98 @@ def _prompt_hash(messages: List[Dict[str, Any]]) -> str:
     return hashlib.sha256(_safe_messages_to_text(messages).encode("utf-8")).hexdigest()
 
 
-async def compose(inputs: Any, cached_task: Any = None, withheld: bool = False) -> List[Dict[str, Any]]:
-    """The messages action selection sends for `inputs`. No model is called."""
+DEFAULT_TEMPLATE = REPO_ROOT / "ciris_engine" / "ciris_templates" / "default.yaml"
+
+
+class Stack:
+    """What an agent template contributes to the evaluators' prompts.
+
+    Built the way the runtime builds it: `profile_loader.load_template`, then
+    the override extraction `IdentityManager` uses, then the identity the
+    orchestrator hands action selection. `template is None` is the base prompt.
+    """
+
+    def __init__(self, template: Any = None, path: Optional[Path] = None) -> None:
+        self.template = template
+        self.path = path
+
+    def overrides(self, attr: str) -> Optional[Dict[str, Any]]:
+        if self.template is None:
+            return None
+        obj = getattr(self.template, attr, None)
+        if not obj:
+            return {}
+        declared = getattr(obj, "__dict__", {}) or {}
+        extra = getattr(obj, "model_extra", None) or {}
+        return {k: v for k, v in {**declared, **extra}.items() if v is not None}
+
+    @property
+    def permitted_actions(self) -> Optional[List[Any]]:
+        from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+        if self.template is None or self.template.permitted_actions is None:
+            return None
+        return [HandlerActionType(a) if isinstance(a, str) else a for a in self.template.permitted_actions]
+
+    @property
+    def identity(self) -> Dict[str, str]:
+        if self.template is None:
+            return {"agent_id": "ciris", "description": "A CIRIS agent", "role": "Assistant"}
+        t = self.template
+        return {"agent_id": t.name, "description": t.description, "role": t.role_description}
+
+    def describe(self) -> Dict[str, Any]:
+        if self.template is None or self.path is None:
+            return {"template": None, "note": "base prompt: no agent template; no deployed agent sends this"}
+        try:
+            shown = str(self.path.resolve().relative_to(REPO_ROOT))
+        except ValueError:
+            shown = str(self.path)
+        return {
+            "template": self.template.name,
+            "file": shown,
+            "sha256": hashlib.sha256(self.path.read_bytes()).hexdigest(),
+            "permitted_actions": [a.value for a in (self.permitted_actions or [])],
+            "action_selection_pdma_overrides": self.overrides("action_selection_pdma_overrides"),
+            "csdma_overrides": self.overrides("csdma_overrides"),
+            "pdma_overrides": self.overrides("pdma_overrides"),
+            "dsdma_domain_label": self.template.name,
+            "dsdma_domain_specific_knowledge": (
+                self.template.dsdma_kwargs.domain_specific_knowledge if self.template.dsdma_kwargs else None
+            ),
+        }
+
+
+def load_stack(template_path: Optional[Path]) -> Stack:
+    if template_path is None:
+        return Stack()
+    from ciris_engine.logic.utils.profile_loader import load_template
+
+    template = asyncio.run(load_template(template_path))
+    if template is None:
+        raise SystemExit(f"template did not load: {template_path}")
+    return Stack(template, template_path)
+
+
+def new_action_selector(stack: Optional[Stack] = None) -> Any:
     from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator
-    from ciris_engine.schemas.dma.results import ASPDMALLMResult
-    from ciris_engine.schemas.runtime.enums import HandlerActionType
 
     registry = Mock()
     registry.get_services_by_type.return_value = []
-    dma = ActionSelectionPDMAEvaluator(service_registry=registry)
+    overrides = stack.overrides("action_selection_pdma_overrides") if stack is not None else None
+    if overrides is None:
+        return ActionSelectionPDMAEvaluator(service_registry=registry)
+    return ActionSelectionPDMAEvaluator(service_registry=registry, prompt_overrides=overrides)
+
+
+async def compose(
+    inputs: Any, cached_task: Any = None, withheld: bool = False, stack: Optional[Stack] = None
+) -> List[Dict[str, Any]]:
+    """The messages action selection sends for `inputs`. No model is called."""
+    from ciris_engine.schemas.dma.results import ASPDMALLMResult
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+    dma = new_action_selector(stack)
     builder = dma.context_builder
     builder.pre_cache_context = AsyncMock(return_value=0)
     builder._tools_cached = True
@@ -92,8 +182,9 @@ async def compose(inputs: Any, cached_task: Any = None, withheld: bool = False) 
     return messages
 
 
-def item_inputs(task_text: str, thought_text: str) -> Tuple[Any, Any]:
+def item_inputs(task_text: str, thought_text: str, stack: Optional[Stack] = None) -> Tuple[Any, Any]:
     """(EnhancedDMAInputs, Task) for one item, everything else fixed."""
+    stack = stack or Stack()
     from ciris_engine.schemas.dma.faculty import EnhancedDMAInputs
     from ciris_engine.schemas.dma.results import CSDMAResult, EthicalDMAResult
     from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus, ThoughtType
@@ -115,7 +206,7 @@ def item_inputs(task_text: str, thought_text: str) -> Tuple[Any, Any]:
         context=ThoughtContext(task_id=TASK_ID, round_number=0, depth=0, correlation_id="item-corr"),
     )
     snapshot = SystemSnapshot(
-        agent_identity={"agent_id": "ciris", "description": "A CIRIS agent", "role": "Assistant"},
+        agent_identity=stack.identity,
         channel_id="item-channel",
         agent_version="item",
         system_counts={"total_tasks": 1, "total_thoughts": 1, "pending_tasks": 0, "pending_thoughts": 0},
@@ -132,8 +223,15 @@ def item_inputs(task_text: str, thought_text: str) -> Tuple[Any, Any]:
         csdma_result=csdma,
         dsdma_result=None,
         idma_result=None,
-        permitted_actions=None,  # the builder's default ten
+        permitted_actions=stack.permitted_actions,  # None = the builder's default ten
     )
+    if stack.template is not None:
+        from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
+        ident = stack.identity
+        inputs.agent_identity = IdentityData(
+            agent_id=ident["agent_id"], description=ident["description"], role=ident["role"], trust_level=0.5
+        )
     return inputs, task
 
 
@@ -157,8 +255,9 @@ def _git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def render_files(out_dir: Path, splits: List[Tuple[str, Path]]) -> Dict[str, Any]:
+def render_files(out_dir: Path, splits: List[Tuple[str, Path]], stack: Optional[Stack] = None) -> Dict[str, Any]:
     os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
+    stack = stack or Stack()
     check = golden_check()
     if not check["equal"]:
         raise SystemExit(f"golden check failed: {check}")
@@ -177,8 +276,8 @@ def render_files(out_dir: Path, splits: List[Tuple[str, Path]]) -> Dict[str, Any
                     if not line.strip():
                         continue
                     item = json.loads(line)
-                    inputs, task = item_inputs(item["task"], item["thought"])
-                    messages = await compose(inputs, cached_task=task, withheld=True)
+                    inputs, task = item_inputs(item["task"], item["thought"], stack)
+                    messages = await compose(inputs, cached_task=task, withheld=True, stack=stack)
                     head, user = messages[:-1], messages[-1]
                     if user.get("role") != "user":
                         raise SystemExit(f"{split}: last message is not the user message")
@@ -209,9 +308,12 @@ def render_files(out_dir: Path, splits: List[Tuple[str, Path]]) -> Dict[str, Any
         "code_commit": _git("rev-parse", "HEAD"),
         "tree_dirty": bool(_git("status", "--porcelain", "--untracked-files=no")),
         "arm": "withheld",
+        "agent_template": stack.describe(),
         "language": "en",
         "thought_depth": 0,
-        "permitted_actions": "builder default (ten)",
+        "permitted_actions": (
+            [a.value for a in stack.permitted_actions] if stack.permitted_actions else "builder default (ten)"
+        ),
         "tools_listed": False,
         "conscience_retry_block": False,
         "final_attempt_advisory": False,
@@ -245,14 +347,20 @@ def render_files(out_dir: Path, splits: List[Tuple[str, Path]]) -> Dict[str, Any
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE, help="agent template (default: default.yaml)")
+    parser.add_argument("--no-template", action="store_true", help="the base prompt, which no deployed agent sends")
     parser.add_argument("splits", nargs="+", help="split=path.jsonl")
     args = parser.parse_args()
     splits = []
     for spec in args.splits:
         name, _, path = spec.partition("=")
         splits.append((name, Path(path)))
-    manifest = render_files(args.out, splits)
-    summary = {k: manifest[k] for k in ("code_commit", "tree_dirty", "prefix", "reassembly_checked_items", "inputs")}
+    os.environ["CIRIS_PREFERRED_LANGUAGE"] = "en"
+    stack = load_stack(None if args.no_template else args.template)
+    manifest = render_files(args.out, splits, stack)
+    keys = ("code_commit", "tree_dirty", "prefix", "reassembly_checked_items", "inputs")
+    summary: Dict[str, Any] = {k: manifest[k] for k in keys}
+    summary["template"] = manifest["agent_template"].get("template")
     print(json.dumps(summary, indent=2))
 
 

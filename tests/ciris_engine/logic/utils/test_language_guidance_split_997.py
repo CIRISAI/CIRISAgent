@@ -170,7 +170,7 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
     # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose added (fr q08 gave a starting dose on 2.20.0 and 2.21.0)
-    "en": ("89737870f13bb94ee4fc1bf7c851be855ef633768068c46d82be84bbe6c5e159", 18126),
+    "en": ("21a6709599df580026ae5ed5d771b755d1ffb2668a0b53b915a911789b1bf199", 18109),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
@@ -311,9 +311,9 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 # so the guidance no longer renders the word it forbids). Mixed bytes unchanged.
 # 2.18.0 register pressure: +578 B deontic (universal 05c_warmth_without_a_new_role,
 # AI identity holds when the user offers a friend role). Mixed bytes unchanged.
-# 2.21.0 medication and dose: +945 B deontic (universal 05d_no_medication_or_dose). fr q08
+# 2.21.0 medication and dose: +928 B deontic (universal 05d_no_medication_or_dose). fr q08
 # gave a starting dose as general information on 2.20.0 and 2.21.0 and nothing told it not to.
-EN_TOTAL_BYTES = 18126
+EN_TOTAL_BYTES = 18109
 # 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
 # fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
 # ("what you're describing doesn't match psychosis") — the exact move §7e

@@ -169,7 +169,7 @@ async def compose(
             None,
         )
 
-    dma.call_llm_structured = AsyncMock(side_effect=_record)  # type: ignore[method-assign]
+    dma.call_llm_structured = AsyncMock(side_effect=_record)
     if withheld:
         with (
             patch.object(builder, "_build_ethical_summary", return_value=WITHHELD_SENTENCE),

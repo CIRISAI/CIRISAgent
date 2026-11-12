@@ -267,12 +267,12 @@ def test_a_structurally_broken_sister_block_is_not_offered_as_an_example(tmp_pat
 
 def test_website_client_and_agent_ui_terms_follow_the_prompt_and_ethics_anchors(tmp_path: Path) -> None:
     en = PL.flat(PL.build_stage(tmp_path))
-    pool = [PL.acc.ExtraAnchor(2, "client:memory.title", "Memory", "Memoria", frozenset({"memory"}))]
+    pool = [PL.acc.ExtraAnchor(2, "client:search.title", "Search", "Buscar", frozenset({"search"}))]
     anchors = PL.make_anchors(tmp_path, {"es": pool})("es", ["rsaspdma.evaluation_steps"], en)
 
     keys = [k for k, _, _ in anchors]
-    assert keys[-1] == "client:memory.title"
-    assert keys.index("client:memory.title") > max(i for i, k in enumerate(keys) if ":" not in k)
+    assert keys[-1] == "client:search.title"
+    assert keys.index("client:search.title") > max(i for i, k in enumerate(keys) if ":" not in k)
 
 
 def test_the_anchor_rules_reach_all_three_system_prompts(tmp_path: Path) -> None:

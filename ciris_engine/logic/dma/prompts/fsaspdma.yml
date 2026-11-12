@@ -32,7 +32,8 @@ evaluation_steps: |
   1. WHAT should be forgotten, and who asked for it?
   2. WHICH NODE holds it? Compare against CANDIDATE NODES and the addressing
      convention. Give the id exactly as it is listed.
-  3. WHAT ELSE is on that node? Everything shown as already stored goes with it.
+  3. WHAT ELSE is on that node? Everything shown as already stored on it is
+     removed with it.
   4. SCOPE. Give the scope the node is stored in.
   5. Decide: FORGET with the node you have checked, SPEAK to ask or to say what
      would also be lost, or PONDER to reconsider.
@@ -73,7 +74,7 @@ response_format: |
     "reason": "why this node is being forgotten (required when FORGET)",
     "message": "what to say (required when SPEAK)",
     "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this is the right node, or why you switched"
+    "reasoning": "why this is the right node, or why you chose SPEAK or PONDER instead"
   }}
 
 # DEONTIC — the closing categorical.

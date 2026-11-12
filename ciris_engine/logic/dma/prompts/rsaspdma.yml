@@ -24,11 +24,11 @@ system_guidance_header: |
 
 # PROCEDURAL — how a recall resolves, and the method.
 evaluation_steps: |
-  A recall resolves in this order:
+  A RECALL resolves in this order:
 
     node_id   an exact lookup. If that node exists it is returned, and nothing
               else is searched.
-    query     a text search of memory, narrowed by node_type and scope when you
+    query     a text search of the graph, narrowed by node_type and scope when you
               give them. Used when there is no node_id, or it matched nothing.
 
   Work through these in order:
@@ -36,7 +36,7 @@ evaluation_steps: |
   1. WHAT are you looking for? One thing, stated plainly.
   2. IS IT ALREADY IN FRONT OF YOU? A person's stored facts arrive with their
      profile, and the conversation is in your context. What you can already read
-     needs no recall.
+     needs no RECALL.
   3. IS IT ON A NODE YOU CAN NAME? If one of the CANDIDATE NODES holds it, give
      that id as node_id.
   4. OTHERWISE give a query: the fewest words that identify what you want. Add
@@ -52,7 +52,7 @@ memory_prohibitions: |
   nothing, and an empty result then reads as "I never learned this" when the
   truth is "I looked in the wrong place".
 
-  Do not state what a recall returned before it has run. This step addresses
+  Do not state what a RECALL returned before it has run. This step addresses
   the read; the result arrives afterwards.
 
 # CONTINGENT — runtime values only. No guidance, no prohibitions.
@@ -79,7 +79,7 @@ response_format: |
     "limit": 10,
     "message": "what to say (required when SPEAK)",
     "questions": ["what to reconsider (required when PONDER)"],
-    "reasoning": "why this read finds what you are looking for, or why you switched"
+    "reasoning": "why this read finds what you are looking for, or why you chose SPEAK or PONDER instead"
   }}
 
 # DEONTIC — the closing categorical.

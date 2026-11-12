@@ -174,54 +174,66 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "am": ("fdac6c92cb28ece7a7cbcf69a33b1d279ebd7ed61063736611fdc1c11e06ef26", 33860),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "am": ("47f8f121893db3e183f30e6af98fe89d05649586184bb20e9213e6b063661220", 35610),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "ar": ("d6334dc85d406d97ce10798612985ad53be85ac3654382ab5989b73fa0b55541", 24076),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "ar": ("3c2397388661b340daf47aab343d885640a855fccb5a4a7cc7c86bcdf8a1d0ed", 25469),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "de": ("b7aad87c7838536510bdcb22eb063492660f24cf5a439e1a10b443cf5a6b32e0", 21094),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "de": ("34babd9aaa9310020e5e134650ee47b567432c7eef0cb84e67a5c35f750a64e3", 22394),
     # 18628 -> 17921 (2026-10-29): the U1 category-only rewrite of the four
     # universal parts (05/25/26/26b), drafted by the i18n translate lane from en
     # 4808efd98 and then hand-corrected to usted (04_formal_register). The es
     # glossary's "tú for chat messages" rule had put the exemplar speech in tú.
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "es": ("4526c81517d590bcf3c2e229775acff1c07b722ce703bf6fc757dde26a2d70aa", 19394),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "es": ("0a6c818724f42563d80a32799f8cc20f3788672ff26d4519e4b2f7420a5522e5", 20481),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "fr": ("dd2aff33541a8afe3f33ec34e6afdba65f0798a5a678efe5d61ebb49cbbe00e8", 23747),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "fr": ("bac035b22d069a670daf25771f4f2281fdeae99c00e07e3d3fb0201d310aafe1", 24936),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "hi": ("85435eccf58599a6613f22be337bfc6518089598117a4914581259808b9e5dab", 37346),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "hi": ("8e628d62e1106816aead1435fb3c6ecf451a49a75b2bd8e2e9c727c7b2f73bb3", 39992),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "it": ("e9faaa11f9ec0c531a9b3aa0cf0906796fe247b4af2004a77dc2495672fa6400", 19273),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "it": ("7da22deb23d98967959199c392d46df8ab0d815006298ede0b6132e9f0b47c8c", 20363),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "ja": ("93fa14d148a0329ebcd218fa4b6b8d669a953b7454438bd06adcbc08c5c49bf6", 31458),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "ja": ("f11d0d238088b3d2a48a31e8c7d106ac8bca83196678fe6662b0c7928b063ef8", 32919),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "ko": ("ea935b0bee524e4ae9810fb3163b896a5dc6aaa1a42bad22ed69de105ab0057a", 29791),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "ko": ("4de2d9b1d3dc93e7f7084ccba901c3922c184d50943ef9f2cea2e2023b9ad8cb", 31150),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "pt": ("988e73dc6772d2cabff2926a098df7add887cb8287cc352febf8b7a299916e97", 19162),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "pt": ("528bc8d88d766cc9a226725b503100a2caac81355c67a116511dc8a9157b6a4e", 20238),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "ru": ("4daab895c369ff716b1c4c76f0152cdedb3dd8ab9e89463aa00ca90396049b5d", 33195),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "ru": ("229ee9463cb33692b5d7bffda29ec4112654436f10f8740edd1d5d78fe100944", 35177),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "sw": ("da4f84c7fefa87e66c62b9464e8e8ac0a9954586eb072f407582b2693bd700de", 18172),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "sw": ("7d044f3d20501a91739c99d88c160f724392ae17d075b26b00507d4522e5fc7c", 19181),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
@@ -229,19 +241,23 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "zh": ("1074ad24ac62b7cbdedfed16e85d00cac7bc551d39a84efa081cfa8b62f92efe", 16467),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "zh": ("f90bae846553b94ce6567d86c835250cc3260d7791041ea963e229627e9317a8", 17598),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "ur": ("38ab31d5645f784a6f21e70bc6b4ce3d9f3c7e1cf964494b8e08dd1f94a068bf", 31116),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "ur": ("363e7f824f7294bd203d88ce94b151e2d62f7db654801f9c02444cc5bd5a6a6c", 32925),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "bn": ("2565b064a95e8a87211845a4c51d9b4966d76efe65329d88e08b6d549bf3d2d9", 38978),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "bn": ("cb63c4868d785e89e4ddcca93ee774453ccada66efe18d7937b7101dd3d1583f", 41756),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "fa": ("033de1e81f724a1d334f953e80c7218abf1434a4466aa0df138e91ddb13028ec", 39867),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "fa": ("bac74798fcc7b9bd4df09fd9939b2c4b4661d1dbe72a5a1a031ea83c00e01cbc", 41740),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
@@ -249,43 +265,53 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "id": ("8cf05332ab732c04bbd8c00133b2f36beb22384602cecebf837d30f767ce5df2", 19868),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "id": ("c50e2e9aa1dba1cd62f2da4a937ff234d81d463780a4af11ffa25877b8e16a3f", 21004),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "pa": ("421d9cb05d39dce96a06936e5147f6eb4c81e43677eb68df6ce46e7a6fb74b5c", 37428),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "pa": ("a04bf9045bfe43ecdeeaaea50cf10a1b5c51fffee7612f6e405943d89d727c9c", 40186),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "ta": ("01cddcf176b5645eb315aaad75325f71d224d773f5ce3fa3d09c39eb74efe690", 47220),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "ta": ("e1307f8e64306cdfc67470f43e7bf5ae85a8a5345b0a21a528bbb6ee8b394970", 50461),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "te": ("2d06449636efac3356d20e95c6932eda469a4a953895cdaf3377ac77bef213da", 42798),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "te": ("392f3731909233dc6dab2fb436bbce28933d3a1897543b5ece959a8c4503367d", 45471),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "vi": ("435029e855254b664074eae8928a1fab9958694e6b8b284099836c7714d00a7d", 24531),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "vi": ("6ac92c5e67d33e75cd630ab7c7ba08a2f4fe7a0bd57eb7c53f474c20249f2c32", 26042),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "mr": ("0efe6b2388f5452f76e27df6fe4db801ba53b82aeefe0a2ba696efc1b7435c8f", 35481),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "mr": ("60b7c7cbb349239c82adc6db3cc75ae95562cf66743e76116f4c8252cab9a6a2", 38381),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "my": ("6990dda0df13b15b82279613dcbb91c78c7faf83a671906df64d854c38973ad2", 54391),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "my": ("e28396e542d924165f50edbf64fce2ea07fa3bf90315b1ef913d10a22f06a9d4", 57717),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "th": ("d6bad8e8cd9e16d04684ddc7e0be36517eb3b8d5b7b9fcd6904e3835d52e1f68", 40880),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "th": ("34db2d796e0b8b95c086a8bb59704d8e40738f18d62423cc92aef0916207d81b", 43565),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "uk": ("4980a41215fa85575c425ab33648903efa6c0fcb5281486514b5547bafc026b1", 40821),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "uk": ("205787dd388af10860f66f08d9ce7c442abb361ba32fdb3738cf801633570e16", 42710),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
-    "yo": ("2bc746c3fafab0bc190faa247ae6e5ecd7359a020d4289ed19f8253c3c54310e", 27095),
+    # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
+    "yo": ("4057e3d3a874b0a550a4ca1979d9f6c16a88d0c8f4fd43424fee37e117ee860d", 28575),
 }
 
 #: What the split bought at ``en``, in bytes. A ratchet on the number that

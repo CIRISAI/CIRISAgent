@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.21.1-stable] - Unreleased
 
+### Changed
+
+- **ciris-client 0.5.241.** 109 new app strings (5,998 in en.json; machine-translated and judge-reviewed, not native-reviewed), merged into the agent's bundle in all 29 locales and the three app mirrors (`check_client_strings.py --merge`, 3,161 keys), and the iOS Resources.zip rebuilt with them (only its 29 `app/localization` files changed). Tested five-platform on agent 2.21.0 with server 0.5.246 (CIRISClient run 43454259725). The five PyPI wheel sha256s match the client session's list.
+
 ### Fixed
 
 - **A model whose reasoning cannot be turned off now answers instead of failing every message.** Through OpenRouter, `anthropic/claude-sonnet-5.5` refuses `reasoning.enabled=false` with `400 Reasoning is mandatory for this endpoint`, and the agent raised without retrying, so every reply was "I encountered an issue processing your request". The first such refusal is remembered for that model, and the call is retried at once with the least reasoning the model accepts (lowest effort, reasoning left out of the reply). Measured on that model: 0 reasoning tokens, about 1 s per call. Reasoning stays off for every model that allows it. Test Connection makes the same fallback, so it checks what the agent will actually send. Found by the client's five-platform run on 2.21.0.

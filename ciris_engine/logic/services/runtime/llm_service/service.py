@@ -499,7 +499,17 @@ def _is_context_length_error(error_str: str) -> bool:
       - "max_tokens must be less than or equal to N"  (Groq llama-4 family)
     Both indicate the same fix: shrink the request budget.
     """
-    context_patterns = ["context_length", "maximum context", "context length", "token limit", "too many tokens"]
+    # "input too long" is Anthropic's wording for an over-long prompt (#1247:
+    # "Input too long: 55321 input tokens, limit is 32768"). Unrecognised, it
+    # read as UNKNOWN, which is retried since 2.22.0; a re-send cannot shrink it.
+    context_patterns = [
+        "context_length",
+        "maximum context",
+        "context length",
+        "token limit",
+        "too many tokens",
+        "input too long",
+    ]
     if any(pattern in error_str for pattern in context_patterns):
         return True
     # Generic "max_tokens ... exceed" (most providers)

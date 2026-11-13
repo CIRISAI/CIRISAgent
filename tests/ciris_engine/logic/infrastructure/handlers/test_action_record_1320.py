@@ -83,7 +83,8 @@ def test_a_reply_is_recorded_once_it_is_sent() -> None:
     record = format_action_record(thoughts, "en")
 
     assert reply_sent(thoughts)
-    assert record.split("\n")[-1] == _s("handlers.action_record_reply_sent")
+    # The reply line, then (the reply came last, nothing failed) the TASK_COMPLETE hint (ac-07).
+    assert record.split("\n")[-2:] == [_s("handlers.action_record_reply_sent"), _s("handlers.action_record_next_task_complete")]
     assert "SPEAK" in record
 
 
@@ -103,7 +104,8 @@ def test_a_task_that_only_pondered_and_spoke_states_the_identity_is_unchanged() 
 
     assert not identity_written(thoughts)
     assert lines.count(_s(IDENTITY_STATUS)) == 1
-    assert lines[-2] == _s(IDENTITY_STATUS) and lines[-1] == _s("handlers.action_record_reply_sent")
+    assert lines[-3] == _s(IDENTITY_STATUS) and lines[-2] == _s("handlers.action_record_reply_sent")
+    assert lines[-1] == _s("handlers.action_record_next_task_complete")
 
 
 def test_a_refused_identity_write_leaves_the_identity_unchanged() -> None:
@@ -179,3 +181,51 @@ def test_the_record_renders_in_low_coverage_locales(lang: str) -> None:
     record = format_action_record([_thought("t1", "memorize", params={"node": _node("user/x", "local")})], lang)
     assert "MEMORIZE" in record and "user/x" in record
     assert "{" not in record
+
+
+# --- RATCHET Market 4, ac-07: the record names the tool and what it produced ---
+
+
+def _tool_thought(tid: str, status: ThoughtStatus, outcome: str) -> Thought:
+    t = _thought(tid, "tool", status, params={"name": "create_ticket", "parameters": {"goal_description": "g"}})
+    assert t.final_action is not None
+    t.final_action.outcome = outcome
+    return t
+
+
+def test_a_tool_entry_names_the_tool_and_its_result():
+    """ac-07: the follow-up said only "- TOOL: done", and after the reply the model
+    filed the same ticket again. The record now says which tool and what it made."""
+    record = format_action_record(
+        [_tool_thought("t1", ThoughtStatus.COMPLETED, "Result: {'ticket_id': 'PROP-8AD130BDAC2F'}")], "en"
+    )
+    assert "- TOOL create_ticket: done: Result: {'ticket_id': 'PROP-8AD130BDAC2F'}" in record
+
+
+def test_after_the_tool_then_the_reply_the_next_action_is_named():
+    thoughts = [
+        _tool_thought("t1", ThoughtStatus.COMPLETED, "Result: {'ticket_id': 'PROP-8AD130BDAC2F'}"),
+        _thought("t2", "speak", ThoughtStatus.COMPLETED),
+    ]
+    record = format_action_record(thoughts, "en")
+    lines = record.splitlines()
+    assert lines[1].startswith("- TOOL create_ticket: done") and lines[2] == "- SPEAK: done"
+    assert "most likely TASK_COMPLETE" in lines[-1]
+
+
+def test_no_task_complete_hint_before_a_reply_or_after_a_failure():
+    before_reply = format_action_record([_tool_thought("t1", ThoughtStatus.COMPLETED, "ok")], "en")
+    assert "TASK_COMPLETE" not in before_reply
+    failed_then_spoke = format_action_record(
+        [_tool_thought("t1", ThoughtStatus.FAILED, "goal_description is required"), _thought("t2", "speak", ThoughtStatus.COMPLETED)],
+        "en",
+    )
+    assert "TASK_COMPLETE" not in failed_then_spoke
+
+
+def test_outcome_round_trips_through_the_stored_final_action():
+    from ciris_engine.schemas.runtime.models import FinalAction
+
+    fa = FinalAction(action_type="tool", action_params={"name": "x"}, reasoning="r", outcome="made PROP-1")
+    assert FinalAction.model_validate(fa.model_dump()).outcome == "made PROP-1"
+    assert FinalAction(action_type="speak", action_params={}, reasoning="r").outcome is None

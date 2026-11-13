@@ -78,6 +78,15 @@ def _entry(thought: Thought, lang: str) -> Optional[str]:
     status = get_string(lang, status_key)
     node = _node_of(thought)
     if node is None:
+        tool_name = action.action_params.get("name") if action.action_type.lower() == HandlerActionType.TOOL.value else None
+        if tool_name:
+            # Which tool, and what it produced: "TOOL: done" told the next round
+            # nothing, and after a SPEAK the model filed the same ticket again
+            # (RATCHET Market 4 ac-07). The outcome is the handler's, not the model's.
+            line = get_string(lang, "handlers.action_record_entry_tool", action=name, tool=str(tool_name), status=status)
+            if action.outcome:
+                line = f"{line}: {action.outcome}"
+            return line
         return get_string(lang, "handlers.action_record_entry", action=name, status=status)
     line = get_string(
         lang,
@@ -126,7 +135,23 @@ def format_action_record(thoughts: List[Thought], lang: str) -> str:
     if not identity_written(thoughts):
         lines.append(get_string(lang, "handlers.action_record_identity_status_unchanged"))
     lines.append(get_string(lang, reply_key))
+    if _replied_last(thoughts):
+        # The actions above ran and the user was then told: say what that usually
+        # means, from the record, so the next round reads its own history (ac-07:
+        # a ticket filed, then a reply, then the same ticket filed again).
+        lines.append(get_string(lang, "handlers.action_record_next_task_complete"))
     return "\n".join(lines)
+
+
+def _replied_last(thoughts: List[Thought]) -> bool:
+    """True when the most recent action that ran is a SPEAK that completed, after no failed action."""
+    ran = [t for t in thoughts if t.final_action is not None and t.status in _STATUS_KEYS]
+    if not ran:
+        return False
+    last = ran[-1]
+    if last.final_action is None or last.final_action.action_type.lower() != HandlerActionType.SPEAK.value:
+        return False
+    return last.status == ThoughtStatus.COMPLETED and all(t.status != ThoughtStatus.FAILED for t in ran)
 
 
 def action_record_for_task(task_id: Optional[str], occurrence_id: str, lang: str) -> str:

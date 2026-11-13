@@ -6,7 +6,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Callable, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -152,6 +152,7 @@ class BaseActionHandler(ABC):
         thought_type: Optional[Any] = None,
         action_result: Optional[Any] = None,
         status: Optional["ThoughtStatus"] = None,
+        outcome: Optional[str] = None,
     ) -> Optional[str]:
         """
         Centralized method to complete a thought and create a follow-up.
@@ -162,6 +163,8 @@ class BaseActionHandler(ABC):
             thought_type: Type of follow-up thought (defaults to FOLLOW_UP)
             action_result: The action result to store with the thought
             status: The final status (defaults to COMPLETED, can be FAILED)
+            outcome: What the action produced (a tool's result summary), stored with
+                the thought so every later follow-up's action record names it
 
         Returns:
             The follow-up thought ID if created, None otherwise
@@ -171,11 +174,14 @@ class BaseActionHandler(ABC):
 
         # Mark the current thought with the specified status (default to COMPLETED)
         final_status = status or ThoughtStatus.COMPLETED
+        # `outcome` only when a handler reported one, so every other call is unchanged.
+        status_kwargs: Dict[str, Any] = {"outcome": outcome} if outcome else {}
         success = persistence.update_thought_status(
             thought_id=thought.thought_id,
             status=final_status,
             occurrence_id=thought.agent_occurrence_id,
             final_action=action_result,
+            **status_kwargs,
         )
 
         if not success:

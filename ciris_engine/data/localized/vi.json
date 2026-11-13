@@ -364,6 +364,7 @@
     "action_record_status_deferred": "đã chuyển giao cho Cơ Quan Sáng Suốt",
     "action_record_reply_sent": "Một phản hồi đã được gửi cho người dùng trong nhiệm vụ này.",
     "action_record_no_reply": "Chưa có phản hồi nào được gửi cho người dùng trong nhiệm vụ này.",
+    "action_record_next_task_complete": "Các hành động ở trên đã chạy và người dùng đã được thông báo sau đó. Hành động tiếp theo rất có thể là HOÀN_THÀNH_NHIỆM_VỤ.",
     "action_record_identity_status_unchanged": "Danh tính: không đổi trong nhiệm vụ này.",
     "memorize_identity_not_approved": "Nhiệm vụ này không có phê duyệt của Cơ Quan Sáng Suốt đi kèm, nên danh tính đã không được thay đổi."
   },

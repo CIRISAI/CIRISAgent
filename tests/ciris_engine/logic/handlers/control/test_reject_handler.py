@@ -17,7 +17,7 @@ Tests cover:
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
@@ -469,7 +469,7 @@ class TestRejectHandler:
                     thought_id="thought_123",
                     status=ThoughtStatus.FAILED,
                     occurrence_id=test_thought.agent_occurrence_id,
-                    final_action=result,
+                    final_action=result, outcome=ANY,
                 )
 
                 # REJECT is terminal - no follow-up even on error

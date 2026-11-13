@@ -229,3 +229,24 @@ def test_outcome_round_trips_through_the_stored_final_action():
     fa = FinalAction(action_type="tool", action_params={"name": "x"}, reasoning="r", outcome="made PROP-1")
     assert FinalAction.model_validate(fa.model_dump()).outcome == "made PROP-1"
     assert FinalAction(action_type="speak", action_params={}, reasoning="r").outcome is None
+
+
+# --- Eric, 2026-11-13: every action's result, whatever the action ---
+
+
+def test_every_action_defaults_its_outcome_to_the_handlers_first_paragraph():
+    from ciris_engine.logic.infrastructure.handlers.base_handler import OUTCOME_MAX_CHARS, _outcome_from_followup
+
+    text = "CIRIS_FOLLOW_UP_THOUGHT: MEMORIZE COMPLETE - stored user/x\n\nGuidance the record does not need."
+    assert _outcome_from_followup(text) == "MEMORIZE COMPLETE - stored user/x"
+    assert _outcome_from_followup("") is None
+    long = _outcome_from_followup("x" * (OUTCOME_MAX_CHARS + 50))
+    assert long is not None and len(long) == OUTCOME_MAX_CHARS
+
+
+@pytest.mark.parametrize("action", ["memorize", "recall", "speak", "ponder", "observe", "defer"])
+def test_any_action_entry_carries_its_outcome(action):
+    t = _thought("t1", action)
+    assert t.final_action is not None
+    t.final_action.outcome = f"{action.upper()} result text"
+    assert f"{action.upper()} result text" in format_action_record([t], "en")

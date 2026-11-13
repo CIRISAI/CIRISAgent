@@ -80,14 +80,10 @@ def _entry(thought: Thought, lang: str) -> Optional[str]:
     if node is None:
         tool_name = action.action_params.get("name") if action.action_type.lower() == HandlerActionType.TOOL.value else None
         if tool_name:
-            # Which tool, and what it produced: "TOOL: done" told the next round
-            # nothing, and after a SPEAK the model filed the same ticket again
-            # (RATCHET Market 4 ac-07). The outcome is the handler's, not the model's.
             line = get_string(lang, "handlers.action_record_entry_tool", action=name, tool=str(tool_name), status=status)
-            if action.outcome:
-                line = f"{line}: {action.outcome}"
-            return line
-        return get_string(lang, "handlers.action_record_entry", action=name, status=status)
+        else:
+            line = get_string(lang, "handlers.action_record_entry", action=name, status=status)
+        return _with_outcome(line, action.outcome)
     line = get_string(
         lang,
         "handlers.action_record_entry_node",
@@ -98,7 +94,17 @@ def _entry(thought: Thought, lang: str) -> Optional[str]:
     )
     if node.scope != GraphScope.IDENTITY:
         line = f"{line}; {get_string(lang, 'handlers.action_record_identity_unchanged')}"
-    return line
+    return _with_outcome(line, action.outcome)
+
+
+def _with_outcome(line: str, outcome: Optional[str]) -> str:
+    """Every action's result, as its handler reported it (Eric, 2026-11-13).
+
+    "TOOL: done" told the next round nothing, and after a SPEAK the model filed
+    the same ticket again (RATCHET Market 4 ac-07). The outcome is the handler's,
+    never the model's.
+    """
+    return f"{line}: {outcome}" if outcome else line
 
 
 def identity_written(thoughts: List[Thought]) -> bool:

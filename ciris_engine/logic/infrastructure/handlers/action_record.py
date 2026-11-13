@@ -145,7 +145,11 @@ def format_action_record(thoughts: List[Thought], lang: str) -> str:
         # The actions above ran and the user was then told: say what that usually
         # means, from the record, so the next round reads its own history (ac-07:
         # a ticket filed, then a reply, then the same ticket filed again).
-        lines.append(get_string(lang, "handlers.action_record_next_task_complete"))
+        # The verb is a placeholder so no translation renders it in words (the
+        # Tamil lane rejected every draft that did): enum names stay enum values.
+        lines.append(
+            get_string(lang, "handlers.action_record_next_task_complete", task_complete=HandlerActionType.TASK_COMPLETE.name)
+        )
     return "\n".join(lines)
 
 

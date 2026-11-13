@@ -401,7 +401,7 @@
     "action_record_status_deferred": "deferred to a Wise Authority",
     "action_record_reply_sent": "A reply has been sent to the user in this task.",
     "action_record_no_reply": "No reply has been sent to the user in this task yet.",
-    "action_record_next_task_complete": "The actions above ran and the user was told after them. The next action is most likely TASK_COMPLETE.",
+    "action_record_next_task_complete": "The actions above ran and the user was told after them. The next action is most likely {task_complete}.",
     "action_record_identity_status_unchanged": "Identity: unchanged in this task.",
     "memorize_identity_not_approved": "No Wise Authority approval accompanies this task, so the identity was not changed."
   },

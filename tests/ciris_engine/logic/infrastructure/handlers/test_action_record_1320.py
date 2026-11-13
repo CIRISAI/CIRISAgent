@@ -84,7 +84,7 @@ def test_a_reply_is_recorded_once_it_is_sent() -> None:
 
     assert reply_sent(thoughts)
     # The reply line, then (the reply came last, nothing failed) the TASK_COMPLETE hint (ac-07).
-    assert record.split("\n")[-2:] == [_s("handlers.action_record_reply_sent"), _s("handlers.action_record_next_task_complete")]
+    assert record.split("\n")[-2:] == [_s("handlers.action_record_reply_sent"), get_string("en", "handlers.action_record_next_task_complete", task_complete="TASK_COMPLETE")]
     assert "SPEAK" in record
 
 
@@ -105,7 +105,7 @@ def test_a_task_that_only_pondered_and_spoke_states_the_identity_is_unchanged() 
     assert not identity_written(thoughts)
     assert lines.count(_s(IDENTITY_STATUS)) == 1
     assert lines[-3] == _s(IDENTITY_STATUS) and lines[-2] == _s("handlers.action_record_reply_sent")
-    assert lines[-1] == _s("handlers.action_record_next_task_complete")
+    assert lines[-1] == get_string("en", "handlers.action_record_next_task_complete", task_complete="TASK_COMPLETE")
 
 
 def test_a_refused_identity_write_leaves_the_identity_unchanged() -> None:

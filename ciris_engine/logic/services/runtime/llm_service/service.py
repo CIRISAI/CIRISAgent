@@ -1235,6 +1235,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         #: surface can pick the right instruction without re-reading prose.
         #: See :func:`_root_provider_fault` for why the text is not enough.
         self.last_fault_code: str = ""
+        #: When the fault above and the last answered call happened (monotonic).
+        #: A fault is LIVE only while no call has succeeded since it: the chat
+        #: notice names it, and a recovered provider must not keep being blamed.
+        self.last_fault_at: float = 0.0
+        self.last_success_at: float = 0.0
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
@@ -2438,6 +2443,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Process a successful LLM response and return usage data."""
         self.circuit_breaker.record_success()
+        self.last_success_at = time.monotonic()
         _record_raw_completion_text(completion)
 
         # Handle different response formats - Google uses usage_metadata, OpenAI uses usage
@@ -2491,6 +2497,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # fault, which correctly falls back to the provider's own words.
         self.last_error = _root_provider_error(e)
         self.last_fault_code = _root_provider_fault(e)
+        self.last_fault_at = time.monotonic()
         base_url = self.openai_config.base_url or ""
 
         if "ciris.ai" in base_url:
@@ -2526,6 +2533,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # fault, which correctly falls back to the provider's own words.
         self.last_error = _root_provider_error(e)
         self.last_fault_code = _root_provider_fault(e)
+        self.last_fault_at = time.monotonic()
 
         error_details = {
             "error_type": type(e).__name__,
@@ -2597,6 +2605,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self._total_errors += 1
             self.last_error = _root_provider_error(e)
             self.last_fault_code = _root_provider_fault(e)
+            self.last_fault_at = time.monotonic()
         error_context = LLMErrorContext(
             model=self.model_name,
             provider=self.openai_config.base_url or "default",
@@ -2635,6 +2644,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 )
                 self.last_error = _root_provider_error(e)
                 self.last_fault_code = _root_provider_fault(e)
+                self.last_fault_at = time.monotonic()
                 _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
@@ -2657,9 +2667,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # _root_provider_fault returns "" when it cannot name the fault, which is
         # the correct way to say "no structured verdict, fall back to the words".
         self.last_fault_code = _root_provider_fault(e)
+        self.last_fault_at = time.monotonic()
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )
+
+    def live_fault_code(self) -> str:
+        """The provider's structured fault slug, only while no call has succeeded since it."""
+        if self.last_fault_code and self.last_fault_at > self.last_success_at:
+            return self.last_fault_code
+        return ""
 
     def _get_status(self) -> LLMStatus:
         """Get detailed status including circuit breaker metrics (private method)."""

@@ -14,7 +14,7 @@ import sys
 import time
 from enum import Enum
 from json import JSONDecodeError
-from typing import Any, Awaitable, Callable, Dict, List, NoReturn, Optional, Tuple, Type, Union, cast
+from typing import Any, Awaitable, Callable, Dict, List, NoReturn, Optional, Set, Tuple, Type, Union, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -157,6 +157,39 @@ def _build_ciris_proxy_metadata(
             interaction_id=interaction_id,
             original_request_id=request_id,
         )
+
+
+#: OpenRouter models (lower-cased ids) that refused ``reasoning.enabled=false``
+#: with "Reasoning is mandatory for this endpoint". Process-wide and learned on
+#: the first refusal, so each such model costs one failed call per process.
+_REASONING_MANDATORY_MODELS: Set[str] = set()
+
+#: The least reasoning OpenRouter accepts from a model that cannot turn it off:
+#: the lowest effort, and the reasoning left out of the reply. Eric, 2026-11-13:
+#: "We have to suppress all reasoning ... as much as possible". Measured on
+#: anthropic/claude-sonnet-5.5: enabled=false and effort=none are refused;
+#: effort=minimal with exclude is accepted (0 reasoning tokens, ~1 s).
+_OPENROUTER_MINIMAL_REASONING: Dict[str, Any] = {"reasoning": {"effort": "minimal", "exclude": True}}
+
+
+def is_reasoning_mandatory_error(error: BaseException) -> bool:
+    """True for a provider's refusal to turn reasoning off."""
+    return "reasoning is mandatory" in str(error).lower()
+
+
+def note_reasoning_mandatory(model_name: str) -> bool:
+    """Record that ``model_name`` refuses reasoning-off. True if newly recorded."""
+    key = (model_name or "").lower()
+    if not key or key in _REASONING_MANDATORY_MODELS:
+        return False
+    _REASONING_MANDATORY_MODELS.add(key)
+    logger.warning(
+        "[LLM_REASONING_MANDATORY] model=%s refuses reasoning off; from now on it is asked for the "
+        "least reasoning it accepts (%s)",
+        model_name,
+        _OPENROUTER_MINIMAL_REASONING["reasoning"],
+    )
+    return True
 
 
 def build_request_extra_body(
@@ -2166,6 +2199,10 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # of the response, which they accept.
             if any(t in model for t in ("deepseek-r1", "-r1", ":thinking", "-thinking")):
                 return {"reasoning": {"exclude": True}}
+            # A model that has already refused (e.g. anthropic/claude-sonnet-5.5):
+            # the least reasoning it accepts, not off.
+            if model in _REASONING_MANDATORY_MODELS:
+                return {k: dict(v) for k, v in _OPENROUTER_MINIMAL_REASONING.items()}
             # ADHERENCE IS UPSTREAM-DEPENDENT, and no request-side key fixes
             # that. Same model, same payload, four calls, reading the `provider`
             # field OpenRouter returns:
@@ -2693,6 +2730,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         f"error={str(e)[:200]} — config bug, raising without retry"
                     )
                     raise
+
+                # A model whose reasoning cannot be turned off: learn it once and
+                # retry at once with the least reasoning it accepts. The request is
+                # rebuilt on every attempt, so the next one carries the new extras.
+                if (
+                    isinstance(e, BadRequestError)
+                    and is_reasoning_mandatory_error(e)
+                    and note_reasoning_mandatory(getattr(self, "model_name", "") or "")
+                ):
+                    continue
 
                 # If a BadRequestError surfaces with a category we don't
                 # remediate (e.g. malformed request, missing field), retry

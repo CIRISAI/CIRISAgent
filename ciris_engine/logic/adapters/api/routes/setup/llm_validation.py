@@ -377,7 +377,11 @@ def _get_provider_base_url(provider: str, base_url: Optional[str]) -> Optional[s
 async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValidationResponse:
     """Validate OpenAI-compatible API connection."""
     from openai import AsyncOpenAI
-    from ciris_engine.logic.services.runtime.llm_service.service import build_request_extra_body
+    from ciris_engine.logic.services.runtime.llm_service.service import (
+        build_request_extra_body,
+        is_reasoning_mandatory_error,
+        note_reasoning_mandatory,
+    )
 
     # Build client configuration
     client_kwargs: Dict[str, Any] = {"api_key": config.api_key or "local"}
@@ -415,7 +419,21 @@ async def _validate_openai_compatible(config: LLMValidationRequest) -> LLMValida
         )
     except Exception as token_err:
         error_str = str(token_err).lower()
-        if "max_tokens" in error_str and "max_completion_tokens" in error_str:
+        if is_reasoning_mandatory_error(token_err) and note_reasoning_mandatory(model_to_test):
+            # The pipeline makes the same fallback, so test what it will send.
+            logger.info("[VALIDATE_LLM] Model cannot turn reasoning off; retrying with the least it accepts")
+            extra_body = build_request_extra_body(
+                resolved_base_url or "",
+                model_to_test,
+                require_zero_data_retention=config.require_zero_data_retention,
+            )
+            await client.chat.completions.create(
+                model=model_to_test,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=1,
+                extra_body=extra_body,
+            )
+        elif "max_tokens" in error_str and "max_completion_tokens" in error_str:
             logger.info("[VALIDATE_LLM] Model requires max_completion_tokens, retrying...")
             await client.chat.completions.create(
                 model=model_to_test,

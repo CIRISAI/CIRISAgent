@@ -5,7 +5,13 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.21.0-stable] - Unreleased
+## [2.21.1-stable] - Unreleased
+
+### Fixed
+
+- **A model whose reasoning cannot be turned off now answers instead of failing every message.** Through OpenRouter, `anthropic/claude-sonnet-5.5` refuses `reasoning.enabled=false` with `400 Reasoning is mandatory for this endpoint`, and the agent raised without retrying, so every reply was "I encountered an issue processing your request". The first such refusal is remembered for that model, and the call is retried at once with the least reasoning the model accepts (lowest effort, reasoning left out of the reply). Measured on that model: 0 reasoning tokens, about 1 s per call. Reasoning stays off for every model that allows it. Test Connection makes the same fallback, so it checks what the agent will actually send. Found by the client's five-platform run on 2.21.0.
+
+## [2.21.0-stable] - 2026-11-13
 
 ### Changed
 

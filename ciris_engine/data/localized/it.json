@@ -130,11 +130,13 @@
   },
   "agent": {
     "error_llm_rate_limited": "Non posso rispondere in questo momento: il mio provider AI sta limitando il numero di richieste che posso inviare. Per favore, riprova tra qualche minuto.",
+    "error_llm_policy_blocked": "Non posso rispondere in questo momento: il mio provider AI non dispone di una rotta per questa richiesta in base alle impostazioni della politica sui dati dell'account. Chi gestisce questo agente deve modificare tali impostazioni o il provider.",
     "greeting": "Ciao! Come posso aiutarti oggi?",
     "thinking": "Fammi pensare...",
     "error_generic": "Ho riscontrato un problema durante l'elaborazione della tua richiesta. Per favore, riprova.",
     "error_llm_out_of_credit": "Non posso rispondere in questo momento: il mio provider AI ha rifiutato la richiesta perché il credito dell'account è esaurito. Chi gestisce questo agente deve aggiungere credito o scegliere un altro provider nelle Impostazioni LLM.",
     "error_llm_key_rejected": "Non posso rispondere in questo momento: il mio provider AI ha rifiutato la chiave API. Chi gestisce questo agente deve aggiornare la chiave nelle Impostazioni LLM.",
+    "error_llm_model_not_found": "Non posso rispondere in questo momento: il mio provider AI non offre il modello che sono configurato per utilizzare. Chi gestisce questo agente deve scegliere un altro modello nelle Impostazioni LLM.",
     "error_timeout": "La richiesta ha impiegato troppo tempo. Per favore, riprova.",
     "defer_to_wa": "Devo consultare un consulente umano su questo argomento. Ti risponderò presto.",
     "task_complete": "Attività completata con successo.",

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **ciris-client 0.5.241.** 109 new app strings (5,998 in en.json; machine-translated and judge-reviewed, not native-reviewed), merged into the agent's bundle in all 29 locales and the three app mirrors (`check_client_strings.py --merge`, 3,161 keys), and the iOS Resources.zip rebuilt with them (only its 29 `app/localization` files changed). Tested five-platform on agent 2.21.0 with server 0.5.246 (CIRISClient run 43454259725). The five PyPI wheel sha256s match the client session's list.
+- **The iOS bundle carries this release's engine.** `apps/ios/Resources.zip` is committed, and CI signs the iOS build manifest from the code inside it, but its `ciris_engine` had stayed at 2.18.0 while each release refreshed only its localization and native libraries. It is now synced from source the way `tools/build_mobile.sh` does it (`ciris_engine/`, `ciris_adapters/`; no build secrets) and rebuilt: 257 engine, 7 adapter and 29 localization entries changed, 72 added, 10 removed; the Python runtime and vendored packages are untouched. No import the 2.21.1 engine adds is missing from the bundled packages (the one new unmet import is the desktop launcher's `main`, which iOS never runs). A test now fails if the bundled engine version and the source version differ, or if build secrets land in the zip.
 
 ### Fixed
 

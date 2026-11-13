@@ -41,10 +41,11 @@ _NODE_TOKENS = {"import-traces", "--home", "--key-id"}
 # args reach the node, which does not understand them).
 _FORCE_HEADLESS = {"--server", "--headless"}
 
-# The desktop node's key label — matches what the desktop client app spawns
-# (`ciris-server --home <appdata>/ciris --key-id ciris-client`), so the bare
-# `ciris-server` command and the GUI app land on the SAME node identity.
-DEFAULT_DESKTOP_KEY_ID = "ciris-client"
+# No key label is passed to the desktop node (0.5.246): the node boots as the key
+# its home already holds (`node_key::home_key_alias` in the Rust core), so the
+# bare `ciris-server` command, the desktop app and the agent are ONE node per
+# home. Passing `--key-id ciris-client` here used to give an agent-launched home
+# a second, stale node identity.
 
 
 def _default_user_home() -> str:
@@ -197,7 +198,7 @@ def _run_desktop_mode() -> None:
         print(f"ERROR: cannot create CIRIS home {home}: {e}", file=sys.stderr)
         sys.exit(1)
     print(f"Starting CIRIS node (home={home})...")
-    node_proc = _spawn_headless_node(["--home", home, "--key-id", DEFAULT_DESKTOP_KEY_ID])
+    node_proc = _spawn_headless_node(["--home", home])
 
     # Give it a moment; surface an immediate crash clearly.
     time.sleep(2.0)

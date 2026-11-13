@@ -22,7 +22,7 @@ inserting exactly one message (never regenerated from the code under test):
   thought's language chain (thought / task, profile, env). The fixture has no
   profile language, so the accord is now asked for ``en`` (the env) instead of
   ``None``: one sentinel, ``lang=None`` -> ``lang=en``; the real text is the same.
-- 2.21.1: PDMA and CSDMA carry the agent's identity block (approved amendments
+- 2.22.0: PDMA and CSDMA carry the agent's identity block (approved amendments
   included, ``formatters.identity.identity_block_of``) at the head of their
   system message, joined by a blank line: the fixture identity's block was
   prepended to message 4 of each snapshot, nothing else changed.

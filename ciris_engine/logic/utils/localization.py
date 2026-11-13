@@ -458,7 +458,7 @@ UNIVERSAL_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     # EXCLUSION direction ("does not meet the criteria for X") is the same
     # violation as the inclusion.
     "26b_user_symptom_direction",
-    # How tickets work (2.21.1): a create_ticket proposal is `blocked` awaiting a
+    # How tickets work (2.22.0): a create_ticket proposal is `blocked` awaiting a
     # Wise Authority. RATCHET Market 4 saw consciences call correct proposals
     # hallucinated and the tool step refuse the tool right after it worked.
     # Eric, 2026-11-13: part of the general guidance block every prompt gets.

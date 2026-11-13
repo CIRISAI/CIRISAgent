@@ -189,8 +189,11 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         # Extract domain_hint for filtering
         domain_hint = context.domain_hint
 
-        # Filter for services with send_deferral capability AND matching domain
+        # Filter for services with send_deferral capability AND matching domain.
+        # `generalists` keeps every send_deferral-capable service, for the
+        # fallback below when no service declares the hinted domain.
         services = []
+        generalists = []
         for service in all_wa_services:
             logger.debug(f"Checking service {service.__class__.__name__} for send_deferral capability")
             # Check if service has get_capabilities method
@@ -205,6 +208,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 logger.debug(f"Service {service.__class__.__name__} has capabilities: {cap_actions}")
                 if "send_deferral" not in cap_actions:
                     continue
+                generalists.append(service)
 
                 # Check domain support if domain_hint is specified
                 # Services must explicitly declare supported domains to handle domain-specific deferrals
@@ -227,6 +231,18 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             else:
                 logger.warning(f"Service {service.__class__.__name__} has no get_capabilities method")
 
+        if not services and domain_hint and generalists:
+            # The domain hint informs, it does not block (Eric, 2026-11-13). With
+            # no service declaring the domain, the deferral used to go nowhere:
+            # the task was marked DEFERRED with no deferral record, and every
+            # Wise Authority resolve was refused 409 (RATCHET Market 4, run
+            # 43453725789: 4 of 93). A declared specialist still gets it alone.
+            logger.warning(
+                f"No wise authority service declares domain '{domain_hint.value}' for {handler_name}; "
+                f"delivering to {len(generalists)} general wise authority service(s) with the domain hint "
+                f"in the request."
+            )
+            services = generalists
         if not services:
             if domain_hint:
                 logger.warning(

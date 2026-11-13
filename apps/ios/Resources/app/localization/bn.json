@@ -375,6 +375,7 @@
     "action_record_status_deferred": "জ্ঞানী কর্তৃপক্ষের কাছে স্থগিত করা হয়েছে",
     "action_record_reply_sent": "এই কাজে ব্যবহারকারীকে একটি উত্তর পাঠানো হয়েছে।",
     "action_record_no_reply": "এই কাজে এখনও ব্যবহারকারীকে কোনো উত্তর পাঠানো হয়নি।",
+    "action_record_next_task_complete": "উপরের ক্রিয়াগুলো চালানো হয়েছে এবং তার পরে ব্যবহারকারীকে জানানো হয়েছে। পরবর্তী ক্রিয়াটি সম্ভবত TASK_COMPLETE হবে।",
     "action_record_identity_status_unchanged": "পরিচয়: এই কাজে অপরিবর্তিত।",
     "memorize_identity_not_approved": "এই কাজের সাথে কোনো জ্ঞানী কর্তৃপক্ষের অনুমোদন নেই, তাই পরিচয় পরিবর্তন করা হয়নি।"
   },

@@ -366,6 +366,7 @@
     "idma_scientific_mapping": "அறிவியல் வரைபடமாக்கல்",
     "action_record_header": "இந்தப் பணியில் இயங்கிய செயல்கள்:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, முனை {node_id}, {scope} வரம்பு",
     "action_record_identity_unchanged": "அடையாளம் மாறவில்லை",
     "action_record_status_done": "முடிந்தது",

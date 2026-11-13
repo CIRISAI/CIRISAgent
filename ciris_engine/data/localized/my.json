@@ -366,6 +366,7 @@
     "idma_scientific_mapping": "သိပ္ပံနည်းကျ ပုံဖော်မှု",
     "action_record_header": "ဤ task တွင် လုပ်ဆောင်ခဲ့သည့် လုပ်ဆောင်ချက်များ៖",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}၊ node {node_id}၊ {scope} scope",
     "action_record_identity_unchanged": "အထောက်အထား မပြောင်းလဲပါ",
     "action_record_status_done": "ပြီးမြောက်ပြီ",
@@ -373,6 +374,7 @@
     "action_record_status_deferred": "ပညာရှိအာဏာပိုင်ထံ လွှဲပြောင်းထားသည်",
     "action_record_reply_sent": "ဤ task တွင် user ထံ ပြန်စာ ပို့ပြီးပါပြီ။",
     "action_record_no_reply": "ဤ task တွင် user ထံ ပြန်စာ မပို့ရသေးပါ။",
+    "action_record_next_task_complete": "အထက်ပါ လုပ်ဆောင်ချက်များ လုပ်ဆောင်ပြီးနောက် user ကို အသိပေးခဲ့ပါသည်။ နောက် လုပ်ဆောင်ချက်သည် အလုပ်ပြီးဆုံးပြီ ဖြစ်နိုင်ခြေ အများဆုံး ဖြစ်သည်။",
     "action_record_identity_status_unchanged": "အထောက်အထား: ဤ task တွင် မပြောင်းလဲပါ။",
     "memorize_identity_not_approved": "ဤ task တွင် ပညာရှိအာဏာပိုင်၏ approval ပါဝင်ခြင်း မရှိသဖြင့်၊ အထောက်အထားကို ပြောင်းလဲခြင်း မရှိခဲ့ပါ။"
   },

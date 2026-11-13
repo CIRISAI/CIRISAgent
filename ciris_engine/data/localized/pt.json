@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "Mapeamento científico",
     "action_record_header": "Ações executadas nesta tarefa:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, nó {node_id}, escopo {scope}",
     "action_record_identity_unchanged": "identidade inalterada",
     "action_record_status_done": "concluído",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "adiado para uma Autoridade Sábia",
     "action_record_reply_sent": "Uma resposta foi enviada ao usuário nesta tarefa.",
     "action_record_no_reply": "Ainda não foi enviada nenhuma resposta ao usuário nesta tarefa.",
+    "action_record_next_task_complete": "As ações acima foram executadas e o usuário foi informado depois delas. A próxima ação provavelmente é TAREFA_CONCLUÍDA.",
     "action_record_identity_status_unchanged": "Identidade: inalterada nesta tarefa.",
     "memorize_identity_not_approved": "Nenhuma aprovação de uma Autoridade Sábia acompanha esta tarefa, portanto a identidade não foi alterada."
   },

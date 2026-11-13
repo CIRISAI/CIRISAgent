@@ -364,6 +364,7 @@
     "idma_scientific_mapping": "نگاشت علمی",
     "action_record_header": "اقداماتی که در این وظیفه اجرا شدند:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}، گره {node_id}، محدودهٔ {scope}",
     "action_record_identity_unchanged": "هویت بدون تغییر",
     "action_record_status_done": "انجام شد",
@@ -371,6 +372,7 @@
     "action_record_status_deferred": "به مرجع خردمند ارجاع شد",
     "action_record_reply_sent": "در این وظیفه پاسخی به کاربر ارسال شده است.",
     "action_record_no_reply": "در این وظیفه هنوز پاسخی به کاربر ارسال نشده است.",
+    "action_record_next_task_complete": "اقدامات بالا اجرا شدند و پس از آن‌ها به کاربر اطلاع داده شد. اقدام بعدی به احتمال زیاد TASK_COMPLETE است.",
     "action_record_identity_status_unchanged": "هویت: بدون تغییر در این وظیفه.",
     "memorize_identity_not_approved": "هیچ تأییدی از یک مرجع خردمند همراه این وظیفه نیست، پس هویت تغییر نکرد."
   },

@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "वैज्ञानिक मानचित्रण",
     "action_record_header": "इस कार्य में चलाई गई क्रियाएं:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, नोड {node_id}, {scope} scope",
     "action_record_identity_unchanged": "पहचान अपरिवर्तित",
     "action_record_status_done": "पूर्ण",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "Wise Authority के पास स्थगित किया गया",
     "action_record_reply_sent": "इस कार्य में उपयोगकर्ता को एक उत्तर भेजा जा चुका है।",
     "action_record_no_reply": "इस कार्य में अभी तक उपयोगकर्ता को कोई उत्तर नहीं भेजा गया है।",
+    "action_record_next_task_complete": "ऊपर दी गई क्रियाएं चलाई गईं और उसके बाद उपयोगकर्ता को सूचित किया गया। अगली क्रिया सबसे अधिक संभावना TASK_COMPLETE होगी।",
     "action_record_identity_status_unchanged": "पहचान: इस कार्य में अपरिवर्तित।",
     "memorize_identity_not_approved": "इस कार्य के साथ कोई Wise Authority स्वीकृति नहीं है, इसलिए पहचान नहीं बदली गई।"
   },

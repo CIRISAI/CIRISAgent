@@ -356,6 +356,7 @@
     "idma_scientific_mapping": "Ánh xạ khoa học",
     "action_record_header": "Các hành động đã chạy trong nhiệm vụ này:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, nút {node_id}, phạm vi {scope}",
     "action_record_identity_unchanged": "danh tính không đổi",
     "action_record_status_done": "hoàn tất",

@@ -366,6 +366,7 @@
     "idma_scientific_mapping": "శాస్త్రీయ మ్యాపింగ్",
     "action_record_header": "ఈ పనిలో అమలైన చర్యలు:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, నోడ్ {node_id}, {scope} పరిధి",
     "action_record_identity_unchanged": "గుర్తింపు మారలేదు",
     "action_record_status_done": "పూర్తయింది",
@@ -373,6 +374,7 @@
     "action_record_status_deferred": "జ్ఞాన అధికారం వద్దకు వాయిదా వేయబడింది",
     "action_record_reply_sent": "ఈ పనిలో వినియోగదారుకు సమాధానం పంపబడింది.",
     "action_record_no_reply": "ఈ పనిలో వినియోగదారుకు ఇంకా సమాధానం పంపబడలేదు.",
+    "action_record_next_task_complete": "పైన ఉన్న చర్యలు అమలయ్యాయి మరియు వాటి తర్వాత వినియోగదారుకు తెలియజేయబడింది. తదుపరి చర్య చాలావరకు TASK_COMPLETE కావచ్చు.",
     "action_record_identity_status_unchanged": "గుర్తింపు: ఈ పనిలో మారలేదు.",
     "memorize_identity_not_approved": "ఈ పనికి జ్ఞాన అధికారం ఆమోదం లేదు, కాబట్టి గుర్తింపు మార్చబడలేదు."
   },

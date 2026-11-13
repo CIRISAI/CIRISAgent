@@ -366,6 +366,7 @@
     "idma_scientific_mapping": "Taswirar kimiyya",
     "action_record_header": "Ayyukan da suka gudana a wannan aiki:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, kumburi {node_id}, iyakar {scope}",
     "action_record_identity_unchanged": "shaida ba ta canza ba",
     "action_record_status_done": "an kammala",
@@ -373,6 +374,7 @@
     "action_record_status_deferred": "an mika zuwa Hukumar Hikima",
     "action_record_reply_sent": "An aika amsa ga mai amfani a wannan aiki.",
     "action_record_no_reply": "Har yanzu ba a aika amsa ga mai amfani a wannan aiki ba.",
+    "action_record_next_task_complete": "Ayyukan da ke sama sun gudana kuma an sanar da mai amfani bayansu. Aiki na gaba mai yiwuwa shi ne GAMA.",
     "action_record_identity_status_unchanged": "Shaida: ba ta canza ba a wannan aiki.",
     "memorize_identity_not_approved": "Babu amincewar Hukumar Hikima da ke tare da wannan aiki, don haka ba a canza shaidar ba."
   },

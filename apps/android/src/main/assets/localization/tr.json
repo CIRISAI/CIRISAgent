@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "Bilimsel eşleme",
     "action_record_header": "Bu görevde çalıştırılan eylemler:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, düğüm {node_id}, {scope} kapsamı",
     "action_record_identity_unchanged": "kimlik değişmedi",
     "action_record_status_done": "tamamlandı",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "bir Bilge Otorite'ye ertelendi",
     "action_record_reply_sent": "Bu görevde kullanıcıya bir yanıt gönderildi.",
     "action_record_no_reply": "Bu görevde kullanıcıya henüz bir yanıt gönderilmedi.",
+    "action_record_next_task_complete": "Yukarıdaki eylemler çalıştırıldı ve kullanıcıya bunlardan sonra bilgi verildi. Bir sonraki eylem büyük olasılıkla TASK_COMPLETE olacaktır.",
     "action_record_identity_status_unchanged": "Kimlik: bu görevde değişmedi.",
     "memorize_identity_not_approved": "Bu göreve eşlik eden bir Bilge Otorite onayı yok, bu nedenle kimlik değiştirilmedi."
   },

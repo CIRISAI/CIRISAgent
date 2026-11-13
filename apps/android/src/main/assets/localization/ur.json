@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "سائنسی نقشہ سازی",
     "action_record_header": "اس کام میں چلائی گئی کارروائیاں:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}، نوڈ {node_id}، {scope} دائرہ کار",
     "action_record_identity_unchanged": "شناخت غیر تبدیل شدہ",
     "action_record_status_done": "مکمل",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "ایک دانش مند اتھارٹی کے پاس مؤخر کیا گیا",
     "action_record_reply_sent": "اس کام میں صارف کو ایک جواب بھیجا جا چکا ہے۔",
     "action_record_no_reply": "اس کام میں صارف کو ابھی تک کوئی جواب نہیں بھیجا گیا۔",
+    "action_record_next_task_complete": "اوپر دی گئی کارروائیاں انجام دی گئیں اور ان کے بعد صارف کو بتایا گیا۔ اگلی کارروائی غالباً TASK_COMPLETE ہے۔",
     "action_record_identity_status_unchanged": "شناخت: اس کام میں غیر تبدیل شدہ۔",
     "memorize_identity_not_approved": "اس کام کے ساتھ کوئی دانش مند اتھارٹی کی منظوری شامل نہیں، اس لیے شناخت تبدیل نہیں کی گئی۔"
   },

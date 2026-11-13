@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "Wissenschaftliche Zuordnung",
     "action_record_header": "Aktionen, die in dieser Aufgabe ausgeführt wurden:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, Knoten {node_id}, Geltungsbereich {scope}",
     "action_record_identity_unchanged": "Identität unverändert",
     "action_record_status_done": "Abgeschlossen",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "an eine Wise Authority aufgeschoben",
     "action_record_reply_sent": "In dieser Aufgabe wurde dem Benutzer eine Antwort gesendet.",
     "action_record_no_reply": "In dieser Aufgabe wurde dem Benutzer noch keine Antwort gesendet.",
+    "action_record_next_task_complete": "Die obigen Aktionen wurden ausgeführt, und der Benutzer wurde danach informiert. Die nächste Aktion ist höchstwahrscheinlich TASK_COMPLETE.",
     "action_record_identity_status_unchanged": "Identität: in dieser Aufgabe unverändert.",
     "memorize_identity_not_approved": "Diese Aufgabe wird von keiner Genehmigung durch die Wise Authority begleitet, daher wurde die Identität nicht geändert."
   },

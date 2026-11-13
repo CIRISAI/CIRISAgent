@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "Научное сопоставление",
     "action_record_header": "Действия, выполненные в этой задаче:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, узел {node_id}, область {scope}",
     "action_record_identity_unchanged": "идентичность не изменена",
     "action_record_status_done": "завершено",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "отложено до решения Мудрого Авторитета",
     "action_record_reply_sent": "Ответ пользователю в этой задаче уже отправлен.",
     "action_record_no_reply": "Ответ пользователю в этой задаче ещё не отправлен.",
+    "action_record_next_task_complete": "Действия выше были выполнены, и после них пользователь получил ответ. Следующим действием, скорее всего, будет TASK_COMPLETE.",
     "action_record_identity_status_unchanged": "Идентичность: не изменена в этой задаче.",
     "memorize_identity_not_approved": "Эту задачу не сопровождает одобрение Мудрого Авторитета, поэтому идентичность не была изменена."
   },

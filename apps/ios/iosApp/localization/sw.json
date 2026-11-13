@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "Ramani ya kisayansi",
     "action_record_header": "Vitendo vilivyotekelezwa katika kazi hii:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, nodi {node_id}, wigo wa {scope}",
     "action_record_identity_unchanged": "utambulisho haujabadilika",
     "action_record_status_done": "imekamilika",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "limeahirishwa kwa Wise Authority",
     "action_record_reply_sent": "Jibu limetumwa kwa mtumiaji katika kazi hii.",
     "action_record_no_reply": "Hakuna jibu lililotumwa kwa mtumiaji katika kazi hii bado.",
+    "action_record_next_task_complete": "Vitendo vilivyo hapo juu vilitekelezwa, na mtumiaji aliambiwa baada ya vitendo hivyo kutekelezwa. Kitendo kinachofuata kuna uwezekano mkubwa kuwa ni KAZI_IMEKAMILIKA.",
     "action_record_identity_status_unchanged": "Utambulisho: haujabadilika katika kazi hii.",
     "memorize_identity_not_approved": "Hakuna idhini ya Wise Authority inayoambatana na kazi hii, kwa hivyo utambulisho haukubadilishwa."
   },

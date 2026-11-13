@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "التعيين العلمي",
     "action_record_header": "الإجراءات التي نُفِّذت في هذه المهمة:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}، العقدة {node_id}، نطاق {scope}",
     "action_record_identity_unchanged": "الهوية دون تغيير",
     "action_record_status_done": "تم",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "مؤجَّل إلى السلطة الحكيمة",
     "action_record_reply_sent": "تم إرسال رد إلى المستخدم في هذه المهمة.",
     "action_record_no_reply": "لم يُرسَل أي رد إلى المستخدم في هذه المهمة بعد.",
+    "action_record_next_task_complete": "الإجراءات أعلاه نُفِّذت وتم إبلاغ المستخدم بعدها. الإجراء التالي على الأرجح هو اكتملت المهمة.",
     "action_record_identity_status_unchanged": "الهوية: دون تغيير في هذه المهمة.",
     "memorize_identity_not_approved": "لا تصحب هذه المهمة أي موافقة من السلطة الحكيمة، فلم تتغيّر الهوية."
   },

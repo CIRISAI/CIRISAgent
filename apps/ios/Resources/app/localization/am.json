@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "ሳይንሳዊ ካርታ ስራ",
     "action_record_header": "በዚህ ተግባር የተፈጸሙ እርምጃዎች፡",
     "action_record_entry": "- {action}፡ {status}",
+    "action_record_entry_tool": "- {action} {tool}፡ {status}",
     "action_record_entry_node": "- {action}፡ {status}፣ ኖድ {node_id}፣ {scope} ሽፋን",
     "action_record_identity_unchanged": "ማንነት አልተለወጠም",
     "action_record_status_done": "ተከናውኗል",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "ለጥበብ ባለስልጣን ተላልፏል",
     "action_record_reply_sent": "በዚህ ተግባር ለተጠቃሚው ምላሽ ተልኳል።",
     "action_record_no_reply": "በዚህ ተግባር ለተጠቃሚው እስካሁን ምላሽ አልተላከም።",
+    "action_record_next_task_complete": "ከላይ ያሉት እርምጃዎች ተፈጽመዋል እና ተጠቃሚው ከዚያ በኋላ ተነግሮታል። ቀጣዩ እርምጃ በአብዛኛው TASK_COMPLETE ይሆናል።",
     "action_record_identity_status_unchanged": "ማንነት፡ በዚህ ተግባር ውስጥ አልተለወጠም።",
     "memorize_identity_not_approved": "ለዚህ ተግባር ምንም የጥበብ ባለስልጣን ማጽደቅ አልተያያዘም፣ ስለዚህ ማንነቱ አልተለወጠም።"
   },

@@ -366,6 +366,7 @@
     "idma_scientific_mapping": "Àwòrán onímọ̀ sáyẹ́nsì",
     "action_record_header": "Àwọn iṣẹ́ tí a ṣe nínú iṣẹ́ yìí:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, nódù {node_id}, àgbègbè {scope}",
     "action_record_identity_unchanged": "ìdánimọ̀ kò yí padà",
     "action_record_status_done": "parí",
@@ -373,6 +374,7 @@
     "action_record_status_deferred": "a fi lélẹ̀ sí Aláṣẹ Ọlọ́gbọ́n kan",
     "action_record_reply_sent": "A ti fi èsì kan ránṣẹ́ sí olùlò nínú iṣẹ́ yìí.",
     "action_record_no_reply": "Kò tíì sí èsì kankan tí a fi ránṣẹ́ sí olùlò nínú iṣẹ́ yìí.",
+    "action_record_next_task_complete": "Àwọn iṣẹ́ tí ó wà lókè ti ṣiṣẹ́, a sì sọ fún olùmúlò lẹ́yìn wọn. Ó ṣeéṣe jù lọ pé iṣẹ́ tó kàn yóò jẹ́ IṢẸ́_TI_PARÍ.",
     "action_record_identity_status_unchanged": "Ìdánimọ̀: kò yí padà nínú iṣẹ́ yìí.",
     "memorize_identity_not_approved": "Kò sí ìfọwọ́sí Aláṣẹ Ọlọ́gbọ́n tí ó bá iṣẹ́ yìí rìn, nítorí náà a kò yí ìdánimọ̀ padà."
   },

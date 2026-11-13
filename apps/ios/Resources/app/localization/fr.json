@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "Correspondance scientifique",
     "action_record_header": "Actions exécutées dans cette tâche :",
     "action_record_entry": "- {action} : {status}",
+    "action_record_entry_tool": "- {action} {tool} : {status}",
     "action_record_entry_node": "- {action} : {status}, nœud {node_id}, portée {scope}",
     "action_record_identity_unchanged": "identité inchangée",
     "action_record_status_done": "Terminé",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "différé à une Wise Authority",
     "action_record_reply_sent": "Une réponse a été envoyée à l'utilisateur dans cette tâche.",
     "action_record_no_reply": "Aucune réponse n'a encore été envoyée à l'utilisateur dans cette tâche.",
+    "action_record_next_task_complete": "Les actions ci-dessus ont été exécutées et l'utilisateur a été informé après celles-ci. La prochaine action est très probablement TASK_COMPLETE.",
     "action_record_identity_status_unchanged": "Identité : inchangée dans cette tâche.",
     "memorize_identity_not_approved": "Aucune approbation de Wise Authority n'accompagne cette tâche, l'identité n'a donc pas été modifiée."
   },

@@ -367,6 +367,7 @@
     "idma_scientific_mapping": "বৈজ্ঞানিক ম্যাপিং",
     "action_record_header": "এই কাজে যে ক্রিয়াগুলো চালানো হয়েছে:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, নোড {node_id}, {scope} পরিসর",
     "action_record_identity_unchanged": "পরিচয় অপরিবর্তিত",
     "action_record_status_done": "সম্পন্ন",

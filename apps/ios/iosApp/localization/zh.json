@@ -358,6 +358,7 @@
     "idma_scientific_mapping": "科学映射",
     "action_record_header": "此任务中已执行的动作：",
     "action_record_entry": "- {action}：{status}",
+    "action_record_entry_tool": "- {action} {tool}：{status}",
     "action_record_entry_node": "- {action}：{status}，节点 {node_id}，{scope} 范围",
     "action_record_identity_unchanged": "身份未变更",
     "action_record_status_done": "已完成",
@@ -365,6 +366,7 @@
     "action_record_status_deferred": "已转交智慧权威",
     "action_record_reply_sent": "此任务中已向用户发送回复。",
     "action_record_no_reply": "此任务中尚未向用户发送任何回复。",
+    "action_record_next_task_complete": "上方动作已执行，并在这些动作完成后告知了用户。下一个动作最可能是任务完成。",
     "action_record_identity_status_unchanged": "身份：此任务中未变更。",
     "memorize_identity_not_approved": "此任务未附带智慧权威批准，因此身份未被变更。"
   },

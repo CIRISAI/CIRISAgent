@@ -366,6 +366,7 @@
     "idma_scientific_mapping": "การจับคู่ทางวิทยาศาสตร์",
     "action_record_header": "การกระทำที่ดำเนินการในงานนี้:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, โหนด {node_id}, ขอบเขต {scope}",
     "action_record_identity_unchanged": "ตัวตนไม่เปลี่ยนแปลง",
     "action_record_status_done": "เสร็จสิ้น",
@@ -373,6 +374,7 @@
     "action_record_status_deferred": "ส่งต่อไปยังผู้มีอำนาจที่ชาญฉลาด",
     "action_record_reply_sent": "มีการส่งคำตอบกลับไปยังผู้ใช้ในงานนี้แล้ว",
     "action_record_no_reply": "ยังไม่มีการส่งคำตอบกลับไปยังผู้ใช้ในงานนี้",
+    "action_record_next_task_complete": "การกระทำข้างต้นดำเนินการแล้ว และผู้ใช้ได้รับแจ้งหลังจากนั้น การกระทำถัดไปน่าจะเป็นงานเสร็จสิ้นมากที่สุด",
     "action_record_identity_status_unchanged": "ตัวตน: ไม่เปลี่ยนแปลงในงานนี้",
     "memorize_identity_not_approved": "งานนี้ไม่มีการอนุมัติจากผู้มีอำนาจที่ชาญฉลาดประกอบอยู่ ตัวตนจึงไม่ถูกเปลี่ยนแปลง"
   },

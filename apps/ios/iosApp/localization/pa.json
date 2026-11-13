@@ -366,6 +366,7 @@
     "idma_scientific_mapping": "ਵਿਗਿਆਨਕ ਮੈਪਿੰਗ",
     "action_record_header": "ਇਸ ਕੰਮ ਵਿੱਚ ਚੱਲੀਆਂ ਕਾਰਵਾਈਆਂ:",
     "action_record_entry": "- {action}: {status}",
+    "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, ਨੋਡ {node_id}, {scope} ਦਾਇਰਾ",
     "action_record_identity_unchanged": "ਪਛਾਣ ਬਦਲੀ ਨਹੀਂ",
     "action_record_status_done": "ਹੋ ਗਿਆ",
@@ -373,6 +374,7 @@
     "action_record_status_deferred": "ਸਿਆਣੀ ਅਥਾਰਟੀ ਨੂੰ ਮੁਲਤਵੀ ਕੀਤਾ ਗਿਆ",
     "action_record_reply_sent": "ਇਸ ਕੰਮ ਵਿੱਚ ਵਰਤੋਂਕਾਰ ਨੂੰ ਇੱਕ ਜਵਾਬ ਭੇਜਿਆ ਗਿਆ ਹੈ।",
     "action_record_no_reply": "ਇਸ ਕੰਮ ਵਿੱਚ ਹਾਲੇ ਤੱਕ ਵਰਤੋਂਕਾਰ ਨੂੰ ਕੋਈ ਜਵਾਬ ਨਹੀਂ ਭੇਜਿਆ ਗਿਆ।",
+    "action_record_next_task_complete": "ਉੱਪਰ ਦੱਸੀਆਂ ਕਾਰਵਾਈਆਂ ਚੱਲੀਆਂ ਅਤੇ ਉਹਨਾਂ ਤੋਂ ਬਾਅਦ ਵਰਤੋਂਕਾਰ ਨੂੰ ਦੱਸਿਆ ਗਿਆ। ਅਗਲੀ ਕਾਰਵਾਈ ਸੰਭਾਵਤ ਤੌਰ 'ਤੇ TASK_COMPLETE ਹੈ।",
     "action_record_identity_status_unchanged": "ਪਛਾਣ: ਇਸ ਕੰਮ ਵਿੱਚ ਬਦਲੀ ਨਹੀਂ।",
     "memorize_identity_not_approved": "ਇਸ ਕੰਮ ਕੋਲ ਕੋਈ ਸਿਆਣੀ ਅਥਾਰਟੀ ਦੀ ਮਨਜ਼ੂਰੀ ਨਹੀਂ ਹੈ, ਇਸ ਲਈ ਪਛਾਣ ਨਹੀਂ ਬਦਲੀ ਗਈ।"
   },

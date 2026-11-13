@@ -690,10 +690,11 @@ class CoreToolService(BaseService, ToolService):
     async def _create_ticket(self, params: ToolParameters) -> ToolResult:
         """Propose a new ticket. Creates it in PROPOSAL state — never executing.
 
-        The proposal is written with status ``proposed``, which is not one of the
-        statuses WorkProcessor discovers, so no Task is generated from it. A
-        human must move it to ``pending`` (and, for spend, issue a budget grant)
-        before any work happens.
+        The proposal is written with status ``blocked`` (``PROPOSAL_TICKET_STATUS``:
+        persist's ticket-status enum has no ``proposed``) and marked as a proposal
+        in its metadata. ``blocked`` is not one of the statuses WorkProcessor
+        discovers, so no Task is generated from it. A human must move it to
+        ``pending`` (and, for spend, issue a budget grant) before any work happens.
         """
         try:
             from ciris_engine.logic.persistence.models.tickets import create_ticket
@@ -1056,9 +1057,11 @@ class CoreToolService(BaseService, ToolService):
                     detailed_instructions="""
 ## What this tool does and does not do
 
-`create_ticket` writes a ticket with status `proposed`. The work processor only
-picks up tickets in `pending`, `assigned` or `in_progress`, so **a proposal never
-becomes a running task by itself**. A human must move it forward.
+`create_ticket` writes a **proposal**: a ticket with status `blocked`, marked as
+a proposal awaiting human approval. That is the real, documented state of a new
+proposal, not an error. The work processor only picks up tickets in `pending`,
+`assigned` or `in_progress`, so **a proposal never becomes a running task by
+itself**. A human must move it forward.
 
 ## Requesting a budget
 
@@ -1215,7 +1218,7 @@ When you update metadata, it's deep-merged with existing metadata:
 
 Valid status values and when to use them:
 - `in_progress`: Active work happening
-- `blocked`: Waiting on external dependency
+- `blocked`: Waiting on external dependency (a new proposal from `create_ticket` is also `blocked`, awaiting human approval)
 - `deferred`: Intentionally delayed (use defer_ticket instead)
 - `completed`: Successfully finished
 - `failed`: Unrecoverable error occurred

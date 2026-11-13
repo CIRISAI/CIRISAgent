@@ -88,6 +88,7 @@ class ConscienceExecutionPhase:
         # Create typed context for conscience checks BEFORE exemption check
         # (bypass consciences need this context to run)
         from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+        from ciris_engine.logic.formatters.identity import agent_identity_of
 
         # Lift IDMA out of the DMA result dict into a typed context field so
         # consciences can read fragility/k_eff/phase directly on the context
@@ -101,6 +102,9 @@ class ConscienceExecutionPhase:
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
             idma_result=idma_result,
             wa_authorization=wa_authorization_of(processing_context),
+            # The identity the DMAs read, approved amendments included (bug 2,
+            # RATCHET Market 4): consciences judged against the pre-amendment self.
+            agent_identity=agent_identity_of(processing_context),
             # The thought's deadline (#1186). The conscience-retry pass calls
             # this step again with the SAME thought_item, so it spends the
             # remainder, never a fresh budget.

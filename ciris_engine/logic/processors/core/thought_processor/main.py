@@ -1922,10 +1922,13 @@ class ThoughtProcessor(
         # Create typed context for conscience checks (needed for both bypass and normal)
         from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
 
+        from ciris_engine.logic.formatters.identity import agent_identity_of
+
         context = ConscienceCheckContext(
             thought=thought,
             idma_result=idma_result,
             wa_authorization=wa_authorization_of(processing_context),
+            agent_identity=agent_identity_of(processing_context),
             dma_results=dma_results_dict,  # extra="allow" accepts additional fields
         )
 

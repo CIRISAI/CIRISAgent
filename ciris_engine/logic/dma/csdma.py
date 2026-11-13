@@ -280,8 +280,14 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
     def _build_context_summary(self, agent_identity: Any) -> str:
         """Build context summary from agent_identity data."""
+        from ciris_engine.logic.formatters.identity import amendment_texts, describe_with_amendments
+
         agent_id = getattr(agent_identity, "agent_id", "Unknown")
-        description = getattr(agent_identity, "description", "")
+        # The approved amendments ride with the description, as in every other
+        # identity rendering (RATCHET Market 4: 0 of 534 CSDMA calls had them).
+        description = describe_with_amendments(
+            getattr(agent_identity, "description", ""), amendment_texts(agent_identity)
+        )
         role = getattr(agent_identity, "role", "")
 
         return (

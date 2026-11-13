@@ -152,6 +152,25 @@ class _BaseConscience(ConscienceInterface):
             raise RuntimeError("TimeService is required for Conscience")
         self._time_service = time_service
 
+    def _with_identity(
+        self, messages: List[LLMMessage], context: ConscienceCheckContext, language: str
+    ) -> List[LLMMessage]:
+        """Add the agent's identity, approved amendments included, before the user prompt.
+
+        The same block action selection and the domain DMA read
+        (``identity_block_of``). Without it, a conscience judged the agent as it
+        was before a Wise Authority-approved amendment: refusals the amendment
+        requires were overridden as hallucinated constraints, and the approved
+        apply step read as the agent altering itself (RATCHET Market 4, run
+        43453725789). No identity on the context adds nothing.
+        """
+        from ciris_engine.logic.formatters.identity import identity_block_of
+
+        block = identity_block_of(getattr(context, "agent_identity", None), language=language)
+        if not block or not messages:
+            return messages
+        return [*messages[:-1], LLMMessage(role="system", content=block), messages[-1]]
+
     def _resolve_language(self, context: ConscienceCheckContext) -> str:
         """Determine the language for THIS conscience check.
 
@@ -606,6 +625,7 @@ class EntropyConscience(_BaseConscience):
             messages, entropy_user_prompt = self._create_entropy_messages(
                 text, image_context, language=self._resolve_language(context)
             )
+            messages = self._with_identity(messages, context, self._resolve_language(context))
             if hasattr(sink, "llm"):
                 entropy_eval, _ = await self._call_llm_with_budget(
                     sink,
@@ -767,6 +787,7 @@ class CoherenceConscience(_BaseConscience):
                 language=self._resolve_language(context),
                 user_message=self._extract_user_message(context),
             )
+            messages = self._with_identity(messages, context, self._resolve_language(context))
             if hasattr(sink, "llm"):
                 coherence_eval, _ = await self._call_llm_with_budget(
                     sink,
@@ -889,6 +910,7 @@ class OptimizationVetoConscience(_BaseConscience):
         messages, opt_veto_user_prompt = self._create_optimization_veto_messages(
             action_desc, image_context, language=self._resolve_language(context)
         )
+        messages = self._with_identity(messages, context, self._resolve_language(context))
         # The veto was sending approved identity changes back for "Wise
         # Authority review" they had already had (formatters/wa_approval.py).
         # Leads the user prompt rather than riding as its own system message, so
@@ -1031,6 +1053,7 @@ class EpistemicHumilityConscience(_BaseConscience):
             language=self._resolve_language(context),
             user_message=self._extract_user_message(context),
         )
+        messages = self._with_identity(messages, context, self._resolve_language(context))
 
         try:
             if hasattr(sink, "llm"):

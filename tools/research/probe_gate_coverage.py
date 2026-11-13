@@ -138,12 +138,15 @@ SUBSPLITS: Tuple[Tuple[str, str], ...] = (
 #:
 #: ``string`` 141 -> 142 (2.21.0): ``prompts.universal_guidance.05d_no_medication_or_dose``,
 #: DEONTIC, composed beside 05/05b/05c: numerator and denominator move together.
+#:
+#: ``string`` 142 -> 143 (2.22.0): ``prompts.universal_guidance.30_ticket_model``,
+#: NOMOLOGICAL, the ticket model in the general guidance block.
 EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     # 45 -> 55 (#1027): RSASPDMA and FSASPDMA, the recall and forget second
     # passes, five model-facing fields each.
     "dma_prompt": 55,
-    "string": 142,
+    "string": 143,
     "conscience_prompt": 12,
     "template": 3,
 }

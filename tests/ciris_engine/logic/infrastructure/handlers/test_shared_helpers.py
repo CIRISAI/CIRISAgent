@@ -501,7 +501,41 @@ class TestConsentHelpers:
         assert "MEMORIZE BLOCKED" in error
         assert "expired" in error.lower()
         assert metadata_added is False
-        mock_consent_service.revoke_consent.assert_called_once()
+        # #1357: blocked, not renewed, no decay started here.
+        mock_consent_service.revoke_consent.assert_not_called()
+        mock_consent_service.grant_consent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_expired_consent_from_the_service_blocks_and_is_not_renewed(
+        self, user_node, mock_consent_service, mock_time_service
+    ):
+        """#1357: the real service raises on expiry. That used to read as "never seen"
+        and the gate granted a fresh 14-day consent and wrote the memory."""
+        from ciris_engine.logic.services.governance.consent import ConsentExpiredError
+
+        mock_consent_service.get_consent.side_effect = ConsentExpiredError("Consent for test_user has expired")
+
+        error, metadata_added = await handle_user_consent(
+            "test_user", user_node, mock_consent_service, mock_time_service
+        )
+
+        assert error is not None and "MEMORIZE BLOCKED" in error and "expired" in error.lower()
+        assert metadata_added is False
+        mock_consent_service.grant_consent.assert_not_called()
+        mock_consent_service.revoke_consent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unreadable_consent_refuses_the_write(self, user_node, mock_consent_service, mock_time_service):
+        """#1357: a read error is not consent. The write used to go ahead with no check."""
+        mock_consent_service.get_consent.side_effect = RuntimeError("database is locked")
+
+        error, metadata_added = await handle_user_consent(
+            "test_user", user_node, mock_consent_service, mock_time_service
+        )
+
+        assert error is not None and "MEMORIZE BLOCKED" in error and "could not be read" in error
+        assert metadata_added is False
+        mock_consent_service.grant_consent.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_handle_user_consent_creates_default_for_new_user(

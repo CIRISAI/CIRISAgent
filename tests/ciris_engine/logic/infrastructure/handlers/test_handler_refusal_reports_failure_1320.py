@@ -45,7 +45,12 @@ class Store:
         self.thoughts: Dict[str, Thought] = {}
 
     def update_thought_status(
-        self, thought_id: str, status: ThoughtStatus, occurrence_id: str = "default", final_action: Any = None
+        self,
+        thought_id: str,
+        status: ThoughtStatus,
+        occurrence_id: str = "default",
+        final_action: Any = None,
+        outcome: Any = None,
     ) -> bool:
         thought = self.thoughts.get(thought_id)
         if thought is None:

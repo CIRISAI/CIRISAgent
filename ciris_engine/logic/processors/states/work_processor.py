@@ -24,7 +24,7 @@ from ciris_engine.logic.utils.context_utils import build_dispatch_context
 from ciris_engine.logic.utils.round_timing import RoundPhase, format_phase_totals, round_phase_timer, timed_phase
 from ciris_engine.schemas.processors.results import WorkResult
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.services.budget_envelope import PROPOSAL_TICKET_STATUS
 from ciris_engine.schemas.services.resources_core import ResourceAction
@@ -33,6 +33,16 @@ logger = logging.getLogger(__name__)
 
 #: Tasks handled by their own processors; a failed thought never closes them here.
 _TASKS_NOT_CLOSED_ON_FAILURE = frozenset({"WAKEUP_ROOT", "SYSTEM_TASK"})
+
+#: Provider fault codes (``llm_service._root_provider_fault``) that the
+#: failed-task notice names. Any other code keeps the generic notice.
+_FAULT_NOTICE_KEYS = {
+    "insufficient_quota": "agent.error_llm_out_of_credit",
+    "invalid_api_key": "agent.error_llm_key_rejected",
+    "model_not_found": "agent.error_llm_model_not_found",
+    "rate_limited": "agent.error_llm_rate_limited",
+    "policy_blocked": "agent.error_llm_policy_blocked",
+}
 
 
 class WorkProcessor(BaseProcessor):
@@ -414,12 +424,45 @@ class WorkProcessor(BaseProcessor):
         if await refuse_agent_send_under_halt(AgentSendSurface.TASK_FAILURE_NOTICE, channel_id):
             return
 
-        message = get_string(get_preferred_language(), "agent.error_generic")
+        message = get_string(get_preferred_language(), self._task_failure_message_key())
         try:
             with reasoning_scope(task_id=task.task_id, thought_id=thought_id, phase="task_failure_notice"):
                 await bus.send_message_sync(channel_id=channel_id, content=message, handler_name="WorkProcessor")
         except Exception as e:  # noqa: BLE001 - the task is already FAILED; the notice is best-effort
             logger.warning("Could not notify channel %s that task %s failed: %s", channel_id, task.task_id, e)
+
+    def _task_failure_message_key(self) -> str:
+        """The notice for a failed task: the provider's reason when it gave one we can name.
+
+        A billing refusal, a rejected key or an unknown model all used to reach
+        the user as "I encountered an issue processing your request", which sends
+        them to retry something that cannot work. The reason is the provider's
+        structured fault code, recorded by the LLM service and only while no call
+        has succeeded since (``live_fault_code``). Anything else keeps the
+        generic notice.
+        """
+        for code in self._live_llm_fault_codes():
+            key = _FAULT_NOTICE_KEYS.get(code)
+            if key:
+                return key
+        return "agent.error_generic"
+
+    def _live_llm_fault_codes(self) -> List[str]:
+        registry = getattr(self, "service_registry", None)
+        codes: List[str] = []
+        try:
+            providers = registry._services.get(ServiceType.LLM, []) if registry is not None else []
+            if not isinstance(providers, (list, tuple)):
+                return []
+            for sp in providers:
+                service = getattr(sp, "instance", sp)
+                reader = getattr(service, "live_fault_code", None)
+                code = reader() if callable(reader) else ""
+                if isinstance(code, str) and code:
+                    codes.append(code)
+        except Exception:  # noqa: BLE001 - the notice must still go out, generic if need be
+            return []
+        return codes
 
     def _should_skip_ticket_by_status(self, ticket_status: str) -> bool:
         """Check if ticket should be skipped based on status.

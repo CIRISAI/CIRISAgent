@@ -988,7 +988,8 @@ def federation_consent_status() -> "dict[str, object]":
         "aligned": False,
     }
     try:
-        status["capture"] = current_community_grant_id() is not None
+        # In force, not merely present: a withdrawn grant is not capture consent (#1356).
+        status["capture"] = community_grant_in_force() is not None
     except Exception as exc:  # noqa: BLE001
         logger.debug("consent-DRY: capture resolution failed: %s", exc)
     engine = _resolve_engine()
@@ -1002,7 +1003,17 @@ def federation_consent_status() -> "dict[str, object]":
         canonical = canon[0].get("key_id") if canon else None
         status["canonical"] = canonical
         if canonical:
-            peers = engine.list_consent_peers(key_id)  # type: ignore[attr-defined]
+            # The replication grant is owner-authored (#599/#601), so the node's
+            # own key holds no consent peer and `list_consent_peers(node key)`
+            # always read "not resolved": the warning fired on every node whose
+            # traces were in fact reaching the canonical. The server's send set
+            # is the union over the node and the humans it stands for
+            # (`consent_peers_by_principals`); read that when the build has it.
+            by_principals = getattr(engine, "consent_peers_by_principals", None)
+            if callable(by_principals):
+                peers = by_principals(key_id)
+            else:
+                peers = engine.list_consent_peers(key_id)  # type: ignore[attr-defined]
             peer_ids = peers if isinstance(peers, list) else _json.loads(peers or "[]")
             status["replication"] = any(canonical in str(p) for p in peer_ids)
     except Exception as exc:  # noqa: BLE001
@@ -1010,10 +1021,15 @@ def federation_consent_status() -> "dict[str, object]":
     # CC#46 analyze: resolve through the engine's scoped-consent resolver the
     # moment it is py-exposed (assert-the-resolved-stance; a row that folds to
     # Unspecified is the silent false the DX doc warns about).
+    # The same principal union as replication: the analyze grant is owner-authored too.
+    by_principals_resolver = getattr(engine, "resolve_scoped_consent_by_principals", None)
     resolver = getattr(engine, "resolve_scoped_consent", None)
-    if resolver is not None and status["canonical"]:
+    if status["canonical"] and (callable(by_principals_resolver) or resolver is not None):
         try:
-            stance = resolver(str(status["canonical"]), "analyze")
+            if callable(by_principals_resolver):
+                stance = by_principals_resolver(str(status["canonical"]), key_id, "analyze")
+            else:
+                stance = resolver(str(status["canonical"]), "analyze")  # type: ignore[misc]
             status["analyze"] = "granted" in str(stance).lower()
         except Exception as exc:  # noqa: BLE001
             logger.debug("consent-DRY: analyze resolution failed: %s", exc)
@@ -1033,7 +1049,7 @@ def log_federation_consent_drift(reason: str) -> None:
         if st["capture"] and st["replication"] is False:
             logger.warning(
                 "[CONSENT-DRY] capture consent is ON (%s) but consent:replication for "
-                "canonical %s is NOT resolved via list_consent_peers — sealed traces "
+                "canonical %s is NOT in the node's consent peer set — sealed traces "
                 "will NOT replicate. Remedy: confirm sharing on the Manage Consent "
                 "card (owner session -> POST /v1/federation/consent).",
                 reason,

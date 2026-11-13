@@ -23,15 +23,17 @@ def _engine(peers=None, canonicals='[{"key_id": "ciris-canonical-1-test"}]'):
     eng = MagicMock()
     eng.list_canonical_servers.return_value = canonicals
     eng.list_consent_peers.return_value = peers or []
-    # analyze resolver deliberately ABSENT (0.5.139 py surface)
+    # analyze resolver deliberately ABSENT (0.5.139 py surface), and no principal-union readers
     del eng.resolve_scoped_consent
+    del eng.resolve_scoped_consent_by_principals
+    del eng.consent_peers_by_principals
     return eng
 
 
 def _wire(monkey, engine, key_id="ciris-agent-test", grant="g-1"):
     monkey.setattr(att, "_resolve_engine", lambda: engine)
     monkey.setattr(att, "_resolve_attesting_key_id", lambda: key_id)
-    monkey.setattr(att, "current_community_grant_id", lambda: grant)
+    monkey.setattr(att, "community_grant_in_force", lambda: grant)
 
 
 def test_aligned_when_capture_and_replication_resolve(monkeypatch):
@@ -64,6 +66,51 @@ def test_drift_logger_warns_with_remedy_never_authors(monkeypatch, caplog):
 def test_status_never_raises_without_engine(monkeypatch):
     monkeypatch.setattr(att, "_resolve_engine", lambda: None)
     monkeypatch.setattr(att, "_resolve_attesting_key_id", lambda: None)
-    monkeypatch.setattr(att, "current_community_grant_id", lambda: None)
+    monkeypatch.setattr(att, "community_grant_in_force", lambda: None)
     st = att.federation_consent_status()
     assert st["aligned"] is False and st["replication"] is None
+
+
+def _owner_authored_engine():
+    """A node whose replication + analyze grants were authored by its OWNER (#599/#601):
+    its own key holds no consent peer; the principal union does."""
+    eng = MagicMock()
+    eng.list_canonical_servers.return_value = '[{"key_id": "ciris-canonical-1-test"}]'
+    eng.list_consent_peers.return_value = []
+    eng.consent_peers_by_principals.return_value = '["ciris-canonical-1-test"]'
+    eng.resolve_scoped_consent_by_principals.return_value = "granted"
+    return eng
+
+
+def test_owner_authored_grant_resolves_through_the_principals(monkeypatch, caplog):
+    """The false warning: every battery node's traces reached the canonical while
+    [CONSENT-DRY] said they would not, because only the node's own key was asked."""
+    eng = _owner_authored_engine()
+    _wire(monkeypatch, eng)
+    st = att.federation_consent_status()
+    assert st["replication"] is True and st["analyze"] is True and st["aligned"] is True
+    eng.consent_peers_by_principals.assert_called_once_with("ciris-agent-test")
+    eng.resolve_scoped_consent_by_principals.assert_called_once_with(
+        "ciris-canonical-1-test", "ciris-agent-test", "analyze"
+    )
+    with caplog.at_level(logging.WARNING):
+        att.log_federation_consent_drift("boot")
+    assert not any(r.levelno >= logging.WARNING and "[CONSENT-DRY]" in r.message for r in caplog.records)
+
+
+def test_principal_union_without_the_canonical_still_warns(monkeypatch, caplog):
+    """Not vacuous: an empty principal union is still a real gap."""
+    eng = _owner_authored_engine()
+    eng.consent_peers_by_principals.return_value = "[]"
+    _wire(monkeypatch, eng)
+    assert att.federation_consent_status()["replication"] is False
+    with caplog.at_level(logging.WARNING):
+        att.log_federation_consent_drift("boot")
+    assert any("[CONSENT-DRY]" in r.message for r in caplog.records)
+
+
+def test_a_withdrawn_capture_grant_is_not_capture_consent(monkeypatch):
+    eng = _owner_authored_engine()
+    _wire(monkeypatch, eng, grant=None)
+    monkeypatch.setattr(att, "current_community_grant_id", lambda: "g-withdrawn")
+    assert att.federation_consent_status()["capture"] is False

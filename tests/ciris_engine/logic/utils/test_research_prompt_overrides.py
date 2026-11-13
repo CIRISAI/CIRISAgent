@@ -855,7 +855,8 @@ class TestDriftGuard:
         # dma_prompt keys each (rsaspdma.* / fsaspdma.*: system_guidance_header,
         # evaluation_steps, context_integration, response_format,
         # closing_reminder). Their graph blocks are msaspdma's own keys.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 216
+        # 216 -> 217 (2.22.0): prompts.universal_guidance.30_ticket_model.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 217
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

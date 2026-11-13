@@ -142,17 +142,38 @@ def is_transient_transport_failure(exc: BaseException, category: Optional[str] =
     return not any(marker in text for marker in _UNFUNDED_MARKERS)
 
 
-def is_retryable_by_facility(exc: BaseException, category: Optional[str] = None) -> bool:
-    """Should the conscience facility spend another attempt on this failure?
+#: Failures a fresh request cannot fix, so another attempt is a wasted call:
+#: the key or model is wrong, the prompt is too long for the model, every
+#: breaker is open (the bus already waited as long as the deadline allowed), or
+#: the provider is rate limiting (the bus already backed off). An unfunded
+#: account is the sixth, recognised by its wording (_UNFUNDED_MARKERS).
+NOT_WORTH_ANOTHER_ATTEMPT_CATEGORIES = frozenset(
+    {"AUTH_ERROR", "MODEL_NOT_AVAILABLE", "CONTEXT_LENGTH_EXCEEDED", "CIRCUIT_OPEN", "RATE_LIMIT"}
+)
 
-    True for transient transport (an independent draw may answer) and for the
-    LLM faults a fresh draw can fix. False for config faults, rate limits, an
-    unfunded account, context overflow, and anything unrecognised.
+
+def is_worth_another_attempt(exc: BaseException, category: Optional[str] = None) -> bool:
+    """THE retry rule for a DMA or a conscience shard: retry unless a fresh request cannot help.
+
+    Retrying is the default, including for a failure nobody has classified
+    (UNKNOWN): a reply cut off at max_tokens, a dropped connection re-raised as
+    a generic error. Eric, 2026-11-13: "Retry is supposed to occur for most
+    error types." The old rule was an allow-list (transport, schema), so every
+    UNKNOWN got one attempt: the es safety battery (run 43522397191) lost an
+    answer to one runaway generation, and RATCHET Market 4 ac-21 a whole task
+    to one "Connection error.". Retries stay inside the thought's deadline and
+    attempt cap, and an exhausted check still fails closed.
     """
     cat = category or categorize_conscience_error(exc)
-    if cat in FACILITY_RETRY_LLM_FAULT_CATEGORIES:
-        return True
-    return is_transient_transport_failure(exc, cat)
+    if cat in NOT_WORTH_ANOTHER_ATTEMPT_CATEGORIES:
+        return False
+    text = str(exc).lower()
+    return not any(marker in text for marker in _UNFUNDED_MARKERS)
+
+
+def is_retryable_by_facility(exc: BaseException, category: Optional[str] = None) -> bool:
+    """Should the conscience facility spend another attempt on this failure? See ``is_worth_another_attempt``."""
+    return is_worth_another_attempt(exc, category)
 
 
 def categorize_conscience_error(exc: BaseException) -> str:

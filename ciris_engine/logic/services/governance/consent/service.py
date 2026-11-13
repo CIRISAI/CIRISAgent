@@ -45,7 +45,7 @@ from ciris_engine.schemas.types import JSONDict
 from .air import ArtificialInteractionReminder
 from .attestation import emit_consent_grant, emit_consent_revocation
 from .decay import DecayProtocolManager
-from .exceptions import ConsentNotFoundError, ConsentValidationError
+from .exceptions import ConsentExpiredError, ConsentNotFoundError, ConsentValidationError
 from .metrics import ConsentMetricsCollector
 from .partnership import PartnershipManager
 
@@ -172,7 +172,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         if cached.stream == ConsentStream.TEMPORARY and cached.expires_at:
             if self._now() > cached.expires_at:
                 del self._consent_cache[user_id]
-                raise ConsentNotFoundError(f"Consent for {user_id} has expired")
+                raise ConsentExpiredError(f"Consent for {user_id} has expired")
 
     def _reconstruct_consent_from_node(self, user_id: str, node: Any) -> ConsentStatus:
         """Reconstruct ConsentStatus from graph node."""
@@ -206,7 +206,7 @@ class ConsentService(BaseService, ConsentManagerProtocol, ToolService):
         # Check expiry
         if status.stream == ConsentStream.TEMPORARY and status.expires_at:
             if self._now() > status.expires_at:
-                raise ConsentNotFoundError(f"Consent for {user_id} has expired")
+                raise ConsentExpiredError(f"Consent for {user_id} has expired")
 
         # Update cache
         self._consent_cache[user_id] = status

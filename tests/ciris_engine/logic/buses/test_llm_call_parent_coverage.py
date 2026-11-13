@@ -182,8 +182,8 @@ def _find_broadcast_llm_call_emission_sites() -> Set[str]:
 # the new site is reached only from a `@streaming_step`-decorated handler
 # OR explicitly inside a `set_parent_event_context()` `with` block.
 EXPECTED_BROADCAST_SITES: Set[str] = {
-    "ciris_engine/logic/buses/llm_bus.py:919",  # _execute_llm_call success path
-    "ciris_engine/logic/buses/llm_bus.py:1045",  # _execute_llm_call error path
+    "ciris_engine/logic/buses/llm_bus.py:943",  # _execute_llm_call success path
+    "ciris_engine/logic/buses/llm_bus.py:1069",  # _execute_llm_call error path
 }
 
 

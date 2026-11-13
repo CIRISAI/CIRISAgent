@@ -690,10 +690,11 @@ class CoreToolService(BaseService, ToolService):
     async def _create_ticket(self, params: ToolParameters) -> ToolResult:
         """Propose a new ticket. Creates it in PROPOSAL state — never executing.
 
-        The proposal is written with status ``proposed``, which is not one of the
-        statuses WorkProcessor discovers, so no Task is generated from it. A
-        human must move it to ``pending`` (and, for spend, issue a budget grant)
-        before any work happens.
+        The proposal is written with status ``blocked`` (``PROPOSAL_TICKET_STATUS``:
+        persist's ticket-status enum has no ``proposed``) and marked as a proposal
+        in its metadata. ``blocked`` is not one of the statuses WorkProcessor
+        discovers, so no Task is generated from it. A human must move it to
+        ``pending`` (and, for spend, issue a budget grant) before any work happens.
         """
         try:
             from ciris_engine.logic.persistence.models.tickets import create_ticket
@@ -993,8 +994,10 @@ class CoreToolService(BaseService, ToolService):
             return ToolInfo(
                 name="create_ticket",
                 description=(
-                    "Propose a new ticket for work you cannot do now. Creates it in PROPOSAL state — "
-                    "it will NOT run until a human approves it."
+                    "File a new ticket: any work item, request or incident a user asks you to record "
+                    "(for example \"the lobby display is frozen\"), or work you cannot do now. This is "
+                    "the only tool that opens a ticket. Every new ticket is a PROPOSAL — it will NOT "
+                    "run until a human approves it."
                 ),
                 parameters=ToolParameterSchema(
                     type="object",
@@ -1045,8 +1048,10 @@ class CoreToolService(BaseService, ToolService):
                 ),
                 category="workflow",
                 when_to_use=(
-                    "When work needs to happen that you cannot or should not do in this task — "
-                    "especially when it needs money. Proposing is how you ask; it is not how you act."
+                    "When a user asks you to file, open or log a ticket — an incident, a fault report, a "
+                    "status report or a request — and when work needs to happen that you cannot or "
+                    "should not do in this task, especially when it needs money. Proposing is how you "
+                    "ask; it is not how you act."
                 ),
                 documentation=ToolDocumentation(
                     quick_start=(
@@ -1056,9 +1061,11 @@ class CoreToolService(BaseService, ToolService):
                     detailed_instructions="""
 ## What this tool does and does not do
 
-`create_ticket` writes a ticket with status `proposed`. The work processor only
-picks up tickets in `pending`, `assigned` or `in_progress`, so **a proposal never
-becomes a running task by itself**. A human must move it forward.
+`create_ticket` writes a **proposal**: a ticket with status `blocked`, marked as
+a proposal awaiting human approval. That is the real, documented state of a new
+proposal, not an error. The work processor only picks up tickets in `pending`,
+`assigned` or `in_progress`, so **a proposal never becomes a running task by
+itself**. A human must move it forward.
 
 ## Requesting a budget
 
@@ -1127,7 +1134,8 @@ proposal you already opened rather than opening another.
                 dma_guidance=ToolDMAGuidance(
                     when_not_to_use=(
                         "Don't propose work you can simply do now, and don't open a second proposal for "
-                        "something you already proposed. Don't use a proposal to imply work has started."
+                        "something you already proposed in this task: once the ticket is filed and the "
+                        "user told, the request is done. Don't use a proposal to imply work has started."
                     ),
                     ethical_considerations=(
                         "A proposal asks a human to spend attention, and a budget request asks them to "
@@ -1215,7 +1223,7 @@ When you update metadata, it's deep-merged with existing metadata:
 
 Valid status values and when to use them:
 - `in_progress`: Active work happening
-- `blocked`: Waiting on external dependency
+- `blocked`: Waiting on external dependency (a new proposal from `create_ticket` is also `blocked`, awaiting human approval)
 - `deferred`: Intentionally delayed (use defer_ticket instead)
 - `completed`: Successfully finished
 - `failed`: Unrecoverable error occurred

@@ -346,3 +346,50 @@ async def test_502_on_replica_a_drives_traffic_to_replica_b(registry, time_svc):
     ok_count = sum(1 for r in results if isinstance(r, tuple))
     assert ok_count == 8, f"expected all succeed via healthy replica, got {ok_count}/8"
     assert healthy.call_count >= 8
+
+
+class _ConnectionDroppingService(CountingMockService):
+    """Raises what the LLM service raises for a dropped connection: a generic
+    RuntimeError whose cause is openai's APIConnectionError (RATCHET ac-21)."""
+
+    async def call_llm_structured(self, messages, response_model, max_tokens=1024, temperature=0.0, **kwargs):
+        import httpx
+        from openai import APIConnectionError
+
+        self.call_count += 1
+        if self.call_count <= self.fail_first_n:
+            try:
+                raise APIConnectionError(request=httpx.Request("POST", "https://example.invalid/v1"))
+            except APIConnectionError as conn:
+                raise RuntimeError("LLM API call failed - circuit breaker activated for failover") from conn
+        return MockResponse(), ResourceUsage(
+            tokens_used=10, tokens_input=5, tokens_output=5, cost_cents=0.001, model_used="mock"
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_dropped_connection_is_retried_like_a_5xx(registry, time_svc):
+    """One transient "Connection error." used to get a single attempt and fail the task."""
+    svc = _ConnectionDroppingService("ciris_primary", delay=0.0, fail_first_n=1)
+    bus = _build_bus(registry, time_svc, [svc], max_in_flight=2)
+    bus._extract_retry_after_time = lambda _err: 0.01  # type: ignore[assignment]
+
+    result, _usage = await bus.call_llm_structured(
+        messages=[{"role": "user", "content": "hi"}],
+        response_model=MockResponse,
+    )
+    assert isinstance(result, MockResponse)
+    assert svc.call_count == 2
+
+
+def test_connection_error_detector_is_typed_not_worded():
+    from openai import APIConnectionError
+    import httpx
+
+    try:
+        raise APIConnectionError(request=httpx.Request("POST", "https://example.invalid/v1"))
+    except APIConnectionError as conn:
+        wrapped = RuntimeError("LLM API call failed")
+        wrapped.__cause__ = conn
+    assert LLMBus._is_connection_error(wrapped)
+    assert not LLMBus._is_connection_error(RuntimeError("Connection error. in some prose"))

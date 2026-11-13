@@ -6,7 +6,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Callable, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -37,6 +37,22 @@ logger = logging.getLogger(__name__)
 
 # Maximum number of validation errors to show in error messages
 MAX_VALIDATION_ERRORS_SHOWN = 3
+
+
+
+#: An action's recorded result: enough for an id or a short answer, never a payload.
+OUTCOME_MAX_CHARS = 400
+
+
+def _outcome_from_followup(follow_up_content: str) -> Optional[str]:
+    """The first paragraph of a handler's follow-up, without the marker, capped; None if empty."""
+    text = (follow_up_content or "").strip()
+    if text.startswith("CIRIS_FOLLOW_UP_THOUGHT:"):
+        text = text[len("CIRIS_FOLLOW_UP_THOUGHT:"):].strip()
+    first = text.split("\n\n", 1)[0].strip()
+    if not first:
+        return None
+    return first if len(first) <= OUTCOME_MAX_CHARS else first[: OUTCOME_MAX_CHARS - 1] + "…"
 
 
 class ActionHandlerDependencies:
@@ -152,6 +168,7 @@ class BaseActionHandler(ABC):
         thought_type: Optional[Any] = None,
         action_result: Optional[Any] = None,
         status: Optional["ThoughtStatus"] = None,
+        outcome: Optional[str] = None,
     ) -> Optional[str]:
         """
         Centralized method to complete a thought and create a follow-up.
@@ -162,6 +179,9 @@ class BaseActionHandler(ABC):
             thought_type: Type of follow-up thought (defaults to FOLLOW_UP)
             action_result: The action result to store with the thought
             status: The final status (defaults to COMPLETED, can be FAILED)
+            outcome: What the action produced, stored with the thought so every later
+                follow-up's action record names it. Defaults to the first paragraph
+                of ``follow_up_content``: every handler's statement of what happened.
 
         Returns:
             The follow-up thought ID if created, None otherwise
@@ -171,11 +191,17 @@ class BaseActionHandler(ABC):
 
         # Mark the current thought with the specified status (default to COMPLETED)
         final_status = status or ThoughtStatus.COMPLETED
+        # Every action's result reaches the next round's record (Eric, 2026-11-13):
+        # the handler's own summary when it gives one, else its follow-up text's
+        # first paragraph, which is its statement of what happened.
+        outcome = outcome or _outcome_from_followup(follow_up_content)
+        status_kwargs: Dict[str, Any] = {"outcome": outcome} if outcome else {}
         success = persistence.update_thought_status(
             thought_id=thought.thought_id,
             status=final_status,
             occurrence_id=thought.agent_occurrence_id,
             final_action=action_result,
+            **status_kwargs,
         )
 
         if not success:

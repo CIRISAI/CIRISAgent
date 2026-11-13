@@ -789,13 +789,15 @@ class ActionDispatcher:
     ) -> None:
         """Update thought status to FAILED on handler error."""
         try:
+            # The action and its failure, in the shape every other action is
+            # stored in, so the task's record lists it (Eric, 2026-11-13). The old
+            # {"error", "original_result"} dict had no action_type: nothing read it,
+            # and the record could not show the action had run at all.
             persistence.update_thought_status(
                 thought_id=thought.thought_id,
                 status=ThoughtStatus.FAILED,
-                final_action={
-                    "error": f"Handler {handler.__class__.__name__} failed: {error}",
-                    "original_result": result,
-                },
+                final_action=result,
+                outcome=f"Handler {handler.__class__.__name__} failed: {error}"[:400],
             )
         except Exception as e_persist:
             logger.error(

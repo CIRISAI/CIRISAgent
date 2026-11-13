@@ -20,6 +20,23 @@ from ciris_adapters.ciris_accord_metrics.adapter import AccordMetricsAdapter
 _TS = "2025-01-01T00:00:00Z"
 
 
+@pytest.fixture(autouse=True)
+def _sandbox_home(monkeypatch, tmp_path):
+    """The purge rewrites the home's .env; never let a test reach the real one."""
+    home = tmp_path / "sandbox-home"
+    home.mkdir()
+    monkeypatch.setenv("CIRIS_HOME", str(home))
+    monkeypatch.setattr("ciris_engine.logic.utils.path_resolution.get_ciris_home", lambda: home)
+
+    def _paths():
+        import os
+
+        override = os.environ.get("CIRIS_CONFIG_DIR")
+        return ([Path(override) / ".env"] if override else []) + [home / ".env"]
+
+    monkeypatch.setattr("ciris_engine.logic.setup.first_run.get_config_paths", _paths)
+
+
 def _mk_adapter(monkeypatch, tmp_path: Path, env_consent: bool = True):
     if env_consent:
         monkeypatch.setenv("CIRIS_ACCORD_METRICS_CONSENT", "true")
@@ -180,3 +197,40 @@ def test_a_withdrawn_grant_does_not_re_arm_at_boot(monkeypatch, tmp_path):
     assert corpus.writes == 0, "no new grant is written over a withdrawal"
     assert adapter.metrics_service._derive_consent_from_ceg() is None
     assert adapter.metrics_service._consent_given is False
+
+
+def test_purge_also_clears_the_homes_env(monkeypatch, tmp_path):
+    """The boot loads <home>/.env too; leaving the vars there brought consent back next boot."""
+    from ciris_adapters.ciris_accord_metrics import adapter as adapter_mod
+
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".env").write_text("KEEP=1\nCIRIS_ACCORD_METRICS_CONSENT=true\n", encoding="utf-8")
+    config_dir = tmp_path / "cfg"
+    config_dir.mkdir()
+    adapter = _mk_adapter(monkeypatch, config_dir)
+    monkeypatch.setattr(
+        "ciris_engine.logic.setup.first_run.get_config_paths", lambda: [config_dir / ".env", home / ".env"]
+    )
+    monkeypatch.setattr("ciris_engine.logic.utils.path_resolution.get_ciris_home", lambda: home)
+    assert adapter_mod._legacy_consent_env_files() == [(config_dir / ".env").resolve(), (home / ".env").resolve()]
+    adapter._purge_legacy_consent_sources()
+    assert (home / ".env").read_text(encoding="utf-8") == "KEEP=1\n"
+    assert "CIRIS_ACCORD_METRICS_CONSENT" not in (config_dir / ".env").read_text(encoding="utf-8")
+
+
+def test_purge_never_rewrites_a_file_outside_the_home_or_config_dir(monkeypatch, tmp_path):
+    """The site-wide /etc/ciris/.env (here: any other dir) is not the agent's to rewrite."""
+    from ciris_adapters.ciris_accord_metrics import adapter as adapter_mod
+
+    home = tmp_path / "home"
+    home.mkdir()
+    elsewhere = tmp_path / "etc-ciris"
+    elsewhere.mkdir()
+    (elsewhere / ".env").write_text("CIRIS_ACCORD_METRICS_CONSENT=true\n", encoding="utf-8")
+    monkeypatch.delenv("CIRIS_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(
+        "ciris_engine.logic.setup.first_run.get_config_paths", lambda: [home / ".env", elsewhere / ".env"]
+    )
+    monkeypatch.setattr("ciris_engine.logic.utils.path_resolution.get_ciris_home", lambda: home)
+    assert adapter_mod._legacy_consent_env_files() == [(home / ".env").resolve()]

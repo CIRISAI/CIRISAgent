@@ -44,6 +44,7 @@ class RejectHandler(BaseActionHandler):
                 status=final_thought_status,
                 occurrence_id=thought_occurrence_id,
                 final_action=result,
+                outcome=f"REJECT parameters invalid: {e}"[:400],
             )
             return None
 
@@ -59,6 +60,7 @@ class RejectHandler(BaseActionHandler):
             status=final_thought_status,
             occurrence_id=thought_occurrence_id,
             final_action=result,
+            outcome=follow_up_content_key_info[:400],
         )
         if parent_task_id:
             self._mark_task_rejected(parent_task_id, thought_occurrence_id)

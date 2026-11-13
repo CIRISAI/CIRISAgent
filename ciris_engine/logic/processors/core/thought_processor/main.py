@@ -590,6 +590,7 @@ class ThoughtProcessor(
                         aspdma_reasoning=action_result.rationale or "",
                         original_thought=thought_item,
                         time_service=self._time_service,
+                        context=thought_context,
                     ),
                 )
 
@@ -1324,6 +1325,12 @@ class ThoughtProcessor(
             )
 
             if retry_result:
+                # The retry is an ASPDMA result like the first: a verb without the
+                # details its second pass supplies. Skipping it sent every retried
+                # TOOL with parameters {} (RATCHET Market 4 run 43453725789: all 7
+                # failed create_ticket calls) and a retried MEMORIZE unaddressed.
+                # The recursive path got this in 2.21.0 (#1027); this one did not.
+                retry_result = await self._run_verb_second_pass(thought_item, retry_result, retry_context)
                 return await self._process_conscience_retry_result(
                     thought_item, thought, dma_results, retry_context, retry_result, conscience_result
                 )
@@ -1916,10 +1923,13 @@ class ThoughtProcessor(
         # Create typed context for conscience checks (needed for both bypass and normal)
         from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
 
+        from ciris_engine.logic.formatters.identity import agent_identity_of
+
         context = ConscienceCheckContext(
             thought=thought,
             idma_result=idma_result,
             wa_authorization=wa_authorization_of(processing_context),
+            agent_identity=agent_identity_of(processing_context),
             dma_results=dma_results_dict,  # extra="allow" accepts additional fields
         )
 

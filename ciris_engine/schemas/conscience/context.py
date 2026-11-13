@@ -58,6 +58,13 @@ class ConscienceCheckContext(BaseModel):
         None, description="Verified WA approval carried by the thought's task"
     )
 
+    # The agent's identity (IdentityData or its dict form), read from the same
+    # system snapshot the DMAs read, approved amendments included. Every
+    # conscience renders it with the DMAs' one identity block
+    # (formatters.identity.format_core_identity_block), so a conscience judges
+    # the agent as it is now, not as it was before an approved amendment.
+    agent_identity: Optional[Any] = Field(None, description="Agent identity from the system snapshot")
+
     # Additional context can be added via extra fields
     model_config = ConfigDict(
         extra="allow",  # Allow additional context fields

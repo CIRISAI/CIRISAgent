@@ -497,7 +497,12 @@ class TestWiseBusDomainFiltering:
 
     @pytest.mark.asyncio
     async def test_no_services_support_domain_hint(self) -> None:
-        """Returns False when no services support the requested domain."""
+        """No service declares the domain: the hint informs, it does not block.
+
+        It used to return False and deliver nothing, which left the task DEFERRED
+        with no deferral record that a Wise Authority could resolve (RATCHET
+        Market 4, run 43453725789). Ruling: Eric, 2026-11-13.
+        """
         from dataclasses import dataclass, field
         from typing import List
         from unittest.mock import AsyncMock, MagicMock
@@ -536,9 +541,11 @@ class TestWiseBusDomainFiltering:
         )
         result = await bus.send_deferral(context, "test_handler")
 
-        # Should fail because no service supports MEDICAL
-        assert result is False
-        service.send_deferral.assert_not_called()
+        # Delivered to the general service, with the hint in the request.
+        assert result is True
+        service.send_deferral.assert_called_once()
+        request = service.send_deferral.await_args.args[0]
+        assert request.context.get("domain_hint") == "MEDICAL"
 
     @pytest.mark.asyncio
     async def test_defer_until_with_z_suffix(self) -> None:

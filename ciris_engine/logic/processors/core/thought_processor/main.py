@@ -590,6 +590,7 @@ class ThoughtProcessor(
                         aspdma_reasoning=action_result.rationale or "",
                         original_thought=thought_item,
                         time_service=self._time_service,
+                        context=thought_context,
                     ),
                 )
 

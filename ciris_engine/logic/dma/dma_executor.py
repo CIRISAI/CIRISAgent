@@ -1261,6 +1261,7 @@ async def run_tsaspdma_correction(
     aspdma_reasoning: str,
     original_thought: ProcessingQueueItem,
     time_service: Optional["TimeServiceProtocol"] = None,
+    context: Optional[Any] = None,
 ) -> ActionSelectionDMAResult:
     """Run TSASPDMA in correction mode when ASPDMA selected a non-existent tool.
 
@@ -1331,7 +1332,7 @@ async def run_tsaspdma_correction(
             available_tools=available_tools,
             aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
-            context=None,
+            context=context,
         )
 
         # Update correlation with success

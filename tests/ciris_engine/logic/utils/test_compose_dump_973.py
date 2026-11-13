@@ -112,6 +112,9 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
             *LANGUAGE_GUIDANCE_BLOCKS,
             "crisis",  # #1248: crisis block directly after language guidance
             "prohibition",
+            # 2.21.1: the identity block (amendments included) leads the system
+            # message, as in DSDMA, and reports as named residue.
+            "system.head",
             "csdma_common_sense.system_guidance_header",
             "system.join1",
             "csdma_common_sense.evaluation_steps",
@@ -127,6 +130,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         *LANGUAGE_GUIDANCE_BLOCKS,
         "crisis",  # #1248: crisis block directly after language guidance
         "prohibition",
+        "system.head",  # 2.21.1: the identity block, amendments included
         "pdma_ethical.system_guidance_header",
         "pdma_ethical.system_guidance_header.slots",
         # #1320: `prompts.wa_approval.only_verified` follows the composed system

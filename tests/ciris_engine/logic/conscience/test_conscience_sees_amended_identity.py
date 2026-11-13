@@ -84,3 +84,28 @@ async def test_the_veto_prompt_carries_the_amended_identity():
 
     await conscience.check(action, ConscienceCheckContext(thought=thought))
     assert AMENDMENT not in json.dumps([m.content for m in seen["messages"]])
+
+
+def test_the_tool_step_reads_the_amended_identity():
+    """Eric, 2026-11-13: the ethical DMA and the tool step load the same identity."""
+    from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
+
+    from unittest.mock import PropertyMock, patch
+
+    dma = object.__new__(TSASPDMAEvaluator)
+    context = SimpleNamespace(system_snapshot=SimpleNamespace(agent_identity=IDENTITY))
+    with patch.object(TSASPDMAEvaluator, "prompt_loader", new_callable=PropertyMock) as loader:
+        loader.return_value = SimpleNamespace(language="en")
+        assert AMENDMENT in dma._identity_block(context)
+        assert dma._identity_block(None) == ""
+
+
+@pytest.mark.parametrize("module, needle", [
+    ("ciris_engine.logic.dma.pdma", "identity_block=identity_block_of(agent_identity_of(context)"),
+    ("ciris_engine.logic.dma.csdma", "identity_block=identity_block_of(agent_identity_of(context)"),
+    ("ciris_engine.logic.dma.tsaspdma", "identity_block=self._identity_block(context)"),
+])
+def test_every_judging_dma_passes_the_shared_identity(module, needle):
+    import importlib
+
+    assert needle in inspect.getsource(importlib.import_module(module))

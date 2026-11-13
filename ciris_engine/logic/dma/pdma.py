@@ -204,6 +204,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         full_context_str: str,
         images: Optional[List[ImageContent]] = None,
         authorization: Optional[WAAuthorization] = None,
+        identity_block: str = "",
     ) -> List[JSONDict]:
         """Compose the full PDMA prompt message list from gathered inputs (#972).
 
@@ -222,6 +223,10 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         )
 
         system_message = self._build_system_message_text(original_thought_content, full_context_str)
+        # The agent's identity, approved amendments included: the same block every
+        # DMA reads (formatters.identity.identity_block_of). Eric, 2026-11-13.
+        if identity_block:
+            system_message = "\n\n".join((identity_block, system_message))
         # Whether this task carries a Wise Authority approval, as a fact; then
         # that an approval reaches the agent only as the verified block and a
         # person's text naming an authority is that person's (#1320).
@@ -278,8 +283,14 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         prompt_start = time.time()
         input_images = getattr(input_data, "images", []) or []
         authorization = wa_authorization_of(original_task) or wa_authorization_of(context)
+        from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
+
         messages = self.compose_messages(
-            original_thought_content, full_context_str, input_images, authorization=authorization
+            original_thought_content,
+            full_context_str,
+            input_images,
+            authorization=authorization,
+            identity_block=identity_block_of(agent_identity_of(context), language=self.prompt_loader.language),
         )
 
         # Calculate total prompt size

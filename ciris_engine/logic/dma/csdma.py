@@ -207,6 +207,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         system_snapshot_str: str,
         user_profiles_str: str,
         images: Optional[List[ImageContent]] = None,
+        identity_block: str = "",
     ) -> List[JSONDict]:
         """Compose the full CSDMA prompt message list from gathered inputs (#972).
 
@@ -221,7 +222,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         return self._create_csdma_messages_for_instructor(
             thought_content,
             context_summary,
-            identity_context_block="",
+            # The agent's identity, approved amendments included: the same block
+            # every DMA reads (formatters.identity.identity_block_of). Eric, 2026-11-13.
+            identity_context_block=identity_block,
             system_snapshot_block=combined_snapshot_block,
             user_profiles_block="",
             images=images,
@@ -280,14 +283,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
 
     def _build_context_summary(self, agent_identity: Any) -> str:
         """Build context summary from agent_identity data."""
-        from ciris_engine.logic.formatters.identity import amendment_texts, describe_with_amendments
-
         agent_id = getattr(agent_identity, "agent_id", "Unknown")
-        # The approved amendments ride with the description, as in every other
-        # identity rendering (RATCHET Market 4: 0 of 534 CSDMA calls had them).
-        description = describe_with_amendments(
-            getattr(agent_identity, "description", ""), amendment_texts(agent_identity)
-        )
+        description = getattr(agent_identity, "description", "")
         role = getattr(agent_identity, "role", "")
 
         return (
@@ -311,6 +308,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         thought_images = getattr(thought_item, "images", []) or []
 
         # Compose messages via the extracted seam (#972)
+        from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
+
         messages = self.compose_messages(
             thought_content_str,
             context_summary,
@@ -318,6 +317,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             system_snapshot_str,
             user_profiles_str,
             images=thought_images,
+            identity_block=identity_block_of(agent_identity_of(context), language=self.prompt_loader.language),
         )
 
         # Store prompts for streaming/debugging

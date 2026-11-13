@@ -263,7 +263,8 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
     # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose (i18n lane, third English wording)
-    "ur": ("363e7f824f7294bd203d88ce94b151e2d62f7db654801f9c02444cc5bd5a6a6c", 32925),
+    # 2.21.1 ticket model: universal 30_ticket_model (i18n lane)
+    "ur": ("178e70976c68c69b3c67b5059824f7cf1ea163fbc075f03676365b3865167699", 33903),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)

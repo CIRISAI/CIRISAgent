@@ -277,6 +277,9 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # permission boundary, not a value ranking, so it HOLDS: a values-alt arm
     # must not acquire the ability to diagnose by varying its values.
     "universal_guidance.26b_user_symptom_direction": BlockAnnotation(_C.DEONTIC, None),
+    # How tickets work: a proposal is `blocked` awaiting a Wise Authority. A
+    # standing fact about the system's own tool, not a rule.
+    "universal_guidance.30_ticket_model": BlockAnnotation(_C.NOMOLOGICAL, None),
     # "These training-attractor pulls are properties of LLMs, not of any one
     # language." A law-like relation the reasoning is asked to accept, not a
     # world-fact checkable at compose time — nomological, sibling of IDMA's

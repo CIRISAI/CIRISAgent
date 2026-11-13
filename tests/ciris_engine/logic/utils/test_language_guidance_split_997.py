@@ -170,7 +170,8 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
     # 2026-11-12 medication and dose: universal 05d_no_medication_or_dose added (fr q08 gave a starting dose on 2.20.0 and 2.21.0)
-    "en": ("21a6709599df580026ae5ed5d771b755d1ffb2668a0b53b915a911789b1bf199", 18109),
+    # 2.21.1 ticket model: universal 30_ticket_model added (RATCHET Market 4)
+    "en": ("fa2d4289e6dfaf859358920122c8af63c06177b7c812c7748e627d03fafb82fc", 18619),
     # 2026-10-29 universal-guidance sweep: §7c/§7e/cross-cluster cut from language_guidance; prompts.universal_guidance drafted by the i18n lane from en 4808efd98 (register-checked)
     # 2026-10-30 stigma words: universal 05b_no_stigma_words added (i18n lane; am/ta/te hand-finished from the reviewer findings); verbatim slur example removed from the §18 ratification list
     # 2026-10-30 register pressure: universal 05c_warmth_without_a_new_role (i18n lane; am ar bn fr it my ru ta zh hand-finished from the reviewer findings)
@@ -341,7 +342,8 @@ COMPOSED_SHA256: Dict[str, Tuple[str, int]] = {
 # AI identity holds when the user offers a friend role). Mixed bytes unchanged.
 # 2.21.0 medication and dose: +928 B deontic (universal 05d_no_medication_or_dose). fr q08
 # gave a starting dose as general information on 2.20.0 and 2.21.0 and nothing told it not to.
-EN_TOTAL_BYTES = 18109
+# 2.21.1 ticket model: +510 B nomological (universal 30_ticket_model).
+EN_TOTAL_BYTES = 18619
 # 4189 -> 4402 (#1010). The cross-cluster EXEMPLAR is a `mixed` block, and
 # fixing it made it longer: its CORRECT RESPONSE used to model the exclusion
 # ("what you're describing doesn't match psychosis") — the exact move §7e

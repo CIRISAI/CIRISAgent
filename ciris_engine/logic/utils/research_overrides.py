@@ -364,6 +364,7 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         # research arm can replace the exclusion-direction rule explicitly rather
         # than losing it as collateral when 26 is replaced.
         "prompts.universal_guidance.26b_user_symptom_direction",
+        "prompts.universal_guidance.30_ticket_model",
         "prompts.prohibitions.AUTONOMOUS_DECEPTION",
         "prompts.prohibitions.BIOMETRIC_INFERENCE",
         "prompts.prohibitions.CONTENT_MODERATION",

@@ -994,8 +994,10 @@ class CoreToolService(BaseService, ToolService):
             return ToolInfo(
                 name="create_ticket",
                 description=(
-                    "Propose a new ticket for work you cannot do now. Creates it in PROPOSAL state — "
-                    "it will NOT run until a human approves it."
+                    "File a new ticket: any work item, request or incident a user asks you to record "
+                    "(for example \"the lobby display is frozen\"), or work you cannot do now. This is "
+                    "the only tool that opens a ticket. Every new ticket is a PROPOSAL — it will NOT "
+                    "run until a human approves it."
                 ),
                 parameters=ToolParameterSchema(
                     type="object",
@@ -1046,8 +1048,10 @@ class CoreToolService(BaseService, ToolService):
                 ),
                 category="workflow",
                 when_to_use=(
-                    "When work needs to happen that you cannot or should not do in this task — "
-                    "especially when it needs money. Proposing is how you ask; it is not how you act."
+                    "When a user asks you to file, open or log a ticket — an incident, a fault report, a "
+                    "status report or a request — and when work needs to happen that you cannot or "
+                    "should not do in this task, especially when it needs money. Proposing is how you "
+                    "ask; it is not how you act."
                 ),
                 documentation=ToolDocumentation(
                     quick_start=(
@@ -1130,7 +1134,8 @@ proposal you already opened rather than opening another.
                 dma_guidance=ToolDMAGuidance(
                     when_not_to_use=(
                         "Don't propose work you can simply do now, and don't open a second proposal for "
-                        "something you already proposed. Don't use a proposal to imply work has started."
+                        "something you already proposed in this task: once the ticket is filed and the "
+                        "user told, the request is done. Don't use a proposal to imply work has started."
                     ),
                     ethical_considerations=(
                         "A proposal asks a human to spend attention, and a budget request asks them to "

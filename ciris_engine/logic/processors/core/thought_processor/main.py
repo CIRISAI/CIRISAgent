@@ -1324,6 +1324,12 @@ class ThoughtProcessor(
             )
 
             if retry_result:
+                # The retry is an ASPDMA result like the first: a verb without the
+                # details its second pass supplies. Skipping it sent every retried
+                # TOOL with parameters {} (RATCHET Market 4 run 43453725789: all 7
+                # failed create_ticket calls) and a retried MEMORIZE unaddressed.
+                # The recursive path got this in 2.21.0 (#1027); this one did not.
+                retry_result = await self._run_verb_second_pass(thought_item, retry_result, retry_context)
                 return await self._process_conscience_retry_result(
                     thought_item, thought, dma_results, retry_context, retry_result, conscience_result
                 )

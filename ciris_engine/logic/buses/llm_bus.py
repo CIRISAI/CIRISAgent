@@ -387,6 +387,30 @@ class LLMBus(BaseBus[LLMService]):
             self._service_semaphores[service_name] = sem
         return sem
 
+    @staticmethod
+    def _is_connection_error(e: BaseException) -> bool:
+        """A dropped or refused connection to the provider, anywhere in the cause chain.
+
+        Typed, not worded: the LLM service re-raises it as the generic
+        "LLM API call failed" RuntimeError, so the text says nothing. It is as
+        transient as a 503, but it used to get the single general attempt, then
+        the DMA did not retry it either, and the task failed with no reply
+        (RATCHET Market 4, run 43453725789, ac-21: one "Connection error.").
+        Includes openai's APITimeoutError, which subclasses APIConnectionError.
+        """
+        try:
+            from openai import APIConnectionError
+        except ImportError:  # pragma: no cover - openai is a hard dependency
+            return False
+        seen: set[int] = set()
+        cur: Optional[BaseException] = e
+        while cur is not None and id(cur) not in seen:
+            seen.add(id(cur))
+            if isinstance(cur, APIConnectionError):
+                return True
+            cur = cur.__cause__ or cur.__context__
+        return False
+
     def _is_server_error(self, error_str: str, full_error: str) -> bool:
         """Detect transient upstream server errors (5xx and upstream-provider errors).
 
@@ -721,12 +745,12 @@ class LLMBus(BaseBus[LLMService]):
         # retry budget so concurrent waves don't escalate server hiccups into
         # a cascade of "LLM UNEXPECTED ERROR"s.
         is_rate_limit = self._is_rate_limit_error(error_str, full_error)
-        is_server_error = self._is_server_error(error_str, full_error)
+        is_server_error = self._is_server_error(error_str, full_error) or self._is_connection_error(e)
         if is_rate_limit or is_server_error:
             rate_limit_retry_count += 1
             if is_server_error and not is_rate_limit:
                 logger.warning(
-                    f"Upstream server error on {service_name} "
+                    f"Upstream server or connection error on {service_name} "
                     f"(attempt {rate_limit_retry_count}/{max_rate_limit_retries}): "
                     f"{type(e).__name__} — applying rate-limit backoff"
                 )

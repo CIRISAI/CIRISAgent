@@ -25,6 +25,11 @@ upstream definitions, not copies -- and replaces only the bundle locations:
 ``LOCALIZE_TARGET=accord``
     the Accord segment bundle staged by ``accord_localize.py`` at
     ``LOCALIZE_ACCORD_STAGE``. Not meant to be selected by hand.
+
+``LOCALIZE_TARGET=prompts``
+    the DMA prompt-template bundle staged by ``prompt_localize.py`` at
+    ``LOCALIZE_PROMPTS_STAGE`` (one key per translatable field of
+    ``ciris_engine/logic/dma/prompts/*.yml``). Not meant to be selected by hand.
 """
 
 from __future__ import annotations
@@ -77,8 +82,17 @@ elif TARGET == "accord":
     # an absolute path yields the path itself.
     CANONICAL_BUNDLE = str(Path(_stage).resolve())
     EXCLUDED_PREFIXES = ()
+elif TARGET == "prompts":
+    _stage = os.environ.get("LOCALIZE_PROMPTS_STAGE", "")
+    if not _stage:
+        raise SystemExit(
+            "[refuse] LOCALIZE_TARGET=prompts needs LOCALIZE_PROMPTS_STAGE; run "
+            "localization/prompt_localize.py, which stages the DMA prompt bundle"
+        )
+    CANONICAL_BUNDLE = str(Path(_stage).resolve())
+    EXCLUDED_PREFIXES = ()
 else:
-    raise SystemExit(f"[refuse] LOCALIZE_TARGET={TARGET!r}: expected 'ui' or 'accord'")
+    raise SystemExit(f"[refuse] LOCALIZE_TARGET={TARGET!r}: expected 'ui', 'accord' or 'prompts'")
 
 #: One bundle, one copy. ``insert`` writes every entry here.
 MIRROR_BUNDLES: Tuple[str, ...] = (CANONICAL_BUNDLE,)

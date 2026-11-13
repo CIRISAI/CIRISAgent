@@ -28,7 +28,7 @@ WA_API_USER = get_env_var("WA_API_USER", "somecomputerguy")  # API username for 
 # The corpus is the CIRIS Constitution's ethics text. Each EDITION is three
 # artifacts (CORPUS_EDITIONS below):
 #   - <edition>_POLYGLOT.txt: the full polyglot, woven across the traditions of
-#     the 29 supported locales (localization/manifest.json). The consciences read it.
+#     the 29 supported locales (ciris_engine/data/localized/manifest.json). The consciences read it.
 #   - <edition>_POLYGLOT_compressed.txt: the Braided Monolith. Round-1 DMAs read it.
 #   - localized/<edition>_{lang}.txt: per-locale translations (29, incl. en).
 #     Action selection reads them via get_localized_accord_text().

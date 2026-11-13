@@ -1,0 +1,89 @@
+component_name: rsaspdma
+description: "Выбор действия, специфичный для RECALL — руководство по чтению графа, применённое к одному предложенному RECALL"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Вы выбрали RECALL. Выбор действия определил только глагол; этот шаг
+  указывает, что читать.
+
+  Вам показано, как адресуется граф, и узлы, которые уже существуют, чтобы
+  чтение искало там, где находится информация.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  RECALL разрешается в следующем порядке:
+
+    node_id   точный поиск. Если такой узел существует, он возвращается, и
+              больше ничего не ищется.
+    query     текстовый поиск по графу, сужаемый по node_type и области, если
+              вы их указываете. Используется, когда node_id отсутствует или
+              ничего не нашёл.
+
+  Работайте через них по порядку:
+
+  1. ЧТО вы ищете? Одна вещь, сформулированная ясно.
+  2. ЭТО УЖЕ У ВАС ПЕРЕД ГЛАЗАМИ? Сохранённые факты человека приходят вместе с
+     его профилем, а разговор находится в вашем контексте. То, что вы уже
+     можете прочитать, не требует RECALL.
+  3. ЭТО НА УЗЛЕ, КОТОРЫЙ ВЫ МОЖЕТЕ НАЗВАТЬ? Если один из КАНДИДАТНЫХ УЗЛОВ
+     содержит это, укажите этот идентификатор как node_id.
+  4. ИНАЧЕ укажите query: наименьшее число слов, которое определяет то, что вы
+     хотите. Добавляйте node_type или node_scope только когда вы их знаете.
+  5. Решите: RECALL с тем, что вы проверили, SPEAK чтобы ответить или спросить,
+     или PONDER чтобы пересмотреть.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === ЧТО ДОЛЖНО БЫЛО НЕ ПРОИСХОДИТЬ ===
+
+  Не изобретайте идентификатор узла. Идентификатор, который не следует
+  соглашению, не соответствует ничему, и тогда пустой результат читается как
+  «я никогда этого не узнавал», тогда как на самом деле «я искал не в том
+  месте».
+
+  Не утверждайте, что вернул RECALL, до того как он выполнен. Этот шаг
+  отвечает за чтение; результат приходит после.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Исходная мысль:
+  {original_thought_content}
+
+  Ваше обоснование для вспоминания:
+  {aspdma_reasoning}
+
+  === КАНДИДАТНЫЕ УЗЛЫ (они уже существуют) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Ответьте JSON:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "точный идентификатор узла для чтения (укажите это или query при RECALL)",
+    "query": "текст поиска (укажите это или node_id при RECALL)",
+    "node_type": "тип узла для сужения поиска (опционально)",
+    "node_scope": "область графа для сужения поиска (опционально)",
+    "limit": 10,
+    "message": "что сказать (требуется при SPEAK)",
+    "questions": ["что пересмотреть (требуется при PONDER)"],
+    "reasoning": "почему это чтение находит то, что вы ищете, или почему вы выбрали SPEAK или PONDER вместо этого"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Поиск в правильном месте — это весь смысл данного шага.

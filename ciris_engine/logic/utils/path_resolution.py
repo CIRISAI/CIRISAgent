@@ -70,8 +70,8 @@ CIRIS_HOME_ENV_CONTEXT = "CIRIS_HOME environment variable"
 
 # Allowlist of valid ISO 639-1 language codes supported by CIRIS.
 # This is the ONLY source of truth for valid language codes - user input MUST match.
-# Mirrors localization/manifest.json — 29 locales total. Adding a locale here
-# without adding the corresponding localization/<code>.json file will surface
+# Mirrors ciris_engine/data/localized/manifest.json — 29 locales total. Adding a locale here
+# without adding the corresponding ciris_engine/data/localized/<code>.json file will surface
 # as missing-prompt errors at agent startup.
 SUPPORTED_LANGUAGE_CODES = frozenset(
     {

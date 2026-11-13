@@ -1,0 +1,83 @@
+component_name: rsaspdma
+description: "Recall-विशिष्ट कृती निवड — graph-read करणारा मार्गदर्शक, एका प्रस्तावित RECALL वर लागू केलेला"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  आपणे RECALL निवडले आहे. कृती निवडाने फक्त verb निवडला; ही पायरी काय वाचायचे ते सांगते.
+
+  आपल्याला दाखवले जाते की graph कसे address केले जाते आणि कोणते nodes आधीच अस्तित्वात आहेत, जेणेकरून read तिथे पाहतो जिथे माहिती आहे.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  एक RECALL या क्रमाने सोडवला जातो:
+
+    node_id   एक अचूक lookup. जर तो node अस्तित्वात असेल तर तो परत केला जातो, आणि आणखी
+              काहीही शोधले जात नाही.
+    query     graph चा एक text search, आपण दिल्यास node_type आणि scope ने संकुचित केलेला.
+              node_id नसताना, किंवा तो काहीही जुळला नाही तेव्हा वापरला जातो.
+
+  या क्रमाने काम करा:
+
+  1. आपण काय शोधत आहात? एक गोष्ट, स्पष्टपणे मांडलेली.
+  2. ते आधीच आपल्यासमोर आहे का? एखाद्या व्यक्तीचे साठवलेले facts त्यांच्या profile सह येतात,
+     आणि संभाषण आपल्या context मध्ये आहे. जे आपण आधीच वाचू शकता त्याला RECALL ची गरज नाही.
+  3. ते आपण नाव देऊ शकता अशा node वर आहे का? जर CANDIDATE NODES पैकी एक ते धारण करत असेल,
+     तो id node_id म्हणून द्या.
+  4. अन्यथा एक query द्या: आपल्याला हवे ते ओळखणारे कमीत कमी शब्द. node_type किंवा
+     node_scope फक्त तेव्हाच जोडा जेव्हा ते आपल्याला माहीत असतील.
+  5. Decide करा: आपण तपासलेल्या गोष्टीसह RECALL, उत्तर देण्यासाठी किंवा विचारण्यासाठी SPEAK,
+     किंवा reconsider साठी PONDER.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === जे घडू नये ===
+
+  एक node id invent करू नका. convention पालन न करणारा id काहीही जुळत नाही, आणि मग रिकामा
+  result "मला हे कधीच कळले नाही" असे वाचले जाते जेव्हा सत्य असते "मी चुकीच्या ठिकाणी शोधले".
+
+  RECALL ने काय परत केले हे ते चालण्यापूर्वी सांगू नका. हा टप्पा read ला संबोधित करतो;
+  result नंतर येतो.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  मूळ विचार:
+  {original_thought_content}
+
+  आठवण्यासाठी आपला reasoning:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (हे आधीच अस्तित्वात आहेत) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON सह respond करा:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "वाचायचा अचूक node id (RECALL साठी हे किंवा query द्या)",
+    "query": "search text (RECALL साठी हे किंवा node_id द्या)",
+    "node_type": "search संकुचित करण्यासाठी node type (optional)",
+    "node_scope": "search संकुचित करण्यासाठी graph scope (optional)",
+    "limit": 10,
+    "message": "काय सांगायचे (SPEAK साठी आवश्यक)",
+    "questions": ["काय reconsider करायचे (PONDER साठी आवश्यक)"],
+    "reasoning": "हा read आपण जे शोधत आहात ते का सापडवतो, किंवा आपणे SPEAK किंवा PONDER का निवडले"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  योग्य ठिकाणी शोधणे हाच या पायरीचा संपूर्ण उद्देश आहे.

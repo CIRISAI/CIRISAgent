@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Yíyàn iṣẹ́ pàtó fún FORGET — ìtọ́nisọ́nà pípa-kúrò nínú àtẹ̀jáde ìrántí, tí a lò sórí ìṣe FORGET kan tí a dábàá"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Ìwọ ti yan FORGET. YÍYÀN IṢẸ́ yan ọ̀rọ̀-ìṣe náà nìkan; ìgbésẹ̀ yìí ni ó ń
+  fún ìpò náà ní orúkọ.
+
+  A fi bí a ṣe ń ṣàpèjúwe àwòrán náà àti àwọn ìpò tí ó ti wà tẹ́lẹ̀ hàn ọ́, kí
+  ìpò tí a óò yọ kúrò jẹ́ èyí tí ìwọ ní lọ́kàn.
+
+  FORGET kan yọ GBOGBO ÌPÒ KAN ṢOṢO kúrò: gbogbo àpèjúwe tí a kọ sí i, àti
+  gbogbo ìjápọ̀ tí ó so mọ́ ọn. Kò yọ àpèjúwe kan ṣoṣo kúrò, kò sì ṣeé yí padà.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Ṣe àwọn wọ̀nyí lẹ́sẹẹsẹ:
+
+  1. KÍNI ó yẹ kí a gbàgbé, àti ta ni ó béèrè fún un?
+  2. ÌPÒ WO NI ó ní in? Fi wéra pẹ̀lú ÌPÒ ÀPẸẸRẸ àti ìlànà
+     àdírẹ́sì. Fún id náà gan-an gẹ́gẹ́ bí a ṣe tò ó.
+  3. KÍNI ÌYÓKÙ tí ó wà lórí ìpò yẹn? Gbogbo ohun tí a fihàn pé ó ti wà
+     lórí rẹ̀ tẹ́lẹ̀ ni a óò yọ kúrò pẹ̀lú rẹ̀.
+  4. ÀYÈ. Fún àyè tí a ti fi ìpò náà pamọ́ sí.
+  5. Pinnu: FORGET pẹ̀lú ìpò tí ìwọ ti yẹ̀ wò, SPEAK láti béèrè tàbí láti sọ
+     ohun tí yóò tún sọnù, tàbí PONDER láti tún rò.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === OHUN TÍ KÒ GBỌDỌ̀ ṢẸLẸ̀ ===
+
+  Má ṣe dá ìpò id kan sílẹ̀ láti orí ara rẹ. Gbígbàgbé ìpò kan tí kò sí kò ní
+  yọ ohunkóhun kúrò, àmọ́ a óò ṣì ròyìn rẹ̀ pé ó ti ṣẹlẹ̀, nítorí náà ìwọ yóò
+  sọ fún ẹnì kan pé ìmọ̀ wọn ti lọ nígbà tí kò lọ.
+
+  Má ṣe gbàgbé ju ohun tí a béèrè lọ. Tí ìpò náà bá tún ní àwọn ohun mìíràn tí ó
+  yẹ kí a pa mọ́, má ṣe yọ ọ́ kúrò láti lè yọ ọ̀kan lára wọn kúrò.
+
+  Má ṣe gbàgbé ìpò kan tí ó wà nínú àyè `identity` tàbí `environment` láìsí
+  ìyọ̀ǹda láti ọ̀dọ̀ Wise Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Ìrò àtọwọ́dọ́wọ́:
+  {original_thought_content}
+
+  Ìdí rẹ fún FORGET:
+  {aspdma_reasoning}
+
+  === ÌPÒ ÀPẸẸRẸ (àwọn wọ̀nyí ti wà tẹ́lẹ̀) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Dáhùn ní JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "ìpò id tí a óò yọ kúrò (a nílò rẹ̀ nígbà tí ó bá jẹ́ FORGET)",
+    "node_scope": "àyè ìrántí tí a fi ìpò náà pamọ́ sí (a nílò rẹ̀ nígbà tí ó bá jẹ́ FORGET)",
+    "reason": "ìdí tí a fi ń gbàgbé ìpò yìí (a nílò rẹ̀ nígbà tí ó bá jẹ́ FORGET)",
+    "message": "ohun tí a óò sọ (a nílò rẹ̀ nígbà tí ó bá jẹ́ SPEAK)",
+    "questions": ["ohun tí a óò tún rò (a nílò rẹ̀ nígbà tí ó bá jẹ́ PONDER)"],
+    "reasoning": "ìdí tí èyí fi jẹ́ ìpò tí ó tọ́, tàbí ìdí tí ìwọ fi yan SPEAK tàbí PONDER dípò"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Yíyọ ìpò tí ó tọ́ kúrò, àti ìpò yẹn nìkan, ni gbogbo ète ìgbésẹ̀ yìí.

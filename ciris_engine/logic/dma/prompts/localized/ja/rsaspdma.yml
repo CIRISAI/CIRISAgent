@@ -1,0 +1,89 @@
+component_name: rsaspdma
+description: "想起固有のアクション選択 — グラフ読み取りガイドを、提案された一つの RECALL に適用したもの"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  あなたは RECALL を選択しました。アクション選択は動詞のみを選びました；このステップは
+  何を読み取るかを示します。
+
+  グラフがどのようにアドレスされるか、および既に存在するノードが表示されるため、
+  読み取りが情報のある場所を探すことができます。
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  RECALL は次の順序で解決されます：
+
+    node_id   正確な照合。そのノードが存在する場合、それが返され、
+              他には何も検索されません。
+    query     グラフのテキスト検索で、指定した場合は node_type と scope に
+              よって絞り込まれます。node_id がない場合、またはそれが何にも
+              一致しなかった場合に使用されます。
+
+  順番にこれらを実行してください：
+
+  1. あなたは何を探していますか？ 一つのことを、明確に述べてください。
+  2. それは既にあなたの目の前にありますか？ 人の保存された事実はその人の
+     プロフィールと共に届き、会話はあなたのコンテキストにあります。既に読める
+     ものに RECALL は必要ありません。
+  3. それは名前を挙げられるノードにありますか？ 候補ノードのいずれかがそれを
+     保持している場合、その id を node_id として示してください。
+  4. それ以外の場合は query を示してください：求めるものを特定する最小限の
+     語数で。node_type または node_scope は、それらが分かっている場合にのみ
+     追加してください。
+  5. 決定：チェック済みの内容で RECALL、答えるかまたは尋ねるために SPEAK、
+     または再検討するために PONDER。
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === 何が起きてはいけないか ===
+
+  ノード id を作り上げないでください。慣例に従わない id は何にも一致せず、
+  空の結果は「これを学んだことは一度もない」と読めてしまいますが、
+  真実は「間違った場所を探した」ということです。
+
+  RECALL が実行される前に、その結果を述べないでください。このステップは
+  読み取りを指示するものであり、結果はその後に届きます。
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  元の思考：
+  {original_thought_content}
+
+  想起の理由：
+  {aspdma_reasoning}
+
+  === 候補ノード（これらは既に存在する）===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON で応答します：
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "読み取る正確なノード id（RECALL 時はこれか query のいずれかを指定）",
+    "query": "検索テキスト（RECALL 時はこれか node_id のいずれかを指定）",
+    "node_type": "検索を絞り込むノードタイプ（任意）",
+    "node_scope": "検索を絞り込むグラフスコープ（任意）",
+    "limit": 10,
+    "message": "言うこと（SPEAK 時は必須）",
+    "questions": ["再検討すること（PONDER 時は必須）"],
+    "reasoning": "この読み取りが探しているものを見つける理由、またはなぜ SPEAK か PONDER を選んだのか"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  正しい場所を探すことが、このステップの要点です。

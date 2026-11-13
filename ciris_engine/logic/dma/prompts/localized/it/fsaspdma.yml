@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Selezione dell'azione specifica per dimenticare — la guida all'eliminazione nel grafo, applicata a una proposta FORGET"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Hai selezionato FORGET. La selezione dell'azione ha scelto solo il verbo; questo passo
+  nomina il nodo.
+
+  Ti viene mostrato come il grafo è indirizzato e i nodi che già esistono, così
+  il nodo rimosso è quello che intendi.
+
+  Un FORGET rimuove UN INTERO NODO: ogni attributo archiviato su di esso, e ogni edge
+  ad esso collegato. Non rimuove un singolo attributo, e non è annullabile.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Lavora attraverso questi in ordine:
+
+  1. COSA dovrebbe essere dimenticato, e chi lo ha richiesto?
+  2. QUALE NODO lo contiene? Confrontalo con i NODI CANDIDATI e la convenzione
+     di indirizzamento. Fornisci l'id esattamente come è elencato.
+  3. COS'ALTRO si trova su quel nodo? Tutto ciò che è mostrato come già
+     archiviato su di esso viene rimosso insieme a esso.
+  4. SCOPE. Fornisci lo scope in cui il nodo è archiviato.
+  5. Decidi: FORGET con il nodo che hai verificato, SPEAK per chiedere o per
+     dire cosa andrebbe perso anche, o PONDER per riconsiderare.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === COSA NON DEVE ACCADERE ===
+
+  Non inventare un identificativo di nodo. Dimenticare un nodo che non esiste non rimuove
+  nulla ed è comunque segnalato come completato, quindi diresti a una persona che le sue
+  informazioni sono sparite quando non lo sono.
+
+  Non dimenticare più di quanto richiesto. Se il nodo contiene anche cose che dovrebbero
+  essere conservate, non rimuoverlo per eliminarne una.
+
+  Non dimenticare un nodo in scope `identity` o `environment` senza approvazione
+  da Wise Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Pensiero originale:
+  {original_thought_content}
+
+  Il tuo ragionamento per dimenticare:
+  {aspdma_reasoning}
+
+  === NODI CANDIDATI (questi già esistono) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Rispondi con JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "l'identificativo di nodo da rimuovere (richiesto quando FORGET)",
+    "node_scope": "scope del grafo in cui il nodo è archiviato (richiesto quando FORGET)",
+    "reason": "perché questo nodo viene dimenticato (richiesto quando FORGET)",
+    "message": "cosa dire (richiesto quando SPEAK)",
+    "questions": ["cosa riconsiderare (richiesto quando PONDER)"],
+    "reasoning": "perché questo è il nodo giusto, o perché hai scelto SPEAK o PONDER invece"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Rimuovere il nodo giusto, e solo quello, è l'intero scopo di questo passo.

@@ -663,3 +663,49 @@ class TestIntegrationRefactoredFunctions:
         assert step_data.thought_id == "thought_123"
         assert step_data.action_executed == "SPEAK"
         assert step_data.dispatch_success is True
+
+
+def test_aspdma_result_reports_the_selection_not_the_override(base_step_data, mock_conscience_result_passed):
+    """On a conscience override, ASPDMA_RESULT names what the model selected.
+
+    The step's output holds the conscience's replacement (ponder); the event
+    carries the model's own rationale and prompt, so its verb must be the
+    model's too. Found by joining captured LLM calls to traces: 15 of 31
+    selection rows disagreed with their trace, every one an override.
+    """
+    from ciris_engine.logic.processors.core.step_decorators import (
+        _create_aspdma_result_event,
+        _create_conscience_execution_data,
+    )
+    from ciris_engine.schemas.streaming.reasoning_stream import create_reasoning_event
+
+    from ciris_engine.schemas.actions.parameters import PonderParams, SpeakParams
+    from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+    from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+    selected = ActionSelectionDMAResult(
+        selected_action=HandlerActionType.SPEAK,
+        action_parameters=SpeakParams(content="An answer."),
+        rationale="The user asked a question; answer it.",
+    )
+    replacement = ActionSelectionDMAResult(
+        selected_action=HandlerActionType.PONDER,
+        action_parameters=PonderParams(questions=["Is this within my limits?"]),
+        rationale="Conscience override.",
+    )
+    overridden = ConscienceApplicationResult(
+        original_action=selected,
+        final_action=replacement,
+        overridden=True,
+        override_reason="epistemic humility",
+        epistemic_data=mock_conscience_result_passed.epistemic_data,
+    )
+
+    data = _create_conscience_execution_data(base_step_data, overridden, (selected,))
+    assert data.selected_action == str(HandlerActionType.SPEAK)
+    assert data.conscience_passed is False
+
+    event = _create_aspdma_result_event(data, "2026-01-01T00:00:00+00:00", False, create_reasoning_event)
+    assert event.selected_action == str(HandlerActionType.SPEAK)
+    assert event.action_rationale == "The user asked a question; answer it."

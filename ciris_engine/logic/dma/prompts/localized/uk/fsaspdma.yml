@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Вибір дії, специфічний для забування — посібник з видалення графу, застосований до однієї запропонованої дії FORGET"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Ви вибрали FORGET. Вибір дії визначив лише дієслово; цей крок
+  називає вузол.
+
+  Вам показано, як адресується граф, та вузли, які вже існують, щоб
+  видалений вузол був саме тим, який ви маєте на увазі.
+
+  FORGET видаляє ОДИН ЦІЛИЙ ВУЗОЛ: кожен атрибут, збережений на ньому, і кожне ребро,
+  приєднане до нього. Він не видаляє один окремий атрибут, і це не скасовується.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Пройдіть через них по порядку:
+
+  1. ЩО слід забути, і хто про це попросив?
+  2. ЯКИЙ ВУЗОЛ це містить? Порівняйте з КАНДИДАТНИМИ ВУЗЛАМИ та умовою
+     адресування. Вкажіть ідентифікатор точно так, як він зазначений.
+  3. ЩО ЩЕ є на цьому вузлі? Усе, що показано як уже збережене на ньому,
+     видаляється разом з ним.
+  4. ОБЛАСТЬ. Вкажіть область, у якій зберігається вузол.
+  5. Вирішіть: FORGET з вузлом, який ви перевірили, SPEAK щоб запитати або
+     сказати, що також буде втрачено, або PONDER щоб переглянути.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ЩО НЕ ПОВИННО ВІДБУТИСЯ ===
+
+  Не вигадуйте ідентифікатор вузла. Забування вузла, який не існує, не видаляє
+  нічого, але все одно повідомляється як виконане, тож ви скажете людині, що її
+  інформація зникла, коли насправді це не так.
+
+  Не забувайте більше, ніж просили. Якщо вузол також містить речі, які слід
+  зберегти, не видаляйте його, щоб позбутися одного з них.
+
+  Не забувайте вузол в області `identity` або `environment` без затвердження
+  Wise Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Вихідна думка:
+  {original_thought_content}
+
+  Ваше обґрунтування для забування:
+  {aspdma_reasoning}
+
+  === КАНДИДАТНІ ВУЗЛИ (вони вже існують) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Відповісти JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "ідентифікатор вузла для видалення (потрібно для FORGET)",
+    "node_scope": "область графу, у якій зберігається вузол (потрібно для FORGET)",
+    "reason": "чому цей вузол забувається (потрібно для FORGET)",
+    "message": "що сказати (потрібно для SPEAK)",
+    "questions": ["що переглянути (потрібно для PONDER)"],
+    "reasoning": "чому це правильний вузол, або чому ви обрали SPEAK чи PONDER замість цього"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Видалення правильного вузла, і тільки цього вузла, — ось сенс цього кроку.

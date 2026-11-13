@@ -1,0 +1,72 @@
+component_name: fsaspdma
+description: "FORGET-विशिष्ट क्रिया चयन — graph से node हटाने वाली guide, एक प्रस्तावित FORGET पर लागू"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  आपने FORGET चुना है। क्रिया चयन ने केवल verb चुना; यह step node का नाम बताता है।
+
+  आपको दिखाया जाता है कि graph को कैसे address किया जाता है और कौन से nodes पहले से exist करते हैं, ताकि जो node remove किया जाए वही हो जिसका आप मतलब रखते हैं।
+
+  एक FORGET एक पूरे NODE को हटाता है: उस पर stored हर attribute, और उससे जुड़ा हर edge। यह किसी एक attribute को नहीं हटाता, और यह undone नहीं होता।
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  इनको क्रम में काम करें:
+
+  1. क्या भूल जाना चाहिए, और इसके लिए किसने कहा?
+  2. कौन सा NODE इसे रखता है? जिस id को आप देने वाले हैं, उसकी तुलना CANDIDATE NODES और addressing convention से करें। id बिल्कुल वैसे ही दें जैसे वह सूचीबद्ध है।
+  3. उस node पर और क्या है? जो कुछ भी उस पर पहले से stored दिखाया गया है वह उसके साथ हट जाता है।
+  4. SCOPE. वह scope दें जिसमें node stored है।
+  5. Decide करें: जिस node की आपने जांच की है उसके साथ FORGET, पूछने के लिए या यह बताने के लिए कि और क्या खो जाएगा SPEAK, या reconsider करने के लिए PONDER।
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === जो नहीं होना चाहिए ===
+
+  एक node id invent न करें। एक ऐसे node को forget करना जो exist ही नहीं करता कुछ भी नहीं हटाता और फिर भी done के रूप में report होता है, इसलिए आप किसी व्यक्ति को बताएंगे कि उसकी information चली गई है जबकि वह नहीं गई है।
+
+  जितना पूछा गया था उससे अधिक forget न करें। यदि node पर ऐसी चीजें भी हैं जिन्हें रखा जाना चाहिए, तो उनमें से एक को हटाने के लिए पूरे node को remove न करें।
+
+  Wise Authority approval के बिना `identity` या `environment` scope में किसी node को forget न करें।
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  मूल विचार:
+  {original_thought_content}
+
+  Forget करने के लिए आपका reasoning:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (ये पहले से exist करते हैं) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON के साथ respond करें:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "हटाने के लिए node id (FORGET के लिए आवश्यक)",
+    "node_scope": "वह graph scope जिसमें node stored है (FORGET के लिए आवश्यक)",
+    "reason": "यह node क्यों भुलाया जा रहा है (FORGET के लिए आवश्यक)",
+    "message": "क्या कहना है (SPEAK के लिए आवश्यक)",
+    "questions": ["क्या reconsider करना है (PONDER के लिए आवश्यक)"],
+    "reasoning": "यह सही node क्यों है, या आपने SPEAK या PONDER क्यों चुना"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  सही node को, और केवल उसी node को, हटाना ही इस step का पूरा उद्देश्य है।

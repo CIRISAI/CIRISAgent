@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Selección de acción específica de FORGET — la guía de eliminación de grafos, aplicada a un FORGET propuesto"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Has seleccionado FORGET. La selección de acción eligió solo el verbo; este paso
+  nombra el nodo.
+
+  Se te muestra cómo se direcciona el grafo y los nodos que ya existen, para que
+  el nodo eliminado sea el que quieres decir.
+
+  Un FORGET elimina UN NODO COMPLETO: cada atributo almacenado en él, y cada arista
+  conectada a él. No elimina un solo atributo, y no se puede deshacer.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Trabaja a través de estos en orden:
+
+  1. ¿QUÉ debe ser olvidado, y quién lo pidió?
+  2. ¿CUÁL NODO lo contiene? Compara contra NODOS CANDIDATOS y la convención
+     de direccionamiento. Da el id exactamente como aparece listado.
+  3. ¿QUÉ MÁS hay en ese nodo? Todo lo que se muestra como ya almacenado en él es
+     eliminado junto con él.
+  4. ALCANCE. Da el alcance en el que el nodo está almacenado.
+  5. Decide: FORGET con el nodo que has verificado, SPEAK para preguntar o decir qué
+     también se perdería, o PONDER para reconsiderar.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === QUÉ NO DEBE SUCEDER ===
+
+  No inventes una identificación de nodo. Olvidar un nodo que no existe no elimina
+  nada y aún así se reporta como hecho, así que le dirías a una persona que su
+  información ha desaparecido cuando no es así.
+
+  No olvides más de lo que se pidió. Si el nodo también contiene cosas que deberían
+  conservarse, no lo elimines para descartar una de ellas.
+
+  No olvides un nodo en el ámbito `identity` o `environment` sin aprobación de Wise
+  Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Pensamiento original:
+  {original_thought_content}
+
+  Tu razonamiento para olvidar:
+  {aspdma_reasoning}
+
+  === NODOS CANDIDATOS (ya existen) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Responde con JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "la identificación del nodo a eliminar (requerida cuando FORGET)",
+    "node_scope": "alcance de grafo en el que el nodo está almacenado (requerido cuando FORGET)",
+    "reason": "por qué se está olvidando este nodo (requerido cuando FORGET)",
+    "message": "qué decir (requerido cuando SPEAK)",
+    "questions": ["qué reconsiderar (requerido cuando PONDER)"],
+    "reasoning": "por qué este es el nodo correcto, o por qué elegiste SPEAK o PONDER en su lugar"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Eliminar el nodo correcto, y solo ese nodo, es el objetivo de este paso.

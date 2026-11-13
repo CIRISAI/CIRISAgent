@@ -1,0 +1,80 @@
+component_name: fsaspdma
+description: "FORGET-குறிப்பிட்ட செயல் தேர்வு — வரைபடம்-நீக்கும் வழிகாட்டி, ஒரு முன்மொழியப்பட்ட FORGET-க்குப் பயன்படுத்தப்பட்டது"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  நீ FORGET தேர்ந்தெடுத்தாய். செயல் தேர்வு வினைச்சொல்லை மட்டும் தேர்ந்தெடுத்தது; இந்த படி
+  முனையைப் பெயரிடுகிறது.
+
+  வரைபடம் எவ்வாறு முகவரி செய்யப்படுகிறது மற்றும் ஏற்கனவே இருக்கும் முனைகள் என்ன
+  என்பது உனக்குக் காட்டப்படுகிறது, எனவே நீக்கப்படும் முனை நீ நினைக்கும் முனையே.
+
+  ஒரு FORGET ஒரே ஒரு முழு முனையை நீக்குகிறது: அதில் சேமிக்கப்பட்டுள்ள ஒவ்வொரு பண்புக்கூறும்,
+  அதனுடன் இணைக்கப்பட்ட ஒவ்வொரு விளிம்பும். அது ஒரு தனி பண்புக்கூறை நீக்காது, மற்றும் அது
+  திரும்பப் பெறப்படாது.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  இவைகளை வரிசையில் வேலை செய்யவும்:
+
+  1. எது மறக்கப்பட வேண்டும், யார் அதைக் கேட்டார்கள்?
+  2. எந்த முனை அதை வைத்திருக்கிறது? CANDIDATE NODES மற்றும் முகவரி வழுமொழியுடன் ஒப்பிடவும். பட்டியலிடப்பட்டுள்ளபடியே அடையாளத்தைக் கொடுங்கள்.
+  3. அந்த முனையில் வேறு என்ன உள்ளது? அதில் ஏற்கனவே சேமிக்கப்பட்டதாகக் காட்டப்படும் அனைத்தும் அதனுடன் அகற்றப்படும்.
+  4. நோக்கம். முனை சேமிக்கப்பட்டுள்ள நோக்கத்தைக் கொடுங்கள்.
+  5. நிச்சயிக்கவும்: நீங்கள் சரிபார்த்த முனையுடன் FORGET, கேட்கவோ அல்லது இழக்கப்படும் மற்றவற்றைச் சொல்லவோ SPEAK, அல்லது மறுபரிசீலனை செய்ய PONDER.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === எது நடக்க வேண்டாம் ===
+
+  ஒரு முனை அடையாளம் கற்பனை செய்ய வேண்டாம். இல்லாத ஒரு முனையை மறப்பது
+  எதையும் நீக்காது, ஆனாலும் அது செய்யப்பட்டதாகவே தெரிவிக்கப்படும், எனவே
+  நீங்கள் ஒரு நபரிடம் அவர்களின் தகவல் போய்விட்டது என்று சொல்வீர்கள், ஆனால் அது போகவில்லை.
+
+  கேட்கப்பட்டதை விட அதிகமாக மறக்க வேண்டாம். முனையில் வைக்கப்பட வேண்டிய
+  மற்ற விஷயங்களும் இருந்தால், அவற்றில் ஒன்றை கைவிட முனையை நீக்காதீர்கள்.
+
+  Wise Authority ஒப்புதல் இல்லாமல் `identity` அல்லது `environment`
+  நோக்கத்தில் உள்ள ஒரு முனையை மறக்க வேண்டாம்.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  அசல் சிந்தனை:
+  {original_thought_content}
+
+  மறப்பதற்கான உங்கள் நியாயம்:
+  {aspdma_reasoning}
+
+  === CANDIDATE முனைகள் (இவை ஏற்கனவே உள்ளன) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON உடன் பதிலளிக்கவும்:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "அகற்ற வேண்டிய முனை அடையாளம் (FORGET போது தேவை)",
+    "node_scope": "முனை சேமிக்கப்பட்டுள்ள வரைபட நோக்கம் (FORGET போது தேவை)",
+    "reason": "இந்த முனை ஏன் மறக்கப்படுகிறது (FORGET போது தேவை)",
+    "message": "சொல்லலாம் (SPEAK போது தேவை)",
+    "questions": ["மீண்டும் கருத்தடங்க (PONDER போது தேவை)"],
+    "reasoning": "இது ஏன் சரியான முனை, அல்லது நீ ஏன் SPEAK அல்லது PONDER தேர்ந்தெடுத்தாய்"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  சரியான முனையை மட்டும், அதை மட்டுமே, நீக்குவதே இந்த படியின் முழு நோக்கம்.

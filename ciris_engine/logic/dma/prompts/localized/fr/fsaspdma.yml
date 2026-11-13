@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Sélection d'action spécifique à l'oubli — le guide de suppression du graphe, appliqué à une proposition de FORGET"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Vous avez sélectionné FORGET. La sélection d'action a choisi seulement le verbe ; cette étape
+  nomme le nœud.
+
+  On vous montre comment le graphe est adressé et les nœuds qui existent déjà, afin que
+  le nœud supprimé soit celui que vous voulez dire.
+
+  Un FORGET supprime UN NŒUD ENTIER : chaque attribut stocké dessus, et chaque arête
+  attachée à lui. Il ne supprime pas un seul attribut, et il ne se défait pas.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Travaillez à travers ceux-ci dans l'ordre :
+
+  1. QUOI devrait être oublié, et qui l'a demandé ?
+  2. QUEL NŒUD le contient ? Comparez par rapport aux NŒUDS CANDIDATS et à la
+     convention d'adressage. Donnez l'id exactement tel qu'il est listé.
+  3. QUOI D'AUTRE se trouve sur ce nœud ? Tout ce qui est indiqué comme déjà stocké dessus
+     est supprimé avec lui.
+  4. PORTÉE. Donnez la portée dans laquelle le nœud est stocké.
+  5. Décidez : FORGET avec le nœud que vous avez vérifié, SPEAK pour demander ou pour dire ce
+     qui serait aussi perdu, ou PONDER pour reconsidérer.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === CE QUI NE DOIT PAS ARRIVER ===
+
+  N'inventez pas d'identifiant de nœud. Oublier un nœud qui n'existe pas ne supprime
+  rien et est quand même signalé comme fait, donc vous diriez à une personne que son
+  information a disparu alors que ce n'est pas le cas.
+
+  N'oubliez pas plus que ce qui a été demandé. Si le nœud contient aussi des éléments qui devraient
+  être conservés, ne le supprimez pas pour en abandonner un.
+
+  N'oubliez pas un nœud de portée `identity` ou `environment` sans l'approbation de Wise
+  Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Pensée originale :
+  {original_thought_content}
+
+  Votre raison d'oublier :
+  {aspdma_reasoning}
+
+  === NŒUDS CANDIDATS (ceux-ci existent déjà) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Répondez avec JSON :
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "l'identifiant de nœud à supprimer (obligatoire lors de FORGET)",
+    "node_scope": "portée du graphe dans laquelle le nœud est stocké (obligatoire lors de FORGET)",
+    "reason": "pourquoi ce nœud est oublié (obligatoire lors de FORGET)",
+    "message": "ce à dire (obligatoire lors de SPEAK)",
+    "questions": ["ce à reconsidérer (obligatoire lors de PONDER)"],
+    "reasoning": "pourquoi c'est le bon nœud, ou pourquoi vous avez choisi SPEAK ou PONDER à la place"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Supprimer le bon nœud, et seulement celui-là, est tout l'objet de cette étape.

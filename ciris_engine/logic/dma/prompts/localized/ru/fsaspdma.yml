@@ -1,0 +1,83 @@
+component_name: fsaspdma
+description: "Выбор действия, специфичный для FORGET — руководство по удалению из графа, применённое к одному предложенному FORGET"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Вы выбрали FORGET. Выбор действия определил только глагол; этот шаг
+  называет узел.
+
+  Вам показано, как адресуется граф, и узлы, которые уже существуют, чтобы
+  удаляемый узел был именно тем, который вы имеете в виду.
+
+  FORGET удаляет ОДИН ЦЕЛЫЙ УЗЕЛ: каждый атрибут, хранящийся на нём, и каждое
+  ребро, прикреплённое к нему. Это не удаляет один отдельный атрибут, и это
+  нельзя отменить.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Работайте через них по порядку:
+
+  1. ЧТО должно быть забыто и кто это запросил?
+  2. КАКОЙ УЗЕЛ содержит это? Сравните с КАНДИДАТНЫМИ УЗЛАМИ и соглашением
+     адресации. Укажите идентификатор точно так, как он указан в списке.
+  3. ЧТО ЕЩЁ находится на этом узле? Всё, что показано как уже хранящееся на
+     нём, удаляется вместе с ним.
+  4. ОБЛАСТЬ. Укажите область, в которой хранится узел.
+  5. Решите: FORGET с узлом, который вы проверили, SPEAK чтобы спросить или
+     сказать, что также будет потеряно, или PONDER чтобы пересмотреть.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ЧТО ДОЛЖНО БЫЛО НЕ ПРОИСХОДИТЬ ===
+
+  Не изобретайте идентификатор узла. Забывание узла, который не существует, не
+  удаляет ничего, но всё равно сообщается как выполненное, поэтому вы скажете
+  человеку, что его информация удалена, когда это не так.
+
+  Не забывайте больше, чем было запрошено. Если узел также содержит то, что
+  должно быть сохранено, не удаляйте его, чтобы избавиться от одной из этих вещей.
+
+  Не забывайте узел в области `identity` или `environment` без одобрения Wise
+  Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Исходная мысль:
+  {original_thought_content}
+
+  Ваше обоснование для забывания:
+  {aspdma_reasoning}
+
+  === КАНДИДАТНЫЕ УЗЛЫ (они уже существуют) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Ответьте JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "идентификатор узла для удаления (требуется при FORGET)",
+    "node_scope": "область графа, в которой хранится узел (требуется при FORGET)",
+    "reason": "почему этот узел забывается (требуется при FORGET)",
+    "message": "что сказать (требуется при SPEAK)",
+    "questions": ["что пересмотреть (требуется при PONDER)"],
+    "reasoning": "почему это правильный узел, или почему вы выбрали SPEAK или PONDER вместо этого"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Удаление правильного узла, и только этого узла, — это весь смысл данного шага.

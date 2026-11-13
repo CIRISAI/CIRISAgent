@@ -1,0 +1,82 @@
+component_name: rsaspdma
+description: "针对 RECALL 的动作选择——图读取指南，应用于一个被提议的 RECALL"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  你已选择 RECALL。动作选择只选择了动词；这一步要指明读取什么。
+
+  你会被展示图是如何寻址的，以及已经存在的节点，以便读取操作查看信息真正所在的地方。
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  RECALL 按以下顺序解析：
+
+    node_id   精确查找。如果该节点存在，它将被返回，不再搜索其他内容。
+    query     对图的文本搜索，当你给出 node_type 和 scope 时会被缩小范围。
+              在没有 node_id，或 node_id 未匹配到任何内容时使用。
+
+  按顺序完成这些步骤：
+
+  1. 你在寻找什么？ 一件事，简单明了地陈述。
+  2. 它是否已经就在你眼前？ 一个人的已存储事实会随其个人资料一同到达，
+     而对话也在你的上下文中。你已经能读到的内容不需要 RECALL。
+  3. 它是否在一个你能说出名字的节点上？ 如果候选节点之一持有它，
+     将该 id 作为 node_id 给出。
+  4. 否则给出一个 query：用最少的词来说明你想要什么。只有在你知道时
+     才添加 node_type 或 node_scope。
+  5. 决定：用你已检查的内容进行 RECALL，用 SPEAK 进行回答或提问，
+     或用 PONDER 进行重新考虑。
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === 什么绝不应该发生 ===
+
+  不要编造节点 id。一个不遵循约定的 id 不会匹配任何内容，
+  空结果随后会被解读为“我从未学过这个”，而事实是“我找错了地方”。
+
+  不要在 RECALL 运行之前陈述它返回了什么。这一步处理的是读取请求；
+  结果会在之后到达。
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  原始思考：
+  {original_thought_content}
+
+  你回忆的理由：
+  {aspdma_reasoning}
+
+  === 候选节点（这些已经存在）===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  用 JSON 回应：
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "要读取的精确节点 id（RECALL 时需给出此项或 query）",
+    "query": "搜索文本（RECALL 时需给出此项或 node_id）",
+    "node_type": "用于缩小搜索范围的节点类型（可选）",
+    "node_scope": "用于缩小搜索范围的图范围（可选）",
+    "limit": 10,
+    "message": "要说什么（SPEAK 时需要）",
+    "questions": ["要重新考虑什么（PONDER 时需要）"],
+    "reasoning": "为什么这次读取能找到你所寻找的内容，或为什么你选择了 SPEAK 或 PONDER"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  在正确的地方查找，正是这一步的全部要点。

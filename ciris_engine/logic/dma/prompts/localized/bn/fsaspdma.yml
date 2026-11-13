@@ -1,0 +1,72 @@
+component_name: fsaspdma
+description: "ভুলে যাওয়া-নির্দিষ্ট কর্ম নির্বাচন — গ্রাফ মুছে ফেলার নির্দেশিকা, একটি প্রস্তাবিত FORGET-এ প্রয়োগ করা"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  আপনি FORGET নির্বাচন করেছেন। কর্ম নির্বাচন শুধুমাত্র ক্রিয়াপদটি বেছে নিয়েছে; এই ধাপ node টির নাম দেয়।
+
+  গ্রাফ কীভাবে সম্বোধন করা হয় এবং যে nodes ইতিমধ্যে বিদ্যমান তা আপনাকে দেখানো হয়, যাতে অপসারিত node টি সেটিই হয় যা আপনি বোঝাতে চান।
+
+  একটি FORGET একটি সম্পূর্ণ NODE অপসারণ করে: এতে সংরক্ষিত প্রতিটি attribute, এবং এর সাথে সংযুক্ত প্রতিটি edge। এটি একটি একক attribute অপসারণ করে না, এবং এটি ফেরানো যায় না।
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  এগুলি ক্রমে কাজ করুন:
+
+  1. কী ভুলে যাওয়া উচিত, এবং কে এটি অনুরোধ করেছে?
+  2. কোন NODE এটি ধারণ করে? CANDIDATE NODES এবং addressing convention-এর বিপরীতে তুলনা করুন। id ঠিক যেমন তালিকাভুক্ত আছে তেমন দিন।
+  3. সেই node-এ আর কী আছে? ইতিমধ্যে এতে সংরক্ষিত হিসেবে দেখানো সবকিছু এটির সাথে অপসারিত হয়।
+  4. SCOPE। node যে scope-এ সংরক্ষিত আছে তা দিন।
+  5. সিদ্ধান্ত নিন: আপনার যাচাইকৃত node-এর সাথে FORGET, জিজ্ঞাসা করতে বা কী হারিয়ে যাবে তা বলতে SPEAK, অথবা পুনর্বিবেচনা করতে PONDER।
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === যা ঘটবে না ===
+
+  একটি node id আবিষ্কার করবেন না। যে node বিদ্যমান নেই তা ভুলে যাওয়া কিছুই অপসারণ করে না কিন্তু তবুও সম্পন্ন হয়েছে বলে রিপোর্ট করা হয়, তাই আপনি একজন ব্যক্তিকে বলবেন তাদের তথ্য মুছে গেছে যখন আসলে তা অপসারিত হয়নি।
+
+  যা অনুরোধ করা হয়েছিল তার চেয়ে বেশি ভুলে যাবেন না। যদি node এ এমন কিছুও থাকে যা রাখা উচিত, সেগুলির একটিকে বাদ দিতে node টি অপসারণ করবেন না।
+
+  Wise Authority অনুমোদন ছাড়া `identity` বা `environment` scope এ কোনো node ভুলে যাবেন না।
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  মূল চিন্তা:
+  {original_thought_content}
+
+  ভুলে যাওয়ার জন্য আপনার যুক্তি:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (এগুলি ইতিমধ্যে বিদ্যমান) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON এর সাথে প্রতিক্রিয়া জানান:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "অপসারণের জন্য node id (FORGET এর জন্য প্রয়োজনীয়)",
+    "node_scope": "node যে graph scope-এ সংরক্ষিত আছে (FORGET এর জন্য প্রয়োজনীয়)",
+    "reason": "কেন এই node ভুলে যাওয়া হচ্ছে (FORGET এর জন্য প্রয়োজনীয়)",
+    "message": "কি বলবেন (SPEAK এর জন্য প্রয়োজনীয়)",
+    "questions": ["কি পুনর্বিবেচনা করবেন (PONDER এর জন্য প্রয়োজনীয়)"],
+    "reasoning": "কেন এটি সঠিক node, অথবা কেন আপনি SPEAK বা PONDER বেছে নিয়েছেন"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  সঠিক node অপসারণ করা, এবং শুধুমাত্র সেই node, এই ধাপের সম্পূর্ণ উদ্দেশ্য।

@@ -588,6 +588,12 @@ def _create_conscience_execution_data(
 
     input_action_result = args[0]  # This is the ActionSelectionDMAResult passed to conscience
     action_rationale = input_action_result.rationale
+    # The verb too. `selected_action` above is the conscience step's FINAL action,
+    # so on an override the event named the conscience's replacement (ponder,
+    # defer) as the model's selection, beside the model's own rationale and
+    # prompt. The final action is still reported: in `action_result` here and
+    # in the CONSCIENCE_RESULT event.
+    selected_action = str(input_action_result.selected_action)
 
     # Extract ASPDMA prompt if available (set by evaluator in user_prompt field)
     aspdma_prompt = getattr(input_action_result, "user_prompt", None)

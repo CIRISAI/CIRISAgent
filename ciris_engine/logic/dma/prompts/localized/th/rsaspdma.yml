@@ -1,0 +1,87 @@
+component_name: rsaspdma
+description: "การเลือกการกระทำเฉพาะการเรียกคืน — คู่มือการอ่านกราฟ นำไปใช้กับ RECALL ที่เสนอหนึ่งรายการ"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  คุณได้เลือก RECALL แล้ว การเลือกการกระทำเลือกเพียงคำกริยาเท่านั้น ขั้นตอนนี้
+  ระบุว่าจะอ่านอะไร
+
+  คุณจะได้เห็นว่ากราฟถูกอ้างอิงอย่างไร และ node ที่มีอยู่แล้ว เพื่อให้
+  การอ่านมองหาในที่ที่ข้อมูลอยู่จริง
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  การ RECALL จะคลี่คลายตามลำดับนี้:
+
+    node_id   การค้นหาแบบตรงเป๊ะ ถ้า node นั้นมีอยู่จริงจะถูกส่งกลับมา และจะไม่มีการ
+              ค้นหาสิ่งอื่นใดอีก
+    query     การค้นหาข้อความในกราฟ ซึ่งจะถูกจำกัดขอบเขตด้วย node_type และ scope เมื่อคุณ
+              ระบุไว้ ใช้เมื่อไม่มี node_id หรือเมื่อ node_id นั้นไม่พบสิ่งใดเลย
+
+  ทำตามนี้ตามลำดับ:
+
+  1. คุณกำลังมองหาอะไร? สิ่งเดียว ระบุให้ชัดเจนตรงไปตรงมา
+  2. มันอยู่ตรงหน้าคุณอยู่แล้วหรือไม่? ข้อเท็จจริงที่ถูกเก็บไว้ของบุคคลหนึ่งจะมาพร้อมกับ
+     โปรไฟล์ของพวกเขา และบทสนทนาก็อยู่ใน context ของคุณแล้ว สิ่งที่คุณอ่านได้อยู่แล้ว
+     ไม่จำเป็นต้อง RECALL
+  3. มันอยู่บน node ที่คุณสามารถระบุชื่อได้หรือไม่? ถ้า CANDIDATE NODES ตัวใดตัวหนึ่ง
+     เก็บสิ่งนั้นไว้ ให้ระบุ id นั้นเป็น node_id
+  4. มิฉะนั้นให้ระบุ query: คำที่น้อยที่สุดที่บ่งชี้สิ่งที่คุณต้องการ เพิ่ม
+     node_type หรือ node_scope เฉพาะเมื่อคุณทราบค่าเหล่านั้น
+  5. ตัดสินใจ: RECALL ด้วยสิ่งที่คุณได้ตรวจสอบแล้ว SPEAK เพื่อตอบหรือถาม หรือ
+     PONDER เพื่อพิจารณาใหม่
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === สิ่งที่ต้องไม่เกิดขึ้น ===
+
+  อย่าประดิษฐ์ node id ขึ้นมา id ที่ไม่ตามปกติจะไม่ตรงกับสิ่งใดเลย
+  และผลลัพธ์ที่ว่างเปล่าก็จะถูกอ่านว่า "ฉันไม่เคยเรียนรู้สิ่งนี้" ทั้งที่ความจริง
+  คือ "ฉันมองหาผิดที่"
+
+  อย่าระบุว่า RECALL คืนค่าอะไรก่อนที่มันจะทำงาน ขั้นตอนนี้เกี่ยวข้องกับการอ่าน
+  ส่วนผลลัพธ์จะมาถึงในภายหลัง
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  ความคิดเดิม:
+  {original_thought_content}
+
+  เหตุผลของคุณสำหรับการเรียกคืน:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (สิ่งเหล่านี้มีอยู่แล้ว) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  ตอบด้วย JSON:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "node id ที่แน่นอนที่จะอ่าน (ให้ค่านี้หรือ query เมื่อ RECALL)",
+    "query": "ข้อความค้นหา (ให้ค่านี้หรือ node_id เมื่อ RECALL)",
+    "node_type": "ประเภท node เพื่อจำกัดขอบเขตการค้นหา (ไม่บังคับ)",
+    "node_scope": "graph scope เพื่อจำกัดขอบเขตการค้นหา (ไม่บังคับ)",
+    "limit": 10,
+    "message": "สิ่งที่จะพูด (จำเป็นเมื่อ SPEAK)",
+    "questions": ["สิ่งที่จะพิจารณาใหม่ (จำเป็นเมื่อ PONDER)"],
+    "reasoning": "ทำไมการอ่านนี้จึงพบสิ่งที่คุณกำลังมองหา หรือทำไมคุณจึงเลือก SPEAK หรือ PONDER แทน"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  การมองหาในที่ที่ถูกต้อง คือประเด็นทั้งหมดของขั้นตอนนี้

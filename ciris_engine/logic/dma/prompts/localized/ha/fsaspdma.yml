@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Zaɓin Aiki na musamman don mantawa — jagorar share kan Zane na alaƙa, wanda aka yi amfani da shi ga shawarar FORGET guda ɗaya da aka gabatar"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Ka zaɓi FORGET. Zaɓin Aiki ya zaɓi kalmar aikin ne kawai; wannan mataki
+  ke ba da sunan sako.
+
+  An nuna maka yadda ake yunakawa Zane na alaƙa da sakon da suke nan tuni, domin
+  sako wanda aka cire shine wanda kake nufi.
+
+  FORGET yana cire SAKO GUDA ƊAYA DUKA: kowace siffa da aka ajiye a kansa, da
+  kowane haɗi da aka haɗa da shi. Ba ya cire siffa guda ɗaya kawai, kuma ba a warware shi ba.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Bi waɗannan matakan a jere:
+
+  1. MENE NE ya kamata a manta, kuma wa ya nema?
+  2. WANE KUMBURI ke riƙe da shi? Kwatanta da CANDIDATE NODES da kuma doka
+     yunakawa. Ba da id ɗin daidai yadda aka jera shi.
+  3. MENE NE KUMA ke kan wannan kumburi? Duk abin da aka nuna a matsayin
+     an riga an ajiye a kansa za a cire shi tare da shi.
+  4. YANKI. Ba da yankin da aka ajiye kumburin a ciki.
+  5. Yanke shawara: FORGET tare da kumburin da ka duba, SPEAK don tambaya ko don
+     faɗi abin da kuma za a rasa, ko PONDER don sake tunani.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === Abin da ba zu kaɗa ===
+
+  Kada ka gina ID na sako. Mantawa da sako wanda ba ya nan ba ya cire
+  komai kuma har yanzu ana ba da rahoton an yi shi, don haka za ka gaya wa
+  mutum cewa bayaninsa ya ɓace alhali ba haka ba ne.
+
+  Kada ka manta fiye da abin da aka nema. Idan sako kuma yana riƙe da abubuwan da ya kamata
+  a kiyaye, kada ka cire shi domin barin ɗaya daga cikinsu.
+
+  Kada ka manta sako a cikin yankin `identity` ko `environment` ba tare da
+  amincewar Hukumar Hikima ba.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Tunanin farko:
+  {original_thought_content}
+
+  Dalilin ka na mantawa:
+  {aspdma_reasoning}
+
+  === SAKON DA KE YANA (waɗannan sun kasance jiya) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Amsa tare da JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "id na kumburin da za a cire (yana buƙata lokacin FORGET)",
+    "node_scope": "yankin zane na alaƙa da aka ajiye kumburin a ciki (yana buƙata lokacin FORGET)",
+    "reason": "dalilin da ya sa ake mantawa da wannan kumburi (yana buƙata lokacin FORGET)",
+    "message": "abin da za a faɗi (yana buƙata lokacin SPEAK)",
+    "questions": ["abin da za a sake tunani a kai (yana buƙata lokacin PONDER)"],
+    "reasoning": "dalilin da ya sa wannan shi ne kumburin da ya dace, ko dalilin da ya sa ka zaɓi SPEAK ko PONDER maimakon"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Cire sako daidai, kuma wannan sako kaɗai, shine ainihin manufar wannan mataki.

@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "FORGET-నిర్దిష్ట చర్య ఎంపిక — గ్రాఫ్-తొలగింపు మార్గదర్శకత్వం, ఒక ప్రతిపాదిత FORGET కు వర్తింపజేయబడింది"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  మీరు FORGET ఎంచుకున్నారు. చర్య ఎంపిక క్రియను మాత్రమే ఎంచుకుంది; ఈ దశ
+  నోడ్‌ను పేర్కొంటుంది.
+
+  గ్రాఫ్ ఎలా చిరునామా చేయబడుతుందో మరియు ఇప్పటికే ఉన్న నోడ్‌లు మీకు చూపించబడ్డాయి,
+  కాబట్టి తొలగించబడిన నోడ్ మీరు ఉద్దేశించినదే అవుతుంది.
+
+  ఒక FORGET ఒక పూర్తి నోడ్‌ను తొలగిస్తుంది: దానిపై నిల్వ చేయబడిన ప్రతి లక్షణం, మరియు దానికి
+  జోడించబడిన ప్రతి ఎడ్జ్. ఇది ఒకే లక్షణాన్ని తొలగించదు, మరియు ఇది వెనక్కి తీసుకోబడదు.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  ఇవన్నీ క్రమంలో చేయండి:
+
+  1. ఏమిటి మరచిపోవాలి, మరియు దీన్ని ఎవరు అడిగారు?
+  2. ఏ నోడ్ దీన్ని కలిగి ఉంది? CANDIDATE NODES మరియు చిరునామా
+     సంప్రదాయంతో పోల్చండి. జాబితాలో ఉన్నట్లుగా ఖచ్చితంగా id ఇవ్వండి.
+  3. ఆ నోడ్‌పై ఇంకా ఏమి ఉంది? దానిపై ఇప్పటికే నిల్వ ఉన్నదిగా చూపబడిన ప్రతిదీ
+     దానితో పాటు తొలగించబడుతుంది.
+  4. స్కోప్. నోడ్ నిల్వ ఉన్న స్కోప్‌ను ఇవ్వండి.
+  5. నిర్ణయించుకోండి: నువ్వు పరిశీలించిన నోడ్‌తో FORGET, అడగడానికి లేదా ఇంకా ఏమి
+     కోల్పోతారో చెప్పడానికి SPEAK, లేదా తిరిగి పరిశీలించడానికి PONDER.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ఏది జరగకూడదు ===
+
+  ఒక నోడ్ id కల్పించుకోవద్దు. లేని నోడ్‌ను మరచిపోవడం ఏమీ
+  తొలగించదు కానీ ఇంకా పూర్తయినట్లు నివేదించబడుతుంది, కాబట్టి నువ్వు ఒక వ్యక్తికి వారి
+  సమాచారం పోయిందని చెబుతావు, అది పోనప్పుడు కూడా.
+
+  అడిగినదానికంటే ఎక్కువ మరచిపోవద్దు. నోడ్ కూడా ఉంచవలసిన విషయాలను
+  కలిగి ఉంటే, వాటిలో ఒకదాన్ని వదిలించుకోవడానికి దాన్ని తొలగించవద్దు.
+
+  `identity` లేదా `environment` స్కోప్‌లో ఉన్న నోడ్‌ను Wise
+  Authority ఆమోదం లేకుండా మరచిపోవద్దు.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  అసలు సిద్ధాంతం:
+  {original_thought_content}
+
+  మరచిపోవటానికి నీ తర్కం:
+  {aspdma_reasoning}
+
+  === CANDIDATE నోడ్‌లు (అవన్నీ ఇప్పటికే ఉన్నవి) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON చేయండి:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "తొలగించవలసిన నోడ్ id (FORGET సమయంలో చేయవలసిన)",
+    "node_scope": "నోడ్ నిల్వ ఉన్న గ్రాఫ్ స్కోప్ (FORGET సమయంలో చేయవలసిన)",
+    "reason": "ఈ నోడ్‌ను ఎందుకు మరచిపోతున్నారు (FORGET సమయంలో చేయవలసిన)",
+    "message": "చెప్పటానికి (SPEAK సమయంలో చేయవలసిన)",
+    "questions": ["తిరిగి పరిశీలించడానికి (PONDER సమయంలో చేయవలసిన)"],
+    "reasoning": "ఇది సరైన నోడ్ ఎందుకు, లేదా నువ్వు ఎందుకు SPEAK లేదా PONDER ఎంచుకున్నావు"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  సరైన నోడ్‌ను, మరియు ఆ నోడ్‌ను మాత్రమే, తొలగించడం ఈ దశ యొక్క మొత్తం ఉద్దేశ్యం.

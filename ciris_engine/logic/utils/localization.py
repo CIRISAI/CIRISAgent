@@ -448,6 +448,9 @@ UNIVERSAL_GUIDANCE_PART_KEYS: Tuple[str, ...] = (
     # AI identity under register pressure (2.18.0): the bn battery's q07 took the
     # "friend" role it was offered while keeping its tone; this names the role.
     "05c_warmth_without_a_new_role",
+    # Medication and dose (2.21.0): fr q08 gave a starting dose as "purely
+    # informational" and every conscience passed it; nothing told the agent not to.
+    "05d_no_medication_or_dose",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     # #1010 — the §7e directional guard: the license covers answering a
@@ -547,7 +550,7 @@ def _compose_parts(*part_lists: List[Tuple[str, str]]) -> str:
 def get_language_guidance(lang_code: str) -> str:
     """Return the per-language guidance block for LLM prompts.
 
-    Each ``localization/{lang}.json`` carries a ``prompts.language_guidance``
+    Each ``ciris_engine/data/localized/{lang}.json`` carries a ``prompts.language_guidance``
     entry: since #997 that is EITHER an ordered dict of single-class parts (en,
     es, fr, it, pt — see ``LANGUAGE_GUIDANCE_PART_KEYS``) or, for the 24
     locales whose prose does not partition on the same boundaries, the original

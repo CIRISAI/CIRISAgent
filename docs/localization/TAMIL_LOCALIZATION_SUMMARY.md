@@ -1,5 +1,10 @@
 # Tamil (ta) Localization Summary
 
+> **Historical (written April 2026).** The numbers, paths and workflow below
+> describe how the first languages were bootstrapped with agent fan-outs. They
+> are kept as a record of what went wrong and why, not as instructions. Current
+> state and the current way to translate: [`localization/CLAUDE.md`](../../localization/CLAUDE.md).
+
 ## Status: COMPLETE (Draft Quality)
 
 **Date**: 2026-04-08

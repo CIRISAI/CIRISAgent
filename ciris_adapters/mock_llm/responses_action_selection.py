@@ -5,7 +5,9 @@ import shlex
 from typing import Any, Dict, List, Optional, Union
 
 from ciris_engine.logic.dma.dsaspdma import DSASPDMALLMResult
+from ciris_engine.logic.dma.fsaspdma import FSASPDMALLMResult
 from ciris_engine.logic.dma.msaspdma import MSASPDMALLMResult
+from ciris_engine.logic.dma.rsaspdma import RSASPDMALLMResult
 from ciris_engine.logic.dma.tsaspdma import TSASPDMALLMResult
 from ciris_engine.logic.utils.channel_utils import create_channel_context
 from ciris_engine.schemas.actions import (
@@ -74,6 +76,38 @@ def _enum_value(value: Any, default: str) -> str:
     if value is None:
         return default
     return str(getattr(value, "value", value)).lower()
+
+
+#: Marks what a mock action selection hands to the same verb's mock second pass.
+#:
+#: ASPDMA selects the verb and its second pass fills in the details (#1027), so
+#: the flat ASPDMA result has no field for a node id, a query or a deferral time.
+#: A live model re-derives those in the second pass from the thought. The mock
+#: has already parsed them from the ``$command``, so it appends them to its
+#: reasoning — which every second-pass prompt quotes — and reads them back.
+_MOCK_PARAMS_TAG = "[MOCK_PARAMS]"
+
+
+def _with_mock_params(rationale: str, payload: Dict[str, Any]) -> str:
+    """``rationale`` followed by the tagged, single-line JSON payload."""
+    import json
+
+    return f"{rationale}\n{_MOCK_PARAMS_TAG}{json.dumps(payload, default=str)}"
+
+
+def _mock_params_from(messages: Optional[List[Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
+    """The payload a mock action selection left in its reasoning, if the prompt quotes one."""
+    import json
+
+    text = "\n".join(_extract_text_content(m.get("content", "")) for m in (messages or []) if isinstance(m, dict))
+    match = re.search(re.escape(_MOCK_PARAMS_TAG) + r"(\{.*\})", text)
+    if not match:
+        return None
+    try:
+        payload = json.loads(match.group(1))
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _node_content(node: Dict[str, Any]) -> str:
@@ -1918,46 +1952,66 @@ def aspdma_llm_result(
             reject_create_filter=params_dict.get("create_filter", False),
         )
     elif action == HandlerActionType.DEFER:
+        # No DEFER fields: DSASPDMA writes the reason and the reactivation time.
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            reasoning=rationale,
-            defer_reason=params_dict.get("reason", "Deferring"),
-            defer_until=params_dict.get("defer_until"),
+            reasoning=_with_mock_params(
+                rationale,
+                {"reason": params_dict.get("reason", "Deferring"), "defer_until": params_dict.get("defer_until")},
+            ),
         )
     elif action == HandlerActionType.RECALL:
+        # No RECALL fields: RSASPDMA says what to read.
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            reasoning=rationale,
-            recall_query=params_dict.get("query"),
-            recall_node_type=params_dict.get("node_type"),
-            recall_scope=str(params_dict.get("scope")) if params_dict.get("scope") else None,
-            recall_limit=params_dict.get("limit", 10),
+            reasoning=_with_mock_params(
+                rationale,
+                {
+                    "query": params_dict.get("query"),
+                    "node_id": params_dict.get("node_id"),
+                    "node_type": _enum_value(params_dict.get("node_type"), "") or None,
+                    "scope": _enum_value(params_dict.get("scope"), "") or None,
+                    "limit": params_dict.get("limit", 10),
+                },
+            ),
         )
     elif action == HandlerActionType.MEMORIZE:
         node = params_dict.get("node", {})
         if hasattr(node, "model_dump"):
             node = node.model_dump()
+        # GraphNode dumps as `type` / `scope` (enums). Reading `node_type`
+        # and str(enum) turned EVERY mock $memorize into a LOCAL
+        # observation, so no mock run ever exercised an IDENTITY-scope
+        # write or its WA gate (#1303). The scope is the one MEMORIZE field
+        # ASPDMA still carries, because that gate reads it.
+        scope = _enum_value(node.get("scope"), "local")
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            reasoning=rationale,
-            # GraphNode dumps as `type` / `scope` (enums). Reading `node_type`
-            # and str(enum) turned EVERY mock $memorize into a LOCAL
-            # observation, so no mock run ever exercised an IDENTITY-scope
-            # write or its WA gate (#1303). The flat schema has no node id, so
-            # the requested id travels as the content.
-            memorize_node_type=_enum_value(node.get("type") or node.get("node_type"), "observation"),
-            memorize_content=_node_content(node),
-            memorize_scope=_enum_value(node.get("scope"), "local"),
+            reasoning=_with_mock_params(
+                rationale,
+                {
+                    "node_type": _enum_value(node.get("type") or node.get("node_type"), "observation"),
+                    "scope": scope,
+                    "content": _node_content(node),
+                },
+            ),
+            memorize_scope=scope,
         )
     elif action == HandlerActionType.FORGET:
         node = params_dict.get("node", {})
         if hasattr(node, "model_dump"):
             node = node.model_dump()
+        # No FORGET fields: FSASPDMA names the node.
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            reasoning=rationale,
-            forget_node_id=node.get("node_id") or node.get("id"),
-            forget_reason=params_dict.get("reason", "Forgetting"),
+            reasoning=_with_mock_params(
+                rationale,
+                {
+                    "node_id": node.get("node_id") or node.get("id"),
+                    "scope": _enum_value(node.get("scope"), "local"),
+                    "reason": params_dict.get("reason", "Forgetting"),
+                },
+            ),
         )
     elif action == HandlerActionType.TASK_COMPLETE:
         flat_result = ASPDMALLMResult(
@@ -2155,13 +2209,24 @@ def dsaspdma_llm_result(
     if reason_match:
         current_reason = reason_match.group(1).strip()
 
-    return _infer_dsaspdma_result(prompt_text, current_reason)
+    # The mock action selection's own reason and reactivation time (#1027): the
+    # flat ASPDMA result no longer has fields for them, and this pass sets both.
+    handed_over = _mock_params_from(messages) or {}
+    if handed_over.get("reason"):
+        current_reason = str(handed_over["reason"])
+    else:
+        current_reason = current_reason.split(_MOCK_PARAMS_TAG)[0].strip()
+
+    result = _infer_dsaspdma_result(prompt_text, current_reason)
+    if handed_over.get("defer_until"):
+        result = result.model_copy(update={"defer_until": str(handed_over["defer_until"])})
+    return result
 
 
 def msaspdma_llm_result(
     context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
 ) -> MSASPDMALLMResult:
-    """Mock MSASPDMALLMResult: affirm the proposed MEMORIZE as proposed.
+    """Mock MSASPDMALLMResult: address the MEMORIZE the mock action selection asked for.
 
     MSASPDMA re-decides a MEMORIZE against the graph's conventions. The mock had
     no answer for it, so every mock MEMORIZE logged "MSASPDMA: Failed ...
@@ -2169,26 +2234,29 @@ def msaspdma_llm_result(
     back to the original action. The incidents gate then failed runs whose
     tests all passed (run 39664086947, 38/38).
 
-    The verdict is MEMORIZE with the proposed id, type and scope read back from
-    the prompt. The content is re-derived from the thought's ``$memorize``
-    arguments exactly as the action-selection pass derived it, so the stored
-    node is the one the fallback used to store.
+    The verdict is MEMORIZE with the type and scope the mock action selection
+    parsed from the ``$memorize`` command and handed over in its reasoning
+    (``_with_mock_params``). The content is re-derived from the thought's
+    ``$memorize`` arguments, so the stored node is the one mock runs have always
+    stored.
     """
+    import uuid
+
     text = "\n".join(_extract_text_content(m.get("content", "")) for m in (messages or []) if isinstance(m, dict))
-
-    def field(label: str) -> Optional[str]:
-        match = re.search(rf"^{label}:\s*(.+)$", text, re.MULTILINE)
-        return match.group(1).strip() if match else None
-
-    node_id, node_type, node_scope = field("node id"), field("node type"), field("scope")
-    if not (node_id and node_type and node_scope):
+    handed_over = _mock_params_from(messages)
+    if handed_over is None:
         return MSASPDMALLMResult(
             final_action="PONDER",
-            questions=["[MOCK LLM] MSASPDMA could not read the proposed node from the prompt."],
-            reasoning="[MOCK LLM] MSASPDMA: no proposed node in the prompt",
+            questions=["[MOCK LLM] MSASPDMA could not read what to memorize from the prompt."],
+            reasoning="[MOCK LLM] MSASPDMA: no memorize request in the prompt",
         )
-    command = re.search(r"\$memorize\s+([^\n\"']+)", text)
-    content = _memorize_command_id(command.group(1)) if command else node_id
+    node_type = str(handed_over.get("node_type") or "observation")
+    node_scope = str(handed_over.get("scope") or "local")
+    # Action selection names no node (#1027). The mock keeps what its runs have
+    # always stored: a fresh id, found again by its content.
+    node_id = str(uuid.uuid4())
+    command = re.search(r"\$memorize\s+([^\n\"']+)", text.split(_MOCK_PARAMS_TAG)[0])
+    content = _memorize_command_id(command.group(1)) if command else str(handed_over.get("content") or node_id)
     # An IDENTITY write comes back without a `content` key, the way a live
     # model's second pass names its attributes (RATCHET run 39788730490), so
     # wa_identity_approval exercises the shape that broke uptake. Other scopes
@@ -2204,6 +2272,48 @@ def msaspdma_llm_result(
         node_type=node_type,
         node_scope=node_scope,
         attributes=attributes,
-        reasoning="[MOCK LLM] MSASPDMA: the proposed node is correctly addressed",
+        reasoning="[MOCK LLM] MSASPDMA: addressed the requested memorize",
+    )
+
+
+def rsaspdma_llm_result(
+    context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
+) -> RSASPDMALLMResult:
+    """Mock RSASPDMALLMResult: read what the mock action selection's ``$recall`` asked for."""
+    handed_over = _mock_params_from(messages)
+    if not handed_over or not (handed_over.get("query") or handed_over.get("node_id") or handed_over.get("node_type")):
+        return RSASPDMALLMResult(
+            final_action="PONDER",
+            questions=["[MOCK LLM] RSASPDMA could not read what to recall from the prompt."],
+            reasoning="[MOCK LLM] RSASPDMA: no recall request in the prompt",
+        )
+    return RSASPDMALLMResult(
+        final_action="RECALL",
+        node_id=handed_over.get("node_id"),
+        query=handed_over.get("query"),
+        node_type=handed_over.get("node_type"),
+        node_scope=handed_over.get("scope"),
+        limit=int(handed_over.get("limit") or 10),
+        reasoning="[MOCK LLM] RSASPDMA: reading what was asked for",
+    )
+
+
+def fsaspdma_llm_result(
+    context: Optional[List[Any]] = None, messages: Optional[List[Dict[str, Any]]] = None
+) -> FSASPDMALLMResult:
+    """Mock FSASPDMALLMResult: name the node the mock action selection's ``$forget`` asked for."""
+    handed_over = _mock_params_from(messages)
+    if not handed_over or not handed_over.get("node_id"):
+        return FSASPDMALLMResult(
+            final_action="PONDER",
+            questions=["[MOCK LLM] FSASPDMA could not read which node to forget from the prompt."],
+            reasoning="[MOCK LLM] FSASPDMA: no forget request in the prompt",
+        )
+    return FSASPDMALLMResult(
+        final_action="FORGET",
+        node_id=str(handed_over["node_id"]),
+        node_scope=str(handed_over.get("scope") or "local"),
+        reason=str(handed_over.get("reason") or "Forgetting"),
+        reasoning="[MOCK LLM] FSASPDMA: forgetting the node that was asked for",
     )
 

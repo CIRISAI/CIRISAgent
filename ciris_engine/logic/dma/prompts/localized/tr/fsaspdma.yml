@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Unutmaya özgü eylem seçimi — grafik silme kılavuzu, önerilen bir FORGET eylemine uygulanmış"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  FORGET seçtiniz. Eylem seçimi yalnızca fiili seçti; bu adım düğümü
+  adlandırır.
+
+  Grafiğin nasıl adreslendiği ve zaten var olan düğümler size gösterilir, böylece
+  kaldırılan düğüm kastettiğiniz düğüm olur.
+
+  Bir FORGET, TÜM BİR DÜĞÜMÜ kaldırır: üzerinde saklanan her nitelik ve ona
+  bağlı her kenar. Tek bir niteliği kaldırmaz ve geri alınamaz.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Sırasıyla bunların içinden geçin:
+
+  1. NE unutulmalı ve bunu kim istedi?
+  2. HANGİ DÜĞÜM bunu tutuyor? ADAY DÜĞÜMLER ve adresleme kuralıyla
+     karşılaştırın. Kimliği tam olarak listelendiği gibi verin.
+  3. O düğümde BAŞKA NE var? Üzerinde zaten saklı olarak gösterilen her şey
+     onunla birlikte kaldırılır.
+  4. KAPSAM. Düğümün saklandığı kapsamı verin.
+  5. Karar verin: kontrol ettiğiniz düğümle FORGET, sormak veya neyin de
+     kaybolacağını söylemek için SPEAK, ya da yeniden düşünmek için PONDER.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === OLAN NE OLMAMALIDIR ===
+
+  Bir düğüm kimliği icat etmeyin. Var olmayan bir düğümü unutmak hiçbir şeyi
+  kaldırmaz ve yine de tamamlandı olarak bildirilir, bu yüzden bir kişiye
+  bilgisinin gittiğini söylersiniz, oysa gitmemiştir.
+
+  İstenenden fazlasını unutmayın. Düğüm, saklanması gereken başka şeyler de
+  tutuyorsa, bunlardan birini düşürmek için düğümü kaldırmayın.
+
+  Wise Authority onayı olmadan `identity` veya `environment` kapsamındaki bir
+  düğümü unutmayın.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Orijinal düşünce:
+  {original_thought_content}
+
+  Unutma nedeniniz:
+  {aspdma_reasoning}
+
+  === ADAY DÜĞÜMLER (bunlar zaten var) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON ile yanıt verin:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "kaldırılacak düğüm kimliği (FORGET için gerekli)",
+    "node_scope": "düğümün saklandığı grafik kapsamı (FORGET için gerekli)",
+    "reason": "bu düğümün neden unutulduğu (FORGET için gerekli)",
+    "message": "söylenecek şey (SPEAK için gerekli)",
+    "questions": ["düşünülecek şey (PONDER için gerekli)"],
+    "reasoning": "bunun neden doğru düğüm olduğu veya bunun yerine neden SPEAK ya da PONDER seçtiğiniz"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Doğru düğümü ve yalnızca o düğümü kaldırmak, bu adımın tüm amacıdır.

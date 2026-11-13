@@ -1085,6 +1085,29 @@ StructuredCallFunc = Callable[
 ]
 
 
+
+def _record_raw_completion_text(completion: Any) -> None:
+    """Hand the provider's completion text to the LLM capture, when one is open.
+
+    The text as returned: the message content, or the tool-call arguments when
+    the structured reply came back as a tool call. Never raises.
+    """
+    try:
+        from ciris_engine.logic.buses.llm_call_context import record_raw_completion
+
+        choices = getattr(completion, "choices", None)
+        if not choices:
+            return
+        message = getattr(choices[0], "message", None)
+        text = getattr(message, "content", None)
+        if not text:
+            calls = getattr(message, "tool_calls", None) or []
+            text = "".join(getattr(getattr(c, "function", None), "arguments", "") or "" for c in calls) or None
+        record_raw_completion(text if isinstance(text, str) else None)
+    except Exception:  # capture is diagnostic; it never affects the call
+        pass
+
+
 class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     """Client for interacting with OpenAI-compatible APIs with circuit breaker protection.
 
@@ -2378,6 +2401,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Process a successful LLM response and return usage data."""
         self.circuit_breaker.record_success()
+        _record_raw_completion_text(completion)
 
         # Handle different response formats - Google uses usage_metadata, OpenAI uses usage
         if hasattr(completion, "usage_metadata"):

@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "اختيار الإجراء الخاص بالنسيان — دليل حذف الرسم البياني، مطبّق على عملية FORGET واحدة مقترحة"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  اخترت FORGET. اختيار الإجراء اختار الفعل فقط؛ هذه الخطوة
+  تسمّي العقدة.
+
+  تُعرض لك كيفية معالجة الرسم البياني والعقد الموجودة بالفعل، حتى
+  تكون العقدة المُزالة هي التي تقصدها.
+
+  عملية FORGET تزيل عقدة واحدة كاملة: كل سمة مخزّنة عليها، وكل حافة
+  متصلة بها. لا تزيل سمة واحدة فقط، ولا يمكن التراجع عنها.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  اعمل من خلال هذه بالترتيب:
+
+  1. ماذا يجب نسيانه، ومن طلب ذلك؟
+  2. أي عقدة تحتفظ به؟ قارن مقابل CANDIDATE NODES واتفاقية المعالجة.
+     أعطِ المعرّف تماماً كما هو مُدرج.
+  3. ماذا أيضاً موجود على تلك العقدة؟ كل ما يظهر أنه مخزَّن بالفعل
+     عليها يُزال معها.
+  4. النطاق. أعطِ النطاق الذي تُخزَّن فيه العقدة.
+  5. قرّر: FORGET مع العقدة التي تحققت منها، SPEAK للسؤال أو لقول ما
+     سيُفقد أيضاً، أو PONDER لإعادة التفكير.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ما يجب عدم حدوثه ===
+
+  لا تختلق معرّف عقدة. نسيان عقدة غير موجودة لا يزيل
+  شيئاً ومع ذلك يُبلَّغ عنه كأنه تم، لذا ستخبر شخصاً أن
+  معلوماته قد زالت وهي ليست كذلك.
+
+  لا تنسَ أكثر مما طُلب. إذا كانت العقدة تحتوي أيضاً على أشياء يجب
+  الاحتفاظ بها، فلا تزلها لإسقاط واحدة منها.
+
+  لا تنسَ عقدة في نطاق `identity` أو `environment` بدون موافقة
+  السلطة الحكيمة.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  الفكرة الأصلية:
+  {original_thought_content}
+
+  تفكيرك لنسيان هذا:
+  {aspdma_reasoning}
+
+  === العقد المرشحة (موجودة بالفعل) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  أجب بـ JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "معرّف العقدة المراد إزالته (مطلوب عند FORGET)",
+    "node_scope": "نطاق الرسم البياني الذي تُخزَّن فيه العقدة (مطلوب عند FORGET)",
+    "reason": "سبب نسيان هذه العقدة (مطلوب عند FORGET)",
+    "message": "ما يجب قوله (مطلوب عند SPEAK)",
+    "questions": ["ما يجب إعادة التفكير فيه (مطلوب عند PONDER)"],
+    "reasoning": "لماذا هذه هي العقدة الصحيحة، أو لماذا اخترت SPEAK أو PONDER بدلاً من ذلك"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  إزالة العقدة الصحيحة، وتلك العقدة فقط، هي الهدف الكامل من هذه الخطوة.

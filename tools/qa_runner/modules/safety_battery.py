@@ -485,6 +485,7 @@ class SafetyBatteryTests:
         self._results_dir = results_dir or (REPORT_DIR / f"{lang}_{domain}_{self._run_id}")
         # Filled in by _create_locale_user() at run start.
         self._locale_token: Optional[str] = None
+        self._delivery_receipt: Optional[Dict[str, Any]] = None
         self._locale_username: Optional[str] = None
         self._locale_display_name: Optional[str] = None
         # Filled in by _capture_agent_identity() at run start.
@@ -595,10 +596,59 @@ class SafetyBatteryTests:
         self.console.print("[dim]waiting 30s for trace flush…[/dim]")
         await asyncio.sleep(30)
 
+        # The receiver's answer, read once while the agent is still up.
+        self._delivery_receipt = await self._read_delivery_receipt()
         self._write_summary(manifest, results_jsonl)
         self._write_manifest_signed(manifest, results_jsonl)
         self._print_summary(manifest)
         return self.results
+
+    async def _read_delivery_receipt(self) -> Dict[str, Any]:
+        """GET /v1/system/runtime/delivery-receipt once, at the end of the run.
+
+        The probe reports the producer's side; this is each canonical's signed
+        answer about whether it holds our newest trace. Never raises: an
+        unreadable receipt is recorded as such, and `held` stays None (unknown).
+        """
+        out: Dict[str, Any] = {"held": None, "shipped_any": None, "status_code": None, "data": None, "error": None}
+        transport = getattr(self.client, "_transport", None)
+        base_url = getattr(transport, "base_url", f"http://localhost:{self.api_port}")
+        admin_token = getattr(transport, "api_key", None)
+        if not admin_token:
+            out["error"] = "no admin token on SDK transport"
+            return out
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=60.0) as c:
+                r = await c.get(
+                    f"{base_url}/v1/system/runtime/delivery-receipt",
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                )
+            out["status_code"] = r.status_code
+            if r.status_code == 200:
+                data = (r.json() or {}).get("data") or {}
+                data.pop("raw_json", None)
+                out["data"] = data
+                out["held"] = data.get("held_by_every_answering_canonical")
+                # held is about the NEWEST trace, which can still be in flight
+                # when the run ends. shipped_any separates "behind" from "never
+                # landed": any canonical holding any of our traces is delivery.
+                any_flags = [c.get("shipped_any") for c in data.get("canonicals") or [] if isinstance(c, dict)]
+                if any(f is True for f in any_flags):
+                    out["shipped_any"] = True
+                elif any_flags and all(f is False for f in any_flags):
+                    out["shipped_any"] = False
+                else:
+                    out["shipped_any"] = None
+            else:
+                out["error"] = r.text[:300]
+        except Exception as exc:  # noqa: BLE001 — provenance only, never fail the capture
+            out["error"] = f"{type(exc).__name__}: {exc}"
+        held = out["held"]
+        label = "HELD" if held is True else "NOT HELD" if held is False else "UNKNOWN"
+        self.console.print(f"[dim]delivery receipt: {label} (status={out['status_code']}, error={out['error']})[/dim]")
+        return out
 
     async def _capture_agent_identity(self) -> None:
         """Best-effort capture of agent_id + agent_version from the running
@@ -656,7 +706,9 @@ class SafetyBatteryTests:
                     }
                     resp = await http.post(url, json=payload, headers=headers)
                     if resp.status_code in (200, 409):
-                        self.console.print(f"[dim]  {adapter_id}: {trace_level} ready[/dim]")
+                        # The level ASKED for. The agent captures at 'detailed' when it
+                        # installs no egress scrubber, and says so in its own log.
+                        self.console.print(f"[dim]  {adapter_id}: registered ({trace_level} requested)[/dim]")
                     else:
                         self.console.print(
                             f"[yellow]  {adapter_id}: HTTP {resp.status_code} {resp.text[:160]}[/yellow]"
@@ -1021,7 +1073,26 @@ class SafetyBatteryTests:
             "total_duration_s": round(sum(r.duration_s for r in self._battery_results), 2),
             "results_jsonl": str(results_jsonl.relative_to(REPO_ROOT)),
         }
-        summary["delivery"] = self._collect_delivery_proof()
+        delivery = self._collect_delivery_proof()
+        receipt = self._delivery_receipt
+        delivery["receipt"] = receipt
+        # The receiver's answer outranks the producer's. The probe's own window
+        # (900 s) outlasts a battery run, and its producer-side counters do not
+        # measure trace carriage: traces travel as offers and delivers, so a leaf
+        # node serves nothing and still ships (CIRISAgent run 43364853207: the
+        # probe said nothing, the canonical held 40 trace rows). A canonical
+        # that answered decides; no answer leaves the probe's verdict, or None.
+        held = (receipt or {}).get("held")
+        shipped_any = (receipt or {}).get("shipped_any")
+        if held is True or shipped_any is True:
+            delivery["shipped"] = True
+            delivery["shipped_from"] = "canonical delivery receipt"
+        elif held is False and shipped_any is False:
+            delivery["shipped"] = False
+            delivery["shipped_from"] = "canonical delivery receipt"
+        elif delivery.get("shipped") is not None:
+            delivery["shipped_from"] = "agent [DELIVERY-PROBE] verdict"
+        summary["delivery"] = delivery
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(summary, f, ensure_ascii=False, indent=2)
             f.write("\n")

@@ -282,14 +282,17 @@ legitimate uses but are *not* what this folder holds.
 `/localization/CLAUDE.md` documents the **per-locale translation
 workflow** for the 29 supported languages. That layer produces:
 
-- `/localization/{code}.json` — UI strings, fully translated per locale
-- `ciris_engine/data/localized/accord_1.2b_{code}.txt` — ACCORD
-  translated per locale
+- `ciris_engine/data/localized/{code}.json` — UI and agent strings, plus the
+  per-language primer (`prompts.language_guidance`, authored, not translated)
+- `ciris_engine/data/localized/constitution_ethics_1.3_{code}.txt` — the
+  ethics text translated per locale (`accord_1.2b_{code}.txt` is kept as the
+  research control arm)
 - `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{code}.txt` —
   guide translated per locale
 - `ciris_engine/logic/dma/prompts/localized/{code}/*.yml` — DMA
   prompts translated per locale
-- `docs/localization/glossaries/{code}_glossary.md` — terminology
+- `localization/glossaries/{code}_glossary.md` — terminology (vendored from
+  CIRISClient; what the translation pipeline reads)
   glossary per locale
 
 Those are translations: each locale gets the source material

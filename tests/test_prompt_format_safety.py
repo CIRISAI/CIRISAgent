@@ -59,7 +59,7 @@ from ciris_engine.logic.dma.prompt_loader import (  # noqa: E402
 )
 
 # All 29 locales (en master + 28 translations). Source of truth lives in
-# localization/manifest.json; this hardcoded list is the test harness's
+# ciris_engine/data/localized/manifest.json; this hardcoded list is the test harness's
 # tripwire — if a locale gets added/removed, this test will surface that
 # the prompt directories are out of sync.
 ALL_LOCALES = [

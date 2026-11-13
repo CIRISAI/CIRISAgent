@@ -1,0 +1,88 @@
+component_name: rsaspdma
+description: "Lựa chọn hành động dành riêng cho RECALL — hướng dẫn đọc trên đồ thị, áp dụng cho một RECALL được đề xuất"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Bạn đã chọn RECALL. Lựa chọn hành động chỉ chọn động từ; bước này
+  nói những gì cần đọc.
+
+  Bạn được cho thấy cách đồ thị được đánh địa chỉ và các node đã tồn tại, để
+  việc đọc tìm đúng nơi thông tin nằm ở đó.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  Một RECALL được giải quyết theo thứ tự này:
+
+    node_id   một tra cứu chính xác. Nếu node đó tồn tại, nó được trả về, và
+              không có gì khác được tìm kiếm.
+    query     một tìm kiếm văn bản trên đồ thị, được thu hẹp bởi node_type và
+              phạm vi khi bạn cung cấp chúng. Được dùng khi không có node_id,
+              hoặc nó không khớp với gì cả.
+
+  Thực hiện các bước này theo thứ tự:
+
+  1. BẠN đang tìm kiếm điều gì? Một điều, nói rõ ràng.
+  2. NÓ ĐÃ CÓ SẴN TRƯỚC MẶT BẠN CHƯA? Các sự kiện đã lưu trữ của một người
+     đến cùng với hồ sơ của họ, và cuộc trò chuyện nằm trong ngữ cảnh của bạn.
+     Những gì bạn đã có thể đọc được thì không cần RECALL.
+  3. NÓ CÓ NẰM TRÊN MỘT NODE BẠN CÓ THỂ GỌI TÊN KHÔNG? Nếu một trong các
+     CANDIDATE NODES chứa nó, hãy đưa id đó làm node_id.
+  4. NẾU KHÔNG, hãy đưa ra một query: số từ ít nhất xác định điều bạn muốn.
+     Chỉ thêm node_type hoặc node_scope khi bạn biết chúng.
+  5. Quyết định: RECALL với những gì bạn đã kiểm tra, SPEAK để trả lời hoặc
+     hỏi, hoặc PONDER để cân nhắc lại.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === ĐIỀU PHẢI KHÔNG XẢY RA ===
+
+  Không bịa node id. Một id không tuân theo quy ước sẽ không khớp với bất kỳ
+  thứ gì, và kết quả trống khi đó sẽ đọc như "tôi chưa bao giờ học được điều này"
+  trong khi sự thật là "tôi đã tìm sai chỗ".
+
+  Không phát biểu điều một RECALL đã trả về trước khi nó được chạy. Bước này
+  giải quyết việc đọc; kết quả đến sau đó.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Suy nghĩ ban đầu:
+  {original_thought_content}
+
+  Lý do của bạn để nhắc lại:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (những cái này đã tồn tại) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Trả lời bằng JSON:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "node id chính xác cần đọc (đưa ra cái này hoặc query khi RECALL)",
+    "query": "văn bản tìm kiếm (đưa ra cái này hoặc node_id khi RECALL)",
+    "node_type": "loại node để thu hẹp tìm kiếm (tùy chọn)",
+    "node_scope": "graph scope để thu hẹp tìm kiếm (tùy chọn)",
+    "limit": 10,
+    "message": "điều để nói (bắt buộc khi SPEAK)",
+    "questions": ["điều để cân nhắc lại (bắt buộc khi PONDER)"],
+    "reasoning": "tại sao việc đọc này tìm thấy điều bạn đang tìm kiếm, hoặc tại sao bạn chọn SPEAK hoặc PONDER thay vào đó"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Tìm đúng nơi là mục đích duy nhất của bước này.

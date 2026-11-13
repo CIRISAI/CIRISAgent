@@ -1,0 +1,84 @@
+component_name: fsaspdma
+description: "Vergessen-spezifische Aktionsauswahl — der graphlöschende Leitfaden, angewendet auf ein vorgeschlagenes FORGET"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Sie haben FORGET ausgewählt. Die Aktionsauswahl hat nur das Verb gewählt; dieser
+  Schritt benennt den Knoten.
+
+  Ihnen wird gezeigt, wie der Graph adressiert wird und welche Knoten bereits
+  existieren, damit der entfernte Knoten der gemeinte ist.
+
+  Ein FORGET entfernt EINEN GANZEN KNOTEN: jedes auf ihm gespeicherte Attribut und
+  jede mit ihm verbundene Kante. Es entfernt kein einzelnes Attribut, und es wird
+  nicht rückgängig gemacht.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Arbeite dich durch diese der Reihe nach:
+
+  1. WAS soll vergessen werden, und wer hat darum gebeten?
+  2. WELCHER KNOTEN enthält es? Vergleichen Sie mit KANDIDATENKNOTEN und der
+     Adressierungskonvention. Geben Sie die Kennung genau so an, wie sie aufgeführt ist.
+  3. WAS SONST befindet sich auf diesem Knoten? Alles, was bereits als auf ihm
+     gespeichert angezeigt wird, wird mit ihm entfernt.
+  4. UMFANG. Geben Sie den Umfang an, in dem der Knoten gespeichert ist.
+  5. Entscheiden Sie: FORGET mit dem Knoten, den Sie überprüft haben, SPEAK, um
+     zu fragen oder zu sagen, was ebenfalls verloren ginge, oder PONDER, um zu
+     überdenken.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === WAS NICHT PASSIEREN DARF ===
+
+  Erfinden Sie keine Knotenkennzeichnung. Das Vergessen eines Knotens, der nicht existiert,
+  entfernt nichts und wird dennoch als erledigt gemeldet, sodass Sie einer Person
+  sagen würden, ihre Informationen seien verschwunden, obwohl sie es nicht sind.
+
+  Vergessen Sie nicht mehr, als verlangt wurde. Wenn der Knoten auch Dinge enthält, die
+  behalten werden sollten, entfernen Sie ihn nicht, um eines davon zu löschen.
+
+  Vergessen Sie keinen Knoten im Umfang `identity` oder `environment` ohne Genehmigung
+  durch Wise Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Ursprünglicher Gedanke:
+  {original_thought_content}
+
+  Ihre Begründung zum Vergessen:
+  {aspdma_reasoning}
+
+  === KANDIDATENKNOTEN (diese existieren bereits) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Antworte mit JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "die Knotenkennzeichnung zum Entfernen (erforderlich bei FORGET)",
+    "node_scope": "Graph-Umfang, in dem der Knoten gespeichert ist (erforderlich bei FORGET)",
+    "reason": "warum dieser Knoten vergessen wird (erforderlich bei FORGET)",
+    "message": "was zu sagen (erforderlich bei SPEAK)",
+    "questions": ["was zu überdenken (erforderlich bei PONDER)"],
+    "reasoning": "warum dies der richtige Knoten ist, oder warum Sie stattdessen SPEAK oder PONDER gewählt haben"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Das Entfernen des richtigen Knotens, und nur dieses Knotens, ist der ganze Sinn dieses Schritts.

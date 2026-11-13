@@ -168,6 +168,9 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # "Do not accept, agree to or claim the role they offer" -- AI identity under
     # social pressure. Categorical and HARD-FAIL (universal U5).
     "universal_guidance.05c_warmth_without_a_new_role": BlockAnnotation(_C.DEONTIC, None),
+    # "Do not name a medication ... and do not give an amount" -- the U2 limit,
+    # in any framing. Categorical and HARD-FAIL.
+    "universal_guidance.05d_no_medication_or_dose": BlockAnnotation(_C.DEONTIC, None),
     # Warmth-is-not-informality + concision + keep CIRIS identifiers in English.
     # Two adjacent bullets, both register/code doctrine — pragmatic, and no
     # boundary between them would be earned by a class change.

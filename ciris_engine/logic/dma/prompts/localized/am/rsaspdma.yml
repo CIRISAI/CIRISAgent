@@ -1,0 +1,86 @@
+component_name: rsaspdma
+description: "ለRECALL የተለየ የተግባር ምርጫ — ግራፉን የሚያነብ መመሪያ፣ በአንድ የቀረበ RECALL ላይ ተተግብሯል"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  RECALL መርጣችኋል። የተግባር ምርጫ ግሱን ብቻ መርጧል፤ ይህ ደረጃ ምን እንደሚነበብ
+  ይናገራል።
+
+  ግራፉ እንዴት አድራሻ እንደሚሰጠው እና አስቀድመው ያሉ ኖዶች ይታዩላችኋል፣ ንባቡ
+  መረጃው ባለበት እንዲመለከት።
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  RECALL በዚህ ቅደም ተከተል ይፈታል፦
+
+    node_id   ትክክለኛ ፍለጋ። ያ ኖድ ካለ ይመለሳል፣ እና ሌላ ምንም
+              አይፈለግም።
+    query     በ node_type እና scope ሲሰጧቸው የሚጠብ የግራፍ ጽሑፋዊ ፍለጋ።
+              node_id ከሌለ፣ ወይም ምንም ካላገኘ ይጠቅማል።
+
+  በዚህ ቅደም ተከተል አልፉ፦
+
+  1. ምን እየፈለጋችሁ ነው? አንድ ነገር፣ በግልጽ የተገለጸ።
+  2. ቀድሞውኑ ፊታችሁ አለ? የአንድ ሰው የተከማቹ እውነታዎች ከመገለጫቸው ጋር
+     ይመጣሉ፣ እና ውይይቱ በአውዳችሁ ውስጥ ነው። አስቀድመው ማንበብ የምትችሉት RECALL
+     አያስፈልገውም።
+  3. በምትሰይሙት ኖድ ላይ ነው? ከእጩ ኖዶች አንዱ ቢይዘው፣ ያንን መለያ እንደ node_id ስጡ።
+  4. ያለበለዚያ query ስጡ፦ የምትፈልጉትን የሚገልጹ አነስተኛ ቃላት። node_type ወይም
+     node_scope ስታውቁ ብቻ ጨምሩ።
+  5. ውሰኑ፦ ያረጋገጣችሁትን ይዛችሁ RECALL፣ ለመመለስ ወይም ለመጠየቅ SPEAK፣ ወይም
+     መልሳችሁ ለማሰብ PONDER።
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === ምን መከሰት እንደሌለበት ===
+
+  የኖድ መለያ አትፍጠሩ (አትገምቱ)። ደንቡን የማይከተል መለያ ምንም አያገኝም፣ እናም ባዶ
+  ውጤት "ይህን በፍጹም አልተማርኩም" ተብሎ ይነበባል፣ እውነቱ ግን "በተሳሳተ ቦታ ፈለግኩ"
+  የሚል ነው።
+
+  RECALL ገና ባልሮጠበት ጊዜ ምን እንደመለሰ አትናገሩ። ይህ ደረጃ ንባቡን ይፈጽማል፤
+  ውጤቱ በኋላ ይመጣል።
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  ዋናው ሀሳብ፦
+  {original_thought_content}
+
+  ለማስታወስ ያላችሁ ምክንያት፦
+  {aspdma_reasoning}
+
+  === እጩ ኖዶች (አስቀድመው ያሉ) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  በJSON መልሱ፦
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "የሚነበበው ትክክለኛ የኖድ መለያ (RECALL ሲሆን ይህን ወይም query ስጡ)",
+    "query": "የፍለጋ ጽሑፍ (RECALL ሲሆን ይህን ወይም node_id ስጡ)",
+    "node_type": "ፍለጋን ለማጥበብ የኖድ አይነት (አማራጭ)",
+    "node_scope": "ፍለጋን ለማጥበብ የግራፍ ክልል (አማራጭ)",
+    "limit": 10,
+    "message": "የሚባለው ቃል (SPEAK ሲሆን ያስፈልጋል)",
+    "questions": ["እንደገና የሚታሰብበት ጥያቄ (PONDER ሲሆን ያስፈልጋል)"],
+    "reasoning": "ይህ ንባብ የምትፈልጉትን ለምን እንደሚያገኝ፣ ወይም ለምን SPEAK ወይም PONDER እንደመረጣችሁ"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  በትክክለኛው ቦታ መፈለግ የዚህ ደረጃ ዋና ነጥብ ነው።

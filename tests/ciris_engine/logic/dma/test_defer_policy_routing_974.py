@@ -160,7 +160,10 @@ async def test_override_manifest_changes_composed_aspdma_bytes(
 
 def test_routed_defer_text_is_the_pre_routing_doctrine(clean_overrides: pytest.MonkeyPatch) -> None:
     text = ActionInstructionGenerator()._generate_schema_for_action(HandlerActionType.DEFER)
-    assert text.startswith("DEFER: defer_reason (string, required), defer_until (ISO 8601 timestamp, optional)\n")
+    # The head changed in #1027: ASPDMA no longer fills defer_reason/defer_until
+    # (DSASPDMA does). The doctrine on WHEN to defer is unchanged below.
+    assert text.startswith("DEFER: no additional fields.")
+    assert "defer_reason" not in text and "defer_until" not in text
     assert text.endswith("use SPEAK to explain the error to the user.")
     assert "⚠️ DEFER is ONLY for situations the agent cannot resolve alone:" in text
     assert "❌ DO NOT DEFER for:" in text

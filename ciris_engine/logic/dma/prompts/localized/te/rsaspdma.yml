@@ -1,0 +1,87 @@
+component_name: rsaspdma
+description: "RECALL-నిర్దిష్ట చర్య ఎంపిక — గ్రాఫ్-చదివింపు మార్గదర్శకత్వం, ఒక ప్రతిపాదిత RECALL కు వర్తింపజేయబడింది"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  మీరు RECALL ఎంచుకున్నారు. చర్య ఎంపిక క్రియను మాత్రమే ఎంచుకుంది; ఈ దశ
+  ఏమి చదవాలో చెబుతుంది.
+
+  గ్రాఫ్ ఎలా చిరునామా చేయబడుతుందో మరియు ఇప్పటికే ఉన్న నోడ్‌లు మీకు చూపించబడ్డాయి,
+  కాబట్టి చదివింపు సమాచారం ఉన్న చోట చూస్తుంది.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  ఒక RECALL ఈ క్రమంలో పరిష్కరించబడుతుంది:
+
+    node_id   ఖచ్చితమైన శోధన. ఆ నోడ్ ఉంటే అది తిరిగి ఇవ్వబడుతుంది, మరియు
+              మరేదీ శోధించబడదు.
+    query     గ్రాఫ్ యొక్క పాఠ్య శోధన, నువ్వు ఇచ్చినప్పుడు node_type మరియు scope ద్వారా
+              సంకుచితం చేయబడుతుంది. node_id లేనప్పుడు, లేదా అది దేనికీ సరిపోలనప్పుడు ఉపయోగించబడుతుంది.
+
+  ఇవన్నీ క్రమంలో చేయండి:
+
+  1. నువ్వు దేని కోసం చూస్తున్నావు? ఒక విషయం, స్పష్టంగా చెప్పబడింది.
+  2. ఇది ఇప్పటికే నీ ముందు ఉందా? ఒక వ్యక్తి యొక్క నిల్వ చేసిన వాస్తవాలు వారి
+     ప్రొఫైల్‌తో వస్తాయి, మరియు సంభాషణ నీ సందర్భంలో ఉంది. నువ్వు ఇప్పటికే చదవగలిగేదానికి RECALL
+     అవసరం లేదు.
+  3. ఇది నువ్వు పేరు పెట్టగలిగే నోడ్‌పై ఉందా? CANDIDATE NODES లో ఒకటి దీన్ని కలిగి ఉంటే, ఆ
+     id ని node_id గా ఇవ్వండి.
+  4. లేకపోతే ఒక query ఇవ్వండి: నువ్వు కోరుకునేదాన్ని గుర్తించే అతి తక్కువ పదాలు. నీకు
+     తెలిసినప్పుడే node_type లేదా node_scope జోడించండి.
+  5. నిర్ణయించుకోండి: నువ్వు పరిశీలించిన దానితో RECALL, సమాధానం చెప్పడానికి లేదా అడగడానికి SPEAK,
+     లేదా తిరిగి పరిశీలించడానికి PONDER.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === ఏది జరగకూడదు ===
+
+  ఒక నోడ్ id కల్పించుకోవద్దు. సంప్రదాయాన్ని పాటించని id దేనికీ
+  సరిపోలదు, మరియు ఖాళీ ఫలితం అప్పుడు "నేను దీన్ని ఎప్పుడూ నేర్చుకోలేదు" అని చదవబడుతుంది,
+  నిజం "నేను తప్పు స్థలంలో చూశాను" అయినప్పటికీ.
+
+  RECALL అమలు అయ్యే ముందు అది ఏమి తిరిగి ఇచ్చిందో చెప్పవద్దు. ఈ దశ
+  చదవడాన్ని అడ్రస్ చేస్తుంది; ఫలితం తర్వాత వస్తుంది.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  అసలు సిద్ధాంతం:
+  {original_thought_content}
+
+  గుర్తుకు తెచ్చుకోవటానికి నీ తర్కం:
+  {aspdma_reasoning}
+
+  === CANDIDATE నోడ్‌లు (అవన్నీ ఇప్పటికే ఉన్నవి) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON చేయండి:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "చదవవలసిన ఖచ్చితమైన నోడ్ id (RECALL సమయంలో దీన్ని లేదా query ఇవ్వండి)",
+    "query": "శోధన పాఠ్యం (RECALL సమయంలో దీన్ని లేదా node_id ఇవ్వండి)",
+    "node_type": "శోధనను సంకుచితం చేయడానికి నోడ్ రకం (ఐచ్ఛికం)",
+    "node_scope": "శోధనను సంకుచితం చేయడానికి గ్రాఫ్ స్కోప్ (ఐచ్ఛికం)",
+    "limit": 10,
+    "message": "చెప్పటానికి (SPEAK సమయంలో చేయవలసిన)",
+    "questions": ["తిరిగి పరిశీలించడానికి (PONDER సమయంలో చేయవలసిన)"],
+    "reasoning": "ఈ చదవడం నువ్వు వెతుకుతున్నదాన్ని ఎందుకు కనుగొంటుంది, లేదా నువ్వు ఎందుకు SPEAK లేదా PONDER ఎంచుకున్నావు"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  సరైన చోట చూడటం ఈ దశ యొక్క మొత్తం ఉద్దేశ్యం.

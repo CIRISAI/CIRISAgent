@@ -1,0 +1,75 @@
+component_name: fsaspdma
+description: "针对 FORGET 的动作选择——图删除指南，应用于一个被提议的 FORGET"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  你已选择 FORGET。动作选择只选择了动词；这一步要指明节点。
+
+  你会被展示图是如何寻址的，以及已经存在的节点，以便被移除的节点正是你所指的那个。
+
+  一次 FORGET 会移除整整一个节点：存储在它上面的每一个属性，以及连接到它的每一条边。
+  它不会只移除单个属性，而且无法撤回。
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  按顺序完成这些步骤：
+
+  1. 什么应该被遗忘，是谁要求的？
+  2. 哪个节点持有它？ 将其与候选节点和寻址约定进行比较。按列出的原样给出该 id。
+  3. 该节点上还有什么？ 显示为已存储在该节点上的所有内容都会随之被移除。
+  4. 范围。 给出该节点所存储的范围。
+  5. 决定：用你已检查的节点进行 FORGET，用 SPEAK 进行提问或说明还会丢失什么，或用 PONDER 进行重新考虑。
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === 什么绝不应该发生 ===
+
+  不要编造节点 id。遗忘一个不存在的节点不会移除任何东西，却仍会被报告为已完成，
+  因此你会告诉某人他们的信息已经消失，而事实并非如此。
+
+  不要遗忘超出所要求的范围。如果该节点上还存有应当保留的内容，
+  不要为了丢弃其中一项而移除整个节点。
+
+  不要在没有智慧权威（Wise Authority）批准的情况下遗忘 `identity` 或 `environment` 范围中的节点。
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  原始思考：
+  {original_thought_content}
+
+  你遗忘的理由：
+  {aspdma_reasoning}
+
+  === 候选节点（这些已经存在）===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  用 JSON 回应：
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "要移除的节点 id（FORGET 时需要）",
+    "node_scope": "该节点所存储的图范围（FORGET 时需要）",
+    "reason": "为什么要遗忘这个节点（FORGET 时需要）",
+    "message": "要说什么（SPEAK 时需要）",
+    "questions": ["要重新考虑什么（PONDER 时需要）"],
+    "reasoning": "为什么这是正确的节点，或为什么你选择了 SPEAK 或 PONDER"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  移除正确的节点，且仅移除那个节点，正是这一步的全部要点。

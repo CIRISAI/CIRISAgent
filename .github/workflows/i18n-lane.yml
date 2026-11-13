@@ -47,7 +47,7 @@ on:
   workflow_call:
     inputs:
       target:
-        description: "accord | ui"
+        description: "accord | ui | prompts"
         required: false
         default: "accord"
         type: string
@@ -81,7 +81,7 @@ on:
         default: false
         type: boolean
       extra_tm:
-        description: "target=accord: anchor terminology on the ciris-website + CIRISClient strings (pinned read-only checkouts) and the agent UI; anchors only, never values"
+        description: "target=accord or prompts: anchor terminology on the ciris-website + CIRISClient strings (pinned read-only checkouts) and the agent UI; anchors only, never values"
         required: false
         default: true
         type: boolean
@@ -182,7 +182,7 @@ jobs:
       # The SHAs go into the step summary, the plan log and the commit message.
       - name: Extra translation memory -- pin the default-branch commits
         id: extra_tm
-        if: inputs.extra_tm && inputs.target == 'accord'
+        if: inputs.extra_tm && (inputs.target == 'accord' || inputs.target == 'prompts')
         run: |
           set -euo pipefail
           website=$(git ls-remote https://github.com/CIRISAI/ciris-website.git HEAD | cut -f1)
@@ -459,6 +459,14 @@ jobs:
             # accord's structural rules, every reassembled file byte-equal to its
             # bundle, and no per-locale accord mirror anywhere.
             python3 localization/accord_localize.py --version "$ACCORD_VERSION" --stem "$STEM" --verify
+          elif [ "$TARGET" = "prompts" ]; then
+            # Every translated field of every locale template still parses,
+            # keeps its placeholders and survives str.format(). --changed: only
+            # what this run wrote can block; standing debt is printed. Whether a field
+            # is translated at all, and into the right script, is the
+            # chain-localization suite's call in the build workflow.
+            python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+            python3 localization/prompt_localize.py --verify --changed
           else
             python3 tools/dev/check_localization_sync.py
           fi
@@ -486,6 +494,8 @@ jobs:
             # localization/accord/<stem>_<version> for any other stem.
             if [ "$STEM" = "accord" ]; then STAGE="$ACCORD_VERSION"; else STAGE="${STEM}_${ACCORD_VERSION}"; fi
             git add --all -- "localization/accord/$STAGE" ciris_engine/data/localized
+          elif [ "$TARGET" = "prompts" ]; then
+            git add --all -- ciris_engine/logic/dma/prompts/localized
           else
             git add --all -- ciris_engine/data/localized
           fi

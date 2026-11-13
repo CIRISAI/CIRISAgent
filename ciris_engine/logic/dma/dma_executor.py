@@ -76,7 +76,9 @@ from .dsaspdma import DSASPDMAEvaluator
 from .dsdma_base import BaseDSDMA
 from .exceptions import DMAFailure
 from .idma import IDMAEvaluator
+from .fsaspdma import FSASPDMAEvaluator
 from .msaspdma import MSASPDMAEvaluator
+from .rsaspdma import RSASPDMAEvaluator
 from .pdma import EthicalPDMAEvaluator
 from .tsaspdma import TSASPDMAEvaluator
 
@@ -981,33 +983,40 @@ async def run_dsaspdma(
         raise
 
 
-async def run_msaspdma(
-    evaluator: MSASPDMAEvaluator,
+async def _run_memory_second_pass(
+    name: str,
+    evaluate: Callable[..., Awaitable[ActionSelectionDMAResult]],
     aspdma_result: ActionSelectionDMAResult,
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
 ) -> ActionSelectionDMAResult:
-    """Run the Memorize-Specific Action Selection PDMA (MSASPDMA)."""
+    """Run one memory verb's second pass under a trace span.
+
+    MSASPDMA, RSASPDMA and FSASPDMA differ in the evaluator and the verb, not in
+    how the call is traced, so the span lives here once. ``name`` is the
+    evaluator's short name (``msaspdma``); ``evaluate`` is its verb-specific
+    entry point.
+    """
 
     if not time_service:
         raise RuntimeError("TimeService is required for DMA execution")
     start_time = time_service.now()
 
     trace_id = f"task_{original_thought.source_task_id or 'unknown'}_{original_thought.thought_id}"
-    span_id = f"msaspdma_{original_thought.thought_id}"
+    span_id = f"{name}_{original_thought.thought_id}"
     parent_span_id = f"action_selection_pdma_{original_thought.thought_id}"
 
     trace_context = TraceContext(
         trace_id=trace_id,
         span_id=span_id,
         parent_span_id=parent_span_id,
-        span_name="run_msaspdma",
+        span_name=f"run_{name}",
         span_kind="internal",
         baggage={
             "thought_id": original_thought.thought_id,
             "task_id": original_thought.source_task_id or "",
-            "dma_type": "msaspdma",
+            "dma_type": name,
         },
     )
 
@@ -1015,8 +1024,8 @@ async def run_msaspdma(
         correlation_id=f"trace_{span_id}_{start_time.timestamp()}",
         correlation_type=CorrelationType.TRACE_SPAN,
         service_type="dma",
-        handler_name="MSASPDMAEvaluator",
-        action_type="evaluate_memorize_action",
+        handler_name=f"{name.upper()}Evaluator",
+        action_type=f"{name}_second_pass",
         created_at=start_time,
         updated_at=start_time,
         timestamp=start_time,
@@ -1025,7 +1034,7 @@ async def run_msaspdma(
             "thought_id": original_thought.thought_id,
             "task_id": original_thought.source_task_id or "",
             "component_type": "dma",
-            "dma_type": "msaspdma",
+            "dma_type": name,
             "trace_depth": "4",
         },
         request_data=None,
@@ -1041,18 +1050,14 @@ async def run_msaspdma(
     persistence.add_correlation(correlation, time_service)
 
     try:
-        result = await evaluator.evaluate_memorize_action(
-            aspdma_result=aspdma_result,
-            original_thought=original_thought,
-            context=context,
-        )
+        result = await evaluate(aspdma_result=aspdma_result, original_thought=original_thought, context=context)
 
         end_time = time_service.now()
         update_req = CorrelationUpdateRequest(
             correlation_id=correlation.correlation_id,
             response_data={
                 "success": "true",
-                "result_summary": f"MSASPDMA completed: action={result.selected_action}",
+                "result_summary": f"{name.upper()} completed: action={result.selected_action}",
                 "execution_time_ms": str((end_time - start_time).total_seconds() * 1000),
                 "response_timestamp": end_time.isoformat(),
             },
@@ -1079,6 +1084,45 @@ async def run_msaspdma(
         )
         persistence.update_correlation(update_req, time_service)
         raise
+
+
+async def run_msaspdma(
+    evaluator: MSASPDMAEvaluator,
+    aspdma_result: ActionSelectionDMAResult,
+    original_thought: ProcessingQueueItem,
+    context: Optional[Any] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run the Memorize-Specific Action Selection PDMA (MSASPDMA)."""
+    return await _run_memory_second_pass(
+        "msaspdma", evaluator.evaluate_memorize_action, aspdma_result, original_thought, context, time_service
+    )
+
+
+async def run_rsaspdma(
+    evaluator: RSASPDMAEvaluator,
+    aspdma_result: ActionSelectionDMAResult,
+    original_thought: ProcessingQueueItem,
+    context: Optional[Any] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run the Recall-Specific Action Selection PDMA (RSASPDMA)."""
+    return await _run_memory_second_pass(
+        "rsaspdma", evaluator.evaluate_recall_action, aspdma_result, original_thought, context, time_service
+    )
+
+
+async def run_fsaspdma(
+    evaluator: FSASPDMAEvaluator,
+    aspdma_result: ActionSelectionDMAResult,
+    original_thought: ProcessingQueueItem,
+    context: Optional[Any] = None,
+    time_service: Optional["TimeServiceProtocol"] = None,
+) -> ActionSelectionDMAResult:
+    """Run the Forget-Specific Action Selection PDMA (FSASPDMA)."""
+    return await _run_memory_second_pass(
+        "fsaspdma", evaluator.evaluate_forget_action, aspdma_result, original_thought, context, time_service
+    )
 
 
 async def run_tsaspdma(

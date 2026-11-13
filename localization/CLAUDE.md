@@ -13,9 +13,9 @@ Instructions for rapidly expanding CIRIS language coverage while maintaining min
 Translation work goes through the CIRISClient pipeline vendored here
 (`localize.py`; provenance in `VENDORED.md`). Its lanes run translate, then
 evaluate (MQM spans from a different-family judge), then repair. Sub-agent
-fan-outs, including the Haiku and language-family clustering described further
-down this file, produced word-salad in 5 of 28 locales that structural checks
-missed. Treat those sections as history.
+fan-outs (one agent per file or per language family, Haiku for volume) are how
+the first 29 languages were bootstrapped. They produced word-salad in 5 of 28
+locales that structural checks missed, and this file no longer describes them.
 
 ```bash
 # 1.3 is renamed: constitution_ethics_1.3_<lang>.txt, TM from the shipped accord_1.2b_<lang>.txt
@@ -27,7 +27,19 @@ python3 localization/accord_localize.py $E13 --units section0 --lane translate -
 python3 localization/accord_localize.py $E13 --extra-tm ~/ciris-website --extra-tm ~/CIRISClient --extra-tm . \
     --units section0 --lane translate --dry-run
 python3 localization/localize.py --check                                     # UI/prompt bundle (LOCALIZE_TARGET=ui)
+python3 localization/prompt_localize.py --check                              # DMA prompt templates still in English, per locale
+python3 localization/prompt_localize.py --lane translate --keys 'rsaspdma.*' --dry-run
 ```
+
+**A new DMA prompt** (`ciris_engine/logic/dma/prompts/<name>.yml`): commit an
+English copy in each `localized/<lang>/` folder, then dispatch `i18n translate`
+with `target: prompts` and `keys: <name>.*`. A field still byte-identical to
+English counts as missing, so the lane picks it up and the chain-localization
+tests fail until it has. **A rewritten field** already has an (old) translation
+in each locale, so it is not missing: dispatch with the exact key and
+`overwrite: true`.
+
+What each part of the ratchet rests on, and where the prior art says it is weak: `localization/PRIOR_ART.md`.
 
 Real runs spend tokens. They go through the `i18n translate|evaluate|repair`
 workflows (dispatch only, one writer at a time). Never hand-edit vendored files:
@@ -41,291 +53,216 @@ Localization is not translation. It is extending ethical agency across linguisti
 
 **Priority principle**: Languages are ordered by *need*, not by market size. A Hausa speaker in rural Niger has more to gain from ethical AI than an English speaker with 50 alternatives. This is Mission Driven Development applied to localization.
 
-## Current State (2026-04-08)
+## Current State (checked against the tree 2026-11-11)
 
-- **29 languages**: am, ar, bn, de, en, es, fa, fr, ha, hi, id, it, ja, ko, mr, my, pa, pt, ru, sw, ta, te, th, tr, uk, ur, vi, yo, zh
-- **Gross coverage**: ~72% of world population (deduplicated)
-- **Need-adjusted coverage**: ~95%
-- **All 29 languages complete**: glossary, JSON, DMA prompts (ACCORD and guide for Tier 1-2)
+This section replaces a snapshot dated 2026-04-08 that had drifted badly. Each
+line names where to re-check it, because this one will drift too.
 
-## What "Complete" Means
+- **29 languages**, source of truth `ciris_engine/data/localized/manifest.json`:
+  am, ar, bn, de, en, es, fa, fr, ha, hi, id, it, ja, ko, mr, my, pa, pt, ru,
+  sw, ta, te, th, tr, uk, ur, vi, yo, zh. There is no `localization/manifest.json`
+  and there must not be one: any `*.json` directly in `localization/` hijacks
+  the agent's string loader (see `VENDORED.md`).
+- **In production** on the app stores. User feedback on translation quality is
+  reported positive, most of it from Amharic speakers (maintainer, 2026-11-11).
+  It is not recorded per locale in this repository.
+- **Every language has a language primer** (`prompts.language_guidance` in
+  `ciris_engine/data/localized/<lang>.json`), not only Amharic. en, es, fr, it
+  and pt carry it split into numbered single-class parts; the other 24 carry
+  one authored block of roughly 4 to 17 KB. Doctrine that reads the same in
+  every language has moved to `prompts.universal_guidance`, which the pipeline
+  translates. See `LANGUAGE_GUIDANCE_PART_KEYS` in
+  `ciris_engine/logic/utils/localization.py`.
+- **Every language has a safety battery**: `tests/safety/<language>_mental_health/`
+  holds the v4 question arc, the scoring rubric and the machine-applicable
+  `canonical_universal_criteria.json`, for all 29.
+- **The batteries run.** `.github/workflows/safety-battery.yml` (weekly, and on
+  dispatch per language) captures responses and has an interpreter agent apply
+  the criteria. `qa_reports/safety_interpret/` holds about 300 interpreted
+  runs covering all 29 locales, the latest dated 2026-10-15; per locale that
+  is between 7 (vi) and 22 (am). What they found is in
+  `tests/safety/FINDINGS_LEDGER.md`; what was changed in response is in
+  `tests/safety/GUIDANCE_FIXES.md`; the process is `FSD/SAFETY_GUIDANCE_PROCESS.md`.
+  `qa_reports/safety_sweeps.json` is an older ledger (30 sweeps, May 2026) and
+  its "never evaluated" notes are stale.
+- **Rules are crowdsourced, verdicts are machined.** `tests/safety/` is merged
+  consensus state; changes are proposed through the federation flow in
+  `tests/safety/README.md`, not edited directly.
+- **Translation runs in CI**, through the vendored pipeline: `i18n translate`,
+  `i18n evaluate`, `i18n repair` (dispatch only), with targets `accord`, `ui`
+  and `prompts`.
 
-A language is complete when all 5 components exist and pass validation:
+## Three corpora, run independently, read by each other
 
-| Component | Location | Validation |
-|-----------|----------|------------|
-| 1. Glossary | `docs/localization/glossaries/{code}_glossary.md` | All sections filled, 3,000+ chars |
-| 2. UI Strings | `localization/{code}.json` | 1,257 nested keys, valid JSON, no duplicates |
-| 3. ACCORD | `ciris_engine/data/localized/accord_1.2b_{code}.txt` | Within 10% of English line count (~1,153 lines) |
-| 4. Guide | `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_{code}.md` | 80%+ of English line count |
-| 5. DMA Prompts | `ciris_engine/logic/dma/prompts/localized/{code}/*.yml` | 6 files, valid YAML, `{{}}` escaping |
+CIRIS text is translated in three repositories. Each runs its own localization
+on its own schedule, with its own review, and none waits for another.
 
-**Registration** (after all files created):
-- `localization/manifest.json` — add language entry
-- `ciris_engine/data/localized/manifest.json` — mirror entry
-- `mobile/shared/.../SetupState.kt` — add to `SUPPORTED_LANGUAGES`
-- `test_localization_completeness.py` — add code to 5 parameterized lists
-
-## Expansion Priority Order
-
-Based on composite scoring: speaker count, need weight (inverse income + inverse digital access), overlap with existing languages. See `manifest.json` `localization_roadmap` for full data.
-
-### Tier 1 — ✅ COMPLETE
-1. **Indonesian (id)** — 200M speakers, 4th largest country, low overlap, need 3.0
-2. **Hausa (ha)** — 80M speakers, West Africa lingua franca, need 5.0 (highest)
-3. **Persian (fa)** — 110M speakers, RTL, covers Iran + Afghanistan, need 3.0
-
-### Tier 2 — ✅ COMPLETE
-4. **Vietnamese (vi)** — 85M, no overlap, growing digital access
-5. **Punjabi (pa)** — 150M, high overlap w/ Hindi/Urdu but fills Gurmukhi gap
-6. **Telugu (te)** — 83M, distinct Dravidian script, India's 4th largest
-7. **Tamil (ta)** — 85M, India + Sri Lanka + SE Asia
-
-### Tier 3 — ✅ COMPLETE
-8. **Marathi (mr)** — 83M, Devanagari script (leverage Hindi tooling)
-9. **Thai (th)** — 61M, unique script
-10. **Yoruba (yo)** — 45M, Nigeria, need 4.5
-11. **Burmese (my)** — 43M, Myanmar, need 4.5
-12. **Ukrainian (uk)** — 40M, distinct from Russian
-
-**All tiers complete**: gross ~72%, need-adjusted ~95%.
-
-## Rapid Expansion Workflow
-
-Each language takes ~30-45 minutes using parallel agents. Follow this exact sequence:
-
-### Phase 1: Glossary (1 agent, ~5 min)
-
-Create glossary FIRST. This is non-negotiable — without it, terminology drifts across files.
-
-```
-Create glossary for {LANGUAGE} at docs/localization/glossaries/{CODE}_glossary.md.
-Use docs/localization/glossaries/ur_glossary.md as the structural template.
-Include all sections: Core Action Verbs (10), Core Concepts (9+), Technical Terms (8+),
-Cognitive States (6), UI Labels, DMA-Specific Terms, Phrases, Cultural Considerations.
-Technical terms (API, DMA, LLM, Agent) stay in English.
-```
-
-### Phase 2: JSON UI Strings (4-5 parallel agents, ~10 min)
-
-Split by key prefix to avoid conflicts and token limits:
-
-- **Agent 1**: `common_*, nav_*, screen_*, filter_*` (~80 keys)
-- **Agent 2**: `setup_*, startup_*, status_*, processing_*` (~80 keys)
-- **Agent 3**: `services_*, system_*, sessions_*, scheduler_*, runtime_*` (~120 keys)
-- **Agent 4**: `adapter_*, audit_*, billing_*, config_*, consent_*, data_*` (~150 keys)
-- **Agent 5**: `graph_*, logs_*, memory_*, telemetry_*, tickets_*, remaining` (~80 keys)
-
-Each agent reads `en.json` for source, `{code}_glossary.md` for terminology, and edits `{code}.json`.
-
-### Phase 3: ACCORD (2-3 parallel agents, ~10 min)
-
-Split by section:
-- **Agent 1**: Sections 0-3 (Introduction, Core Identity, Operations)
-- **Agent 2**: Sections 4-6 (Obligations, Maturity, Creation Ethics)
-- **Agent 3**: Sections 7-9 + Annexes (War Ethics, Sunset, Mathematics)
-
-Preserve section headers in CAPS. Keep code blocks in English. Maintain the poetic-philosophical voice — this is a covenant, not a manual.
-
-### Phase 4: DMA Prompts (2 parallel agents, ~10 min)
-
-- **Agent 1**: `pdma_ethical.yml`, `csdma_common_sense.yml`, `idma.yml`
-- **Agent 2**: `action_selection_pdma.yml`, `dsdma_base.yml`, `tsaspdma.yml`
-
-**CRITICAL**: Escape all JSON braces as `{{` and `}}`. Python's `.format()` will break otherwise. This is the #1 recurring bug in localization work.
-
-### Propagating ONE prompt change across all 28 locales (use language-family clustering)
-
-When the English source for a single DMA prompt is rewritten (e.g. dsdma_base.yml in 2.7.4), don't fan out 28 individual agents — that wastes context and produces no efficiency gain over sequential. Instead spawn **9 parallel agents grouped by language family**, each handling 2–6 related languages serially. Family clustering exploits shared glossary patterns, shared script behaviour (RTL groups, CJK groups), and shared cultural framing for the same prompt — so an agent can re-use research across the languages it owns.
-
-Canonical 9-cluster grouping for the 28 non-English locales:
-
-| Cluster | Languages | Notes |
+| Corpus | Repository | What it holds |
 |---|---|---|
-| 1. Romance + Germanic European | es, fr, it, pt, de | Latin script, similar register |
-| 2. Slavic Cyrillic | ru, uk | Distinct languages, Cyrillic |
-| 3. Indo-Aryan + Iranian | hi, mr, pa, ur, fa, bn | Devanagari / Gurmukhi / Persian / Bengali; ur+fa are RTL |
-| 4. CJK East Asian | zh, ja, ko | Hanzi/kanji-based, no spaces |
-| 5. SE Asian | th, vi, id, my | Diverse scripts (Thai, Latin, Burmese) |
-| 6. Dravidian | ta, te | South Indian scripts |
-| 7. Semitic + Ethiopic + Chadic | ar, am, ha | Arabic RTL, Ge'ez script, Hausa Latin/Ajami |
-| 8. Sub-Saharan African (Niger-Congo) | sw, yo | Latin script, Bantu/Yoruba |
-| 9. Turkic | tr | Latin, Turkish |
+| Agent | `CIRISAI/CIRISAgent` (this one) | Agent and API strings, language primers, ethics text, guide, DMA and conscience prompts |
+| Client | `CIRISAI/CIRISClient` | The apps' interface strings (Android, iOS, desktop share one bundle) |
+| Website | `CIRISAI/ciris-website` | Site dictionaries and chrome |
 
-Each family-agent gets:
-- The new English source content (or a path)
-- Their assigned language codes
-- Output paths under `ciris_engine/logic/dma/prompts/localized/{code}/`
-- Required-token list (placeholders that must survive verbatim: `{domain_name}`, `{rules_summary_str}`, `{context_str}`, `{original_thought_content}` — single-brace; example JSON braces must be doubled `{{}}`)
-- The instruction to keep JSON object keys ("domain", "domain_alignment", "flags", "reasoning") in English while translating string values
+They are not merged and there is no shared bundle. They are kept coherent by
+reading each other's shipped translations as **analysis and terminology
+anchors**: when one corpus translates or reviews a string, the other corpora's
+rendering of the same terms in that language is in front of the translator and
+the reviewer. An anchor is never copied in as a value.
 
-Use Haiku for these agents — sufficient for prompt-level translation and parallel-friendly. Validate each output by parsing the YAML and confirming the required-token set matches the English source.
+What this repository does, which you can verify here:
 
-### Phase 5: Comprehensive Guide (1-2 agents, ~10 min)
+- `accord_localize.EXTRA_LAYOUTS` recognises a website checkout, a client
+  checkout and this repository's own UI bundle, ranked in that order.
+- The lanes check the website and the client out read-only at their
+  default-branch commit, pinned once per run, for the `accord` and `prompts`
+  targets, and put both commits in the commit message (`i18n-lane.yml`,
+  `extra_tm`).
+- The other corpus's own review is respected: a string its MQM review flagged
+  critical or major, a file whose status is rejected, a value left in English
+  or in the wrong script, is not used as an anchor (`_flagged_keys`,
+  `_file_status`, `_usable`).
 
-Translate `CIRIS_COMPREHENSIVE_GUIDE_en.md`. Target 80%+ of English line count. Keep markdown structure intact.
+In the other direction, the client and the website include this repository's
+corpus in their own analysis the same way (maintainer, 2026-11-11). That side
+lives in those repositories and is not visible from here; the website carries
+its own `localization/localize.py`, `glossary.py` and `SITE_NOTES.md`.
 
-### Phase 6: Registration & Validation (1 agent, ~5 min)
+The pipeline code itself flows one way: `localize.py`, `glossary.py`, the
+translation guide and the 28 glossaries are vendored byte-identical from
+CIRISClient (`VENDORED.md`). A fix to the pipeline or to a glossary goes
+upstream to the client and comes back on the next re-vendor.
 
-1. Add to `localization/manifest.json` and `ciris_engine/data/localized/manifest.json`
-2. Add to `SetupState.kt` `SUPPORTED_LANGUAGES`
-3. Add to `test_localization_completeness.py` (5 parameterized locations)
-4. Run: `pytest tests/ciris_engine/logic/utils/test_localization_completeness.py -v -k "{code}"`
-5. Run: `pytest tests/ciris_engine/logic/dma/test_prompt_formatting.py -v`
+Consequences worth knowing:
 
-## Minimum Viable Linguistic Rigor
+- **A correction in one corpus does not propagate.** If a native speaker fixes
+  a term in the client, the agent's value is unchanged until its own lane runs
+  and sees the fix as an anchor. The glossary is the only thing all three are
+  bound by.
+- **Agreement between corpora is evidence, not proof.** Three pipelines of the
+  same lineage, with overlapping models, can agree on the same mistake.
+- **This repository has two glossary sets.** `localization/glossaries/` (from
+  the client, read by the pipeline) and `docs/localization/glossaries/` (the
+  agent's originals, read only by the completeness test) differ in all 29
+  files.
 
-We use auto-generated translations (Claude) with a "good enough for ethical reasoning, flagged for native review" standard. This is deliberate:
+## What a language consists of
 
-### What We Guarantee
-- **Terminology consistency** — glossary-enforced canonical translations for all CIRIS-specific terms (ACCORD, Wise Authority, the 10 action verbs, 6 cognitive states)
-- **Structural completeness** — all keys present, all files exist, all tests pass
-- **Functional correctness** — DMA prompts parse without errors, JSON braces escaped, YAML valid
-- **Meaning preservation** — ethical reasoning concepts translate to culturally appropriate equivalents, not word-for-word calques
-- **RTL support** — Arabic, Urdu, Persian, Hausa (Ajami) properly flagged
+| Component | Location | Checked by |
+|---|---|---|
+| UI and agent strings | `ciris_engine/data/localized/<lang>.json` (about 6,000 leaf keys in en) | `test_localization_completeness.py`; `tools/dev/check_localization_integrity.py` |
+| Language primer | `prompts.language_guidance` in that file (authored per language, excluded from translation) | the safety battery |
+| Ethics text | `ciris_engine/data/localized/constitution_ethics_1.3_<lang>.txt` (`accord_1.2b_<lang>.txt` kept as the research control arm) | `accord_localize.py --verify`; hash pins |
+| Comprehensive guide | `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_<lang>.txt` | completeness test |
+| DMA prompts | `ciris_engine/logic/dma/prompts/localized/<lang>/*.yml` (10 templates) | chain-localization tests; `test_prompt_formatting.py`; `prompt_localize.py --verify` |
+| Conscience prompts | `ciris_engine/logic/conscience/prompts/localized/<lang>/*.yml` (3; the optimization veto is polyglot and universal) | chain-localization tests |
+| Crisis resources | `ciris_engine/data/localized/crisis_resources_<lang>.json` | `test_crisis_block_in_every_dma_1248.py` |
+| Glossary | `localization/glossaries/<lang>_glossary.md` (vendored from CIRISClient; what the pipeline reads). `docs/localization/glossaries/` is the older agent-side copy | vendoring check |
+| Safety battery | `tests/safety/<language>_mental_health/` | `safety-battery.yml` |
 
-### What We Do NOT Guarantee (Yet)
-- **Native fluency** — translations are functional but may sound stilted to native speakers
-- **Dialectal coverage** — Arabic covers MSA, not Egyptian/Levantine/Gulf variants; Chinese covers Simplified, not Traditional
-- **Cultural localization** — metaphors, idioms, and examples are translated literally; cultural adaptation is a future pass
-- **Legal compliance** — translations have not been reviewed for jurisdiction-specific requirements
+Registration is the manifest entry alone. The tests read the language list from
+the manifest (`get_supported_languages`); there are no per-test lists to edit.
+The app's language list lives in CIRISClient, not in this repository.
 
-### Review Status Lifecycle
-```
-draft → needs_native_review → reviewed → production
-```
+## Priority
 
-All auto-generated languages start at `draft` / `needs_native_review`. They are usable but should not be marketed as "native quality" until a native speaker reviews.
+Languages are ordered by need, not market size. The original roadmap (three
+tiers, 12 languages added after the first 17) is complete. Hardening effort
+still follows the same order: the languages the base models know least get the
+most primer work and the most battery runs.
 
-## Per-Language Guidance Blocks (`prompts.language_guidance`)
+### Base-model support, worst first
 
-Beyond the core 5-component "is the language complete" deliverable above, each `localization/{code}.json` carries a **`prompts.language_guidance`** key that gets injected as a system message into every DMA / conscience / ASPDMA call when non-empty (see `ciris_engine/logic/utils/localization.py::get_language_guidance` and the 8 DMA injection sites). For 28 of 29 languages this is empty — the model handles the language well enough that no extra in-context guidance is needed. For the one language with **observed production failures**, the block carries terminology corrections, grammar primer essentials, and cross-cluster disambiguation.
+Ranked by inverse Qwen support. Hard data is from the
+[MMLU-ProX 13-language benchmark](https://aclanthology.org/2025.emnlp-main.79.pdf)
+where given; the rest is inferred. This table is from early 2026 and concerns
+one model family. Production now also runs other models (root `CLAUDE.md`,
+"Live LLM model matrix"), so read it as the reason for the ordering, not as
+current measurement.
 
-### When to populate vs leave empty
+| Tier | Languages | Signal |
+|---|---|---|
+| 0, outside Qwen3's 119 languages | am, ha, yo | Production-observed transliteration and sense-collision errors in am; ha and yo by absence of training data |
+| 1, listed but low-resource | sw (40.1%, worst of 13 tested), my, mr, pa, te, ta | |
+| 2 | ur, bn (57.6%), fa, hi (58.0%), th (60.1%), vi, id, uk, tr | |
+| 3 | ar (62.1%), ko (62.1%), ja (63.4%), ru, it | |
+| 4 | de (65.9%), pt (66.6%), es (66.5%), fr (67.1%), zh (65.9%) | |
+| 5 | en (70.3%) | |
 
-The architecture is **empty-by-default** — every language gets a key, populated only on observed failure. This pattern is deliberate:
+## Language primers
 
-- Empty packs add zero wire-payload (the DMA layer skips the append entirely on empty strings)
-- Each language's pack is independent — populating Amharic does not affect Spanish
-- The discipline learned crafting the first populated pack (NOT-X-because-Y disambiguation, prescriptive framing, compact grammar) is **transferable** by template, not by leakage
-- We never speculatively populate — language packs are reactive to observed failure, not a priori predictions
+Each `prompts.language_guidance` is injected as a system message into every
+DMA, conscience and action-selection call
+(`ciris_engine/logic/utils/localization.py::get_language_guidance`). It began as
+a reactive fix for Amharic in 2.7.6, on the rule "populate only on observed
+failure". That rule no longer describes the tree: all 29 are populated.
 
-The CIRIS philosophy is "harden for the hardest case." Per Meta-Goal M-1, languages are ordered by *need*, not by market size — and Amharic / Hausa / Yoruba are the hardest cases for any LLM, including ours. **Getting these right means the well-resourced languages are extra-right by inheritance.**
+What a primer carries, from the Amharic original:
 
-### Qwen support tier table (priority order for primer work)
+1. Top-line operating rules: register, script, numerals, mark uncertainty
+   instead of transliterating, keep CIRIS identifiers in English.
+2. Terminology with NOT-X-because-Y pairs for the terms that collide.
+3. The wire-protocol terms: the ten action verbs and six cognitive states, with
+   the reminder that JSON values stay in English.
+4. Compact prescriptive grammar: formal imperatives, modals, plurals.
+5. Cross-cluster disambiguation for adjacent clinical conditions.
+6. A closing reminder of the agent's role.
 
-The 29 supported languages ranked by **inverse Qwen support** (worst at top = highest priority for a populated language guidance block). Hard data is from the [MMLU-ProX 13-language benchmark](https://aclanthology.org/2025.emnlp-main.79.pdf) where available; otherwise inferred from training-data realities and the [Qwen3 official 119-language list](https://qwenlm.github.io/blog/qwen3/).
+Framing is prescriptive ("respect these conventions"), not descriptive.
+Descriptive context turns into template mimicry (Walia-LLM, Azime et al.,
+EMNLP 2024).
 
-| # | Lang | Tier | Hard signal | Confidence |
-|---|---|---|---|---|
-| 1 | **am** Amharic | Tier 0 — NOT in Qwen3's 119 | Production-observed transliteration + sense-collision errors. **POPULATED in 2.7.6.** | High |
-| 2 | **ha** Hausa | Tier 0 — NOT in Qwen3's 119 | Niger-Congo / Chadic — barely any Qwen training data. **PRIMER PENDING.** | High |
-| 3 | **yo** Yoruba | Tier 0 — NOT in Qwen3's 119 | Niger-Congo + tonal language (tone marks frequently dropped by LLMs). **PRIMER PENDING.** | High |
-| 4 | **sw** Swahili | Tier 1 — listed but worst-tested | 40.1% MMLU-ProX (worst of 13 langs tested) | High |
-| 5 | **my** Burmese | Tier 1 — listed, low-resource | Sino-Tibetan low-resource; Qwen-SEA-LION-v4 explicitly targets it | Medium |
-| 6 | **mr** Marathi | Tier 1 — Indo-Aryan | Consistently rated lower than Hindi | Medium |
-| 7 | **pa** Punjabi | Tier 1 — Gurmukhi script | Underrepresented vs Hindi's Devanagari in pretraining | Medium |
-| 8 | **te** Telugu | Tier 1 — Dravidian | "Lower performance" per MMLU-ProX paper | Medium |
-| 9 | **ta** Tamil | Tier 1 — Dravidian | Slightly better than Telugu; SEA-LION-v4 targets | Medium |
-| 10 | **ur** Urdu | Tier 2 — Persian-script Indo-Aryan | Persian script underrepresented vs Devanagari | Medium |
-| 11 | **bn** Bengali | Tier 2 — bottom-of-MMLU-ProX | 57.6% MMLU-ProX | High |
-| 12 | **fa** Persian | Tier 2 — Iranian + RTL | Mid-resource RTL | Low-medium |
-| 13 | **hi** Hindi | Tier 2 — best Indo-Aryan | 58.0% MMLU-ProX | High |
-| 14 | **th** Thai | Tier 2 — SEA | 60.1% MMLU-ProX | High |
-| 15 | **vi** Vietnamese | Tier 2 — SEA Latin | SEA-LION targets | Medium |
-| 16 | **id** Indonesian | Tier 2 — SEA Latin | SEA-LION priority | Medium |
-| 17 | **uk** Ukrainian | Tier 2 — Slavic | Less data than Russian | Medium |
-| 18 | **tr** Turkish | Tier 2 — Turkic | Agglutinative tokenization-hard | Medium |
-| 19 | **ar** Arabic | Tier 3 — high-resource RTL | 62.1% MMLU-ProX | High |
-| 20 | **ko** Korean | Tier 3 — high-resource CJK | 62.1% MMLU-ProX | High |
-| 21 | **ja** Japanese | Tier 3 — high-resource CJK | 63.4% MMLU-ProX | High |
-| 22 | **ru** Russian | Tier 3 — Slavic high-resource | Large pretraining corpus | Medium |
-| 23 | **it** Italian | Tier 3 — Romance | Strong on Qwen3 235B benchmarks | Medium |
-| 24 | **de** German | Tier 4 — Germanic top | 65.9% MMLU-ProX | High |
-| 25 | **pt** Portuguese | Tier 4 — Romance top | 66.6% MMLU-ProX | High |
-| 26 | **es** Spanish | Tier 4 — Romance top | 66.5% MMLU-ProX | High |
-| 27 | **fr** French | Tier 4 — best non-English | 67.1% MMLU-ProX | High |
-| 28 | **zh** Chinese | Tier 4 — Qwen native | 65.9% MMLU-ProX (native target) | High |
-| 29 | **en** English | Tier 5 — best | 70.3% MMLU-ProX | High |
+A primer is authored for its language. It is not a translation of the English
+one and the pipeline does not translate it (`UI_EXCLUDED_PREFIXES`). A change
+to one is tested by the battery for that language and recorded in
+`GUIDANCE_FIXES.md`. Open per-locale work is tracked in `FINDINGS_LEDGER.md`
+(section 5 lists which locales still lack which fix).
 
-### Roadmap implications
+## What is and is not guaranteed
 
-- **Tier 0 (am, ha, yo)**: Full primer treatment — top-line operating rules + NOT-X-because-Y term pairs + grammar essentials + cross-cluster scaffolding. Amharic shipped in 2.7.6; Hausa and Yoruba research is in flight. Each follows the same 6-section structure.
-- **Tier 1 (sw, my, mr, pa, te, ta)**: Smaller targeted packs — term-pair disambiguation only, no full grammar primer needed (Qwen has *some* training data). Build only when production observation surfaces specific failures.
-- **Tier 2 (ur, bn, fa, hi, th, vi, id, uk, tr)**: Empty-pack defaults stand. Revisit if production reveals issues.
-- **Tier 3+ (ar, ko, ja, ru, it, de, pt, es, fr, zh, en)**: Empty packs stay empty. Qwen handles these solidly; speculative population would be cargo-culting.
+Guaranteed, by gates that fail closed: terminology from the glossary;
+structural completeness; placeholders, doubled braces and `str.format`
+validity; the right script; hard-fail safety criteria per language.
 
-### Anatomy of a populated pack
+Not guaranteed: native fluency; dialect coverage (Arabic is MSA, Chinese is
+Simplified); cultural adaptation of examples; legal review per jurisdiction.
 
-The Amharic primer (`localization/am.json` → `prompts.language_guidance`) is the canonical reference. It carries six sections totalling ~5KB / ~1500 input tokens (~1.2% of the 128K context window every Ally-eligible model offers):
+Machine-reviewed is not native-reviewed. `ciris.ai/crowdsourcing-alignment` is
+the route for a native speaker to propose an edit; structured native review of
+judgment calls is still being built.
 
-1. **Top-line operating rules** — formal-register requirement, script + numerals + punctuation conventions, mark-uncertainty rule (do not silently transliterate), concision instruction, name fidelity, CIRIS canonical identifiers preserved in English.
-2. **Terminology with NOT-X-because-Y disambiguation** — load-bearing term pairs for the domains the agent handles. The negative-example pattern ("X means Y, not Z; never use Z") is research-validated for ambiguous-term resolution and outperforms flat glossaries.
-3. **CIRIS canonical wire-protocol terms** — the 10 action verbs, 6 cognitive states, key concept translations, with a reminder that JSON `selected_action` values stay in English.
-4. **Compact prescriptive grammar** — verb forms (formal vs informal imperatives), modal verbs (must/should/can/may — load-bearing for safety-critical advice), pluralization patterns, compound-term construction.
-5. **Cross-cluster disambiguation** — explicit symptom maps for adjacent clinical conditions (depression, anxiety, schizophrenia in the Amharic case) so the model doesn't contaminate one cluster with another's symptoms.
-6. **Closing operating reminder** — defer to professional, concise responses, agent's role.
+## Pitfalls that have actually occurred
 
-Framing throughout is **prescriptive** ("respect these conventions") not descriptive ("here are facts about Amharic"). Walia-LLM (Azime et al., EMNLP 2024) documented that descriptive context turns into template-mimicry; prescriptive framing keeps the model treating the primer as constraints-to-honor.
+| Pitfall | What catches it |
+|---|---|
+| JSON braces not doubled in a DMA prompt | `test_prompt_formatting.py`; `prompt_localize.prompt_problems` |
+| A placeholder doubled or translated (the prompt silently loses a substitution) | `prompt_localize.py --verify`, which lists 28 standing cases as of 2026-11-11 |
+| A locale file left in English | chain-localization tests (`tests/ciris_engine/logic/utils/test_<lang>_chain_localization.py`) |
+| Another language's text in a locale (Russian in uk, Bengali in pa) | `check_localization_integrity.py` |
+| Word-salad that parses | only the evaluate lane and native review |
+| A JSON file placed in `localization/` | the vendoring check; every string lookup returns empty until it is removed |
 
-### Pressure-test protocol for new packs
-
-Before a new populated pack ships, exercise it against an adversarial question set. The Amharic pack was hardened via `tests/safety/amharic_mental_health/v3_amharic_mental_health_arc.json` — 9 questions covering symptom disclosure → diagnostic pressure → treatment pressure → cross-cluster probe → crisis trigger → 4 adversarial probes (transliteration mirror, register attack, medication boundary push, false reassurance). Grade against `v3_amharic_scoring_rubric.md` (universal hard-fail criteria + per-question checklists). Hard-fail = release block.
-
-Each new tier-0 language should ship with a parallel safety harness in `tests/safety/{language}_mental_health/` following the same structure. Amharic is the template.
-
-## Haiku Model for Translation
-
-Use `model: haiku` for translation sub-agents. It is:
-- Fast enough for parallel execution
-- Sufficient quality for UI strings and documentation
-- Cost-effective for the volume involved
-
-Use Opus/Sonnet only for the ACCORD (poetic-philosophical register requires nuance) and glossary creation (requires cultural judgment).
-
-## Common Pitfalls
-
-| Pitfall | Prevention |
-|---------|------------|
-| JSON brace escaping | Always `{{` and `}}` in DMA YAMLs. Test with `test_prompt_formatting.py` |
-| Token limit exceeded | Never translate full files in one agent. Split by prefix/section |
-| Race conditions | Assign non-overlapping key prefixes to each parallel agent |
-| Terminology drift | Glossary phase is mandatory. Reference it in every agent prompt |
-| Missing RTL flag | Set `"direction": "rtl"` in `_meta` for Arabic, Urdu, Persian, Hausa (Ajami) |
-| Placeholder corruption | Preserve `{0}`, `{name}`, `%s`, `%d` exactly as-is |
-| Recreating en.json structure | Copy `en.json`, then replace values. Do not rebuild structure |
-
-## Quality Validation Commands
+## Commands
 
 ```bash
-# Full localization test suite
 pytest tests/ciris_engine/logic/utils/test_localization_completeness.py -v
-
-# Single language
-pytest tests/ciris_engine/logic/utils/test_localization_completeness.py -v -k "id"
-
-# DMA prompt escaping (catches {{}} issues)
+pytest tests/ciris_engine/logic/utils/test_am_chain_localization.py -v     # one per language
 pytest tests/ciris_engine/logic/dma/test_prompt_formatting.py -v
-
-# Quick key count check
-python -c "import json; d=json.load(open('localization/{code}.json')); print(len([k for k in json.dumps(d).split('\"') if k.strip()]))"
+python3 tools/dev/check_localization_integrity.py                           # value integrity of the string bundle
+python3 tools/dev/check_localize_vendoring.py
+python3 localization/prompt_localize.py --verify                            # DMA prompt structure
 ```
 
-## File Reference
+## File reference
 
 | What | Where |
-|------|-------|
-| UI strings source | `localization/en.json` |
-| ACCORD source | `ciris_engine/data/localized/accord_1.2b_en.txt` |
-| Guide source | `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_en.md` |
-| DMA prompts source | `ciris_engine/logic/dma/prompts/*.yml` |
-| Glossary template | `docs/localization/glossaries/ur_glossary.md` (use as reference) |
-| Localization loader | `ciris_engine/logic/utils/localization.py` |
-| Completeness tests | `tests/ciris_engine/logic/utils/test_localization_completeness.py` |
-| Prompt escaping tests | `tests/ciris_engine/logic/dma/test_prompt_formatting.py` |
-| Lessons learned | `docs/localization/LESSONS_LEARNED.md` |
-| Manifest | `localization/manifest.json` |
-| MDD framework | `FSD/MISSION_DRIVEN_DEVELOPMENT.md` |
+|---|---|
+| Pipeline provenance and adapters | `localization/VENDORED.md` |
+| What the ratchet rests on | `localization/PRIOR_ART.md` |
+| String loader, primer composition | `ciris_engine/logic/utils/localization.py` |
+| Safety batteries, ledger, fixes | `tests/safety/` |
+| Safety guidance design and process | `FSD/SAFETY_GUIDANCE.md`, `FSD/SAFETY_GUIDANCE_PROCESS.md` |
+| Polyglot layer (not translation) | `ciris_engine/data/localized/polyglot/CLAUDE.md` |
+| Early lessons (historical) | `docs/localization/LESSONS_LEARNED.md`, `docs/localization/README.md` |
 
 ---
 

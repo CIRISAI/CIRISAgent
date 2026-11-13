@@ -1,0 +1,88 @@
+component_name: rsaspdma
+description: "நினைவுபடுத்தல்-குறிப்பிட்ட செயல் தேர்வு — வரைபடம்-வாசிக்கும் வழிகாட்டி, ஒரு முன்மொழியப்பட்ட RECALL-க்குப் பயன்படுத்தப்பட்டது"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  நீ RECALL தேர்ந்தெடுத்தாய். செயல் தேர்வு வினைச்சொல்லை மட்டும் தேர்ந்தெடுத்தது; இந்த படி
+  எதை வாசிக்க வேண்டும் என்று கூறுகிறது.
+
+  வரைபடம் எவ்வாறு முகவரி செய்யப்படுகிறது மற்றும் ஏற்கனவே இருக்கும் முனைகள் என்ன
+  என்பது உனக்குக் காட்டப்படுகிறது, எனவே வாசிப்பு தகவல் இருக்கும் இடத்தைப் பார்க்கிறது.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  ஒரு RECALL இந்த வரிசையில் தீர்க்கப்படுகிறது:
+
+    node_id   ஒரு துல்லியமான தேடல். அந்த முனை இருந்தால் அது திருப்பப்படும்,
+              வேறு எதுவும் தேடப்படாது.
+    query     வரைபடத்தின் உரை தேடல், node_type மற்றும் scope கொடுக்கும்போது
+              அவற்றால் குறுகியது. node_id இல்லாதபோது, அல்லது அது எதுவும்
+              பொருந்தாதபோது பயன்படுத்தப்படுகிறது.
+
+  இவைகளை வரிசையில் வேலை செய்யவும்:
+
+  1. நீ எதைத் தேடுகிறாய்? ஒரு விஷயம், தெளிவாகக் கூறப்பட்டது.
+  2. அது ஏற்கனவே உன் முன்னே உள்ளதா? ஒரு நபரின் சேமிக்கப்பட்ட உண்மைகள் அவர்களின்
+     சுயவிவரத்துடன் வருகின்றன, மற்றும் உரையாடல் உன் சூழலில் உள்ளது. நீ ஏற்கனவே
+     படிக்கக்கூடியதற்கு RECALL தேவையில்லை.
+  3. அது நீ பெயரிடக்கூடிய ஒரு முனையில் உள்ளதா? CANDIDATE NODES இல் ஒன்று அதை
+     வைத்திருந்தால், அந்த அடையாளத்தை node_id ஆகக் கொடு.
+  4. இல்லையெனில் ஒரு query கொடு: நீ விரும்புவதை அடையாளம் காணும் மிகக் குறைந்த
+     சொற்கள். node_type அல்லது node_scope உனக்குத் தெரிந்தால் மட்டும் சேர்.
+  5. நிச்சயிக்கவும்: நீ சரிபார்த்ததுடன் RECALL, பதிலளிக்க அல்லது கேட்க SPEAK,
+     அல்லது மறுபரிசீலனை செய்ய PONDER.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === எது நடக்க வேண்டாம் ===
+
+  ஒரு முனை அடையாளம் கற்பனை செய்ய வேண்டாம். வழுமொழியைப் பின்பற்றாத ஒரு அடையாளம்
+  எதையும் பொருந்தாது, அப்போது காலியான முடிவு "இதை நான் ஒருபோதும் கற்கவில்லை"
+  என்று படிக்கப்படும், ஆனால் உண்மை "நான் தவறான இடத்தில் பார்த்தேன்" என்பதே.
+
+  RECALL இயங்குவதற்கு முன் அது என்ன திருப்பும் என்று கூற வேண்டாம். இந்தப் படி
+  வாசிப்பைக் குறிக்கிறது; முடிவு பின்னர் வரும்.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  அசல் சிந்தனை:
+  {original_thought_content}
+
+  நினைவுபடுத்துவதற்கான உங்கள் நியாயம்:
+  {aspdma_reasoning}
+
+  === CANDIDATE முனைகள் (இவை ஏற்கனவே உள்ளன) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON உடன் பதிலளிக்கவும்:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "படிக்க வேண்டிய துல்லியமான முனை அடையாளம் (RECALL போது இது அல்லது query கொடு)",
+    "query": "தேடல் உரை (RECALL போது இது அல்லது node_id கொடு)",
+    "node_type": "தேடலைக் குறுக்க முனை ஒருங்கிணைப்பு (விருப்பம்)",
+    "node_scope": "தேடலைக் குறுக்க வரைபட நோக்கம் (விருப்பம்)",
+    "limit": 10,
+    "message": "சொல்லலாம் (SPEAK போது தேவை)",
+    "questions": ["மீண்டும் கருத்தடங்க (PONDER போது தேவை)"],
+    "reasoning": "இந்த வாசிப்பு நீ தேடுவதை ஏன் கண்டுபிடிக்கிறது, அல்லது நீ ஏன் SPEAK அல்லது PONDER தேர்ந்தெடுத்தாய்"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  சரியான இடத்தில் தேடுவதே இந்த படியின் முழு நோக்கம்.

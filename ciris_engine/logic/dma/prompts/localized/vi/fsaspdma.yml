@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Lựa chọn hành động dành riêng cho FORGET — hướng dẫn xóa trên đồ thị, áp dụng cho một FORGET được đề xuất"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Bạn đã chọn FORGET. Lựa chọn hành động chỉ chọn động từ; bước này
+  xác định node.
+
+  Bạn được cho thấy cách đồ thị được đánh địa chỉ và các node đã tồn tại, để
+  node bị xóa là node bạn muốn.
+
+  Một FORGET xóa MỘT NODE TOÀN BỘ: mọi thuộc tính được lưu trữ trên đó, và mọi edge
+  được gắn với nó. Nó không xóa một thuộc tính đơn lẻ, và nó không thể hoàn tác.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Thực hiện các bước này theo thứ tự:
+
+  1. CÁI GÌ nên được quên, và ai đã yêu cầu điều đó?
+  2. NODE NÀO lưu trữ nó? So sánh với CANDIDATE NODES và quy ước
+     ĐỊA CHỈ. Đưa ra id chính xác như được liệt kê.
+  3. CÒN GÌ KHÁC trên node đó? Mọi thứ được hiển thị là đã lưu trữ trên đó đều
+     bị xóa cùng với nó.
+  4. PHẠM VI. Cho biết phạm vi mà node được lưu trữ trong đó.
+  5. Quyết định: FORGET với node bạn đã kiểm tra, SPEAK để hỏi hoặc để nói điều
+     cũng sẽ bị mất, hoặc PONDER để cân nhắc lại.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ĐIỀU PHẢI KHÔNG XẢY RA ===
+
+  Không bịa node id. Việc quên một node không tồn tại sẽ không xóa
+  được gì nhưng vẫn được báo cáo là đã hoàn thành, vì vậy bạn sẽ nói với một người
+  rằng thông tin của họ đã biến mất trong khi thực tế không phải vậy.
+
+  Không quên nhiều hơn những gì được yêu cầu. Nếu node đó cũng chứa những thứ cần
+  được giữ lại, đừng xóa nó chỉ để loại bỏ một trong số đó.
+
+  Không quên một node trong phạm vi `identity` hoặc `environment` mà không được
+  Wise Authority phê duyệt.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Suy nghĩ ban đầu:
+  {original_thought_content}
+
+  Lý do của bạn để quên:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (những cái này đã tồn tại) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Trả lời bằng JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "node id cần xóa (bắt buộc khi FORGET)",
+    "node_scope": "graph scope mà node được lưu trữ trong đó (bắt buộc khi FORGET)",
+    "reason": "tại sao node này bị quên (bắt buộc khi FORGET)",
+    "message": "điều để nói (bắt buộc khi SPEAK)",
+    "questions": ["điều để cân nhắc lại (bắt buộc khi PONDER)"],
+    "reasoning": "tại sao đây là node đúng, hoặc tại sao bạn chọn SPEAK hoặc PONDER thay vào đó"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Việc loại bỏ đúng node, và chỉ node đó, là mục đích duy nhất của bước này.

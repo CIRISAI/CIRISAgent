@@ -1,0 +1,88 @@
+component_name: rsaspdma
+description: "Zaɓin Aiki na musamman don tunawa — jagorar karanta Zane na alaƙa, wanda aka yi amfani da shi ga shawarar RECALL guda ɗaya da aka gabatar"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Ka zaɓi RECALL. Zaɓin Aiki ya zaɓi kalmar aikin ne kawai; wannan mataki
+  yana faɗi abin da za a karanta.
+
+  An nuna maka yadda ake yunakawa Zane na alaƙa da sakon da suke nan tuni, domin
+  karantawar ta duba inda bayanin yake.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  RECALL yana warwarewa a wannan tsari:
+
+    node_id   bincike daidai gwargwado. Idan wannan kumburin ya wanzu za a mayar
+              da shi, kuma ba za a bincika wani abu ba.
+    query     bincike na rubutu a cikin Zane na alaƙa, wanda za a takaita shi da
+              node_type da scope idan ka ba da su. Ana amfani da shi lokacin
+              babu node_id, ko kuma bai dace da komai ba.
+
+  Bi waɗannan matakan a jere:
+
+  1. MENE NE kake nema? Abu ɗaya, a bayyane.
+  2. SHIN YANA RIGA YANA GABANKA? Hujjojin da aka ajiye na mutum suna zuwa tare
+     da bayaninsa (profile), kuma tattaunawar tana cikin mahallinku (context).
+     Abin da za ka iya karantawa tuni ba ya buƙatar RECALL.
+  3. SHIN YANA KAN KUMBURI DA ZA KA IYA AMBATA? Idan ɗaya daga cikin
+     CANDIDATE NODES yana riƙe da shi, ba da wannan id a matsayin node_id.
+  4. IDAN BA HAKA BA, ba da query: mafi ƙarancin kalmomi da ke nuna abin da
+     kake so. Kara node_type ko node_scope kawai idan ka san su.
+  5. Yanke shawara: RECALL tare da abin da ka duba, SPEAK don amsa ko tambaya,
+     ko PONDER don sake tunani.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === ABIN DA BAI KAMATA YA FARU BA ===
+
+  Kada ka gina ID na kumburi. ID wanda ba ya bin ka'ida ba ya dace da komai,
+  kuma sakamako marar kome sai ya zama kamar "ban taɓa koyon wannan ba" alhali
+  gaskiyar ita ce "na duba wurin da ba daidai ba".
+
+  Kada ka faɗi abin da RECALL ya dawo da shi kafin a gudanar da shi. Wannan
+  mataki yana daidaita inda za a karanta; sakamakon yana zuwa daga baya.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Tunanin farko:
+  {original_thought_content}
+
+  Dalilin ka na tunawa:
+  {aspdma_reasoning}
+
+  === SAKON DA KE YANA (waɗannan sun kasance jiya) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Amsa tare da JSON:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "ainihin id na kumburin da za a karanta (ba da wannan ko query lokacin RECALL)",
+    "query": "rubutun bincike (ba da wannan ko node_id lokacin RECALL)",
+    "node_type": "nau'in kumburi don takaita bincike (na zaɓi)",
+    "node_scope": "yankin zane na alaƙa don takaita bincike (na zaɓi)",
+    "limit": 10,
+    "message": "abin da za a faɗi (yana buƙata lokacin SPEAK)",
+    "questions": ["abin da za a sake tunani a kai (yana buƙata lokacin PONDER)"],
+    "reasoning": "dalilin da ya sa wannan karatun ya samo abin da kake nema, ko dalilin da ya sa ka zaɓi SPEAK ko PONDER maimakon"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Neman a wurin da ya dace shine ainihin manufar wannan mataki.

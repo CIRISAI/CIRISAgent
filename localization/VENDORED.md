@@ -23,6 +23,10 @@ Every adapter mode is read-only except a real lane run. `--check`,
 throwaway directory and never write `ciris_engine/data/localized` or the
 committed stage. A test asserts this byte for byte.
 
+How the agent, client and website corpora relate (independent runs, mutual
+anchors) is in `CLAUDE.md`, "Three corpora, run independently, read by each
+other". This file is about the code.
+
 ## Upstream
 
 | | |
@@ -63,7 +67,7 @@ moves. They are not drift-checked.
 
 | Here | Derived from | What changed |
 |---|---|---|
-| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. **Sharded** (agent-only): a `plan` job (whole-run dry-run, so `--max-keys` still bounds the run, plus the locale assignment), a `shard` matrix (`shards` input, default 7 = 4 locales each, `fail-fast: false`, read-only token, never commits), and one `collect` job that refuses foreign locale files, gates the combined tree, merges the reports and commits once. The commit additionally waits for the gate to pass. An `extra_tm` input (default on, Accord only) adds read-only checkouts of CIRISAI/ciris-website and CIRISAI/CIRISClient as `--extra-tm` anchor corpora: `plan` resolves each default branch's commit ONCE and every shard checks out exactly those SHAs (plan outputs); the SHAs go into the step summary and, via `collect`, the commit message. |
+| `.github/workflows/i18n-lane.yml` | same path | No CIRISServer `.emitters` checkout and no client bundle mirrors (the agent has neither). Adds a `target` input (`accord` / `ui` / `prompts`) and Accord inputs. The client's strict gate is replaced by this check plus `accord_localize.py --verify` (Accord), `prompt_localize.py --verify --changed` (DMA prompts) or `tools/dev/check_localization_sync.py` (UI). The vendoring digest is checked, never re-recorded. Inputs reach the shell through env, via `localization/run_lane.sh`. **Sharded** (agent-only): a `plan` job (whole-run dry-run, so `--max-keys` still bounds the run, plus the locale assignment), a `shard` matrix (`shards` input, default 7 = 4 locales each, `fail-fast: false`, read-only token, never commits), and one `collect` job that refuses foreign locale files, gates the combined tree, merges the reports and commits once. The commit additionally waits for the gate to pass. An `extra_tm` input (default on, Accord and DMA prompts) adds read-only checkouts of CIRISAI/ciris-website and CIRISAI/CIRISClient as `--extra-tm` anchor corpora: `plan` resolves each default branch's commit ONCE and every shard checks out exactly those SHAs (plan outputs); the SHAs go into the step summary and, via `collect`, the commit message. |
 | `.github/workflows/i18n-{translate,evaluate,repair}.yml` | same paths | Same `workflow_dispatch` callers, same `i18n-write-<ref>` one-writer concurrency group. They add the agent inputs, and `accord_units` defaults to one unit (`section0`). `mode` offers `fast` only (see "Local divergences"). They also take `shards`. |
 | `tools/dev/check_localize_vendoring.py` | `packaging/check_vendoring.py` | Same per-file-digest pattern, applied to this record instead of a `client/` tree digest. |
 
@@ -86,6 +90,7 @@ attribute that the vendored functions look up at call time.
     `prompts.language_guidance` excluded. That subtree is a per-language
     primer, not a translation.
   - `LOCALIZE_TARGET=accord` targets the staged Accord bundle.
+  - `LOCALIZE_TARGET=prompts` targets the staged DMA prompt bundle.
 - `localization/accord_segments.py` segments the Accord into one key per
   non-blank line and reassembles it from skeleton + values. The round trip is
   lossless for the English source and for all 29 shipped locales.
@@ -97,6 +102,38 @@ attribute that the vendored functions look up at call time.
   agent UI's translated strings as extra terminology anchors (ranked after
   the accord TM, bounded per key and per request, never written as values).
   That is a replacement `anchors_for` hook, not an edit to `localize.py`.
+- `localization/prompt_localize.py` is the `prompts` target: the DMA prompt
+  templates (`ciris_engine/logic/dma/prompts/localized/<lang>/*.yml`). It
+  stages every translatable top-level field as one key, `<template>.<field>`,
+  in a temporary bundle; runs `localize.py`'s own CLI over it with the backoff
+  wrapper and a rule block appended to the three system prompts (these are
+  instruction-prompt blocks, not UI labels: keep `{{ }}`, JSON field names,
+  action verbs and backticked identifiers verbatim); then writes each accepted
+  value into the locale's YAML in place, leaving every other byte alone.
+  - **A field byte-identical to the English source counts as missing.** A new
+    template is translated by committing English copies in the 28 locale
+    folders (the completeness test requires the files) and dispatching the
+    translate lane; the chain-localization tests fail until it has run.
+  - `ENGLISH_BY_DESIGN` lists the three fields #974 left in English for every
+    locale. They are never staged.
+  - A value is written only if it still renders (`prompt_problems`): same
+    placeholders, same doubled braces, `str.format` succeeds, same JSON field
+    names, no lost action verb or backticked identifier. A rejected value is
+    not written, the field stays English, and the run exits non-zero.
+  - **Translation memory** (a replacement `anchors_for` hook): for the target
+    language, the locale's other DMA prompt blocks (same field of a sister
+    template first, then shared vocabulary; a block that fails
+    `prompt_problems` is not offered), lines of its shipped ethics text, and,
+    through `accord_localize.load_extra_tm` with its quality screen unchanged,
+    the website's, the CIRISClient apps' and the agent UI's strings. The agent
+    UI is always read; `--extra-tm DIR` adds a website or client checkout, and
+    the lane pins both exactly as it does for the Accord. Anchors only, never
+    values. The vendored default caps an anchor at 240 characters, which
+    excludes nearly every prompt block; this hook allows 1,600.
+  - `--verify` is the lane's gate; with `--changed` it blocks only on fields
+    whose value differs from HEAD, so standing debt is printed but cannot fail
+    a run that did not write it. `--check`, `--dry-run`, `--verify` and the
+    evaluate lane never write a prompt file.
 - `localization/run_lane.sh` is the workflow entry point.
 - `localization/lane_shards.py` is the shard bookkeeping the lane's `plan`,
   `shard` and `collect` jobs share: the deterministic round-robin assignment

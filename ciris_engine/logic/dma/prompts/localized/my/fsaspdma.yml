@@ -1,0 +1,87 @@
+component_name: fsaspdma
+description: "မေ့ခြင်း-အထူးပြု လုပ်ဆောင်ချက်ရွေးချယ်မှု — graph ဖျက်ခြင်း လမ်းညွှန်ကို အဆိုပြုထားသော FORGET တစ်ခုအပေါ် အသုံးချထားသည်"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  သင်သည် FORGET ကို ရွေးချယ်ပြီးပါပြီ။ Action Selection သည် ကြိယာကိုသာ
+  ရွေးချယ်ခဲ့ပြီး၊ ဤအဆင့်သည် node ကို အမည်ပေးသည်။
+
+  Graph ကို မည်သို့လိပ်စာပေးသည်နှင့် မည်သည့် node များ ရှိနှင့်ပြီးဖြစ်သည်ကို
+  သင့်အားပြသထားသည့်အတွက် ဖယ်ရှားသော node သည် သင်ရည်ရွယ်သည့် node
+  အမှန်ဖြစ်သည်။
+
+  FORGET တစ်ခုသည် NODE တစ်ခုလုံးကို ဖယ်ရှားသည်: ၎င်းတွင် သိမ်းဆည်းထားသော
+  attribute အားလုံးနှင့် ၎င်းနှင့် ချိတ်ဆက်ထားသော edge အားလုံးပါ ပါဝင်သည်။
+  attribute တစ်ခုတည်းကို ဖယ်ရှားခြင်း မဟုတ်ဘဲ၊ ပြန်ပြင်၍လည်း မရပါ။
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  ဤအရာများကို အစီအစဉ်အတိုင်း လုပ်ဆောင်ပါ:
+
+  1. မည်သည့်အရာကို မေ့ရမည်ဖြစ်ပြီး၊ မည်သူက တောင်းဆိုခဲ့သနည်း?
+  2. မည်သည့် node တွင် ၎င်းရှိသနည်း? CANDIDATE NODES နှင့် လိပ်စာ
+     ပုံသဏ္ဍာန်ကို နှိုင်းယှဉ်ပါ။ id ကို စာရင်းတွင် ဖော်ပြထားသည့်အတိုင်း တိကျစွာ ပေးပါ။
+  3. ထို node တွင် အခြားမည်သည့်အရာ ရှိသနည်း? ၎င်းတွင် သိမ်းဆည်းပြီးဖြစ်ကြောင်း
+     ပြသထားသည့် အရာအားလုံးသည် ၎င်းနှင့်အတူ ဖယ်ရှားခံရမည်။
+  4. အဆင့်သတ်။ node သိမ်းဆည်းထားသည့် scope ကို ပေးပါ။
+  5. ဆုံးဖြတ်ပါ - သင်စစ်ဆေးပြီးသော node ဖြင့် FORGET (မေ့ပါ)၊ မေးရန် သို့မဟုတ်
+     အခြားဆုံးရှုံးနိုင်သည့်အရာကို ပြောရန် SPEAK (ပြောပါ)၊ သို့မဟုတ် ပြန်လည်စဉ်းစားရန်
+     PONDER (စဉ်းစားပါ)။
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === မည်သည်မျှ ဖြစ်ပွားပေးမည်မဟုတ် ===
+
+  Node id ကို ဖန်တီးမထားပါနှင့်။ မရှိသော node ကို မေ့ခြင်းသည် မည်သည့်အရာကိုမျှ
+  မဖယ်ရှားနိုင်ဘဲ ပြီးစီးပြီဟု အစီရင်ခံသွားမည်ဖြစ်ပြီး၊ ထို့ကြောင့် သင်သည်
+  ပုဂ္ဂိုလ်တစ်ဦးအား သူ၏ အချက်အလက် ပျောက်ဆုံးသွားပြီဟု ပြောလိုက်မည်ဖြစ်သော်လည်း
+  အမှန်မှာ ပျောက်ဆုံးသွားခြင်း မဟုတ်ပါ။
+
+  တောင်းဆိုသည်ထက် ပို၍ မေ့ပါနှင့်။ node တွင် ထိန်းသိမ်းထားသင့်သည့် အခြားအရာများ
+  ပါရှိနေပါက၊ ၎င်းတို့အနက် တစ်ခုကို ဖယ်ရှားရန်အတွက် node တစ်ခုလုံးကို
+  မဖယ်ရှားပါနှင့်။
+
+  Wise Authority အတည်ပြုချက်မပါဘဲ `identity` သို့မဟုတ် `environment` scope ရှိ
+  node ကို မေ့ပါနှင့်။
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  မူလအတွေးအခေါ်:
+  {original_thought_content}
+
+  မေ့ရန်ခွင့်ပြုလုပ်ချက်ဆိုင်ရာ သင့်လျင်းပွားချက်:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (ဤ node များ ရှိနှင့်ပြီးဖြစ်သည်) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON အားဖြင့် အဆိုပြုသည်:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "ဖယ်ရှားမည့် node id (FORGET နှင့်အတူ လိုအပ်သည်)",
+    "node_scope": "node သိမ်းဆည်းထားသည့် graph scope (FORGET နှင့်အတူ လိုအပ်သည်)",
+    "reason": "ဤ node ကို အဘယ်ကြောင့် မေ့နေသည် (FORGET နှင့်အတူ လိုအပ်သည်)",
+    "message": "ပြောရမည့်အရာ (SPEAK နှင့်အတူ လိုအပ်သည်)",
+    "questions": ["ပြန်လည်စဉ်းစားမည့်အရာ (PONDER နှင့်အတူ လိုအပ်သည်)"],
+    "reasoning": "အဘယ်ကြောင့် ၎င်းသည် မှန်ကန်သော node ဖြစ်သည်၊ သို့မဟုတ် အဘယ်ကြောင့် SPEAK သို့မဟုတ် PONDER ကို ယင်းအစား ရွေးချယ်ခဲ့သည်"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  မှန်ကန်သော node ကိုသာ ဖယ်ရှားခြင်းသည် ဤအဆင့်၏ အဓိကရည်ရွယ်ချက် ဖြစ်သည်။

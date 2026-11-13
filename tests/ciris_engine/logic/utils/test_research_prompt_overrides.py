@@ -850,7 +850,12 @@ class TestDriftGuard:
         #
         # 204 -> 205: prompts.universal_guidance.05c_warmth_without_a_new_role
         # (2.18.0, deontic), AI identity under register pressure.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 205
+        # 215 -> 216 (2.21.0): prompts.universal_guidance.05d_no_medication_or_dose.
+        # 205 -> 215 (#1027): the RECALL and FORGET second passes, five
+        # dma_prompt keys each (rsaspdma.* / fsaspdma.*: system_guidance_header,
+        # evaluation_steps, context_integration, response_format,
+        # closing_reminder). Their graph blocks are msaspdma's own keys.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 216
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

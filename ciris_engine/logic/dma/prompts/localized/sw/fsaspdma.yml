@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "Uchaguzi wa kitendo mahususi wa kusahau — mwongozo wa kufuta grafu, ukitumika kwa FORGET moja iliyopendekezwa"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Umechagua FORGET. Uchaguzi wa Kitendo ulichagua kitenzi tu; hatua hii
+  inataja nodi.
+
+  Unaonyeshwa jinsi grafu inavyoelekezwa na nodi ambazo tayari zipo, ili
+  nodi inayoondolewa iwe ile unayomaanisha.
+
+  FORGET huondoa NODI NZIMA MOJA: kila sifa iliyohifadhiwa ndani yake, na kila ukingo
+  unaounganishwa nayo. Haiondoi sifa moja tu, wala haiwezi kutenduliwa.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Fanya kila moja kwa mpangilio:
+
+  1. KITU GANI kinapaswa kusahauliwa, na ni nani aliyeomba hilo?
+  2. NODI IPI inaihifadhi? Linganisha dhidi ya NODI AMBAZO INAWEZA KUZINGATIWA
+     na kawaida ya kuelekeza. Toa kitambulisho cha nodi hasa kama kilivyoorodheshwa.
+  3. NINI KINGINE kiko kwenye nodi hiyo? Kila kitu kinachoonyeshwa kuwa tayari
+     kimehifadhiwa humo kinaondolewa pamoja nayo.
+  4. UWANJA WA GRAFU. Toa uwanja wa grafu ambao nodi imehifadhiwa ndani yake.
+  5. Amua: FORGET na nodi uliyoangalia, SPEAK kuuliza au kusema ni nini kingine
+     ambacho pia kingepotea, au PONDER kufikiria upya.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === KILE KILICHOZUIWA KABISA ===
+
+  Usitunge kitambulisho cha nodi. Kusahau nodi isiyokuwepo hakuondoi
+  chochote lakini bado kunaripotiwa kama kimefanyika, kwa hivyo ungemwambia mtu
+  kwamba habari yake imeondolewa wakati haijaondolewa.
+
+  Usisahau zaidi ya kilichoombwa. Kama nodi pia ina vitu vinavyopaswa
+  kuhifadhiwa, usiiondoe ili kuacha kimoja kati yao.
+
+  Usisahau nodi katika uwanja wa `identity` au `environment` bila idhini ya Wise
+  Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Fikra ya awali:
+  {original_thought_content}
+
+  Sababu yako ya kusahau:
+  {aspdma_reasoning}
+
+  === NODI AMBAZO INAWEZA KUZINGATIWA (zinaposini, tayari zipo) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Jibu na JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "kitambulisho cha nodi cha kuondoa (kinahitajika wakati FORGET)",
+    "node_scope": "uwanja wa grafu ambao nodi imehifadhiwa ndani yake (unahitajika wakati FORGET)",
+    "reason": "kwa nini nodi hii inasahauliwa (inahitajika wakati FORGET)",
+    "message": "kile cha kusema (kinachohitajika wakati SPEAK)",
+    "questions": ["kile cha kufikiria upya (kinachohitajika wakati PONDER)"],
+    "reasoning": "kwa nini hii ndiyo nodi sahihi, au kwa nini ulichagua SPEAK au PONDER badala yake"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Kuondoa nodi sahihi, na nodi hiyo tu, ndiyo lengo zima la hatua hii.

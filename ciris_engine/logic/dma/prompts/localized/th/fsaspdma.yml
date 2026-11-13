@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "การเลือกการกระทำเฉพาะการลืม — คู่มือการลบกราฟ นำไปใช้กับ FORGET ที่เสนอหนึ่งรายการ"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  คุณได้เลือก FORGET แล้ว การเลือกการกระทำเลือกเพียงคำกริยาเท่านั้น ขั้นตอนนี้
+  ระบุชื่อ node
+
+  คุณจะได้เห็นว่ากราฟถูกอ้างอิงอย่างไร และ node ที่มีอยู่แล้ว เพื่อให้
+  node ที่ถูกลบเป็น node ที่คุณหมายถึงจริงๆ
+
+  การ FORGET จะลบ node ทั้งหมดหนึ่งตัว: ทุก attribute ที่เก็บไว้บนมัน และทุก edge
+  ที่เชื่อมต่อกับมัน มันไม่ได้ลบ attribute เดียว และไม่สามารถเลิกทำได้
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  ทำตามนี้ตามลำดับ:
+
+  1. อะไรควรถูกลืม และใครเป็นผู้ขอให้ลืม?
+  2. node ใดเก็บสิ่งนั้นไว้? เปรียบเทียบกับ CANDIDATE NODES และรูปแบบการอ้างอิง
+     ให้ id ตามที่ระบุไว้ทุกประการ
+  3. มีอะไรอื่นอีกบน node นั้น? ทุกสิ่งที่แสดงว่าถูกเก็บไว้บน node นั้นแล้ว
+     จะถูกลบไปพร้อมกัน
+  4. SCOPE: ให้ scope ที่ node นั้นถูกเก็บไว้
+  5. ตัดสินใจ: FORGET ด้วย node ที่คุณได้ตรวจสอบแล้ว, SPEAK เพื่อถามหรือบอกว่า
+     อะไรจะสูญหายไปด้วย หรือ PONDER เพื่อพิจารณาใหม่
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === สิ่งที่ต้องไม่เกิดขึ้น ===
+
+  อย่าประดิษฐ์ node id ขึ้นมา การลืม node ที่ไม่มีอยู่จริงจะไม่ลบอะไรเลย
+  แต่ยังคงถูกรายงานว่าสำเร็จ ดังนั้นคุณจะบอกบุคคลหนึ่งว่าข้อมูลของพวกเขาหายไป
+  ทั้งที่ความจริงไม่ได้หายไป
+
+  อย่าลืมมากกว่าที่ถูกขอ ถ้า node นั้นยังเก็บสิ่งอื่นที่ควรเก็บไว้ด้วย
+  อย่าลบมันเพื่อทิ้งสิ่งใดสิ่งหนึ่งไป
+
+  อย่าลืม node ใน `identity` หรือ `environment` scope โดยไม่ได้รับการอนุมัติ
+  จาก Wise Authority
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  ความคิดเดิม:
+  {original_thought_content}
+
+  เหตุผลของคุณสำหรับการลืม:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (สิ่งเหล่านี้มีอยู่แล้ว) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  ตอบด้วย JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "node id ที่จะลบ (จำเป็นเมื่อ FORGET)",
+    "node_scope": "graph scope ที่ node ถูกเก็บไว้ (จำเป็นเมื่อ FORGET)",
+    "reason": "ทำไม node นี้จึงถูกลืม (จำเป็นเมื่อ FORGET)",
+    "message": "สิ่งที่จะพูด (จำเป็นเมื่อ SPEAK)",
+    "questions": ["สิ่งที่จะพิจารณาใหม่ (จำเป็นเมื่อ PONDER)"],
+    "reasoning": "ทำไม node นี้จึงถูกต้อง หรือทำไมคุณจึงเลือก SPEAK หรือ PONDER แทน"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  การลบ node ที่ถูกต้อง และเฉพาะ node นั้น คือประเด็นทั้งหมดของขั้นตอนนี้

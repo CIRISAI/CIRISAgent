@@ -91,10 +91,11 @@ class ActionInstructionGenerator:
             return self._format_memory_action_schema("RECALL")
 
         elif action_type == HandlerActionType.FORGET:
-            # Use flat field names matching ASPDMALLMResult
+            # No fields: FSASPDMA names the node, with the graph in front of it (#1027).
             return (
-                "FORGET: forget_node_id (string, required), forget_reason (string, required)\n"
-                "For user nodes: Use numeric Discord IDs like 'user/537080239679864862' as forget_node_id."
+                "FORGET: no additional fields.\n"
+                "Say in your reasoning what should be forgotten and why. "
+                "A follow-up step shows you the nodes that exist and identifies the one to remove."
             )
 
         elif action_type == HandlerActionType.DEFER:
@@ -163,36 +164,28 @@ class ActionInstructionGenerator:
         )
 
     def _format_memory_action_schema(self, action_name: str) -> str:
-        """Format schema for memory-related actions (MEMORIZE, RECALL)."""
+        """What ASPDMA is told about MEMORIZE and RECALL: when to pick them, not how to fill them.
+
+        The node, its attributes and the query are settled by the verb's second
+        pass (MSASPDMA / RSASPDMA), which has the graph's addressing conventions
+        and the nodes that already exist. ASPDMA had neither, and the fields it
+        used to fill here were discarded (#1027).
+        """
         if action_name == "MEMORIZE":
-            # Use flat field names matching ASPDMALLMResult
-            base_schema = (
-                "MEMORIZE: memorize_node_type (string), memorize_content (string), "
-                "memorize_scope (string: local|identity|environment|community)"
-            )
-
-            guidance = [
-                "\nFor memorize_node_type: use 'user' for user data, 'channel' for channel data, "
-                "'concept' for facts/beliefs/knowledge, 'agent' for agent data.",
+            return (
+                "MEMORIZE: memorize_scope (string: local|identity|environment|community)\n"
                 "For memorize_scope: use 'local' for user/channel data, 'identity' for personal "
-                "facts/beliefs, 'environment' for external/internet data.",
-            ]
-
-            return base_schema + "\n".join(guidance)
+                "facts/beliefs, 'environment' for external/internet data.\n"
+                "Do not choose a node or attributes here. "
+                "A follow-up step shows you the graph's conventions and the nodes that already exist."
+            )
 
         elif action_name == "RECALL":
-            # Use flat field names matching ASPDMALLMResult
-            base_schema = (
-                "RECALL: recall_query (string, optional), recall_node_type (string, optional), "
-                "recall_scope (string: local|identity|environment, optional), recall_limit (integer, default: 10)"
+            return (
+                "RECALL: no additional fields.\n"
+                "Say in your reasoning what you are looking for. "
+                "A follow-up step builds the query against the nodes that exist."
             )
-
-            guidance = [
-                "\nUse recall_query to search by text, recall_node_type to filter by type.",
-                "At least one of recall_query or recall_node_type should be provided.",
-            ]
-
-            return base_schema + "\n".join(guidance)
 
         # Should not reach here
         return f"{action_name}: {{}}"
@@ -283,7 +276,7 @@ class ActionInstructionGenerator:
                 "name": tool_name,
                 "service": service_name,
                 "description": tool_info.description,
-                "parameters": tool_info.parameters.model_dump() if tool_info.parameters else {},
+                "parameters": (tool_info.parameters.model_dump() if tool_info.parameters else {}),
             }
             if hasattr(tool_info, "when_to_use") and tool_info.when_to_use:
                 enhanced_info["when_to_use"] = tool_info.when_to_use

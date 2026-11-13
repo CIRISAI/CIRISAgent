@@ -1,0 +1,72 @@
+component_name: fsaspdma
+description: "ਭੁੱਲਣ-ਵਿਸ਼ੇਸ਼ ਕਾਰਵਾਈ ਦੀ ਚੋਣ — ਗ੍ਰਾਫ਼-ਮਿਟਾਉਣ ਵਾਲੀ ਗਾਈਡ, ਇੱਕ ਪ੍ਰਸਤਾਵਿਤ FORGET ਉੱਤੇ ਲਾਗੂ ਕੀਤੀ ਗਈ"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  ਤੁਸੀਂ FORGET ਚੁਣਿਆ ਹੈ। ਕਾਰਵਾਈ ਦੀ ਚੋਣ ਨੇ ਸਿਰਫ਼ verb ਚੁਣਿਆ ਹੈ; ਇਹ ਕਦਮ node ਨਿਰਧਾਰਤ ਕਰਦਾ ਹੈ।
+
+  ਤੁਹਾਨੂੰ ਦਿਖਾਇਆ ਜਾਂਦਾ ਹੈ ਕਿ ਗ੍ਰਾਫ਼ ਨੂੰ ਕਿਵੇਂ address ਕੀਤਾ ਜਾਂਦਾ ਹੈ ਅਤੇ ਉਹ nodes ਜੋ ਪਹਿਲਾਂ ਤੋਂ ਮੌਜੂਦ ਹਨ, ਤਾਂ ਜੋ ਹਟਾਇਆ ਗਿਆ node ਉਹੀ ਹੋਵੇ ਜਿਸਦਾ ਤੁਸੀਂ ਮਤਲਬ ਰੱਖਦੇ ਹੋ।
+
+  ਇੱਕ FORGET ਇੱਕ ਪੂਰੇ NODE ਨੂੰ ਹਟਾਉਂਦਾ ਹੈ: ਉਸ ਉੱਤੇ stored ਹਰ attribute, ਅਤੇ ਇਸ ਨਾਲ ਜੁੜਿਆ ਹਰ edge। ਇਹ ਇੱਕ ਇਕੱਲੇ attribute ਨੂੰ ਨਹੀਂ ਹਟਾਉਂਦਾ, ਅਤੇ ਇਹ undone ਨਹੀਂ ਹੁੰਦਾ।
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  ਇਨ੍ਹਾਂ ਨੂੰ ਕ੍ਰਮ ਵਿੱਚ ਕਰੋ:
+
+  1. ਕੀ ਭੁੱਲਣਾ ਚਾਹੀਦਾ ਹੈ, ਅਤੇ ਕਿਸ ਨੇ ਇਸ ਲਈ ਕਿਹਾ?
+  2. ਕਿਹੜਾ NODE ਇਸ ਨੂੰ ਰੱਖਦਾ ਹੈ? CANDIDATE NODES ਅਤੇ addressing convention ਦੇ ਵਿਰੁੱਧ compare ਕਰੋ। id ਬਿਲਕੁਲ ਉਸੇ ਤਰ੍ਹਾਂ ਦਿਓ ਜਿਵੇਂ ਇਹ ਸੂਚੀਬੱਧ ਹੈ।
+  3. ਉਸ node ਉੱਤੇ ਹੋਰ ਕੀ ਹੈ? ਜੋ ਵੀ ਪਹਿਲਾਂ ਤੋਂ ਉਸ ਉੱਤੇ store ਦਿਖਾਇਆ ਗਿਆ ਹੈ, ਉਹ ਇਸ ਦੇ ਨਾਲ ਹੀ ਹਟਾਇਆ ਜਾਂਦਾ ਹੈ।
+  4. SCOPE. ਉਹ scope ਦਿਓ ਜਿਸ ਵਿੱਚ node store ਹੈ।
+  5. Decide ਕਰੋ: ਆਪਣੇ checked node ਦੇ ਨਾਲ FORGET, ਪੁੱਛਣ ਲਈ ਜਾਂ ਇਹ ਦੱਸਣ ਲਈ ਕਿ ਹੋਰ ਕੀ ਗੁਆਚ ਜਾਵੇਗਾ SPEAK, ਜਾਂ reconsider ਲਈ PONDER।
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ਜੋ ਨਹੀਂ ਹੋਣਾ ਚਾਹੀਦਾ ===
+
+  ਇੱਕ node id invent ਨਹੀਂ ਕਰੋ। ਇੱਕ node ਜੋ ਮੌਜੂਦ ਨਹੀਂ ਹੈ ਉਸ ਨੂੰ ਭੁੱਲਣ ਨਾਲ ਕੁਝ ਵੀ ਨਹੀਂ ਹਟਦਾ ਅਤੇ ਫਿਰ ਵੀ ਇਸ ਨੂੰ ਪੂਰਾ ਹੋਇਆ ਦੱਸਿਆ ਜਾਂਦਾ ਹੈ, ਇਸ ਲਈ ਤੁਸੀਂ ਕਿਸੇ ਵਿਅਕਤੀ ਨੂੰ ਦੱਸੋਗੇ ਕਿ ਉਨ੍ਹਾਂ ਦੀ ਜਾਣਕਾਰੀ ਖਤਮ ਹੋ ਗਈ ਹੈ ਜਦੋਂ ਕਿ ਅਜਿਹਾ ਨਹੀਂ ਹੈ।
+
+  ਜੋ ਪੁੱਛਿਆ ਗਿਆ ਸੀ ਉਸ ਤੋਂ ਵੱਧ ਭੁੱਲੋ ਨਾ। ਜੇ node ਉੱਤੇ ਅਜਿਹੀਆਂ ਚੀਜ਼ਾਂ ਵੀ ਹਨ ਜਿਨ੍ਹਾਂ ਨੂੰ ਰੱਖਿਆ ਜਾਣਾ ਚਾਹੀਦਾ ਹੈ, ਤਾਂ ਉਨ੍ਹਾਂ ਵਿੱਚੋਂ ਇੱਕ ਨੂੰ ਛੱਡਣ ਲਈ ਇਸ ਨੂੰ ਨਾ ਹਟਾਓ।
+
+  Wise Authority approval ਤੋਂ ਬਿਨਾ `identity` ਜਾਂ `environment` scope ਵਿੱਚ ਕੋਈ node ਭੁੱਲੋ ਨਾ।
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  ਮੂਲ ਵਿਚਾਰ:
+  {original_thought_content}
+
+  ਭੁੱਲਣ ਲਈ ਤੁਹਾਡਾ ਤਰਕ:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (ਇਹ ਪਹਿਲਾਂ ਤੋਂ ਮੌਜੂਦ ਹਨ) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON ਨਾਲ respond ਕਰੋ:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "ਹਟਾਉਣ ਵਾਲਾ node id (FORGET ਲਈ ਜਰੂਰੀ)",
+    "node_scope": "graph scope ਜਿਸ ਵਿੱਚ node store ਹੈ (FORGET ਲਈ ਜਰੂਰੀ)",
+    "reason": "ਇਹ node ਕਿਉਂ ਭੁੱਲਿਆ ਜਾ ਰਿਹਾ ਹੈ (FORGET ਲਈ ਜਰੂਰੀ)",
+    "message": "ਕੀ ਕਹਿਣਾ ਹੈ (SPEAK ਲਈ ਜਰੂਰੀ)",
+    "questions": ["ਕੀ reconsider ਕਰਨਾ ਹੈ (PONDER ਲਈ ਜਰੂਰੀ)"],
+    "reasoning": "ਇਹ ਸਹੀ node ਕਿਉਂ ਹੈ, ਜਾਂ ਤੁਸੀਂ SPEAK ਜਾਂ PONDER ਕਿਉਂ ਚੁਣਿਆ"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  ਸਹੀ node ਨੂੰ ਹਟਾਉਣਾ, ਅਤੇ ਸਿਰਫ਼ ਉਸ node ਨੂੰ, ਇਸ ਕਦਮ ਦਾ ਪੂਰਾ ਮਕਸਦ ਹੈ।

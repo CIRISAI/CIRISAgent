@@ -1,0 +1,88 @@
+component_name: rsaspdma
+description: "Uchaguzi wa kitendo mahususi wa kurudisha — mwongozo wa kusoma grafu, ukitumika kwa RECALL moja iliyopendekezwa"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Umechagua RECALL. Uchaguzi wa Kitendo ulichagua kitenzi tu; hatua hii
+  inasema nini cha kusoma.
+
+  Unaonyeshwa jinsi grafu inavyoelekezwa na nodi ambazo tayari zipo, ili
+  usomaji uangalie mahali habari ilipo.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  RECALL hutatuliwa kwa mpangilio huu:
+
+    node_id   utafutaji sahihi. Kama nodi hiyo ipo inarudishwa, na hakuna kitu
+              kingine kinachotafutwa.
+    query     utafutaji wa maandishi wa grafu, unaopunguzwa na node_type na
+              uwanja unapoyatoa. Unatumika wakati hakuna node_id, au
+              haikulingana na chochote.
+
+  Fanya kila moja kwa mpangilio:
+
+  1. KITU GANI unachotafuta? Kitu kimoja, kilichosemwa waziwazi.
+  2. JE KIPO TAYARI MBELE YAKO? Ukweli uliohifadhiwa wa mtu unafika pamoja na
+     wasifu wao, na mazungumzo yako tayari katika muktadha wako. Kile unachoweza
+     kusoma tayari hakihitaji RECALL.
+  3. JE KIPO KWENYE NODI UNAYOWEZA KUITAJA? Kama mojawapo ya NODI AMBAZO
+     INAWEZA KUZINGATIWA inaihifadhi, toa kitambulisho hicho kama node_id.
+  4. VINGINEVYO toa query: maneno machache zaidi yanayotambulisha kile
+     unachotaka. Ongeza node_type au node_scope tu unapoyajua.
+  5. Amua: RECALL na kile ulichoangalia, SPEAK kujibu au kuuliza, au PONDER
+     kufikiria upya.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === KILE KILICHOZUIWA KABISA ===
+
+  Usitunge kitambulisho cha nodi. Kitambulisho kisichofuata kawaida hakilingani
+  na chochote, na matokeo tupu basi yanasomeka kama "sikuwahi kujifunza hili"
+  wakati ukweli ni "nilitazama mahali pasipo sahihi".
+
+  Usieleze kile RECALL ilichorudisha kabla haijatekelezwa. Hatua hii inashughulikia
+  usomaji; matokeo yanafika baadaye.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Fikra ya awali:
+  {original_thought_content}
+
+  Sababu yako ya kurudisha:
+  {aspdma_reasoning}
+
+  === NODI AMBAZO INAWEZA KUZINGATIWA (zinaposini, tayari zipo) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Jibu na JSON:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "kitambulisho cha nodi hasa cha kusoma (toa hiki au query wakati RECALL)",
+    "query": "maandishi ya utafutaji (toa hiki au node_id wakati RECALL)",
+    "node_type": "aina ya nodi kupunguza utafutaji (si lazima)",
+    "node_scope": "uwanja wa grafu kupunguza utafutaji (si lazima)",
+    "limit": 10,
+    "message": "kile cha kusema (kinachohitajika wakati SPEAK)",
+    "questions": ["kile cha kufikiria upya (kinachohitajika wakati PONDER)"],
+    "reasoning": "kwa nini usomaji huu unapata kile unachotafuta, au kwa nini ulichagua SPEAK au PONDER badala yake"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Kuangalia mahali sahihi ndiyo lengo zima la hatua hii.

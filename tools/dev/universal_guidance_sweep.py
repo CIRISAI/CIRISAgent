@@ -43,6 +43,7 @@ UNIVERSAL_PARTS = (
     "05_no_wellness_confirmation",
     "05b_no_stigma_words",
     "05c_warmth_without_a_new_role",
+    "05d_no_medication_or_dose",
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     "26b_user_symptom_direction",

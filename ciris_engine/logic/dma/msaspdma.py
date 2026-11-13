@@ -34,7 +34,7 @@ from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_localized_accord_text
 from ciris_engine.schemas.actions.parameters import MemorizeParams, PonderParams, SpeakParams
 from ciris_engine.schemas.dma.msaspdma import CandidateNode
-from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+from ciris_engine.schemas.dma.results import UNADDRESSED_NODE_ID, ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 from ciris_engine.schemas.types import JSONDict
@@ -46,6 +46,9 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 logger = logging.getLogger(__name__)
+
+#: Shown where the prompt lists what action selection proposed and it proposed nothing.
+_NOT_CHOSEN = "(not chosen yet — choose below)"
 
 
 class MSASPDMALLMResult(PromptCarrier):
@@ -184,6 +187,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             raise TypeError(f"MSASPDMA expects MemorizeParams, got {type(params)}")
 
         node = params.node
+        unaddressed = node.id == UNADDRESSED_NODE_ID
         attrs = node.attributes if isinstance(node.attributes, dict) else {}
         authorization = wa_authorization_of(context)
 
@@ -231,15 +235,25 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         user_message = context_block.format(
             original_thought_content=original_thought_content,
             aspdma_reasoning=aspdma_result.rationale or "",
-            proposed_node_id=node.id,
-            proposed_node_type=getattr(node.type, "value", str(node.type)),
+            # ASPDMA selects the verb and the scope, not the node (#1027), so
+            # there is normally no proposed id or type to show.
+            proposed_node_id=_NOT_CHOSEN if unaddressed else node.id,
+            proposed_node_type=(_NOT_CHOSEN if unaddressed else getattr(node.type, "value", str(node.type))),
             proposed_node_scope=getattr(node.scope, "value", str(node.scope)),
             proposed_attributes=", ".join(sorted(attrs)) or "(none)",
             candidate_nodes=self._format_candidates(candidates),
             system_owned_attributes=self._format_system_owned(self.system_owned_attributes()),
         )
 
+        return self._frame_messages(system_message, user_message)
 
+    def _frame_messages(self, system_message: str, user_message: str) -> List[JSONDict]:
+        """Wrap one system and one user message in the frame every DMA shares.
+
+        Accord, language guidance, crisis resources, then the evaluator's own
+        two messages. Shared with RSASPDMA and FSASPDMA so the three memory
+        second passes cannot drift apart on what precedes their guide.
+        """
         messages: List[JSONDict] = []
         accord_text = get_localized_accord_text(self.prompt_loader.language)
         if accord_text:
@@ -259,6 +273,18 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         messages.append({"role": "system", "content": system_message})
         messages.append({"role": "user", "content": user_message})
         return messages
+
+    def _graph_block(self, key: str) -> str:
+        """A block of the shared graph guide, read from msaspdma.yml in this thought's language.
+
+        What the graph is and how it is addressed is one description, used by
+        all three memory second passes. RSASPDMA and FSASPDMA read it from here
+        rather than carry a copy that could disagree with it.
+        """
+        value = self.prompt_loader.load_prompt_template("msaspdma").get_prompt(key)
+        if value is None:
+            raise ValueError(f"msaspdma prompt template missing required key: {key}")
+        return value
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
         """Adopt the thought's language so the guide renders localized."""

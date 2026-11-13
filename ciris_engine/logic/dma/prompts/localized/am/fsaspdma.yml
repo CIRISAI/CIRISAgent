@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "ለFORGET የተለየ የተግባር ምርጫ — ግራፉን የሚሰርዝ መመሪያ፣ በአንድ የቀረበ FORGET ላይ ተተግብሯል"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  FORGET መርጣችኋል። የተግባር ምርጫ ግሱን ብቻ መርጧል፤ ይህ ደረጃ ኖዱን ይሰይማል።
+
+  ግራፉ እንዴት አድራሻ እንደሚሰጠው እና አስቀድመው ያሉ ኖዶች ይታዩላችኋል፣ የሚወገደው
+  ኖድ እናንተ ማለት የፈለጋችሁት እንዲሆን።
+
+  አንድ FORGET አንድ ሙሉ ኖድ ያስወግዳል፦ በእሱ ላይ የተቀመጠውን እያንዳንዱን
+  ባህርይ፣ እና ከእሱ ጋር የተያያዘውን እያንዳንዱን ግንኙነት። አንድ ነጠላ ባህርይ
+  አያስወግድም፣ እና አይቀለበስም።
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  በዚህ ቅደም ተከተል አልፉ፦
+
+  1. ምን መረሳት አለበት፣ እና ማን ጠየቀው?
+  2. የትኛው ኖድ ይይዘዋል? ከእጩ ኖዶች እና ከአድራሻ አሰጣጡ ደንብ ጋር አወዳድሩ።
+     መለያውን በትክክል እንደተዘረዘረው ስጡ።
+  3. በዚያ ኖድ ላይ ሌላ ምን አለ? ቀድሞውኑ በእሱ ላይ እንደተከማቸ የሚታየው ሁሉ
+     ከእሱ ጋር ይወገዳል።
+  4. ክልል። ኖዱ የተከማቸበትን ክልል ስጡ።
+  5. ውሰኑ፦ ያረጋገጣችሁትን ኖድ ይዛችሁ FORGET፣ ለመጠየቅ ወይም ደግሞ ምን እንደሚጠፋ
+     ለመናገር SPEAK፣ ወይም መልሳችሁ ለማሰብ PONDER።
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === ምን መከሰት እንደሌለበት ===
+
+  የኖድ መለያ አትፍጠሩ (አትገምቱ)። የሌለውን ኖድ መርሳት ምንም አያስወግድም፣ ነገር ግን
+  እንደተፈጸመ ተደርጎ ይዘገባል፣ ስለዚህ መረጃቸው ያለ ቢሆንም ጠፍቷል ብላችሁ ለሰው
+  ትነግራላችሁ።
+
+  ከተጠየቀው በላይ አትርሱ። ኖዱ መቀመጥ ያለባቸውን ነገሮችም የያዘ ከሆነ፣ ከእነሱ
+  አንዱን ለማጥፋት ብለው አታስወግዱት።
+
+  ያለ Wise Authority ፈቃድ በ`identity` ወይም `environment` ክልል ውስጥ ያለን
+  ኖድ አትርሱ።
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  ዋናው ሀሳብ፦
+  {original_thought_content}
+
+  ለመርሳት ያላችሁ ምክንያት፦
+  {aspdma_reasoning}
+
+  === እጩ ኖዶች (አስቀድመው ያሉ) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  በJSON መልሱ፦
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "የሚወገደው የኖድ መለያ (FORGET ሲሆን ያስፈልጋል)",
+    "node_scope": "ኖዱ የተከማቸበት የግራፍ ክልል (FORGET ሲሆን ያስፈልጋል)",
+    "reason": "ይህ ኖድ ለምን እንደሚረሳ (FORGET ሲሆን ያስፈልጋል)",
+    "message": "የሚባለው ቃል (SPEAK ሲሆን ያስፈልጋል)",
+    "questions": ["እንደገና የሚታሰብበት ጥያቄ (PONDER ሲሆን ያስፈልጋል)"],
+    "reasoning": "ይህ ትክክለኛው ኖድ ለምን እንደሆነ፣ ወይም ለምን SPEAK ወይም PONDER እንደመረጣችሁ"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  ትክክለኛውን ኖድ ብቻ ማስወገድ የዚህ ደረጃ ዋና ነጥብ ነው።

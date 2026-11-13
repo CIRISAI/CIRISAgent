@@ -1,0 +1,83 @@
+component_name: fsaspdma
+description: "Pemilihan tindakan khusus-FORGET — panduan penghapusan graf, diterapkan pada satu FORGET yang diusulkan"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Anda telah memilih FORGET. Pemilihan tindakan hanya memilih kata kerjanya; langkah ini
+  menentukan nodenya.
+
+  Anda ditunjukkan bagaimana graf dialamatkan dan node yang sudah ada, sehingga
+  node yang dihapus adalah node yang Anda maksud.
+
+  Satu FORGET menghapus SATU NODE UTUH: setiap atribut yang tersimpan di dalamnya, dan setiap edge
+  yang terhubung dengannya. Ia tidak menghapus satu atribut saja, dan tidak dapat dibatalkan.
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  Lakukan ini dalam urutan:
+
+  1. APA yang harus dilupakan, dan siapa yang memintanya?
+  2. NODE MANA yang menyimpannya? Bandingkan dengan CANDIDATE NODES dan konvensi
+     PENGALAMATAN. Berikan id persis seperti yang tercantum.
+  3. APA LAGI yang ada pada node tersebut? Semua yang ditampilkan sebagai sudah
+     tersimpan di dalamnya akan terhapus bersamanya.
+  4. RUANG LINGKUP. Berikan ruang lingkup tempat node tersebut disimpan.
+  5. Putuskan: FORGET dengan node yang telah Anda periksa, SPEAK untuk bertanya
+     atau untuk mengatakan apa yang juga akan hilang, atau PONDER untuk
+     mempertimbangkan kembali.
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === APA YANG TIDAK BOLEH TERJADI ===
+
+  Jangan mengarang id node. Melupakan node yang tidak ada tidak menghapus
+  apa pun dan tetap dilaporkan sebagai berhasil, sehingga Anda akan memberi tahu seseorang
+  bahwa informasi mereka telah hilang padahal tidak.
+
+  Jangan melupakan lebih dari yang diminta. Jika node tersebut juga menyimpan hal-hal yang seharusnya
+  dipertahankan, jangan menghapusnya hanya untuk membuang salah satunya.
+
+  Jangan melupakan node dalam ruang lingkup `identity` atau `environment` tanpa persetujuan Wise
+  Authority.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Pemikiran awal:
+  {original_thought_content}
+
+  Alasan Anda untuk melupakan:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (ini sudah ada) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Merespons dengan JSON:
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "id node yang akan dihapus (wajib ketika FORGET)",
+    "node_scope": "graph scope tempat node disimpan (wajib ketika FORGET)",
+    "reason": "mengapa node ini dilupakan (wajib ketika FORGET)",
+    "message": "apa yang dikatakan (wajib ketika SPEAK)",
+    "questions": ["apa yang dipertimbangkan kembali (wajib ketika PONDER)"],
+    "reasoning": "mengapa ini adalah node yang benar, atau mengapa Anda memilih SPEAK atau PONDER sebagai gantinya"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Menghapus node yang benar, dan hanya node itu, adalah keseluruhan tujuan dari langkah ini.

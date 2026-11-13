@@ -1,0 +1,87 @@
+component_name: rsaspdma
+description: "Selección de acción específica de RECALL — la guía de lectura de grafos, aplicada a un RECALL propuesto"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Has seleccionado RECALL. La selección de acción eligió solo el verbo; este paso
+  indica qué leer.
+
+  Se te muestra cómo se direcciona el grafo y los nodos que ya existen, para que
+  la lectura busque donde está la información.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  Un RECALL se resuelve en este orden:
+
+    node_id   una búsqueda exacta. Si ese nodo existe, es devuelto, y nada
+              más es buscado.
+    query     una búsqueda de texto en el grafo, acotada por node_type y ámbito cuando
+              los proporcionas. Se usa cuando no hay node_id, o este no coincidió con nada.
+
+  Trabaja a través de estos en orden:
+
+  1. ¿QUÉ estás buscando? Una sola cosa, expresada claramente.
+  2. ¿YA ESTÁ FRENTE A TI? Los hechos almacenados de una persona llegan con su
+     perfil, y la conversación está en tu contexto. Lo que ya puedes leer
+     no necesita RECALL.
+  3. ¿ESTÁ EN UN NODO QUE PUEDES NOMBRAR? Si uno de los NODOS CANDIDATOS lo contiene,
+     da ese id como node_id.
+  4. DE LO CONTRARIO da un query: las menos palabras posibles que identifiquen lo que quieres. Agrega
+     node_type o node_scope solo cuando los conozcas.
+  5. Decide: RECALL con lo que has verificado, SPEAK para responder o preguntar, o
+     PONDER para reconsiderar.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === QUÉ NO DEBE SUCEDER ===
+
+  No inventes una identificación de nodo. Un id que no sigue la convención no
+  coincide con nada, y un resultado vacío entonces se lee como "nunca aprendí esto"
+  cuando la verdad es "busqué en el lugar equivocado".
+
+  No afirmes lo que un RECALL devolvió antes de que se haya ejecutado. Este paso
+  aborda la lectura; el resultado llega después.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Pensamiento original:
+  {original_thought_content}
+
+  Tu razonamiento para recordar:
+  {aspdma_reasoning}
+
+  === NODOS CANDIDATOS (ya existen) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Responde con JSON:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "identificación exacta del nodo a leer (da esto o query cuando RECALL)",
+    "query": "texto de búsqueda (da esto o node_id cuando RECALL)",
+    "node_type": "tipo de nodo para acotar una búsqueda (opcional)",
+    "node_scope": "alcance de grafo para acotar una búsqueda (opcional)",
+    "limit": 10,
+    "message": "qué decir (requerido cuando SPEAK)",
+    "questions": ["qué reconsiderar (requerido cuando PONDER)"],
+    "reasoning": "por qué esta lectura encuentra lo que buscas, o por qué elegiste SPEAK o PONDER en su lugar"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Buscar en el lugar correcto es el objetivo de este paso.

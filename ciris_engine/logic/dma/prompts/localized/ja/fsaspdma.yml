@@ -1,0 +1,82 @@
+component_name: fsaspdma
+description: "忘却固有のアクション選択 — グラフ削除ガイドを、提案された一つの FORGET に適用したもの"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. FSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# DELETING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  あなたは FORGET を選択しました。アクション選択は動詞のみを選びました；このステップは
+  ノードを指定します。
+
+  グラフがどのようにアドレスされるか、および既に存在するノードが表示されるため、
+  削除されるノードがあなたの意図するものであることを確認できます。
+
+  FORGET は一つのノード全体を削除します：そこに保存されているすべての属性、
+  およびそれに付随するすべてのエッジです。単一の属性を削除するのではなく、
+  また元に戻すことはできません。
+
+# PROCEDURAL — the method.
+evaluation_steps: |
+  順番にこれらを実行してください：
+
+  1. 何が忘却されるべきで、誰がそれを求めたのですか？
+  2. どのノードがそれを保持していますか？ 候補ノードとアドレッシング規約と
+     比較してください。id は記載されている通り正確に示してください。
+  3. そのノードには他に何がありますか？ そこに既に保存されていると示されて
+     いるものはすべて、それと共に削除されます。
+  4. スコープ。ノードが保存されているスコープを示してください。
+  5. 決定：チェック済みのノードで FORGET、尋ねるため、あるいは他に失われる
+     ものを伝えるために SPEAK、または再検討するために PONDER。
+
+# DEONTIC — what must not happen. Categorical, and safety-reviewable.
+memory_prohibitions: |
+  === 何が起きてはいけないか ===
+
+  ノード id を作り上げないでください。存在しないノードを忘却しても何も削除されませんが、
+  完了したと報告されるため、実際には消えていない情報をあなたは人に消えたと伝えることになります。
+
+  求められた以上を忘却しないでください。そのノードが保持すべき他のものも保持している場合、
+  そのうちの一つを削除するためにノード全体を削除してはいけません。
+
+  Wise Authority の承認なしに `identity` または `environment` スコープの
+  ノードを忘却しないでください。
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  元の思考：
+  {original_thought_content}
+
+  忘却の理由：
+  {aspdma_reasoning}
+
+  === 候補ノード（これらは既に存在する）===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  JSON で応答します：
+
+  {{
+    "final_action": "FORGET" | "SPEAK" | "PONDER",
+    "node_id": "削除するノード id（FORGET 時は必須）",
+    "node_scope": "ノードが保存されているグラフスコープ（FORGET 時は必須）",
+    "reason": "このノードが忘却される理由（FORGET 時は必須）",
+    "message": "言うこと（SPEAK 時は必須）",
+    "questions": ["再検討すること（PONDER 時は必須）"],
+    "reasoning": "これが正しいノードである理由、またはなぜ SPEAK か PONDER を選んだのか"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  正しいノード、そしてそのノードだけを削除することが、このステップの要点です。

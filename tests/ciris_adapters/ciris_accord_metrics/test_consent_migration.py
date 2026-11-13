@@ -109,7 +109,7 @@ def test_post_migration_boot_derives_consent_from_ceg(monkeypatch, tmp_path):
     assert adapter._consent_given is False
 
     with patch(
-        "ciris_engine.logic.services.governance.consent.attestation.current_community_grant_id",
+        "ciris_engine.logic.services.governance.consent.attestation.community_grant_in_force",
         return_value="att-123",
     ):
         with patch(
@@ -133,3 +133,50 @@ def test_granted_at_threads_into_claim():
     # default stays None (fresh opt-in stamps nothing retroactive)
     grant2 = build_community_consent_grant("key-1", "community-1")
     assert grant2.attestation_envelope.claim.granted_at is None
+
+
+def test_a_withdrawn_grant_does_not_re_arm_at_boot(monkeypatch, tmp_path):
+    """The owner withdrew: the grant row is still the newest, and a boot must not read it as consent.
+
+    Before the fix the adapter read ``current_community_grant_id`` (the revocation
+    target, withdrawn or not), set consent, and wrote a fresh grant with the reason
+    "prior grant withdrawn".
+    """
+    from ciris_engine.logic.services.governance.consent import attestation as att
+    from ciris_engine.logic.services.governance.consent import trace_sharing
+
+    class Corpus:
+        def __init__(self):
+            self.rows = [
+                {"attestation_id": "g-1", "attestation_type": "scores", "asserted_at": "2026-11-01T00:00:00Z"},
+                {"attestation_id": "w-1", "attestation_type": "withdraws", "asserted_at": "2026-11-02T00:00:00Z"},
+            ]
+            self.writes = 0
+
+        def list_attestations(self, query, cursor, limit, key_id):
+            import json
+
+            return json.dumps({"items": self.rows})
+
+        def attestation_upsert_local(self, payload):
+            self.writes += 1
+            return "g-2"
+
+    corpus = Corpus()
+    monkeypatch.delenv(att._FEATURE_FLAG_ENV, raising=False)
+    monkeypatch.setattr(att, "_resolve_engine", lambda: corpus)
+    monkeypatch.setattr(att, "_resolve_attesting_key_id", lambda: "agent-key")
+    monkeypatch.setattr(att, "canonical_community_key_id", lambda: None)
+    assert att.current_community_grant_id() == "g-1", "the withdrawn grant is still the newest row"
+
+    adapter = _mk_adapter(monkeypatch, tmp_path, env_consent=False)
+    granted = []
+    monkeypatch.setattr(trace_sharing, "grant_trace_sharing", lambda *a, **k: granted.append(a) or MagicMock())
+    with patch.object(adapter.metrics_service, "start", return_value=asyncio.sleep(0)):
+        asyncio.run(adapter.start())
+
+    assert adapter._consent_given is False
+    assert granted == []
+    assert corpus.writes == 0, "no new grant is written over a withdrawal"
+    assert adapter.metrics_service._derive_consent_from_ceg() is None
+    assert adapter.metrics_service._consent_given is False

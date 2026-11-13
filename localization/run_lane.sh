@@ -5,7 +5,7 @@
 # workflow inputs never get interpolated into a script body, then appends "$@"
 # (e.g. --dry-run, --mode batch, --report i18n-report.json).
 #
-#   TARGET          accord | ui
+#   TARGET          accord | ui | prompts
 #   LANE            translate | evaluate | repair
 #   ACCORD_VERSION  accord version (TARGET=accord)
 #   TM_VERSION      previous accord used as translation memory (TARGET=accord)
@@ -15,13 +15,13 @@
 #                   its shipped translation instead of a fresh draft (default false)
 #   EXTRA_TM        space-separated corpus roots (a ciris-website, CIRISClient or
 #                   CIRISAgent checkout) whose translated strings become extra
-#                   terminology anchors, never values (TARGET=accord; default none)
+#                   terminology anchors, never values (TARGET=accord or prompts; default none)
 #   UNITS           space-separated accord units; empty = every unit, one at a time
 #   KEYS            space-separated fnmatch patterns over flat dotted keys
 #   LANGS           space-separated locale codes; empty = all 28
 #   MAX_KEYS        refuse runs larger than this many key-values (accord: per unit)
 #   OVERWRITE       true = the translate lane replaces values that already exist
-#                   (TARGET=ui; localize.py --overwrite). For a deliberate
+#                   (TARGET=ui or prompts; localize.py --overwrite). For a deliberate
 #                   retranslation after an English change: pair it with exact
 #                   KEYS, never a broad pattern, so hand-written overrules stay.
 set -euo pipefail
@@ -45,8 +45,17 @@ case "${TARGET:-accord}" in
     cmd=(python3 localization/lane_backoff.py)
     if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
     ;;
+  prompts)
+    # The DMA prompt templates (ciris_engine/logic/dma/prompts/localized/<lang>/*.yml),
+    # staged as a key bundle by prompt_localize.py. A field still byte-identical
+    # to English counts as missing, so empty KEYS = "whatever is untranslated".
+    python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml
+    cmd=(python3 localization/prompt_localize.py)
+    if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
+    for d in ${EXTRA_TM:-}; do cmd+=(--extra-tm "$d"); done
+    ;;
   *)
-    echo "TARGET must be accord or ui, got '${TARGET}'" >&2
+    echo "TARGET must be accord, ui or prompts, got '${TARGET}'" >&2
     exit 2
     ;;
 esac

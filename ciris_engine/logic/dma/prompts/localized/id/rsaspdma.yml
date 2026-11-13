@@ -1,0 +1,89 @@
+component_name: rsaspdma
+description: "Pemilihan tindakan khusus-RECALL — panduan pembacaan graf, diterapkan pada satu RECALL yang diusulkan"
+version: "1.0"
+accord_header: true
+
+# ---------------------------------------------------------------------------
+# What the graph IS, how it is addressed and the scope table are NOT repeated
+# here. RSASPDMA composes `memory_model`, `addressing_convention` and
+# `scope_convention` from msaspdma.yml, so the three memory verbs read one
+# description of the graph, in the thought's language. Only what is specific to
+# READING lives in this file.
+#
+# SINGLE-CLASS BLOCKS, as in msaspdma.yml: if a sentence does not belong to the
+# block's class, it belongs in another block.
+# ---------------------------------------------------------------------------
+
+# PROCEDURAL — what this step is.
+system_guidance_header: |
+  Anda telah memilih RECALL. Pemilihan tindakan hanya memilih kata kerjanya; langkah ini
+  menyatakan apa yang akan dibaca.
+
+  Anda ditunjukkan bagaimana graf dialamatkan dan node yang sudah ada, sehingga
+  pembacaan mencari di tempat informasi tersebut berada.
+
+# PROCEDURAL — how a recall resolves, and the method.
+evaluation_steps: |
+  RECALL diselesaikan dalam urutan berikut:
+
+    node_id   pencarian yang tepat. Jika node tersebut ada, node itu dikembalikan,
+              dan tidak ada yang lain dicari.
+    query     pencarian teks pada graf, dipersempit oleh node_type dan scope
+              jika Anda memberikannya. Digunakan ketika tidak ada node_id, atau
+              tidak cocok dengan apa pun.
+
+  Lakukan ini dalam urutan:
+
+  1. APA yang Anda cari? Satu hal, dinyatakan dengan jelas.
+  2. APAKAH ITU SUDAH ADA DI DEPAN ANDA? Fakta tersimpan seseorang datang bersama
+     profil mereka, dan percakapan ada dalam konteks Anda. Apa yang sudah dapat
+     Anda baca tidak memerlukan RECALL.
+  3. APAKAH ITU ADA PADA NODE YANG DAPAT ANDA SEBUTKAN NAMANYA? Jika salah satu
+     dari CANDIDATE NODES menyimpannya, berikan id tersebut sebagai node_id.
+  4. JIKA TIDAK, berikan query: kata-kata paling sedikit yang mengidentifikasi apa
+     yang Anda inginkan. Tambahkan node_type atau node_scope hanya jika Anda
+     mengetahuinya.
+  5. Putuskan: RECALL dengan apa yang telah Anda periksa, SPEAK untuk menjawab
+     atau bertanya, atau PONDER untuk mempertimbangkan kembali.
+
+# DEONTIC — what must not happen.
+memory_prohibitions: |
+  === APA YANG TIDAK BOLEH TERJADI ===
+
+  Jangan mengarang id node. Id yang tidak mengikuti konvensi tidak cocok dengan
+  apa pun, dan hasil yang kosong kemudian dibaca sebagai "saya tidak pernah
+  mempelajari ini" padahal kebenarannya adalah "saya mencari di tempat yang salah".
+
+  Jangan menyatakan apa yang dikembalikan oleh RECALL sebelum RECALL dijalankan.
+  Langkah ini menangani pembacaan; hasilnya tiba sesudahnya.
+
+# CONTINGENT — runtime values only. No guidance, no prohibitions.
+context_integration: |
+  Pemikiran awal:
+  {original_thought_content}
+
+  Alasan Anda untuk mengingat kembali:
+  {aspdma_reasoning}
+
+  === CANDIDATE NODES (ini sudah ada) ===
+  {candidate_nodes}
+
+# PRAGMATIC — the wire contract.
+response_format: |
+  Merespons dengan JSON:
+
+  {{
+    "final_action": "RECALL" | "SPEAK" | "PONDER",
+    "node_id": "id node yang tepat untuk dibaca (berikan ini atau query ketika RECALL)",
+    "query": "teks pencarian (berikan ini atau node_id ketika RECALL)",
+    "node_type": "tipe node untuk mempersempit pencarian (opsional)",
+    "node_scope": "graph scope untuk mempersempit pencarian (opsional)",
+    "limit": 10,
+    "message": "apa yang dikatakan (wajib ketika SPEAK)",
+    "questions": ["apa yang dipertimbangkan kembali (wajib ketika PONDER)"],
+    "reasoning": "mengapa pembacaan ini menemukan apa yang Anda cari, atau mengapa Anda memilih SPEAK atau PONDER sebagai gantinya"
+  }}
+
+# DEONTIC — the closing categorical.
+closing_reminder: |
+  Mencari di tempat yang benar adalah keseluruhan tujuan dari langkah ini.

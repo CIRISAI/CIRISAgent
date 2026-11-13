@@ -41,12 +41,17 @@ class ConsentValidationError(Exception):
     pass
 
 
-class ConsentExpiredError(Exception):
+class ConsentExpiredError(ConsentNotFoundError):
     """
     Raised when accessing expired TEMPORARY consent.
 
     This error indicates that a TEMPORARY consent has exceeded its 14-day duration
     and is no longer valid. The consent record exists but is expired.
+
+    A subclass of ConsentNotFoundError, so a caller that only asks "is there live
+    consent?" reads it as before. A caller that would GRANT consent on "not
+    found" must catch this first (#1357): an expired record is not a new person,
+    and renewing it on the agent's own initiative is not the person's consent.
 
     Usage:
         - Treat as ConsentNotFoundError for most purposes

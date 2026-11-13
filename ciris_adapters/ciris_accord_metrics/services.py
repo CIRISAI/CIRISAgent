@@ -898,7 +898,7 @@ class AccordMetricsService:
         # `_consent_given`) only. The direct per-seal CEG read is the sovereign
         # (`engine=None`) path; wiring it in cohabitation is upstream
         # CIRISEdge#85. So the CEG grant reaches the seal INDIRECTLY: the
-        # adapter reads it at boot (current_community_grant_id → _consent_given)
+        # adapter reads it at boot (community_grant_in_force → _consent_given)
         # and that populates the config-fallback timestamp handed to LensClient.
         # We still resolve + pass the key_id so the sovereign path works
         # unchanged once/if the agent uses it.
@@ -2479,7 +2479,7 @@ class AccordMetricsService:
         The 2.9.6 fold made the ``consent:community_trust:v1`` grant THE consent
         artifact. In the cohabitation seal path lens-core gates on the
         config-fallback consent, so the service must TRANSLATE the grant into
-        that fallback. Reads ``current_community_grant_id`` (+ its ``asserted_at``
+        that fallback. Reads ``community_grant_in_force`` (+ its ``asserted_at``
         for a restart-stable timestamp). On a hit, sets ``_consent_given`` /
         ``_consent_timestamp`` (never clobbering an already-set timestamp) and
         returns the grant id; else returns None. Never raises — a broken read
@@ -2487,11 +2487,12 @@ class AccordMetricsService:
         """
         try:
             from ciris_engine.logic.services.governance.consent.attestation import (
+                community_grant_in_force,
                 current_community_grant_asserted_at,
-                current_community_grant_id,
             )
 
-            grant_id = current_community_grant_id()
+            # In force: a grant its owner has withdrawn is still the newest row.
+            grant_id = community_grant_in_force()
             if not grant_id:
                 return None
             self._consent_given = True

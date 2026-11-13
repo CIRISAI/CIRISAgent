@@ -81,7 +81,7 @@ def no_grant(monkeypatch):
     grant = {"id": None}
     from ciris_engine.logic.services.governance.consent import attestation
 
-    monkeypatch.setattr(attestation, "current_community_grant_id", lambda: grant["id"])
+    monkeypatch.setattr(attestation, "community_grant_in_force", lambda: grant["id"])
     monkeypatch.setattr(attestation, "current_community_grant_asserted_at", lambda: "2026-10-29T00:00:00Z")
     return grant
 

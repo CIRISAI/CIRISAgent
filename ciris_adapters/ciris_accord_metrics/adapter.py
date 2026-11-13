@@ -206,7 +206,7 @@ class AccordMetricsAdapter(Service):
 
         # CONSENT: the CEG grant (consent:community_trust:v1) is THE consent
         # artifact (2.9.6 #866). Boot order:
-        #   1. A standing CEG grant makes this a consenting boot — post-migration
+        #   1. A CEG grant IN FORCE (not withdrawn) makes this a consenting boot — post-migration
         #      installs carry no legacy consent sources at all.
         #   2. Otherwise a LEGACY consent source (adapter-config consent_given /
         #      CIRIS_ACCORD_METRICS_CONSENT env, incl. old COVENANT aliases) is
@@ -219,10 +219,13 @@ class AccordMetricsAdapter(Service):
         if not self._consent_given:
             try:
                 from ciris_engine.logic.services.governance.consent.attestation import (
-                    current_community_grant_id,
+                    community_grant_in_force,
                 )
 
-                if current_community_grant_id():
+                # In force, not merely present: the newest grant is still found
+                # after its owner withdraws it (it is the revocation target),
+                # and reading it here re-armed a withdrawn consent at boot.
+                if community_grant_in_force():
                     self._consent_given = True
                     logger.info("   consent derived from standing CEG community grant (post-migration boot)")
             except Exception as exc:  # noqa: BLE001 — best-effort

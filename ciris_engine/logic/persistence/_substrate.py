@@ -13,39 +13,21 @@ single PyO3 type registry, so the persist ``Engine`` handed to
 two separate wheels they were distinct PyClasses and Edge refused with
 ``'Engine' object is not an instance of 'Engine'`` (CIRISEdge#22 cohabitation).
 
-Prefer ``ciris_server``; fall back to the standalone wheels for partial dev
-environments that do not have the one wheel installed.
+One wheel only (2.22.0). The fallback to the standalone ``ciris_persist`` /
+``ciris_edge`` wheels is gone: it could load persist and edge as two separate
+native modules, the double load behind the lost-wakeup hang (CIRISEdge#988),
+and ciris-server 0.5.247 confirmed ``Engine`` and ``init_edge_runtime`` import
+from the one wheel as one ``.so``. A missing ``ciris_server`` is an install
+error and fails at import, loudly, instead of degrading.
 """
 
 from __future__ import annotations
 
-try:
-    from ciris_server import Engine, NotFound, reset_engine  # type: ignore[import-not-found, import-untyped, unused-ignore]
-    from ciris_server.edge import init_edge_runtime  # type: ignore[import-not-found, import-untyped, unused-ignore]
+from ciris_server import Engine, NotFound, init_tracing, reset_engine  # type: ignore[import-not-found, import-untyped, unused-ignore]
+from ciris_server.edge import init_edge_runtime  # type: ignore[import-not-found, import-untyped, unused-ignore]
 
-    SUBSTRATE_SOURCE = "ciris_server"
-except ImportError:  # pragma: no cover - dev env without the consolidated wheel
-    from ciris_persist import Engine, NotFound, reset_engine  # type: ignore[import-not-found, import-untyped, unused-ignore]
-
-    try:
-        from ciris_edge.ciris_edge import init_edge_runtime  # type: ignore[import-not-found, import-untyped, unused-ignore]
-    except ImportError:  # edge wheel absent — edge_runtime raises its own RuntimeError
-        init_edge_runtime = None  # type: ignore[assignment, unused-ignore]
-
-    SUBSTRATE_SOURCE = "ciris_persist"
-
-# #937 — the Rust `tracing` subscriber installer. Without it every substrate
-# log event is discarded at the source, which is why persist's "migration
-# phase begin (advisory lock acquired)" never appeared during the 15-minute
-# boot hang. Optional: older wheels and the standalone ciris_persist build
-# may not expose it, and `utils/substrate_logging.py` degrades to a warning.
-try:
-    from ciris_server import init_tracing  # type: ignore[import-not-found, import-untyped, unused-ignore]
-except ImportError:  # pragma: no cover - substrate without the entry point
-    try:
-        from ciris_persist import init_tracing  # type: ignore[import-not-found, import-untyped, unused-ignore]
-    except ImportError:
-        init_tracing = None  # type: ignore[assignment, unused-ignore]
+#: Kept for callers and tests that assert which substrate loaded; one value now.
+SUBSTRATE_SOURCE = "ciris_server"
 
 __all__ = [
     "Engine",

@@ -5,7 +5,11 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.22.0-stable] - Unreleased
+## [2.22.0-stable] - 2026-11-14
+
+### Known issue
+
+- **A home that boots without AI and later with AI loses federation (server bug, fixed in 2.22.1).** On the second boot ciris-server keeps the node's Ed25519 key but pairs it with a newly minted ML-DSA key. The key id covers only the Ed25519 half, so the canonical refuses the new record as a key swap (first record wins, by design), and rows the node signs afterwards fail verification. Present since ciris-server 0.5.246 (2.21.0). The five-platform run on this release hit it on Linux and Windows (CIRISAgent run 43651657997); macOS, iOS and Android delivered. The harness keeps booting no-AI first so that it covers the real "add AI later" path. Separately, `CIRIS_NODE_IDENTITY_TTL_S` reaches the agent's own backend but not the desktop node process these legs start, so identities from those legs do not expire yet; also 2.22.1.
 
 ### Changed
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.22.1-stable] - Unreleased
 
+### Changed
+
+- **ciris-server 0.5.248** (edge v45.1.3, persist v61.4.1, verify v22.2.0). This fixes the 2.22.0 known issue (CIRISServer#878). When AI is added to a home that first booted without it, the node keeps its key with the exact ML-DSA pair it registered, so the canonical no longer sees a key swap. A home that 0.5.246–0.5.247 already re-keyed heals on its next boot and keeps the stray seed as `node_ml_dsa_65.seed.pubkey_swap`. If no local seed matches the registered record, the node refuses to sign rather than mint a new one. Rooms stay at two people. All nine PyPI sha256s match the server session's list, and the three bundled Android wheels match them. The iOS native library reports 0.5.248, and the iOS bundle's engine is re-synced to 2.22.1.
+- **The desktop harness node gets an identity lifetime.** The web_ui launcher now sets `CIRIS_NODE_IDENTITY_TTL_S` (86400) on a home it wiped, the restart after setup included, so desktop CI identities no longer stay live on the canonical.
+
 ### Fixed
 
 - **The tool step reads the agent's identity, approved amendments included.** The normal TSASPDMA path passed no context, so its prompt had no identity block; only correction mode had been fixed in 2.22.0. RATCHET Market 4 run 43667023655: the amendment reached 3 of 112 TSASPDMA prompts, and a ticket the amendment forbids was filed.

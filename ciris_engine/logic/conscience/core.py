@@ -171,6 +171,35 @@ class _BaseConscience(ConscienceInterface):
             return messages
         return [*messages[:-1], LLMMessage(role="system", content=block), messages[-1]]
 
+    @staticmethod
+    def _with_action_record(
+        messages: List[LLMMessage], user_prompt: str, context: ConscienceCheckContext, language: str
+    ) -> tuple[List[LLMMessage], str]:
+        """Lead the user prompt with the record of the actions already run in this task.
+
+        Entropy and the optimization veto judge the action alone, so on a
+        follow-up they read a report of a finished act as the act itself. In
+        RATCHET Market 4 ac-20 (run 43667023655) the veto refused "I have filed a
+        ticket", the ticket stood, and the agent told the user it could not file
+        one. They need the context to judge the next action (Eric, 2026-11-15).
+        Same record the follow-up thought carries (action_record.py); empty when
+        nothing has run, so a seed thought's prompt is unchanged.
+        """
+        from ciris_engine.logic.infrastructure.handlers.action_record import action_record_for_task
+
+        thought = getattr(context, "thought", None)
+        task_id = getattr(thought, "source_task_id", None)
+        occurrence_id = getattr(thought, "agent_occurrence_id", None) or "default"
+        record = action_record_for_task(
+            task_id if isinstance(task_id, str) else None,
+            occurrence_id if isinstance(occurrence_id, str) else "default",
+            language,
+        )
+        if not record or not messages:
+            return messages, user_prompt
+        user_prompt = "\n\n".join((record, user_prompt))
+        return [*messages[:-1], LLMMessage(role="user", content=user_prompt)], user_prompt
+
     def _resolve_language(self, context: ConscienceCheckContext) -> str:
         """Determine the language for THIS conscience check.
 
@@ -626,6 +655,9 @@ class EntropyConscience(_BaseConscience):
                 text, image_context, language=self._resolve_language(context)
             )
             messages = self._with_identity(messages, context, self._resolve_language(context))
+            messages, entropy_user_prompt = self._with_action_record(
+                messages, entropy_user_prompt, context, self._resolve_language(context)
+            )
             if hasattr(sink, "llm"):
                 entropy_eval, _ = await self._call_llm_with_budget(
                     sink,
@@ -921,6 +953,9 @@ class OptimizationVetoConscience(_BaseConscience):
         if approval_block:
             opt_veto_user_prompt = "\n\n".join((approval_block, opt_veto_user_prompt))
             messages[-1] = LLMMessage(role="user", content=opt_veto_user_prompt)
+        messages, opt_veto_user_prompt = self._with_action_record(
+            messages, opt_veto_user_prompt, context, self._resolve_language(context)
+        )
 
         try:
             if hasattr(sink, "llm"):

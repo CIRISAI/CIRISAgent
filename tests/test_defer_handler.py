@@ -7,7 +7,7 @@ and proper integration with the Wise Authority service.
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 
@@ -255,7 +255,7 @@ class TestDeferHandler:
             thought_id=thought.thought_id,
             status=ThoughtStatus.DEFERRED,
             occurrence_id="default",
-            final_action=result,
+            final_action=result, outcome=ANY,
         )
 
         # Verify task status updated (update_task_status no longer takes
@@ -392,7 +392,7 @@ class TestDeferHandler:
             thought_id=thought.thought_id,
             status=ThoughtStatus.DEFERRED,
             occurrence_id="default",
-            final_action=result,
+            final_action=result, outcome=ANY,
         )
         mock_persistence.update_task_status.assert_called_once()
 

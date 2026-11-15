@@ -15,6 +15,17 @@ from ciris_engine.schemas.runtime.system_context import ChannelContext
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
 
 
+@pytest.fixture(autouse=True)
+def _consent_granted(monkeypatch):
+    """Consent is not under test here. With no graph store the consent read fails,
+    and since #1357 a failed read refuses the write before the managed-attribute
+    check this file is about."""
+    monkeypatch.setattr(
+        "ciris_engine.logic.handlers.memory.memorize_handler.handle_user_consent",
+        AsyncMock(return_value=(None, True)),
+    )
+
+
 @pytest.mark.asyncio
 async def test_managed_user_attributes_blocked():
     """Test that managed user attributes cannot be memorized."""

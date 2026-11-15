@@ -13,7 +13,14 @@ from .wa_approval import (
     format_wa_only_verified_rule,
     wa_authorization_of,
 )
-from .identity import amendment_texts, describe_with_amendments, format_agent_identity, format_core_identity_block
+from .identity import (
+    agent_identity_of,
+    amendment_texts,
+    describe_with_amendments,
+    format_agent_identity,
+    format_core_identity_block,
+    identity_block_of,
+)
 from .prompt_blocks import (
     format_parent_task_chain,
     append_round1_accord_blocks,
@@ -36,6 +43,8 @@ __all__ = [
     "format_wa_only_verified_rule",
     "wa_authorization_of",
     "format_core_identity_block",
+    "identity_block_of",
+    "agent_identity_of",
     "format_parent_task_chain",
     "format_thoughts_chain",
     "append_round1_accord_blocks",

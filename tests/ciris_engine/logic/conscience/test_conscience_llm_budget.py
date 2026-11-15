@@ -235,7 +235,6 @@ async def test_transient_transport_is_retried(message: str) -> None:
         ("RATE_LIMIT", "Error code: 429 - rate limited"),  # the bus already waited out the cooldown
         ("INTERNAL_ERROR", "HTTP 500 Insufficient credits: 0 available"),  # seen in #1247
         ("CONTEXT_LENGTH_EXCEEDED", "Error code: 400 - Input too long: 55321 input tokens, limit is 32768"),
-        ("UNKNOWN", "something we have never seen"),
     ],
 )
 async def test_failures_a_retry_cannot_change_are_not_retried(category: str, message: str) -> None:
@@ -247,6 +246,26 @@ async def test_failures_a_retry_cannot_change_are_not_retried(category: str, mes
         with pytest.raises(RuntimeError):
             await _shard(retries=3)._call_llm_with_budget(sink, handler_name="x")
     assert sink.llm.call_llm_structured.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "something we have never seen",
+        # es safety battery, run 43522397191: one runaway generation cost an answer.
+        "LLM call failed (IncompleteOutputException): The output is incomplete due to a max_tokens length limit.",
+        # RATCHET Market 4 ac-21: a dropped connection re-raised as a generic error.
+        "LLM API call failed - circuit breaker activated for failover",
+    ],
+)
+async def test_an_unrecognised_failure_is_retried(message: str) -> None:
+    """Eric, 2026-11-13: retry is supposed to occur for most error types. An
+    unrecognised failure used to get exactly one attempt."""
+    answered = (_humility(), None)
+    sink = _sink([RuntimeError(message), answered])
+    assert await _shard(retries=3)._call_llm_with_budget(sink, handler_name="x") is answered
+    assert sink.llm.call_llm_structured.await_count == 2
 
 
 @pytest.mark.asyncio

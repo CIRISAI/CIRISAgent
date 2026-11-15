@@ -157,6 +157,13 @@ class FinalAction(BaseModel):
     action_type: str = Field(..., description="Action type chosen")
     action_params: JSONDict = Field(..., description="Action parameters (will be typed per action)")
     reasoning: str = Field(..., description="Why this action was chosen")
+    outcome: Optional[str] = Field(
+        None,
+        description=(
+            "What the action produced, as its handler reported it (a tool's result summary). "
+            "Read back into later follow-ups' action record, so the next round knows what ran."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

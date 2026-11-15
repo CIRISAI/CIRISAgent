@@ -17,6 +17,11 @@ from ciris_engine.schemas.types import JSONDict
 logger = logging.getLogger(__name__)
 
 
+
+#: The result summary stored with a tool thought for the task's action record:
+#: enough for a ticket id or a short answer, never a whole payload.
+_OUTCOME_MAX_CHARS = 400
+
 class ToolHandler(BaseActionHandler):
     TOOL_RESULT_TIMEOUT = 30
 
@@ -250,7 +255,11 @@ class ToolHandler(BaseActionHandler):
         final_status = ThoughtStatus.COMPLETED if success else ThoughtStatus.FAILED
 
         follow_up_id = self.complete_thought_and_create_followup(
-            thought=thought, follow_up_content=follow_up_text, action_result=result, status=final_status
+            thought=thought,
+            follow_up_content=follow_up_text,
+            action_result=result,
+            status=final_status,
+            outcome=follow_up_info[:_OUTCOME_MAX_CHARS],
         )
 
         if not follow_up_id:

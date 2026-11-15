@@ -17,7 +17,7 @@ Tests cover:
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
@@ -560,7 +560,7 @@ class TestMemorizeHandler:
 
                 # Verify thought was marked as failed
                 mock_base_persistence.update_thought_status.assert_called_with(
-                    thought_id="thought_123", status=ThoughtStatus.FAILED, occurrence_id="default", final_action=result
+                    thought_id="thought_123", status=ThoughtStatus.FAILED, occurrence_id="default", final_action=result, outcome=ANY
                 )
 
                 # Verify error follow-up was created

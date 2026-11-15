@@ -27,6 +27,44 @@ def amendment_texts(agent_identity: Any) -> List[str]:
     return [text for text in texts if text]
 
 
+def agent_identity_of(processing_context: Any) -> Any:
+    """The agent identity on a thought's processing context (its system snapshot), or None."""
+    snapshot = (
+        processing_context.get("system_snapshot")
+        if isinstance(processing_context, dict)
+        else getattr(processing_context, "system_snapshot", None)
+    )
+    if snapshot is None:
+        return None
+    return snapshot.get("agent_identity") if isinstance(snapshot, dict) else getattr(snapshot, "agent_identity", None)
+
+
+def identity_block_of(agent_identity: Any, language: Optional[str] = None) -> str:
+    """The one identity block, approved amendments included, from an identity; "" when there is none.
+
+    The same call action selection and the domain DMA make
+    (``format_core_identity_block`` with ``amendment_texts``), for every other
+    prompt that judges the agent: one identity, one rendering.
+    """
+    if not agent_identity:
+        return ""
+
+    def _field(name: str) -> str:
+        value = agent_identity.get(name) if isinstance(agent_identity, dict) else getattr(agent_identity, name, None)
+        return str(value) if value else ""
+
+    agent_id = _field("agent_id")
+    if not agent_id:
+        return ""
+    return format_core_identity_block(
+        agent_id,
+        _field("description"),
+        _field("role"),
+        language=language,
+        amendments=amendment_texts(agent_identity),
+    )
+
+
 def describe_with_amendments(description: str, amendments: Sequence[str]) -> str:
     """The core description followed by each approved amendment, one per line.
 

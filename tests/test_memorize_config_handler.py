@@ -215,8 +215,14 @@ class TestConfigNodeHandling:
         assert "adaptive_filter.caps.detection.threshold" in str(stored_node.attributes)
 
     @pytest.mark.asyncio
-    async def test_non_config_node_unchanged(self, mock_handler, dispatch_context, thought):
+    async def test_non_config_node_unchanged(self, mock_handler, dispatch_context, thought, monkeypatch):
         """Test that non-CONFIG nodes pass through unchanged."""
+        # Consent is not under test: with no graph store the read fails, and since
+        # #1357 a failed consent read refuses a user-node write.
+        monkeypatch.setattr(
+            "ciris_engine.logic.handlers.memory.memorize_handler.handle_user_consent",
+            AsyncMock(return_value=(None, True)),
+        )
         node = GraphNode(
             id="user/user123", type=NodeType.USER, scope=GraphScope.LOCAL, attributes={"name": "Test User"}
         )

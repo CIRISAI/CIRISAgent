@@ -392,6 +392,7 @@ class MemorizeHandler(BaseActionHandler):
                 status=ThoughtStatus.FAILED,
                 occurrence_id=thought.agent_occurrence_id,
                 final_action=result,
+                outcome=f"MEMORIZE action failed with error: {e}"[:400],
             )
 
             follow_up = create_follow_up_thought(

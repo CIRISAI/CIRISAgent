@@ -46,7 +46,7 @@ from ciris_engine.logic.config.llm_budget import (
     attempt_timeout,
     llm_call_deadline,
 )
-from ciris_engine.logic.conscience.transport import categorize_conscience_error, is_transient_transport_failure
+from ciris_engine.logic.conscience.transport import categorize_conscience_error, is_worth_another_attempt
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.processors.support.thought_escalation import escalate_dma_failure
 from ciris_engine.logic.utils import hedging
@@ -96,28 +96,6 @@ logger = logging.getLogger(__name__)
 #: floor instead.
 
 
-#: Answered-but-unusable model output. A schema-invalid reply is stochastic
-#: noise, not a property of the request, so a re-draw (same deadline, same
-#: attempt cap) often succeeds. Not #895's grammar work: just another draw.
-_SCHEMA_REDRAW_CATEGORIES = frozenset({"VALIDATION_ERROR"})
-
-
-def _is_schema_redraw(exc: BaseException, category: str) -> bool:
-    """Is this a schema-validation failure of the model's reply (worth a re-draw)?
-
-    The categorizer checks model-not-available and context overflow first, so
-    a 404 or an over-long prompt never lands here. An exception it could not
-    name is still a re-draw when its type says the reply failed validation.
-    """
-    if category in _SCHEMA_REDRAW_CATEGORIES:
-        return True
-    if category != "UNKNOWN":
-        return False
-    from pydantic import ValidationError
-
-    return isinstance(exc, ValidationError) or type(exc).__name__ == "InstructorRetryException"
-
-
 async def run_dma_with_retries(
     run_fn: Callable[..., Awaitable[Any]],
     *args: Any,
@@ -140,12 +118,11 @@ async def run_dma_with_retries(
     `dma_attempt_cap` (never fewer than `retry_limit`). Without one, exactly
     `retry_limit` attempts, as before.
 
-    ONE retry policy for every DMA: a timeout, connection error or 5xx is an
-    independent draw and gets another attempt, and so does schema-invalid
-    model output (stochastic noise: a re-draw often parses). Anything else
-    (auth, model not available, context overflow, an unfunded account, rate
-    limit, an open breaker, an unrecognised error) fails fast -- a fresh
-    request would fail the same way. Either way an exhausted DMA raises
+    ONE retry policy for every DMA and conscience shard
+    (``transport.is_worth_another_attempt``): every failure gets another
+    attempt, an unrecognised one included, except the ones a fresh request
+    cannot fix (auth, model not available, context overflow, an open breaker,
+    rate limit, an unfunded account). Either way an exhausted DMA raises
     DMAFailure: nothing here ever fails open.
 
     A SLOW attempt is hedged, not abandoned: past the DMA's recent p95 latency
@@ -261,9 +238,7 @@ async def run_dma_with_retries(
                     retryable = True
                 else:
                     category = categorize_conscience_error(last_error)
-                    retryable = is_transient_transport_failure(last_error, category) or _is_schema_redraw(
-                        last_error, category
-                    )
+                    retryable = is_worth_another_attempt(last_error, category)
                     # Ensure we never log empty error messages
                     error_msg = str(error).replace("\n", " ").strip() or f"<{type(error).__name__} with no message>"
                     if not retryable:
@@ -1261,6 +1236,7 @@ async def run_tsaspdma_correction(
     aspdma_reasoning: str,
     original_thought: ProcessingQueueItem,
     time_service: Optional["TimeServiceProtocol"] = None,
+    context: Optional[Any] = None,
 ) -> ActionSelectionDMAResult:
     """Run TSASPDMA in correction mode when ASPDMA selected a non-existent tool.
 
@@ -1331,7 +1307,7 @@ async def run_tsaspdma_correction(
             available_tools=available_tools,
             aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
-            context=None,
+            context=context,
         )
 
         # Update correlation with success

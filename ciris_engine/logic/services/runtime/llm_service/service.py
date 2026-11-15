@@ -14,7 +14,7 @@ import sys
 import time
 from enum import Enum
 from json import JSONDecodeError
-from typing import Any, Awaitable, Callable, Dict, List, NoReturn, Optional, Tuple, Type, Union, cast
+from typing import Any, Awaitable, Callable, Dict, List, NoReturn, Optional, Set, Tuple, Type, Union, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -157,6 +157,39 @@ def _build_ciris_proxy_metadata(
             interaction_id=interaction_id,
             original_request_id=request_id,
         )
+
+
+#: OpenRouter models (lower-cased ids) that refused ``reasoning.enabled=false``
+#: with "Reasoning is mandatory for this endpoint". Process-wide and learned on
+#: the first refusal, so each such model costs one failed call per process.
+_REASONING_MANDATORY_MODELS: Set[str] = set()
+
+#: The least reasoning OpenRouter accepts from a model that cannot turn it off:
+#: the lowest effort, and the reasoning left out of the reply. Eric, 2026-11-13:
+#: "We have to suppress all reasoning ... as much as possible". Measured on
+#: anthropic/claude-sonnet-5.5: enabled=false and effort=none are refused;
+#: effort=minimal with exclude is accepted (0 reasoning tokens, ~1 s).
+_OPENROUTER_MINIMAL_REASONING: Dict[str, Any] = {"reasoning": {"effort": "minimal", "exclude": True}}
+
+
+def is_reasoning_mandatory_error(error: BaseException) -> bool:
+    """True for a provider's refusal to turn reasoning off."""
+    return "reasoning is mandatory" in str(error).lower()
+
+
+def note_reasoning_mandatory(model_name: str) -> bool:
+    """Record that ``model_name`` refuses reasoning-off. True if newly recorded."""
+    key = (model_name or "").lower()
+    if not key or key in _REASONING_MANDATORY_MODELS:
+        return False
+    _REASONING_MANDATORY_MODELS.add(key)
+    logger.warning(
+        "[LLM_REASONING_MANDATORY] model=%s refuses reasoning off; from now on it is asked for the "
+        "least reasoning it accepts (%s)",
+        model_name,
+        _OPENROUTER_MINIMAL_REASONING["reasoning"],
+    )
+    return True
 
 
 def build_request_extra_body(
@@ -466,7 +499,17 @@ def _is_context_length_error(error_str: str) -> bool:
       - "max_tokens must be less than or equal to N"  (Groq llama-4 family)
     Both indicate the same fix: shrink the request budget.
     """
-    context_patterns = ["context_length", "maximum context", "context length", "token limit", "too many tokens"]
+    # "input too long" is Anthropic's wording for an over-long prompt (#1247:
+    # "Input too long: 55321 input tokens, limit is 32768"). Unrecognised, it
+    # read as UNKNOWN, which is retried since 2.22.0; a re-send cannot shrink it.
+    context_patterns = [
+        "context_length",
+        "maximum context",
+        "context length",
+        "token limit",
+        "too many tokens",
+        "input too long",
+    ]
     if any(pattern in error_str for pattern in context_patterns):
         return True
     # Generic "max_tokens ... exceed" (most providers)
@@ -1202,6 +1245,11 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         #: surface can pick the right instruction without re-reading prose.
         #: See :func:`_root_provider_fault` for why the text is not enough.
         self.last_fault_code: str = ""
+        #: When the fault above and the last answered call happened (monotonic).
+        #: A fault is LIVE only while no call has succeeded since it: the chat
+        #: notice names it, and a recovered provider must not keep being blamed.
+        self.last_fault_at: float = 0.0
+        self.last_success_at: float = 0.0
 
         api_key = self.openai_config.api_key
         base_url = self.openai_config.base_url
@@ -2166,6 +2214,10 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             # of the response, which they accept.
             if any(t in model for t in ("deepseek-r1", "-r1", ":thinking", "-thinking")):
                 return {"reasoning": {"exclude": True}}
+            # A model that has already refused (e.g. anthropic/claude-sonnet-5.5):
+            # the least reasoning it accepts, not off.
+            if model in _REASONING_MANDATORY_MODELS:
+                return {k: dict(v) for k, v in _OPENROUTER_MINIMAL_REASONING.items()}
             # ADHERENCE IS UPSTREAM-DEPENDENT, and no request-side key fixes
             # that. Same model, same payload, four calls, reading the `provider`
             # field OpenRouter returns:
@@ -2401,6 +2453,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
     ) -> Tuple[BaseModel, ResourceUsage]:
         """Process a successful LLM response and return usage data."""
         self.circuit_breaker.record_success()
+        self.last_success_at = time.monotonic()
         _record_raw_completion_text(completion)
 
         # Handle different response formats - Google uses usage_metadata, OpenAI uses usage
@@ -2454,6 +2507,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # fault, which correctly falls back to the provider's own words.
         self.last_error = _root_provider_error(e)
         self.last_fault_code = _root_provider_fault(e)
+        self.last_fault_at = time.monotonic()
         base_url = self.openai_config.base_url or ""
 
         if "ciris.ai" in base_url:
@@ -2489,6 +2543,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # fault, which correctly falls back to the provider's own words.
         self.last_error = _root_provider_error(e)
         self.last_fault_code = _root_provider_fault(e)
+        self.last_fault_at = time.monotonic()
 
         error_details = {
             "error_type": type(e).__name__,
@@ -2560,6 +2615,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             self._total_errors += 1
             self.last_error = _root_provider_error(e)
             self.last_fault_code = _root_provider_fault(e)
+            self.last_fault_at = time.monotonic()
         error_context = LLMErrorContext(
             model=self.model_name,
             provider=self.openai_config.base_url or "default",
@@ -2598,6 +2654,7 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 )
                 self.last_error = _root_provider_error(e)
                 self.last_fault_code = _root_provider_fault(e)
+                self.last_fault_at = time.monotonic()
                 _handle_instructor_retry_exception(e, error_context, self.circuit_breaker)
 
         # Generic exception handling
@@ -2620,9 +2677,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         # _root_provider_fault returns "" when it cannot name the fault, which is
         # the correct way to say "no structured verdict, fall back to the words".
         self.last_fault_code = _root_provider_fault(e)
+        self.last_fault_at = time.monotonic()
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )
+
+    def live_fault_code(self) -> str:
+        """The provider's structured fault slug, only while no call has succeeded since it."""
+        if self.last_fault_code and self.last_fault_at > self.last_success_at:
+            return self.last_fault_code
+        return ""
 
     def _get_status(self) -> LLMStatus:
         """Get detailed status including circuit breaker metrics (private method)."""
@@ -2693,6 +2757,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                         f"error={str(e)[:200]} — config bug, raising without retry"
                     )
                     raise
+
+                # A model whose reasoning cannot be turned off: learn it once and
+                # retry at once with the least reasoning it accepts. The request is
+                # rebuilt on every attempt, so the next one carries the new extras.
+                if (
+                    isinstance(e, BadRequestError)
+                    and is_reasoning_mandatory_error(e)
+                    and note_reasoning_mandatory(getattr(self, "model_name", "") or "")
+                ):
+                    continue
 
                 # If a BadRequestError surfaces with a category we don't
                 # remediate (e.g. malformed request, missing field), retry

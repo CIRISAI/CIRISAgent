@@ -174,12 +174,16 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         """Send a deferral to wise authority services that support the domain.
 
         If context.domain_hint is set (for domain-specific deferrals like MEDICAL,
-        FINANCIAL, etc.), only services that advertise support for that domain
-        will receive the deferral. This prevents unnecessary broadcasting and
-        ensures only qualified handlers receive domain-specific requests.
+        FINANCIAL, etc.) and a service declares that domain, only those services
+        receive it. When none declares it, which is the normal case on a
+        ciris-server node, it goes to every send_deferral-capable service with
+        the hint in the request: the hint informs, it does not block. The agent's
+        WiseAuthorityService signs the request row into the room with the node's
+        owner, who is the node's Wise Authority (ciris-server agent_deferral.rs);
+        the server routes on the owner and the room, never on the hint.
 
         If no domain_hint is set, broadcasts to all services with send_deferral
-        capability (legacy behavior for human deferrals).
+        capability.
         """
         from ciris_engine.schemas.runtime.enums import ServiceType
 
@@ -189,8 +193,11 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         # Extract domain_hint for filtering
         domain_hint = context.domain_hint
 
-        # Filter for services with send_deferral capability AND matching domain
+        # Filter for services with send_deferral capability AND matching domain.
+        # `generalists` keeps every send_deferral-capable service, for the
+        # fallback below when no service declares the hinted domain.
         services = []
+        generalists = []
         for service in all_wa_services:
             logger.debug(f"Checking service {service.__class__.__name__} for send_deferral capability")
             # Check if service has get_capabilities method
@@ -205,6 +212,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                 logger.debug(f"Service {service.__class__.__name__} has capabilities: {cap_actions}")
                 if "send_deferral" not in cap_actions:
                     continue
+                generalists.append(service)
 
                 # Check domain support if domain_hint is specified
                 # Services must explicitly declare supported domains to handle domain-specific deferrals
@@ -227,11 +235,23 @@ class WiseBus(BaseBus[WiseAuthorityService]):
             else:
                 logger.warning(f"Service {service.__class__.__name__} has no get_capabilities method")
 
+        if not services and domain_hint and generalists:
+            # The domain hint informs, it does not block (Eric, 2026-11-13). With
+            # no service declaring the domain, the deferral used to go nowhere:
+            # the task was marked DEFERRED with no deferral record, and every
+            # Wise Authority resolve was refused 409 (RATCHET Market 4, run
+            # 43453725789: 4 of 93). A declared specialist still gets it alone.
+            logger.warning(
+                f"No wise authority service declares domain '{domain_hint.value}' for {handler_name}; "
+                f"delivering to {len(generalists)} general wise authority service(s) with the domain hint "
+                f"in the request."
+            )
+            services = generalists
         if not services:
             if domain_hint:
                 logger.warning(
                     f"No wise authority service supports domain '{domain_hint.value}' for {handler_name}. "
-                    f"Ensure a service advertising this domain is registered (e.g., CIRISNode)."
+                    f"No wise authority service accepts deferrals at all."
                 )
             else:
                 logger.info(f"No wise authority service available for {handler_name}")
@@ -355,8 +375,8 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
         For REQUIRES_SEPARATE_MODULE capabilities (MEDICAL, FINANCIAL, etc.),
         returns a DomainDeferralRequired signal instead of raising. The caller
-        auto-constructs a DeferralContext with domain_hint and routes through
-        CIRISNode to a qualified licensed agent.
+        auto-constructs a DeferralContext with domain_hint and defers it to the
+        node owner's Wise Authority, with the domain named in the request.
 
         Args:
             capability: The capability to validate
@@ -394,7 +414,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         severity = get_prohibition_severity(category)
 
         if severity == ProhibitionSeverity.REQUIRES_SEPARATE_MODULE:
-            # Route to licensed handler via CIRISNode instead of raising
+            # Defer to the owner's Wise Authority, naming the licensed domain, instead of raising
             try:
                 domain = DomainCategory(category)
             except ValueError:
@@ -402,14 +422,14 @@ class WiseBus(BaseBus[WiseAuthorityService]):
 
             logger.info(
                 f"Domain deferral required: {category} capability '{capability}' "
-                f"will be routed to licensed handler via CIRISNode"
+                f"is deferred to the node owner's Wise Authority"
             )
             return DomainDeferralRequired(
                 category=domain,
                 capability=capability,
                 reason=(
                     f"{category} capability '{capability}' requires licensed domain handler. "
-                    f"Routing to qualified agent via CIRISNode."
+                    f"Deferring to the node owner's Wise Authority."
                 ),
             )
         elif severity == ProhibitionSeverity.NEVER_ALLOWED:
@@ -534,7 +554,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
         if hasattr(request, "capability"):
             deferral_signal = self._validate_capability(request.capability, agent_tier)
             if deferral_signal is not None:
-                # Route to licensed domain handler via CIRISNode auto-deferral
+                # Licensed-domain auto-deferral to the node owner's Wise Authority
                 needs_category = get_need_category_for_domain(deferral_signal.category)
                 deferral_context = DeferralContext(
                     thought_id=f"domain_deferral_{id(request)}",
@@ -561,7 +581,7 @@ class WiseBus(BaseBus[WiseAuthorityService]):
                     origin=GuidanceOrigin.DOMAIN_AUTO_DEFERRAL,
                     custom_guidance=(
                         f"This request requires a licensed {deferral_signal.category.value} handler. "
-                        f"{'Deferral sent to CIRISNode for routing.' if success else 'No WA service available for routing.'}"
+                        f"{'Deferral sent to the Wise Authority.' if success else 'No Wise Authority service is available to receive the deferral.'}"
                     ),
                 )
 

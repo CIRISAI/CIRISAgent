@@ -47,6 +47,7 @@ UNIVERSAL_PARTS = (
     "25_exemplar_cross_cluster",
     "26_cross_cluster_pattern",
     "26b_user_symptom_direction",
+    "30_ticket_model",
 )
 TIER0 = ("ha", "yo", "am")
 HEADER = re.compile(r"^==[^=\n][^\n]*==[ \t]*$", re.M)

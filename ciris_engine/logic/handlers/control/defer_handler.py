@@ -66,6 +66,7 @@ class DeferHandler(BaseActionHandler):
             status=ThoughtStatus.DEFERRED,
             occurrence_id=thought.agent_occurrence_id,
             final_action=result,
+            outcome=follow_up_info[:400],
         )
         self.logger.info(f"Updated thought {thought_id} to DEFERRED. Info: {follow_up_info}")
 

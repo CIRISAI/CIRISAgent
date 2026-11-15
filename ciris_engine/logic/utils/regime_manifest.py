@@ -289,6 +289,7 @@ FIELD_CLASS_ANNOTATIONS: Dict[str, BlockClass] = {
     "prompts.universal_guidance.25_exemplar_cross_cluster": BlockClass.MIXED,
     "prompts.universal_guidance.26_cross_cluster_pattern": BlockClass.DEONTIC,
     "prompts.universal_guidance.26b_user_symptom_direction": BlockClass.DEONTIC,
+    "prompts.universal_guidance.30_ticket_model": BlockClass.NOMOLOGICAL,
     # #974 step 3: the three CORE IDENTITY copies collapsed to one key.
     "prompts.identity_block": BlockClass.ONTOLOGICAL,
     # A verified WA approval (formatters/wa_approval.py), split so each part is

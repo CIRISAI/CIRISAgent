@@ -18,7 +18,7 @@ import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 
@@ -496,7 +496,7 @@ class TestDeferHandler:
                     thought_id="thought_123",
                     status=ThoughtStatus.DEFERRED,
                     occurrence_id=test_thought.agent_occurrence_id,
-                    final_action=result,
+                    final_action=result, outcome=ANY,
                 )
 
                 # Verify no follow-up was created

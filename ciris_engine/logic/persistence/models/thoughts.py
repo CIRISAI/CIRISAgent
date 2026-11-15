@@ -155,10 +155,12 @@ def _persist_row_to_thought(row: Dict[str, Any]) -> Thought:
             action_params = action_params.model_dump()
         reasoning = f.get("reasoning", "")
         try:
+            outcome_raw = f.get("outcome")
             final_action = FinalAction(
                 action_type=str(action_type),
                 action_params=action_params if isinstance(action_params, dict) else {},
                 reasoning=str(reasoning),
+                outcome=str(outcome_raw) if outcome_raw else None,
             )
         except Exception:
             final_action = None
@@ -576,8 +578,9 @@ def update_thought_status(
     status: ThoughtStatus,
     occurrence_id: str = "default",
     final_action: Optional[Any] = None,
+    outcome: Optional[str] = None,
 ) -> bool:
-    """Update the status of a thought, and optionally final_action."""
+    """Update the status of a thought, and optionally final_action and what it produced."""
     engine = _get_engine()
     status_val = getattr(status, "value", status)
 
@@ -606,14 +609,17 @@ def update_thought_status(
             params = action_data.get("action_parameters", {})
             if hasattr(params, "model_dump"):
                 params = params.model_dump()
-            final_action_json = json.dumps(
-                {
-                    "action_type": action_type_str,
-                    "action_params": params,
-                    "reasoning": action_data.get("rationale", action_data.get("reasoning", "")),
-                }
-            )
+            normalized: Dict[str, Any] = {
+                "action_type": action_type_str,
+                "action_params": params,
+                "reasoning": action_data.get("rationale", action_data.get("reasoning", "")),
+            }
+            if outcome:
+                normalized["outcome"] = outcome
+            final_action_json = json.dumps(normalized)
         else:
+            if outcome:
+                action_data = {**action_data, "outcome": outcome}
             final_action_json = json.dumps(action_data)
 
     try:

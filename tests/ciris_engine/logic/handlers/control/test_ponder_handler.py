@@ -17,7 +17,7 @@ Tests cover:
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Optional
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -449,7 +449,7 @@ class TestPonderHandler:
                 thought_id="thought_123",
                 status=ThoughtStatus.COMPLETED,
                 occurrence_id="default",
-                final_action=mock_result,
+                final_action=mock_result, outcome=ANY,
             )
 
             # Verify follow-up was created even with empty/invalid questions (fallback behavior)

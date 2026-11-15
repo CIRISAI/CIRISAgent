@@ -431,30 +431,20 @@ async def handle_user_consent(
     Returns:
         Tuple of (error_message or None, consent_metadata_added)
     """
-    from ciris_engine.logic.services.governance.consent import ConsentNotFoundError
+    from ciris_engine.logic.services.governance.consent import ConsentExpiredError, ConsentNotFoundError
     from ciris_engine.schemas.consent.core import ConsentRequest, ConsentStream
 
+    # #1357 (Eric, 2026-11-13): an expired TEMPORARY consent blocks the write and
+    # is NOT renewed here, and no decay is started here; the expiry cleanup still
+    # removes the record, and the person can choose consent again in settings. A
+    # consent read that fails (not "not found") refuses the write: no consent
+    # answer means no memory about that person.
     try:
         consent_status = await consent_service.get_consent(user_id)
-
-        # Check if TEMPORARY consent has expired
-        if consent_status.stream == ConsentStream.TEMPORARY:
-            now = time_service.now()
-            if consent_status.expires_at and now > consent_status.expires_at:
-                await consent_service.revoke_consent(user_id, "TEMPORARY consent expired (14 days)")
-                return (
-                    f"MEMORIZE BLOCKED: User consent expired. "
-                    f"User {user_id}'s TEMPORARY consent expired on {consent_status.expires_at}. "
-                    f"Decay protocol initiated. User data will be anonymized over 90 days.",
-                    False,
-                )
-
-        # Add consent metadata to node attributes
-        _add_consent_metadata_to_node(node, consent_status)
-        return None, True
-
+    except ConsentExpiredError:
+        return _expired_consent_block(user_id, None), False
     except ConsentNotFoundError:
-        # No consent exists - try to create default TEMPORARY consent
+        # Never seen: default TEMPORARY consent on first interaction.
         try:
             now = time_service.now()
             consent_request = ConsentRequest(
@@ -473,10 +463,33 @@ async def handle_user_consent(
         except Exception as grant_error:
             logger.debug(f"Cannot grant consent: {grant_error}. Continuing without consent.")
             return None, False
+    except Exception as e:  # noqa: BLE001 - any other read failure fails closed
+        logger.warning(f"MEMORIZE refused: consent for user {user_id} could not be read ({type(e).__name__}: {e})")
+        return (
+            f"MEMORIZE BLOCKED: User consent could not be read. "
+            f"Nothing about user {user_id} was stored, because without a consent answer "
+            f"no memory about them is written.",
+            False,
+        )
 
-    except Exception as e:
-        logger.debug(f"Consent service not available: {e}. Continuing without consent check.")
-        return None, False
+    # The service raises ConsentExpiredError itself; a status that is expired
+    # anyway (a stale cache, another implementation) is blocked the same way.
+    if consent_status.stream == ConsentStream.TEMPORARY:
+        if consent_status.expires_at and time_service.now() > consent_status.expires_at:
+            return _expired_consent_block(user_id, consent_status.expires_at), False
+
+    # Add consent metadata to node attributes
+    _add_consent_metadata_to_node(node, consent_status)
+    return None, True
+
+
+def _expired_consent_block(user_id: str, expired_on: Optional[datetime]) -> str:
+    when = f" on {expired_on.isoformat()}" if expired_on else ""
+    return (
+        f"MEMORIZE BLOCKED: User consent expired. "
+        f"User {user_id}'s TEMPORARY consent expired{when}. Nothing about them was stored, "
+        f"and consent was not renewed: only the user can choose to consent again."
+    )
 
 
 def _add_consent_metadata_to_node(node: GraphNode, consent_status: Any) -> None:

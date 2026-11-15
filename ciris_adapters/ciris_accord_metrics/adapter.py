@@ -13,10 +13,12 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, List, Optional
 
 from ciris_engine.logic.adapters.base import Service
 from ciris_engine.logic.registries.base import Priority
+from ciris_engine.logic.utils.env_file import write_env_file
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
 from ciris_engine.schemas.runtime.adapter_management import AdapterConfig, RuntimeAdapterStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
@@ -46,6 +48,42 @@ def _get_metrics_env(name: str, default: str = "") -> str:
         return value
 
     return default
+
+
+
+def _legacy_consent_env_files() -> List[Path]:
+    """The .env files the boot loads, the only ones the consent purge may rewrite.
+
+    The list comes from ``first_run.get_config_paths()``, which resolves the home
+    and passes ``CIRIS_CONFIG_DIR`` through ``validate_path_safety``. Each entry
+    must be named ``.env`` and sit in the home or in that validated config dir;
+    the site-wide ``/etc/ciris/.env`` is the system's, not this agent's to rewrite.
+    The purge used to build its path straight from ``CIRIS_CONFIG_DIR`` (or the
+    working directory), so it rewrote whatever that named and missed the home's
+    own .env, where the vars came back from on the next boot.
+    """
+    try:
+        from ciris_engine.logic.setup.first_run import get_config_paths
+        from ciris_engine.logic.utils.path_resolution import get_ciris_home
+    except Exception:  # noqa: BLE001 - no config layer, nothing safe to rewrite
+        return []
+    try:
+        candidates = get_config_paths()
+        allowed_dirs = {get_ciris_home().resolve()}
+        override = os.environ.get("CIRIS_CONFIG_DIR")
+        if override:
+            from ciris_engine.logic.utils.path_resolution import validate_path_safety
+
+            allowed_dirs.add(validate_path_safety(Path(override).expanduser(), context="CIRIS_CONFIG_DIR"))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"   consent migration: config paths unreadable ({type(exc).__name__}): {exc}")
+        return []
+    files: List[Path] = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.name == ".env" and resolved.parent in allowed_dirs and resolved not in files:
+            files.append(resolved)
+    return files
 
 
 class AccordMetricsAdapter(Service):
@@ -286,21 +324,20 @@ class AccordMetricsAdapter(Service):
             if k in os.environ:
                 os.environ.pop(k, None)
                 logger.info(f"   consent migration: removed {k} from process env")
-        # 2. persistent .env
-        try:
-            from pathlib import Path
-
-            env_path = Path(os.environ.get("CIRIS_CONFIG_DIR", ".")) / ".env"
-            if env_path.exists():
+        # 2. persistent .env: every file the boot loads, so the vars cannot come back
+        for env_path in _legacy_consent_env_files():
+            try:
+                if not env_path.exists():
+                    continue
                 lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
                 kept = [ln for ln in lines if not any(ln.strip().startswith(f"{k}=") for k in env_keys)]
                 if len(kept) != len(lines):
-                    env_path.write_text("".join(kept), encoding="utf-8")
+                    write_env_file(env_path, "".join(kept))
                     logger.info(
                         f"   consent migration: removed {len(lines) - len(kept)} legacy consent line(s) from {env_path}"
                     )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"   consent migration: .env purge failed ({type(exc).__name__}): {exc}")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"   consent migration: .env purge failed for {env_path} ({type(exc).__name__}): {exc}")
         # 3. adapter-config graph fields (best-effort; config service optional)
         try:
             if isinstance(self._adapter_config, dict):

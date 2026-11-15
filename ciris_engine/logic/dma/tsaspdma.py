@@ -126,6 +126,12 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         """Load prompt template fresh each time to respect language changes."""
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
+    def _identity_block(self, context: Optional[Any]) -> str:
+        """The agent's identity block, approved amendments included, from the thought's context."""
+        from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
+
+        return identity_block_of(agent_identity_of(context), language=self.prompt_loader.language)
+
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
         """Sync prompt language using the full localization priority chain.
 
@@ -331,6 +337,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         aspdma_reasoning: str,
         original_thought_content: str,
         context_enrichment: Optional[Dict[str, Any]] = None,
+        identity_block: str = "",
     ) -> List[JSONDict]:
         """Assemble prompt messages for TSASPDMA evaluation.
 
@@ -369,9 +376,10 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             tool_name=tool_name,
         )
 
-        # Format with standard blocks (no identity needed for TSASPDMA)
+        # The agent's identity, approved amendments included: the same block
+        # every DMA reads (formatters.identity.identity_block_of). Eric, 2026-11-13.
         formatted_system = format_system_prompt_blocks(
-            "",  # identity block
+            identity_block,
             "",  # additional context
             "",  # system snapshot
             "",  # user profiles
@@ -458,6 +466,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
             context_enrichment=context_enrichment,
+            identity_block=self._identity_block(context),
         )
 
         # Store user prompt for debugging
@@ -549,6 +558,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             available_tools_list=tools_list_text,
             aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
+            identity_block=self._identity_block(context),
         )
 
         logger.info(
@@ -634,6 +644,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         available_tools_list: str,
         aspdma_reasoning: str,
         original_thought_content: str,
+        identity_block: str = "",
     ) -> List[JSONDict]:
         """Create prompt messages for TSASPDMA correction mode."""
         messages: List[JSONDict] = []
@@ -662,6 +673,8 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             self.prompt_template_data,
             tool_name=requested_tool,
         )
+        if identity_block:
+            system_message = "\n\n".join((identity_block, system_message))
         messages.append({"role": "system", "content": system_message})
 
         # Get the correction section template (stored in custom_prompts by loader)

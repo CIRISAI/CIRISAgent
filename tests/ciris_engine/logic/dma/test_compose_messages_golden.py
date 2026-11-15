@@ -22,6 +22,10 @@ inserting exactly one message (never regenerated from the code under test):
   thought's language chain (thought / task, profile, env). The fixture has no
   profile language, so the accord is now asked for ``en`` (the env) instead of
   ``None``: one sentinel, ``lang=None`` -> ``lang=en``; the real text is the same.
+- 2.22.0: PDMA and CSDMA carry the agent's identity block (approved amendments
+  included, ``formatters.identity.identity_block_of``) at the head of their
+  system message, joined by a blank line: the fixture identity's block was
+  prepended to message 4 of each snapshot, nothing else changed.
 """
 
 from typing import List, cast
@@ -29,6 +33,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONDict
 from tests.ciris_engine.logic.dma.compose_golden import (
@@ -89,7 +94,9 @@ def test_pdma_compose_seam_matches_golden() -> None:
         system_snapshot_str, user_profile_str = dma._build_context_strings(make_context(), thought=item)
         full_context_str = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n{system_snapshot_str}{user_profile_str}"
 
-        messages = dma.compose_messages(str(item.content), full_context_str, [])
+        identity_block = identity_block_of(agent_identity_of(make_context()), language=dma.prompt_loader.language)
+
+        messages = dma.compose_messages(str(item.content), full_context_str, [], identity_block=identity_block)
     _assert_matches_golden("pdma", messages)
 
 
@@ -109,6 +116,7 @@ def test_csdma_compose_seam_matches_golden() -> None:
             system_snapshot_str,
             user_profiles_str,
             images=[],
+            identity_block=identity_block_of(agent_identity_of(make_context()), language=dma.prompt_loader.language),
         )
     _assert_matches_golden("csdma", messages)
 

@@ -1047,6 +1047,15 @@ class APIServerManager:
         if _run_kind_warning:
             self.console.print(f"[yellow][WARN] {_run_kind_warning}[/yellow]")
 
+        # A fresh-home harness node's identities carry a signed end, so they do
+        # not stay live on the canonical after the run. The node still announces
+        # at federation scope like the wizard; only the lifetime differs.
+        from .run_kind import declare_identity_ttl
+
+        _ttl_warning = declare_identity_ttl(env, fresh_home=bool(self.config.wipe_data))
+        if _ttl_warning:
+            self.console.print(f"[yellow][WARN] {_ttl_warning}[/yellow]")
+
         # accord_halt writes the node's halt latch, so the agent gets a home of
         # its own that nothing else uses (CIRISAgent#1231). The module reads the
         # latch path back from the node and refuses to write outside this dir.

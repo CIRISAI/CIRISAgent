@@ -60,6 +60,42 @@ def declare_run_kind(env: MutableMapping[str, str], default: str = QA) -> Option
     return None
 
 
+#: ciris-server >= 0.5.247 signs this end into the node key record, the agent
+#: key record, the node's self occurrence, the owner's person key and the
+#: owner-binding (at claim and at every re-announce). Unset = production, no end.
+IDENTITY_TTL_ENV_VAR = "CIRIS_NODE_IDENTITY_TTL_S"
+#: A fresh-home harness identity outlives its run, not the day.
+HARNESS_IDENTITY_TTL_S = 86400
+#: The server refuses anything shorter.
+MIN_IDENTITY_TTL_S = 600
+
+
+def declare_identity_ttl(env: MutableMapping[str, str], fresh_home: bool) -> Optional[str]:
+    """Give a fresh-home harness node's identities a signed end, so nothing stays live on the canonical.
+
+    Only a fresh home: a reused home keeps keys from an earlier run, and an end
+    on those would retire an identity a later run still expects. An explicit
+    value at or above the server's minimum is kept; anything else is replaced.
+    Older servers ignore the variable. Returns a warning when a value was replaced.
+    """
+    if not fresh_home:
+        return None
+    inherited = (env.get(IDENTITY_TTL_ENV_VAR) or "").strip()
+    if inherited:
+        try:
+            if int(inherited) >= MIN_IDENTITY_TTL_S:
+                return None
+        except ValueError:
+            pass
+    env[IDENTITY_TTL_ENV_VAR] = str(HARNESS_IDENTITY_TTL_S)
+    if inherited:
+        return (
+            f"{IDENTITY_TTL_ENV_VAR}={inherited!r} is not a lifetime of at least {MIN_IDENTITY_TTL_S} s, "
+            f"so it is set to {HARNESS_IDENTITY_TTL_S}"
+        )
+    return None
+
+
 def declare_process_run_kind(default: str = QA) -> Optional[str]:
     """``declare_run_kind`` on this process's own ``os.environ``.
 

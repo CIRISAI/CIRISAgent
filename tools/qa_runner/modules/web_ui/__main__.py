@@ -929,33 +929,52 @@ class DesktopAppTestRunner:
             await asyncio.sleep(1.5)
             return True
 
-        # 1. The account surface (both modes, both shells).
-        if await _surface_to_logout("account", "the Account surface"):
-            return
+        # THE SHELL SETTLES AFTER SIGN-IN. Right after setup the app is still
+        # composing: the first tree can hold no circles chrome (so shell detection
+        # reads the old rail), and This node can list only the node-build rows
+        # until the app sees its agent. Linux, run 43754658996: every route missed
+        # once at 20:36:00 and the run failed. Try every route, and if all miss,
+        # wait and try them all again until LOGOUT_SETTLE_S has passed; only a
+        # route that never appears fails, with the last pass's misses.
+        deadline = time.time() + LOGOUT_SETTLE_S
+        attempt = 0
+        while True:
+            attempt += 1
+            misses.clear()
 
-        # 2. The agent home's top bar (old rail only).
-        if await self.helper.is_element_visible("btn_governance_menu"):
-            self._log("logout via the governance menu: btn_governance_menu -> menu_logout")
-            if not await self.helper.click("btn_governance_menu"):
-                raise RuntimeError("Failed to open the governance menu")
-            if not await self.helper.wait_for_element("menu_logout", timeout=8000):
-                await self._dump_tree("reset:menu_logout")
-                raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
-            if not await self.helper.click("menu_logout"):
-                raise RuntimeError("Failed to click menu_logout")
-            await asyncio.sleep(1.5)
-            return
-        misses.append("btn_governance_menu: not on screen")
+            # 1. The account surface (both modes, both shells).
+            if await _surface_to_logout("account", "the Account surface"):
+                return
 
-        # 3. Settings (circles: under This node; old rail: pre-0.5.216 Agent group).
-        if await _surface_to_logout("agent-settings", "the Settings surface"):
-            return
+            # 2. The agent home's top bar (old rail only).
+            if await self.helper.is_element_visible("btn_governance_menu"):
+                self._log("logout via the governance menu: btn_governance_menu -> menu_logout")
+                if not await self.helper.click("btn_governance_menu"):
+                    raise RuntimeError("Failed to open the governance menu")
+                if not await self.helper.wait_for_element("menu_logout", timeout=8000):
+                    await self._dump_tree("reset:menu_logout")
+                    raise RuntimeError("menu_logout not under btn_governance_menu — the item moved categories")
+                if not await self.helper.click("menu_logout"):
+                    raise RuntimeError("Failed to click menu_logout")
+                await asyncio.sleep(1.5)
+                return
+            misses.append("btn_governance_menu: not on screen")
+
+            # 3. Settings (circles: under This node; old rail: pre-0.5.216 Agent group).
+            if await _surface_to_logout("agent-settings", "the Settings surface"):
+                return
+
+            if time.time() >= deadline:
+                break
+            self._log(f"no logout route yet (pass {attempt}); waiting for the shell to settle")
+            await asyncio.sleep(LOGOUT_RETRY_S)
 
         await self._dump_tree("reset:logout")
         tags = [e.test_tag for e in await self.helper.get_elements()]
         groups = [t for t in tags if t.startswith("nav_group_")]
         raise RuntimeError(
-            "no logout route on this install. Looked for, circles shell (0.5.224+): "
+            f"no logout route on this install after {attempt} passes over {LOGOUT_SETTLE_S:.0f}s. "
+            "Looked for, circles shell (0.5.224+): "
             f"{' -> '.join(CIRCLES_ROUTES['account'])} and "
             f"{' -> '.join(CIRCLES_ROUTES['agent-settings'])}; old rail: nav_epistemic_account "
             "(0.5.216+), btn_governance_menu (the agent home's top bar), nav_epistemic_agent_settings. "
@@ -1087,6 +1106,24 @@ class DesktopAppTestRunner:
                     f"NOT ASSERTED on {platform}: the .env lives on the device; the desktop legs assert its removal"
                 )
                 return
+            # 3. The client's own wipe finished. A partial wipe is a home no real
+            #    first run produces: Windows (run 43754658996) removed 7 entries
+            #    while the node held the rest open, logged `wipeLocalData -> false`,
+            #    and the next boot re-keyed the node (pubkey_swap). The .env check
+            #    below passed anyway, because the .env was one of the 7.
+            outcome = _client_wipe_outcome(_newest_client_log_text())
+            if outcome is None:
+                self._log(
+                    "NOT OBSERVED: no `wipeLocalData ->` line in the client log, so the wipe's outcome is unknown"
+                )
+            else:
+                wiped, lines = outcome
+                if not wiped:
+                    raise RuntimeError(
+                        "the client's factory reset did not finish wiping the home "
+                        f"({'; '.join(lines) or 'wipeLocalData -> false'})"
+                    )
+                self._log(f"the client wiped the home ({'; '.join(lines)})")
             env_path = Path(os.environ.get("CIRIS_HOME") or (Path.home() / "ciris")) / ".env"
             deadline = time.time() + 20
             while time.time() < deadline:
@@ -1104,6 +1141,28 @@ class DesktopAppTestRunner:
             )
 
         await self.run_test("reset_took_effect", reset_took_effect)
+
+        async def stop_restarted_app():
+            # CLOSE THE GAP. The reset restarts the app into first run, and while
+            # nothing answers :4243 the restarted app launches a ciris-server of
+            # its own. macOS, run 43754658996: the workflow freed the ports at
+            # 20:39:09, the app started a node at 20:39:16 (it minted keys and
+            # reached the canonical), and the with-AI bring-up killed it five
+            # seconds later. The canonical then held that dead process's route for
+            # the node key (CIRISEdge#1004). Stop the app, then the nodes it
+            # spawns (bring-up's order), so nothing can start between this step
+            # and the next `--launch`, which relaunches the app itself.
+            if (getattr(_LAST_ARGS, "platform", "desktop") or "desktop") != "desktop":
+                self._log("not desktop: the device app is relaunched by the next bring-up")
+                return
+            from tools.qa_runner.platform_procs import desktop_process_pattern, kill_processes_matching
+
+            killed = kill_processes_matching(desktop_process_pattern())
+            for pat in ("ciris_server", "ciris-server"):
+                killed += kill_processes_matching(pat)
+            self._log(f"stopped the restarted app and its nodes ({killed} process(es)) until the next bring-up")
+
+        await self.run_test("stop_restarted_app", stop_restarted_app)
         return all(r.success for r in self.results)
 
     async def test_setup_wizard_flow(
@@ -2586,6 +2645,54 @@ def resolved_qa_home() -> Path:
     return Path(env_home).expanduser() if env_home else Path.home() / "ciris"
 
 
+#: How long a logout keeps retrying while the app finishes composing after sign-in.
+LOGOUT_SETTLE_S = 45.0
+#: Pause between logout passes.
+LOGOUT_RETRY_S = 5.0
+
+#: Subdirectories of the QA home a fresh bring-up removes. ``identity/`` goes with
+#: ``data/``: keeping the federation seeds while ``data/edge`` is wiped gives the
+#: same node key a second transport identity (CIRISEdge#1004), and keeping an
+#: Ed25519 seed without its ML-DSA half re-keys the node (pubkey_swap, run
+#: 43754658996).
+FRESH_HOME_SUBDIRS = ("data", "identity")
+
+
+class HomeWipeIncomplete(RuntimeError):
+    """A fresh bring-up could not remove part of the QA home."""
+
+
+_WIPE_OUTCOME_RE = re.compile(r"wipeLocalData -> (true|false)")
+
+
+def _client_wipe_outcome(log_text: str) -> "Optional[tuple[bool, List[str]]]":
+    """The client's last factory-reset wipe: (finished, its LocalDataWipe lines), or None if unlogged.
+
+    The desktop client logs ``[LocalDataWipe] <home>: removed N generated entries,
+    ok=<bool>`` and ``[onResetSetup] wipeLocalData -> <bool>``. Only the last
+    reset in the log counts.
+    """
+    outcomes = list(_WIPE_OUTCOME_RE.finditer(log_text))
+    if not outcomes:
+        return None
+    last = outcomes[-1]
+    start = log_text.rfind("onResetSetup] User initiated device reset", 0, last.start())
+    window = log_text[max(start, 0) : last.end()]
+    lines = [ln.strip() for ln in window.splitlines() if "[LocalDataWipe]" in ln]
+    return last.group(1) == "true", lines
+
+
+def _newest_client_log_text() -> str:
+    """The newest desktop client log's text (one log per launch), or "" if there is none."""
+    candidates = sorted(temp_path(".").glob("ciris_desktop_setup.*.log"), key=lambda q: q.stat().st_mtime)
+    if not candidates:
+        return ""
+    try:
+        return candidates[-1].read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
 def _wipe_dev_data() -> None:
     """Wipe every data location the CIRIS backend may use, for a clean first run.
 
@@ -2595,7 +2702,16 @@ def _wipe_dev_data() -> None:
     destructive operation aimed at whichever directory the harness assumed,
     rather than the one it was told to use.
 
-    The signing key is preserved so device identity survives a reset.
+    THE WHOLE HOME, NOT HALF OF IT. ``data/`` and ``identity/`` go together
+    (FRESH_HOME_SUBDIRS). Wiping one and keeping the other is a home no real
+    first run produces, and both 2.22.1 desktop failures came from one: a kept
+    Ed25519 seed without its ML-DSA half (Windows, pubkey_swap) and kept seeds
+    with a wiped ``data/edge`` (macOS, a second transport identity for one key).
+    A directory that is still there after the wipe raises HomeWipeIncomplete:
+    every caller runs after killing the app and the node, so a leftover means
+    something still holds it, and testing on top of it proves nothing.
+
+    The legacy ``agent_signing.key`` at the home root is preserved, as before.
     """
     home_ciris = resolved_qa_home()
     repo_root = Path(__file__).resolve().parents[4]
@@ -2605,10 +2721,20 @@ def _wipe_dev_data() -> None:
     if signing_key.exists():
         key_backup = signing_key.read_bytes()
 
+    targets = [home_ciris / sub for sub in FRESH_HOME_SUBDIRS] + [repo_root / "data"]
+    left: List[str] = []
+    for target in targets:
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+            if target.exists():
+                left.append(str(target))
+                continue
+            print(f" wiped {target}")
+    if left:
+        raise HomeWipeIncomplete(
+            f"could not remove {', '.join(left)}: something still holds it, so this would not be a fresh home"
+        )
     for data_dir in [home_ciris / "data", repo_root / "data"]:
-        if data_dir.exists():
-            shutil.rmtree(data_dir, ignore_errors=True)
-            print(f" wiped {data_dir}")
         data_dir.mkdir(parents=True, exist_ok=True)
 
     # Restore signing key
@@ -3417,7 +3543,11 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         print(" [FAIL] ports still held after the bring-up kill; the backend would fail Edge init")
         return 1
     time.sleep(1)
-    _wipe_dev_data()
+    try:
+        _wipe_dev_data()
+    except HomeWipeIncomplete as exc:
+        print(f" [FAIL] {exc}")
+        return 1
 
     # 2. Start backend in first-run mode
     # CIRIS_TESTING_MODE relaxes the setup validator that otherwise rejects 'admin'
@@ -3598,7 +3728,11 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
         print(" [FAIL] ports still held after the bring-up kill; the backend would fail Edge init")
         return 1
     time.sleep(1)
-    _wipe_dev_data()
+    try:
+        _wipe_dev_data()
+    except HomeWipeIncomplete as exc:
+        print(f" [FAIL] {exc}")
+        return 1
     # _wipe_dev_data rewrites ~/ciris/.env with CIRIS_CONFIGURED="true" (for
     # the configured-mode path). First-run must NOT see it — remove it so the
     # backend's setup probe reports first_run and the desktop routes to the

@@ -3427,6 +3427,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         port=args.port,
         mock_llm=args.mock_llm,
         wipe_data=False,  # we already did it
+        run_home=True,
         first_run_mode=True,
         startup_timeout=args.timeout,
     )
@@ -3457,6 +3458,7 @@ async def run_desktop_up(args: argparse.Namespace) -> int:
         port=args.port,
         mock_llm=args.mock_llm,
         wipe_data=False,
+        run_home=True,  # same home, same run: the re-announce keeps the end
         first_run_mode=False,
         startup_timeout=args.timeout,
     )
@@ -3613,6 +3615,7 @@ async def run_desktop_first_run_up(args: argparse.Namespace) -> int:
         port=args.port,
         mock_llm=args.mock_llm,
         wipe_data=False,  # we already did it
+        run_home=True,
         first_run_mode=True,
         startup_timeout=args.timeout,
     )

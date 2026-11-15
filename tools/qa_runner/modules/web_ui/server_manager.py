@@ -43,6 +43,9 @@ class ServerConfig:
     install_wheel: bool = False  # Install fresh wheel before starting
     wipe_data: bool = True  # Wipe data for clean slate
     first_run_mode: bool = False  # Enable first-run/setup wizard mode (no CIRIS_CONFIGURED)
+    # The home was wiped by this run (here or by the caller), so its identities
+    # are this run's own and get a signed end (CIRIS_NODE_IDENTITY_TTL_S).
+    run_home: bool = False
 
 
 @dataclass
@@ -324,6 +327,14 @@ class ServerManager:
         from tools.qa_runner.run_kind import declare_run_kind
 
         declare_run_kind(env)
+        # A home this run wiped holds identities that are this run's own: give
+        # them a signed end, so they do not stay live on the canonical. The env
+        # reaches the node too, since on the no-AI answer this process becomes it.
+        from tools.qa_runner.run_kind import declare_identity_ttl
+
+        _ttl_warning = declare_identity_ttl(env, fresh_home=self.config.wipe_data or self.config.run_home)
+        if _ttl_warning:
+            print(f"[WARN] {_ttl_warning}")
 
         # Force deterministic data path across BOTH the first-run and
         # configured-mode backend invocations. Without this:

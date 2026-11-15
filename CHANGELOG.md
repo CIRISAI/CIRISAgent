@@ -5,6 +5,14 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.1-stable] - Unreleased
+
+### Fixed
+
+- **The tool step reads the agent's identity, approved amendments included.** The normal TSASPDMA path passed no context, so its prompt had no identity block; only correction mode had been fixed in 2.22.0. RATCHET Market 4 run 43667023655: the amendment reached 3 of 112 TSASPDMA prompts, and a ticket the amendment forbids was filed.
+- **Entropy and the optimization veto see the actions already run in the task.** They judged the action alone, so on a follow-up the veto read "I have filed a ticket" as the filing itself, and the agent then told the user it could not file the ticket that stood (ac-20). The task's action record now leads their prompt; seed-thought prompts are unchanged.
+- **The node owner can resolve a domain-hinted deferral.** Since 2.22.0 these deferrals are recorded, so the resolve route's jurisdiction gate runs for them. The owner's `wa-root-…` id cannot be built as a WA certificate, and the lookup raised outside the route's error handling: a bare 500 logged only to the console (rv-10, rv-12, sh-ch-03). A root owner row is now ROOT; a jurisdiction lookup that fails is a logged 503.
+
 ## [2.22.0-stable] - 2026-11-14
 
 ### Known issue

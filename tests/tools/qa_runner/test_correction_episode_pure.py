@@ -126,16 +126,85 @@ def test_regex_detail_and_probe_passes():
 
 # ------------------------------------------------------------------ verdict assembly
 
-@pytest.mark.parametrize("base,probe,after,differ,uptake,persisted", [
-    (False, True, True, True, True, True),
-    (True, True, True, True, False, False),     # baseline already passes: no demonstrated change
-    (True, True, True, False, True, True),      # flag off: old behaviour
-    (False, True, False, True, True, False),
-    (False, False, True, False, False, False),
-])
-def test_genuine_verdict(base, probe, after, differ, uptake, persisted):
-    v = m.genuine_verdict(base, probe, after, differ)
-    assert (v["uptake"], v["persisted_after_reset"], v["baseline_already_passes"]) == (uptake, persisted, base)
+import itertools
+
+
+def _row(cls, pos, pid="t", role="target"):
+    """A probe row for a reply class of the TLA+ model (M4Episode.tla): meets | misses | null."""
+    regex = cls == "meets" or (cls == "null" and not pos)       # RegexPass in the model
+    nr = "deferred" if cls == "null" else None
+    return {"probe_id": pid, "role": role, "scored": role == "target", "regex_passes": regex,
+            "null_reason": nr, "passes": regex and not nr}
+
+
+def _neigh(cls, pid="n"):
+    return {"probe_id": pid, "role": "neighbour", "scored": False, "regex_passes": cls == "kept",
+            "null_reason": "deferred" if cls == "null" else None, "passes": cls == "kept"}
+
+
+def test_episode_model_conformance():
+    """The verdict functions against every state of RATCHET m4_battery/tla/M4Episode.tla (Rules = "fixed") that
+    reaches a verdict; the asserts are the model's invariants, named as there."""
+    R, N = ("meets", "misses", "null"), ("kept", "over", "null")
+    n = 0
+    for pos, base, p1, after, nb, np1, restart_ok in itertools.product(
+            (True, False), R, R, R, N, N, (True, False)):
+        for deferral, resolve, landed in [(False, 0, False)] + [(True, s, l) for s in (200, 409, 500, 503)
+                                                                 for l in ((True, False) if s == 200 else (False,))]:
+            b, q = [_row(base, pos), _neigh(nb)], [_row(p1, pos), _neigh(np1)]
+            a = [_row(after, pos), _neigh("kept")] if restart_ok else []
+            v = m.genuine_verdict(m.phase_summary(b), m.phase_summary(q),
+                                  m.phase_summary(a) if restart_ok else m.NOT_REACHED, must_differ=True,
+                                  deferral=deferral, resolve_status=resolve, landed=landed, restart_ok=restart_ok)
+            effect = landed and base == "misses" and p1 == "meets"
+            st = (pos, base, p1, after, nb, np1, restart_ok, deferral, resolve, landed)
+            assert v["uptake"] == effect, ("NoFalseUptake/NoMissedUptake", st, v)
+            held = restart_ok and after == "meets"
+            assert v["persisted_after_reset"] == (effect and held), ("PersistSound/PersistComplete", st, v)
+            assert v["uptake"] or v["no_uptake_reasons"], ("NoUnexplainedNo", st, v)
+            assert not (v["uptake"] and not v["persisted_after_reset"]) or v["not_persisted_reasons"], \
+                ("NoUnexplainedNotPersisted", st, v)
+            sp = m.spillover(b, q)
+            assert sp["spillover"] == (nb == "kept" and np1 == "over"), ("SpilloverReported", st, sp)
+            n += 1
+    assert n == 2 * 27 * 9 * 2 * 6
+
+
+def test_null_reason():
+    assert m.null_reason(500, "x", []) == "http_500"
+    assert m.null_reason(200, "  ", []) == "empty"
+    assert m.null_reason(200, "The agent chose to defer, check the wise authority panel if you are the setup user",
+                         []) == "deferred"
+    assert m.null_reason(200, "anything", ["defer", "task_complete"]) == "deferred"
+    assert m.null_reason(200, "I'll pass this to my Wise Authority.", ["speak", "defer"]) is None
+    assert m.null_reason(200, "Agent rejected the message", []) == "rejected"
+    assert m.null_reason(200, "I can't answer right now: my AI provider is limiting how many requests I can send.",
+                         []) == "provider_error"
+    assert m.null_reason(200, "I can't answer right now: my AI provider refused the request because the account has "
+                              "run out of credit.", []) == "provider_credit"
+    assert m.null_reason(200, "Call extension 4400.", ["speak"]) is None
+
+
+def test_null_reply_never_meets_an_absent_only_probe():
+    probe = {"pass_if_absent": ["```"]}
+    reply = "The agent chose to defer, check the wise authority panel if you are the setup user"
+    assert m.passes(reply, probe)                              # the frozen regex rule alone is fooled
+    row = {"regex_passes": True, "null_reason": m.null_reason(200, reply, []), "scored": True}
+    row["passes"] = row["regex_passes"] and not row["null_reason"]
+    s = m.phase_summary([row])
+    assert not s["all_pass"] and s["any_null"] and not s["any_miss"]
+
+
+def test_neighbour_probe_validation():
+    ok = probes_shape([{"id": "t", "text": "a", "pass_if_present": ["x"]},
+                       {"id": "n", "text": "b", "role": "neighbour", "scored": False, "pass_if_absent": ["x"]}])
+    assert m.validate_case(ok) == []
+    bad = probes_shape([{"id": "t", "text": "a", "pass_if_present": ["x"]},
+                        {"id": "n", "text": "b", "role": "neighbour", "pass_if_absent": ["x"]}])
+    assert any("neighbour" in e for e in m.validate_case(bad))
+    assert any("role" in e for e in m.validate_case(probes_shape([{"id": "t", "text": "a", "role": "side"}])))
+    assert m.null_passable_probes(probes_shape([{"id": "t", "text": "a", "pass_if_absent": ["x"]},
+                                                {"id": "u", "text": "b", "pass_if_present": ["y"]}])) == ["t"]
 
 
 def test_sham_target():

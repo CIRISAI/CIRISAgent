@@ -374,6 +374,22 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         """
         wa = await self.auth_service.get_wa(wa_id)
         if not wa:
+            # The node-claimed owner (wa-root-…) has no WACertificate, but a root
+            # owner row is ROOT and takes the recovery path below like any ROOT
+            # (Eric, 2026-11-15). RATCHET Market 4 run 43667023655: building a
+            # certificate for it raised, and every owner resolve of a
+            # domain-hinted deferral answered an unlogged 500.
+            owner_role_of = getattr(self.auth_service, "get_node_owner_role", None)
+            owner_role = await owner_role_of(wa_id) if owner_role_of else None
+            if owner_role == WARole.ROOT.value:
+                return AuthorizationDecision(
+                    allowed=True,
+                    message=f"Node owner '{wa_id}' is ROOT and unconditionally authorized for '{action}' (recovery path)",
+                    wa_id=wa_id,
+                    role=WARole.ROOT,
+                    action=action,
+                    resource=resource,
+                )
             return AuthorizationDecision(
                 allowed=False,
                 reason=AuthorizationDenialReason.WA_NOT_FOUND,

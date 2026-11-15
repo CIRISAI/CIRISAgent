@@ -483,7 +483,26 @@ def _active_or_none(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 def get_wa_by_id(wa_id: str) -> Optional[WACertificate]:
     """Get an active WA certificate by ID."""
     row = _active_or_none(_parse_persist_payload(_get_engine().wa_cert_get(wa_id)))
-    return _row_to_wa(row) if row else None
+    # A node-claimed owner row (wa-root-…) is not a WACertificate and cannot be
+    # built as one; answer None like every enumeration does rather than raise.
+    # Callers that need the owner's role ask node_owner_role().
+    return _row_to_wa(row) if row and _is_brain_wa_row(row) else None
+
+
+def node_owner_role(wa_id: str) -> Optional[str]:
+    """Role of an ACTIVE node-claimed owner row (wa-root-…), or None.
+
+    The owner the substrate seats at claim time is the Wise Authority for their
+    own agent (Eric, 2026-10-22), but its row cannot be materialized as a
+    WACertificate. The jurisdiction gate needs only its role, so this reads that
+    and nothing else. Classic brain certificates return None: get_wa_by_id
+    already answers for them.
+    """
+    row = _active_or_none(_parse_persist_payload(_get_engine().wa_cert_get(wa_id)))
+    if not row or _is_brain_wa_row(row):
+        return None
+    role = row.get("role")
+    return str(role).lower() if role else None
 
 
 def get_wa_by_kid(jwt_kid: str) -> Optional[WACertificate]:

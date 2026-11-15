@@ -399,8 +399,26 @@ async def resolve_deferral(
 
     if _domain:
         _scope_resource = f"{str(_domain).lower()}_{deferral_id}"
-        _wa_id = await resolve_certificate_id(request, auth)
-        _decision = await wa_service.authorize(_wa_id, "resolve_deferral", _scope_resource)
+        try:
+            _wa_id = await resolve_certificate_id(request, auth)
+            _decision = await wa_service.authorize(_wa_id, "resolve_deferral", _scope_resource)
+        except Exception as exc:
+            # Same fail-closed rule as the domain read above, and LOGGED: this
+            # used to escape as a bare 500 whose traceback reached only
+            # uvicorn's console (RATCHET Market 4, run 43667023655).
+            logger.warning(  # NOSONAR - deferral_id sanitized via sanitize_for_log()
+                "JURISDICTION UNVERIFIABLE: could not authorize the resolver of deferral %s: %s",
+                sanitize_for_log(deferral_id),
+                exc,
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Cannot verify jurisdiction for this deferral right now, so it cannot be resolved. "
+                    "This is a lookup failure, not a permissions decision — please retry."
+                ),
+            ) from exc
         if not _decision.allowed:
             logger.warning(  # NOSONAR - all user-controlled values sanitized via sanitize_for_log()
                 "JURISDICTION DENIED: %s (caller %s) may not resolve %s deferral %s (%s; required scope %s)",

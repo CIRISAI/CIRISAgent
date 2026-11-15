@@ -525,6 +525,10 @@ class AuthenticationService(BaseInfrastructureService, AuthenticationServiceProt
         """Get WA certificate by ID."""
         return authentication_store.get_wa_by_id(wa_id)
 
+    async def get_node_owner_role(self, wa_id: str) -> Optional[str]:
+        """Role of the node-claimed owner row for ``wa_id`` (wa-root-…), or None."""
+        return authentication_store.node_owner_role(wa_id)
+
     async def _get_wa_by_kid(self, jwt_kid: str) -> Optional[WACertificate]:
         """Get WA certificate by JWT key ID."""
         return authentication_store.get_wa_by_kid(jwt_kid)

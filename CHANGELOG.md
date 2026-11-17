@@ -5,7 +5,13 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.22.1-stable] - Unreleased
+## [2.22.1-stable] - 2026-11-16
+
+### Known issues
+
+- **Windows: the client's "Reset device" cannot finish wiping the home while the no-AI node holds its files** (`LocalDataWipe … ok=false`). The five-platform harness now fails the reset step on it and wipes the home itself, so the with-AI leg still starts clean and delivers. Fix belongs to the client: stop the node before wiping.
+- **Windows: a conscience vetoed a plain greeting** as "ignoring the JSON instruction". That is the structured-output schema text instructor appends to the accord system message (#1363). One leg of run 44006352958; it did not reproduce across 9 OpenRouter providers. Traces still delivered.
+- The owner's community_trust grant was re-authored on each delivery-probe tick (#1361). ciris-server 0.5.249 makes the door idempotent, so no new rows are signed; the agent-side loop is still open.
 
 ### Changed
 

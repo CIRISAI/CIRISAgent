@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 import time
 import httpx
 
-from .shell_nav import Shell, detect_shell, row_tag, surface_for_screen, walk_circles
+from .shell_nav import Shell, detect_shell, row_tag, shell_composed, surface_for_screen, walk_circles
 
 
 @dataclass
@@ -703,7 +703,10 @@ class DesktopAppHelper:
         the `nav_epistemic_<id>` row -- drawer, collapsed group, fold -- and
         clicks it, exactly as every call site did before.
         """
-        if await self.shell() == Shell.CIRCLES:
+        tags = [e.test_tag for e in await self.get_elements()]
+        if not shell_composed(tags):
+            return "no navigation shell on screen yet (neither the circles nor the rail chrome is composed)"
+        if detect_shell(tags) == Shell.CIRCLES:
             return await walk_circles(self, surface)
         tag = row_tag(surface)
         reveal_err = await self.reveal_sidebar_row(tag)

@@ -189,3 +189,28 @@ async def test_logout_still_fails_when_no_route_ever_appears(_fast, monkeypatch)
     app = _ComposingApp()
     with pytest.raises(RuntimeError, match="no logout route on this install after 1 passes"):
         await _composing_runner(app, compose_after_passes=10_000)._logout()
+
+
+class _RailRevealSpy(_ComposingApp):
+    """Counts old-rail reveals; on an uncomposed tree there must be none."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rail_reveals = 0
+
+    async def reveal_sidebar_row(self, tag: str):  # type: ignore[override]
+        self.rail_reveals += 1
+        return f"{tag!r} is not on screen after opening each sidebar group (no nav_group_* rows)"
+
+
+@pytest.mark.asyncio
+async def test_an_uncomposed_tree_is_waited_for_not_walked_as_the_old_rail(_fast, monkeypatch):
+    """Linux, run 44006352958: the first read had no chrome, detect_shell said RAIL, and the
+    rail's reveal scrolled an endless list for the whole logout window."""
+    monkeypatch.setattr(web_ui, "LOGOUT_SETTLE_S", 30.0)
+    app = _RailRevealSpy()
+    err = await app.reach_surface("account")
+    assert err and "no navigation shell on screen yet" in err
+    await _composing_runner(app, compose_after_passes=1)._logout()
+    assert app.rail_reveals == 0
+    assert app.page == ("screen", "Login")

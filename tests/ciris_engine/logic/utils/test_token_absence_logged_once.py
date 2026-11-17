@@ -6,11 +6,13 @@ time: 50 in one QA session, which tripped the incidents gate's WARNING-flood
 check (run 39684260533).
 """
 
+import io
 import logging
 
 import pytest
 
 from ciris_engine.logic.utils import token_handshake as th
+from ciris_engine.logic.utils.log_dedup import RepeatCollapsingFilter
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +23,20 @@ def _reset(monkeypatch):
 
 
 def _warnings(caplog):
-    return [r for r in caplog.records if r.levelno == logging.WARNING and "no proxy token" in r.getMessage()]
+    """The warnings read_proxy_token itself raised.
+
+    Matched on the emitting function, not just the text. A handler carrying
+    RepeatCollapsingFilter (setup_basic_logging installs two, and an earlier
+    test in the same xdist worker can leave one behind) re-logs a held streak
+    as "<same text>  [repeated N more times]" through this same logger. That
+    summary is the dedup filter's line, not a second warning from here, and
+    counting it made this file fail on main depending on test order.
+    """
+    return [
+        r
+        for r in caplog.records
+        if r.levelno == logging.WARNING and r.funcName == "read_proxy_token" and "no proxy token" in r.getMessage()
+    ]
 
 
 def test_absence_warns_once(caplog):
@@ -41,3 +56,23 @@ def test_absence_after_a_token_warns_again(caplog, monkeypatch):
         th.read_proxy_token()
         th.read_proxy_token()
     assert len(_warnings(caplog)) == 2
+
+
+def test_count_ignores_the_dedup_filters_summary(caplog, monkeypatch):
+    """A leaked repeat-collapsing handler must not change the count.
+
+    Reproduces the main failure: with such a handler listening at DEBUG, the
+    second WARNING is held as a repeat and the DEBUG line that follows flushes
+    it as a summary record carrying the same text.
+    """
+    # Not NullHandler: its handle() is a no-op, so its filters never run.
+    leaked = logging.StreamHandler(io.StringIO())
+    leaked.setLevel(logging.DEBUG)
+    leaked.addFilter(RepeatCollapsingFilter())
+    th.logger.addHandler(leaked)
+    try:
+        test_absence_after_a_token_warns_again(caplog, monkeypatch)
+        summaries = [r for r in caplog.records if "repeated" in r.getMessage()]
+        assert len(summaries) == 1, "the leaked handler did not produce the summary this test guards against"
+    finally:
+        th.logger.removeHandler(leaked)

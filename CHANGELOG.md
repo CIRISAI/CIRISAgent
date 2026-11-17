@@ -5,6 +5,27 @@ All notable changes to CIRIS Agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.1-stable] - 2026-11-16
+
+### Known issues
+
+- **Windows: the client's "Reset device" cannot finish wiping the home while the no-AI node holds its files** (`LocalDataWipe … ok=false`). The five-platform harness now fails the reset step on it and wipes the home itself, so the with-AI leg still starts clean and delivers. Fix belongs to the client: stop the node before wiping.
+- **Windows: a conscience vetoed a plain greeting** as "ignoring the JSON instruction". That is the structured-output schema text instructor appends to the accord system message (#1363). One leg of run 44006352958; it did not reproduce across 9 OpenRouter providers. Traces still delivered.
+- The owner's community_trust grant was re-authored on each delivery-probe tick (#1361). ciris-server 0.5.249 makes the door idempotent, so no new rows are signed; the agent-side loop is still open.
+
+### Changed
+
+- **ciris-server 0.5.249** (edge v45.1.4, persist v61.4.1, verify v22.2.0), which supersedes 0.5.248 below. The 2.22.1 five-platform run on 0.5.248 found a second way to re-key a node. On Windows a partial client reset kept the Ed25519 key but lost the ML-DSA half, so the node minted a new pair under its old id and the canonical refused it as pubkey_swap. A home in that state now sets its key files aside and starts as a new node, and a key Conflict with a different pair fails loudly at boot. Edge 45.1.4 lets a newer verified route replace a stale one (CIRISEdge#1004: a node that came back on a new transport identity was locked out), backs off contact-key re-queues (#1005), and carries #1006. `author_community_trust` is idempotent: it returns the owner's standing grant instead of signing a new one (the server half of #1361). All nine PyPI sha256s match the CI publish run's own attestations (confirmed by the server session), and the three bundled Android wheels match PyPI. The iOS native library reports 0.5.249.
+- **The five-platform harness starts the with-AI leg on a fresh home, or fails.** A client reset that does not finish wiping the home fails the reset step. A fresh bring-up removes `identity/` with `data/` and stops on anything left behind. After the reset the restarted app is stopped, so it cannot start a node of its own before the next bring-up. The logout retries for up to 45 s while the app finishes composing after sign-in.
+- **ciris-server 0.5.248** (edge v45.1.3, persist v61.4.1, verify v22.2.0). This fixes the 2.22.0 known issue (CIRISServer#878). When AI is added to a home that first booted without it, the node keeps its key with the exact ML-DSA pair it registered, so the canonical no longer sees a key swap. A home that 0.5.246–0.5.247 already re-keyed heals on its next boot and keeps the stray seed as `node_ml_dsa_65.seed.pubkey_swap`. If no local seed matches the registered record, the node refuses to sign rather than mint a new one. Rooms stay at two people. All nine PyPI sha256s match the server session's list, and the three bundled Android wheels match them. The iOS native library reports 0.5.248, and the iOS bundle's engine is re-synced to 2.22.1.
+- **The desktop harness node gets an identity lifetime.** The web_ui launcher now sets `CIRIS_NODE_IDENTITY_TTL_S` (86400) on a home it wiped, the restart after setup included, so desktop CI identities no longer stay live on the canonical.
+
+### Fixed
+
+- **The tool step reads the agent's identity, approved amendments included.** The normal TSASPDMA path passed no context, so its prompt had no identity block; only correction mode had been fixed in 2.22.0. RATCHET Market 4 run 43667023655: the amendment reached 3 of 112 TSASPDMA prompts, and a ticket the amendment forbids was filed.
+- **Entropy and the optimization veto see the actions already run in the task.** They judged the action alone, so on a follow-up the veto read "I have filed a ticket" as the filing itself, and the agent then told the user it could not file the ticket that stood (ac-20). The task's action record now leads their prompt; seed-thought prompts are unchanged.
+- **The node owner can resolve a domain-hinted deferral.** Since 2.22.0 these deferrals are recorded, so the resolve route's jurisdiction gate runs for them. The owner's `wa-root-…` id cannot be built as a WA certificate, and the lookup raised outside the route's error handling: a bare 500 logged only to the console (rv-10, rv-12, sh-ch-03). A root owner row is now ROOT; a jurisdiction lookup that fails is a logged 503.
+
 ## [2.22.0-stable] - 2026-11-14
 
 ### Known issue

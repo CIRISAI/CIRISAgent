@@ -866,6 +866,43 @@ class TestTSASPDMAIntegration:
             assert "TSASPDMA" in result.rationale
 
     @pytest.mark.asyncio
+    async def test_maybe_run_tsaspdma_passes_the_thought_context(
+        self, thought_processor_with_tsaspdma, thought_content
+    ) -> None:
+        """The tool step gets the thought's context, so its prompt carries the identity.
+
+        RATCHET Market 4, run 43667023655: context=None reached TSASPDMA, its
+        prompt had no identity block, and a ticket the approved amendment
+        forbids was filed.
+        """
+        from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+        from ciris_engine.schemas.actions.parameters import ToolParams
+
+        thought_item = ProcessingQueueItem(
+            thought_id="test_thought",
+            source_task_id="test_task",
+            thought_type=ThoughtType.STANDARD,
+            content=thought_content,
+            raw_input_string="test",
+            initial_context={},
+            thought_depth=0,
+        )
+        tool_result = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.TOOL,
+            action_parameters=ToolParams(name="test_tool", parameters={}),
+            rationale="Test tool",
+        )
+        from types import SimpleNamespace
+
+        thought_context = SimpleNamespace(system_snapshot=None)
+
+        with patch("ciris_engine.logic.dma.dma_executor.run_tsaspdma") as mock_run_tsaspdma:
+            mock_run_tsaspdma.return_value = tool_result
+            await thought_processor_with_tsaspdma._maybe_run_tsaspdma(thought_item, tool_result, thought_context)
+
+        assert mock_run_tsaspdma.call_args.kwargs["context"] is thought_context
+
+    @pytest.mark.asyncio
     async def test_maybe_run_tsaspdma_handles_invalid_params(
         self, thought_processor_with_tsaspdma, thought_content
     ) -> None:

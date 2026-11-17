@@ -684,7 +684,11 @@ class ThoughtProcessor(
                     tool_info=tool_info,
                     aspdma_reasoning=action_result.rationale or "",
                     original_thought=thought_item,
-                    context=None,
+                    # The thought's context carries the identity block the tool
+                    # step judges against, approved amendments included. None
+                    # here sent TSASPDMA no identity at all (RATCHET Market 4,
+                    # run 43667023655: amendment in 3 of 112 TSASPDMA prompts).
+                    context=thought_context,
                     time_service=self._time_service,
                     context_enrichment=context_enrichment,
                 ),

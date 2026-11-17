@@ -158,6 +158,21 @@ def is_circles_tag(tag: str) -> bool:
     return tag == MY_THINGS or tag.startswith(CIRCLE_PREFIX)
 
 
+def shell_composed(tags: Collection[str]) -> bool:
+    """Whether either shell's navigation chrome is in the tree yet.
+
+    Right after sign-in the tree can hold neither. detect_shell then answers
+    RAIL by default, and the rail's reveal scrolls an endless list looking for a
+    row that belongs to the circles shell: Linux, run 44006352958, spent the
+    whole logout window scrolling `nav_epistemic_account`. A caller that sees
+    False should wait, not guess.
+    """
+    return any(
+        is_circles_tag(t) or t.startswith("nav_group_") or t.startswith("nav_epistemic_") or t == "btn_nav_drawer_open"
+        for t in tags
+    )
+
+
 def detect_shell(tags: Collection[str]) -> Shell:
     """Circles shell if `btn_my_things` or any `circle_*` is in the tree, else the old rail.
 

@@ -1,5 +1,9 @@
 import logging
-from typing import Any, Dict, List, Mapping, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Union, cast
+
+if TYPE_CHECKING:
+    from ciris_engine.logic.prompt_assembly.segmenting import Segments
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
 
 from pydantic import BaseModel, Field
 
@@ -7,7 +11,6 @@ from ciris_engine.schemas.dma.sent_prompts import attach_sent_prompts, carry_sen
 from ciris_engine.logic.conscience.transport import surfaces_as_transport_failure
 from ciris_engine.logic.formatters import (
     amendment_texts,
-    append_round1_accord_blocks,
     format_core_identity_block,
     format_system_prompt_blocks,
     format_system_snapshot,
@@ -15,6 +18,7 @@ from ciris_engine.logic.formatters import (
     get_escalation_guidance,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
@@ -201,7 +205,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         agent_occurrence_id = getattr(thought_item, "agent_occurrence_id", "default")
         original_task = await self.fetch_original_task(thought_item.source_task_id, agent_occurrence_id)
         task_context_str = self.format_task_context(original_task, thought_depth, thought=thought_item)
-        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
+        task_language = self.prompt_loader.language  # the language format_task_context rendered the sender in
 
         # Use DMAInputData if provided, otherwise fall back to ProcessingQueueItem context
         if current_context:
@@ -267,6 +271,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 language=self._explicit_language,
                 amendments=amendment_texts(agent_identity),
             )
+            agent_identity_for_prompt: Any = agent_identity
         else:
             # NO FALLBACK - STRICT TYPE CHECKING ONLY
             # When no DMAInputData, we still need to get identity from ProcessingQueueItem
@@ -333,6 +338,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 language=self._explicit_language,
                 amendments=amendment_texts(agent_identity_raw),
             )
+            agent_identity_for_prompt = agent_identity_raw
 
             # Format optional blocks - type narrow for .get() access
             if isinstance(system_snapshot_raw, dict):
@@ -353,17 +359,22 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         # Get images from thought item for multimodal
         thought_images = getattr(thought_item, "images", []) or []
 
-        # Compose messages via the extracted seam (#972)
-        messages = self.compose_messages(
+        # Compose messages via the extracted seam (#972), built by PromptAssembler (#1366 Phase 3)
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+        from ciris_engine.logic.prompt_assembly.segmenting import task_context_segments
+
+        messages, manifest = self.compose_prompt(
             thought_content_str,
             thought_item.thought_id,
-            task_context_block,
+            task_context_segments(task_context_str, verified_sender_of(thought_item, original_task), task_language),
+            agent_identity_for_prompt,
             identity_block,
             system_snapshot_block,
             user_profiles_block,
             context_str,
             rules_summary_str,
             images=thought_images,
+            thought=thought_item,
         )
 
         try:
@@ -376,14 +387,15 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             # source (the prompt asked for domain_alignment, the response
             # model demanded score → InstructorRetryException → circuit
             # breaker → "All LLM services failed").
-            llm_eval_data, _ = await self.call_llm_structured(
-                messages=messages,
-                response_model=DSDMAResult,
-                max_tokens=8192,
-                temperature=0.0,
-                thought_id=thought_item.thought_id,
-                task_id=thought_item.source_task_id,
-            )
+            with prompt_manifest_scope(manifest):
+                llm_eval_data, _ = await self.call_llm_structured(
+                    messages=messages,
+                    response_model=DSDMAResult,
+                    max_tokens=8192,
+                    temperature=0.0,
+                    thought_id=thought_item.thought_id,
+                    task_id=thought_item.source_task_id,
+                )
 
             # The LLM picks its own domain string — use that. Clamp the
             # alignment to [0, 1] defensively in case the model exceeded
@@ -460,32 +472,24 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             "in the YAML with the {full_snapshot_and_profile_context_str} slot."
         )
 
-    def compose_messages(
+    def _system_body(
         self,
-        thought_content_str: str,
-        thought_id: str,
-        task_context_block: str,
         identity_block: str,
         system_snapshot_block: str,
         user_profiles_block: str,
         context_str: str,
         rules_summary_str: str,
-        images: Optional[List[ImageContent]] = None,
-    ) -> List[JSONDict]:
-        """Compose the full DSDMA prompt message list from gathered inputs (#972).
-
-        Pure prompt composition - no LLM call, no data fetching. All awaited
-        data gathering (task fetch, snapshot/identity extraction, language
-        sync) happens in ``evaluate_thought()`` before this is called.
-        """
+    ) -> str:
+        """The system message before the identity prepend: the domain template, then response_format /
+        closing_reminder (#990)."""
         escalation_guidance_block = get_escalation_guidance(0)
 
         # The crisis block is NOT rendered into the template any more (#1248):
         # it arrives as its own system message right after language guidance,
-        # via append_round1_accord_blocks below — the same block every DMA sees.
-        # A template that still carries a `{crisis_resources_block}` slot (the
-        # echo-speculative identity, under "For Mental Health Concerns:") gets a
-        # number-free pointer to it, so DSDMA never carries the block twice.
+        # the same block every DMA sees. A template that still carries a
+        # `{crisis_resources_block}` slot (the echo-speculative identity, under
+        # "For Mental Health Concerns:") gets a number-free pointer to it, so
+        # DSDMA never carries the block twice.
         crisis_resources_block = DSDMA_CRISIS_BLOCK_POINTER
 
         task_history_block = ""
@@ -544,33 +548,22 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         # Append response_format / closing_reminder — #990.
         #
-        # BaseDSDMA has never used `DMAPromptLoader.get_system_message()`
-        # (`git log -S "get_system_message" -- dsdma_base.py` returns zero
-        # commits). It renders `system_guidance_header` alone, via the
-        # `prompt_template` property. So every OTHER populated field in
-        # dsdma_base.yml was inert — including `response_format`, which is the
-        # LANGUAGE RULES block: "respond in the user's preferred language, keep
-        # JSON keys in English, put string values in the user's language."
-        #
-        # DSDMA has therefore never been told any of that, in any release since
-        # v2.3.1, in any of the 29 locales. The `{{...}}` escaping in that field
-        # shows it was authored expecting `.format()` — it was written to be
-        # composed and then never wired in.
-        #
-        # Appended here rather than by switching to get_system_message(): that
-        # method renders six fields in a fixed order and DSDMA's own header is
-        # already rendered above with block substitution the shared path does
-        # not do. Going through the loader-owned collection keeps the research
-        # dma_prompt namespace intercepting these keys (same routing rationale
-        # as #974 below).
+        # BaseDSDMA has never used `DMAPromptLoader.get_system_message()`: it
+        # renders `system_guidance_header` alone, via the `prompt_template`
+        # property, so every OTHER populated field in dsdma_base.yml was inert —
+        # including `response_format`, the LANGUAGE RULES block. Appended here
+        # rather than by switching to get_system_message(): that method renders
+        # six fields in a fixed order and DSDMA's own header is already rendered
+        # above with block substitution the shared path does not do. Going
+        # through the loader-owned collection keeps the research dma_prompt
+        # namespace intercepting these keys.
         _template_data = self.prompt_template_data
         _lang = self.prompt_loader.language
         for _field in ("response_format", "closing_reminder"):
             _value = getattr(_template_data, _field, None)
             # isinstance, not truthiness: `prompt_template_data` is a property
             # and tests substitute a Mock for it, where every attribute is a
-            # truthy Mock. Requiring str keeps a non-string YAML value (or a
-            # test double) from being concatenated into a system prompt.
+            # truthy Mock.
             if isinstance(_value, str) and _value:
                 system_message_content += "\n\n" + safe_format(
                     _value,
@@ -579,60 +572,169 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                     rules_summary_str=rules_summary_str,
                     context_str=context_str,
                 )
+        return system_message_content
 
-        full_snapshot_and_profile_context_str = task_context_block + system_snapshot_block + user_profiles_block
-        # Routed (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2): the DSDMA
-        # user message lives in dsdma_base.yml `context_integration`, rendered
-        # through the loader so the research-override dma_prompt namespace
+    def compose_messages(
+        self,
+        thought_content_str: str,
+        thought_id: str,
+        task_context: "Segments",
+        agent_identity: Any,
+        identity_block: str,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        images: Optional[List[ImageContent]] = None,
+        thought: Any = None,
+    ) -> List[JSONDict]:
+        """The DSDMA messages alone (#972 seam); see :meth:`compose_prompt`."""
+        messages, _ = self.compose_prompt(
+            thought_content_str,
+            thought_id,
+            task_context,
+            agent_identity,
+            identity_block,
+            system_snapshot_block,
+            user_profiles_block,
+            context_str,
+            rules_summary_str,
+            images=images,
+            thought=thought,
+        )
+        return messages
+
+    def _identity_segments(self, agent_identity: Any, identity_block: str) -> "Segments":
+        """The validated identity block as segments: identity_base pieces and one amendment segment per grant."""
+        from ciris_engine.logic.prompt_assembly.segmenting import block, identity_segments, joined
+        from ciris_engine.schemas.context.prompt_provenance import PromptSegment, SegmentKind, SegmentSource
+
+        segments = identity_segments(agent_identity, self._explicit_language)
+        if joined(segments) == identity_block:
+            return segments
+        # An identity the shared renderer reads differently: keep its bytes.
+        logger.warning("[DSDMA] identity block not segmentable; sent as one identity_base segment")
+        return block(
+            PromptSegment(
+                segment_id="identity:base:0",
+                kind=SegmentKind.IDENTITY_BASE,
+                source=SegmentSource.AGENT_PROFILE,
+                text=identity_block,
+            )
+        )
+
+    def compose_prompt(
+        self,
+        thought_content_str: str,
+        thought_id: str,
+        task_context: "Segments",
+        agent_identity: Any,
+        identity_block: str,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        images: Optional[List[ImageContent]] = None,
+        thought: Any = None,
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """Compose the DSDMA prompt from typed segments with PromptAssembler (FSD/PROMPT_CONTEXT_PROVENANCE.md §6).
+
+        Pure prompt composition - no LLM call, no data fetching (#972). All awaited data gathering (task fetch,
+        snapshot/identity extraction, language sync) happens in ``evaluate_thought()`` before this is called.
+        ``task_context`` is the task's text and verified sender (:func:`segmenting.task_context_segments`);
+        ``identity_block`` is the validated CORE IDENTITY block the segments must reproduce.
+        """
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            PromptBuilder,
+            concat,
+            evaluator_call,
+            expand,
+            history,
+            original_task_segments,
+            round1_preamble,
+            segment,
+            split_template,
+            thought_request,
+        )
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind
+
+        language = self.prompt_loader.language
+        builder = PromptBuilder()
+        # Round-1 DMA system blocks — ACCORD + per-language guidance + crisis resources + prohibition context
+        # (#910, #1248), the shared order (NOT ASPDMA).
+        round1_preamble(builder, language, self.prompt_loader.get_accord_mode(self.prompt_template_data))
+
+        identity = self._identity_segments(agent_identity, identity_block) if identity_block else ([], [])
+
+        def system_render(identity_block: str, system_snapshot_block: str, user_profiles_block: str) -> str:
+            return self._system_body(identity_block, system_snapshot_block, user_profiles_block, context_str, rules_summary_str)
+
+        system = split_template(
+            system_render,
+            {
+                "identity_block": segment("sys:identity", SegmentKind.IDENTITY_BASE, identity_block),
+                "system_snapshot_block": history("sys:system_snapshot", system_snapshot_block),
+                "user_profiles_block": history("sys:user_profiles", user_profiles_block),
+            },
+            prefix="instr:system",
+            first_glue="",
+        )
+        if identity_block:
+            system = expand(system, "sys:identity", identity, language)
+        # CRITICAL: Identity block must ALWAYS be first in system message after accord. Prepend identity to the
+        # system message if the template did not already include it. (Stored prompts are the bytes sent, identity
+        # included: RATCHET runs 39844408349, 39845804302.)
+        real = system_render(identity_block, system_snapshot_block, user_profiles_block)
+        if identity_block and "CORE IDENTITY" not in real:
+            system = concat(identity, system, "\n\n")
+        builder.message("system", *system)
+
+        # Routed (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2): the DSDMA user message lives in dsdma_base.yml
+        # `context_integration`, rendered through the loader so the research-override dma_prompt namespace
         # intercepts it (key: dsdma_base.context_integration).
         user_loader, user_template_data = self._resolve_user_template()
-        user_message_content = user_loader.get_user_message(
-            user_template_data,
-            full_snapshot_and_profile_context_str=full_snapshot_and_profile_context_str,
-            domain_name=self.domain_name,
-            thought_content_str=thought_content_str,
-            # Slots the stale pre-#974 template shape used — supplied so an
-            # explicit research override written against the old shape still
-            # renders instead of KeyError-ing.
-            rules_summary_str=rules_summary_str,
-            context_str=context_str,
-            original_thought_content=thought_content_str,
+
+        def user_render(
+            full_snapshot_and_profile_context_str: str, thought_content_str: str, original_thought_content: str
+        ) -> str:
+            return user_loader.get_user_message(
+                user_template_data,
+                full_snapshot_and_profile_context_str=full_snapshot_and_profile_context_str,
+                domain_name=self.domain_name,
+                thought_content_str=thought_content_str,
+                # Slots the stale pre-#974 template shape used — supplied so an explicit research override written
+                # against the old shape still renders instead of KeyError-ing.
+                rules_summary_str=rules_summary_str,
+                context_str=context_str,
+                original_thought_content=original_thought_content,
+            )
+
+        context = original_task_segments(task_context, system_snapshot_block, user_profiles_block)
+        from ciris_engine.logic.prompt_assembly.segmenting import joined
+
+        user = split_template(
+            user_render,
+            {
+                "full_snapshot_and_profile_context_str": segment("ctx", SegmentKind.HISTORY, joined(context, language)),
+                "thought_content_str": thought_request("request", thought_content_str, thought),
+                "original_thought_content": thought_request("request:legacy_slot", thought_content_str, thought),
+            },
+            prefix="instr:user",
+            first_glue="",
         )
+        user = expand(user, "ctx", context, language)
 
-        # CRITICAL: Identity block must ALWAYS be first in system message after accord
-        # Prepend identity to system message if not already included
-        if identity_block and "CORE IDENTITY" not in system_message_content:
-            system_message_content = identity_block + "\n\n" + system_message_content
-
-        # Store prompts for streaming/debugging -- AFTER the identity prepend, so
-        # DMA_RESULTS.dsdma_system_prompt is what the model was sent. Stored
-        # before it, the trace never showed CORE IDENTITY or the WA-approved
-        # amendments (RATCHET runs 39844408349, 39845804302).
-
-        logger.debug(
-            f"DSDMA '{self.domain_name}' input to LLM for thought {thought_id}:\nSystem: {system_message_content}\nUser: {user_message_content}"
-        )
-
-        # Build multimodal content if images are present
+        logger.debug(f"DSDMA '{self.domain_name}' composed prompt for thought {thought_id}")
         thought_images = images or []
         if thought_images:
             logger.info(
                 f"[VISION] DSDMA '{self.domain_name}' building multimodal content with {len(thought_images)} images"
             )
-        user_content = self.build_multimodal_content(user_message_content, thought_images)
-
-        messages: List[JSONDict] = []
-        # Round-1 DMA system blocks — ACCORD + per-language guidance +
-        # prohibition context (#910) — via the shared helper (NOT ASPDMA).
-        append_round1_accord_blocks(
-            messages,
-            language=self.prompt_loader.language,
-            accord_mode=self.prompt_loader.get_accord_mode(self.prompt_template_data),
+        builder.message("user", *user, images=thought_images)
+        return builder.assemble(
+            PromptStage.DSDMA,
+            evaluator_call(DSDMAResult.__name__, thought, language, None, agent_identity),
         )
-        messages.append({"role": "system", "content": system_message_content})
-        messages.append({"role": "user", "content": user_content})
-
-        return messages
 
     async def evaluate_alias(self, input_data: ProcessingQueueItem, **kwargs: Any) -> DSDMAResult:
         """Alias for evaluate_thought to satisfy BaseDMA."""

@@ -1,21 +1,22 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
+    from ciris_engine.logic.prompt_assembly.segmenting import Segments
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 from ciris_engine.schemas.dma.sent_prompts import attach_sent_prompts, sent_prompts_from_messages
 from ciris_engine.logic.conscience.transport import surfaces_as_transport_failure
 from ciris_engine.logic.formatters import (
-    append_round1_accord_blocks,
     format_parent_task_chain,
-    format_system_prompt_blocks,
     format_system_snapshot,
     format_thoughts_chain,
     format_user_profiles,
     format_user_prompt_blocks,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
@@ -93,48 +94,19 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         """
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
-    def _create_csdma_messages_for_instructor(
-        self,
-        thought_content: str,
-        context_summary: str,
-        identity_context_block: str,
-        system_snapshot_block: str,
-        user_profiles_block: str,
-        images: Optional[List[ImageContent]] = None,
-    ) -> List[JSONDict]:
-        """Assemble prompt messages using canonical formatting utilities and prompt loader.
+    def _system_message_text(self, context_summary: str, original_thought_content: str) -> str:
+        """The stage's system guidance.
 
-        Template overrides (from the agent template's `csdma_overrides`) are
-        FIELD-scoped — see `dma/template_overrides.py`. Replacing one field must
-        never disable another (#996):
-
-        - `system_prompt` REPLACES the `system_guidance_header` field. The other
-          five fields `get_system_message` composes are unaffected.
-        - `user_prompt_template` is ADDITIVE: it leads, and the composed user
-          message follows undiminished. `context_integration` carries live slots
-          (`context_summary`), so it is not fit for replacement.
+        Template overrides (from the agent template's `csdma_overrides`) are FIELD-scoped — see
+        `dma/template_overrides.py`. Replacing one field must never disable another (#996): `system_prompt`
+        REPLACES the `system_guidance_header` field; the other five fields `get_system_message` composes are
+        unaffected. It used to return the override in place of get_system_message(), which composes six fields —
+        so replacing the header also disabled domain_principles, evaluation_steps, evaluation_criteria,
+        response_format and response_guidance.
         """
-        messages: List[JSONDict] = []
-
-        # Round-1 DMA system blocks — ACCORD + per-language guidance +
-        # prohibition context (#910) — via the shared helper (NOT ASPDMA).
-        append_round1_accord_blocks(
-            messages,
-            language=self.prompt_loader.language,
-            accord_mode=self.prompt_loader.get_accord_mode(self.prompt_template_data),
-        )
-
-        # Check for template override of system_prompt (e.g., HE-300 format instructions)
         template_system_override = None
         if isinstance(self.prompts, dict):
             template_system_override = self.prompts.get("system_prompt")
-
-        # #996 — a `system_prompt` override replaces the `system_guidance_header`
-        # FIELD, not the composed system message. It used to return the override
-        # in place of get_system_message(), which composes six fields — so
-        # replacing the header also disabled domain_principles, evaluation_steps,
-        # evaluation_criteria, response_format and response_guidance. Replacing
-        # one field must never disable another.
         template_data = self.prompt_template_data
         if template_system_override:
             template_data = template_data.model_copy(update={"system_guidance_header": template_system_override})
@@ -143,44 +115,33 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
                 "the other composed fields are unaffected",
                 len(template_system_override),
             )
-        system_message = self.prompt_loader.get_system_message(
-            template_data, context_summary=context_summary, original_thought_content=thought_content
+        return self.prompt_loader.get_system_message(
+            template_data, context_summary=context_summary, original_thought_content=original_thought_content
         )
 
-        formatted_system = format_system_prompt_blocks(
-            identity_context_block,
-            "",
-            system_snapshot_block,
-            user_profiles_block,
-            None,
-            system_message,
-        )
-        messages.append({"role": "system", "content": formatted_system})
+    def _user_message_text(self, context_summary: str, original_thought_content: str) -> str:
+        """The user message.
 
-        # Check for template override of user_prompt_template
+        `user_prompt_template` is ADDITIVE (#996): `context_integration` carries live slots (`context_summary`,
+        `original_thought_content`), so it is not fit for replacement: substituting a template's text for it
+        dropped `context_summary` outright. The authored framing leads, the composition follows undiminished.
+        """
         template_user_override = None
         if isinstance(self.prompts, dict):
             template_user_override = self.prompts.get("user_prompt_template")
 
         user_message_text = self.prompt_loader.get_user_message(
-            self.prompt_template_data, context_summary=context_summary, original_thought_content=thought_content
+            self.prompt_template_data, context_summary=context_summary, original_thought_content=original_thought_content
         )
-
-        if not user_message_text or user_message_text == f"Thought to evaluate: {thought_content}":
+        if not user_message_text or user_message_text == f"Thought to evaluate: {original_thought_content}":
             user_message_text = format_user_prompt_blocks(
                 format_parent_task_chain([]),
-                format_thoughts_chain([{"content": thought_content}]),
+                format_thoughts_chain([{"content": original_thought_content}]),
                 None,
             )
-
-        # #996 — ADDITIVE. `context_integration` carries live slots
-        # (`context_summary`, `original_thought_content`), so it is not fit for
-        # replacement: substituting a template's text for it dropped
-        # `context_summary` outright. The authored framing leads, the
-        # composition follows undiminished.
         if template_user_override:
             framing = template_user_override.format(
-                thought_content=thought_content,
+                thought_content=original_thought_content,
                 context_summary=context_summary,
             )
             logger.debug(
@@ -189,45 +150,82 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
                 len(user_message_text),
             )
             user_message_text = additive(framing, user_message_text)
-
-        # Build multimodal content if images are present
-        images_list = images or []
-        if images_list:
-            logger.info(f"[VISION] CSDMA building multimodal content with {len(images_list)} images")
-        user_content = self.build_multimodal_content(user_message_text, images_list)
-        messages.append({"role": "user", "content": user_content})
-
-        return messages
+        return user_message_text
 
     def compose_messages(
         self,
         thought_content: str,
         context_summary: str,
-        task_context_str: str,
-        system_snapshot_str: str,
-        user_profiles_str: str,
+        context: "Segments",
         images: Optional[List[ImageContent]] = None,
-        identity_block: str = "",
+        agent_identity: Any = None,
+        thought: Any = None,
     ) -> List[JSONDict]:
-        """Compose the full CSDMA prompt message list from gathered inputs (#972).
+        """The CSDMA messages alone (#972 seam); see :meth:`compose_prompt`."""
+        messages, _ = self.compose_prompt(thought_content, context_summary, context, images, agent_identity, thought)
+        return messages
 
-        Pure prompt composition - no LLM call, no data fetching. All awaited
-        data gathering (task fetch, context extraction) happens in
-        ``evaluate_thought()`` before this is called.
+    def compose_prompt(
+        self,
+        thought_content: str,
+        context_summary: str,
+        context: "Segments",
+        images: Optional[List[ImageContent]] = None,
+        agent_identity: Any = None,
+        thought: Any = None,
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """Compose the CSDMA prompt from typed segments with PromptAssembler (FSD/PROMPT_CONTEXT_PROVENANCE.md §6).
+
+        Pure prompt composition - no LLM call, no data fetching (#972). ``context`` is the ORIGINAL TASK block
+        (:func:`segmenting.original_task_segments`). The system message is
+        ``format_system_prompt_blocks(identity, "", context, "", None, guidance)``: identity, guidance, context.
         """
-        # Prepend task context to system snapshot
-        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
-        combined_snapshot_block = task_context_block + system_snapshot_str + user_profiles_str
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            PromptBuilder,
+            concat,
+            evaluator_call,
+            expand,
+            identity_segments,
+            round1_preamble,
+            segment,
+            split_template,
+            stripped_ends,
+            thought_request,
+        )
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
-        return self._create_csdma_messages_for_instructor(
-            thought_content,
-            context_summary,
-            # The agent's identity, approved amendments included: the same block
-            # every DMA reads (formatters.identity.identity_block_of). Eric, 2026-11-13.
-            identity_context_block=identity_block,
-            system_snapshot_block=combined_snapshot_block,
-            user_profiles_block="",
-            images=images,
+        language = self.prompt_loader.language
+        builder = PromptBuilder()
+        # Round-1 DMA system blocks — ACCORD + per-language guidance + crisis resources + prohibition context
+        # (#910, #1248), the shared order (NOT ASPDMA).
+        round1_preamble(builder, language, self.prompt_loader.get_accord_mode(self.prompt_template_data))
+
+        def slots(prefix: str) -> Dict[str, Any]:
+            # The summary is built from the agent's own identity record (agent id, role, description).
+            return {
+                "context_summary": segment(
+                    f"{prefix}context_summary", SegmentKind.IDENTITY_BASE, context_summary, SegmentSource.AGENT_PROFILE
+                ),
+                "original_thought_content": thought_request(f"{prefix}request", thought_content, thought),
+            }
+
+        guidance = split_template(self._system_message_text, slots("sys:"), prefix="instr:system", first_glue="")
+        # The agent's identity, approved amendments included: the same block every DMA reads
+        # (formatters.identity.identity_block_of). Eric, 2026-11-13.
+        system = concat(identity_segments(agent_identity, language), guidance, "\n\n")
+        system = concat(system, context, "\n\n")
+        segments = stripped_ends(system[0])
+        kept = {s.segment_id for s in segments}
+        builder.message("system", segments, [i for i in system[1] if i.segment_id in kept])
+
+        user = split_template(self._user_message_text, slots(""), prefix="instr:user", first_glue="")
+        images_list = images or []
+        if images_list:
+            logger.info(f"[VISION] CSDMA building multimodal content with {len(images_list)} images")
+        builder.message("user", *user, images=images_list)
+        return builder.assemble(
+            PromptStage.CSDMA,
+            evaluator_call(CSDMAResult.__name__, thought, language, None, agent_identity),
         )
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
@@ -302,22 +300,27 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         task_context_str = self.format_task_context(original_task, thought_depth, thought=thought_item)
 
         # Extract context data from context object
+        task_language = self.prompt_loader.language  # the language format_task_context rendered the sender in
         system_snapshot_str, user_profiles_str, context_summary = self._extract_context_data(context)
 
         # Get images from thought item for multimodal
         thought_images = getattr(thought_item, "images", []) or []
 
-        # Compose messages via the extracted seam (#972)
-        from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
+        # Compose messages via the extracted seam (#972), built by PromptAssembler (#1366 Phase 3)
+        from ciris_engine.logic.formatters.identity import agent_identity_of
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+        from ciris_engine.logic.prompt_assembly.segmenting import original_task_segments, task_context_segments
 
-        messages = self.compose_messages(
+        task_segments = task_context_segments(
+            task_context_str, verified_sender_of(thought_item, original_task), task_language
+        )
+        messages, manifest = self.compose_prompt(
             thought_content_str,
             context_summary,
-            task_context_str,
-            system_snapshot_str,
-            user_profiles_str,
+            original_task_segments(task_segments, system_snapshot_str, user_profiles_str),
             images=thought_images,
-            identity_block=identity_block_of(agent_identity_of(context), language=self.prompt_loader.language),
+            agent_identity=agent_identity_of(context),
+            thought=thought_item,
         )
 
         # Store prompts for streaming/debugging
@@ -332,14 +335,15 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         )
 
         try:
-            result_tuple = await self.call_llm_structured(
-                messages=messages,
-                response_model=CSDMAResult,
-                max_tokens=8192,
-                temperature=0.0,
-                thought_id=thought_item.thought_id,
-                task_id=thought_item.source_task_id,
-            )
+            with prompt_manifest_scope(manifest):
+                result_tuple = await self.call_llm_structured(
+                    messages=messages,
+                    response_model=CSDMAResult,
+                    max_tokens=8192,
+                    temperature=0.0,
+                    thought_id=thought_item.thought_id,
+                    task_id=thought_item.source_task_id,
+                )
             csdma_eval: CSDMAResult = result_tuple[0]
 
             # raw_llm_response field has been removed from CSDMAResult

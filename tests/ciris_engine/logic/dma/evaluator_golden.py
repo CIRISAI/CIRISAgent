@@ -2,7 +2,8 @@
 
 ``golden/evaluator_assembly_messages.json`` was captured from each evaluator's ``evaluate()`` BEFORE it moved onto
 PromptAssembler (``python3 -m tests.ciris_engine.logic.dma.evaluator_golden`` on that tree). The migrated path must
-send the same bytes, except where the context policy requires a change (IDMA: the signed rules in force).
+send the same bytes, except where the context policy requires a change (IDMA: the signed rules in force; its
+governed prompt after the change is recorded as ``idma_full@policy``).
 Deterministic: the #972 environment (language en, sentinel accord / guidance / crisis / prohibition blocks), fixed
 ids. Fixtures: ``plain`` (the #972 inputs); ``full`` (a verified amendment, a verified WA grant, a verified
 sender on the task, an image, user profiles); for DSDMA also ``blocks`` (a domain template carrying the identity / snapshot / profile slots).

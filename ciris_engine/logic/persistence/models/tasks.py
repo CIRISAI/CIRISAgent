@@ -20,8 +20,8 @@ from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.core import EventPayload
 from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.logic.persistence.utils import decode_wa_authorization
-from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome
+from ciris_engine.logic.persistence.utils import decode_verified_sender, decode_wa_authorization
+from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome, VerifiedSender
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 from ciris_engine.schemas.services.graph.audit import AuditEventData
 
@@ -78,7 +78,9 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
     # context so load-time round-trips correctly (legacy parity).
     ctx = task_dict.get("context")
     images = task_dict.get("images") or []
-    if ctx is None and (images or task.preferred_language is not None or task.signature_pqc):
+    if ctx is None and (
+        images or task.preferred_language is not None or task.signature_pqc or task.updated_info_sender is not None
+    ):
         ctx = {}
     if ctx is not None:
         ctx = dict(ctx)
@@ -89,6 +91,10 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
         # Persist's task row has one signature column; the PQC half rides here.
         if task.signature_pqc:
             ctx["__agent_signature_pqc__"] = task.signature_pqc
+        # Persist's task row has no column for the coalesced message's sender
+        # (#1366 item 5); it rides beside updated_info_content here.
+        if task.updated_info_sender is not None:
+            ctx["__agent_updated_info_sender__"] = task.updated_info_sender.model_dump(mode="json")
         payload["context"] = ctx
 
     outcome = task_dict.get("outcome")
@@ -151,6 +157,9 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
                 preferred_language=ctx_data.get("preferred_language"),
                 envelope=_decode_envelope(ctx_data.get("envelope"), row.get("task_id")),
                 wa_authorization=decode_wa_authorization(ctx_data.get("wa_authorization"), row.get("task_id")),
+                # The verified sender (#1366 item 5). Dropped here, every task
+                # read back from the store lost it, and no prompt rendered it.
+                verified_sender=decode_verified_sender(ctx_data.get("verified_sender"), row.get("task_id")),
             )
         except Exception as e:
             logger.warning(f"Failed to decode context for task {row.get('task_id')}: {e}")
@@ -220,6 +229,11 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
         signature_pqc=_signature_pqc(ctx_data),
         updated_info_available=updated_info_available,
         updated_info_content=row.get("updated_info_content"),
+        updated_info_sender=(
+            decode_verified_sender(ctx_data.get("__agent_updated_info_sender__"), row.get("task_id"))
+            if isinstance(ctx_data, dict)
+            else None
+        ),
         images=images,
     )
 
@@ -961,8 +975,14 @@ def set_task_updated_info_flag(
     time_service: TimeServiceProtocol,
     db_path: Optional[str] = None,
     images: Optional[List[Any]] = None,
+    sender: Optional[VerifiedSender] = None,
 ) -> bool:
     """Set the updated_info_available flag on a task with new observation content.
+
+    ``sender`` is the coalesced message's own verified sender (#1366 item 5).
+    It replaces any earlier update's sender together with the content, so the
+    pair never mixes two messages; None records "not verified", never the task
+    creator.
 
     Returns False if task already committed to non-PONDER action or doesn't belong to occurrence.
     """
@@ -978,6 +998,7 @@ def set_task_updated_info_flag(
 
     task.updated_info_available = True
     task.updated_info_content = updated_content
+    task.updated_info_sender = sender
     task.updated_at = time_service.now_iso()
     if images:
         combined, new_count = _prepare_images(task, images)

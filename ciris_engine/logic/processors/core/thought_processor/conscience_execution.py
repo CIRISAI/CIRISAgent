@@ -66,10 +66,33 @@ class ConscienceExecutionPhase:
         from ciris_engine.logic import persistence
 
         try:
-            return persistence.get_task_by_id_any_occurrence(task_id)
+            task = persistence.get_task_by_id_any_occurrence(task_id)
         except Exception as e:  # noqa: BLE001 - a missing task must not take the conscience stage down
             logger.debug("Could not read task %s for the conscience context: %s", task_id, e)
             return None
+        return ConscienceExecutionPhase._as_answered_message(thought, task)
+
+    @staticmethod
+    def _as_answered_message(thought: Any, task: Any) -> Any:
+        """The task as the message the thought answers (#1366 item 5; RATCHET review F6).
+
+        A thought that took up a message coalesced onto its task carries that
+        message's sender, which differs from the task creator's. Coherence and
+        epistemic humility then judged the reply to the newcomer against the
+        creator's message. For that thought the "user message" is the
+        coalesced one (``updated_info_content``), on a copy: the stored task is
+        unchanged.
+        """
+        if task is None:
+            return None
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+
+        thought_sender = verified_sender_of(getattr(thought, "context", None), getattr(thought, "initial_context", None))
+        task_sender = getattr(getattr(task, "context", None), "verified_sender", None)
+        update = getattr(task, "updated_info_content", None)
+        if thought_sender is not None and thought_sender != task_sender and isinstance(update, str) and update:
+            return task.model_copy(update={"description": update})
+        return task
 
     if TYPE_CHECKING:
         conscience_registry: Any
@@ -118,10 +141,15 @@ class ConscienceExecutionPhase:
         # rather than spelunking through system_snapshot-as-dma-bag.
         idma_result = dma_results.get("idma") if isinstance(dma_results, dict) else None
 
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+
+        conscience_task = self._task_for_conscience(thought or thought_item)
         context = ConscienceCheckContext(
             thought=thought or thought_item,
             # The real user message for coherence / epistemic humility (#1366 item 18).
-            task=self._task_for_conscience(thought or thought_item),
+            task=conscience_task,
+            # The sender of the message this thought answers (#1366 item 5).
+            verified_sender=verified_sender_of(thought, thought_item, conscience_task),
             round_number=None,
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
             idma_result=idma_result,

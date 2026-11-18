@@ -1606,6 +1606,14 @@ class ThoughtProcessor(
         logger.info(f"[CONSCIENCE_RETRY] Original action was: {attempted_action}")
 
         updated_observation = self._extract_updated_observation(conscience_result)
+        if updated_observation and thought is not None:
+            # UpdatedStatusConscience moved the thought onto the coalesced
+            # message's sender; the queue item the second pass reads follows (#1366 item 5).
+            from ciris_engine.logic.formatters.verified_sender import adopt_verified_sender, verified_sender_of
+
+            update_sender = verified_sender_of(thought)
+            if update_sender is not None:
+                adopt_verified_sender(thought_item, update_sender)
 
         # Log PONDER questions if present
         if conscience_result.final_action and hasattr(conscience_result.final_action, "action_parameters"):
@@ -1719,6 +1727,15 @@ class ThoughtProcessor(
                     )
 
                     if new_retry_result:
+                        # The verb second pass, with the veto, as on the normal
+                        # retry (#1027 shape, #1366 item 1): skipping it sent a
+                        # retried TOOL unfilled and left TSASPDMA without feedback.
+                        new_retry_result = await self._run_verb_second_pass(
+                            thought_item,
+                            new_retry_result,
+                            new_retry_context,
+                            conscience_feedback=thought_item.conscience_feedback,
+                        )
                         # Recursively process the new result
                         return await self._process_conscience_retry_result(
                             thought_item,
@@ -1968,10 +1985,15 @@ class ThoughtProcessor(
 
         from ciris_engine.logic.formatters.identity import agent_identity_of
 
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+
+        conscience_task = self._task_for_conscience(thought)
         context = ConscienceCheckContext(
             thought=thought,
             # The real user message for coherence / epistemic humility (#1366 item 18).
-            task=self._task_for_conscience(thought),
+            task=conscience_task,
+            # The sender of the message this thought answers (#1366 item 5).
+            verified_sender=verified_sender_of(thought, conscience_task),
             idma_result=idma_result,
             wa_authorization=wa_authorization_of(processing_context),
             agent_identity=agent_identity_of(processing_context),

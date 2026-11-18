@@ -317,7 +317,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         thought_depth = getattr(thought_item, "thought_depth", 0)
         agent_occurrence_id = getattr(thought_item, "agent_occurrence_id", "default")
         original_task = await self.fetch_original_task(thought_item.source_task_id, agent_occurrence_id)
-        task_context_str = self.format_task_context(original_task, thought_depth)
+        task_context_str = self.format_task_context(original_task, thought_depth, thought=thought_item)
 
         # Extract context data
         system_snapshot_str, user_profiles_str, context_summary = self._extract_context_data(context)

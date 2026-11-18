@@ -268,7 +268,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         thought_depth = getattr(input_data, "thought_depth", 0)
         agent_occurrence_id = getattr(input_data, "agent_occurrence_id", "default")
         original_task = await self.fetch_original_task(input_data.source_task_id, agent_occurrence_id)
-        task_context_str = self.format_task_context(original_task, thought_depth)
+        task_context_str = self.format_task_context(original_task, thought_depth, thought=input_data)
         logger.info(f"[PDMA-TIMING] {input_data.thought_id} fetch_task took {(time.time()-fetch_start)*1000:.0f}ms")
 
         # Build context strings

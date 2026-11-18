@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
+from ciris_engine.logic.formatters import verified_sender as _vs
 from ciris_engine.logic.formatters.wa_approval import (
     format_wa_approval_rule,
     wa_authorization_of,
@@ -137,6 +138,12 @@ def _with_why(verdict: str, why: str) -> str:
 # imported here for backward compat. New consumers should import directly
 # from the schemas module.
 from ciris_engine.schemas.conscience.core import CoherenceResult, EntropyResult  # noqa: E402,F401
+
+
+def _is_follow_up_thought(thought: Any) -> bool:
+    """A thought that is not its task's seed (it has a parent, or depth > 0)."""
+    depth = getattr(thought, "thought_depth", 0)
+    return bool(getattr(thought, "parent_thought_id", None)) or (isinstance(depth, int) and depth > 0)
 
 
 class _BaseConscience(ConscienceInterface):
@@ -552,7 +559,10 @@ class _BaseConscience(ConscienceInterface):
                     text = raw
             if not text:
                 thought = getattr(context, "thought", None)
-                if thought is not None:
+                # Only a seed thought's content is the user's message; a
+                # follow-up's is LLM-written and must never be labelled the user's
+                # (RATCHET review F7): no task means "unknown".
+                if thought is not None and not _is_follow_up_thought(thought):
                     raw = getattr(thought, "content", None)
                     if raw is not None:
                         text = raw.text if hasattr(raw, "text") else str(raw)
@@ -693,6 +703,10 @@ class EntropyConscience(_BaseConscience):
             )
             messages, entropy_user_prompt = self._with_action_record(
                 messages, entropy_user_prompt, context, self._resolve_language(context)
+            )
+            # Verified id/role only, when an ID-scoped rule is in force; never the display name (#1366 item 5).
+            messages, entropy_user_prompt = _vs.lead_with_verified_sender(
+                messages, entropy_user_prompt, context, self._resolve_language(context), ablated=True
             )
             if hasattr(sink, "llm"):
                 entropy_eval, _ = await self._call_llm_with_budget(
@@ -857,6 +871,10 @@ class CoherenceConscience(_BaseConscience):
             )
             messages = self._with_identity(messages, context, self._resolve_language(context))
             # The same factual record entropy and the veto read (#1366 item 18).
+            # The verified sender, apart from the self-chosen display name (#1366 item 5, #1365).
+            messages, coherence_user_prompt = _vs.lead_with_verified_sender(
+                messages, coherence_user_prompt, context, self._resolve_language(context)
+            )
             messages, coherence_user_prompt = self._with_action_record(
                 messages, coherence_user_prompt, context, self._resolve_language(context)
             )
@@ -997,6 +1015,10 @@ class OptimizationVetoConscience(_BaseConscience):
         messages, opt_veto_user_prompt = self._with_action_record(
             messages, opt_veto_user_prompt, context, self._resolve_language(context)
         )
+        # Verified id/role only, when an ID-scoped rule is in force; never the display name (#1366 item 5).
+        messages, opt_veto_user_prompt = _vs.lead_with_verified_sender(
+            messages, opt_veto_user_prompt, context, self._resolve_language(context), ablated=True
+        )
 
         try:
             if hasattr(sink, "llm"):
@@ -1131,6 +1153,10 @@ class EpistemicHumilityConscience(_BaseConscience):
         )
         messages = self._with_identity(messages, context, self._resolve_language(context))
         # The same factual record entropy and the veto read (#1366 item 18).
+        # The verified sender, apart from the self-chosen display name (#1366 item 5, #1365).
+        messages, epistemic_humility_user_prompt = _vs.lead_with_verified_sender(
+            messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
+        )
         messages, epistemic_humility_user_prompt = self._with_action_record(
             messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
         )

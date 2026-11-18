@@ -37,6 +37,7 @@ from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
+from ciris_engine.logic.formatters.verified_sender import sanitize_display_text
 from ciris_engine.schemas.runtime.models import TaskContext, VerifiedSender
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
@@ -136,10 +137,21 @@ AUTHORITY_HEADER_KEYS: Tuple[str, ...] = (
     "prompts.wa_approval.grant",
     "prompts.identity_block",
     "prompts.language_guidance.01_preamble",
+    # The system-built sender and governance blocks (#1366 items 3 and 5). A
+    # user who types one is forging verified identity or a WA's signed rule
+    # (RATCHET review F3: both passed the filter unchanged).
+    "prompts.verified_sender.header",
+    "prompts.verified_sender.footer",
+    "prompts.wa_governance.header",
+    "prompts.wa_governance.footer",
 )
 _FALLBACK_AUTHORITY_HEADERS: Tuple[str, ...] = (
     "WISE AUTHORITY APPROVAL",
     "CORE IDENTITY - THIS IS WHO YOU ARE!",
+    "VERIFIED SENDER",
+    "END VERIFIED SENDER",
+    "VERIFIED WISE AUTHORITY GOVERNANCE",
+    "END VERIFIED WISE AUTHORITY GOVERNANCE",
 )
 
 # Characters that may frame a header on its own line: "=== X ===", "## X",
@@ -260,6 +272,18 @@ def detect_and_replace_spoofed_markers(content: str) -> str:
             logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern.pattern}")
 
     return modified_content
+
+
+def safe_display_name(name: Any) -> str:
+    """A self-chosen display name as it may appear in prompt text (RATCHET review F2/F3).
+
+    Spoofed markers neutralised first, then reduced by the verified-sender
+    allowlist: no newline, control, format character, quote or "=" survives,
+    so the name cannot draw a block of its own. Empty becomes ``unknown``.
+    """
+    if not name:
+        return "unknown"
+    return sanitize_display_text(detect_and_replace_spoofed_markers(str(name))) or "unknown"
 
 
 def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] = None) -> str:
@@ -478,10 +502,18 @@ class BaseObserver(Generic[MessageT], ABC):
         API's AuthContext.role), rendered as its plain enum value. An adapter
         that does not know the role leaves it None and none is shown: never a
         guess.
+
+        The name is the sender's self-chosen display name and is never rendered
+        raw (RATCHET review F2): a name holding newlines and a fake
+        ``=== VERIFIED SENDER ===`` block rode the task description, seed
+        thought and coalesced updates ahead of the real block. It is reduced to
+        single-line, frame-free text (``safe_display_name``); the id and role
+        come only from the adapter.
         """
         role = getattr(msg, "author_role", None)
         role_part = f", role: {role.value}" if isinstance(role, UserRole) else ""
-        return f"@{msg.author_name} (ID: {msg.author_id}{role_part})"
+        author_id = sanitize_display_text(getattr(msg, "author_id", ""), max_len=128) or "unknown"
+        return f"@{safe_display_name(getattr(msg, 'author_name', None))} (ID: {author_id}{role_part})"
 
     def _verified_sender(self, msg: Any) -> VerifiedSender:
         """The sender as this adapter verified it, for TaskContext.verified_sender (#1366 item 5).
@@ -818,11 +850,11 @@ class BaseObserver(Generic[MessageT], ABC):
             aid = hist_msg.get("author_id")
             aname = hist_msg.get("author")
             if aid and aname and isinstance(aname, str):
-                user_lookup[str(aid)] = aname
+                user_lookup[str(aid)] = safe_display_name(aname)
 
         # Add current message author
         if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-            user_lookup[str(msg.author_id)] = msg.author_name
+            user_lookup[str(msg.author_id)] = safe_display_name(msg.author_name)
 
         return user_lookup
 
@@ -840,7 +872,9 @@ class BaseObserver(Generic[MessageT], ABC):
             # The verified role, as the current message's tag shows it (#1366 item 5).
             role = hist_msg.get("author_role")
             role_part = f", role: {role}" if isinstance(role, str) and role else ""
-            lines.append(f"{i}. @{author} (ID: {author_id}{role_part}): {content}")
+            # Never the raw display name or id (RATCHET review F2).
+            safe_id = sanitize_display_text(author_id, max_len=128) or "unknown"
+            lines.append(f"{i}. @{safe_display_name(author)} (ID: {safe_id}{role_part}): {content}")
 
         return lines
 
@@ -945,7 +979,7 @@ class BaseObserver(Generic[MessageT], ABC):
             # Format mentions for task description
             passive_task_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                passive_task_lookup[str(msg.author_id)] = msg.author_name
+                passive_task_lookup[str(msg.author_id)] = safe_display_name(msg.author_name)
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
             # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel.
@@ -975,6 +1009,10 @@ class BaseObserver(Generic[MessageT], ABC):
                     self.agent_occurrence_id,
                     self.time_service,
                     images=update_images,
+                    # The coalesced message's OWN verified sender (#1366 item 5).
+                    # Without it the update was answered under the task
+                    # creator's verified identity.
+                    sender=self._verified_sender(msg),
                 )
                 if success:
                     logger.info(
@@ -1033,7 +1071,7 @@ class BaseObserver(Generic[MessageT], ABC):
             # Build user lookup for the current message
             initial_user_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                initial_user_lookup[str(msg.author_id)] = msg.author_name
+                initial_user_lookup[str(msg.author_id)] = safe_display_name(msg.author_name)
             formatted_msg_content = self._fence_current_message(
                 format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
             )

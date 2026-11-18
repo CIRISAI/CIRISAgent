@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.formatters.verified_sender import with_verified_sender
 from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters import format_system_prompt_blocks
@@ -243,6 +244,8 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if _crisis_block:
             messages.append({"role": "system", "content": _crisis_block})
         messages.append({"role": "system", "content": system_message})
+        # The verified sender of the message being answered (#1366 item 5).
+        user_message = with_verified_sender(user_message, original_thought, context, language=self.prompt_loader.language)
         # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
         user_message = with_conscience_feedback(user_message, conscience_feedback)
         messages.append({"role": "user", "content": user_message})

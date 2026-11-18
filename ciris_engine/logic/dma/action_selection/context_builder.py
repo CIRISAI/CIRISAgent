@@ -858,7 +858,9 @@ class ActionSelectionContextBuilder:
         from ciris_engine.logic.dma.prompt_loader import get_prompt_loader
         from ciris_engine.logic.formatters.verified_sender import verified_sender_block_of
 
-        sender_block = verified_sender_block_of(task, language=get_prompt_loader().language)
+        # The thought's own sender first: a message coalesced onto the task is
+        # answered under ITS sender, never the task creator's.
+        sender_block = verified_sender_block_of(original_thought, task, language=get_prompt_loader().language)
         if sender_block:
             parts.append("")
             parts.append(sender_block)

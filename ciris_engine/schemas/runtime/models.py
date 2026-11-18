@@ -195,6 +195,15 @@ class ThoughtContext(BaseModel):
             "thought creation time. Top of the localization chain."
         ),
     )
+    verified_sender: Optional[VerifiedSender] = Field(
+        None,
+        description=(
+            "The sender of the message THIS thought answers, as the adapter verified it (#1366 item 5). "
+            "Per message, not per task: a message coalesced onto a channel's active task carries its own "
+            "sender here, so it is never rendered under the task creator's verified identity. None means "
+            "the thought answers the message that created its task (TaskContext.verified_sender applies)."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -258,6 +267,13 @@ class Task(BaseModel):
     )
     updated_info_content: Optional[str] = Field(
         None, description="New observation content that arrived after task creation"
+    )
+    updated_info_sender: Optional[VerifiedSender] = Field(
+        None,
+        description=(
+            "The verified sender of updated_info_content (#1366 item 5): the coalesced message's own "
+            "sender, never the task creator's. The thought that answers the update renders this one."
+        ),
     )
     # Native multimodal support - images attached to task flow through to LLM
     images: List[ImageContent] = Field(

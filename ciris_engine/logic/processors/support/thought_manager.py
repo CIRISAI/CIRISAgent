@@ -14,7 +14,7 @@ from ciris_engine.logic.utils.task_thought_factory import create_follow_up_thoug
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus, ThoughtType
-from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought, ThoughtContext
+from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought, ThoughtContext, VerifiedSender
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,8 @@ class ThoughtManager:
                     task.context.correlation_id if hasattr(task.context, "correlation_id") else str(uuid.uuid4())
                 ),
                 agent_occurrence_id=task.agent_occurrence_id,  # Inherit from task
+                # A seed thought answers the message that created its task (#1366 item 5).
+                verified_sender=task.context.verified_sender,
             )
         elif task.context:
             # If it's already some other type of context, create a new ThoughtContext
@@ -153,6 +155,10 @@ class ThoughtManager:
                     task.context.correlation_id if hasattr(task.context, "correlation_id") else str(uuid.uuid4())
                 ),
                 agent_occurrence_id=task.agent_occurrence_id,
+                # The recovery thought answers the coalesced message, so it carries
+                # THAT message's sender, never the task creator's (#1366 item 5).
+                # An update recorded without one is answered as unverified.
+                verified_sender=getattr(task, "updated_info_sender", None) or VerifiedSender(source="unverified"),
             )
 
         now_iso = self.time_service.now_iso()

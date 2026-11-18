@@ -741,6 +741,24 @@ class _MessagePiece(NamedTuple):
 _PART_SOURCE_RE = re.compile(r"^(?P<key>.+)\[(?P<lang>[^\[\]]*)\]$")
 
 
+def _is_splitter_probe() -> bool:
+    """True while ``segmenting.split_template`` renders its sentinel probe (#1366).
+
+    ``split_template`` renders every template twice: once with the real slot
+    values (the bytes the model receives) and once with sentinel markers, to
+    find where the slots sit. The probe never reaches a message. Recording it
+    queued a second, never-matching copy of each field behind the real one, so
+    the strictly-in-order cover stalled on it and the NEXT message (each DMA's
+    user message) fell back to one undivided ``mixed`` block. Asked of the
+    splitter rather than inferred from the render: a slotless field renders
+    identically under the probe, and a field whose kwargs carry no slot (DSDMA's
+    ``response_format``) has no sentinel to find.
+    """
+    from ciris_engine.logic.prompt_assembly.segmenting import in_probe_render
+
+    return in_probe_render()
+
+
 def _part_key(source: str) -> str:
     """Strip the locale tag off a composer source; the key is the template field.
 
@@ -1060,6 +1078,8 @@ class _RoutedRecorder:
         strips it into different bytes never matches and stays ``inline``.
         """
         value = self._real_user_message(loader, template_data, **kwargs)
+        if _is_splitter_probe():
+            return value
         component = str(getattr(template_data, "component_name", "unknown"))
         return self._register(value, "user", f"dma_prompt:{component}.context_integration")
 
@@ -1112,7 +1132,7 @@ class _RoutedRecorder:
         one level down.
         """
         value = self._real_dsaspdma_prompt(evaluator, key)
-        if isinstance(value, str) and value:
+        if isinstance(value, str) and value and not _is_splitter_probe():
             self._parts.append(
                 _RecordedPart(
                     key=f"dsaspdma.{key}",
@@ -1135,7 +1155,7 @@ class _RoutedRecorder:
         one level down.
         """
         value = self._real_msaspdma_prompt(evaluator, key)
-        if isinstance(value, str) and value:
+        if isinstance(value, str) and value and not _is_splitter_probe():
             self._parts.append(
                 _RecordedPart(
                     key=f"msaspdma.{key}",
@@ -1158,6 +1178,8 @@ class _RoutedRecorder:
         credit coverage to a key that did not compose.
         """
         value = self._real_conscience_user(loader, conscience_type, image_context=image_context, **kwargs)
+        if _is_splitter_probe():
+            return value
         field = "user_prompt_with_image_template" if image_context else "user_prompt_template"
         # #997: the loader renders that template through ``safe_format`` (lazy
         # import, conscience/prompt_loader.py:223), so ``format_part`` has
@@ -1182,6 +1204,8 @@ class _RoutedRecorder:
         ``routed`` follows one level up.
         """
         rendered = self._real_safe_format(template, source=source, **kwargs)
+        if _is_splitter_probe():
+            return rendered
         key = _part_key(source)
         segmented = _segment_template(template, kwargs, rendered)
         self._parts.append(

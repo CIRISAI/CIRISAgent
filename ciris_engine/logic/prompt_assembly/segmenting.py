@@ -17,6 +17,7 @@ without rewording anything:
 
 import logging
 import re
+from contextvars import ContextVar
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ciris_engine.logic.prompt_assembly.assembler import LayoutItem
@@ -41,6 +42,15 @@ Segments = Tuple[List[PromptSegment], List[LayoutItem]]
 
 _SENTINEL = "\x00§{}§\x00"
 _SENTINEL_RE = re.compile("\x00§([^§\x00]+)§\x00")
+
+#: Set while :func:`split_template` renders its sentinel probe. That render only locates the slots; its bytes never
+#: reach a message, so an observer of the render seams (the #973 compose dump) must not count it as composed text.
+_PROBE_RENDER: ContextVar[bool] = ContextVar("prompt_assembly_probe_render", default=False)
+
+
+def in_probe_render() -> bool:
+    """True while a template is being rendered with slot sentinels rather than its real values."""
+    return _PROBE_RENDER.get()
 
 
 class SegmentationError(ValueError):
@@ -73,7 +83,11 @@ def split_template(
     """
     plain = dict(plain or {})
     real = render(**plain, **{name: seg.text for name, seg in slots.items()})
-    marked = render(**plain, **{name: _SENTINEL.format(name) for name in slots})
+    token = _PROBE_RENDER.set(True)
+    try:
+        marked = render(**plain, **{name: _SENTINEL.format(name) for name in slots})
+    finally:
+        _PROBE_RENDER.reset(token)
     segments: List[PromptSegment] = []
     seen: Dict[str, int] = {}
     cursor = 0

@@ -14,6 +14,7 @@ from ciris_engine.logic.prompt_assembly.segmenting import (
     amendment_in_force,
     governance_segments,
     identity_segments,
+    in_probe_render,
     segment,
     sender_block_segments,
     split_template,
@@ -61,6 +62,20 @@ def test_split_template_rejoins_and_types_each_slot():
     assert "".join(s.text for s in segs) == template.format(draft="SPEAK hello", who="en")
     assert [s.segment_id for s in segs if s.kind == SegmentKind.DRAFT] == ["draft", "draft#2"]
     assert [i.glue for i in layout][1:] == [""] * (len(layout) - 1)
+
+
+def test_split_template_flags_only_its_sentinel_render_as_a_probe():
+    # The #973 compose dump records every render seam; the sentinel render never reaches a message, so the splitter
+    # must say which of its two renders is the probe or the dump queues a phantom copy of every field.
+    seen = []
+
+    def render(**v):
+        seen.append(in_probe_render())
+        return "Judge: {draft}".format(**v)
+
+    split_template(render, {"draft": segment("draft", SegmentKind.DRAFT, "SPEAK hi")}, prefix="t")
+    assert seen == [False, True]
+    assert in_probe_render() is False
 
 
 def test_split_template_refuses_a_template_that_transforms_its_values():

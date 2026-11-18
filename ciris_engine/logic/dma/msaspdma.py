@@ -213,7 +213,8 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         node = params.node
         unaddressed = node.id == UNADDRESSED_NODE_ID
         attrs = node.attributes if isinstance(node.attributes, dict) else {}
-        authorization = wa_authorization_of(context)
+        # The grant the memorize writes under: on the processing context, else on the thought's own context.
+        authorization = wa_authorization_of(context) or wa_authorization_of(original_thought)
 
         # Each block is composed as its OWN message so it stays single-class on
         # the wire. Bundling them back into one system string would recreate the
@@ -247,6 +248,9 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         # filled the gap with a person's claimed approval); then the rule that
         # an approval exists only as that verified block (#1320).
         system = self._guide_segments(guide) + self._approval_segments(authorization)
+        # The agent's identity first: the memorize that writes an amendment must see the identity it changes. The
+        # Wise Authority's signed guidance rides in the approval block above, as a signed rule with its grant (#1366).
+        identity = self._identity(context)
 
         candidates = self.candidate_nodes_from_context(context)
         # ASPDMA selects the verb and the scope, not the node (#1027), so
@@ -273,6 +277,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             original_thought,
             context,
             conscience_feedback,
+            identity=identity,
         )
 
     # ----------------------------------------------------- prompt assembly (#1366)
@@ -283,10 +288,9 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         return [_seg(f"instr:{key}", "stage_instruction", text) for key, text in guide if text or keep_empty]
 
     def _approval_segments(self, authorization: Any) -> List[Any]:
-        """The WA approval (the grant as ``wa_guidance`` with its authz, then its rule) and the approval facts."""
+        """The WA approval (the grant as ``rule.signed_guidance`` with its authz, then its rule) and the facts."""
         from ciris_engine.logic.formatters.wa_approval import format_wa_approval_rule
-        from ciris_engine.logic.prompt_assembly.carriers import authz_from_wa_authorization
-        from ciris_engine.schemas.context.prompt_provenance import PromptSegment, SegmentKind, SegmentSource
+        from ciris_engine.logic.prompt_assembly.segmenting import signed_guidance_segment
 
         language = self.prompt_loader.language
         out: List[Any] = []
@@ -294,15 +298,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if block and authorization is not None:
             rule = format_wa_approval_rule(authorization, language=language)
             if rule and block.endswith("\n\n" + rule):
-                out.append(
-                    PromptSegment(
-                        segment_id="wa_guidance",
-                        kind=SegmentKind.WA_GUIDANCE,
-                        source=SegmentSource.SIGNED_ROW,
-                        text=block[: -len(rule) - 2],
-                        authz=authz_from_wa_authorization(authorization),
-                    )
-                )
+                out.append(signed_guidance_segment("rule:wa_grant", block[: -len(rule) - 2], authorization))
                 out.append(_seg("instr:wa_approval_rule", "stage_instruction", rule))
             else:
                 out.append(_seg("instr:wa_approval", "stage_instruction", block))
@@ -310,6 +306,13 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if facts:
             out.append(_seg("instr:approval_facts", "stage_instruction", facts))
         return out
+
+    def _identity(self, context: Optional[Any]) -> "Tuple[Any, Any]":
+        """The identity block's (segments, layout); empty when the context carries no identity."""
+        from ciris_engine.logic.formatters.identity import agent_identity_of
+        from ciris_engine.logic.prompt_assembly.segmenting import identity_segments
+
+        return identity_segments(agent_identity_of(context), self.prompt_loader.language)
 
     def _user_slots(
         self,
@@ -355,6 +358,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         original_thought: ProcessingQueueItem,
         context: Optional[Any],
         conscience_feedback: Optional[ConscienceFeedback],
+        identity: "Optional[Tuple[Any, Any]]" = None,
     ) -> "Tuple[List[JSONDict], PromptManifest]":
         """Frame and assemble: accord, language guidance, crisis resources, the guide, the user message.
 
@@ -385,7 +389,13 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             "system", _seg("instr:crisis", "stage_instruction", get_crisis_resources_system_block(language) or "")
         )
         system = stripped_ends(system)
-        builder.message("system", system, items(system, "\n\n", ""))
+        layout = items(system, "\n\n", "")
+        if identity is not None and identity[0]:
+            # The identity block leads the guide.
+            head, head_layout = identity
+            layout = list(head_layout) + ([layout[0].model_copy(update={"glue": "\n\n"})] + layout[1:] if layout else [])
+            system = list(head) + system
+        builder.message("system", system, layout)
 
         template = self._require_prompt_value("context_integration")
         user, user_items = split_template(

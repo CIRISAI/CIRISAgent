@@ -1,7 +1,8 @@
 """Fixtures + capture harness for the memory second-pass prompt goldens (CIRISAgent#1366 Phase 3).
 
 ``golden/{msaspdma,rsaspdma,fsaspdma}_assembly_messages.json`` were captured from ``evaluate_memorize_action``,
-``evaluate_recall_action`` and ``evaluate_forget_action`` BEFORE the three memory second passes moved onto
+``evaluate_recall_action`` and ``evaluate_forget_action`` (and ``dsaspdma_assembly_messages.json`` from
+``evaluate_deferral_action``) BEFORE the three memory second passes moved onto
 PromptAssembler (run ``python3 -m tests.ciris_engine.logic.dma.msaspdma_golden`` on that tree). The migrated path
 must send the same bytes. Deterministic: the #972 environment (language en, sentinel accord / guidance / crisis
 blocks), fixed ids.
@@ -18,7 +19,7 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import Mock
 
-from ciris_engine.schemas.actions.parameters import ForgetParams, MemorizeParams, RecallParams
+from ciris_engine.schemas.actions.parameters import DeferParams, ForgetParams, MemorizeParams, RecallParams
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.dma.results import UNADDRESSED_NODE_ID, ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -61,7 +62,10 @@ def full_context() -> Any:
     profile = SimpleNamespace(
         user_id="wa-user-0eve", display_name="eve the admin", memorized_attributes={"preferred_name": "Eve"}
     )
-    snapshot = SimpleNamespace(user_profiles=[profile], channel_id="golden-channel", agent_identity=None)
+    from tests.ciris_engine.logic.dma.compose_golden import make_system_snapshot
+
+    identity = make_system_snapshot().agent_identity  # MSASPDMA reads it; RSASPDMA and FSASPDMA do not
+    snapshot = SimpleNamespace(user_profiles=[profile], channel_id="golden-channel", agent_identity=identity)
     return SimpleNamespace(system_snapshot=snapshot, verified_sender=SENDER, wa_authorization=GRANT)
 
 
@@ -75,6 +79,14 @@ def _aspdma_result(verb: str, addressed: bool = False) -> ActionSelectionDMAResu
             attributes={"favorite_color": "chartreuse"},
         )
         params, action = MemorizeParams(channel_id="golden-channel", node=node), HandlerActionType.MEMORIZE
+    elif verb == "ds":
+        params = DeferParams(
+            channel_id="golden-channel",
+            reason="Golden fixture: needs a Wise Authority.",
+            context={"topic": "standing rule", "tags": ["a", "b"]} if addressed else None,
+            defer_until="2026-01-02T00:00:00+00:00" if addressed else None,
+        )
+        action = HandlerActionType.DEFER
     elif verb == "rs":
         params, action = RecallParams(channel_id="golden-channel", query="favorite color"), HandlerActionType.RECALL
     else:
@@ -86,6 +98,7 @@ def _aspdma_result(verb: str, addressed: bool = False) -> ActionSelectionDMAResu
 
 
 def _dma(verb: str, captured: Dict[str, Any]) -> Any:
+    from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator, DSASPDMALLMResult
     from ciris_engine.logic.dma.fsaspdma import FSASPDMAEvaluator, FSASPDMALLMResult
     from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator, MSASPDMALLMResult
     from ciris_engine.logic.dma.rsaspdma import RSASPDMAEvaluator, RSASPDMALLMResult
@@ -94,6 +107,14 @@ def _dma(verb: str, captured: Dict[str, Any]) -> Any:
         "ms": (MSASPDMAEvaluator, MSASPDMALLMResult(final_action="PONDER", questions=["Golden?"])),
         "rs": (RSASPDMAEvaluator, RSASPDMALLMResult(final_action="PONDER", questions=["Golden?"])),
         "fs": (FSASPDMAEvaluator, FSASPDMALLMResult(final_action="PONDER", questions=["Golden?"])),
+        "ds": (
+            DSASPDMAEvaluator,
+            DSASPDMALLMResult(
+                reason_summary="Golden?",
+                operational_reason="consent_or_authority_required",
+                primary_need_category="justice_and_legal_agency",
+            ),
+        ),
     }[verb]
     dma = cls(service_registry=Mock())
 
@@ -112,18 +133,21 @@ def _dma(verb: str, captured: Dict[str, Any]) -> Any:
 
 
 async def capture(name: str, captured: Optional[Dict[str, Any]] = None) -> List[JSONDict]:
-    """``name`` is ``<verb>_<fixture>``: verb ms / rs / fs; fixture plain, full or (ms) addressed_full."""
+    """``name`` is ``<verb>_<fixture>``: verb ms / rs / fs / ds; fixture plain, full or (ms, ds) addressed_full."""
     captured = {} if captured is None else captured
     verb, fixture = name.split("_", 1)
     dma = _dma(verb, captured)
     full = fixture.endswith("full")
+    kwargs: Dict[str, Any] = {
+        "aspdma_result": _aspdma_result(verb, addressed=fixture == "addressed_full"),
+        "context": full_context() if full else None,
+        "conscience_feedback": FEEDBACK if full else None,
+    }
     with deterministic_prompt_environment():
-        await dma.evaluate(
-            make_queue_item(),
-            aspdma_result=_aspdma_result(verb, addressed=fixture == "addressed_full"),
-            context=full_context() if full else None,
-            conscience_feedback=FEEDBACK if full else None,
-        )
+        if verb == "ds":
+            await dma.evaluate_deferral_action(original_thought=make_queue_item(), **kwargs)
+        else:
+            await dma.evaluate(make_queue_item(), **kwargs)
     return [dict(m) for m in captured["messages"]]
 
 
@@ -131,6 +155,7 @@ NAMES: Dict[str, tuple[str, ...]] = {
     "msaspdma": ("ms_plain", "ms_full", "ms_addressed_full"),
     "rsaspdma": ("rs_plain", "rs_full"),
     "fsaspdma": ("fs_plain", "fs_full"),
+    "dsaspdma": ("ds_plain", "ds_full", "ds_addressed_full"),
 }
 
 
@@ -148,7 +173,12 @@ async def _capture_all() -> Dict[str, Dict[str, List[JSONDict]]]:
 
 
 if __name__ == "__main__":
+    import sys
+
+    only = set(sys.argv[1:])
     for site, goldens in asyncio.run(_capture_all()).items():
+        if only and site not in only:
+            continue
         golden_path(site).write_text(
             json.dumps(goldens, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8"
         )

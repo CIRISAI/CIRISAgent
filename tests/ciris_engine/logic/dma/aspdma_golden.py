@@ -69,7 +69,6 @@ async def capture_governed() -> List[JSONDict]:
     inputs.processing_context = {
         "system_snapshot": snapshot,
         "wa_authorization": GRANT.model_dump(),
-        "conscience_guidance": {"retry_attempt": 2, "original_action_failed_because": "Golden fixture: no class word."},
     }
     inputs.images = [IMAGE]
     registry = Mock()

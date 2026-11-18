@@ -16,6 +16,7 @@ from ciris_engine.logic.formatters import (
     format_system_snapshot,
     format_user_profiles,
     get_escalation_guidance,
+    wa_authorization_of,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
@@ -24,7 +25,7 @@ from ciris_engine.protocols.dma.base import DSDMAProtocol
 from ciris_engine.schemas.dma.core import DMAInputData
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import DSDMAResult
-from ciris_engine.schemas.runtime.models import ImageContent
+from ciris_engine.schemas.runtime.models import ImageContent, WAAuthorization
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONDict
 
@@ -375,6 +376,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             rules_summary_str,
             images=thought_images,
             thought=thought_item,
+            authorization=wa_authorization_of(original_task) or wa_authorization_of(thought_item),
         )
 
         try:
@@ -636,6 +638,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         rules_summary_str: str,
         images: Optional[List[ImageContent]] = None,
         thought: Any = None,
+        authorization: Optional[WAAuthorization] = None,
     ) -> "Tuple[List[JSONDict], PromptManifest]":
         """Compose the DSDMA prompt from typed segments with PromptAssembler (FSD/PROMPT_CONTEXT_PROVENANCE.md §6).
 
@@ -649,6 +652,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             concat,
             evaluator_call,
             expand,
+            governance_segments,
             history,
             original_task_segments,
             round1_preamble,
@@ -687,6 +691,8 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         real = system_render(identity_block, system_snapshot_block, user_profiles_block)
         if identity_block and "CORE IDENTITY" not in real:
             system = concat(identity, system, "\n\n")
+        # The Wise Authority's signed guidance in force, as a signed rule with its grant (#1366).
+        system = concat(system, governance_segments(authorization, [], language), "\n\n")
         builder.message("system", *system)
 
         # Routed (#974 step 2, FSD RESEARCH_PROMPT_OVERRIDES §11.2): the DSDMA user message lives in dsdma_base.yml
@@ -733,7 +739,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         builder.message("user", *user, images=thought_images)
         return builder.assemble(
             PromptStage.DSDMA,
-            evaluator_call(DSDMAResult.__name__, thought, language, None, agent_identity),
+            evaluator_call(DSDMAResult.__name__, thought, language, authorization, agent_identity),
         )
 
     async def evaluate_alias(self, input_data: ProcessingQueueItem, **kwargs: Any) -> DSDMAResult:

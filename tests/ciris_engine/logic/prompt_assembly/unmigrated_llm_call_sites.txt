@@ -1,3 +1,2 @@
 # LLM call sites in logic/dma and logic/conscience not yet built by PromptAssembler (CIRISAgent#1366).
 # Phase 3 migrates each and deletes its line; test_llm_call_sites_ratchet.py fails on any new site.
-ciris_engine/logic/dma/dsaspdma.py::DSASPDMAEvaluator.evaluate_deferral_action::call_llm_structured

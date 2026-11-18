@@ -81,9 +81,14 @@ def full_context() -> Any:
 
 
 def full_task() -> Any:
-    """The #972 task, created by a verified sender (its VERIFIED SENDER block rides in the task context)."""
+    """The #972 task, created by a verified sender (its VERIFIED SENDER block rides in the task context), carrying
+    the Wise Authority's verified grant as a guidance task does."""
     return cg.make_task().model_copy(
-        update={"context": TaskContext(channel_id="golden-channel", correlation_id="golden-corr", verified_sender=SENDER)}
+        update={
+            "context": TaskContext(
+                channel_id="golden-channel", correlation_id="golden-corr", verified_sender=SENDER, wa_authorization=GRANT
+            )
+        }
     )
 
 

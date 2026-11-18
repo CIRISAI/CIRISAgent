@@ -6,6 +6,10 @@ system_guidance_header: |
   domain alignment — common-sense plausibility and ethical scoring belong
   to other DMAs.
 
+  Pipeline position: you run first, beside PDMA and CSDMA. IDMA then reviews
+  the three, action selection chooses the action, and the consciences
+  review it.
+
   === AGENT'S DOMAIN KNOWLEDGE ===
 
   {rules_summary_str}

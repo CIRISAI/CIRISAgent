@@ -229,6 +229,19 @@ def sender_block_segments(
 # ------------------------------------------------------------------------------------------------ governance
 
 
+def signed_guidance_segment(segment_id: str, text: str, authorization: WAAuthorization) -> PromptSegment:
+    """The Wise Authority's grant as a ``rule.signed_guidance`` segment with its authz (the one WA guidance kind,
+    decision 2026-11-18: the former ``wa_guidance`` kind is merged into it)."""
+    return PromptSegment(
+        segment_id=segment_id,
+        kind=SegmentKind.RULE,
+        provenance=RuleProvenance.SIGNED_GUIDANCE,
+        source=SegmentSource.SIGNED_ROW,
+        text=text,
+        authz=authz_from_wa_authorization(authorization),
+    )
+
+
 def governance_segments(
     authorization: Optional[WAAuthorization],
     amendments: Sequence[IdentityAmendment],
@@ -245,17 +258,16 @@ def governance_segments(
     segments = [_instruction(f"{prefix}:header", header)]
     for index, (text, record) in enumerate(entries):
         if isinstance(record, WAAuthorization):
-            provenance, authz = RuleProvenance.SIGNED_GUIDANCE, authz_from_wa_authorization(record)
-        else:
-            provenance, authz = RuleProvenance.AMENDMENT, _amendment_authz(record, index)
+            segments.append(signed_guidance_segment(f"{prefix}:entry:{index}", text, record))
+            continue
         segments.append(
             PromptSegment(
                 segment_id=f"{prefix}:entry:{index}",
                 kind=SegmentKind.RULE,
-                provenance=provenance,
+                provenance=RuleProvenance.AMENDMENT,
                 source=SegmentSource.SIGNED_ROW,
                 text=text,
-                authz=authz,
+                authz=_amendment_authz(record, index),
             )
         )
     segments.append(_instruction(f"{prefix}:footer", footer))

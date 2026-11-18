@@ -66,7 +66,13 @@ from ciris_engine.schemas.services.llm import (
 )
 
 from .pricing_calculator import LLMPricingCalculator
-from .provider_limits import ProviderLimitError, ProviderLimitFault, provider_limit_fault
+from .provider_limits import (
+    ProviderLimitError,
+    ProviderLimitFault,
+    ProviderLimitFaultCode,
+    budget_identity,
+    provider_limit_fault,
+)
 
 
 def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict]:
@@ -2178,6 +2184,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 fault.retry_after_s,
                 where,
             )
+        elif fault.code is ProviderLimitFaultCode.REQUEST_TOO_LARGE:
+            # One request's size, not the provider failing: like a
+            # context-length 400, it must not open the breaker for the small
+            # calls that would succeed.
+            logger.error(
+                "LLM provider spending limit (%s, NOT a breaker failure): %s -- %s",
+                fault.code.value,
+                fault.describe(),
+                where,
+            )
         else:
             self.circuit_breaker.record_failure()
             logger.error("LLM provider spending limit (%s): %s -- %s", fault.code.value, fault.describe(), where)
@@ -2735,6 +2751,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         _handle_generic_llm_exception(
             e, self.model_name, self.openai_config.base_url or "", resp_model_name, self.circuit_breaker
         )
+
+    def budget_identity(self) -> Tuple[str, str]:
+        """(base URL, truncated key digest): which account's in-flight budget this service spends.
+
+        The LLM bus keys its in-flight pause on this, so every service using the
+        same key at the same provider pauses together. Never contains the key.
+        """
+        endpoints = getattr(self, "_endpoint_urls", None) or []
+        base_url = endpoints[0] if endpoints else (self.openai_config.base_url or "")
+        return budget_identity(base_url, self.openai_config.api_key)
 
     def live_fault_code(self) -> str:
         """The provider's structured fault slug, only while no call has succeeded since it."""

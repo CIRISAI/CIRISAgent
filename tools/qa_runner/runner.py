@@ -137,6 +137,14 @@ EXPECTED_QA_INCIDENT_PATTERNS = [
     # - reddit adapter probe: QA has no Reddit credentials, so the adapter
     #   correctly refuses to load. Environmental, not a fault.
     "Reddit credentials are not configured",
+    # - OpenRouter in-flight spending budget (#1366 item 20): a live run under
+    #   load is refused with 402 limit_source=openrouter_in_flight_budget, and
+    #   the bus pauses and RETRIES -- every call can succeed while the same
+    #   WARNING repeats 50+ times. Transient and handled; a refusal that is
+    #   finally surfaced still fails its call (and every terminal limit logs
+    #   ERROR without either marker).
+    "[LLM_IN_FLIGHT_BUDGET]",
+    "LLM provider in-flight budget full",
 ]
 
 

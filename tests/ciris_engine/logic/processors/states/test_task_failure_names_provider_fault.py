@@ -87,3 +87,24 @@ def test_every_named_fault_has_an_english_string():
     for key in _FAULT_NOTICE_KEYS.values():
         value = get_string("en", key)
         assert value and value != key, key
+
+
+@pytest.mark.parametrize(
+    "code,key,must,must_not",
+    [
+        ("in_flight_budget", "agent.error_llm_in_flight_budget", "in-flight", "key limit"),
+        ("request_too_large", "agent.error_llm_request_too_large", "too large", "key limit"),
+        ("key_limit", "agent.error_llm_key_limit", "key limit", "add credit"),
+        ("budget_limit", "agent.error_llm_budget_limit", "budget limit", "key limit"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_spending_limits_are_named_in_the_notice(code, key, must, must_not):
+    # #1366 item 20 F8: a key-limit refusal used to read as "out of credit",
+    # then as the generic notice. Each limit has its own remedy.
+    assert _FAULT_NOTICE_KEYS[code] == key
+    obj, send = _processor(_llm(code, fault_at=time.monotonic()))
+    await _notify(obj)
+    content = send.await_args.kwargs["content"]
+    assert content == get_string("en", key) and content != key, "the string must exist in en.json"
+    assert must in content.lower() and must_not not in content.lower()

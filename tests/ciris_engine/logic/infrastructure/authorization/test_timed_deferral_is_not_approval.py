@@ -341,6 +341,7 @@ async def test_only_an_issued_approval_unblocks_the_reconsidered_work(
     the envelope that path produces.
     """
     from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_authority_envelope
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import tool_call_fingerprint
 
     _bind_store(monkeypatch, store)
     assert scheduler._reactivate_deferred_task(_scheduled_reactivation(), DEFERRED_TASK_ID) is True
@@ -351,6 +352,8 @@ async def test_only_an_issued_approval_unblocks_the_reconsidered_work(
         issuer_id="wa-2026-08-01-ABC123",
         granted_tools=frozenset({APPROVAL_TOOL}),
         capabilities=frozenset(),
+        # #1366 item 10: an approval binds the call the human was shown.
+        approved_calls=frozenset({tool_call_fingerprint(APPROVAL_TOOL, {"amount": 5000})}),
     )
     monkeypatch.setattr(
         "ciris_engine.logic.processors.core.thought_processor.main.resolve_envelope_for_task_id",

@@ -27,6 +27,14 @@ from ciris_engine.schemas.runtime.models import Thought, ThoughtContext
 from ciris_engine.schemas.runtime.system_context import ChannelContext
 
 
+
+def _reviewed(result: ActionSelectionDMAResult) -> ActionSelectionDMAResult:
+    """Stamp the result as the thought processor does when the consciences pass
+    it (#1366 item 10). ToolHandler refuses an unreviewed TOOL."""
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import reviewed_action_fingerprint
+
+    return result.model_copy(update={"reviewed_action_hash": reviewed_action_fingerprint(result)})
+
 def create_channel_context(channel_id: str = "test_channel") -> ChannelContext:
     """Helper to create a valid ChannelContext for tests."""
     return ChannelContext(
@@ -237,6 +245,7 @@ async def test_tool_parameter_validation_strict(mock_dependencies_with_tools):
         reasoning="Math calculation needed",
         evaluation_time_ms=80,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -286,6 +295,7 @@ async def test_tool_parameter_type_validation(mock_dependencies_with_tools):
         reasoning="Testing type checking",
         evaluation_time_ms=70,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -326,6 +336,7 @@ async def test_tool_with_optional_parameters(mock_dependencies_with_tools):
         reasoning="Testing optional params",
         evaluation_time_ms=95,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -366,6 +377,7 @@ async def test_tool_with_enum_validation(mock_dependencies_with_tools):
         reasoning="Testing enum constraints",
         evaluation_time_ms=75,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -411,6 +423,7 @@ async def test_tool_with_array_parameters(mock_dependencies_with_tools):
         reasoning="Testing array handling",
         evaluation_time_ms=85,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -455,6 +468,7 @@ async def test_tool_cost_tracking(mock_dependencies_with_tools):
         reasoning="Testing cost awareness",
         evaluation_time_ms=90,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -558,6 +572,7 @@ async def test_tool_parameter_defaults(mock_dependencies_with_tools):
         reasoning="Testing parameter defaults",
         evaluation_time_ms=80,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -594,6 +609,7 @@ async def test_tool_not_found_handling(mock_dependencies_with_tools):
         reasoning="Testing missing tool",
         evaluation_time_ms=60,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)

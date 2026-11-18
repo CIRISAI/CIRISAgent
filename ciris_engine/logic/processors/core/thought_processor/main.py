@@ -16,9 +16,14 @@ from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+from ciris_engine.logic.infrastructure.authorization.reviewed_action import (
+    resolve_tool_name_via_bus,
+    reviewed_action_fingerprint,
+    tool_call_fingerprint,
+)
 from ciris_engine.logic.infrastructure.authorization.tool_approval import (
     build_approval_deferral,
-    envelope_approves_tool,
+    envelope_approves_call,
     tool_requires_approval,
 )
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
@@ -287,6 +292,9 @@ class ThoughtProcessor(
         conscience_result: Optional[ConscienceApplicationResult] = (
             conscience_result_raw if isinstance(conscience_result_raw, ConscienceApplicationResult) else None
         )
+        # Phase 4.8: review integrity (#1366 item 10). Fingerprint the action the
+        # consciences just passed, so dispatch can refuse anything else.
+        conscience_result = self._stamp_reviewed_action(action_result_dict.get("action_result"), conscience_result)
         action_from_conscience = self._handle_special_cases(conscience_result)
 
         # Phase 4.9: approval gate (CIRISAgent#942). Deliberately the LAST thing
@@ -338,6 +346,49 @@ class ThoughtProcessor(
 
         return {"action_result": action_result, "conscience_result": conscience_result}
 
+    @staticmethod
+    def _stamp_reviewed_action(
+        reviewed_draft: Any,
+        conscience_result: Optional[ConscienceApplicationResult],
+    ) -> Optional[ConscienceApplicationResult]:
+        """Bind the final action to the draft the consciences reviewed (#1366 item 10).
+
+        ``reviewed_draft`` is the action handed to the (last) conscience pass —
+        first pass or retry. A TOOL final action is stamped with its
+        :func:`reviewed_action_fingerprint` only when the consciences passed it
+        (not overridden) AND it fingerprints identically to that draft; in every
+        other case the stamp is CLEARED, so a value set by any other producer
+        never survives. ``ToolHandler`` refuses an unstamped or mismatched TOOL.
+
+        Runs before the approval gate: the gate may only narrow (TOOL -> DEFER),
+        and the stamp is meaningless on the DEFER it produces.
+        """
+        if conscience_result is None or conscience_result.final_action is None:
+            return conscience_result
+        final_action = conscience_result.final_action
+        stamp: Optional[str] = None
+        if final_action.selected_action == HandlerActionType.TOOL and not conscience_result.overridden:
+            final_fp = reviewed_action_fingerprint(final_action)
+            draft_fp = (
+                reviewed_action_fingerprint(reviewed_draft)
+                if isinstance(reviewed_draft, ActionSelectionDMAResult)
+                else None
+            )
+            if final_fp is not None and final_fp == draft_fp:
+                stamp = final_fp
+            else:
+                logger.error(
+                    "REVIEW-INTEGRITY: TOOL final action does not match the draft the consciences reviewed "
+                    "(final=%s reviewed=%s); leaving it unstamped so dispatch refuses it.",
+                    final_fp,
+                    draft_fp,
+                )
+        if final_action.reviewed_action_hash == stamp:
+            return conscience_result
+        return conscience_result.model_copy(
+            update={"final_action": final_action.model_copy(update={"reviewed_action_hash": stamp})}
+        )
+
     async def _enforce_tool_approval(
         self,
         thought: Thought,
@@ -358,11 +409,12 @@ class ThoughtProcessor(
         follow-up task. That follow-up re-runs this pipeline, reaches this method
         again, and passes.
 
-        **The grant is per-tool, per-task, not per-invocation.** The follow-up task
-        re-reasons from scratch and may call the approved tool with different
-        arguments than the ones that triggered the deferral. This mirrors the
-        budget envelope — a ceiling, not a transaction. Do not read it as
-        human review of a specific call.
+        **The grant binds the call (#1366 item 10).** The envelope carries the
+        ``tool_call_fingerprint`` (tool + exact arguments) the human was shown.
+        The follow-up task re-reasons from scratch; if it calls the approved
+        tool with different arguments, the fingerprint differs and this gate
+        defers again, so that call gets its own approval. A legacy tool-only
+        approval envelope approves nothing here.
 
         Everything that is not a ``TOOL`` action, and every tool that does not
         declare ``requires_approval``, returns unchanged: this is the #942 approval
@@ -392,8 +444,9 @@ class ThoughtProcessor(
         if not tool_requires_approval(tool_info):
             return conscience_result
 
+        call_fingerprint = tool_call_fingerprint(tool_name, tool_params.parameters)
         envelope = resolve_envelope_for_task_id(thought.source_task_id, thought.agent_occurrence_id)
-        if envelope_approves_tool(envelope, tool_name):
+        if envelope_approves_call(envelope, tool_name, call_fingerprint):
             logger.info(
                 "APPROVAL-GATE: '%s' authorized for task %s by %s envelope %s (issuer %s)",
                 tool_name,
@@ -405,9 +458,10 @@ class ThoughtProcessor(
             return conscience_result
 
         logger.warning(
-            "APPROVAL-GATE: DENIED '%s' for task %s — tool declares requires_approval=True and the "
-            "task envelope (%s) does not grant it. Deferring to Wise Authority.",
+            "APPROVAL-GATE: DENIED '%s' (call %s) for task %s — tool declares requires_approval=True "
+            "and the task envelope (%s) does not grant this call. Deferring to Wise Authority.",
             tool_name,
+            call_fingerprint,
             thought.source_task_id,
             (
                 f"issuer={envelope.issuer.kind.value} id={envelope.envelope_id}"
@@ -424,6 +478,7 @@ class ThoughtProcessor(
             tool_info=tool_info,
             intended_parameters=tool_params.parameters,
             channel_id=getattr(tool_params, "channel_id", None),
+            call_fingerprint=call_fingerprint,
         )
         return conscience_result.model_copy(
             update={
@@ -484,9 +539,14 @@ class ThoughtProcessor(
         handler = self._VERB_SECOND_PASS.get(action_result.selected_action)
         if handler is None:
             return action_result
+        # Resolve tool aliases on both sides of the second pass (#1366 item 10):
+        # before, so TSASPDMA documents the real tool; after, so whatever name it
+        # settles on is the real tool by the time the consciences review the draft.
+        action_result = self._resolve_tool_alias(action_result)
         result: ActionSelectionDMAResult = await handler(
             self, thought_item, action_result, thought_context, conscience_feedback=conscience_feedback
         )
+        result = self._resolve_tool_alias(result)
         result = self._ponder_if_second_pass_left_it_unfilled(thought_item, result)
         # A second pass returns a NEW result that never saw the action-selection
         # prompts, and ASPDMA_RESULT is built from whatever result comes out of
@@ -498,6 +558,27 @@ class ThoughtProcessor(
         return result.model_copy(
             update={"user_prompt": action_result.user_prompt, "system_prompt": action_result.system_prompt}
         )
+
+    def _resolve_tool_alias(self, action_result: ActionSelectionDMAResult) -> ActionSelectionDMAResult:
+        """Rewrite a TOOL draft's alias to the tool the bus will actually run (#1366 item 10).
+
+        ``ToolBus.execute_tool`` resolves aliases at dispatch. Left there, the
+        consciences reviewed ``todoist`` and ``skill:todoist-cli`` ran. Resolving
+        here — on every path into the consciences, since first pass and retry
+        both go through ``_run_verb_second_pass`` — makes the reviewed name the
+        executed name; the dispatch-side fingerprint check catches any alias
+        registered after review.
+        """
+        if action_result.selected_action != HandlerActionType.TOOL:
+            return action_result
+        params = action_result.action_parameters
+        if not isinstance(params, ToolParams):
+            return action_result
+        resolved = resolve_tool_name_via_bus(self.dependencies.bus_manager, params.name)
+        if resolved == params.name:
+            return action_result
+        logger.info("REVIEW-INTEGRITY: resolved tool alias '%s' -> '%s' before review", params.name, resolved)
+        return action_result.model_copy(update={"action_parameters": params.model_copy(update={"name": resolved})})
 
     async def _maybe_run_tsaspdma(
         self,

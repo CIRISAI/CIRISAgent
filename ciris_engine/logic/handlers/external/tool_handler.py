@@ -3,6 +3,10 @@ import uuid
 from typing import Any, Dict, Optional, Tuple, cast
 
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
+from ciris_engine.logic.infrastructure.authorization.reviewed_action import (
+    resolve_tool_name_via_bus,
+    reviewed_action_fingerprint,
+)
 from ciris_engine.logic.infrastructure.handlers.base_handler import BaseActionHandler
 from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreationError
 from ciris_engine.schemas.actions import ToolParams
@@ -28,6 +32,12 @@ class ToolHandler(BaseActionHandler):
     async def handle(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
     ) -> Optional[str]:
+        # Execute only what was reviewed (#1366 item 10) — before decapsulation,
+        # so the comparison is over secret references, as the consciences saw.
+        refusal = self._refuse_if_changed_since_review(result, thought)
+        if refusal is not None:
+            return refusal
+
         # Validate parameters
         params_or_error = await self._validate_tool_params(result, thought, dispatch_context)
         if isinstance(params_or_error, str):
@@ -39,6 +49,64 @@ class ToolHandler(BaseActionHandler):
 
         # Create follow-up thought
         return self._complete_tool_action(thought, result, params, success, follow_up_info)
+
+    def _refuse_if_changed_since_review(self, result: ActionSelectionDMAResult, thought: Thought) -> Optional[str]:
+        """Refuse a TOOL call that is not the call the consciences reviewed (#1366 item 10).
+
+        Recomputes ``reviewed_action_fingerprint`` over what is about to run —
+        with the tool name the bus would actually dispatch to, so an alias
+        registered after review counts as a change — and compares it with the
+        stamp the thought processor set when the consciences passed. Absent
+        stamp (nothing was reviewed) or any difference refuses, fail-closed.
+
+        Checked BEFORE secret decapsulation (references are what was reviewed)
+        and BEFORE ``_build_tool_params`` adds ``channel_id`` (already hashed as
+        ``ToolParams.channel_id``) and the handler-authoritative ``task_id``.
+
+        The contract for a legitimate post-review change is refuse-and-re-review:
+        the thought fails with a follow-up saying why, and that follow-up thought
+        goes back through action selection and the consciences, which review the
+        call as it now stands. Nothing here re-reviews in place.
+
+        Returns the follow-up thought id on refusal, ``None`` to proceed.
+        """
+        reviewed = result.reviewed_action_hash
+        params = result.action_parameters
+        name = params.name if isinstance(params, ToolParams) else None
+        resolved = resolve_tool_name_via_bus(self.bus_manager, name) if name is not None else None
+        current = reviewed_action_fingerprint(result, resolved_tool_name=resolved)
+        if reviewed is not None and current == reviewed:
+            return None
+
+        if reviewed is None:
+            why = "this tool call was never passed by the consciences (no review fingerprint)"
+        elif current is None:
+            why = "the action is no longer a reviewable tool call"
+        elif resolved != name:
+            why = f"tool '{name}' now resolves to '{resolved}', which is not the tool that was reviewed"
+        else:
+            why = "the tool, arguments or target changed after the consciences reviewed it"
+        self.logger.error(
+            "REVIEW-INTEGRITY: REFUSED tool %r for thought %s (task %s): %s. reviewed=%s executing=%s. "
+            "Not executed; the follow-up thought re-reviews the call as it stands.",
+            name,
+            thought.thought_id,
+            thought.source_task_id,
+            why,
+            reviewed,
+            current,
+        )
+        follow_up_id = self.complete_thought_and_create_followup(
+            thought=thought,
+            follow_up_content=self._localized_followup(
+                "tool_action_failed_with_reason",
+                default=f"TOOL action failed: {why}",
+                reason=f"not executed — {why}. Re-decide the action; it will be reviewed again.",
+            ),
+            action_result=result,
+            status=ThoughtStatus.FAILED,
+        )
+        return follow_up_id or ""
 
     async def _validate_tool_params(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext

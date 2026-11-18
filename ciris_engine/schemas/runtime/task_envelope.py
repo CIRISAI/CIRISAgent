@@ -414,6 +414,14 @@ class TaskEnvelope(BaseModel):
         default_factory=frozenset,
         description="Declared effect classes. Closed enum, no wildcard. Summary axis, not a tool gate.",
     )
+    approved_calls: FrozenSet[str] = Field(
+        default_factory=frozenset,
+        description=(
+            "For a human-approval envelope (#942): the tool_call_fingerprint (tool + exact "
+            "arguments) of each call the human approved (CIRISAgent#1366 item 10). Empty on a "
+            "legacy tool-only approval, which the approval gate does not honour."
+        ),
+    )
     target_roots: Tuple[TargetRoot, ...] = Field(
         default_factory=tuple, description="Declared roots of the task's reachable surface (Phase 4 input)"
     )
@@ -544,6 +552,9 @@ class TaskEnvelope(BaseModel):
             attenuated_from=self.envelope_id,
             granted_tools=new_tools,
             capabilities=new_caps,
+            # Kept as-is: an approved call is still bound to its tool, which
+            # must survive in new_tools for envelope_approves_call to pass.
+            approved_calls=self.approved_calls,
             target_roots=new_roots,
             credentials=new_creds,
         )

@@ -1231,13 +1231,21 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         no approval envelope, so the gate denies again on the re-run. That is the
         fail-closed direction — a broken issuance can never turn into a grant.
         """
-        from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+            pending_call_fingerprint_from_deferral_context,
+            pending_tool_from_deferral_context,
+        )
 
         if not isinstance(deferral_info, dict):
             return
         approved_tool = pending_tool_from_deferral_context(deferral_info.get("context"))
         if approved_tool is None:
             return
+        # The call the human was shown (CIRISAgent#1366 item 10). Absent on a
+        # deferral raised before calls were bound: the envelope is then minted
+        # tool-only, which the gate treats as legacy and defers again for
+        # re-approval of a specific call.
+        approved_call = pending_call_fingerprint_from_deferral_context(deferral_info.get("context"))
 
         try:
             from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_authority_envelope
@@ -1249,6 +1257,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 issuer_id=wa_id,
                 granted_tools=frozenset({approved_tool}),
                 capabilities=frozenset(),
+                approved_calls=frozenset({approved_call}) if approved_call else frozenset(),
                 agent_occurrence_id=agent_occurrence_id,
                 time_service=self._time_service,
             )

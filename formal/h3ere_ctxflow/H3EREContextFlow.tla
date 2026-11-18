@@ -46,7 +46,10 @@ Untrusted == {"request", "history", "display_name_labelled", "display_name_unlab
               "rule_user_chat", "rule_wa_chat"}
 Items == {"request", "history", "identity_base", "amendment", "wa_guidance", "sender_identity",
           "action_record_factual", "action_record_tainted", "display_name_labelled", "display_name_unlabelled",
-          "rule_user_chat", "rule_wa_chat", "rule_verified"}
+          "rule_user_chat", "rule_wa_chat", "rule_verified",
+          \* Ablation stubs (FSD §6a): engine-computed properties of a withheld segment, none of its bytes.
+          "request_stub", "history_stub", "tool_output_stub", "rule_chat_stub"}
+Stubs == {"request_stub", "history_stub", "tool_output_stub", "rule_chat_stub"}
 
 Options(s) == CASE s = "S1" -> {"normal"}
                 [] s = "S3" -> {"follow", "normal", "defer_sign"}
@@ -82,9 +85,12 @@ Trusted(p) == p["rule_verified"] \/ p["amendment"] \/ p["wa_guidance"]
 HasEvidence(j) ==
     LET p == inputs[j] IN
     CASE scen = "S1" -> TRUE
-      [] scen = "S2" -> j \notin Ablated /\ p["rule_user_chat"]
+      \* An ablated judge holding a stub of the chat rule knows an advisory rule exists, who stated it (role)
+      \* and that the draft relates to it: enough to judge own-turn compliance, never enough to treat it as signed.
+      [] scen = "S2" -> (j \notin Ablated /\ p["rule_user_chat"]) \/ (j \in Ablated /\ p["rule_chat_stub"])
       [] scen = "S6" -> (attached \/ Trusted(p)) /\ (attached \/ p["sender_identity"])
       [] OTHER       -> attached \/ Trusted(p) \/ (j \notin Ablated /\ p["rule_wa_chat"])
+                        \/ (scen = "S3" /\ j \in Ablated /\ p["rule_chat_stub"])
 
 \* Verdicts available to conscience j on the current draft (A2).
 Verdicts(j) ==
@@ -184,5 +190,9 @@ AuthMonotone == (scen = "S6" /\ everRefused) => final # "file"
 NoForcedDeferral == final # "auto_defer"
 \* I9  A deferral tells the WA what was contested.
 DeferralInformative == (final \in {"defer", "auto_defer"}) => package
+\* I13 Stubs only where content is withheld: non-ablated stages get segments in full, never as stubs.
+StubsOnlyAblated == \A j \in Judges \ Ablated : \A it \in Stubs : ~inputs[j][it]
+\* I14 Informed ablation: wherever an advisory chat rule exists, each ablated judge holds its stub.
+StubInformed == (scen \in {"S2", "S3"}) => \A j \in Ablated : inputs[j]["rule_chat_stub"]
 Terminates == <>(pc = "done")
 =============================================================================

@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 python3 gen_contract_policy.py context_policy.yaml ContractPolicy.tla >/dev/null || exit 1
 python3 gen_contextdata.py matrix.json ContextData.tla >/dev/null || exit 1
 : "${TLA2TOOLS:?set TLA2TOOLS to tla2tools.jar}"
-INVS="TypeOK Ablation EvidenceSufficiency VerifiedIdentity NoWrongExecution ReviewIntegrity VetoContinuity AuthMonotone NoForcedDeferral DeferralInformative NoLaundering NoCrossTaskLeak IdentityLayout"
+INVS="TypeOK Ablation EvidenceSufficiency VerifiedIdentity NoWrongExecution ReviewIntegrity VetoContinuity AuthMonotone NoForcedDeferral DeferralInformative NoLaundering NoCrossTaskLeak IdentityLayout StubsOnlyAblated StubInformed"
 for cfg in ${CFGS:-contract measured contract_postreview contract_noverbveto contract_postreview_gate measured_gate}; do
   for inv in $INVS Terminates; do
     W=$(mktemp -d); cp H3EREContextFlow.tla ContextData.tla ContractPolicy.tla "$W/"; cp "$cfg.cfg" "$W/c.cfg"

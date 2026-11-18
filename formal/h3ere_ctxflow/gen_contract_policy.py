@@ -3,8 +3,9 @@
 A closed-vocabulary compiler, not a language: every kind, provenance, trust level, lifecycle and predicate must
 be one of the enums below. Before generating anything it runs the static checks of §5a and refuses on failure:
   - vocabulary: unknown names are errors;
-  - firewall: an ablated stage allows no untrusted kind (except kinds marked residual) and no untrusted rule
-    provenance;
+  - firewall: an ablated stage receives no untrusted bytes: untrusted kinds and rule provenances only in stub form
+    (engine-computed properties from the closed stub_fields set), or kinds marked residual;
+  - stubs: only for untrusted kinds, only at ablated stages, only fields from the closed STUB_FIELDS set;
   - no laundering by declaration: action_record is system trust and factual;
   - identity layout: display_name renders labelled; sender_identity carries authn;
   - only signed rules are verified provenances (decision 2026-11-18): user_chat and wa_chat must be untrusted;
@@ -28,6 +29,9 @@ PROVENANCES = {"user_chat", "wa_chat", "signed_guidance", "amendment"}
 KINDS = {"stage_instruction", "schema_instruction", "accord", "identity_base", "amendment", "rule", "wa_guidance",
          "request", "history", "sender_identity", "display_name", "action_record", "draft", "dma_output",
          "conscience_feedback", "tool_output", "pipeline_position"}
+FORMS = {"full", "stub"}
+STUB_FIELDS = {"kind", "provenance", "source", "trust", "author_role", "authority", "scope", "disposition",
+               "transforms", "draft_relation", "size", "position", "digest"}
 JUDGES = ["coherence", "entropy", "epistemic", "optveto"]
 MODEL_STAGES = JUDGES + ["aspdma", "tsaspdma"]
 # Scenario sets each predicate holds in (the model's S1..S6; FSD and README scenario table).
@@ -52,7 +56,9 @@ def fail(msg):
 
 def main(src, out):
     P = yaml.safe_load(open(src))
-    kinds, prov, stages = P["kinds"], P["rule_provenance"], P["stages"]
+    kinds, prov = P["kinds"], P["rule_provenance"]
+    # YAML anchors alias one dict across stages; copy so per-stage normalisation cannot leak between them
+    stages = {st: dict(rows) for st, rows in P["stages"].items()}
     ablated = set(P["ablated_stages"])
     # vocabulary
     for k, a in kinds.items():
@@ -65,6 +71,20 @@ def main(src, out):
     for pv, t in prov.items():
         if pv not in PROVENANCES or t not in TRUST:
             fail(f"rule provenance {pv!r}: {t!r}")
+    stub_fields = set(P.get("stub_fields") or [])
+    if not stub_fields <= STUB_FIELDS:
+        fail(f"stub_fields outside the closed set: {sorted(stub_fields - STUB_FIELDS)}")
+    forms = {}
+    for st, rows in stages.items():
+        for key in list(rows):
+            cell = rows[key]
+            if isinstance(cell, dict):
+                if set(cell) - {"when", "form"} or cell.get("form", "full") not in FORMS:
+                    fail(f"{st}.{key}: a cell is a predicate or {{when, form}} with form full|stub")
+                forms[(st, key)] = cell.get("form", "full")
+                rows[key] = cell.get("when", "always")
+            else:
+                forms[(st, key)] = "full"
     for st, rows in stages.items():
         for key, pred in rows.items():
             kind, _, pv = key.partition(".")
@@ -91,14 +111,23 @@ def main(src, out):
     for pv in ("user_chat", "wa_chat"):
         if prov.get(pv) != "untrusted":
             fail(f"rule provenance {pv} must be untrusted: only signed rules are authoritative")
-    # firewall
+    # stubs: only for untrusted kinds, only at ablated stages, and only if the policy declares stub_fields
+    for (st, key), form in forms.items():
+        if form == "stub":
+            if st not in ablated:
+                fail(f"{st}.{key}: stub form is for ablated stages only")
+            if trust_of(key) != "untrusted":
+                fail(f"{st}.{key}: only untrusted segments are stubbed")
+            if not stub_fields:
+                fail("stub form used but no stub_fields declared")
+    # firewall: an ablated stage gets no untrusted bytes; untrusted kinds only as stubs (or declared residuals)
     for st in ablated:
         for key, pred in stages[st].items():
             if pred == "never":
                 continue
             kind = key.split(".")[0]
-            if trust_of(key) == "untrusted" and not kinds[kind].get("residual"):
-                fail(f"firewall: ablated stage {st} allows untrusted {key}")
+            if trust_of(key) == "untrusted" and forms[(st, key)] != "stub" and not kinds[kind].get("residual"):
+                fail(f"firewall: ablated stage {st} allows untrusted {key} in full")
     # no laundering by declaration; identity layout
     if kinds["action_record"].get("trust") != "system":
         fail("action_record must be system trust (factual, no derived_from)")
@@ -117,8 +146,8 @@ def main(src, out):
             fail(f"evidence sufficiency: judge {st} has no verified rule evidence in {sorted(missing)}")
 
     # atoms the model consumes
-    def expr(st, keys):
-        preds = [stages[st].get(k, "never") for k in keys]
+    def expr(st, keys, form="full"):
+        preds = [stages[st].get(k, "never") for k in keys if forms.get((st, k), "full") == form]
         exprs = [PRED_TLA[p] for p in preds if p != "never"]
         return " \\/ ".join(f"({e})" for e in exprs) if exprs else "FALSE"
 
@@ -131,10 +160,14 @@ def main(src, out):
         # never produced under a valid policy: the checks above forbid them
         "action_record_tainted": [], "display_name_unlabelled": [],
     }
+    stub_atoms = {"request_stub": ["request"], "history_stub": ["history"], "tool_output_stub": ["tool_output"],
+                  "rule_chat_stub": ["rule.user_chat", "rule.wa_chat"]}
     lines = []
     for st in MODEL_STAGES:
         for atom, keys in atoms.items():
             lines.append(f'    [] <<"{st}", "{atom}">> = key -> IF {expr(st, keys)} THEN "always" ELSE "never"')
+        for atom, keys in stub_atoms.items():
+            lines.append(f'    [] <<"{st}", "{atom}">> = key -> IF {expr(st, keys, "stub")} THEN "always" ELSE "never"')
     body = "\n".join(lines).replace("    [] ", "    CASE ", 1)
     open(out, "w").write(f"""---------------------------- MODULE ContractPolicy ----------------------------
 (* GENERATED by gen_contract_policy.py from {src} (policy version {P['version']}) -- do not edit.    *)

@@ -30,7 +30,24 @@ rule_provenance:
   signed_guidance:  verified
   amendment:        verified
 
-# stage -> kind[.provenance] -> predicate. Anything not listed is "never".
+# Ablation stubs (FSD §6a). At an ablated stage an untrusted segment may be given in form `stub`: none of its bytes,
+# only these engine-computed properties. Closed set; every value is an enum, a bucket or an id, never free text.
+stub_fields:
+  - kind            # the segment's kind
+  - provenance      # for rule: user_chat | wa_chat (structural provenance only)
+  - source          # user_input | tool_output | llm_output ...
+  - trust           # always untrusted here
+  - author_role     # verified role of the author from authn: OBSERVER|ADMIN|AUTHORITY|SYSTEM_ADMIN|unauthenticated
+  - authority       # none | advisory | signed   (signed only with a verified authz grant)
+  - scope           # this_turn | this_task | standing
+  - disposition     # per-kind engine state, e.g. request: open|answered|deferred|refused; rule: advisory_unsigned|awaiting_signature|refused; tool_output: success|failure
+  - transforms      # engine-applied: sanitized | truncated | normalized | redacted | coalesced
+  - draft_relation  # none | responds_to | quotes, plus quote_share bucket: 0 | <10% | 10-50% | >50%
+  - size            # short | medium | long
+  - position        # current | prior_<n>
+  - digest          # sha256 prefix: correlates the stub with the manifest
+
+# stage -> kind[.provenance] -> predicate, or {when: predicate, form: full|stub}. Anything not listed is "never". Anything not listed is "never".
 # Predicates (closed set): always | never | trusted_rule_in_force | id_scoped | signed_guidance_in_force |
 #   amendment_in_force | advisory_rule | retry
 # trusted_rule_in_force: a SIGNED rule is in force (signed guidance or amendment). advisory_rule: a rule stated in
@@ -69,6 +86,12 @@ stages:
     action_record: always
     draft: always            # residual (FSD §10)
     pipeline_position: always
+    # Ablation stubs: the judge knows these exist and what they are, never what they say.
+    request:        {when: always,        form: stub}
+    history:        {when: always,        form: stub}
+    tool_output:    {when: always,        form: stub}
+    rule.user_chat: {when: advisory_rule, form: stub}
+    rule.wa_chat:   {when: advisory_rule, form: stub}
   optveto: *ablated_judge
   aspdma: &drafter
     stage_instruction: always

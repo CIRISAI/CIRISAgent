@@ -177,6 +177,53 @@ The policy generates three artefacts, and none of them is hand-edited:
   A missing *required* segment is likewise a test failure and a production incident.
 - **Agent profile.** The template identity is one `identity_base` segment. Each approved amendment is its own `amendment` segment with its own `authz` (node id, attestation ids, signature result, `granted_at`), rendered adjacent. That gives per-grant authority, per-amendment revocation, and per-amendment tracking.
 
+## 6a. Ablation stubs (owner decision 2026-11-18)
+
+**An ablated stage is told what it is not shown.** Today an untrusted segment is simply absent from entropy and the optimization veto. So when a draft follows a rule those stages cannot see, they judge it as an invented policy (Market 4: 29 of 31 deferrals were depth-limit auto-deferrals after such vetoes). Instead, every untrusted segment an ablated stage would otherwise lose is replaced by a **stub**: a system-built description of the segment's properties, carrying none of its bytes.
+
+**What a stub contains.** These fields are a closed set, declared as `stub_fields` in `context_policy.yaml` and enforced by the compiler.
+
+| Field | Values | Computed from |
+|---|---|---|
+| `kind` | the §4.1 kind | the segment |
+| `provenance` | `user_chat` \| `wa_chat` (rules only) | how the segment entered (structural, never by reading the text) |
+| `source` | §4.3 source | the segment |
+| `trust` | `untrusted` | the segment, after taint |
+| `author_role` | `OBSERVER` \| `ADMIN` \| `AUTHORITY` \| `SYSTEM_ADMIN` \| `unauthenticated` | the author's `authn` carrier |
+| `authority` | `none` \| `advisory` \| `signed` | `authz`: `signed` only with a verified grant; `advisory` for a chat rule; otherwise `none` |
+| `scope` | `this_turn` \| `this_task` \| `standing` | lifecycle |
+| `disposition` | per kind: request `open`\|`answered`\|`deferred`\|`refused`; rule `advisory_unsigned`\|`awaiting_signature`\|`refused`; tool_output `success`\|`failure`; history `prior` | engine state |
+| `transforms` | subset of `sanitized`, `truncated`, `normalized`, `redacted`, `coalesced` | operations the engine applied |
+| `draft_relation` | `none` \| `responds_to` \| `quotes`, with `quote_share` ∈ `0` \| `<10%` \| `10-50%` \| `>50%` | thought linkage, plus deterministic n-gram overlap between draft and segment |
+| `size` | `short` \| `medium` \| `long` | length buckets |
+| `position` | `current` \| `prior_<n>` | order in the conversation |
+| `digest` | sha256 prefix | accounting; correlates the stub with the manifest |
+
+**Rules:**
+1. **No free text.** Every value is an enum, a bucket or an id computed by the engine. Excluded on purpose:
+   - topic, intent or sentiment;
+   - "contains an instruction";
+   - any summary, paraphrase or model-generated description.
+
+   An attacker can steer a classifier or summariser, so any such field would carry the content back in.
+2. **Stubs only where content is withheld.** A stub is allowed only for an untrusted kind at an ablated stage. Non-ablated stages get the segment in full, never a stub.
+3. **The firewall reads:** an ablated stage receives untrusted kinds only as stubs, or as declared residuals (`draft`, `schema_instruction`).
+4. **Policy form.** A cell is a predicate, or `{when: <predicate>, form: full|stub}`. The compiler refuses:
+   - a stub for a trusted kind;
+   - a stub at a non-ablated stage;
+   - a stub field outside the closed list;
+   - an untrusted kind given in full to an ablated stage.
+5. **Rendering.** One system-built line per stub, inside a block whose delimiters are neutralised in all untrusted input (§6). For example:
+   `WITHHELD request — author_role=OBSERVER authority=none scope=this_turn disposition=open draft_relation=responds_to quote_share=<10% size=short position=current digest=3f9a…`
+6. **What a stub lets a judge conclude, and what it doesn't.**
+   - A stub of a chat rule tells entropy that an advisory rule exists, who stated it (role), and that the draft relates to it. That is enough to judge own-turn compliance.
+   - It never makes the rule authoritative. Authority still needs a signed `rule` segment (§7).
+   - Injection through the stub is bounded by the closed vocabulary: the worst an attacker controls is which bucket a value lands in.
+
+**Model.**
+- Invariants: `StubsOnlyAblated` (non-ablated stages never receive stubs) and `StubInformed` (wherever an advisory chat rule exists, each ablated judge holds its stub). `Ablation` is unchanged, since a stub carries no untrusted bytes.
+- Judgement: an ablated judge holding a chat-rule stub has evidence for advisory own-turn compliance (S2, S3), and none for authority.
+
 ## 7. Composition with the verified-WA signal (#1365)
 
 The "response to request from authorized Wise Authority" block is not new machinery. It is a `rule` segment with provenance `signed_guidance` or `amendment` (never `wa_chat`, §15.1), carrying `authn` and `authz`. Policy requires it for every judge whenever a trusted rule is in force.

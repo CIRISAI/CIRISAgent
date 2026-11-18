@@ -32,8 +32,9 @@ it beside ``only_verified`` in ASPDMA, PDMA, IDMA and the memorize second pass,
 and never in a conscience prompt.
 """
 
-from typing import Any, Optional
+from typing import Any, List, Optional, Sequence
 
+from ciris_engine.schemas.infrastructure.identity_variance import IdentityAmendment
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import WAAuthorization
 from ciris_engine.schemas.services.graph_core import GraphScope
@@ -81,6 +82,13 @@ def format_wa_approval_block(authorization: Optional[WAAuthorization], language:
         granted_at=authorization.granted_at,
         guidance=authorization.guidance or "-",
     )
+    return "\n\n".join((grant, _format_wa_approval_rule(lang)))
+
+
+def _format_wa_approval_rule(lang: str) -> str:
+    """The ``rule`` and ``identity`` parts of the approval block, joined."""
+    from ciris_engine.logic.utils.localization import get_string
+
     # The action and scope names are the enum values the model answers with,
     # so they reach every locale as placeholders, never as translated words.
     rule = get_string(
@@ -92,7 +100,125 @@ def format_wa_approval_block(authorization: Optional[WAAuthorization], language:
         identity_scope=GraphScope.IDENTITY.value,
     )
     identity = get_string(lang, "prompts.wa_approval.identity")
-    return "\n\n".join((grant, rule, identity))
+    return "\n\n".join((rule, identity))
+
+
+# --------------------------------------------------------------------------
+# The verified Wise Authority governance block (CIRISAgent#1365, #1366 items 2-3)
+# --------------------------------------------------------------------------
+
+#: The ``source`` values the governance block names. Enum-like identifiers,
+#: rendered as placeholders so no locale translates them.
+WA_GOVERNANCE_SOURCE_RESOLUTION = "deferral_resolution"
+WA_GOVERNANCE_SOURCE_AMENDMENT = "identity_amendment"
+
+
+def approved_amendments_of(agent_identity: Any) -> List[IdentityAmendment]:
+    """The approved identity amendments, with provenance, an identity carries.
+
+    Reads ``IdentityData.approved_amendments`` (or its dict form). Each entry was
+    loaded from an ``IDENTITY_AMENDMENT`` graph node that records its approval
+    (``context.identity_amendments.amendment_from_node``); an entry that does not
+    validate as an ``IdentityAmendment`` is left out, never guessed at.
+    """
+    if not agent_identity:
+        return []
+    raw = (
+        agent_identity.get("approved_amendments")
+        if isinstance(agent_identity, dict)
+        else getattr(agent_identity, "approved_amendments", None)
+    )
+    amendments: List[IdentityAmendment] = []
+    for item in raw or []:
+        if isinstance(item, IdentityAmendment):
+            amendments.append(item)
+            continue
+        if isinstance(item, dict):
+            try:
+                amendments.append(IdentityAmendment.model_validate(item))
+            except Exception:  # noqa: BLE001 - an incomplete record is not governance
+                continue
+    return [a for a in amendments if a.content.strip()]
+
+
+def format_wa_governance_block(
+    authorization: Optional[WAAuthorization],
+    amendments: Sequence[IdentityAmendment] = (),
+    language: Optional[str] = None,
+) -> str:
+    """The one system-built block of verified Wise Authority governance; "" when there is none.
+
+    For the two input-ablated consciences, entropy and the optimization veto
+    (#1365). They never see the user's message, by design, so a reply that
+    follows a rule a Wise Authority set read to them as an invented constraint
+    (RATCHET Market 4: entropy had the WA's guidance in 0% of guidance-task
+    calls). This block gives them that rule WITHOUT reopening the input channel:
+    it is built only from trusted state, the verified ``WAAuthorization`` a
+    resolved deferral issues and the approved identity amendments with their
+    provenance, never from message text. Each entry names its source, its ids
+    and the directive verbatim from the signed row or amendment.
+    """
+    if authorization is None and not amendments:
+        return ""
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    lang = language or get_preferred_language()
+    entries: List[str] = [get_string(lang, "prompts.wa_governance.header")]
+    if authorization is not None:
+        entries.append(
+            get_string(
+                lang,
+                "prompts.wa_governance.entry_resolution",
+                source=WA_GOVERNANCE_SOURCE_RESOLUTION,
+                wa_id=authorization.wa_id,
+                deferral_id=authorization.deferral_id,
+                response_attestation_id=authorization.response_attestation_id or "-",
+                request_attestation_id=authorization.request_attestation_id or "-",
+                granted_at=authorization.granted_at,
+                # Last: _interpolate replaces in order, so trusted-but-free text
+                # can never be re-read as another placeholder.
+                directive=authorization.guidance or "-",
+            )
+        )
+    for amendment in amendments:
+        entries.append(
+            get_string(
+                lang,
+                "prompts.wa_governance.entry_amendment",
+                source=WA_GOVERNANCE_SOURCE_AMENDMENT,
+                node_id=amendment.node_id,
+                wa_id=amendment.wa_id or "-",
+                deferral_id=amendment.deferral_id or "-",
+                response_attestation_id=amendment.response_attestation_id or "-",
+                amendment_attestation_id=amendment.amendment_attestation_id or "-",
+                granted_at=amendment.granted_at or "-",
+                directive=amendment.content.strip(),
+            )
+        )
+    entries.append(get_string(lang, "prompts.wa_governance.footer"))
+    return "\n".join(entries)
+
+
+def wa_governance_block_of(context: Any, language: Optional[str] = None) -> str:
+    """The governance block for a conscience context: its verified grant and its identity's amendments."""
+    return format_wa_governance_block(
+        wa_authorization_of(context),
+        approved_amendments_of(getattr(context, "agent_identity", None)),
+        language=language,
+    )
+
+
+def format_wa_approval_rule(authorization: Optional[WAAuthorization], language: Optional[str] = None) -> str:
+    """The approval block's ``rule`` and ``identity`` parts alone; "" without a verified approval.
+
+    The optimization veto reads these beside the governance block, which now
+    carries the grant itself (the ``grant`` part would repeat it).
+    """
+    if authorization is None:
+        return ""
+    from ciris_engine.logic.utils.localization import get_preferred_language
+
+    return _format_wa_approval_rule(language or get_preferred_language())
 
 
 def format_wa_only_verified_rule(language: Optional[str] = None) -> str:

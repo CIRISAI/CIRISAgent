@@ -136,14 +136,6 @@ def verified_sender_of(*contexts: Any) -> Optional[VerifiedSender]:
     return None
 
 
-#: The sender of a task no human sent (wakeup, shutdown, dream, system and guidance tasks the engine creates):
-#: the engine itself. Not a UserRole: no authenticated user holds it (coordinator ruling 2026-11-18).
-SYSTEM_SENDER_ROLE = "SYSTEM"
-SYSTEM_SENDER_SOURCE = "system"
-#: The subject id when the agent's own id is not known: the component that built the prompt.
-SYSTEM_SENDER_FALLBACK_ID = "ciris_engine"
-
-
 def sender_identity_lines(
     user_id: Optional[str], role: Optional[str], source: str, language: Optional[str] = None
 ) -> list[str]:
@@ -169,18 +161,10 @@ def verified_sender_identity_lines(sender: VerifiedSender, language: Optional[st
     return sender_identity_lines(sender.user_id, role, sender.source, language)
 
 
-def system_sender_id(context: Any) -> str:
-    """The subject id of a task no human sent: the agent's own id, else the engine component's."""
-    identity = getattr(context, "agent_identity", None)
-    agent_id = identity.get("agent_id") if isinstance(identity, dict) else getattr(identity, "agent_id", None)
-    return agent_id if isinstance(agent_id, str) and agent_id else SYSTEM_SENDER_FALLBACK_ID
-
-
-def format_system_sender_block(subject_id: str, language: Optional[str] = None) -> str:
-    """The VERIFIED SENDER block of a task the engine created: id = agent/component, role SYSTEM, source system."""
-    lines = sender_identity_lines(subject_id, SYSTEM_SENDER_ROLE, SYSTEM_SENDER_SOURCE, language)
-    lines.extend(verified_sender_trailer_lines(language))
-    return "\n".join(lines)
+#: The sender a conscience is shown when the task carries no verified sender: id unknown, role not verified,
+#: verified by nothing. Never SYSTEM: an adapter that failed to attach a sender must not raise the message's
+#: apparent authority (coordinator ruling 2026-11-18).
+UNVERIFIED_SENDER = VerifiedSender()
 
 
 def verified_sender_display_name_line(display_name: str, language: Optional[str] = None) -> str:
@@ -273,8 +257,8 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     display name labelled as self-chosen (their display-name confusion vetoed
     a correct ID-mismatch refusal on v2.21.0, #1365). Entropy and the
     optimization veto (``ablated=True``): verified id, role and source only,
-    never the display name, whenever a trusted (signed) rule is in force; for
-    a task no human sent, the system sender (role SYSTEM, source system).
+    never the display name, whenever a trusted (signed) rule is in force; with
+    no verified sender, the block says so (id unknown, role not verified).
     Otherwise empty when there is no verified sender.
     """
     sender = getattr(context, "verified_sender", None) or verified_sender_of(
@@ -283,9 +267,7 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     if ablated:
         if not trusted_rule_in_force(context):
             return ""
-        if sender is None:  # a task no human sent: the engine is its sender
-            return format_system_sender_block(system_sender_id(context), language)
-        return format_verified_sender_block(sender, language, include_display_name=False)
+        return format_verified_sender_block(sender or UNVERIFIED_SENDER, language, include_display_name=False)
     if sender is None:
         return ""
     return format_verified_sender_block(sender, language)

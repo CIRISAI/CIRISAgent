@@ -352,22 +352,26 @@ def test_ablated_pair_get_the_verified_sender_whenever_a_trusted_rule_is_in_forc
 
 
 @pytest.mark.parametrize("name, cls, result, ablated", [j for j in _judges() if j[3]])
-def test_a_system_task_under_a_trusted_rule_carries_the_system_sender(
+def test_a_task_without_a_sender_under_a_trusted_rule_is_shown_as_not_verified(
     name: str, cls: type, result: Any, ablated: bool
 ) -> None:
-    """Coordinator ruling 2026-11-18: a task no human sent (wakeup, dream, guidance...) under a trusted rule gets a
-    system-built sender_identity (id = the agent, role SYSTEM, source system); the guard passes in QA mode."""
-    from ciris_engine.logic.prompt_assembly.assembler import current_guard_mode
+    """Coordinator ruling 2026-11-18: an adapter-originated task whose sender was not attached, under a trusted rule,
+    gets a sender_identity saying "not verified" (source unverified) -- never SYSTEM, which would raise its apparent
+    authority. The guard passes in QA mode (the required row is met honestly)."""
     from ciris_engine.logic.formatters.verified_sender import conscience_sender_block
-    from ciris_engine.schemas.context.prompt_provenance import AssemblyMode
+    from ciris_engine.logic.prompt_assembly.assembler import current_guard_mode
     from ciris_engine.schemas.conscience.context import ConscienceCheckContext
+    from ciris_engine.schemas.context.prompt_provenance import AssemblyMode
 
     from tests.ciris_engine.logic.conscience.test_context_flow_1366 import _conscience, _speak
 
     assert current_guard_mode() == AssemblyMode.FAIL_CLOSED  # a violation would raise, not be stripped
-    thought = SimpleNamespace(thought_id="t1", source_task_id="WAKEUP_SHARED_1", agent_occurrence_id="default", content="c")
+    # An observer task: a user's message, no verified_sender anywhere on the thought or task.
+    thought = SimpleNamespace(
+        thought_id="t1", source_task_id="task-from-discord", agent_occurrence_id="default", content="file it for me"
+    )
     context = ConscienceCheckContext(
-        thought=thought, task=SimpleNamespace(description="You are waking up."), agent_identity=_id_scoped_identity()
+        thought=thought, task=SimpleNamespace(description="file it for me"), agent_identity=_id_scoped_identity()
     )
     seen: Dict[str, Any] = {}
     conscience = _conscience(cls, seen, result)
@@ -376,17 +380,19 @@ def test_a_system_task_under_a_trusted_rule_carries_the_system_sender(
     with patch("ciris_engine.logic.persistence.get_thoughts_by_task_id", return_value=[]):
         asyncio.run(conscience.check(_speak(), context))
     sent = json.dumps([m.content for m in seen["messages"]], ensure_ascii=False)
-    assert "VERIFIED SENDER" in sent and "id: ally" in sent and "role: SYSTEM" in sent and "verified by: system" in sent
+    assert "VERIFIED SENDER" in sent and "role: not verified" in sent and "verified by: unverified" in sent
+    assert "SYSTEM" not in sent
     manifest = seen["manifest"]
     assert manifest.guard_violations == []
     (rec,) = [r for r in manifest.segments if r.kind.value == "sender_identity"]
-    assert rec.authn is not None and (rec.authn.subject_id, rec.authn.role, rec.authn.verifier) == ("ally", "SYSTEM", "system")
+    assert rec.authn is not None and (rec.authn.role, rec.authn.verifier) == ("not verified", "unverified")
     # The legacy string helper says the same.
-    assert "role: SYSTEM" in conscience_sender_block(context, "en", ablated=True)
+    block = conscience_sender_block(context, "en", ablated=True)
+    assert "role: not verified" in block and "SYSTEM" not in block
 
 
 @pytest.mark.parametrize("name, cls, result, ablated", [j for j in _judges() if j[3]])
-def test_a_system_task_without_a_trusted_rule_gets_no_sender(name: str, cls: type, result: Any, ablated: bool) -> None:
+def test_a_task_without_a_sender_or_a_trusted_rule_gets_no_sender(name: str, cls: type, result: Any, ablated: bool) -> None:
     from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 
     thought = SimpleNamespace(thought_id="t1", source_task_id="DREAM_1", agent_occurrence_id="default", content="c")

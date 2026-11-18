@@ -226,27 +226,6 @@ def sender_block_segments(
     return segments, items(segments, "\n")
 
 
-def system_sender_block_segments(subject_id: str, *, prefix: str = "sender", language: Optional[str] = None) -> Segments:
-    """The VERIFIED SENDER block of a task no human sent: a system-built ``sender_identity`` (id = the agent or
-    engine component, role SYSTEM, verified by ``system``) and the block's closing lines. No display name."""
-    from ciris_engine.logic.formatters.verified_sender import (
-        SYSTEM_SENDER_ROLE,
-        SYSTEM_SENDER_SOURCE,
-        verified_sender_trailer_lines,
-    )
-
-    segments = [
-        PromptSegment(
-            segment_id=f"{prefix}:identity",
-            kind=SegmentKind.SENDER_IDENTITY,
-            source=SegmentSource.ENGINE,
-            authn=AuthnCarrier(subject_id=subject_id, role=SYSTEM_SENDER_ROLE, verifier=SYSTEM_SENDER_SOURCE),
-        ),
-        _instruction(f"{prefix}:trailer", "\n".join(verified_sender_trailer_lines(language))),
-    ]
-    return segments, items(segments, "\n")
-
-
 # ------------------------------------------------------------------------------------------------ governance
 
 
@@ -555,7 +534,6 @@ __all__ = [
     "sender_authn",
     "sender_block_segments",
     "segment",
-    "system_sender_block_segments",
     "split_template",
     "stripped_ends",
 ]

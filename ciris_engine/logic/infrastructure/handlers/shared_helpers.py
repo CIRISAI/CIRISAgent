@@ -269,30 +269,70 @@ def amendment_text(attributes: Any) -> str:
     return "; ".join(f"{key}: {authored[key]}" for key in sorted(authored))
 
 
-def as_identity_amendment(node: GraphNode, authorization: "WAAuthorization") -> GraphNode:
-    """``node`` as a WA-approved identity amendment, carrying the approval's provenance.
+def approved_amendment_text(authorization: "WAAuthorization") -> Optional[str]:
+    """The exact amendment text a verified approval approved, or None when it approved none (#1366 F1).
 
-    The node type is what the identity loader selects on, and the provenance is
-    what makes each amendment individually auditable and revocable. The id is
-    derived from the approval, not taken from the write: a live second pass
-    invents ids (``identity/agent``), and two approvals addressed alike would
-    otherwise overwrite one another instead of standing side by side.
+    None also when the text does not hash to the digest the signed resolution
+    committed to: bytes that are not the approved bytes are not approved.
     """
     import hashlib
 
-    attributes = serialize_attributes_to_json(node.attributes)
-    text = amendment_text(attributes)
-    if text:
-        attributes["content"] = text
-    attributes["proposed_node_id"] = node.id
-    attributes["wa_amendment"] = {
-        "wa_id": authorization.wa_id,
-        "deferral_id": authorization.deferral_id,
-        "granted_at": authorization.granted_at,
+    text = authorization.amendment_text
+    digest = authorization.amendment_sha256
+    if not text or not digest:
+        return None
+    if hashlib.sha256(text.encode("utf-8")).hexdigest() != digest:
+        return None
+    return text
+
+
+def has_model_supplied_amendment_provenance(node: GraphNode) -> bool:
+    """True when a MEMORIZE draft names amendment provenance itself (#1366 F2).
+
+    An ``identity_amendment`` node, or an identity-scope node carrying a
+    ``wa_amendment`` attribute, is the engine's record of an approval. A model that writes one
+    is forging that record, whatever its task is authorized for.
+    """
+    if node.type == NodeType.IDENTITY_AMENDMENT:
+        return True
+    if node.scope != GraphScope.IDENTITY:
+        return False
+    attributes = node.attributes
+    if hasattr(attributes, "model_dump"):
+        attributes = attributes.model_dump()
+    return isinstance(attributes, dict) and "wa_amendment" in attributes
+
+
+def as_identity_amendment(node: GraphNode, authorization: "WAAuthorization", approved_text: str) -> GraphNode:
+    """The WA-approved identity amendment an identity-scope write in a guidance task lands as.
+
+    EVERYTHING here comes from the verified approval, nothing from the draft
+    (#1366 F1/F2, Eric 2026-11-18: "WA approves exact bytes"):
+
+    - ``content`` is ``approved_text``, the exact bytes the WA approved. The
+      model's wording is not stored; the caller logs it when it differs.
+    - ``wa_amendment`` (who approved, which deferral, when, the approved digest)
+      is set from the authorization.
+    - the id is derived from the approval: one approval, one amendment.
+
+    ``proposed_node_id`` keeps the id the draft addressed, as an audit hint only;
+    no reader treats it as provenance.
+    """
+    import hashlib
+
+    digest = hashlib.sha256(approved_text.encode("utf-8")).hexdigest()
+    attributes: Dict[str, Any] = {
+        "content": approved_text,
+        "proposed_node_id": node.id,
+        "wa_amendment": {
+            "wa_id": authorization.wa_id,
+            "deferral_id": authorization.deferral_id,
+            "granted_at": authorization.granted_at,
+            "approved_sha256": digest,
+        },
     }
-    digest = hashlib.sha256(node.id.encode("utf-8")).hexdigest()[:8]
     return GraphNode(
-        id=f"{CORE_IDENTITY_NODE_ID}/amendment/{authorization.deferral_id}/{digest}",
+        id=f"{CORE_IDENTITY_NODE_ID}/amendment/{authorization.deferral_id}/{digest[:8]}",
         type=NodeType.IDENTITY_AMENDMENT,
         scope=GraphScope.IDENTITY,
         attributes=attributes,

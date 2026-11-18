@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import WAPermission
@@ -24,6 +24,10 @@ class DeferralListResponse(BaseModel):
     total: int = Field(..., description="Total number of pending deferrals")
 
 
+#: The longest identity amendment a Wise Authority can approve in one resolution.
+MAX_AMENDMENT_TEXT_CHARS = 4000
+
+
 class ResolveDeferralRequest(BaseModel):
     """Request to resolve a deferral with integrated guidance."""
 
@@ -31,6 +35,26 @@ class ResolveDeferralRequest(BaseModel):
 
     resolution: str = Field(..., pattern="^(approve|reject|modify)$", description="Resolution type")
     guidance: str = Field(..., description="WA wisdom guidance integrated with the decision")
+    amendment_text: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=MAX_AMENDMENT_TEXT_CHARS,
+        description=(
+            "The EXACT identity amendment text the Wise Authority approves (CIRISAgent#1366 F1). Only with "
+            "resolution='approve'. The API computes its sha256; the node signs that digest into the WA's response "
+            "row, and the guidance task writes these bytes as the amendment. Without it an approval lands no "
+            "identity amendment."
+        ),
+    )
+
+    @field_validator("amendment_text")
+    @classmethod
+    def _exact_text_has_no_outer_whitespace(cls, value: Optional[str]) -> Optional[str]:
+        """The exact bytes, so no outer whitespace: the stored amendment is read back stripped,
+        and a digest over bytes that cannot round-trip could never verify."""
+        if value is not None and (not value.strip() or value != value.strip()):
+            raise ValueError("amendment_text must be non-empty and carry no leading or trailing whitespace")
+        return value
 
 
 class ResolveDeferralResponse(BaseModel):

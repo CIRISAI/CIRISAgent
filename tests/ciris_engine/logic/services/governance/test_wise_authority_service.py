@@ -1409,3 +1409,77 @@ async def test_a_grant_without_a_request_row_names_none(wise_authority_service, 
     assert await wise_authority_service.resolve_deferral(deferral_id, _verified_response()) is True
     grant = _guidance_task_of("task-row-grant-none").context.wa_authorization
     assert grant.request_attestation_id is None and grant.response_attestation_id is None
+
+
+# ========== Exact-bytes approval and per-task grants (#1366 F1, F5) ==========
+
+
+@pytest.mark.asyncio
+async def test_a_stale_grant_is_not_inherited_by_a_new_guidance_task(wise_authority_service, time_service, temp_db):
+    """#1366 F5: a deferred guidance task's own grant never rides into the next guidance task."""
+    from ciris_engine.schemas.runtime.models import WAAuthorization
+
+    await wise_authority_service.start()
+    stale = WAAuthorization(
+        wa_id="wa-old", deferral_id="defer_old", granted_at="2026-11-01T00:00:00+00:00", guidance="old rule"
+    )
+    _insert_task_via_persist(
+        task_id="task-stale-grant",
+        channel_id="test-channel",
+        description="[WA GUIDANCE] earlier",
+        status="active",
+        priority=5,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+        agent_occurrence_id="default",
+        context={
+            "correlation_id": "corr-task-stale-grant",
+            "wa_authorization": stale.model_dump(mode="json"),
+        },
+    )
+    deferral_id = await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-stale-grant",
+            thought_id="thought-task-stale-grant",
+            reason="again",
+            defer_until=time_service.now() + timedelta(hours=1),
+            context={},
+        )
+    )
+    # Unsigned: this resolution issues no grant of its own.
+    response = DeferralResponse(approved=True, reason="Approved", wa_id="wa-2025-06-24-AUTH01", signature="")
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+
+    guidance = _guidance_task_of("task-stale-grant")
+    assert guidance.context.wa_authorization is None, "the old deferral's grant must not authorize this task"
+
+
+@pytest.mark.asyncio
+async def test_the_grant_carries_the_exact_approved_text(wise_authority_service, auth_service, time_service, temp_db):
+    import hashlib
+
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-exact-bytes")
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+    text = "I mentor new moderators"
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    response = _verified_response().model_copy(update={"amendment_text": text, "amendment_sha256": digest})
+
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+    grant = _guidance_task_of("task-exact-bytes").context.wa_authorization
+    assert grant.amendment_text == text and grant.amendment_sha256 == digest
+
+
+@pytest.mark.asyncio
+async def test_text_that_does_not_match_its_signed_digest_is_refused(
+    wise_authority_service, auth_service, time_service, temp_db
+):
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-bytes-mismatch")
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+    import hashlib
+
+    response = _verified_response().model_copy(
+        update={"amendment_text": "other text", "amendment_sha256": hashlib.sha256(b"approved text").hexdigest()}
+    )
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is False

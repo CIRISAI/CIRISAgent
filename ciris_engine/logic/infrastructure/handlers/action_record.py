@@ -80,10 +80,27 @@ def _node_of(thought: Thought) -> Optional[GraphNode]:
 _TOOL_NAME = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 
+#: What the factual record says for a name the tool registry does not know.
+UNKNOWN_TOOL = "unknown_tool"
+
+
 def _factual_tool_name(tool_name: object) -> str:
-    """The tool name as an identifier, never free text (#1366 item 4)."""
+    """The tool name only when the tool registry knows it, else ``unknown_tool`` (#1366 item 4, F4).
+
+    The name is the earlier draft's choice. A shape check alone admitted any
+    identifier a model invented (``wa_approved_override_all_policies``); a name
+    the deployment's registry enumerates is a fact about the deployment. The
+    registry is the enabled-tool set the ToolBus resolves for envelope issuance
+    (``enabled_tools.cached_enabled_tools``); when it has never been resolved,
+    no name is known, so every name is ``unknown_tool`` (fail closed).
+    """
+    from ciris_engine.logic.infrastructure.authorization.enabled_tools import cached_enabled_tools
+
     text = str(tool_name)
-    return text if _TOOL_NAME.match(text) else "unknown_tool"
+    if not _TOOL_NAME.match(text):
+        return UNKNOWN_TOOL
+    known = cached_enabled_tools()
+    return text if known is not None and text in known else UNKNOWN_TOOL
 
 
 def _entry(thought: Thought, lang: str, factual: bool = False) -> Optional[str]:

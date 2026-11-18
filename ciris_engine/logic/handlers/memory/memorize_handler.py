@@ -11,11 +11,13 @@ from ciris_engine.logic.infrastructure.handlers.exceptions import FollowUpCreati
 from ciris_engine.logic.infrastructure.handlers.helpers import create_follow_up_thought
 from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
     amendment_text,
+    approved_amendment_text,
     as_identity_amendment,
     check_managed_attributes,
     create_config_node,
     extract_user_id_from_node,
     handle_user_consent,
+    has_model_supplied_amendment_provenance,
     is_config_node,
     is_identity_amendment_candidate,
     is_identity_node,
@@ -29,6 +31,7 @@ from ciris_engine.logic.services.governance.wise_authority.deferral_rows import 
     DeferralRowsUnavailable,
     emit_identity_amendment,
     rows_available,
+    sha256_hex,
 )
 from ciris_engine.schemas.actions import DreamConsolidationParams, MemorizeParams
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -36,15 +39,23 @@ from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought, WAAuthorization
 from ciris_engine.schemas.services.authority.deferral_rows import (
+    REASON_MODEL_PROVENANCE,
+    REASON_NO_APPROVED_TEXT,
     REASON_NO_REQUEST_ROW,
     REASON_NO_RESPONSE_ROW,
     REASON_RESPONSE_ALREADY_USED,
+    REASON_ROWS_UNAVAILABLE,
+    REASON_AMENDMENT_DIGEST_MISMATCH,
     DeferralRowRefusalKind,
 )
-from ciris_engine.schemas.services.graph_core import GraphNode, NodeType
+from ciris_engine.schemas.services.graph_core import GraphNode
 from ciris_engine.schemas.services.operations import MemoryOpStatus
 
 logger = logging.getLogger(__name__)
+
+#: The notice an identity-scope MEMORIZE gets when its approval named no exact text (#1366 F1).
+#: Beside a reason id (an enum value), so it is not localized either.
+NO_APPROVED_TEXT_NOTICE = "the Wise Authority approved no exact amendment text; re-approval with amendment_text is required"
 
 
 class MemorizeHandler(BaseActionHandler):
@@ -122,27 +133,25 @@ class MemorizeHandler(BaseActionHandler):
             )
 
         # An identity amendment exists only as the record of a verified WA
-        # approval: nothing else may mint one, or the identity loader would
-        # present unapproved text as approved.
+        # approval, and the ENGINE writes that record (#1366 F2): a draft that
+        # is already an identity_amendment node, or names amendment provenance
+        # itself, is refused, with or without an approval in this task.
         authorization = dispatch_context.wa_authorization
-        if node.type == NodeType.IDENTITY_AMENDMENT and authorization is None:
-            self.logger.warning(f"MEMORIZE of an identity amendment without a verified WA approval. Thought {thought_id} denied.")
-            return self.complete_thought_and_create_followup(
-                thought=thought,
-                follow_up_content=self._localized_followup(
-                    "memorize_wa_required",
-                    default="MEMORIZE action failed: WA authorization required for identity changes",
-                ),
-                action_result=result,
-                status=ThoughtStatus.FAILED,
+        if has_model_supplied_amendment_provenance(node):
+            self.logger.warning(
+                f"MEMORIZE draft supplies identity-amendment provenance itself (type={node.type.value}, "
+                f"id={node.id!r}). Thought {thought_id} denied: only the engine writes that record."
             )
+            if authorization is None:
+                return self._refuse_amendment(thought, result, REASON_MODEL_PROVENANCE, name_reason=False)
+            return self._refuse_amendment(thought, result, REASON_MODEL_PROVENANCE, name_reason=True)
         if authorization is not None and is_identity_amendment_candidate(node):
-            node = as_identity_amendment(node, authorization)
-            self.logger.info(
-                f"WA-approved identity amendment {node.id} (wa={authorization.wa_id}, deferral={authorization.deferral_id})"
-            )
-        if authorization is not None and node.type == NodeType.IDENTITY_AMENDMENT:
-            signed = await self._sign_identity_amendment(node, authorization, thought, result)
+            amended = self._approved_amendment(node, authorization, thought)
+            if amended is None:
+                return self._refuse_amendment(
+                    thought, result, f"{REASON_NO_APPROVED_TEXT} ({NO_APPROVED_TEXT_NOTICE})", name_reason=True
+                )
+            signed = await self._sign_identity_amendment(amended, authorization, thought, result)
             if isinstance(signed, str):
                 return signed
             node = signed
@@ -156,6 +165,43 @@ class MemorizeHandler(BaseActionHandler):
 
         # Execute memorize operation
         return await self._execute_memorize(node, thought, result, dispatch_context)
+
+    def _approved_amendment(
+        self, node: GraphNode, authorization: WAAuthorization, thought: Thought
+    ) -> Optional[GraphNode]:
+        """The amendment this identity-scope write lands as: the WA's approved bytes, or None (#1366 F1).
+
+        None when the approval names no exact text (or text that does not hash
+        to its signed digest). Eric, 2026-11-18: no legacy grace, a
+        guidance-only approval lands no amendment; the WA re-approves with the
+        exact text.
+
+        When the draft's wording differs from the approved text, the APPROVED
+        text is written and the difference logged (digests only). Not refused:
+        the WA approved these bytes and this task exists to apply them; a
+        memorize second pass rewording them (RATCHET Market 4: 8 of 80 rewritten)
+        must not be able to block, or alter, what was approved.
+        """
+        approved = approved_amendment_text(authorization)
+        if approved is None:
+            self.logger.warning(
+                f"Identity-scope MEMORIZE in the guidance task of deferral {authorization.deferral_id} lands NO "
+                f"amendment: the approval names no exact amendment text. Re-approval with amendment_text is "
+                f"required. Thought {thought.thought_id}."
+            )
+            return None
+        drafted = amendment_text(node.attributes)
+        if drafted != approved:
+            self.logger.warning(
+                f"Identity amendment for deferral {authorization.deferral_id}: the draft's text "
+                f"(sha256 {sha256_hex(drafted)[:16]}, {len(drafted)} chars) differs from the approved text "
+                f"(sha256 {sha256_hex(approved)[:16]}); writing the approved text. Thought {thought.thought_id}."
+            )
+        amended = as_identity_amendment(node, authorization, approved)
+        self.logger.info(
+            f"WA-approved identity amendment {amended.id} (wa={authorization.wa_id}, deferral={authorization.deferral_id})"
+        )
+        return amended
 
     async def _sign_identity_amendment(
         self,
@@ -185,7 +231,12 @@ class MemorizeHandler(BaseActionHandler):
         """
         thought_id = thought.thought_id
         if not rows_available():
-            return node
+            # No legacy grace (#1366 F1): an amendment without its signed row
+            # could never verify, so it is not written.
+            self.logger.warning(
+                f"Identity amendment {node.id} refused: this node has no deferral rows to sign it. Thought {thought_id}."
+            )
+            return self._refuse_amendment(thought, result, REASON_ROWS_UNAVAILABLE, name_reason=True)
         response_id = authorization.response_attestation_id
         request_id = authorization.request_attestation_id
         if not response_id or not request_id:
@@ -195,10 +246,13 @@ class MemorizeHandler(BaseActionHandler):
                 f"carries no signed row to cite ({missing}). Thought {thought_id}."
             )
             return self._refuse_amendment(thought, result, missing, name_reason=False)
+        approved = approved_amendment_text(authorization)
+        if approved is None:  # _approved_amendment already refused this; never sign other bytes
+            return self._refuse_amendment(thought, result, REASON_NO_APPROVED_TEXT, name_reason=True)
         try:
-            amendment_id = await emit_identity_amendment(amendment_text(node.attributes), response_id, request_id)
+            amendment_id = await emit_identity_amendment(approved, response_id, request_id)
         except DeferralRowsUnavailable:
-            return node
+            return self._refuse_amendment(thought, result, REASON_ROWS_UNAVAILABLE, name_reason=True)
         except DeferralRowRefused as refused:
             refusal = refused.refusal
             self.logger.warning(
@@ -210,7 +264,7 @@ class MemorizeHandler(BaseActionHandler):
                 result,
                 refusal.reason_id,
                 name_reason=refusal.kind is DeferralRowRefusalKind.OUTAGE
-                or refusal.reason_id == REASON_RESPONSE_ALREADY_USED,
+                or refusal.reason_id in (REASON_RESPONSE_ALREADY_USED, REASON_AMENDMENT_DIGEST_MISMATCH),
             )
         attributes = serialize_attributes_to_json(node.attributes)
         provenance = attributes.get("wa_amendment")

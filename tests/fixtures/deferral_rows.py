@@ -61,6 +61,9 @@ class FakeNode:
     #: names the "server" lacks (an old wheel).
     missing: Tuple[str, ...] = ()
     calls: List[Tuple[str, Tuple[object, ...]]] = field(default_factory=list)
+    #: ciris-server 0.5.250 exact-bytes approval: the response row signs an
+    #: ``amendment_digest`` and the amendment row must match it. False = an older node.
+    exact_bytes: bool = True
 
     def _row(self, row_id: str) -> Optional[FakeRow]:
         return next((r for r in self.rows if r.attestation_id == row_id), None)
@@ -77,14 +80,24 @@ class FakeNode:
         self.calls.append(("emit_deferral_request", args))
         return self._sign("emit_deferral_request", "deferral:request:v1", args, deferral_id=args[0])
 
-    def emit_deferral_response(self, request_id: str, approved: bool, bearer: Optional[str] = None) -> str:
-        args = (request_id, approved, bearer)
+    def emit_deferral_response(
+        self, request_id: str, approved: bool, bearer: Optional[str] = None, amendment_digest: Optional[str] = None
+    ) -> str:
+        """0.5.250: ``amendment_digest`` is signed INSIDE the approved response row."""
+        args = (request_id, approved, bearer, amendment_digest)
         self.calls.append(("emit_deferral_response", args))
         request = self._row(request_id)
         if "emit_deferral_response" not in self.fail and (request is None or request.dimension != "deferral:request:v1"):
             raise ValueError(f"deferral.unknown_request: {request_id} is not an admitted deferral:request:v1")
+        if amendment_digest is not None and not approved:
+            raise ValueError("deferral.digest_on_rejection: a rejection approves no amendment text")
         dim = "deferral:response:approved:v1" if approved else "deferral:response:rejected:v1"
-        return self._sign("emit_deferral_response", dim, args, references_attestation_id=request_id)
+        extra: Dict[str, object] = {"amendment_digest": amendment_digest} if amendment_digest else {}
+        return self._sign("emit_deferral_response", dim, args, references_attestation_id=request_id, **extra)
+
+    def emit_deferral_response_legacy(self, request_id: str, approved: bool, bearer: Optional[str] = None) -> str:
+        """< 0.5.250: no amendment digest."""
+        return self.emit_deferral_response(request_id, approved, bearer)
 
     def emit_identity_amendment(self, amendment_digest: str, authorized_by: str, request_id: str) -> str:
         args = (amendment_digest, authorized_by, request_id)
@@ -97,6 +110,11 @@ class FakeNode:
                 raise PermissionError(
                     f"identity_amendment_unauthorized: {authorized_by} answers "
                     f"{response.envelope.get('references_attestation_id')!r}, not the deferral {request_id}"
+                )
+            if self.exact_bytes and response.envelope.get("amendment_digest") != amendment_digest:
+                raise PermissionError(
+                    f"amendment_digest_mismatch: {authorized_by} approves "
+                    f"{response.envelope.get('amendment_digest')!r}, not {amendment_digest}"
                 )
             prior = [r for r in self.rows if r.envelope.get("authorized_by") == authorized_by]
             if prior:
@@ -126,16 +144,28 @@ class FakeNode:
     def lookup(self, name: str) -> Optional[Callable[..., object]]:
         if name in self.missing:
             return None
+        if name == "emit_deferral_response" and not self.exact_bytes:
+            return self.emit_deferral_response_legacy
         fn: Optional[Callable[..., object]] = getattr(self, name, None)
         return fn
 
     def calls_to(self, name: str) -> List[Tuple[object, ...]]:
         return [args for called, args in self.calls if called == name]
 
-    def approved(self) -> Tuple[str, str]:
-        """Seed an admitted request and its owner-signed approval; their ids."""
+    def approved(self, amendment_text: Optional[str] = None) -> Tuple[str, str]:
+        """Seed an admitted request and its owner-signed approval; their ids.
+
+        With ``amendment_text`` the approval signs that exact text's digest (0.5.250).
+        """
+        import hashlib
+
         request = self._sign("seed", "deferral:request:v1", ())
-        response = self._sign("seed", "deferral:response:approved:v1", (), references_attestation_id=request)
+        extra: Dict[str, object] = (
+            {"amendment_digest": hashlib.sha256(amendment_text.encode("utf-8")).hexdigest()} if amendment_text else {}
+        )
+        response = self._sign(
+            "seed", "deferral:response:approved:v1", (), references_attestation_id=request, **extra
+        )
         return request, response
 
 

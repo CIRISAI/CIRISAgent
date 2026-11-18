@@ -29,6 +29,7 @@ from ciris_engine.logic.services.governance.wise_authority.deferral_rows import 
     emit_deferral_response,
     read_deferral_row,
     rows_available,
+    sha256_hex,
 )
 from ciris_engine.schemas.services.authority.deferral_rows import (
     REASON_UNKNOWN_REQUEST,
@@ -236,7 +237,11 @@ def _row_refusal_status(refusal: DeferralRowRefusal) -> tuple[int, str]:
 
 
 async def _sign_response_row(
-    request: Request, deferral_id: str, pending: Optional[PendingDeferral], approved: bool
+    request: Request,
+    deferral_id: str,
+    pending: Optional[PendingDeferral],
+    approved: bool,
+    amendment_sha256: Optional[str] = None,
 ) -> str:
     """Have the node sign the Wise Authority's answer with their own key (#1316); its attestation_id.
 
@@ -264,7 +269,9 @@ async def _sign_response_row(
             status_code=409,
         )
     try:
-        return await emit_deferral_response(request_id, approved, _presented_session_token(request))
+        return await emit_deferral_response(
+            request_id, approved, _presented_session_token(request), amendment_sha256=amendment_sha256
+        )
     except DeferralRowsUnavailable:
         raise_wa_error(
             "Cannot resolve deferral: this node has no deferral rows, so the Wise Authority's answer "
@@ -470,6 +477,19 @@ async def resolve_deferral(
         # row is therefore deferral:response:rejected:v1. Signing it "approved"
         # would let an identity amendment cite it for the unmodified request.
         approved = resolve_request.resolution == "approve"
+        # THE EXACT BYTES (#1366 F1, Eric 2026-11-18: "WA approves exact bytes").
+        # An identity amendment is the text the WA approves here, verbatim; its
+        # digest is in this signature's payload and in the WA's own response
+        # row. Only an approval approves text: a reject or a modify that named
+        # amendment text would be signed as approving nothing, so it is refused.
+        amendment_text = resolve_request.amendment_text
+        if amendment_text is not None and not approved:
+            raise_wa_error(
+                "amendment_text is only accepted with resolution='approve': a rejection or modification "
+                "approves no identity text",
+                status_code=400,
+            )
+        amendment_sha256 = sha256_hex(amendment_text) if amendment_text is not None else None
         signed_at = datetime.now(timezone.utc).isoformat()
         deferral_response = DeferralResponse(
             approved=approved,
@@ -477,6 +497,8 @@ async def resolve_deferral(
             modified_time=None,
             wa_id=auth.user_id,
             signature="",
+            amendment_text=amendment_text,
+            amendment_sha256=amendment_sha256,
         )
         auth_service = getattr(request.app.state, "authentication_service", None)
         if auth_service is None:
@@ -492,7 +514,7 @@ async def resolve_deferral(
 
         # THE WA'S OWN SIGNED ANSWER (#1316), before anything is recorded: if the
         # node refuses it, the resolution is not recorded at all.
-        response_row = await _sign_response_row(request, deferral_id, _pending, approved)
+        response_row = await _sign_response_row(request, deferral_id, _pending, approved, amendment_sha256)
         deferral_response = deferral_response.model_copy(update={"response_attestation_id": response_row})
 
         success = await wa_service.resolve_deferral(deferral_id, deferral_response)

@@ -48,6 +48,7 @@ from typing import Callable, Dict, List, Optional
 
 from ciris_engine.schemas.services.authority.deferral_rows import (
     DEFERRAL_ROW_DIMENSIONS,
+    REASON_AMENDMENT_DIGEST_UNSUPPORTED,
     REASON_TIMEOUT,
     REASON_UNPARSED,
     DeferralRowRefusal,
@@ -124,13 +125,15 @@ def deferral_room_id() -> Optional[str]:
     return None
 
 
-async def _call_raw(name: str, *args: object) -> object:
-    """``ciris_server.<name>(*args)`` off the event loop; every failure a typed refusal."""
+async def _call_raw(name: str, *args: object, **kwargs: object) -> object:
+    """``ciris_server.<name>(*args, **kwargs)`` off the event loop; every failure a typed refusal."""
     fn = _server_function(name)
     if fn is None:
         raise DeferralRowsUnavailable(f"ciris_server.{name} is not available on this node")
     try:
-        result = await asyncio.wait_for(asyncio.to_thread(fn, *args), timeout=DEFERRAL_ROW_CALL_TIMEOUT_SECONDS)
+        result = await asyncio.wait_for(
+            asyncio.to_thread(fn, *args, **kwargs), timeout=DEFERRAL_ROW_CALL_TIMEOUT_SECONDS
+        )
     except asyncio.TimeoutError:
         raise DeferralRowRefused(
             DeferralRowRefusal(
@@ -146,7 +149,16 @@ async def _call_raw(name: str, *args: object) -> object:
 
 async def _call(name: str, *args: object) -> str:
     """A signing call: its answer must be the stored attestation_id."""
-    result = await _call_raw(name, *args)
+    return _attestation_id(name, await _call_raw(name, *args))
+
+
+async def _call_kw(name: str, *args: object, **kwargs: object) -> str:
+    """A signing call with keyword arguments; its answer must be the stored attestation_id."""
+    return _attestation_id(name, await _call_raw(name, *args, **kwargs))
+
+
+def _attestation_id(name: str, result: object) -> str:
+    """The stored attestation_id a signing call answered, or an OUTAGE refusal."""
     if not isinstance(result, str) or not result:
         raise DeferralRowRefused(
             DeferralRowRefusal(
@@ -172,19 +184,70 @@ async def emit_deferral_request(
     )
 
 
-async def emit_deferral_response(request_id: str, approved: bool, bearer: Optional[str]) -> str:
-    """Sign the Wise Authority's answer with the RESOLVER's own key; ``bearer`` is their raw ``sess:`` token."""
-    return await _call("emit_deferral_response", request_id, approved, bearer)
+#: The keyword the node takes for the approved amendment's digest (ciris-server 0.5.250+).
+AMENDMENT_DIGEST_PARAM = "amendment_digest"
 
 
-async def emit_identity_amendment(amendment_text: str, authorized_by: str, request_id: str) -> str:
+def response_rows_commit_amendment_digest() -> bool:
+    """True when the node's ``emit_deferral_response`` signs an ``amendment_digest`` (ciris-server 0.5.250+).
+
+    THE capability check for exact-bytes approval (CIRISAgent#1366 F1). Read
+    from the function's signature, so it answers for the binding actually
+    loaded. False on an older node: it then cannot carry the WA's approval of
+    exact bytes, and an approval that names an amendment is refused rather
+    than recorded without its digest.
+    """
+    import inspect
+
+    fn = _server_function("emit_deferral_response")
+    if fn is None:
+        return False
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        # A PyO3 builtin without a text signature cannot say; it does not have the feature.
+        return False
+    return AMENDMENT_DIGEST_PARAM in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+async def emit_deferral_response(
+    request_id: str, approved: bool, bearer: Optional[str], amendment_sha256: Optional[str] = None
+) -> str:
+    """Sign the Wise Authority's answer with the RESOLVER's own key; ``bearer`` is their raw ``sess:`` token.
+
+    ``amendment_sha256`` is the digest of the exact amendment text the WA
+    approves (#1366 F1). It is the ONE place the agent names the node's call
+    shape: ``emit_deferral_response(request_id, approved, bearer=...,
+    amendment_digest=...)`` (ciris-server 0.5.250). With a digest on a node
+    that cannot sign it, this refuses (``deferral.amendment_digest_unsupported``)
+    instead of signing an answer that silently drops it.
+    """
+    if amendment_sha256 is None:
+        return await _call("emit_deferral_response", request_id, approved, bearer)
+    if not response_rows_commit_amendment_digest():
+        raise DeferralRowRefused(
+            DeferralRowRefusal(
+                reason_id=REASON_AMENDMENT_DIGEST_UNSUPPORTED,
+                text="this node cannot sign an approved amendment's digest into the response row (needs ciris-server 0.5.250+)",
+                kind=DeferralRowRefusalKind.OUTAGE,
+            )
+        )
+    return await _call_kw(
+        "emit_deferral_response", request_id, approved, bearer=bearer, **{AMENDMENT_DIGEST_PARAM: amendment_sha256}
+    )
+
+
+async def emit_identity_amendment(approved_text: str, authorized_by: str, request_id: str) -> str:
     """Sign ``identity_amendment:v1`` citing the approved response to ``request_id``, this agent's deferral.
 
-    The node checks CC 3.1.5 first, that the response answers that request, and
-    that the response has not already authorized an amendment
-    (``deferral.response_already_used``): one approval, one amendment.
+    ``approved_text`` is the EXACT text the Wise Authority approved (#1366 F1),
+    never the model's wording; its digest is what the row signs. The node
+    checks CC 3.1.5 first, that the response answers that request, that the
+    response has not already authorized an amendment
+    (``deferral.response_already_used``), and (0.5.250+) that the response row's
+    ``amendment_digest`` equals this one (``amendment_digest_mismatch``).
     """
-    return await _call("emit_identity_amendment", sha256_hex(amendment_text), authorized_by, request_id)
+    return await _call("emit_identity_amendment", sha256_hex(approved_text), authorized_by, request_id)
 
 
 # --------------------------------------------------------------------- read back
@@ -269,6 +332,7 @@ __all__ = [
     "parse_refusal",
     "read_deferral_row",
     "read_deferral_rows",
+    "response_rows_commit_amendment_digest",
     "rows_available",
     "sha256_hex",
 ]

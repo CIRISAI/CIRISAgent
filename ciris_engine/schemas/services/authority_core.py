@@ -321,6 +321,21 @@ class DeferralResponse(BaseModel):
             "has no request row. Not part of the #944 signed payload: the row carries its own signature."
         ),
     )
+    amendment_text: Optional[str] = Field(
+        default=None,
+        description=(
+            "The exact identity amendment the Wise Authority approved (CIRISAgent#1366 F1, Eric 2026-11-18: "
+            "'WA approves exact bytes'). The guidance task writes these bytes, never the model's wording. "
+            "None for an approval that approves no identity change; such an approval lands no amendment."
+        ),
+    )
+    amendment_sha256: Optional[str] = Field(
+        default=None,
+        description=(
+            "sha256 (lowercase hex) of ``amendment_text``. Part of the #944 signed payload when present, and "
+            "carried as ``amendment_digest`` inside the WA's signed response row where the node supports it."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -337,13 +352,18 @@ def deferral_resolution_payload(deferral_id: str, response: "DeferralResponse", 
     the payload so a signature cannot be lifted onto a different moment, and
     ``deferral_id`` so it cannot be replayed onto a different deferral.
     """
-    return {
+    payload: Dict[str, object] = {
         "deferral_id": deferral_id,
         "approved": response.approved,
         "reason": response.reason,
         "wa_id": response.wa_id,
         "signed_at": signed_at,
     }
+    # The approved amendment's digest (CIRISAgent#1366 F1). Only when present,
+    # so every resolution signed before it still verifies byte for byte.
+    if response.amendment_sha256 is not None:
+        payload["amendment_sha256"] = response.amendment_sha256
+    return payload
 
 
 def is_unverifiable_legacy_signature(signature: str) -> bool:
@@ -387,6 +407,9 @@ def deferral_resolution_record(
         "verification": verification.value,
         # The signed response row (#1316), when the node authored one.
         "response_attestation_id": response.response_attestation_id,
+        # The exact approved amendment text and its digest (#1366 F1), when the WA approved one.
+        "amendment_text": response.amendment_text,
+        "amendment_sha256": response.amendment_sha256,
     }
 
 

@@ -112,6 +112,17 @@ class IdentityAmendment(BaseModel):
     amendment_attestation_id: Optional[str] = Field(
         None, description="The signed identity_amendment:v1 row for this change (CIRISAgent#1316), if any"
     )
+    approved_sha256: Optional[str] = Field(
+        None, description="sha256 of the exact text the Wise Authority approved, as the approval recorded it (#1366 F1)"
+    )
+    verified: bool = Field(
+        False,
+        description=(
+            "True only when sha256(content) equals the digest inside the WA's signed response row AND the node's "
+            "signed identity_amendment:v1 row (#1366 F1). Only verified amendments reach the governance block the "
+            "input-ablated consciences read. Set by the loader, never stored."
+        ),
+    )
 
 
 class IdentityData(BaseModel):

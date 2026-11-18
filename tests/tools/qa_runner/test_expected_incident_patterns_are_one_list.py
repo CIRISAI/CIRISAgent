@@ -91,3 +91,17 @@ def test_patterns_are_specific_enough_to_be_safe() -> None:
 def test_no_duplicate_patterns() -> None:
     seen = [p for p in EXPECTED_QA_INCIDENT_PATTERNS]
     assert len(seen) == len(set(seen)), "duplicate entries — a merge went wrong"
+
+
+def test_retried_in_flight_budget_refusals_do_not_flood_the_gate() -> None:
+    """#1366 item 20 F9: a live run under OpenRouter in-flight pressure logs one
+    WARNING per retried refusal; 50 of them must not turn a green run red."""
+    lines = [
+        "WARNING - llm_bus - llm_bus.py:1120 - [LLM_IN_FLIGHT_BUDGET] openrouter refused EthicalPDMAEvaluator "
+        "(in-flight budget full, retry_after=None); pausing the provider 2.4s, in-flight retry 1/12",
+        "INFO - llm_bus - llm_bus.py:1160 - [LLM_IN_FLIGHT_BUDGET] openrouter paused, CSDMA waits 2.1s",
+        "WARNING - llm_service - service.py:2190 - LLM provider in-flight budget full "
+        "(openrouter_in_flight_budget, retry_after=None) -- transient, NOT a breaker failure: model=m",
+    ]
+    for line in lines:
+        assert _ignored(line), line

@@ -42,6 +42,11 @@ _FAULT_NOTICE_KEYS = {
     "model_not_found": "agent.error_llm_model_not_found",
     "rate_limited": "agent.error_llm_rate_limited",
     "policy_blocked": "agent.error_llm_policy_blocked",
+    # Provider spending limits (#1366 item 20), by OpenRouter's limit_source.
+    "in_flight_budget": "agent.error_llm_in_flight_budget",
+    "request_too_large": "agent.error_llm_request_too_large",
+    "key_limit": "agent.error_llm_key_limit",
+    "budget_limit": "agent.error_llm_budget_limit",
 }
 
 

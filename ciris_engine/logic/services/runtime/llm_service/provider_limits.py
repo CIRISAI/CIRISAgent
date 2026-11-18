@@ -30,6 +30,7 @@ tokens (kept at 8192 by ruling; the retry and pause below absorb the refusals).
 
 from __future__ import annotations
 
+import hashlib
 import random
 from email.utils import parsedate_to_datetime
 from enum import Enum
@@ -49,6 +50,9 @@ REASON_WEIGHT_EXCEEDS_BUDGET = "weight_exceeds_budget"
 IN_FLIGHT_BACKOFF_BASE_S = 2.0
 IN_FLIGHT_BACKOFF_CAP_S = 60.0
 IN_FLIGHT_TOTAL_WAIT_S = 300.0
+#: Floor on a wait the provider gave no Retry-After for: costs are still settling
+#: the instant after a refusal, so a retry within milliseconds is a certain one.
+IN_FLIGHT_MIN_WAIT_S = 2.0
 #: Callers released from a shared pause are spread over up to this many seconds
 #: so they do not all hit the provider in the same instant.
 IN_FLIGHT_RELEASE_SPREAD_S = 2.0
@@ -104,9 +108,11 @@ class ProviderLimitFault(BaseModel):
                 f"running requests settle."
             )
         if self.code is ProviderLimitFaultCode.REQUEST_TOO_LARGE:
+            # Still says "HTTP 402": the DMA must not retry it unchanged. The
+            # budget is a share of the balance, so credits are a remedy too.
             return (
-                f"HTTP {self.http_status}: this single request's estimated cost is larger than the whole "
-                f"OpenRouter in-flight budget ({src}); retrying it unchanged cannot succeed."
+                f"HTTP {self.http_status}: this request is too large for the in-flight budget ({src}): "
+                f"lower max_tokens or the prompt, or add credits."
             )
         if self.code is ProviderLimitFaultCode.KEY_LIMIT:
             return (
@@ -217,29 +223,59 @@ def provider_limit_fault(error: BaseException) -> Optional[ProviderLimitFault]:
                         retry_after_s=retry_after,
                         limit_reset=reset,
                     )
-        cur = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
+        # Explicit causes only (`raise ... from e`). An unrelated error raised
+        # while a refusal was being handled carries it as implicit __context__,
+        # and must surface as itself, not be waited out as an in-flight refusal.
+        cur = getattr(cur, "__cause__", None)
     return None
 
 
-def in_flight_backoff_s(attempt: int, retry_after_s: Optional[float]) -> float:
-    """Wait before in-flight retry ``attempt`` (0-based): max(Retry-After, full-jitter backoff), capped.
+def budget_identity(base_url: Optional[str], api_key: Optional[str]) -> tuple[str, str]:
+    """Who owns an in-flight budget: (base URL, truncated SHA-256 of the API key).
 
-    Full jitter (uniform over [0, base * 2**attempt]) spreads callers that were
-    refused together; Retry-After, when the provider sent it, is the floor.
+    OpenRouter's in-flight budget belongs to the account/key, not to one
+    registered service: replicas and differently-named services with the same
+    key share it. The key itself is never returned, logged or stored -- only
+    16 hex digits of its digest, enough to tell keys apart.
     """
-    ceiling = min(IN_FLIGHT_BACKOFF_CAP_S, IN_FLIGHT_BACKOFF_BASE_S * (2 ** max(0, attempt)))
-    jittered = random.uniform(0.0, ceiling)
-    return min(IN_FLIGHT_BACKOFF_CAP_S, max(retry_after_s or 0.0, jittered))
+    url = (base_url or "").strip().rstrip("/").lower()
+    key = (api_key or "").strip()
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] if key else ""
+    return (url, digest)
+
+
+def in_flight_backoff_s(attempt: int, retry_after_s: Optional[float]) -> float:
+    """Wait before in-flight retry ``attempt`` (0-based).
+
+    With a Retry-After: max(Retry-After, full jitter over [0, base * 2**attempt]).
+    Retry-After is a FLOOR and is never shortened, even past the 60 s cap: the
+    caller compares the result with the time it has and surfaces the refusal
+    when it does not fit, rather than resending before the provider's time.
+
+    Without one: equal jitter (half the ceiling plus up to half again), never
+    under IN_FLIGHT_MIN_WAIT_S, capped at IN_FLIGHT_BACKOFF_CAP_S.
+
+    ``attempt`` is the caller's choice of exponent: the LLM bus passes the
+    larger of the call's own attempt and the account's consecutive refusals,
+    so sustained pressure backs off for every caller, not only the one retrying.
+    """
+    ceiling = min(IN_FLIGHT_BACKOFF_CAP_S, IN_FLIGHT_BACKOFF_BASE_S * 2.0 ** min(max(0, attempt), 32))
+    if retry_after_s is not None:
+        return max(retry_after_s, random.uniform(0.0, ceiling))
+    jittered = ceiling / 2.0 + random.uniform(0.0, ceiling / 2.0)
+    return min(IN_FLIGHT_BACKOFF_CAP_S, max(IN_FLIGHT_MIN_WAIT_S, jittered))
 
 
 __all__ = [
     "IN_FLIGHT_BACKOFF_BASE_S",
     "IN_FLIGHT_BACKOFF_CAP_S",
+    "IN_FLIGHT_MIN_WAIT_S",
     "IN_FLIGHT_RELEASE_SPREAD_S",
     "IN_FLIGHT_TOTAL_WAIT_S",
     "ProviderLimitError",
     "ProviderLimitFault",
     "ProviderLimitFaultCode",
+    "budget_identity",
     "in_flight_backoff_s",
     "parse_retry_after",
     "provider_limit_fault",

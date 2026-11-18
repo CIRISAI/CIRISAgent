@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from ciris_engine.logic.services.runtime.llm_service.provider_limits import (
     IN_FLIGHT_BACKOFF_CAP_S,
+    IN_FLIGHT_MIN_WAIT_S,
     ProviderLimitError,
     ProviderLimitFaultCode,
     in_flight_backoff_s,
@@ -121,8 +122,37 @@ class TestClassification:
     def test_backoff_floors_at_retry_after_and_caps(self):
         for attempt in range(6):
             assert in_flight_backoff_s(attempt, 5.0) >= 5.0
-            assert in_flight_backoff_s(attempt, 500.0) == IN_FLIGHT_BACKOFF_CAP_S
-            assert 0.0 <= in_flight_backoff_s(attempt, None) <= IN_FLIGHT_BACKOFF_CAP_S
+            assert in_flight_backoff_s(attempt, None) <= IN_FLIGHT_BACKOFF_CAP_S
+
+    def test_a_retry_after_over_the_cap_is_never_shortened(self):
+        # F5: Retry-After is a floor. The bus compares the wait with the time it
+        # has and surfaces the refusal when it does not fit -- it never resends
+        # at 60 s into a 3600 s Retry-After.
+        assert in_flight_backoff_s(0, 3600.0) == 3600.0
+        assert in_flight_backoff_s(3, float("inf")) == float("inf")
+
+    def test_without_retry_after_the_first_wait_has_a_floor(self):
+        # F6: full jitter drew waits near 0 s, a retry while costs still settle.
+        waits = [in_flight_backoff_s(0, None) for _ in range(2000)]
+        assert min(waits) >= IN_FLIGHT_MIN_WAIT_S >= 1.0
+
+    def test_only_an_explicit_cause_is_followed(self):
+        # F10: an unrelated error raised while a refusal was being handled has
+        # it as implicit __context__ and must surface as itself.
+        refusal = _api_error(402, IN_FLIGHT, retry_after="1")
+        try:
+            try:
+                raise refusal
+            except openai.APIStatusError:
+                raise KeyError("unrelated bug in a handler")
+        except KeyError as unrelated:
+            assert unrelated.__context__ is refusal
+            assert provider_limit_fault(unrelated) is None
+        try:
+            raise RuntimeError("wrapped") from refusal
+        except RuntimeError as wrapped:
+            fault = provider_limit_fault(wrapped)
+            assert fault is not None and fault.code is ProviderLimitFaultCode.IN_FLIGHT_BUDGET
 
 
 class Verdict(BaseModel):
@@ -214,6 +244,10 @@ class TestServiceRaisesTheCategorizedRefusal:
         assert len(sent) == 1, "retrying this request unchanged cannot succeed"
         assert sent[0]["max_tokens"] == 4096, "max_tokens is never shrunk"
         assert service.last_fault_code == "request_too_large"
+        text = str(exc_info.value)
+        assert "HTTP 402" in text, "the DMA must still not retry it"
+        assert "this request is too large for the in-flight budget" in text
+        assert "lower max_tokens or the prompt, or add credits" in text
         from ciris_engine.logic.conscience.transport import is_worth_another_attempt
 
         assert not is_worth_another_attempt(
@@ -236,3 +270,25 @@ class TestServiceRaisesTheCategorizedRefusal:
         with pytest.raises(ProviderLimitError):
             await _call(service)
         assert service.last_fault_code == "insufficient_quota"
+
+
+class TestRequestTooLargeIsNotABreakerFailure:
+    @pytest.mark.asyncio
+    async def test_six_oversized_requests_leave_the_breaker_closed(self, monkeypatch):
+        # F7: one request's size, like a context-length 400 -- small calls to
+        # the same provider must keep working.
+        service = _service_over(lambda r: _refusal(WEIGHT), monkeypatch)
+        for _ in range(6):  # more than the breaker's failure threshold (5)
+            with pytest.raises(ProviderLimitError):
+                await _call(service)
+        assert service.circuit_breaker.consecutive_failures == 0
+        assert service.circuit_breaker.is_available()
+
+
+class TestBudgetIdentity:
+    def test_the_service_names_its_budget_without_the_key(self, monkeypatch):
+        # F2: the LLM bus keys its pause on this.
+        service = _service_over(lambda r: _refusal(IN_FLIGHT), monkeypatch)
+        url, digest = service.budget_identity()
+        assert url == BASE_URL.lower()
+        assert len(digest) == 16 and "test-key-12345" not in url + digest

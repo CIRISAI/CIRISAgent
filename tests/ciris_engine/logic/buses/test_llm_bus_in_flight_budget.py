@@ -121,6 +121,7 @@ async def _call(bus: LLMBus, handler: str = "EthicalPDMAEvaluator") -> Tuple[Bas
 def fast_backoff(monkeypatch):
     """Sub-second waits so the tests run in real time."""
     monkeypatch.setattr(provider_limits, "IN_FLIGHT_BACKOFF_BASE_S", 0.05)
+    monkeypatch.setattr(provider_limits, "IN_FLIGHT_MIN_WAIT_S", 0.05)
     monkeypatch.setattr(bus_module, "IN_FLIGHT_RELEASE_SPREAD_S", 0.05)
 
 
@@ -193,7 +194,7 @@ class TestOtherLimitsAreSurfacedUnretried:
     @pytest.mark.parametrize(
         "metadata,status,expected",
         [
-            (WEIGHT, 402, "larger than the whole"),
+            (WEIGHT, 402, "too large for the in-flight budget"),
             (CREDITS, 402, "credits cannot cover"),
             (KEY_LIMIT, 402, "key limit"),
             (KEY_LIMIT, 403, "key limit"),

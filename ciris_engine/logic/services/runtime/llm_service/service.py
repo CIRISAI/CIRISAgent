@@ -66,6 +66,13 @@ from ciris_engine.schemas.services.llm import (
 )
 
 from .pricing_calculator import LLMPricingCalculator
+from .provider_limits import (
+    LENGTH_ESCALATION_MAX_TOKENS,
+    ProviderLimitError,
+    ProviderLimitFault,
+    is_incomplete_output,
+    provider_limit_fault,
+)
 
 
 def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict]:
@@ -664,6 +671,15 @@ def _root_provider_fault(error: BaseException) -> str:
     404 only yields ``model_not_found`` when the body's own code or message says
     the model is what was missing.
     """
+    # SPENDING LIMITS FIRST (#1366 item 20). OpenRouter answers 402 for four
+    # different situations -- a transient in-flight budget, one request too big
+    # for the budget, an empty balance, the key's own limit -- and names which
+    # in error.metadata.limit_source. Branch on that, never on the prose; only
+    # a 402 WITHOUT a limit_source falls through to insufficient_quota below.
+    limit = provider_limit_fault(error)
+    if limit is not None:
+        return limit.code.value
+
     seen: set[int] = set()
     cur: BaseException | None = error
     while cur is not None and id(cur) not in seen:
@@ -2062,6 +2078,16 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 raise
 
             except Exception as e:
+                # A provider spending-limit refusal (402/403 with a
+                # limit_source): categorized by its structure, never trips the
+                # breaker when it is the transient in-flight budget (#1366).
+                limit = provider_limit_fault(e)
+                if limit is not None:
+                    self._raise_provider_limit(e, limit, resp_model.__name__, thought_id)
+                # Stopped at max_tokens: raised as-is so the caller can escalate
+                # the output budget once (see _retry_with_length_escalation).
+                if is_incomplete_output(e):
+                    raise
                 self._handle_general_exception(e, resp_model.__name__)
                 raise  # Should not reach here as _handle_general_exception always raises
 
@@ -2075,8 +2101,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             endpoints_tried += 1
 
             try:
-                result = await self._retry_with_backoff(
-                    _make_structured_call, messages, response_model, max_tokens, temperature, retry_state=retry_state
+                result = await self._retry_with_length_escalation(
+                    _make_structured_call, messages, response_model, max_tokens, temperature, retry_state, thought_id
                 )
                 # Success! Record it and reset retry state for next call
                 if current_endpoint:
@@ -2085,6 +2111,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
             except CircuitBreakerError:
                 logger.warning("LLM service circuit breaker is open, failing fast")
+                raise
+
+            except ProviderLimitError:
+                # A spending limit is the ACCOUNT's, not this endpoint's: rotating
+                # endpoints would only repeat the refusal. The LLM bus decides
+                # whether it is worth waiting for (the in-flight budget only).
                 raise
 
             except BadRequestError as e:
@@ -2128,6 +2160,84 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if last_exception:
             raise last_exception
         raise RuntimeError("All endpoints exhausted without success")
+
+    async def _retry_with_length_escalation(
+        self,
+        func: StructuredCallFunc,
+        messages: List[MessageDict],
+        response_model: Type[BaseModel],
+        max_tokens: int,
+        temperature: float,
+        retry_state: RetryState,
+        thought_id: Optional[str],
+    ) -> Tuple[BaseModel, ResourceUsage]:
+        """`_retry_with_backoff`, plus ONE retry at a larger output budget when the reply was cut off.
+
+        Callers ask for an output budget sized to what they measurably need
+        (#1366 item 20: a smaller reservation is what keeps OpenRouter's
+        in-flight budget from refusing calls). When a reply does hit that
+        ceiling (finish_reason=length, instructor's IncompleteOutputException),
+        it is retried once at LENGTH_ESCALATION_MAX_TOKENS -- the value every
+        call used before -- so a long answer is never lost to the smaller
+        default. Escalation only ever goes UP: no path here shrinks max_tokens.
+        """
+        try:
+            return await self._retry_with_backoff(
+                func, messages, response_model, max_tokens, temperature, retry_state=retry_state
+            )
+        except Exception as e:
+            if not is_incomplete_output(e):
+                raise
+            if max_tokens >= LENGTH_ESCALATION_MAX_TOKENS:
+                self._handle_general_exception(e, response_model.__name__)
+                raise
+            logger.warning(
+                "[LLM_LENGTH_ESCALATION] %s stopped at max_tokens=%d (thought=%s); retrying once at %d",
+                response_model.__name__,
+                max_tokens,
+                thought_id,
+                LENGTH_ESCALATION_MAX_TOKENS,
+            )
+        try:
+            return await self._retry_with_backoff(
+                func, messages, response_model, LENGTH_ESCALATION_MAX_TOKENS, temperature, retry_state=retry_state
+            )
+        except Exception as e:
+            if is_incomplete_output(e):
+                self._handle_general_exception(e, response_model.__name__)
+            raise
+
+    def _raise_provider_limit(
+        self, e: Exception, fault: ProviderLimitFault, resp_model_name: str, thought_id: Optional[str]
+    ) -> NoReturn:
+        """Record and raise a provider spending-limit refusal as a ProviderLimitError.
+
+        The transient in-flight budget is not the provider failing: it logs a
+        WARNING and leaves the circuit breaker alone, exactly like a 429. Every
+        other limit (balance, key limit, a request too big for the budget)
+        cannot be waited out, so it is an ERROR and a breaker failure, as every
+        402 was before.
+        """
+        self._track_error(e)
+        self._total_errors += 1
+        self.last_error = fault.describe()
+        self.last_fault_code = fault.code.value
+        self.last_fault_at = time.monotonic()
+        where = (
+            f"model={self.model_name} provider={self.openai_config.base_url or 'default'} "
+            f"response_model={resp_model_name}" + (f" thought={thought_id}" if thought_id else "")
+        )
+        if fault.retryable:
+            logger.warning(
+                "LLM provider in-flight budget full (%s, retry_after=%s) -- transient, NOT a breaker failure: %s",
+                fault.limit_source,
+                fault.retry_after_s,
+                where,
+            )
+        else:
+            self.circuit_breaker.record_failure()
+            logger.error("LLM provider spending limit (%s): %s -- %s", fault.code.value, fault.describe(), where)
+        raise ProviderLimitError(fault) from e
 
     @staticmethod
     def _endpoint_host(base_url: str) -> str:
@@ -2837,6 +2947,10 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         - UNKNOWN: Unrecognized error
         """
         error_str = str(error).lower()
+
+        # A provider spending-limit refusal, read from its structure (#1366).
+        if provider_limit_fault(error) is not None:
+            return "PROVIDER_LIMIT"
 
         # An open breaker sent no request: the message embeds the provider's
         # last real error ("last: LLM API timeout"), which must not be read as

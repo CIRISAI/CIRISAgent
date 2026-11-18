@@ -630,6 +630,16 @@ class CIRISRuntime(ServicePropertyMixin):
             timeout=adapter_load_timeout,
         )
 
+        # Resolve the enabled-tool grant before any task can be created
+        # (#1366 item 19, FSD/TASK_ENVELOPE.md §8 cold-cache issuance). CRITICAL:
+        # with the dispatch gate enforcing, an empty grant denies every tool.
+        init_manager.register_step(
+            phase=InitializationPhase.SERVICES,
+            name="Prime Tool Envelope Grant",
+            handler=self._prime_tool_envelope_grant,
+            critical=True,
+        )
+
         # Warm the context-enrichment cache before the first thought needs it.
         # Shipped in 2.4.2 (#669) but only ever registered by the dead duplicate
         # registrar in initialization_steps.py, so it never ran at boot: every
@@ -1220,6 +1230,12 @@ class CIRISRuntime(ServicePropertyMixin):
         from ciris_engine.logic.runtime.initialization_steps import load_saved_adapters_from_graph
 
         await load_saved_adapters_from_graph(self)
+
+    async def _prime_tool_envelope_grant(self) -> None:
+        """Resolve the enabled-tool set task envelopes enumerate, or fail startup."""
+        from ciris_engine.logic.runtime.initialization_steps import prime_tool_envelope_grant
+
+        await prime_tool_envelope_grant(self)
 
     async def _populate_context_enrichment_cache(self) -> None:
         """Pre-run context-enrichment tools so the first thought does not pay for them.

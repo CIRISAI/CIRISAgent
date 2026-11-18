@@ -1772,6 +1772,13 @@ class TestEnrichmentCacheRefresh:
         mock.startup_channel_id = "test_channel"
         mock.debug = False
         mock.bus_manager = Mock()
+        # A real ToolBus over the same registry: the warm runs only through the
+        # dispatch gate, as the system (CIRISAgent#1366 item 19).
+        from ciris_engine.logic.buses.tool_bus import ToolBus
+
+        bus_time = Mock()
+        bus_time.now.return_value = datetime.now(timezone.utc)
+        mock.bus_manager.tool = ToolBus(mock.service_registry, bus_time)
         mock.agent_name = "test"
         mock.agent_version = "1.0.0"
         return mock

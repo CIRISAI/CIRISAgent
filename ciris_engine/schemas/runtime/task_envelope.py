@@ -46,6 +46,7 @@ from typing import FrozenSet, Iterable, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ciris_engine.schemas.api.auth import UserRole
+from ciris_engine.schemas.runtime.reviewed_action_admission import ReviewedCall
 
 
 class ToolCapability(str, Enum):
@@ -200,6 +201,11 @@ class ToolCallOrigin(str, Enum):
 
     ADAPTER_LIFECYCLE = "adapter_lifecycle"
     """Adapter bootstrap/teardown (connector registration, health probes)."""
+
+    SYSTEM_ENRICHMENT = "system_enrichment"
+    """``context_enrichment=True`` providers run OUTSIDE any task: the startup
+    cache warm, the cache refresh after an adapter loads, and the operator's
+    refresh endpoint. Never borrows a task's identity (CIRISAgent#1366 item 19)."""
 
 
 _TASK_BOUND_ORIGINS: FrozenSet[ToolCallOrigin] = frozenset(
@@ -609,6 +615,13 @@ class ToolInvocationSubject(BaseModel):
     component: Optional[str] = Field(
         None, description="For non-task-bound origins: the component that initiated the call"
     )
+    reviewed_call: Optional[ReviewedCall] = Field(
+        None,
+        description=(
+            "REASONING only: the call as the consciences reviewed it, which the dispatch gate "
+            "matches against an admitted reviewed-action record (CIRISAgent#1366 item 19)"
+        ),
+    )
 
     @property
     def is_task_bound(self) -> bool:
@@ -630,7 +643,11 @@ class ToolInvocationSubject(BaseModel):
                     )
                 if self.envelope.task_id != self.task_id:
                     raise ValueError("envelope.task_id does not match the subject's task_id")
+            if self.reviewed_call is not None and self.origin is not ToolCallOrigin.REASONING:
+                raise ValueError("only a REASONING invocation carries a reviewed call")
         else:
+            if self.reviewed_call is not None:
+                raise ValueError(f"{self.origin.value} invocations are not reviewed; they carry no reviewed call")
             if self.task_id or self.thought_id:
                 raise ValueError(f"{self.origin.value} invocations are not task-bound; task/thought id must be absent")
             if not (self.component or "").strip():
@@ -652,6 +669,7 @@ class ToolInvocationSubject(BaseModel):
         origin: ToolCallOrigin = ToolCallOrigin.REASONING,
         agent_occurrence_id: str = "default",
         envelope: Optional[TaskEnvelope] = None,
+        reviewed_call: Optional[ReviewedCall] = None,
     ) -> "ToolInvocationSubject":
         """Subject for a tool call made on behalf of a task.
 
@@ -669,6 +687,7 @@ class ToolInvocationSubject(BaseModel):
             task_id=task_id,
             thought_id=thought_id,
             envelope=envelope,
+            reviewed_call=reviewed_call,
         )
 
     @classmethod

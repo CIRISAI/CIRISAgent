@@ -240,6 +240,11 @@ class MinimalDreamProcessor(BaseProcessor):
             updated_at=now_iso,
             agent_occurrence_id=self.agent_occurrence_id,
         )
+        # The dream task's deployment envelope (#1366 item 19): the tool gate
+        # denies an envelope-less task.
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
+
+        issue_task_envelope_best_effort(task, time_service=self.time_service)
         persistence.add_task(task)
         self.current_session.task_id = task.task_id
 

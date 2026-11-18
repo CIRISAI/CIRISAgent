@@ -15,6 +15,7 @@ from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.contexts import DispatchContext
 from ciris_engine.schemas.runtime.enums import HandlerActionType, ThoughtStatus
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.reviewed_action_admission import ReviewedCall
 from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolInvocationSubject
 from ciris_engine.schemas.types import JSONDict
 
@@ -37,6 +38,9 @@ class ToolHandler(BaseActionHandler):
         refusal = self._refuse_if_changed_since_review(result, thought)
         if refusal is not None:
             return refusal
+        # What the consciences reviewed, carried to the dispatch gate, which
+        # executes only an admitted fingerprint (#1366 item 19).
+        reviewed_call = self._reviewed_call(result)
 
         # Validate parameters
         params_or_error = await self._validate_tool_params(result, thought, dispatch_context)
@@ -45,7 +49,9 @@ class ToolHandler(BaseActionHandler):
         params = params_or_error
 
         # Execute tool
-        success, follow_up_info = await self._execute_tool(params, thought, dispatch_context)
+        success, follow_up_info = await self._execute_tool(
+            params, thought, dispatch_context, reviewed_call=reviewed_call
+        )
 
         # Create follow-up thought
         return self._complete_tool_action(thought, result, params, success, follow_up_info)
@@ -108,6 +114,18 @@ class ToolHandler(BaseActionHandler):
         )
         return follow_up_id or ""
 
+    def _reviewed_call(self, result: ActionSelectionDMAResult) -> Optional[ReviewedCall]:
+        """The reviewed call (secret references, not values) for the dispatch gate."""
+        params = result.action_parameters
+        if not isinstance(params, ToolParams) or result.reviewed_action_hash is None:
+            return None
+        return ReviewedCall(
+            fingerprint=result.reviewed_action_hash,
+            tool_name=resolve_tool_name_via_bus(self.bus_manager, params.name),
+            arguments=dict(params.parameters),
+            channel_id=params.channel_id,
+        )
+
     async def _validate_tool_params(
         self, result: ActionSelectionDMAResult, thought: Thought, dispatch_context: DispatchContext
     ) -> ToolParams | str:
@@ -157,7 +175,10 @@ class ToolHandler(BaseActionHandler):
             return follow_up_id or ""  # Return empty string if None (should not happen)
 
     def _build_invocation_subject(
-        self, thought: Thought, dispatch_context: DispatchContext
+        self,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        reviewed_call: Optional[ReviewedCall] = None,
     ) -> ToolInvocationSubject:
         """Build the authorization subject for this tool call (CIRISAgent#938).
 
@@ -165,14 +186,14 @@ class ToolHandler(BaseActionHandler):
         thought identity are available — and until now they were dropped here.
         The envelope is *read*, never minted: ``resolve_envelope_for_task_id``
         has no minting surface, and a missing envelope resolves to ``None``,
-        which is a denial to Phase 2 rather than "unconstrained".
+        which the Phase 2 gate denies rather than reading as "unconstrained".
         """
         task_id = thought.source_task_id or dispatch_context.task_id
         envelope = resolve_envelope_for_task_id(task_id, thought.agent_occurrence_id)
         if envelope is None:
-            self.logger.debug(
-                "[TOOL_HANDLER] No task envelope bound to task %s; tool call proceeds unauthorized "
-                "(Phase 1 has no gate — see CIRISAgent#938).",
+            self.logger.warning(
+                "[TOOL_HANDLER] No task envelope bound to task %s; the tool gate will deny this call "
+                "(CIRISAgent#938, #1366 item 19).",
                 task_id,
             )
         return ToolInvocationSubject.for_task(
@@ -182,10 +203,15 @@ class ToolHandler(BaseActionHandler):
             origin=ToolCallOrigin.REASONING,
             agent_occurrence_id=thought.agent_occurrence_id,
             envelope=envelope,
+            reviewed_call=reviewed_call,
         )
 
     async def _execute_tool(
-        self, params: ToolParams, thought: Thought, dispatch_context: DispatchContext
+        self,
+        params: ToolParams,
+        thought: Thought,
+        dispatch_context: DispatchContext,
+        reviewed_call: Optional[ReviewedCall] = None,
     ) -> Tuple[bool, str]:
         """Execute the tool via tool bus. Returns (success, follow_up_info)."""
         thought_id = thought.thought_id
@@ -199,7 +225,7 @@ class ToolHandler(BaseActionHandler):
             tool_params = self._build_tool_params(params, thought)
 
             # The subject the Phase 2 tool gate will authorize (CIRISAgent#938).
-            subject = self._build_invocation_subject(thought, dispatch_context)
+            subject = self._build_invocation_subject(thought, dispatch_context, reviewed_call)
 
             # Execute via tool bus
             self.logger.info(f"[TOOL_HANDLER] Calling bus_manager.tool.execute_tool for '{params.name}'...")

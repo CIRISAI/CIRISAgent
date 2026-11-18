@@ -105,7 +105,7 @@ def _processor(tool_info: Optional[ToolInfo] = None) -> ThoughtProcessor:
 def test_fingerprint_covers_tool_arguments_and_target_only() -> None:
     base = _tool("send_money", {"amount": 10, "to": "{SECRET:abc:account}"})
     fp = reviewed_action_fingerprint(base)
-    assert fp is not None and fp.startswith("sha256:")
+    assert fp is not None and fp.startswith("-16:")  # rc21 §4 [-16, digest]
     assert reviewed_action_fingerprint(_tool("send_money", {"to": "{SECRET:abc:account}", "amount": 10})) == fp
     assert reviewed_action_fingerprint(_tool("send_money", {"amount": 11, "to": "{SECRET:abc:account}"})) != fp
     assert reviewed_action_fingerprint(_tool("send_money", {"amount": "10", "to": "{SECRET:abc:account}"})) != fp
@@ -363,7 +363,7 @@ async def test_approved_tool_with_different_arguments_needs_its_own_approval(mon
         parameters=ToolParameterSchema(type="object", properties={}, required=[]),
         dma_guidance=ToolDMAGuidance(requires_approval=True),
     )
-    approved = tool_call_fingerprint("send_money", {"amount": 10})
+    approved = tool_call_fingerprint("send_money", {"amount": 10}, "ch1")
     monkeypatch.setattr(
         "ciris_engine.logic.processors.core.thought_processor.main.resolve_envelope_for_task_id",
         lambda task_id, occ="default": _wa_envelope(frozenset({approved})),
@@ -376,7 +376,7 @@ async def test_approved_tool_with_different_arguments_needs_its_own_approval(mon
     other = await processor._enforce_tool_approval(_approval_thought(), _passed(_tool("send_money", {"amount": 9999})))
     assert other is not None and other.final_action.selected_action == HandlerActionType.DEFER
     ctx = other.final_action.action_parameters.context or {}
-    assert ctx[PENDING_TOOL_CALL_FINGERPRINT_KEY] == tool_call_fingerprint("send_money", {"amount": 9999})
+    assert ctx[PENDING_TOOL_CALL_FINGERPRINT_KEY] == tool_call_fingerprint("send_money", {"amount": 9999}, "ch1")
 
 
 def test_legacy_tool_only_approval_approves_no_call() -> None:

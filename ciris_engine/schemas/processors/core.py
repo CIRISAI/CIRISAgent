@@ -16,6 +16,7 @@ from ciris_engine.schemas.conscience.core import (
     OptimizationVetoResult,
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.runtime.reviewed_action_admission import ReviewEntry
 from ciris_engine.schemas.runtime.veto_record import VetoChange, VetoDischarge, VetoObjection, VetoRecordEntry
 
 from ..actions.parameters import (
@@ -158,6 +159,23 @@ class ConscienceApplicationResult(BaseModel):
     )
     veto_record: List[VetoRecordEntry] = Field(
         default_factory=list, description="The task's veto record after this pass (prior + new)"
+    )
+
+    # === REVIEWED-ACTION ADMISSION (CIRISAgent#1366 items 10 + 19) ===
+    reviewed_fingerprint: Optional[str] = Field(
+        None, description="Reviewed-action fingerprint of the draft the consciences judged in this pass"
+    )
+    review_passes: List[str] = Field(
+        default_factory=list, description="Consciences that ran and passed that fingerprint in this pass"
+    )
+    review_objection: Optional[ReviewEntry] = Field(
+        None, description="rc21 §4 'objected' review record of this pass, when a faculty objected"
+    )
+    review_candidate: Optional[ReviewEntry] = Field(
+        None, description="rc21 §4 'passed' record of this pass (all four passed); stamped only if dispatch-bound"
+    )
+    reviewed_admission: Optional[ReviewEntry] = Field(
+        None, description="The passed record admitted for dispatch, when the final TOOL action was stamped"
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)

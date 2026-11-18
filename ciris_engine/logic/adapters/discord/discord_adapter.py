@@ -13,7 +13,7 @@ from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
 from ciris_engine.protocols.services import CommunicationService, WiseAuthorityService
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.adapters.discord import DiscordApprovalData, DiscordChannelInfo, DiscordGuidanceData
-from ciris_engine.schemas.adapters.tools import ToolExecutionResult
+from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage, IncomingMessage
@@ -855,10 +855,29 @@ class DiscordAdapter(Service, CommunicationService, WiseAuthorityService):
         *,
         parameters: Optional[Dict[str, Union[str, int, float, bool, List[Any], JSONDict]]] = None,
     ) -> ToolExecutionResult:
-        """Execute a tool through the tool handler."""
+        """Execute a tool through the tool handler — only as a gated ToolBus dispatch.
+
+        This adapter is a registered TOOL provider, so ``ToolBus.dispatch_to_provider``
+        reaches it after the Phase 2 gate. Any other caller holding the adapter
+        would run the handler with no envelope and no review: refused
+        (CIRISAgent#1366 item 19, FSD/TASK_ENVELOPE.md §8 "remaining bypasses").
+        """
 
         # Support both tool_args and parameters for compatibility
         from typing import cast
+
+        from ciris_engine.logic.infrastructure.authorization.dispatch_gate import ungated_refusal
+
+        refusal = ungated_refusal(tool_name, "DiscordAdapter")
+        if refusal is not None:
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.UNAUTHORIZED,
+                success=False,
+                data=None,
+                error=refusal.message(),
+                correlation_id=str(uuid.uuid4()),
+            )
 
         args = tool_args or parameters or {}
         result = await self._tool_handler.execute_tool(tool_name, cast(JSONDict, args))

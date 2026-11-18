@@ -50,6 +50,14 @@ from ciris_engine.schemas.services.operations import MemoryQuery
 # =============================================================================
 
 
+
+
+def _cache_subject(available_tools):
+    """The system subject the cache warm carries (#1366 item 19): enrichment runs only through the gate."""
+    from ciris_engine.logic.context.system_snapshot_helpers import enrichment_cache_subject
+
+    return enrichment_cache_subject(available_tools, "test")
+
 class TestThoughtProcessing:
     """Test thought processing helper functions."""
 
@@ -1321,7 +1329,9 @@ class TestContextEnrichment:
         # Set up available tools with enrichment tool
         available_tools = {"test": [mock_enrichment_tool_info]}
 
-        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+        result = await _run_context_enrichment_tools(
+            mock_runtime_with_enrichment, available_tools, subject=_cache_subject(available_tools)
+        )
 
         # Should have executed the enrichment tool
         assert "test:test_list_items" in result
@@ -1344,7 +1354,9 @@ class TestContextEnrichment:
 
         available_tools = {"test": [mock_enrichment_tool_info]}
 
-        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+        result = await _run_context_enrichment_tools(
+            mock_runtime_with_enrichment, available_tools, subject=_cache_subject(available_tools)
+        )
 
         # Should have error in result
         assert "test:test_list_items" in result
@@ -1377,7 +1389,9 @@ class TestContextEnrichment:
 
         available_tools = {"test": [tool_with_params]}
 
-        await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+        await _run_context_enrichment_tools(
+            mock_runtime_with_enrichment, available_tools, subject=_cache_subject(available_tools)
+        )
 
         # Verify execute_tool was called with the custom params
         tool_service.execute_tool.assert_called_once()
@@ -1445,7 +1459,9 @@ class TestContextEnrichment:
 
         available_tools = {"test": [mock_enrichment_tool_info, second_tool]}
 
-        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+        result = await _run_context_enrichment_tools(
+            mock_runtime_with_enrichment, available_tools, subject=_cache_subject(available_tools)
+        )
 
         # Should have results from both tools
         assert len(result) == 2
@@ -1468,7 +1484,9 @@ class TestContextEnrichment:
         # The tool is in available_tools but not actually provided by any service
         available_tools = {"other_adapter": [mock_enrichment_tool_info]}
 
-        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+        result = await _run_context_enrichment_tools(
+            mock_runtime_with_enrichment, available_tools, subject=_cache_subject(available_tools)
+        )
 
         # Should log warning about missing tool service
         assert "[CONTEXT_ENRICHMENT] No tool service found for other_adapter:test_list_items" in caplog.text
@@ -1496,7 +1514,9 @@ class TestContextEnrichment:
 
         available_tools = {"test": [mock_enrichment_tool_info]}
 
-        result = await _run_context_enrichment_tools(mock_runtime_with_enrichment, available_tools)
+        result = await _run_context_enrichment_tools(
+            mock_runtime_with_enrichment, available_tools, subject=_cache_subject(available_tools)
+        )
 
         # Should have success indicator instead of data
         assert "test:test_list_items" in result

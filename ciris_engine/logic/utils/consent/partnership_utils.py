@@ -93,6 +93,17 @@ class PartnershipRequestHandler:
             parent_task_id=None,
         )
 
+        # The requester's deployment envelope (#1366 item 19): the tool gate
+        # denies an envelope-less task. Inside the reasoning loop nothing may
+        # mint one; the task is then created without, and its tools are denied.
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
+        from ciris_engine.logic.infrastructure.authorization.reasoning_scope import in_reasoning_scope
+
+        if in_reasoning_scope():
+            logger.warning("Partnership task %s created inside the reasoning loop: no envelope issued", task_id)
+        else:
+            issue_task_envelope_best_effort(task)
+
         # Add task directly to persistence (like observers do)
         persistence.add_task(task)
         logger.info(f"Created partnership request task {task_id} for user {user_id}")

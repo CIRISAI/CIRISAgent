@@ -63,7 +63,10 @@ class VetoObjection(BaseModel):
     held_evidence_ids: List[str] = Field(
         default_factory=list, description="Ids of the trusted governance entries the conscience held"
     )
-    action_fingerprint: str = Field(..., description="Fingerprint of the vetoed draft (verb, tool, args/text hash)")
+    action_fingerprint: str = Field(..., description="Reviewed-action fingerprint of the vetoed draft (sha256:...)")
+    equivalence_key: str = Field(
+        "", description="Ban-equivalence key (verb:tool:normalized hash); the ban matches on this"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -86,7 +89,14 @@ class VetoRecordEntry(BaseModel):
 
     veto_id: str = Field(..., description="Unique id of this veto")
     thought_id: Optional[str] = Field(None, description="The thought whose draft was vetoed")
-    action_fingerprint: str = Field(..., description="Fingerprint of the vetoed draft")
+    action_fingerprint: str = Field(..., description="Reviewed-action fingerprint of the vetoed draft")
+    equivalence_key: str = Field(
+        "",
+        description=(
+            "Ban-equivalence key of the vetoed draft. Empty on a record written before the "
+            "fingerprint/key split, whose action_fingerprint is that key"
+        ),
+    )
     action_summary: str = Field("", description="Short description of the vetoed draft, for the drafters")
     objection_type: ObjectionType = Field(..., description="evidence, justification or substantive")
     conscience: str = Field(..., description="Registry name of the objecting conscience")
@@ -117,7 +127,7 @@ class VetoChange(BaseModel):
         ..., description="new trusted evidence, a different action, or neither (a restated justification)"
     )
     evidence_ids: List[str] = Field(default_factory=list, description="Trusted evidence attached on re-review")
-    action_fingerprint: str = Field(..., description="Fingerprint of the draft that passed")
+    action_fingerprint: str = Field(..., description="Reviewed-action fingerprint of the draft that passed")
 
     model_config = ConfigDict(extra="forbid")
 

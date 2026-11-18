@@ -6,7 +6,11 @@ would need to authorize, even in principle. These tests assert the subject now
 arrives, that an identity-less call is *named* rather than silently accepted,
 and that no behaviour changed for existing callers.
 
-**Nothing here asserts a denial.** Phase 1 ships no gate — that is #905 Ask 1.
+Phase 2 (#1366 item 19) made the gate at ``dispatch_to_provider`` enforcing;
+the denial rules themselves are pinned in
+``tests/ciris_engine/logic/infrastructure/authorization/test_dispatch_gate.py``.
+The tests here that once asserted "identity-less still executes" now assert
+the opposite.
 """
 
 import logging
@@ -84,9 +88,13 @@ class FakeTimeService:
 
 @pytest.fixture(autouse=True)
 def clean_enabled_tools():
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import reset_admitted_records
+
     reset_enabled_tools_cache()
+    reset_admitted_records()
     yield
     reset_enabled_tools_cache()
+    reset_admitted_records()
 
 
 @pytest.fixture
@@ -116,28 +124,58 @@ def make_envelope(task_id: str = "task_1") -> TaskEnvelope:
 # ---------------------------------------------------- the subject reaches the bus
 
 
+def _admit_reviewed(tool: str, args: dict):
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import (
+        admit_reviewed_action,
+        make_review_entry,
+        reviewed_call_fingerprint,
+    )
+    from ciris_engine.schemas.runtime.reviewed_action_admission import (
+        REQUIRED_REVIEW_FACULTIES,
+        ReviewedCall,
+        ReviewOutcome,
+        ReviewRecord,
+    )
+
+    fp = reviewed_call_fingerprint(tool, args, None)
+    admit_reviewed_action(
+        make_review_entry(
+            ReviewRecord(fingerprint=fp, thought="th_1", outcome=ReviewOutcome.PASSED, faculties=tuple(sorted(REQUIRED_REVIEW_FACULTIES))),
+            task_id="task_1",
+            derived_from=["request:sha256:00"],
+        )
+    )
+    return ReviewedCall(fingerprint=fp, tool_name=tool, arguments=args, channel_id=None)
+
+
 async def test_reasoning_subject_is_accepted_and_logged(bus_and_service, caplog):
     bus, service = bus_and_service
     subject = ToolInvocationSubject.for_task(
-        task_id="task_1", thought_id="th_1", handler_name="ToolHandler", envelope=make_envelope()
+        task_id="task_1",
+        thought_id="th_1",
+        handler_name="ToolHandler",
+        envelope=make_envelope(),
+        reviewed_call=_admit_reviewed("weather", {"city": "Austin"}),
     )
     with caplog.at_level(logging.DEBUG, logger="ciris_engine.logic.buses.tool_bus"):
-        result = await bus.execute_tool("weather", {"city": "Austin"}, "ToolHandler", subject=subject)
-    assert result.success is True
-    assert service.calls == [("weather", {"city": "Austin"})]
+        result = await bus.execute_tool("weather", {"city": "Austin", "task_id": "task_1"}, "ToolHandler", subject=subject)
+    assert result.success is True, result.error
+    assert service.calls == [("weather", {"city": "Austin", "task_id": "task_1"})]
     rendered = [rec.getMessage() for rec in caplog.records]
     assert any("task=task_1" in m and "thought=th_1" in m and "envelope=env_1" in m for m in rendered)
     # And no identity-less warning was emitted.
     assert not [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
 
 
-async def test_component_subject_is_accepted(bus_and_service):
+async def test_component_subject_without_its_envelope_is_denied(bus_and_service):
     bus, service = bus_and_service
     subject = ToolInvocationSubject.for_component(
         origin=ToolCallOrigin.GOVERNANCE_SERVICE, component="DSARModificationOrchestrator"
     )
     result = await bus.execute_tool("weather", {}, "default", subject=subject)
-    assert result.success is True
+    assert result.success is False
+    assert result.status is ToolExecutionStatus.UNAUTHORIZED
+    assert not service.calls
 
 
 # --------------------------------------------- identity-less calls are named
@@ -167,13 +205,14 @@ async def test_identityless_warning_is_once_per_caller_not_per_call(bus_and_serv
     assert sum("AnotherAdapter" in m for m in warned) == 1
 
 
-async def test_identityless_call_still_executes(bus_and_service):
-    """Phase 1 observes; it does not deny. A gate here without the rest of the
-    design would break every adapter that has not been updated yet."""
+async def test_identityless_call_is_denied(bus_and_service):
+    """Phase 2 (#1366 item 19): an identity-less call never reaches the provider."""
     bus, service = bus_and_service
     result = await bus.execute_tool("weather", {}, "SomeLegacyAdapter")
-    assert result.success is True
-    assert service.calls
+    assert result.success is False
+    assert result.status is ToolExecutionStatus.UNAUTHORIZED
+    assert (result.error or "").startswith("ciris.tool_gate.no_subject")
+    assert not service.calls
 
 
 # ----------------------------------------------- backwards compatibility
@@ -182,7 +221,8 @@ async def test_identityless_call_still_executes(bus_and_service):
 async def test_positional_call_signature_still_works(bus_and_service):
     bus, _ = bus_and_service
     result = await bus.execute_tool("weather", {"a": 1})
-    assert result.success is True
+    # Accepted as a call shape; denied by the gate (no subject), not by a TypeError.
+    assert result.status is ToolExecutionStatus.UNAUTHORIZED
 
 
 async def test_correlation_id_behaviour_is_unchanged_on_not_found(bus_and_service):
@@ -379,11 +419,19 @@ async def test_context_enrichment_routes_through_the_bus(bus_and_service):
         return await original(svc, tool_name, params, **kwargs)
 
     bus.dispatch_to_provider = recording
+    info = FakeToolInfo("weather")
+    info.context_enrichment = True  # type: ignore[attr-defined]
+
+    async def enrichment_info(tool_name):
+        return info
+
+    service.get_tool_info = enrichment_info
     subject = ToolInvocationSubject.for_task(
         task_id="task_1",
         thought_id="th_1",
         handler_name="context_enrichment",
         origin=ToolCallOrigin.CONTEXT_ENRICHMENT,
+        envelope=make_envelope(),
     )
     _key, result = await _execute_enrichment_tool(
         [(service, "api")], "api", _enrichment_tool(), tool_bus=bus, subject=subject
@@ -394,12 +442,13 @@ async def test_context_enrichment_routes_through_the_bus(bus_and_service):
     assert result is not None
 
 
-async def test_context_enrichment_still_works_without_a_bus(bus_and_service):
-    """Startup cache population runs before the bus manager is wired; that path
-    must keep working — a design that blocks weather lookups has failed."""
+async def test_context_enrichment_without_a_bus_is_not_executed(bus_and_service):
+    """#1366 item 19: the no-bus fallback was the last ungated path. The bus is
+    built with the core services, before any adapter or the cache warm, so a
+    missing bus is a wiring defect and the provider is never invoked."""
     from ciris_engine.logic.context.system_snapshot_helpers import _execute_enrichment_tool
 
     _, service = bus_and_service
     _key, result = await _execute_enrichment_tool([(service, "api")], "api", _enrichment_tool())
-    assert result is not None
-    assert service.calls
+    assert result is None
+    assert not service.calls

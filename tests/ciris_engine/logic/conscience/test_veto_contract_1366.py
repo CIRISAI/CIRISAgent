@@ -29,6 +29,7 @@ import pytest
 from ciris_engine.logic.conscience import core
 from ciris_engine.logic.conscience.registry import conscienceRegistry
 from ciris_engine.logic.conscience.veto_contract import (
+    action_equivalence_key,
     action_fingerprint,
     banned_entry_for,
     format_prior_vetoes_block,
@@ -87,17 +88,23 @@ def _tool(params: Dict[str, Any]) -> ActionSelectionDMAResult:
 # ---------------------------------------------------------------- fingerprint
 
 
-def test_fingerprint_ignores_whitespace_and_case_for_speak() -> None:
-    assert action_fingerprint(_speak("Hello  there\n")) == action_fingerprint(_speak("hello there"))
-    assert action_fingerprint(_speak("hello there")) != action_fingerprint(_speak("hello world"))
-    assert action_fingerprint(_speak("x")).startswith("speak::")
+def test_equivalence_key_ignores_whitespace_and_case_for_speak() -> None:
+    assert action_equivalence_key(_speak("Hello  there\n")) == action_equivalence_key(_speak("hello there"))
+    assert action_equivalence_key(_speak("hello there")) != action_equivalence_key(_speak("hello world"))
+    assert action_equivalence_key(_speak("x")).startswith("speak::")
 
 
-def test_fingerprint_names_the_tool_and_hashes_normalized_arguments() -> None:
-    a = action_fingerprint(_tool({"title": "T", "body": "b  c"}))
-    assert a == action_fingerprint(_tool({"body": "b c", "title": "T"}))
-    assert a != action_fingerprint(_tool({"title": "T", "body": "other"}))
+def test_equivalence_key_names_the_tool_and_hashes_normalized_arguments() -> None:
+    a = action_equivalence_key(_tool({"title": "T", "body": "b  c"}))
+    assert a == action_equivalence_key(_tool({"body": "b c", "title": "T"}))
+    assert a != action_equivalence_key(_tool({"title": "T", "body": "other"}))
     assert a.startswith("tool:create_ticket:")
+
+
+def test_the_record_fingerprint_is_the_exact_reviewed_fingerprint() -> None:
+    """One fingerprint for the record and for dispatch (#1366 item 19); the key only bans."""
+    assert action_fingerprint(_tool({"title": "T", "body": "b  c"})) != action_fingerprint(_tool({"title": "T", "body": "b c"}))
+    assert action_fingerprint(_speak("x")).startswith("-16:")
 
 
 # ---------------------------------------------------------------- item 7: typed verdicts

@@ -22,6 +22,7 @@ from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
 from ciris_engine.logic.infrastructure.authorization.reviewed_action import (
+    admit_reviewed_action,
     resolve_tool_name_via_bus,
     reviewed_action_fingerprint,
     tool_call_fingerprint,
@@ -58,6 +59,7 @@ from ciris_engine.schemas.processors.core import (
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.reviewed_action_admission import ReviewEntry
 from ciris_engine.schemas.runtime.veto_record import ObjectionType, VetoObjection
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
@@ -300,7 +302,9 @@ class ThoughtProcessor(
         )
         # Phase 4.8: review integrity (#1366 item 10). Fingerprint the action the
         # consciences just passed, so dispatch can refuse anything else.
-        conscience_result = self._stamp_reviewed_action(action_result_dict.get("action_result"), conscience_result)
+        conscience_result = self._stamp_reviewed_action(
+            action_result_dict.get("action_result"), conscience_result, thought=thought
+        )
         action_from_conscience = self._handle_special_cases(conscience_result)
 
         # Phase 4.9: approval gate (CIRISAgent#942). Deliberately the LAST thing
@@ -367,6 +371,7 @@ class ThoughtProcessor(
     def _stamp_reviewed_action(
         reviewed_draft: Any,
         conscience_result: Optional[ConscienceApplicationResult],
+        thought: Any = None,
     ) -> Optional[ConscienceApplicationResult]:
         """Bind the final action to the draft the consciences reviewed (#1366 item 10).
 
@@ -379,6 +384,11 @@ class ThoughtProcessor(
 
         Runs before the approval gate: the gate may only narrow (TOOL -> DEFER),
         and the stamp is meaningless on the DEFER it produces.
+
+        Admission (#1366 item 19): a stamped TOOL is also offered to
+        ``admit_reviewed_action`` with the consciences that passed THIS
+        fingerprint in this pass; the dispatch gate executes only an admitted
+        fingerprint, and admission needs all four LLM consciences (fail closed).
         """
         if conscience_result is None or conscience_result.final_action is None:
             return conscience_result
@@ -400,11 +410,38 @@ class ThoughtProcessor(
                     final_fp,
                     draft_fp,
                 )
-        if final_action.reviewed_action_hash == stamp:
+        admission = ThoughtProcessor._admit_stamp(stamp, conscience_result, thought)
+        if final_action.reviewed_action_hash == stamp and admission is None:
             return conscience_result
         return conscience_result.model_copy(
-            update={"final_action": final_action.model_copy(update={"reviewed_action_hash": stamp})}
+            update={
+                "final_action": final_action.model_copy(update={"reviewed_action_hash": stamp}),
+                "reviewed_admission": admission,
+            }
         )
+
+    @staticmethod
+    def _admit_stamp(
+        stamp: Optional[str], conscience_result: ConscienceApplicationResult, thought: Any
+    ) -> Optional[ReviewEntry]:
+        """Stamp the rc21 ``passed`` record for the action that will dispatch; ``None`` if none.
+
+        Only a candidate built over the SAME fingerprint, with all four
+        faculties, is admitted; anything else admits nothing (fail closed).
+        """
+        candidate = conscience_result.review_candidate
+        thought_id = getattr(thought, "thought_id", None)
+        if stamp is None or candidate is None or not isinstance(thought_id, str):
+            return None
+        if candidate.record.fingerprint != stamp or candidate.record.thought != thought_id:
+            logger.error(
+                "REVIEW-INTEGRITY: the passed review was over %s (thought %s), not the stamped %s; not admitted",
+                candidate.record.fingerprint,
+                candidate.record.thought,
+                stamp,
+            )
+            return None
+        return admit_reviewed_action(candidate)
 
     async def _enforce_tool_approval(
         self,
@@ -427,7 +464,7 @@ class ThoughtProcessor(
         again, and passes.
 
         **The grant binds the call (#1366 item 10).** The envelope carries the
-        ``tool_call_fingerprint`` (tool + exact arguments) the human was shown.
+        rc21 call fingerprint (tool + exact arguments + channel) the human was shown.
         The follow-up task re-reasons from scratch; if it calls the approved
         tool with different arguments, the fingerprint differs and this gate
         defers again, so that call gets its own approval. A legacy tool-only
@@ -461,7 +498,7 @@ class ThoughtProcessor(
         if not tool_requires_approval(tool_info):
             return conscience_result
 
-        call_fingerprint = tool_call_fingerprint(tool_name, tool_params.parameters)
+        call_fingerprint = tool_call_fingerprint(tool_name, tool_params.parameters, tool_params.channel_id)
         envelope = resolve_envelope_for_task_id(thought.source_task_id, thought.agent_occurrence_id)
         if envelope_approves_call(envelope, tool_name, call_fingerprint):
             logger.info(

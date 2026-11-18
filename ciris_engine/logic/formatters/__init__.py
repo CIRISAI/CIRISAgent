@@ -30,6 +30,7 @@ from .prompt_blocks import (
 )
 from .system_snapshot import format_system_snapshot
 from .user_profiles import format_user_profiles
+from .verified_sender import format_verified_sender_block, verified_sender_block_of, verified_sender_of
 
 __all__ = [
     "format_system_snapshot",
@@ -42,6 +43,9 @@ __all__ = [
     "format_wa_no_approval_fact",
     "format_wa_only_verified_rule",
     "wa_authorization_of",
+    "format_verified_sender_block",
+    "verified_sender_block_of",
+    "verified_sender_of",
     "format_core_identity_block",
     "identity_block_of",
     "agent_identity_of",

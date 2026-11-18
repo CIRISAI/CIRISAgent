@@ -853,6 +853,16 @@ class ActionSelectionContextBuilder:
         if hasattr(task, "priority") and task.priority:
             parts.append(f"Priority: {task.priority}")
 
+        # The sender as authentication verified it, apart from the message
+        # text (#1366 item 5). Empty when the task carries no verified sender.
+        from ciris_engine.logic.dma.prompt_loader import get_prompt_loader
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_block_of
+
+        sender_block = verified_sender_block_of(task, language=get_prompt_loader().language)
+        if sender_block:
+            parts.append("")
+            parts.append(sender_block)
+
         # Add guidance about following through
         if original_thought.thought_depth > 0:
             parts.append("")

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.types import JSONDict
 
 from .enums import TaskStatus, ThoughtStatus, ThoughtType
@@ -78,6 +79,46 @@ class WAAuthorization(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+class VerifiedSender(BaseModel):
+    """Who sent the message that created a task, as the adapter verified it (#1366 item 5, #1365).
+
+    Built by the observer from the adapter's own fields, never from message
+    text. The model used to see the sender only as ``@display-name (ID: …,
+    role: …)`` inside the observation text, and on v2.21.0 two consciences
+    read the display name as the identity and overturned a correct
+    ID-mismatch refusal. This record keeps the three apart:
+
+    - ``user_id``: the id the adapter's authentication (or platform) attached.
+    - ``role``: the role the adapter's authentication verified (the API's
+      ``AuthContext.role``); None where the adapter does not verify roles.
+      Never inferred: the ``wa-`` prefix every minted user id carries is not
+      a role.
+    - ``self_chosen_display_name``: the name the sender chose. Kept only so it
+      can be labelled as not identity.
+
+    Not :class:`RequesterAuthorization`: that record floors an unknown role to
+    OBSERVER for the envelope, and a prompt has to be able to say "not
+    verified" instead.
+    """
+
+    user_id: Optional[str] = Field(None, description="Sender id as the adapter verified it")
+    role: Optional[UserRole] = Field(
+        None, description="Sender role from the adapter's authentication; None when the adapter does not verify roles"
+    )
+    source: str = Field(
+        "unverified",
+        description=(
+            "What vouches for the id and role: '<adapter>_auth' (e.g. 'api_auth') when the role came from "
+            "authentication, the adapter name when only the platform id is known, 'unverified' otherwise"
+        ),
+    )
+    self_chosen_display_name: Optional[str] = Field(
+        None, description="The sender's self-chosen display name. Not identity."
+    )
+
+    model_config = ConfigDict(extra="forbid", frozen=True, defer_build=True)
+
+
 class TaskContext(BaseModel):
     """Typed context for tasks."""
 
@@ -111,6 +152,13 @@ class TaskContext(BaseModel):
             "Set only on a guidance task created from a VERIFIED Wise Authority "
             "approval. Dispatch reads it into DispatchContext.wa_authorized. None "
             "means no WA authorization."
+        ),
+    )
+    verified_sender: Optional[VerifiedSender] = Field(
+        None,
+        description=(
+            "The sender of the message that created this task, as the adapter verified it "
+            "(#1366 item 5). None for tasks not created from a message."
         ),
     )
 
@@ -260,6 +308,7 @@ __all__ = [
     "Task",
     "Thought",
     "TaskContext",
+    "VerifiedSender",
     "TaskOutcome",
     "ThoughtContext",
     "FinalAction",

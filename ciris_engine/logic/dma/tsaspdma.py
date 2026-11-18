@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -338,6 +339,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         original_thought_content: str,
         context_enrichment: Optional[Dict[str, Any]] = None,
         identity_block: str = "",
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
         """Assemble prompt messages for TSASPDMA evaluation.
 
@@ -413,6 +415,9 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             context_enrichment_section=context_enrichment_section,
         )
 
+        # On a conscience retry, the veto ASPDMA saw (#1366 item 1): without it
+        # this pass re-proposed the vetoed call (0 of 162 retries carried it).
+        user_message_text = with_conscience_feedback(user_message_text, conscience_feedback)
         messages.append({"role": "user", "content": user_message_text})
 
         return messages
@@ -425,6 +430,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
         context_enrichment: Optional[Dict[str, Any]] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Evaluate a TOOL action with full documentation.
 
@@ -467,6 +473,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             original_thought_content=thought_content_str,
             context_enrichment=context_enrichment,
             identity_block=self._identity_block(context),
+            conscience_feedback=conscience_feedback,
         )
 
         # Store user prompt for debugging
@@ -736,6 +743,7 @@ Return your response as a FLAT JSON object."""
             aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
             context=context,
+            conscience_feedback=kwargs.get("conscience_feedback"),
         )
 
     def __repr__(self) -> str:

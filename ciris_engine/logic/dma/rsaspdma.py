@@ -22,6 +22,7 @@ from typing import Any, List, Optional
 
 from pydantic import ConfigDict, Field
 
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.schemas.actions.parameters import (
     PonderParams,
@@ -67,6 +68,7 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
         original_thought: ProcessingQueueItem,
         aspdma_result: ActionSelectionDMAResult,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
         """Compose the RSASPDMA prompt message list."""
         self._sync_language_from_context(context)
@@ -87,6 +89,8 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
             aspdma_reasoning=aspdma_result.rationale or "",
             candidate_nodes=self._format_candidates(self.candidate_nodes_from_context(context)),
         )
+        # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
+        user_message = with_conscience_feedback(user_message, conscience_feedback)
         return self._frame_messages(system_message, user_message)
 
     def _convert_recall(
@@ -151,12 +155,15 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
         aspdma_result: ActionSelectionDMAResult,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Say what a selected RECALL reads."""
         if aspdma_result.selected_action != HandlerActionType.RECALL:
             raise ValueError(f"RSASPDMA requires RECALL action, got {aspdma_result.selected_action}")
 
-        messages = self.compose_messages(original_thought, aspdma_result, context=context)
+        messages = self.compose_messages(
+            original_thought, aspdma_result, context=context, conscience_feedback=conscience_feedback
+        )
         llm_result, resource_usage = await self.call_llm_structured(
             messages=messages,
             response_model=RSASPDMALLMResult,
@@ -185,6 +192,7 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
             aspdma_result=aspdma_result,
             original_thought=input_data,
             context=kwargs.get("context"),
+            conscience_feedback=kwargs.get("conscience_feedback"),
         )
 
 

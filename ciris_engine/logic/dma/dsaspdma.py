@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -178,6 +179,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         original_thought: ProcessingQueueItem,
         aspdma_result: ActionSelectionDMAResult,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
         """Compose the full DSASPDMA prompt message list (#972).
 
@@ -241,6 +243,8 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if _crisis_block:
             messages.append({"role": "system", "content": _crisis_block})
         messages.append({"role": "system", "content": system_message})
+        # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
+        user_message = with_conscience_feedback(user_message, conscience_feedback)
         messages.append({"role": "user", "content": user_message})
         return messages
 
@@ -310,6 +314,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         aspdma_result: ActionSelectionDMAResult,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Evaluate a DEFER action and classify it against the rights taxonomy."""
 
@@ -320,7 +325,9 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if not isinstance(current_params, DeferParams):
             raise TypeError(f"DSASPDMA expects DeferParams, got {type(current_params)}")
 
-        messages = self.compose_messages(original_thought, aspdma_result, context=context)
+        messages = self.compose_messages(
+            original_thought, aspdma_result, context=context, conscience_feedback=conscience_feedback
+        )
         llm_result, resource_usage = await self.call_llm_structured(
             messages=messages,
             response_model=DSASPDMALLMResult,

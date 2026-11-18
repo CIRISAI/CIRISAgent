@@ -10,7 +10,7 @@ be one of the enums below. Before generating anything it runs the static checks 
   - only signed rules are verified provenances (decision 2026-11-18): user_chat and wa_chat must be untrusted;
   - evidence sufficiency: whenever a trusted (signed) rule is in force, every judge receives a verified rule provenance,
     an amendment or signed guidance under a predicate at least as broad;
-  - completeness: every stage the model consumes is present.
+  - completeness: every stage the model consumes is present, and every declared kind reaches some stage.
 
 Output: ContractHas(stage, scenario, kind, atom) over the model's atoms. Atoms are the (kind, provenance,
 rendering) combinations the TLA+ model reasons about; kinds the model does not consume are checked but not
@@ -74,6 +74,11 @@ def main(src, out):
                 fail(f"{st}.{key}: provenance only on rule, and must be declared")
             if pred not in PREDICATES:
                 fail(f"{st}.{key}: unknown predicate {pred!r}")
+    # every declared kind is used by some stage (a declared-but-unlisted kind would be flagged on every call)
+    used = {key.split(".")[0] for rows in stages.values() for key, pred in rows.items() if pred != "never"}
+    for k, a in kinds.items():
+        if k not in used and not a.get("unused"):
+            fail(f"kind {k} is declared but reaches no stage (list it, or mark it unused: true)")
     # completeness
     for st in MODEL_STAGES:
         if st not in stages:

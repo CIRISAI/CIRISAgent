@@ -30,7 +30,7 @@ and the assembler still guards, stubs, neutralises, renders and records every se
 import hashlib
 import logging
 from collections import defaultdict
-from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -76,7 +76,9 @@ from ciris_engine.schemas.context.prompt_provenance import (
     TrustLevel,
     min_trust,
 )
-from ciris_engine.schemas.services.llm import LLMMessage
+from ciris_engine.schemas.runtime.models import ImageContent
+from ciris_engine.schemas.services.llm import ImageContentBlock, ImageURLDetail, LLMMessage, TextContentBlock
+from ciris_engine.schemas.types import JSONDict
 
 logger = logging.getLogger(__name__)
 
@@ -121,10 +123,15 @@ class LayoutItem(BaseModel):
 
 
 class LayoutMessage(BaseModel):
-    """One message of an explicit layout: its role and its segments in order."""
+    """One message of an explicit layout: its role, its segments in order, and the images it carries.
+
+    Images ride as content blocks after the text (multimodal), exactly as ``BaseDMA.build_multimodal_content``
+    lays them out; the manifest's spans are into the text block. The consciences never get images.
+    """
 
     role: Literal["system", "user"]
     items: List[LayoutItem]
+    images: List[ImageContent] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -463,9 +470,10 @@ class PromptAssembler:
             )
 
         arranged = self._arrange(stage, kept, trust, layout)
+        images = [list(msg.images) for msg in layout] if layout is not None else [[] for _ in arranged]
         messages: List[LLMMessage] = []
         records: List[SegmentRecord] = []
-        for role, items in arranged:
+        for (role, items), message_images in zip(arranged, images):
             content, spans = _join(items, rendered, withheld_ids)
             if not spans:
                 continue
@@ -494,9 +502,14 @@ class PromptAssembler:
                         withheld_sha256=_sha256(seg.text) if withheld else None,
                     )
                 )
-            messages.append(LLMMessage(role=role, content=content))
+            if message_images:
+                blocks: List[Union[TextContentBlock, ImageContentBlock]] = [TextContentBlock(text=content)]
+                blocks.extend(ImageContentBlock(image_url=ImageURLDetail(url=i.to_data_url())) for i in message_images)
+                messages.append(LLMMessage(role=role, content=blocks))
+            else:
+                messages.append(LLMMessage(role=role, content=content))
 
-        wire = [m.model_dump(exclude_none=True) for m in messages]
+        wire = [wire_message(m) for m in messages]
         digest = messages_sha256(wire)
         call_id = call.call_id or _sha256(
             "|".join([stage.value, call.task_id or "", call.thought_id or "", str(call.retry_index), digest])
@@ -573,6 +586,18 @@ _SCOPE: Dict[Lifecycle, StubScope] = {
     Lifecycle.RETRY_ONLY: StubScope.THIS_TURN,
     Lifecycle.PER_CALL: StubScope.THIS_TURN,
 }
+
+
+def wire_message(message: LLMMessage) -> JSONDict:
+    """A message as a DMA hands it to the LLM bus: text content as is, content blocks each dumped in full."""
+    wire: JSONDict = {"role": message.role}
+    if isinstance(message.content, str):
+        wire["content"] = message.content
+    else:
+        wire["content"] = [block.model_dump() for block in message.content]
+    if message.name is not None:
+        wire["name"] = message.name
+    return wire
 
 
 def neutralise(text: str) -> str:
@@ -701,6 +726,7 @@ __all__ = [
     "STUB_BLOCK_OPEN",
     "neutralise",
     "quote_share",
+    "wire_message",
     "current_guard_mode",
     "guard_mode_for_run_kind",
 ]

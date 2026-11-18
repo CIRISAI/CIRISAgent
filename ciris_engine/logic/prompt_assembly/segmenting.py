@@ -308,14 +308,22 @@ class PromptBuilder:
         self.segments: List[PromptSegment] = []
         self.layout: List[Any] = []
 
-    def message(self, role: str, segments: Sequence[PromptSegment], layout_items: Sequence[LayoutItem]) -> None:
-        """Append one message (skipped when it has no segments)."""
+    def message(
+        self,
+        role: str,
+        segments: Sequence[PromptSegment],
+        layout_items: Sequence[LayoutItem],
+        images: Optional[Sequence[Any]] = None,
+    ) -> None:
+        """Append one message (skipped when it has no segments). ``images`` ride after its text (multimodal)."""
         from ciris_engine.logic.prompt_assembly.assembler import LayoutMessage
 
         if not segments:
             return
         self.segments.extend(segments)
-        self.layout.append(LayoutMessage(role="system" if role == "system" else "user", items=list(layout_items)))
+        self.layout.append(
+            LayoutMessage(role="system" if role == "system" else "user", items=list(layout_items), images=list(images or []))
+        )
 
     def single(self, role: str, segment: Optional[PromptSegment]) -> None:
         """A message holding one segment (skipped for None or empty text)."""
@@ -326,8 +334,10 @@ class PromptBuilder:
         """(messages as the dicts DMAs send, manifest)."""
         from ciris_engine.logic.prompt_assembly.assembler import PromptAssembler
 
+        from ciris_engine.logic.prompt_assembly.assembler import wire_message
+
         messages, manifest = (assembler or PromptAssembler()).build(stage, self.segments, call=call, layout=self.layout)
-        return [m.model_dump(exclude_none=True) for m in messages], manifest
+        return [wire_message(m) for m in messages], manifest
 
 
 def segment(segment_id: str, kind: SegmentKind, text: str, source: SegmentSource = SegmentSource.ENGINE, **kw: Any) -> PromptSegment:

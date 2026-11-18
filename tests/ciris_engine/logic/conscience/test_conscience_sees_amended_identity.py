@@ -114,8 +114,11 @@ def test_the_tool_step_reads_the_amended_identity():
     context = SimpleNamespace(system_snapshot=SimpleNamespace(agent_identity=IDENTITY))
     with patch.object(TSASPDMAEvaluator, "prompt_loader", new_callable=PropertyMock) as loader:
         loader.return_value = SimpleNamespace(language="en")
-        assert AMENDMENT in dma._identity_block(context)
-        assert dma._identity_block(None) == ""
+        assert dma._agent_identity(context) is IDENTITY
+        assert dma._agent_identity(None) is None
+        # ...and the identity, amendment included, is what the assembled prompt carries.
+        system, _ = dma._system_segments("instr", IDENTITY, None, "t")
+        assert AMENDMENT in "".join(s.text for s in system)
 
 
 @pytest.mark.parametrize("module, needle", [

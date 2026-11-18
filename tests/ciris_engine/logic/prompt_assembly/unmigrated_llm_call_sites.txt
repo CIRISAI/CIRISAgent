@@ -9,5 +9,3 @@ ciris_engine/logic/dma/idma.py::IDMAEvaluator.evaluate_thought::call_llm_structu
 ciris_engine/logic/dma/msaspdma.py::MSASPDMAEvaluator.evaluate_memorize_action::call_llm_structured
 ciris_engine/logic/dma/pdma.py::EthicalPDMAEvaluator.evaluate::call_llm_structured
 ciris_engine/logic/dma/rsaspdma.py::RSASPDMAEvaluator.evaluate_recall_action::call_llm_structured
-ciris_engine/logic/dma/tsaspdma.py::TSASPDMAEvaluator.evaluate_tool_action::call_llm_structured
-ciris_engine/logic/dma/tsaspdma.py::TSASPDMAEvaluator.evaluate_tool_correction::call_llm_structured

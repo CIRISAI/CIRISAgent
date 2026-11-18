@@ -142,5 +142,5 @@ def test_the_tsaspdma_correction_scaffold_is_pinned() -> None:
 
     assert (
         "logic/dma/tsaspdma.py",
-        "TSASPDMAEvaluator._create_correction_mode_messages",
+        "TSASPDMAEvaluator._compose_correction_mode",
     ) in RESIDUE_SITES

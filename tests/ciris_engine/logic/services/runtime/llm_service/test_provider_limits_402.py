@@ -1,4 +1,4 @@
-"""OpenRouter spending-limit refusals and the per-call output budget (CIRISAgent#1366 item 20).
+"""OpenRouter spending-limit refusals (CIRISAgent#1366 item 20).
 
 Every 402 used to read as ``insufficient_quota`` and fail with no retry, so one
 transient in-flight-budget refusal ruined a RATCHET Market 4 episode. OpenRouter
@@ -25,7 +25,6 @@ from pydantic import BaseModel
 
 from ciris_engine.logic.services.runtime.llm_service.provider_limits import (
     IN_FLIGHT_BACKOFF_CAP_S,
-    LENGTH_ESCALATION_MAX_TOKENS,
     ProviderLimitError,
     ProviderLimitFaultCode,
     in_flight_backoff_s,
@@ -237,46 +236,3 @@ class TestServiceRaisesTheCategorizedRefusal:
         with pytest.raises(ProviderLimitError):
             await _call(service)
         assert service.last_fault_code == "insufficient_quota"
-
-
-class TestLengthEscalation:
-    @pytest.mark.asyncio
-    async def test_a_reply_cut_off_at_max_tokens_is_retried_once_at_the_larger_budget(self, monkeypatch):
-        sent: List[int] = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            sent.append(json.loads(request.content)["max_tokens"])
-            if len(sent) == 1:
-                return _completion('{"answer": "trunc', finish_reason="length")
-            return _completion('{"answer": "whole"}')
-
-        service = _service_over(handler, monkeypatch)
-        result = await _call(service, max_tokens=2048)
-        assert result.answer == "whole"
-        assert sent == [2048, LENGTH_ESCALATION_MAX_TOKENS]
-
-    @pytest.mark.asyncio
-    async def test_no_escalation_past_the_ceiling(self, monkeypatch):
-        sent: List[int] = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            sent.append(json.loads(request.content)["max_tokens"])
-            return _completion('{"answer": "trunc', finish_reason="length")
-
-        service = _service_over(handler, monkeypatch)
-        with pytest.raises(RuntimeError):
-            await _call(service, max_tokens=LENGTH_ESCALATION_MAX_TOKENS)
-        assert sent == [LENGTH_ESCALATION_MAX_TOKENS]
-
-    @pytest.mark.asyncio
-    async def test_escalation_happens_once_and_only_upward(self, monkeypatch):
-        sent: List[int] = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            sent.append(json.loads(request.content)["max_tokens"])
-            return _completion('{"answer": "trunc', finish_reason="length")
-
-        service = _service_over(handler, monkeypatch)
-        with pytest.raises(RuntimeError):
-            await _call(service, max_tokens=2048)
-        assert sent == [2048, LENGTH_ESCALATION_MAX_TOKENS]

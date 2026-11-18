@@ -178,7 +178,7 @@ class FSASPDMAEvaluator(MSASPDMAEvaluator):
         llm_result, resource_usage = await self.call_llm_structured(
             messages=messages,
             response_model=FSASPDMALLMResult,
-            max_tokens=4096,
+            max_tokens=8192,
             temperature=0.0,
             thought_id=original_thought.thought_id,
             task_id=original_thought.source_task_id,

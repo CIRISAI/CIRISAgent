@@ -66,13 +66,7 @@ from ciris_engine.schemas.services.llm import (
 )
 
 from .pricing_calculator import LLMPricingCalculator
-from .provider_limits import (
-    LENGTH_ESCALATION_MAX_TOKENS,
-    ProviderLimitError,
-    ProviderLimitFault,
-    is_incomplete_output,
-    provider_limit_fault,
-)
+from .provider_limits import ProviderLimitError, ProviderLimitFault, provider_limit_fault
 
 
 def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict]:
@@ -2084,10 +2078,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 limit = provider_limit_fault(e)
                 if limit is not None:
                     self._raise_provider_limit(e, limit, resp_model.__name__, thought_id)
-                # Stopped at max_tokens: raised as-is so the caller can escalate
-                # the output budget once (see _retry_with_length_escalation).
-                if is_incomplete_output(e):
-                    raise
                 self._handle_general_exception(e, resp_model.__name__)
                 raise  # Should not reach here as _handle_general_exception always raises
 
@@ -2101,8 +2091,8 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
             endpoints_tried += 1
 
             try:
-                result = await self._retry_with_length_escalation(
-                    _make_structured_call, messages, response_model, max_tokens, temperature, retry_state, thought_id
+                result = await self._retry_with_backoff(
+                    _make_structured_call, messages, response_model, max_tokens, temperature, retry_state=retry_state
                 )
                 # Success! Record it and reset retry state for next call
                 if current_endpoint:
@@ -2160,52 +2150,6 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if last_exception:
             raise last_exception
         raise RuntimeError("All endpoints exhausted without success")
-
-    async def _retry_with_length_escalation(
-        self,
-        func: StructuredCallFunc,
-        messages: List[MessageDict],
-        response_model: Type[BaseModel],
-        max_tokens: int,
-        temperature: float,
-        retry_state: RetryState,
-        thought_id: Optional[str],
-    ) -> Tuple[BaseModel, ResourceUsage]:
-        """`_retry_with_backoff`, plus ONE retry at a larger output budget when the reply was cut off.
-
-        Callers ask for an output budget sized to what they measurably need
-        (#1366 item 20: a smaller reservation is what keeps OpenRouter's
-        in-flight budget from refusing calls). When a reply does hit that
-        ceiling (finish_reason=length, instructor's IncompleteOutputException),
-        it is retried once at LENGTH_ESCALATION_MAX_TOKENS -- the value every
-        call used before -- so a long answer is never lost to the smaller
-        default. Escalation only ever goes UP: no path here shrinks max_tokens.
-        """
-        try:
-            return await self._retry_with_backoff(
-                func, messages, response_model, max_tokens, temperature, retry_state=retry_state
-            )
-        except Exception as e:
-            if not is_incomplete_output(e):
-                raise
-            if max_tokens >= LENGTH_ESCALATION_MAX_TOKENS:
-                self._handle_general_exception(e, response_model.__name__)
-                raise
-            logger.warning(
-                "[LLM_LENGTH_ESCALATION] %s stopped at max_tokens=%d (thought=%s); retrying once at %d",
-                response_model.__name__,
-                max_tokens,
-                thought_id,
-                LENGTH_ESCALATION_MAX_TOKENS,
-            )
-        try:
-            return await self._retry_with_backoff(
-                func, messages, response_model, LENGTH_ESCALATION_MAX_TOKENS, temperature, retry_state=retry_state
-            )
-        except Exception as e:
-            if is_incomplete_output(e):
-                self._handle_general_exception(e, response_model.__name__)
-            raise
 
     def _raise_provider_limit(
         self, e: Exception, fault: ProviderLimitFault, resp_model_name: str, thought_id: Optional[str]

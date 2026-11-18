@@ -1,4 +1,4 @@
-"""Provider spending-limit refusals (HTTP 402/403) and the per-call output budget.
+"""Provider spending-limit refusals (HTTP 402/403): classification and retry policy.
 
 CIRISAgent#1366 item 20. OpenRouter answers 402 for FOUR different situations,
 and they need four different responses:
@@ -24,8 +24,8 @@ Every 402 used to read as ``insufficient_quota``: the call failed with no retry,
 and one transient in-flight refusal ruined a whole RATCHET Market 4 episode.
 The cause of the refusals was ours too: OpenRouter reserves
 ``input + max_tokens`` x price for every request in flight, and every DMA and
-conscience asked for max_tokens=8192 while its measured completions are 60-240
-tokens. See :data:`LENGTH_ESCALATION_MAX_TOKENS`.
+conscience asks for max_tokens=8192 while its measured completions are 60-240
+tokens (kept at 8192 by ruling; the retry and pause below absorb the refusals).
 """
 
 from __future__ import annotations
@@ -52,15 +52,6 @@ IN_FLIGHT_TOTAL_WAIT_S = 300.0
 #: Callers released from a shared pause are spread over up to this many seconds
 #: so they do not all hit the provider in the same instant.
 IN_FLIGHT_RELEASE_SPREAD_S = 2.0
-
-#: The output budget a call is escalated to, ONCE, when the model stopped at
-#: its max_tokens (finish_reason=length). It is the value every DMA and
-#: conscience sent before #1366 item 20, and the Groq llama-4 max_tokens cap,
-#: so the escalation can never ask a provider for more than it already accepted.
-#: Escalation only goes UP: no path shrinks max_tokens on retry (Eric,
-#: 2026-11-18: a smaller budget could cut reasoning short).
-LENGTH_ESCALATION_MAX_TOKENS = 8192
-
 
 class ProviderLimitFaultCode(str, Enum):
     """The structured fault a spending-limit refusal maps to.
@@ -241,33 +232,15 @@ def in_flight_backoff_s(attempt: int, retry_after_s: Optional[float]) -> float:
     return min(IN_FLIGHT_BACKOFF_CAP_S, max(retry_after_s or 0.0, jittered))
 
 
-def is_incomplete_output(error: BaseException) -> bool:
-    """Did the model stop at max_tokens (instructor's IncompleteOutputException, anywhere in the chain)?"""
-    try:
-        from instructor.core.exceptions import IncompleteOutputException
-    except ImportError:  # pragma: no cover - layout differs across instructor versions
-        return False
-    seen: set[int] = set()
-    cur: Optional[BaseException] = error
-    while cur is not None and id(cur) not in seen:
-        seen.add(id(cur))
-        if isinstance(cur, IncompleteOutputException):
-            return True
-        cur = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
-    return False
-
-
 __all__ = [
     "IN_FLIGHT_BACKOFF_BASE_S",
     "IN_FLIGHT_BACKOFF_CAP_S",
     "IN_FLIGHT_RELEASE_SPREAD_S",
     "IN_FLIGHT_TOTAL_WAIT_S",
-    "LENGTH_ESCALATION_MAX_TOKENS",
     "ProviderLimitError",
     "ProviderLimitFault",
     "ProviderLimitFaultCode",
     "in_flight_backoff_s",
-    "is_incomplete_output",
     "parse_retry_after",
     "provider_limit_fault",
 ]

@@ -319,6 +319,14 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             logger.error(f"[DMA] Failed to fetch task {source_task_id}: {e}")
             return None
 
+    def _verified_sender_block(self, task: Optional[Task]) -> str:
+        """The VERIFIED SENDER block for ``task`` in this DMA's language; "" when it has none (#1366 item 5)."""
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_block_of
+
+        loader = getattr(self, "prompt_loader", None)
+        language = getattr(loader, "language", None)
+        return verified_sender_block_of(task, language=language if isinstance(language, str) else None)
+
     def format_task_context(self, task: Optional[Task], thought_depth: int = 0) -> str:
         """Format task context for inclusion in DMA prompts.
 
@@ -342,6 +350,13 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         # Include parent task context if available (for subtasks)
         if task.context and task.context.parent_task_id:
             parts.append(f"Parent Task ID: {task.context.parent_task_id}")
+
+        # The sender as authentication verified it, apart from the message
+        # text (#1366 item 5). Empty when the task carries no verified sender.
+        sender_block = self._verified_sender_block(task)
+        if sender_block:
+            parts.append("")
+            parts.append(sender_block)
 
         # Add follow-through guidance for non-initial thoughts
         if thought_depth > 0:

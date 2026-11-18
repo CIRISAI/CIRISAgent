@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ciris_engine.logic.services.base_service import BaseService
 from ciris_engine.protocols.services.governance.communication import CommunicationServiceProtocol
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import FetchedMessage
 from ciris_engine.schemas.types import JSONDict
@@ -407,6 +408,14 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
         """Create a FetchedMessage from an 'observe' correlation (incoming user message)."""
         params = self._extract_parameters(correlation.request_data)
 
+        # The role the API recorded from authentication when the message
+        # arrived (#1366 item 5). Anything that is not a role is dropped.
+        raw_role = params.get("author_role")
+        try:
+            author_role = UserRole(raw_role) if raw_role else None
+        except ValueError:
+            author_role = None
+
         return FetchedMessage(
             message_id=params.get("message_id", correlation.correlation_id),
             author_id=params.get("author_id", "unknown"),
@@ -415,6 +424,7 @@ class APICommunicationService(BaseService, CommunicationServiceProtocol):
             timestamp=self._format_timestamp(correlation),
             is_bot=False,
             message_type="user",
+            author_role=author_role,
         )
 
     def _format_timestamp(self, correlation: Any) -> Optional[str]:

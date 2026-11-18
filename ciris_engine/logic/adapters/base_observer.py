@@ -37,7 +37,7 @@ from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
 from ciris_engine.schemas.runtime.enums import ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
-from ciris_engine.schemas.runtime.models import TaskContext
+from ciris_engine.schemas.runtime.models import TaskContext, VerifiedSender
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 from ciris_engine.schemas.types import JSONDict
@@ -483,6 +483,34 @@ class BaseObserver(Generic[MessageT], ABC):
         role_part = f", role: {role.value}" if isinstance(role, UserRole) else ""
         return f"@{msg.author_name} (ID: {msg.author_id}{role_part})"
 
+    def _verified_sender(self, msg: Any) -> VerifiedSender:
+        """The sender as this adapter verified it, for TaskContext.verified_sender (#1366 item 5).
+
+        Built only from the adapter's own message fields: ``author_id`` (from
+        the platform or the API's authentication) and ``author_role`` (the
+        API's AuthContext.role). Nothing is read from the message text, and the
+        ``wa-`` id prefix is never taken as a role. ``author_name`` is kept as
+        the self-chosen display name, so a prompt can say it is not identity.
+        """
+        role = getattr(msg, "author_role", None)
+        role = role if isinstance(role, UserRole) else None
+        origin = (self.origin_service or "").strip()
+        known_origin = bool(origin) and origin != "unknown"
+        if role is not None and known_origin:
+            source = f"{origin}_auth"
+        elif known_origin and getattr(msg, "author_id", None):
+            source = origin
+        else:
+            source = "unverified"
+        author_id = getattr(msg, "author_id", None)
+        author_name = getattr(msg, "author_name", None)
+        return VerifiedSender(
+            user_id=str(author_id) if author_id is not None else None,
+            role=role,
+            source=source,
+            self_chosen_display_name=str(author_name) if author_name else None,
+        )
+
     @staticmethod
     def _anonymous_role_suffix(msg: Any) -> str:
         """`` (role: <ROLE>)`` for an anonymous author whose role is verified, else empty."""
@@ -498,11 +526,27 @@ class BaseObserver(Generic[MessageT], ABC):
             f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
         )
 
+    @staticmethod
+    def _history_role_of(msg: Any) -> Optional[str]:
+        """A history message's verified role as its enum value, or None when unknown or not a role."""
+        role = getattr(msg, "author_role", None)
+        if isinstance(role, UserRole):
+            return role.value
+        if isinstance(role, str):
+            try:
+                return UserRole(role).value
+            except ValueError:
+                return None
+        return None
+
     def _create_history_entry(self, msg: MessageT, protected_content: str, is_agent_message: bool) -> JSONDict:
         """Create a history entry from a message."""
         return {
             "author": "CIRIS" if is_agent_message else (getattr(msg, "author_name", None) or "User"),
             "author_id": getattr(msg, "author_id", None) or ("ciris" if is_agent_message else "unknown"),
+            # The role the adapter recorded from authentication when the
+            # message arrived (#1366 item 5); None where it was not verified.
+            "author_role": self._history_role_of(msg),
             "content": protected_content,
             "timestamp": getattr(msg, "timestamp", None),
             "is_agent": is_agent_message,
@@ -720,8 +764,14 @@ class BaseObserver(Generic[MessageT], ABC):
             from ciris_engine.schemas.runtime.task_envelope import RequesterAuthorization
 
             ctx = getattr(task, "context", None)
+            # The requester's role is the one the adapter verified (#1366 item
+            # 5). Without it the envelope floored every requester to OBSERVER,
+            # even when the API had authenticated an ADMIN or AUTHORITY.
+            sender = getattr(ctx, "verified_sender", None)
+            role = getattr(sender, "role", None)
             requester = RequesterAuthorization(
                 user_id=getattr(ctx, "user_id", None),
+                role=role if isinstance(role, UserRole) else UserRole.OBSERVER,
                 channel_id=getattr(task, "channel_id", None),
                 source_ref=getattr(ctx, "correlation_id", None),
                 is_wise_authority=bool(self.observer_wa_id and task.signed_by == self.observer_wa_id),
@@ -787,7 +837,10 @@ class BaseObserver(Generic[MessageT], ABC):
 
             # Format mentions in content to include usernames
             content = format_discord_mentions(content, user_lookup)
-            lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
+            # The verified role, as the current message's tag shows it (#1366 item 5).
+            role = hist_msg.get("author_role")
+            role_part = f", role: {role}" if isinstance(role, str) and role else ""
+            lines.append(f"{i}. @{author} (ID: {author_id}{role_part}): {content}")
 
         return lines
 
@@ -961,6 +1014,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 status=TaskStatus.ACTIVE,
                 priority=priority,
                 user_id=msg.author_id,  # type: ignore[attr-defined]
+                verified_sender=self._verified_sender(msg),
                 images=msg_images,
                 # Use the centralized resolver so the locale chain is uniform
                 # across every task-creating site (base_observer, discord_observer,

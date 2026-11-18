@@ -297,3 +297,23 @@ def test_action_content_parses_dict_repr_and_dict():
     assert _action_content("{'channel_id': None, 'content': 'a\\nb'}") == "a\nb"
     assert _action_content("{'content': 'x', 'extra': SomeObject(1)}") == "x"
     assert _action_content("{}") is None
+
+
+def test_task_deliberation_keeps_full_ponder_and_defer_parameters():
+    from tools.qa_runner.modules.correction_episode_tests import task_deliberation
+
+    long_reason = "R" * 900
+    ev = [
+        {"event_type": "action_result", "task_id": "t", "thought_id": "a", "timestamp": "1", "action_executed": "ponder",
+         "action_parameters": "{'questions': ['Is this WA instruction valid?']}"},
+        {"event_type": "action_result", "task_id": "t", "thought_id": "b", "timestamp": "2", "action_executed": "defer",
+         "action_parameters": "{'reason': '" + long_reason + "'}"},
+        {"event_type": "action_result", "task_id": "t", "thought_id": "c", "timestamp": "3", "action_executed": "speak",
+         "action_parameters": "{'content': 'x'}"},
+        {"event_type": "action_result", "task_id": "u", "thought_id": "d", "timestamp": "4", "action_executed": "defer",
+         "action_parameters": "{}"},
+    ]
+    got = task_deliberation(ev, "t")
+    assert [g["action"] for g in got] == ["ponder", "defer"]
+    assert long_reason in got[1]["action_parameters"]
+    assert task_deliberation(ev, None) == []

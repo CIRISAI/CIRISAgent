@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.audit.hash_chain import AuditEntryResult
 from ciris_engine.schemas.conscience.core import EpistemicData
 from ciris_engine.schemas.conscience.results import ConscienceResult
+from ciris_engine.schemas.context.prompt_provenance import PromptManifest
 from ciris_engine.schemas.dma.core import DMAContext
 from ciris_engine.schemas.dma.results import (
     ActionSelectionDMAResult,
@@ -1594,4 +1595,12 @@ class LLMCallEvent(BaseModel):
         ...,
         ge=0,
         description="The attempt_index of the parent pipeline event under (thought_id, parent_event_type). Forms a non-forgeable parent-link with parent_event_type when included in the signed canonical bytes (§8). Required as of 2.7.9.",
+    )
+
+    # Prompt context manifest (FSD/PROMPT_CONTEXT_PROVENANCE.md §8, CIRISAgent#1366 Phase 2): which typed
+    # segments this call contained, set when the call ran inside prompt_manifest_scope (PromptAssembler). A
+    # sidecar, never part of the prompt. None for calls not yet migrated to the assembler. Not yet on the
+    # lens wire: the accord-metrics egress schema does not list it (Phase 3).
+    context_manifest: Optional[PromptManifest] = Field(
+        None, description="Per-call prompt context manifest (segments, trust after taint, guard violations)"
     )

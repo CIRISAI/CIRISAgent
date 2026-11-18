@@ -47,6 +47,7 @@ from ciris_engine.protocols.services import LLMService
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.runtime.llm import MessageDict
+from ciris_engine.schemas.context.prompt_provenance import PromptManifest
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
@@ -179,6 +180,30 @@ def _resolve_status_and_error_class(success: bool, error: Optional[BaseException
     return _classify_error(error), error.__class__.__name__
 
 
+def _context_manifest_for(ctx: LLMCallEventContext, max_tokens_sent: Optional[int]) -> Optional[PromptManifest]:
+    """The prompt manifest bound to this call (FSD/PROMPT_CONTEXT_PROVENANCE.md §8), finished with what the bus
+    sent; None outside prompt_manifest_scope. Never raises: the trace must not break the call."""
+    try:
+        from ciris_engine.logic.prompt_assembly.manifest_scope import (
+            current_prompt_manifest,
+            finalize_manifest_for_call,
+        )
+
+        manifest = current_prompt_manifest()
+        if manifest is None:
+            return None
+        return finalize_manifest_for_call(
+            manifest,
+            messages=ctx.messages,
+            response_model=ctx.response_model,
+            selected_service=ctx.selected_service,
+            max_tokens_sent=max_tokens_sent,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"[LLM_CALL manifest] failed: {exc!r}", exc_info=False)
+        return None
+
+
 async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
     """Emit one ReasoningEvent.LLM_CALL per provider invocation.
 
@@ -220,6 +245,7 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
 
         event = create_reasoning_event(
             event_type=ReasoningEvent.LLM_CALL,
+            context_manifest=_context_manifest_for(ctx, sent.max_tokens if sent else None),
             thought_id=ctx.thought_id,
             task_id=ctx.task_id,
             timestamp=datetime.now(timezone.utc).isoformat(),

@@ -225,7 +225,9 @@ async def test_a_verdict_survives_the_real_resource_usage_type() -> None:
     verdict = MSASPDMALLMResult(
         final_action="MEMORIZE", node_id="user/u1", node_type="user", node_scope="local", reasoning="ok"
     )
-    evaluator.compose_messages = MagicMock(return_value=[{"role": "user", "content": "x"}])  # type: ignore[method-assign]
+    evaluator.compose_prompt = MagicMock(  # type: ignore[method-assign]
+        return_value=([{"role": "user", "content": "x"}], MagicMock())
+    )
     evaluator.call_llm_structured = AsyncMock(  # type: ignore[method-assign]
         return_value=(verdict, ResourceUsage(tokens_used=12, model_used="test"))
     )

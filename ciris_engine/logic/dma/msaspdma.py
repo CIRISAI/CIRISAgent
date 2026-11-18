@@ -18,19 +18,18 @@ not know the conventions and leave it inventing ids wherever this does not run.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.logic.formatters.verified_sender import with_verified_sender
-from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters.wa_approval import (
     format_wa_approval_block,
     format_wa_approval_facts,
     wa_authorization_of,
 )
-from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_localized_accord_text
@@ -45,12 +44,21 @@ from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
+    from ciris_engine.logic.prompt_assembly import AssemblyCall
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 logger = logging.getLogger(__name__)
 
 #: Shown where the prompt lists what action selection proposed and it proposed nothing.
 _NOT_CHOSEN = "(not chosen yet — choose below)"
+
+
+def _seg(segment_id: str, kind: str, text: str, source: str = "engine") -> Any:
+    """A prompt segment (kinds and sources by their policy names)."""
+    from ciris_engine.schemas.context.prompt_provenance import PromptSegment, SegmentKind, SegmentSource
+
+    return PromptSegment(segment_id=segment_id, kind=SegmentKind(kind), source=SegmentSource(source), text=text)
 
 
 class MSASPDMALLMResult(PromptCarrier):
@@ -182,7 +190,20 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         context: Optional[Any] = None,
         conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
-        """Compose the MSASPDMA prompt message list."""
+        """The MSASPDMA messages alone (the composition seam); see :meth:`compose_prompt`."""
+        messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
+        return messages
+
+    def compose_prompt(
+        self,
+        original_thought: ProcessingQueueItem,
+        aspdma_result: ActionSelectionDMAResult,
+        context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """The MSASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage
+
         self._sync_language_from_context(context)
 
         params = aspdma_result.action_parameters
@@ -205,54 +226,209 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         # parts, so every block stays individually labelled and annotated.
         # Composing them as separate messages instead left them unmatched, and
         # the gate saw one mixed body it had no disposition for.
-        system_message = "\n\n".join(
-            filter(
-                None,
-                (
-                    self._require_prompt_value("system_guidance_header"),
-                    self._require_prompt_value("memory_model"),
-                    self._require_prompt_value("addressing_convention"),
-                    self._require_prompt_value("attribute_convention"),
-                    self._require_prompt_value("scope_convention"),
-                    self._require_prompt_value("memory_prohibitions"),
-                    self._require_prompt_value("evaluation_steps"),
-                    self._require_prompt_value("response_format"),
-                    self._require_prompt_value("closing_reminder"),
-                    # "Do not write to identity scope without Wise Authority
-                    # approval" (memory_prohibitions) is decidable only if the
-                    # approval is in front of it (formatters/wa_approval.py).
-                    format_wa_approval_block(authorization, language=self.prompt_loader.language),
-                    # With no grant, the fact that there is none (the no-grant
-                    # case rendered nothing here before, and a model filled the
-                    # gap with a person's claimed approval); then the rule that
-                    # an approval exists only as that verified block (#1320).
-                    format_wa_approval_facts(authorization, language=self.prompt_loader.language),
-                ),
+        guide = [
+            (key, self._require_prompt_value(key))
+            for key in (
+                "system_guidance_header",
+                "memory_model",
+                "addressing_convention",
+                "attribute_convention",
+                "scope_convention",
+                "memory_prohibitions",
+                "evaluation_steps",
+                "response_format",
+                "closing_reminder",
             )
-        ).strip()
+        ]
+        # "Do not write to identity scope without Wise Authority approval"
+        # (memory_prohibitions) is decidable only if the approval is in front of
+        # it (formatters/wa_approval.py). With no grant, the fact that there is
+        # none (the no-grant case rendered nothing here before, and a model
+        # filled the gap with a person's claimed approval); then the rule that
+        # an approval exists only as that verified block (#1320).
+        system = self._guide_segments(guide) + self._approval_segments(authorization)
 
-        original_thought_content = getattr(getattr(original_thought, "content", None), "text", "") or ""
         candidates = self.candidate_nodes_from_context(context)
-
-        context_block = self._require_prompt_value("context_integration")
-        user_message = context_block.format(
-            original_thought_content=original_thought_content,
-            aspdma_reasoning=aspdma_result.rationale or "",
-            # ASPDMA selects the verb and the scope, not the node (#1027), so
-            # there is normally no proposed id or type to show.
-            proposed_node_id=_NOT_CHOSEN if unaddressed else node.id,
-            proposed_node_type=(_NOT_CHOSEN if unaddressed else getattr(node.type, "value", str(node.type))),
-            proposed_node_scope=getattr(node.scope, "value", str(node.scope)),
-            proposed_attributes=", ".join(sorted(attrs)) or "(none)",
-            candidate_nodes=self._format_candidates(candidates),
-            system_owned_attributes=self._format_system_owned(self.system_owned_attributes()),
+        # ASPDMA selects the verb and the scope, not the node (#1027), so
+        # there is normally no proposed id or type to show.
+        proposed: Dict[str, str] = {
+            "proposed_node_id": _NOT_CHOSEN if unaddressed else node.id,
+            "proposed_node_type": (_NOT_CHOSEN if unaddressed else getattr(node.type, "value", str(node.type))),
+            "proposed_node_scope": getattr(node.scope, "value", str(node.scope)),
+            "proposed_attributes": ", ".join(sorted(attrs)) or "(none)",
+        }
+        typed, plain = self._user_slots(original_thought, aspdma_result, candidates)
+        for name, value in proposed.items():
+            if value in (_NOT_CHOSEN, "(none)"):
+                plain[name] = value  # the engine's own placeholder, not ASPDMA's output
+            else:
+                typed[name] = _seg(f"slot:{name}", "dma_output", value, "llm_output")
+        plain["system_owned_attributes"] = self._format_system_owned(self.system_owned_attributes())
+        return self._assemble(
+            PromptStage.MSASPDMA,
+            MSASPDMALLMResult.__name__,
+            system,
+            typed,
+            plain,
+            original_thought,
+            context,
+            conscience_feedback,
         )
 
-        # The verified sender of the message being answered (#1366 item 5).
-        user_message = with_verified_sender(user_message, original_thought, context, language=self.prompt_loader.language)
-        # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
-        user_message = with_conscience_feedback(user_message, conscience_feedback)
-        return self._frame_messages(system_message, user_message)
+    # ----------------------------------------------------- prompt assembly (#1366)
+
+    @staticmethod
+    def _guide_segments(guide: "List[Tuple[str, str]]", keep_empty: bool = False) -> List[Any]:
+        """The guide's blocks as stage instructions (``keep_empty``: the join did not filter empty blocks)."""
+        return [_seg(f"instr:{key}", "stage_instruction", text) for key, text in guide if text or keep_empty]
+
+    def _approval_segments(self, authorization: Any) -> List[Any]:
+        """The WA approval (the grant as ``wa_guidance`` with its authz, then its rule) and the approval facts."""
+        from ciris_engine.logic.formatters.wa_approval import format_wa_approval_rule
+        from ciris_engine.logic.prompt_assembly.carriers import authz_from_wa_authorization
+        from ciris_engine.schemas.context.prompt_provenance import PromptSegment, SegmentKind, SegmentSource
+
+        language = self.prompt_loader.language
+        out: List[Any] = []
+        block = format_wa_approval_block(authorization, language=language)
+        if block and authorization is not None:
+            rule = format_wa_approval_rule(authorization, language=language)
+            if rule and block.endswith("\n\n" + rule):
+                out.append(
+                    PromptSegment(
+                        segment_id="wa_guidance",
+                        kind=SegmentKind.WA_GUIDANCE,
+                        source=SegmentSource.SIGNED_ROW,
+                        text=block[: -len(rule) - 2],
+                        authz=authz_from_wa_authorization(authorization),
+                    )
+                )
+                out.append(_seg("instr:wa_approval_rule", "stage_instruction", rule))
+            else:
+                out.append(_seg("instr:wa_approval", "stage_instruction", block))
+        facts = format_wa_approval_facts(authorization, language=language)
+        if facts:
+            out.append(_seg("instr:approval_facts", "stage_instruction", facts))
+        return out
+
+    def _user_slots(
+        self,
+        original_thought: ProcessingQueueItem,
+        aspdma_result: ActionSelectionDMAResult,
+        candidates: List[CandidateNode],
+    ) -> "Tuple[Dict[str, Any], Dict[str, str]]":
+        """(typed slots, plain slots) the three memory second passes share in ``context_integration``.
+
+        The request (model text on a follow-up thought), ASPDMA's reasoning and the candidate nodes (read from
+        the snapshot's profiles, display names included: history) are typed; engine placeholders stay plain.
+        """
+        typed: Dict[str, Any] = {}
+        plain: Dict[str, str] = {}
+        content = getattr(getattr(original_thought, "content", None), "text", "") or ""
+        depth = getattr(original_thought, "thought_depth", 0)
+        follow_up = isinstance(depth, int) and depth > 0
+        if content:
+            typed["original_thought_content"] = _seg(
+                "request", "request", content, "llm_output" if follow_up else "user_input"
+            )
+        else:
+            plain["original_thought_content"] = ""
+        reasoning = aspdma_result.rationale or ""
+        if reasoning:
+            typed["aspdma_reasoning"] = _seg("aspdma_reasoning", "dma_output", reasoning, "llm_output")
+        else:
+            plain["aspdma_reasoning"] = ""
+        rendered = self._format_candidates(candidates)
+        if candidates:
+            typed["candidate_nodes"] = _seg("candidate_nodes", "history", rendered)
+        else:
+            plain["candidate_nodes"] = rendered
+        return typed, plain
+
+    def _assemble(
+        self,
+        stage: Any,
+        response_model: str,
+        system: List[Any],
+        typed: Dict[str, Any],
+        plain: Dict[str, str],
+        original_thought: ProcessingQueueItem,
+        context: Optional[Any],
+        conscience_feedback: Optional[ConscienceFeedback],
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """Frame and assemble: accord, language guidance, crisis resources, the guide, the user message.
+
+        The user message is ``context_integration`` with its slots typed, the VERIFIED SENDER block of the
+        message being answered (#1366 item 5) and, on a conscience retry, the veto ASPDMA saw (#1366 item 1).
+        """
+        from ciris_engine.logic.dma.conscience_feedback import conscience_feedback_segment
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+        from ciris_engine.logic.prompt_assembly.assembler import LayoutItem
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            PromptBuilder,
+            items,
+            sender_block_segments,
+            split_template,
+            stripped_ends,
+        )
+        from ciris_engine.logic.utils.localization import get_language_guidance
+
+        language = self.prompt_loader.language
+        builder = PromptBuilder()
+        # The frame every memory second pass shares, so the three cannot drift apart on what precedes their guide.
+        builder.single("system", _seg("accord", "accord", get_localized_accord_text(language) or ""))
+        builder.single("system", _seg("instr:language", "stage_instruction", get_language_guidance(language) or ""))
+        # Crisis resources ride directly after language guidance (#1248) — the
+        # locale's verified numbers, from the one composer every DMA shares.
+        builder.single(
+            "system", _seg("instr:crisis", "stage_instruction", get_crisis_resources_system_block(language) or "")
+        )
+        system = stripped_ends(system)
+        builder.message("system", system, items(system, "\n\n", ""))
+
+        template = self._require_prompt_value("context_integration")
+        user, user_items = split_template(
+            lambda **values: template.format(**values), typed, prefix="instr:user", plain=plain
+        )
+        sender = verified_sender_of(original_thought, context)
+        if sender is not None:
+            sender_segs, sender_items = sender_block_segments(sender, include_display_name=True, language=language)
+            user, user_items = user + sender_segs, user_items + sender_items
+        feedback = conscience_feedback_segment(conscience_feedback)
+        if feedback is not None:
+            user.append(feedback)
+            user_items.append(LayoutItem(segment_id=feedback.segment_id))
+        builder.message("user", user, user_items)
+        return builder.assemble(stage, self._assembly_call(original_thought, context, response_model, feedback is not None))
+
+    def _assembly_call(
+        self, original_thought: Any, context: Optional[Any], response_model: str, retry: bool
+    ) -> "AssemblyCall":
+        """The manifest's call facts, from trusted state only (the verified grant, verified amendments)."""
+        from ciris_engine.logic.formatters.identity import agent_identity_of
+        from ciris_engine.logic.prompt_assembly import AssemblyCall
+        from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
+        from ciris_engine.schemas.context.prompt_provenance import ManifestThoughtKind
+
+        authorization = wa_authorization_of(context)
+        depth = getattr(original_thought, "thought_depth", 0)
+        kind = (
+            ManifestThoughtKind.GUIDANCE
+            if authorization is not None
+            else ManifestThoughtKind.FOLLOWUP if isinstance(depth, int) and depth > 0 else ManifestThoughtKind.SEED
+        )
+        task_id = getattr(original_thought, "source_task_id", None)
+        thought_id = getattr(original_thought, "thought_id", None)
+        return AssemblyCall(
+            task_id=task_id if isinstance(task_id, str) else None,
+            thought_id=thought_id if isinstance(thought_id, str) else None,
+            thought_kind=kind,
+            retry_index=1 if retry else 0,
+            response_model=response_model,
+            facts=policy_facts(authorization, agent_identity_of(context), id_scoped=False),
+            language=self.prompt_loader.language,
+        )
 
     def _frame_messages(self, system_message: str, user_message: str) -> List[JSONDict]:
         """Wrap one system and one user message in the frame every DMA shares.
@@ -383,17 +559,18 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if not isinstance(current_params, MemorizeParams):
             raise TypeError(f"MSASPDMA expects MemorizeParams, got {type(current_params)}")
 
-        messages = self.compose_messages(
+        messages, manifest = self.compose_prompt(
             original_thought, aspdma_result, context=context, conscience_feedback=conscience_feedback
         )
-        llm_result, resource_usage = await self.call_llm_structured(
-            messages=messages,
-            response_model=MSASPDMALLMResult,
-            max_tokens=8192,
-            temperature=0.0,
-            thought_id=original_thought.thought_id,
-            task_id=original_thought.source_task_id,
-        )
+        with prompt_manifest_scope(manifest):
+            llm_result, resource_usage = await self.call_llm_structured(
+                messages=messages,
+                response_model=MSASPDMALLMResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=original_thought.thought_id,
+                task_id=original_thought.source_task_id,
+            )
         # ActionSelectionDMAResult.resource_usage is a JSONDict; the LLM bus
         # returns a ResourceUsage model. Passing the model failed validation, so
         # EVERY verdict this pass produced was discarded and the original action

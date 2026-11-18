@@ -563,9 +563,11 @@ RESIDUE_SITES: Tuple[Tuple[str, str], ...] = (
     # precisely what residue_digest exists to prevent. Pinned here; the
     # manifest-reachability fix (adding tool_correction_section to
     # _DMA_PROMPT_TEXT_FIELDS) is separate and does not close this hole.
+    # Since #1366 Phase 3 the scaffold lives in _compose_correction_mode (the
+    # segments PromptAssembler builds the correction-mode prompt from).
     (
         "logic/dma/tsaspdma.py",
-        "TSASPDMAEvaluator._create_correction_mode_messages",
+        "TSASPDMAEvaluator._compose_correction_mode",
     ),
     # The ASPDMA user message TEMPLATE routed out in #974 step 1 — it is now
     # prompts/action_selection_pdma.yml `context_integration`, covered by the

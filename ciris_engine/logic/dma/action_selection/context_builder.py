@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
@@ -22,6 +22,19 @@ INSTALLABLE_TOOLS_TTL_SECONDS = 60.0
 
 #: (monotonic time built, text) of the last installable-tools block.
 _installable_tools_cache: Dict[str, Tuple[float, str]] = {}
+
+
+class MainUserParts(NamedTuple):
+    """The ASPDMA main user content before rendering: template, slot values, appended blocks.
+
+    ``conscience_feedback`` is the retry veto the ``conscience_guidance`` slot renders, when it renders one.
+    """
+
+    loader: "DMAPromptLoader"
+    template_data: PromptCollection
+    slots: Dict[str, Any]
+    appended: List[Tuple[str, str]]
+    conscience_feedback: Optional[Union[JSONDict, ConscienceFailureContext]]
 
 
 class ActionSelectionContextBuilder:
@@ -189,6 +202,26 @@ class ActionSelectionContextBuilder:
 
     def build_main_user_content(self, triaged_inputs: EnhancedDMAInputs, agent_name: Optional[str] = None) -> str:
         """Build the main user content for LLM evaluation."""
+        parts = self.main_user_parts(triaged_inputs, agent_name)
+        return self.render_main_user(parts, parts.slots)
+
+    def render_main_user(self, parts: "MainUserParts", slots: Dict[str, Any]) -> str:
+        """The main user content from its parts with ``slots`` as the slot values.
+
+        ``build_main_user_content`` passes the real values; the prompt assembler also renders it with markers in
+        the slots it types (prompt_assembly.segmenting.split_template) and checks the two agree.
+        """
+        from ciris_engine.logic.dma.prompt_loader import safe_format
+
+        formatted_content = parts.loader.get_user_message(parts.template_data, **slots)
+        for _key, _text in parts.appended:
+            formatted_content += "\n\n" + safe_format(
+                _text, source=f"action_selection_pdma.{_key}[{parts.loader.language}]", **slots
+            )
+        return formatted_content.strip()
+
+    def main_user_parts(self, triaged_inputs: EnhancedDMAInputs, agent_name: Optional[str] = None) -> "MainUserParts":
+        """The main user content's template, slot values and appended blocks (rendered by ``render_main_user``)."""
 
         logger.info("[CONTEXT] Building main user content for action selection")
 
@@ -303,7 +336,6 @@ class ActionSelectionContextBuilder:
             "dsdma_summary_str": _dsdma_summary_str,
             "idma_summary_str": _idma_summary_str,
         }
-        formatted_content = loader.get_user_message(template_data, **_slots)
 
         # Three localized blocks the template has no {slot} for — #993, and the
         # #990 pair. Every slot in `context_integration` is filled and every
@@ -326,8 +358,7 @@ class ActionSelectionContextBuilder:
         # Rendered through safe_format with the same slot values: these blocks
         # carry `{{...}}` escapes (the alignment example is a literal JSON
         # snippet) which only resolve under a format pass.
-        from ciris_engine.logic.dma.prompt_loader import safe_format
-
+        appended: List[Tuple[str, str]] = []
         for _key in (
             "csdma_ambiguity_guidance",
             "csdma_ambiguity_alignment_example",
@@ -335,11 +366,14 @@ class ActionSelectionContextBuilder:
         ):
             _text = self._get_agent_specific_prompt(_key, agent_name)
             if _text:
-                formatted_content += "\n\n" + safe_format(
-                    _text, source=f"action_selection_pdma.{_key}[{loader.language}]", **_slots
-                )
-
-        return formatted_content.strip()
+                appended.append((_key, _text))
+        return MainUserParts(
+            loader=loader,
+            template_data=template_data,
+            slots=_slots,
+            appended=appended,
+            conscience_feedback=conscience_feedback if self._build_conscience_guidance(conscience_feedback) else None,
+        )
 
     def _load_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
         """Resolve the ASPDMA user-message template (#974 step 1).

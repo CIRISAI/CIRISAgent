@@ -22,8 +22,10 @@ from ciris_engine.schemas.context.prompt_provenance import (
     PolicyPredicate,
     PromptStage,
     RuleProvenance,
+    SegmentForm,
     SegmentKind,
     StageRole,
+    StubField,
     TrustLevel,
 )
 
@@ -57,6 +59,8 @@ def test_vocabulary_matches_the_generator(gen):
     assert {t.value for t in TrustLevel} == gen.TRUST
     assert {lc.value for lc in Lifecycle} == gen.LIFECYCLE
     assert {p.value for p in PolicyPredicate} == gen.PREDICATES
+    assert {f.value for f in StubField} == gen.STUB_FIELDS
+    assert {f.value for f in SegmentForm} == gen.FORMS
 
 
 def test_predicates_hold_in_exactly_the_generators_scenarios(gen):
@@ -76,7 +80,11 @@ def test_stages_match_the_model(gen):
 
 
 def test_engine_policy_is_the_formal_policy():
-    assert DEFAULT_POLICY_PATH.read_bytes() == (FORMAL / "context_policy.yaml").read_bytes()
+    """One file: the formal copy is a symlink to the engine's, so they cannot drift."""
+    formal = FORMAL / "context_policy.yaml"
+    assert formal.is_symlink()
+    assert formal.resolve() == DEFAULT_POLICY_PATH.resolve()
+    assert DEFAULT_POLICY_PATH.read_bytes() == formal.read_bytes()
 
 
 def test_generator_on_the_engine_policy_emits_the_committed_contract(tmp_path):
@@ -103,5 +111,8 @@ def test_the_engine_loader_reads_every_row(gen):
     for stage_name, rows in raw["stages"].items():
         typed = policy.stages[PromptStage(stage_name)]
         assert [r.key for r in typed] == list(rows)
-        assert [r.predicate.value for r in typed] == list(rows.values())
+        cells = [c if isinstance(c, dict) else {"when": c, "form": "full"} for c in rows.values()]
+        assert [r.predicate.value for r in typed] == [c["when"] for c in cells]
+        assert [r.form.value for r in typed] == [c.get("form", "full") for c in cells]
     assert [s.value for s in policy.ablated_stages] == raw["ablated_stages"]
+    assert [f.value for f in policy.stub_fields] == raw["stub_fields"]

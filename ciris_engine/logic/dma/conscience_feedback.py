@@ -12,10 +12,13 @@ The block is the SAME text ASPDMA receives, rendered the same way, never
 reworded here. A first pass has no feedback and renders nothing.
 """
 
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ciris_engine.schemas.dma.faculty import ConscienceFailureContext
 from ciris_engine.schemas.types import JSONDict
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.context.prompt_provenance import PromptSegment
 
 ConscienceFeedback = Union[JSONDict, ConscienceFailureContext]
 
@@ -48,4 +51,36 @@ def with_conscience_feedback(user_message: str, conscience_feedback: Optional[Co
     return f"{user_message}\n\n{block}\n"
 
 
-__all__ = ["ConscienceFeedback", "conscience_feedback_block", "with_conscience_feedback"]
+
+
+def conscience_feedback_segment(
+    conscience_feedback: Optional[ConscienceFeedback], segment_id: str = "conscience_feedback"
+) -> Optional["PromptSegment"]:
+    """The retry block as the ``conscience_feedback`` segment the prompt assembler requires on a retry.
+
+    Its text is exactly what :func:`with_conscience_feedback` appends after the blank line (the block and its
+    trailing newline); its accounting carrier names the latest veto (FSD/PROMPT_CONTEXT_PROVENANCE.md §9).
+    None on a first pass.
+    """
+    from ciris_engine.logic.conscience.veto_contract import veto_entries_of_feedback
+    from ciris_engine.schemas.context.prompt_provenance import (
+        AcctCarrier,
+        PromptSegment,
+        SegmentKind,
+        SegmentSource,
+    )
+
+    block = conscience_feedback_block(conscience_feedback)
+    if not block:
+        return None
+    entries = veto_entries_of_feedback(conscience_feedback)
+    return PromptSegment(
+        segment_id=segment_id,
+        kind=SegmentKind.CONSCIENCE_FEEDBACK,
+        source=SegmentSource.LLM_OUTPUT,
+        text=f"{block}\n",
+        acct=AcctCarrier(veto_id=entries[-1].veto_id if entries else None),
+    )
+
+
+__all__ = ["ConscienceFeedback", "conscience_feedback_block", "conscience_feedback_segment", "with_conscience_feedback"]

@@ -32,7 +32,7 @@ it beside ``only_verified`` in ASPDMA, PDMA, IDMA and the memorize second pass,
 and never in a conscience prompt.
 """
 
-from typing import Any, List, Optional, Sequence
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityAmendment
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -141,6 +141,66 @@ def approved_amendments_of(agent_identity: Any) -> List[IdentityAmendment]:
     return [a for a in amendments if a.content.strip()]
 
 
+def wa_governance_parts(
+    authorization: Optional[WAAuthorization],
+    amendments: Sequence[IdentityAmendment] = (),
+    language: Optional[str] = None,
+) -> Optional[Tuple[str, List[Tuple[str, Union[WAAuthorization, IdentityAmendment]]], str]]:
+    """The governance block's header, its entries (each with the record it renders) and its footer; None if empty.
+
+    ``format_wa_governance_block`` joins them with newlines; the prompt assembler takes them apart so each entry is
+    its own segment with its own grant (FSD/PROMPT_CONTEXT_PROVENANCE.md §6). Same bytes either way.
+    """
+    # The profile's base link approves a template digest, not a directive: never an entry.
+    amendments = [a for a in amendments if a.verified and a.approved_sha256 and not a.base]
+    if authorization is None and not amendments:
+        return None
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    lang = language or get_preferred_language()
+    entries: List[Tuple[str, Union[WAAuthorization, IdentityAmendment]]] = []
+    if authorization is not None:
+        entries.append(
+            (
+                get_string(
+                    lang,
+                    "prompts.wa_governance.entry_resolution",
+                    source=WA_GOVERNANCE_SOURCE_RESOLUTION,
+                    wa_id=authorization.wa_id,
+                    deferral_id=authorization.deferral_id,
+                    response_attestation_id=authorization.response_attestation_id or "-",
+                    request_attestation_id=authorization.request_attestation_id or "-",
+                    granted_at=authorization.granted_at,
+                    # Last: _interpolate replaces in order, so trusted-but-free text
+                    # can never be re-read as another placeholder.
+                    directive=authorization.guidance or "-",
+                ),
+                authorization,
+            )
+        )
+    for amendment in amendments:
+        entries.append(
+            (
+                get_string(
+                    lang,
+                    "prompts.wa_governance.entry_amendment",
+                    source=WA_GOVERNANCE_SOURCE_AMENDMENT,
+                    node_id=amendment.node_id,
+                    wa_id=amendment.wa_id or "-",
+                    deferral_id=amendment.deferral_id or "-",
+                    response_attestation_id=amendment.response_attestation_id or "-",
+                    amendment_attestation_id=amendment.amendment_attestation_id or "-",
+                    granted_at=amendment.granted_at or "-",
+                    amendment_sha256=amendment.approved_sha256 or "-",
+                    # The exact approved bytes: verified means sha256(content) is the approved digest.
+                    directive=amendment.content,
+                ),
+                amendment,
+            )
+        )
+    return get_string(lang, "prompts.wa_governance.header"), entries, get_string(lang, "prompts.wa_governance.footer")
+
+
 def format_wa_governance_block(
     authorization: Optional[WAAuthorization],
     amendments: Sequence[IdentityAmendment] = (),
@@ -165,49 +225,11 @@ def format_wa_governance_block(
     message, so without that match it is model text, and this block is the
     one place the input-ablated consciences would take it as a rule.
     """
-    # The profile's base link approves a template digest, not a directive: never an entry.
-    amendments = [a for a in amendments if a.verified and a.approved_sha256 and not a.base]
-    if authorization is None and not amendments:
+    parts = wa_governance_parts(authorization, amendments, language)
+    if parts is None:
         return ""
-    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
-
-    lang = language or get_preferred_language()
-    entries: List[str] = [get_string(lang, "prompts.wa_governance.header")]
-    if authorization is not None:
-        entries.append(
-            get_string(
-                lang,
-                "prompts.wa_governance.entry_resolution",
-                source=WA_GOVERNANCE_SOURCE_RESOLUTION,
-                wa_id=authorization.wa_id,
-                deferral_id=authorization.deferral_id,
-                response_attestation_id=authorization.response_attestation_id or "-",
-                request_attestation_id=authorization.request_attestation_id or "-",
-                granted_at=authorization.granted_at,
-                # Last: _interpolate replaces in order, so trusted-but-free text
-                # can never be re-read as another placeholder.
-                directive=authorization.guidance or "-",
-            )
-        )
-    for amendment in amendments:
-        entries.append(
-            get_string(
-                lang,
-                "prompts.wa_governance.entry_amendment",
-                source=WA_GOVERNANCE_SOURCE_AMENDMENT,
-                node_id=amendment.node_id,
-                wa_id=amendment.wa_id or "-",
-                deferral_id=amendment.deferral_id or "-",
-                response_attestation_id=amendment.response_attestation_id or "-",
-                amendment_attestation_id=amendment.amendment_attestation_id or "-",
-                granted_at=amendment.granted_at or "-",
-                amendment_sha256=amendment.approved_sha256 or "-",
-                # The exact approved bytes: verified means sha256(content) is the approved digest.
-                directive=amendment.content,
-            )
-        )
-    entries.append(get_string(lang, "prompts.wa_governance.footer"))
-    return "\n".join(entries)
+    header, entries, footer = parts
+    return "\n".join([header, *(text for text, _ in entries), footer])
 
 
 def wa_governance_block_of(context: Any, language: Optional[str] = None) -> str:

@@ -1,10 +1,5 @@
 # LLM call sites in logic/dma and logic/conscience not yet built by PromptAssembler (CIRISAgent#1366).
 # Phase 3 migrates each and deletes its line; test_llm_call_sites_ratchet.py fails on any new site.
-ciris_engine/logic/conscience/core.py::CoherenceConscience.check::_call_llm_with_budget
-ciris_engine/logic/conscience/core.py::EntropyConscience.check::_call_llm_with_budget
-ciris_engine/logic/conscience/core.py::EpistemicHumilityConscience.check::_call_llm_with_budget
-ciris_engine/logic/conscience/core.py::OptimizationVetoConscience.check::_call_llm_with_budget
-ciris_engine/logic/dma/action_selection_pdma.py::ActionSelectionPDMAEvaluator._perform_main_evaluation::call_llm_structured
 ciris_engine/logic/dma/csdma.py::CSDMAEvaluator.evaluate_thought::call_llm_structured
 ciris_engine/logic/dma/dsaspdma.py::DSASPDMAEvaluator.evaluate_deferral_action::call_llm_structured
 ciris_engine/logic/dma/dsdma_base.py::BaseDSDMA.evaluate_thought::call_llm_structured
@@ -13,5 +8,3 @@ ciris_engine/logic/dma/idma.py::IDMAEvaluator.evaluate_thought::call_llm_structu
 ciris_engine/logic/dma/msaspdma.py::MSASPDMAEvaluator.evaluate_memorize_action::call_llm_structured
 ciris_engine/logic/dma/pdma.py::EthicalPDMAEvaluator.evaluate::call_llm_structured
 ciris_engine/logic/dma/rsaspdma.py::RSASPDMAEvaluator.evaluate_recall_action::call_llm_structured
-ciris_engine/logic/dma/tsaspdma.py::TSASPDMAEvaluator.evaluate_tool_action::call_llm_structured
-ciris_engine/logic/dma/tsaspdma.py::TSASPDMAEvaluator.evaluate_tool_correction::call_llm_structured

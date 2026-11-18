@@ -120,6 +120,147 @@ class PromptStage(str, Enum):
     OPTVETO = "optveto"
 
 
+class SegmentForm(str, Enum):
+    """How a policy cell admits a segment (FSD §6a): its bytes, or only a stub of its properties."""
+
+    FULL = "full"
+    STUB = "stub"
+
+
+class StubField(str, Enum):
+    """The closed set of properties an ablation stub may carry (FSD §6a, ``stub_fields``)."""
+
+    KIND = "kind"
+    PROVENANCE = "provenance"
+    SOURCE = "source"
+    TRUST = "trust"
+    AUTHOR_ROLE = "author_role"
+    AUTHORITY = "authority"
+    SCOPE = "scope"
+    DISPOSITION = "disposition"
+    TRANSFORMS = "transforms"
+    DRAFT_RELATION = "draft_relation"
+    SIZE = "size"
+    POSITION = "position"
+    DIGEST = "digest"
+
+
+class StubAuthorRole(str, Enum):
+    """The author's verified role, from the segment's ``authn`` carrier; ``unauthenticated`` without one."""
+
+    OBSERVER = "OBSERVER"
+    ADMIN = "ADMIN"
+    AUTHORITY = "AUTHORITY"
+    SYSTEM_ADMIN = "SYSTEM_ADMIN"
+    UNAUTHENTICATED = "unauthenticated"
+
+
+class StubAuthority(str, Enum):
+    """What stands behind the withheld text: ``signed`` only with a verified grant."""
+
+    NONE = "none"
+    ADVISORY = "advisory"
+    SIGNED = "signed"
+
+
+class StubScope(str, Enum):
+    THIS_TURN = "this_turn"
+    THIS_TASK = "this_task"
+    STANDING = "standing"
+
+
+class StubDisposition(str, Enum):
+    """Engine state of the withheld segment, per kind (FSD §6a)."""
+
+    OPEN = "open"  # request
+    ANSWERED = "answered"
+    DEFERRED = "deferred"
+    REFUSED = "refused"  # request or rule
+    ADVISORY_UNSIGNED = "advisory_unsigned"  # rule
+    AWAITING_SIGNATURE = "awaiting_signature"  # rule
+    SUCCESS = "success"  # tool_output
+    FAILURE = "failure"
+    PRIOR = "prior"  # history
+
+
+#: The dispositions each stubbable kind may carry, and the one it has when the engine states none.
+STUB_DISPOSITIONS: Dict[str, List[StubDisposition]] = {
+    "request": [StubDisposition.OPEN, StubDisposition.ANSWERED, StubDisposition.DEFERRED, StubDisposition.REFUSED],
+    "rule": [StubDisposition.ADVISORY_UNSIGNED, StubDisposition.AWAITING_SIGNATURE, StubDisposition.REFUSED],
+    "tool_output": [StubDisposition.SUCCESS, StubDisposition.FAILURE],
+    "history": [StubDisposition.PRIOR],
+}
+
+
+class StubTransform(str, Enum):
+    """Operations the engine applied to the withheld bytes."""
+
+    SANITIZED = "sanitized"
+    TRUNCATED = "truncated"
+    NORMALIZED = "normalized"
+    REDACTED = "redacted"
+    COALESCED = "coalesced"
+
+
+class DraftRelation(str, Enum):
+    NONE = "none"
+    RESPONDS_TO = "responds_to"
+    QUOTES = "quotes"
+
+
+class QuoteShare(str, Enum):
+    """Share of the withheld segment's word n-grams the draft repeats (deterministic overlap, never a model)."""
+
+    ZERO = "0"
+    UNDER_10 = "<10%"
+    FROM_10_TO_50 = "10-50%"
+    OVER_50 = ">50%"
+
+
+class SizeBucket(str, Enum):
+    SHORT = "short"
+    MEDIUM = "medium"
+    LONG = "long"
+
+
+class StubFacts(BaseModel):
+    """What the ENGINE knows about a segment that a stub reports and the segment itself cannot say.
+
+    Set by the call site from engine state, never from the text. Everything else in a stub is computed by the
+    assembler from the segment (kind, provenance, source, trust after taint, authn, authz, lifecycle, bytes).
+    """
+
+    disposition: Optional[StubDisposition] = Field(None, description="None: the kind's default")
+    transforms: List[StubTransform] = Field(default_factory=list, description="Engine-applied transforms")
+    position: str = Field("current", pattern=r"^(current|prior_[0-9]{1,4})$", description="current | prior_<n>")
+    responds_to_draft: bool = Field(
+        False, description="Thought linkage: the draft under judgement answers this segment (e.g. the request)"
+    )
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class SegmentStub(BaseModel):
+    """An ablation stub (FSD §6a): only closed-vocabulary properties of a withheld segment, never its bytes."""
+
+    kind: SegmentKind
+    provenance: Optional[RuleProvenance] = None
+    source: SegmentSource
+    trust: TrustLevel
+    author_role: StubAuthorRole
+    authority: StubAuthority
+    scope: StubScope
+    disposition: StubDisposition
+    transforms: List[StubTransform] = Field(default_factory=list)
+    draft_relation: DraftRelation
+    quote_share: QuoteShare
+    size: SizeBucket
+    position: str = Field(..., pattern=r"^(current|prior_[0-9]{1,4})$")
+    digest: str = Field(..., pattern=r"^[0-9a-f]{12}$", description="sha256 prefix of the withheld bytes")
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
 class StageRole(str, Enum):
     """The part a stage plays (FSD §3, §8)."""
 
@@ -214,6 +355,9 @@ class PromptSegment(BaseModel):
     truncated: bool = Field(False, description="The producer cut the text")
     origin_task_id: Optional[str] = Field(None, description="Task a per-task segment belongs to")
     origin_thought_id: Optional[str] = Field(None, description="Thought a per-thought segment belongs to")
+    stub_facts: Optional[StubFacts] = Field(
+        None, description="Engine facts a stub reports if the policy withholds this segment (FSD §6a)"
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -261,6 +405,7 @@ class PolicyRow(BaseModel):
     kind: SegmentKind
     provenance: Optional[RuleProvenance] = None
     predicate: PolicyPredicate
+    form: SegmentForm = Field(SegmentForm.FULL, description="stub: withheld, only its properties are sent (§6a)")
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -277,6 +422,7 @@ class ContextPolicy(BaseModel):
     kinds: Dict[SegmentKind, KindSpec]
     rule_provenance: Dict[RuleProvenance, TrustLevel]
     stages: Dict[PromptStage, List[PolicyRow]]
+    stub_fields: List[StubField] = Field(default_factory=list, description="The closed stub field set (§6a)")
     source_sha256: str = Field(..., description="sha256 of the policy file bytes")
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -322,6 +468,7 @@ class GuardViolationKind(str, Enum):
     LIFECYCLE_MISMATCH = "lifecycle_mismatch"
     CROSS_SCOPE = "cross_scope"  # a per-task / per-thought segment from another task / thought
     DUPLICATE_SEGMENT_ID = "duplicate_segment_id"
+    UNTRUSTED_BYTES = "untrusted_bytes"  # a withheld segment's bytes found in another segment at an ablated stage
 
 
 class GuardAction(str, Enum):
@@ -359,6 +506,9 @@ class SegmentRecord(BaseModel):
     sha256: str = Field(..., description="sha256 of the rendered bytes at the span")
     truncated: bool = False
     derived_from: List[str] = Field(default_factory=list)
+    form: SegmentForm = Field(SegmentForm.FULL, description="stub: the span holds the stub line, not the bytes")
+    stub: Optional[SegmentStub] = Field(None, description="The stub sent in place of the segment (form stub)")
+    withheld_sha256: Optional[str] = Field(None, description="sha256 of the withheld bytes (form stub)")
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -410,6 +560,19 @@ __all__ = [
     "AuthnCarrier",
     "AuthzCarrier",
     "ContextPolicy",
+    "DraftRelation",
+    "QuoteShare",
+    "STUB_DISPOSITIONS",
+    "SegmentForm",
+    "SegmentStub",
+    "SizeBucket",
+    "StubAuthorRole",
+    "StubAuthority",
+    "StubDisposition",
+    "StubFacts",
+    "StubField",
+    "StubScope",
+    "StubTransform",
     "GrantKind",
     "GuardAction",
     "GuardViolation",

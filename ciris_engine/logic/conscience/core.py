@@ -8,12 +8,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.formatters import verified_sender as _vs
-from ciris_engine.logic.formatters.wa_approval import (
-    format_wa_approval_rule,
-    wa_authorization_of,
-    wa_governance_block_of,
-)
+from ciris_engine.logic.conscience.prompt_segments import ConsciencePrompt, assemble_conscience_prompt
+from ciris_engine.logic.formatters.wa_approval import format_wa_approval_rule, wa_authorization_of
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
+from ciris_engine.schemas.context.prompt_provenance import PromptStage
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout, llm_call_deadline
@@ -166,105 +164,51 @@ class _BaseConscience(ConscienceInterface):
             raise RuntimeError("TimeService is required for Conscience")
         self._time_service = time_service
 
-    def _with_identity(
-        self, messages: List[LLMMessage], context: ConscienceCheckContext, language: str, verified_only: bool = False
-    ) -> List[LLMMessage]:
-        """Add the agent's identity, approved amendments included, before the user prompt.
-
-        The same block action selection and the domain DMA read
-        (``identity_block_of``). Without it, a conscience judged the agent as it
-        was before a Wise Authority-approved amendment: refusals the amendment
-        requires were overridden as hallucinated constraints, and the approved
-        apply step read as the agent altering itself (RATCHET Market 4, run
-        43453725789). No identity on the context adds nothing.
-
-        ``verified_only`` is for the input-ablated pair, entropy and the
-        optimization veto (#1366, rc21 profile): their identity block carries
-        only amendments verified as the exact WA-approved bytes under a checked
-        profile. An unverified amendment's text was written in a task that read
-        the user's message; in their identity block it would carry that message
-        past the ablation. The other consciences read it labelled unverified.
-        """
-        from ciris_engine.logic.formatters.identity import identity_block_of
-
-        block = identity_block_of(
-            getattr(context, "agent_identity", None), language=language, verified_only=verified_only
-        )
-        if not block or not messages:
-            return messages
-        return [*messages[:-1], LLMMessage(role="system", content=block), messages[-1]]
-
     @staticmethod
-    def _with_action_record(
-        messages: List[LLMMessage], user_prompt: str, context: ConscienceCheckContext, language: str
-    ) -> tuple[List[LLMMessage], str]:
-        """Lead the user prompt with the record of the actions already run in this task.
+    def _accord_text() -> str:
+        """The accord every conscience judges against: the full polyglot canon, through the override seam.
 
-        Entropy and the optimization veto judge the action alone, so on a
-        follow-up they read a report of a finished act as the act itself. In
-        RATCHET Market 4 ac-20 (run 43667023655) the veto refused "I have filed a
-        ticket", the ticket stood, and the agent told the user it could not file
-        one. They need the context to judge the next action (Eric, 2026-11-15).
-        Empty when nothing has run, so a seed thought's prompt is unchanged.
-
-        The FACTUAL form of the record the follow-up thought carries
-        (action_record.py, CIRISAgent#1366 items 4 and 18): verb, tool name,
-        status and scope, never an outcome. The outcome text carried the user's
-        message after a PONDER ("=== PREVIOUS CONTEXT === You observed @... say:
-        ...") and tool output after a TOOL, which reopened the channel the
-        input ablation of entropy and the optimization veto closes (#1365).
-        Every conscience reads this same form.
+        #995 P0-1: through ``get_accord_text``, NOT the module constant, so the research corpus substitution
+        reaches all four faculties. ``force_full`` is load-bearing: ACCORD_MODE defaults to "compressed", and a
+        bare call would cut 95% of the canon (see ``_create_entropy_messages``).
         """
-        from ciris_engine.logic.infrastructure.handlers.action_record import action_record_for_task
+        return get_accord_text("force_full")
 
-        thought = getattr(context, "thought", None)
-        task_id = getattr(thought, "source_task_id", None)
-        occurrence_id = getattr(thought, "agent_occurrence_id", None) or "default"
-        record = action_record_for_task(
-            task_id if isinstance(task_id, str) else None,
-            occurrence_id if isinstance(occurrence_id, str) else "default",
-            language,
-            factual=True,
+    def _assemble(
+        self,
+        stage: PromptStage,
+        context: ConscienceCheckContext,
+        *,
+        conscience_type: str,
+        draft_slot: str,
+        draft_text: str,
+        image_context: Optional[str],
+        response_model: type,
+        user_message: Optional[str] = None,
+        plain_slots: Optional[Dict[str, str]] = None,
+        approval_rule: str = "",
+    ) -> ConsciencePrompt:
+        """This conscience's prompt, built by PromptAssembler from typed segments (prompt_segments.py).
+
+        The agent's identity with approved amendments (an ablated conscience reads only verified ones: an
+        unverified amendment's text was written in a task that read the user's message), the factual action
+        record (#1366 items 4, 18), the verified sender (item 5), the verified WA governance (items 2-3), the
+        draft. An ablated conscience gets the user's message as a stub, never its bytes (FSD §6a).
+        """
+        return assemble_conscience_prompt(
+            stage,
+            conscience_type=conscience_type,
+            context=context,
+            language=self._resolve_language(context),
+            accord_text=self._accord_text(),
+            draft_slot=draft_slot,
+            draft_text=draft_text,
+            image_context=image_context,
+            user_message=user_message,
+            response_model=response_model.__name__,
+            plain_slots=plain_slots,
+            approval_rule=approval_rule,
         )
-        if not record or not messages:
-            return messages, user_prompt
-        user_prompt = "\n\n".join((record, user_prompt))
-        return [*messages[:-1], LLMMessage(role="user", content=user_prompt)], user_prompt
-
-    @staticmethod
-    def _with_wa_governance(
-        messages: List[LLMMessage], user_prompt: str, context: ConscienceCheckContext, language: str, extra: str = ""
-    ) -> tuple[List[LLMMessage], str]:
-        """Lead the user prompt with the verified Wise Authority governance block (#1365, #1366 items 2-3).
-
-        For the two input-ablated consciences only. Built from trusted state
-        alone (``formatters.wa_approval.wa_governance_block_of``): the verified
-        grant of a resolved deferral and the approved identity amendments, with
-        their ids. Nothing verified, nothing added. ``extra`` follows the block
-        (the optimization veto's approval rule). It leads the user prompt rather
-        than riding as its own system message, so the recorded prompt is exactly
-        what the model read.
-        """
-        block = "\n\n".join(part for part in (wa_governance_block_of(context, language=language), extra) if part)
-        if not block or not messages:
-            return messages, user_prompt
-        user_prompt = "\n\n".join((block, user_prompt))
-        return [*messages[:-1], LLMMessage(role="user", content=user_prompt)], user_prompt
-
-    @classmethod
-    def _with_attached_evidence(
-        cls, messages: List[LLMMessage], user_prompt: str, context: ConscienceCheckContext, language: str
-    ) -> tuple[List[LLMMessage], str]:
-        """Attach the verified governance block on the system's evidence re-review (#1366 item 9).
-
-        For coherence and epistemic humility, which are not otherwise shown the
-        signed grant. Only the fold sets ``attached_evidence``, and only when
-        trusted state holds evidence this conscience did not have; nothing is
-        added otherwise, so a normal prompt is unchanged.
-        """
-        if not getattr(context, "attached_evidence", False):
-            return messages, user_prompt
-        return cls._with_wa_governance(messages, user_prompt, context, language)
 
     @staticmethod
     def _objection(passed: bool, answered: object, context: ConscienceCheckContext, *, sees_governance: bool) -> Dict[str, Any]:
@@ -736,33 +680,32 @@ class EntropyConscience(_BaseConscience):
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] EntropyConscience: Image context detected, using textual metadata")
-            messages, entropy_user_prompt = self._create_entropy_messages(
-                text, image_context, language=self._resolve_language(context)
+            # Input-ablated (#1365): the verified WA governance (#1366 item 2), the factual action record, the
+            # verified id/role only when an ID-scoped rule is in force (item 5), and the request as a stub only.
+            prompt = self._assemble(
+                PromptStage.ENTROPY,
+                context,
+                conscience_type="entropy_conscience",
+                draft_slot="text",
+                draft_text=text,
+                image_context=image_context,
+                response_model=EntropyResult,
+                user_message=self._extract_user_message(context),
             )
-            messages = self._with_identity(messages, context, self._resolve_language(context), verified_only=True)
-            # The WA's verified guidance, which entropy alone never had (#1366 item 2).
-            messages, entropy_user_prompt = self._with_wa_governance(
-                messages, entropy_user_prompt, context, self._resolve_language(context)
-            )
-            messages, entropy_user_prompt = self._with_action_record(
-                messages, entropy_user_prompt, context, self._resolve_language(context)
-            )
-            # Verified id/role only, when an ID-scoped rule is in force; never the display name (#1366 item 5).
-            messages, entropy_user_prompt = _vs.lead_with_verified_sender(
-                messages, entropy_user_prompt, context, self._resolve_language(context), ablated=True
-            )
+            entropy_user_prompt = prompt.user_prompt
             if hasattr(sink, "llm"):
-                entropy_eval, _ = await self._call_llm_with_budget(
-                    sink,
-                    deadline=deadline_of(context),
-                    messages=messages,
-                    response_model=EntropyResult,
-                    handler_name="entropy_conscience",
-                    max_tokens=8192,
-                    temperature=0.0,
-                    thought_id=context.thought.thought_id,
-                    task_id=getattr(context.thought, "source_task_id", None),
-                )
+                with prompt_manifest_scope(prompt.manifest):
+                    entropy_eval, _ = await self._call_llm_with_budget(
+                        sink,
+                        deadline=deadline_of(context),
+                        messages=prompt.messages,
+                        response_model=EntropyResult,
+                        handler_name="entropy_conscience",
+                        max_tokens=8192,
+                        temperature=0.0,
+                        thought_id=context.thought.thought_id,
+                        task_id=getattr(context.thought, "source_task_id", None),
+                    )
             else:
                 raise RuntimeError(MSG_SINK_NO_LLM)
             if isinstance(entropy_eval, EntropyResult):
@@ -860,7 +803,7 @@ class EntropyConscience(_BaseConscience):
             # force_full returns override_corpus("accord.polyglot_full") when
             # the gate is open and ACCORD_TEXT byte-identical when it is not,
             # so the polyglot rationale below is preserved exactly.
-            LLMMessage(role="system", content=get_accord_text("force_full")),
+            LLMMessage(role="system", content=self._accord_text()),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt
@@ -903,6 +846,7 @@ class CoherenceConscience(_BaseConscience):
 
         # Inline the coherence evaluation
         coherence_user_prompt: Optional[str] = None
+        coherence_sees_governance = False
         coherence_why = ""
         coherence_objection: object = None
         try:
@@ -910,37 +854,34 @@ class CoherenceConscience(_BaseConscience):
             image_context = self._get_image_context_info(context)
             if image_context:
                 logger.info("[CONSCIENCE] CoherenceConscience: Image context detected, using textual metadata")
-            messages, coherence_user_prompt = self._create_coherence_messages(
-                text,
-                image_context,
-                language=self._resolve_language(context),
+            # The user's message, the verified sender apart from the self-chosen display name (#1366 item 5),
+            # the factual action record (item 18) and, whenever a trusted rule is in force, the verified
+            # governance block (the policy requires the signed rule at every judge, FSD §14).
+            prompt = self._assemble(
+                PromptStage.COHERENCE,
+                context,
+                conscience_type="coherence_conscience",
+                draft_slot="text",
+                draft_text=text,
+                image_context=image_context,
+                response_model=CoherenceResult,
                 user_message=self._extract_user_message(context),
             )
-            messages = self._with_identity(messages, context, self._resolve_language(context))
-            # The same factual record entropy and the veto read (#1366 item 18).
-            # The verified sender, apart from the self-chosen display name (#1366 item 5, #1365).
-            messages, coherence_user_prompt = _vs.lead_with_verified_sender(
-                messages, coherence_user_prompt, context, self._resolve_language(context)
-            )
-            messages, coherence_user_prompt = self._with_action_record(
-                messages, coherence_user_prompt, context, self._resolve_language(context)
-            )
-            # The signed grant, on the system's evidence re-review only (#1366 item 9).
-            messages, coherence_user_prompt = self._with_attached_evidence(
-                messages, coherence_user_prompt, context, self._resolve_language(context)
-            )
+            coherence_user_prompt = prompt.user_prompt
+            coherence_sees_governance = prompt.sees_governance
             if hasattr(sink, "llm"):
-                coherence_eval, _ = await self._call_llm_with_budget(
-                    sink,
-                    deadline=deadline_of(context),
-                    messages=messages,
-                    response_model=CoherenceResult,
-                    handler_name="coherence_conscience",
-                    max_tokens=8192,
-                    temperature=0.0,
-                    thought_id=context.thought.thought_id,
-                    task_id=getattr(context.thought, "source_task_id", None),
-                )
+                with prompt_manifest_scope(prompt.manifest):
+                    coherence_eval, _ = await self._call_llm_with_budget(
+                        sink,
+                        deadline=deadline_of(context),
+                        messages=prompt.messages,
+                        response_model=CoherenceResult,
+                        handler_name="coherence_conscience",
+                        max_tokens=8192,
+                        temperature=0.0,
+                        thought_id=context.thought.thought_id,
+                        task_id=getattr(context.thought, "source_task_id", None),
+                    )
             else:
                 raise RuntimeError(MSG_SINK_NO_LLM)
             if not isinstance(coherence_eval, CoherenceResult):
@@ -977,9 +918,7 @@ class CoherenceConscience(_BaseConscience):
             coherence_score=coherence,
             coherence_prompt=coherence_user_prompt,
             check_timestamp=ts_datetime,
-            **self._objection(
-                passed, coherence_objection, context, sees_governance=bool(getattr(context, "attached_evidence", False))
-            ),
+            **self._objection(passed, coherence_objection, context, sees_governance=coherence_sees_governance),
         )
 
     def _create_coherence_messages(
@@ -1028,7 +967,7 @@ class CoherenceConscience(_BaseConscience):
             # force_full returns override_corpus("accord.polyglot_full") when
             # the gate is open and ACCORD_TEXT byte-identical when it is not,
             # so the polyglot rationale below is preserved exactly.
-            LLMMessage(role="system", content=get_accord_text("force_full")),
+            LLMMessage(role="system", content=self._accord_text()),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt
@@ -1052,42 +991,39 @@ class OptimizationVetoConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] OptimizationVetoConscience: Image context detected, using textual metadata")
-        messages, opt_veto_user_prompt = self._create_optimization_veto_messages(
-            action_desc, image_context, language=self._resolve_language(context)
-        )
-        messages = self._with_identity(messages, context, self._resolve_language(context), verified_only=True)
-        # The veto was sending approved identity changes back for "Wise
-        # Authority review" they had already had (formatters/wa_approval.py).
-        # The governance block carries the grant with its ids (#1365); the
-        # approval rule follows it, as before, so nothing is said twice.
-        messages, opt_veto_user_prompt = self._with_wa_governance(
-            messages,
-            opt_veto_user_prompt,
-            context,
-            self._resolve_language(context),
-            extra=format_wa_approval_rule(wa_authorization_of(context), language=self._resolve_language(context)),
-        )
-        messages, opt_veto_user_prompt = self._with_action_record(
-            messages, opt_veto_user_prompt, context, self._resolve_language(context)
-        )
-        # Verified id/role only, when an ID-scoped rule is in force; never the display name (#1366 item 5).
-        messages, opt_veto_user_prompt = _vs.lead_with_verified_sender(
-            messages, opt_veto_user_prompt, context, self._resolve_language(context), ablated=True
-        )
-
+        opt_veto_user_prompt: Optional[str] = None
         try:
+            # Input-ablated (#1365). The veto was sending approved identity changes back for "Wise Authority
+            # review" they had already had (formatters/wa_approval.py): the governance block carries the grant
+            # with its ids, and the approval rule follows it, so nothing is said twice. The factual action
+            # record, the verified id/role only when an ID-scoped rule is in force, the request as a stub only.
+            language = self._resolve_language(context)
+            prompt = self._assemble(
+                PromptStage.OPTVETO,
+                context,
+                conscience_type="optimization_veto_conscience",
+                draft_slot="action_description",
+                draft_text=action_desc,
+                image_context=image_context,
+                response_model=OptimizationVetoResult,
+                user_message=self._extract_user_message(context),
+                plain_slots={"user_locale": language or "unknown"},
+                approval_rule=format_wa_approval_rule(wa_authorization_of(context), language=language),
+            )
+            opt_veto_user_prompt = prompt.user_prompt
             if hasattr(sink, "llm"):
-                result, _ = await self._call_llm_with_budget(
-                    sink,
-                    deadline=deadline_of(context),
-                    messages=messages,
-                    response_model=OptimizationVetoResult,
-                    handler_name="optimization_veto_conscience",
-                    max_tokens=8192,
-                    temperature=0.0,
-                    thought_id=context.thought.thought_id,
-                    task_id=getattr(context.thought, "source_task_id", None),
-                )
+                with prompt_manifest_scope(prompt.manifest):
+                    result, _ = await self._call_llm_with_budget(
+                        sink,
+                        deadline=deadline_of(context),
+                        messages=prompt.messages,
+                        response_model=OptimizationVetoResult,
+                        handler_name="optimization_veto_conscience",
+                        max_tokens=8192,
+                        temperature=0.0,
+                        thought_id=context.thought.thought_id,
+                        task_id=getattr(context.thought, "source_task_id", None),
+                    )
             else:
                 raise RuntimeError(MSG_SINK_NO_LLM)
             if not isinstance(result, OptimizationVetoResult):
@@ -1178,7 +1114,7 @@ class OptimizationVetoConscience(_BaseConscience):
             # force_full returns override_corpus("accord.polyglot_full") when
             # the gate is open and ACCORD_TEXT byte-identical when it is not,
             # so the polyglot rationale below is preserved exactly.
-            LLMMessage(role="system", content=get_accord_text("force_full")),
+            LLMMessage(role="system", content=self._accord_text()),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt
@@ -1202,39 +1138,36 @@ class EpistemicHumilityConscience(_BaseConscience):
         image_context = self._get_image_context_info(context)
         if image_context:
             logger.info("[CONSCIENCE] EpistemicHumilityConscience: Image context detected, using textual metadata")
-        messages, epistemic_humility_user_prompt = self._create_epistemic_humility_messages(
-            desc,
-            image_context,
-            language=self._resolve_language(context),
-            user_message=self._extract_user_message(context),
-        )
-        messages = self._with_identity(messages, context, self._resolve_language(context))
-        # The same factual record entropy and the veto read (#1366 item 18).
-        # The verified sender, apart from the self-chosen display name (#1366 item 5, #1365).
-        messages, epistemic_humility_user_prompt = _vs.lead_with_verified_sender(
-            messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
-        )
-        messages, epistemic_humility_user_prompt = self._with_action_record(
-            messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
-        )
-        # The signed grant, on the system's evidence re-review only (#1366 item 9).
-        messages, epistemic_humility_user_prompt = self._with_attached_evidence(
-            messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
-        )
-
+        epistemic_humility_user_prompt: Optional[str] = None
+        epistemic_sees_governance = False
         try:
+            # As coherence: the user's message, the verified sender, the factual record, and the verified
+            # governance block whenever a trusted rule is in force.
+            prompt = self._assemble(
+                PromptStage.EPISTEMIC,
+                context,
+                conscience_type="epistemic_humility_conscience",
+                draft_slot="action_description",
+                draft_text=desc,
+                image_context=image_context,
+                response_model=EpistemicHumilityResult,
+                user_message=self._extract_user_message(context),
+            )
+            epistemic_humility_user_prompt = prompt.user_prompt
+            epistemic_sees_governance = prompt.sees_governance
             if hasattr(sink, "llm"):
-                result, _ = await self._call_llm_with_budget(
-                    sink,
-                    deadline=deadline_of(context),
-                    messages=messages,
-                    response_model=EpistemicHumilityResult,
-                    handler_name="epistemic_humility_conscience",
-                    max_tokens=8192,
-                    temperature=0.0,
-                    thought_id=context.thought.thought_id,
-                    task_id=getattr(context.thought, "source_task_id", None),
-                )
+                with prompt_manifest_scope(prompt.manifest):
+                    result, _ = await self._call_llm_with_budget(
+                        sink,
+                        deadline=deadline_of(context),
+                        messages=prompt.messages,
+                        response_model=EpistemicHumilityResult,
+                        handler_name="epistemic_humility_conscience",
+                        max_tokens=8192,
+                        temperature=0.0,
+                        thought_id=context.thought.thought_id,
+                        task_id=getattr(context.thought, "source_task_id", None),
+                    )
             else:
                 raise RuntimeError(MSG_SINK_NO_LLM)
             # Handle string certainty values if needed
@@ -1279,9 +1212,7 @@ class EpistemicHumilityConscience(_BaseConscience):
             epistemic_humility_check=result,
             epistemic_humility_prompt=epistemic_humility_user_prompt,
             check_timestamp=ts_datetime,
-            **self._objection(
-                passed, result.objection_type, context, sees_governance=bool(getattr(context, "attached_evidence", False))
-            ),
+            **self._objection(passed, result.objection_type, context, sees_governance=epistemic_sees_governance),
         )
 
     def _create_epistemic_humility_messages(
@@ -1330,7 +1261,7 @@ class EpistemicHumilityConscience(_BaseConscience):
             # force_full returns override_corpus("accord.polyglot_full") when
             # the gate is open and ACCORD_TEXT byte-identical when it is not,
             # so the polyglot rationale below is preserved exactly.
-            LLMMessage(role="system", content=get_accord_text("force_full")),
+            LLMMessage(role="system", content=self._accord_text()),
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_prompt),
         ], user_prompt

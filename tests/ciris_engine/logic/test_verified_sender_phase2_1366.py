@@ -267,12 +267,19 @@ def _ctx(**fields: Any) -> Any:
 def _id_scoped_identity() -> Dict[str, Any]:
     from ciris_engine.schemas.infrastructure.identity_variance import IdentityAmendment
 
+    import hashlib
+
+    content = f"Filing tickets is authorized only for the person whose ID is {AUTHORIZED_ID}."
+    # Verified as the WA-approved bytes: an unverified amendment grants nothing, and since #1366 Phase 3 the
+    # context guard keeps it from every conscience (it would fail a QA run closed).
     amendment = IdentityAmendment(
         node_id="identity_amendment/defer_77",
-        content=f"Filing tickets is authorized only for the person whose ID is {AUTHORIZED_ID}.",
+        content=content,
         wa_id=AUTHORIZED_ID,
         deferral_id="defer_77",
         granted_at=_NOW,
+        approved_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        verified=True,
     )
     return {"agent_id": "ally", "description": "d", "role": "r", "approved_amendments": [amendment.model_dump()]}
 

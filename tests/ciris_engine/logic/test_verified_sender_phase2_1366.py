@@ -405,8 +405,11 @@ async def test_benchmark_retry_runs_the_verb_second_pass_with_feedback(monkeypat
     monkeypatch.setenv("CIRIS_BENCHMARK_MODE", "true")
     monkeypatch.setenv("CIRIS_TEMPLATE", "he-300-benchmark")
     proc = ThoughtProcessor.__new__(ThoughtProcessor)
-    vetoed = SimpleNamespace(overridden=True, final_action=SimpleNamespace(selected_action=HandlerActionType.PONDER))
-    passed = SimpleNamespace(overridden=False)
+    # veto_record / pass_after_veto: the typed-veto fields every ConscienceApplicationResult carries (#1366 items 8-9).
+    vetoed = SimpleNamespace(
+        overridden=True, final_action=SimpleNamespace(selected_action=HandlerActionType.PONDER), veto_record=[], pass_after_veto=None
+    )
+    passed = SimpleNamespace(overridden=False, veto_record=[], pass_after_veto=None)
     proc._conscience_execution_step = AsyncMock(side_effect=[vetoed, passed])
     proc._prepare_conscience_retry_context = Mock(return_value="ctx2")
     retried = SimpleNamespace(selected_action=HandlerActionType.TOOL)

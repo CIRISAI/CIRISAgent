@@ -16,7 +16,7 @@ import pytest
 from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, SegmentKind, TrustLevel
 from tests.ciris_engine.logic.dma import msaspdma_golden as mg
 
-SITES = ("msaspdma",)
+SITES = ("msaspdma", "rsaspdma")
 ALL = [(site, name) for site in SITES for name in mg.NAMES[site]]
 
 

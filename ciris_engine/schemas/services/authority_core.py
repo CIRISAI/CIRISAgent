@@ -336,6 +336,13 @@ class DeferralResponse(BaseModel):
             "carried as ``amendment_digest`` inside the WA's signed response row where the node supports it."
         ),
     )
+    call_fingerprint: Optional[str] = Field(
+        default=None,
+        description=(
+            "For a deferral that asks approval of one tool call: the tool_call_fingerprint (tool + exact arguments) "
+            "the Wise Authority approved. Approve only; never together with amendment_text."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

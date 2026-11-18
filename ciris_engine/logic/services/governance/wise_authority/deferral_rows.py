@@ -270,6 +270,8 @@ def _view(item: object) -> Optional[DeferralRowView]:
     refs = env.get("evidence_refs")
     evidence: List[str] = [str(r) for r in refs] if isinstance(refs, list) else []
     weight = item.get("weight")
+    links = env.get("refs")
+    prev = links.get("prev") if isinstance(links, dict) else None
     return DeferralRowView(
         attestation_id=str(item.get("attestation_id", "")),
         dimension=str(dimension),
@@ -285,6 +287,7 @@ def _view(item: object) -> Optional[DeferralRowView]:
         authorized_by=text("authorized_by"),
         evidence_refs=evidence,
         room_id=text("community_key_id"),
+        prev=str(prev) if isinstance(prev, str) and prev else None,
     )
 
 

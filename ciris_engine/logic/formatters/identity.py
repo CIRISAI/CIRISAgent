@@ -13,8 +13,22 @@ from ciris_engine.schemas.types import JSONDict
 from ._localized import label_localizer
 
 
-def amendment_texts(agent_identity: Any) -> List[str]:
-    """The approved identity amendments' texts, from ``IdentityData`` or its dict form."""
+def _is_verified(amendment: Any) -> bool:
+    value = amendment.get("verified") if isinstance(amendment, dict) else getattr(amendment, "verified", False)
+    return value is True
+
+
+def amendment_texts(agent_identity: Any, verified_only: bool = False, language: Optional[str] = None) -> List[str]:
+    """The approved identity amendments' texts, from ``IdentityData`` or its dict form.
+
+    A VERIFIED amendment (sha256 of its text is the Wise Authority's signed
+    approved digest, and the whole profile checked at load) renders as its
+    bytes. Any other one renders labelled unverified, or, with
+    ``verified_only``, not at all: the input-ablated consciences (entropy and
+    the optimization veto) read only verified amendments, because an
+    amendment's text was written in a task that read the user's message, and
+    without the digest match it is that text laundered into the identity.
+    """
     if isinstance(agent_identity, dict):
         raw = agent_identity.get("approved_amendments") or []
     else:
@@ -22,9 +36,21 @@ def amendment_texts(agent_identity: Any) -> List[str]:
     texts: List[str] = []
     for amendment in raw:
         content = amendment.get("content") if isinstance(amendment, dict) else getattr(amendment, "content", None)
-        if content:
-            texts.append(str(content).strip())
-    return [text for text in texts if text]
+        text = str(content).strip() if content else ""
+        if not text:
+            continue
+        if _is_verified(amendment):
+            texts.append(text)
+        elif not verified_only:
+            texts.append(_label_unverified(text, language))
+    return texts
+
+
+def _label_unverified(text: str, language: Optional[str]) -> str:
+    """The text with the suffix an amendment carries when it is not verified as the exact approved bytes."""
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(language or get_preferred_language(), "prompts.identity_amendment_unverified", text=text)
 
 
 def agent_identity_of(processing_context: Any) -> Any:
@@ -39,12 +65,14 @@ def agent_identity_of(processing_context: Any) -> Any:
     return snapshot.get("agent_identity") if isinstance(snapshot, dict) else getattr(snapshot, "agent_identity", None)
 
 
-def identity_block_of(agent_identity: Any, language: Optional[str] = None) -> str:
+def identity_block_of(agent_identity: Any, language: Optional[str] = None, verified_only: bool = False) -> str:
     """The one identity block, approved amendments included, from an identity; "" when there is none.
 
     The same call action selection and the domain DMA make
     (``format_core_identity_block`` with ``amendment_texts``), for every other
-    prompt that judges the agent: one identity, one rendering.
+    prompt that judges the agent: one identity, one rendering. With
+    ``verified_only`` (entropy and the optimization veto), unverified
+    amendments are left out rather than labelled.
     """
     if not agent_identity:
         return ""
@@ -61,7 +89,7 @@ def identity_block_of(agent_identity: Any, language: Optional[str] = None) -> st
         _field("description"),
         _field("role"),
         language=language,
-        amendments=amendment_texts(agent_identity),
+        amendments=amendment_texts(agent_identity, verified_only=verified_only, language=language),
     )
 
 

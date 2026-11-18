@@ -37,7 +37,7 @@ from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery
 from ciris_engine.schemas.types import JSONDict
 
-from .identity_amendments import load_identity_amendments
+from .identity_profile import IdentityBase, load_identity_profile
 from .secrets_snapshot import ERROR_KEY, build_secrets_snapshot
 
 logger = logging.getLogger(__name__)
@@ -566,13 +566,20 @@ async def _extract_agent_identity(
             return default_identity_data, default_identity_summary
 
         # Create typed identity data
+        base = IdentityBase(
+            agent_id=str(attrs_dict.get("agent_id", "unknown")),
+            description=str(attrs_dict.get("description", "No description available")),
+            role=str(attrs_dict.get("role_description", "Unknown")),
+        )
+        amendments, profile = await load_identity_profile(memory_service, base)
         identity_data = IdentityData(
-            agent_id=attrs_dict.get("agent_id", "unknown"),
-            description=attrs_dict.get("description", "No description available"),
-            role=attrs_dict.get("role_description", "Unknown"),
+            agent_id=base.agent_id,
+            description=base.description,
+            role=base.role,
             trust_level=attrs_dict.get("trust_level", 0.5),
             stewardship=attrs_dict.get("stewardship"),
-            approved_amendments=await load_identity_amendments(memory_service),
+            approved_amendments=amendments,
+            profile=profile,
         )
 
         # Create typed identity summary

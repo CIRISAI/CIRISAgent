@@ -15,6 +15,21 @@ from ciris_engine.schemas.services.authority_core import WAPermission
 from ciris_engine.schemas.types import JSONDict
 
 
+class DeferralListCapabilities(BaseModel):
+    """What this agent's deferral API supports, so a client can tell before it acts."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    exact_amendment_text: bool = Field(
+        True,
+        description=(
+            "Resolve accepts amendment_text with resolution='approve': the WA approves those exact bytes, and only "
+            "they can become a verified identity amendment (CIRISAgent#1366 F1). A deferral that proposes one "
+            "carries it as context.proposed_amendment."
+        ),
+    )
+
+
 class DeferralListResponse(BaseModel):
     """Response containing list of pending deferrals."""
 
@@ -22,6 +37,9 @@ class DeferralListResponse(BaseModel):
 
     deferrals: List[PendingDeferral] = Field(..., description="List of pending deferrals")
     total: int = Field(..., description="Total number of pending deferrals")
+    capabilities: DeferralListCapabilities = Field(
+        default_factory=DeferralListCapabilities, description="What this agent's deferral API supports"
+    )
 
 
 #: The longest identity amendment a Wise Authority can approve in one resolution.
@@ -44,6 +62,17 @@ class ResolveDeferralRequest(BaseModel):
             "resolution='approve'. The API computes its sha256; the node signs that digest into the WA's response "
             "row, and the guidance task writes these bytes as the amendment. Without it an approval lands no "
             "identity amendment."
+        ),
+    )
+
+    call_fingerprint: Optional[str] = Field(
+        None,
+        min_length=1,
+        description=(
+            "For a deferral that asks approval of one tool call: the tool_call_fingerprint (tool + exact arguments) "
+            "the Wise Authority approves. Only with resolution='approve' (400, reason id "
+            "wa.call_fingerprint_requires_approve), and never together with amendment_text (400, reason id "
+            "wa.resolve_one_subject): a deferral is either a call approval or an identity change."
         ),
     )
 

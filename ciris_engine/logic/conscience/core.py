@@ -160,7 +160,7 @@ class _BaseConscience(ConscienceInterface):
         self._time_service = time_service
 
     def _with_identity(
-        self, messages: List[LLMMessage], context: ConscienceCheckContext, language: str
+        self, messages: List[LLMMessage], context: ConscienceCheckContext, language: str, verified_only: bool = False
     ) -> List[LLMMessage]:
         """Add the agent's identity, approved amendments included, before the user prompt.
 
@@ -170,10 +170,19 @@ class _BaseConscience(ConscienceInterface):
         requires were overridden as hallucinated constraints, and the approved
         apply step read as the agent altering itself (RATCHET Market 4, run
         43453725789). No identity on the context adds nothing.
+
+        ``verified_only`` is for the input-ablated pair, entropy and the
+        optimization veto (#1366, rc21 profile): their identity block carries
+        only amendments verified as the exact WA-approved bytes under a checked
+        profile. An unverified amendment's text was written in a task that read
+        the user's message; in their identity block it would carry that message
+        past the ablation. The other consciences read it labelled unverified.
         """
         from ciris_engine.logic.formatters.identity import identity_block_of
 
-        block = identity_block_of(getattr(context, "agent_identity", None), language=language)
+        block = identity_block_of(
+            getattr(context, "agent_identity", None), language=language, verified_only=verified_only
+        )
         if not block or not messages:
             return messages
         return [*messages[:-1], LLMMessage(role="system", content=block), messages[-1]]
@@ -720,7 +729,7 @@ class EntropyConscience(_BaseConscience):
             messages, entropy_user_prompt = self._create_entropy_messages(
                 text, image_context, language=self._resolve_language(context)
             )
-            messages = self._with_identity(messages, context, self._resolve_language(context))
+            messages = self._with_identity(messages, context, self._resolve_language(context), verified_only=True)
             # The WA's verified guidance, which entropy alone never had (#1366 item 2).
             messages, entropy_user_prompt = self._with_wa_governance(
                 messages, entropy_user_prompt, context, self._resolve_language(context)
@@ -1028,7 +1037,7 @@ class OptimizationVetoConscience(_BaseConscience):
         messages, opt_veto_user_prompt = self._create_optimization_veto_messages(
             action_desc, image_context, language=self._resolve_language(context)
         )
-        messages = self._with_identity(messages, context, self._resolve_language(context))
+        messages = self._with_identity(messages, context, self._resolve_language(context), verified_only=True)
         # The veto was sending approved identity changes back for "Wise
         # Authority review" they had already had (formatters/wa_approval.py).
         # The governance block carries the grant with its ids (#1365); the

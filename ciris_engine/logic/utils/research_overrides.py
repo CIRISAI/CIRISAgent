@@ -323,6 +323,9 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.formatters.user_label",
         "prompts.formatters.user_preferred_language",
         "prompts.identity_block",
+        # #1366 / rc21 profile: an amendment not verified as the exact approved
+        # bytes, labelled in the identity block of every non-ablated stage.
+        "prompts.identity_amendment_unverified",
         # A verified WA approval, in the three single-class parts the identity
         # it may change is read beside (formatters/wa_approval.py).
         "prompts.wa_approval.grant",

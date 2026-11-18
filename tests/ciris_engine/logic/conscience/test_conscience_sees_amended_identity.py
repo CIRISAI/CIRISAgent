@@ -31,7 +31,9 @@ IDENTITY = {
     "agent_id": "ally",
     "description": "A helpful assistant.",
     "role": "Assistant",
-    "approved_amendments": [{"content": AMENDMENT}],
+    # Verified: the input-ablated pair reads only verified amendments (#1366, rc21
+    # profile; test_ablated_identity_verified_only.py).
+    "approved_amendments": [{"content": AMENDMENT, "verified": True}],
 }
 
 

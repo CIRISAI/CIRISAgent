@@ -144,7 +144,13 @@ def create_wa_success_response(data: _T) -> SuccessResponse[_T]:
     )
 
 
-def raise_wa_error(message: str, status_code: int = 500) -> NoReturn:
+#: Reason ids of the resolve 400s (error.details.reason_id).
+REASON_AMENDMENT_TEXT_REQUIRES_APPROVE = "wa.amendment_text_requires_approve"
+REASON_CALL_FINGERPRINT_REQUIRES_APPROVE = "wa.call_fingerprint_requires_approve"
+REASON_RESOLVE_ONE_SUBJECT = "wa.resolve_one_subject"
+
+
+def raise_wa_error(message: str, status_code: int = 500, reason_id: Optional[str] = None) -> NoReturn:
     """Raise a standardized WA error response.
 
     Consolidates the repeated error response pattern.
@@ -152,6 +158,8 @@ def raise_wa_error(message: str, status_code: int = 500) -> NoReturn:
     Args:
         message: Error message
         status_code: HTTP status code (default 500)
+        reason_id: Stable machine-readable reason, carried as ``error.details.reason_id``
+            (the same place a node refusal carries its own)
 
     Raises:
         HTTPException: Always raises with the specified error
@@ -162,6 +170,7 @@ def raise_wa_error(message: str, status_code: int = 500) -> NoReturn:
             error=ErrorDetail(
                 code=ErrorCode.INTERNAL_ERROR if status_code == 500 else ErrorCode.VALIDATION_ERROR,
                 message=message,
+                details={"reason_id": reason_id} if reason_id else None,
             )
         ).model_dump(mode="json"),
     )
@@ -483,11 +492,28 @@ async def resolve_deferral(
         # row. Only an approval approves text: a reject or a modify that named
         # amendment text would be signed as approving nothing, so it is refused.
         amendment_text = resolve_request.amendment_text
+        call_fingerprint = resolve_request.call_fingerprint
+        # A deferral is either a call approval or an identity change, never both.
+        if amendment_text is not None and call_fingerprint is not None:
+            raise_wa_error(
+                "amendment_text and call_fingerprint cannot be resolved together: a deferral approves either one "
+                "tool call or one identity change",
+                status_code=400,
+                reason_id=REASON_RESOLVE_ONE_SUBJECT,
+            )
+        if call_fingerprint is not None and not approved:
+            raise_wa_error(
+                "call_fingerprint is only accepted with resolution='approve': a rejection or modification "
+                "approves no tool call",
+                status_code=400,
+                reason_id=REASON_CALL_FINGERPRINT_REQUIRES_APPROVE,
+            )
         if amendment_text is not None and not approved:
             raise_wa_error(
                 "amendment_text is only accepted with resolution='approve': a rejection or modification "
                 "approves no identity text",
                 status_code=400,
+                reason_id=REASON_AMENDMENT_TEXT_REQUIRES_APPROVE,
             )
         amendment_sha256 = sha256_hex(amendment_text) if amendment_text is not None else None
         signed_at = datetime.now(timezone.utc).isoformat()
@@ -498,6 +524,7 @@ async def resolve_deferral(
             wa_id=auth.user_id,
             signature="",
             amendment_text=amendment_text,
+            call_fingerprint=call_fingerprint,
             amendment_sha256=amendment_sha256,
         )
         auth_service = getattr(request.app.state, "authentication_service", None)

@@ -246,7 +246,11 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
         import asyncio
 
         from ciris_engine.logic.context.identity_amendments import amendment_from_node
-        from ciris_engine.logic.formatters.identity import describe_with_amendments, format_agent_identity
+        from ciris_engine.logic.formatters.identity import (
+            amendment_texts,
+            describe_with_amendments,
+            format_agent_identity,
+        )
         from ciris_engine.logic.persistence.models.graph import get_all_graph_nodes, get_graph_node
 
         def _query_identity() -> str:
@@ -261,8 +265,10 @@ class LocalGraphMemoryService(BaseGraphService, MemoryService, GraphMemoryServic
             amendments = [a for a in (amendment_from_node(n) for n in nodes) if a is not None]
             amendments.sort(key=lambda a: (a.granted_at, a.node_id))
             if amendments:
+                # Read synchronously, so none is checked against its signed rows or
+                # the profile: each renders labelled unverified (#1366, rc21 profile).
                 attrs["description"] = describe_with_amendments(
-                    str(attrs.get("description", "")), [a.content for a in amendments]
+                    str(attrs.get("description", "")), amendment_texts({"approved_amendments": amendments})
                 )
             return format_agent_identity(attrs)
 

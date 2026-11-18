@@ -70,6 +70,11 @@ class RejectParams(BaseModel):
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
 
+#: The deferral context key a proposed identity amendment rides under, from the
+#: DEFER parameters to the listing (GET /v1/wa/deferrals -> context.proposed_amendment).
+PROPOSED_AMENDMENT_CONTEXT_KEY = "proposed_amendment"
+
+
 class DeferParams(BaseModel):
     """Parameters for DEFER action."""
 
@@ -98,6 +103,14 @@ class DeferParams(BaseModel):
     domain_hint: Optional[DomainCategory] = Field(
         None,
         description="Licensed domain hint for routing, when applicable",
+    )
+    proposed_amendment: Optional[str] = Field(
+        None,
+        description=(
+            "When the deferral asks a Wise Authority to change the agent's identity: the proposed amendment text, "
+            "exactly as the WA would approve it (resolve with amendment_text). Model-written: a proposal, never an "
+            "amendment until a WA approves these exact bytes."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)

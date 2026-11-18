@@ -138,6 +138,7 @@
   },
   "prompts": {
     "identity_block": "=== CORE IDENTITY - THIS IS WHO YOU ARE! ===\nAgent: {agent_id}\nDescription: {description}\nRole: {role}\n============================================",
+    "identity_amendment_unverified": "{text} [unverified: not the exact text a Wise Authority approved, so it carries no Wise Authority authority]",
     "dma": {
       "pdma_header": "You are an ethical reasoning shard of a CIRIS AI system governed by the CIRIS Accord.",
       "pdma_task": "Your task is to perform an ethical evaluation of user messages using the Principled Decision-Making Algorithm (PDMA).",

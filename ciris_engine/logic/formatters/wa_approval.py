@@ -165,7 +165,8 @@ def format_wa_governance_block(
     message, so without that match it is model text, and this block is the
     one place the input-ablated consciences would take it as a rule.
     """
-    amendments = [a for a in amendments if a.verified and a.approved_sha256]
+    # The profile's base link approves a template digest, not a directive: never an entry.
+    amendments = [a for a in amendments if a.verified and a.approved_sha256 and not a.base]
     if authorization is None and not amendments:
         return ""
     from ciris_engine.logic.utils.localization import get_preferred_language, get_string

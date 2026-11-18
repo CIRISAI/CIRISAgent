@@ -23,7 +23,7 @@ from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_localized_accord_text
-from ciris_engine.schemas.actions.parameters import DeferParams
+from ciris_engine.schemas.actions.parameters import PROPOSED_AMENDMENT_CONTEXT_KEY, DeferParams
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -74,8 +74,33 @@ class DSASPDMALLMResult(PromptCarrier):
         None,
         description="Optional override for when the task should be reconsidered",
     )
+    proposed_amendment: Optional[str] = Field(
+        None,
+        description="Only when the deferral proposes a change to the agent's identity: the proposed identity text",
+    )
 
     model_config = ConfigDict(extra="forbid")
+
+
+def _proposed_amendment(text: Optional[str]) -> Optional[str]:
+    """The proposed identity text as a WA could approve it verbatim, or None.
+
+    Stripped, because approved amendment text carries no outer whitespace
+    (``ResolveDeferralRequest.amendment_text``). Text longer than one approval
+    accepts is dropped whole rather than cut: a cut proposal is not the text the
+    agent proposed.
+    """
+    from ciris_engine.schemas.api.wa import MAX_AMENDMENT_TEXT_CHARS
+
+    value = (text or "").strip()
+    if not value:
+        return None
+    if len(value) > MAX_AMENDMENT_TEXT_CHARS:
+        logger.warning(
+            "DSASPDMA: proposed amendment of %d characters exceeds %d; not attached", len(value), MAX_AMENDMENT_TEXT_CHARS
+        )
+        return None
+    return value
 
 
 class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
@@ -282,6 +307,12 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         merged_context["rights_basis"] = rights_basis
         if llm_result.domain_hint is not None:
             merged_context["domain_hint"] = llm_result.domain_hint.value
+        # The typed field is the one source: a context key of the same name set
+        # earlier (action selection writes free-form context) is not carried.
+        merged_context.pop(PROPOSED_AMENDMENT_CONTEXT_KEY, None)
+        proposed_amendment = _proposed_amendment(llm_result.proposed_amendment)
+        if proposed_amendment is not None:
+            merged_context[PROPOSED_AMENDMENT_CONTEXT_KEY] = proposed_amendment
 
         params = DeferParams(
             channel_id=original_params.channel_id,
@@ -293,6 +324,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             secondary_needs_categories=secondary_categories,
             rights_basis=rights_basis,
             domain_hint=llm_result.domain_hint or original_params.domain_hint,
+            proposed_amendment=proposed_amendment,
         )
         # ActionSelectionDMAResult.resource_usage is JSONDict; LLMBus returns
         # a ResourceUsage Pydantic object. Convert via model_dump or pass
@@ -351,6 +383,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
                 rights_basis=get_rights_basis_for_need_category(llm_result.primary_need_category or inferred_need),
                 domain_hint=llm_result.domain_hint,
                 defer_until=llm_result.defer_until,
+                proposed_amendment=llm_result.proposed_amendment,
             )
 
         result = self._convert_result(llm_result, current_params, resource_usage=resource_usage)

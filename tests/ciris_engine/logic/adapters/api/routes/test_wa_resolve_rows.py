@@ -63,12 +63,17 @@ class _Harness:
         )
         self.auth = SimpleNamespace(user_id="wa-2026-10-22-OWNER1")
 
-    async def resolve(self, resolution: str = "approve", amendment_text: Optional[str] = None) -> Any:
+    async def resolve(
+        self, resolution: str = "approve", amendment_text: Optional[str] = None, call_fingerprint: Optional[str] = None
+    ) -> Any:
         return await wa.resolve_deferral(
             self.request,  # type: ignore[arg-type]
             DEFERRAL_ID,
             ResolveDeferralRequest(
-                resolution=resolution, guidance="$memorize x CONCEPT IDENTITY", amendment_text=amendment_text
+                resolution=resolution,
+                guidance="$memorize x CONCEPT IDENTITY",
+                amendment_text=amendment_text,
+                call_fingerprint=call_fingerprint,
             ),
             self.auth,  # type: ignore[arg-type]
         )
@@ -262,6 +267,7 @@ async def test_amendment_text_on_a_non_approval_is_refused(monkeypatch: pytest.M
     with pytest.raises(HTTPException) as refused:
         await h.resolve(resolution, amendment_text=AMENDMENT_TEXT)
     assert refused.value.status_code == 400
+    assert refused.value.detail["error"]["details"]["reason_id"] == "wa.amendment_text_requires_approve"
     assert h.resolved == [] and node.calls_to("emit_deferral_response") == []
 
 
@@ -285,3 +291,36 @@ def test_amendment_text_must_be_the_exact_bytes(bad: str) -> None:
 
     with pytest.raises(ValidationError):
         ResolveDeferralRequest(resolution="approve", guidance="g", amendment_text=bad)
+
+
+@pytest.mark.parametrize("resolution", ["reject", "modify"])
+@pytest.mark.asyncio
+async def test_call_fingerprint_on_a_non_approval_is_refused(monkeypatch: pytest.MonkeyPatch, resolution: str) -> None:
+    node = install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+    with pytest.raises(HTTPException) as refused:
+        await h.resolve(resolution, call_fingerprint="sha256:call")
+    assert refused.value.status_code == 400
+    assert refused.value.detail["error"]["details"]["reason_id"] == "wa.call_fingerprint_requires_approve"
+    assert h.resolved == [] and node.calls_to("emit_deferral_response") == []
+
+
+@pytest.mark.asyncio
+async def test_a_resolution_names_one_subject(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A deferral is either a call approval or an identity change, never both."""
+    node = install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+    with pytest.raises(HTTPException) as refused:
+        await h.resolve(amendment_text=AMENDMENT_TEXT, call_fingerprint="sha256:call")
+    assert refused.value.status_code == 400
+    assert refused.value.detail["error"]["details"]["reason_id"] == "wa.resolve_one_subject"
+    assert h.resolved == [] and node.calls_to("emit_deferral_response") == []
+
+
+@pytest.mark.asyncio
+async def test_an_approved_call_fingerprint_is_carried_to_the_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+    await h.resolve(call_fingerprint="sha256:call")
+    (resolved,) = h.resolved
+    assert resolved.call_fingerprint == "sha256:call" and resolved.amendment_text is None

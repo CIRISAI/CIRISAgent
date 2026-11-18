@@ -299,6 +299,65 @@ async def test_a_long_reason_and_context_come_back_whole_from_the_list_route(
 
 
 @pytest.mark.asyncio
+async def test_a_proposed_amendment_rides_from_dsaspdma_into_the_listing(wise_authority_service, time_service, temp_db):
+    """DSASPDMA's typed proposed_amendment reaches GET /v1/wa/deferrals as context.proposed_amendment,
+    and the list says exact amendment text is supported (client 0.5.243)."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from ciris_engine.logic.adapters.api.routes import wa as wa_routes
+    from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator, DSASPDMALLMResult
+    from ciris_engine.logic.handlers.control.defer_handler import DeferHandler
+    from ciris_engine.schemas.actions.parameters import DeferParams
+    from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
+    proposed = "I end every reply with a short check-in question."
+    evaluator = object.__new__(DSASPDMAEvaluator)
+    result = evaluator._convert_result(
+        DSASPDMALLMResult(
+            reason_summary="Identity change needs Wise Authority approval.",
+            operational_reason=DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED,
+            primary_need_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
+            proposed_amendment=f"  {proposed}\n",
+        ),
+        DeferParams(reason="change my identity", context={"proposed_amendment": "smuggled by action selection"}),
+    )
+    params = result.action_parameters
+    assert isinstance(params, DeferParams) and params.proposed_amendment == proposed
+
+    metadata: dict = {}
+    object.__new__(DeferHandler)._add_context_metadata(metadata, params.context)
+
+    await wise_authority_service.start()
+    _insert_task_via_persist(
+        task_id="task-amend",
+        channel_id="test-channel",
+        description="Amendment task",
+        status="active",
+        priority=0,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+    )
+    await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-amend",
+            thought_id="thought-amend",
+            reason=params.reason,
+            defer_until=time_service.now() + timedelta(hours=1),
+            context=metadata,
+        )
+    )
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wise_authority_service=wise_authority_service)))
+    response = await wa_routes.get_deferrals(request, SimpleNamespace(user_id="observer"), None)  # type: ignore[arg-type]
+
+    (listed,) = [d for d in response.data.deferrals if d.task_id == "task-amend"]
+    assert listed.context["proposed_amendment"] == proposed
+    assert response.data.capabilities.exact_amendment_text is True
+    assert response.data.model_dump(mode="json")["capabilities"] == {"exact_amendment_text": True}
+
+
+@pytest.mark.asyncio
 async def test_get_pending_deferrals(wise_authority_service, time_service, temp_db):
     """Test getting pending deferrals."""
     await wise_authority_service.start()

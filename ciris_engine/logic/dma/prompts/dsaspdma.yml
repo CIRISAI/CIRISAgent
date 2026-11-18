@@ -94,6 +94,7 @@ response_format: |
   - "rights_basis": list of short rights-basis labels
   - "domain_hint": optional licensed domain enum when a specialized licensed handler is clearly needed
   - "defer_until": optional ISO 8601 timestamp (e.g. "2025-01-20T15:00:00Z") at which the task reactivates on its own. Set it only when the deferral is time-based; action selection does not set it, so this is where it is decided
+  - "proposed_amendment": optional. Only when this deferral asks a Wise Authority to change the agent's own identity: the proposed identity text, one short first-person statement, exactly as it would be approved. Otherwise omit it
 
   Example:
   {{"reason_summary": "Licensed legal review is required before giving procedural guidance.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}

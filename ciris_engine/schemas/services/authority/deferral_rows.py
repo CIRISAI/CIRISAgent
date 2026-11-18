@@ -115,6 +115,13 @@ class DeferralRowView(BaseModel):
     authorized_by: Optional[str] = Field(None, description="On an amendment: the approved response")
     evidence_refs: List[str] = Field(default_factory=list)
     room_id: Optional[str] = Field(None, description="The envelope's community_key_id, when the row has a room")
+    prev: Optional[str] = Field(
+        None,
+        description=(
+            "On an identity_amendment (rc21, refs.prev): the row id of the amendment it follows. None on the base "
+            "link, whose amendment_digest is the base template's digest, and on rows from before rc21."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid")
 

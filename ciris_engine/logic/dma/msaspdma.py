@@ -430,33 +430,6 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             language=self.prompt_loader.language,
         )
 
-    def _frame_messages(self, system_message: str, user_message: str) -> List[JSONDict]:
-        """Wrap one system and one user message in the frame every DMA shares.
-
-        Accord, language guidance, crisis resources, then the evaluator's own
-        two messages. Shared with RSASPDMA and FSASPDMA so the three memory
-        second passes cannot drift apart on what precedes their guide.
-        """
-        messages: List[JSONDict] = []
-        accord_text = get_localized_accord_text(self.prompt_loader.language)
-        if accord_text:
-            messages.append({"role": "system", "content": accord_text})
-        from ciris_engine.logic.utils.localization import get_language_guidance
-
-        lang_guidance = get_language_guidance(self.prompt_loader.language)
-        if lang_guidance:
-            messages.append({"role": "system", "content": lang_guidance})
-        # Crisis resources ride directly after language guidance (#1248) — the
-        # locale's verified numbers, from the one composer every DMA shares.
-        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
-
-        _crisis_block = get_crisis_resources_system_block(self.prompt_loader.language)
-        if _crisis_block:
-            messages.append({"role": "system", "content": _crisis_block})
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": user_message})
-        return messages
-
     def _graph_block(self, key: str) -> str:
         """A block of the shared graph guide, read from msaspdma.yml in this thought's language.
 

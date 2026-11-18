@@ -16,7 +16,7 @@ import pytest
 from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, SegmentKind, TrustLevel
 from tests.ciris_engine.logic.dma import msaspdma_golden as mg
 
-SITES = ("msaspdma", "rsaspdma")
+SITES = ("msaspdma", "rsaspdma", "fsaspdma")
 ALL = [(site, name) for site in SITES for name in mg.NAMES[site]]
 
 
@@ -48,7 +48,7 @@ async def test_the_prompt_is_the_pre_migration_bytes_with_a_clean_manifest(site:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["ms_full"])
+@pytest.mark.parametrize("name", ["ms_full", "fs_full"])
 async def test_the_verified_grant_is_wa_guidance_with_its_authz(name: str) -> None:
     seen: Dict[str, Any] = {}
     with _mode(AssemblyMode.FAIL_CLOSED):

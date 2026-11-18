@@ -20,15 +20,13 @@ never a guessed id.
 from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 from pydantic import ConfigDict, Field
 
-from ciris_engine.logic.formatters.verified_sender import with_verified_sender
-from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.logic.formatters.wa_approval import (
-    format_wa_approval_block,
-    format_wa_approval_facts,
     wa_authorization_of,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -50,6 +48,9 @@ from ciris_engine.schemas.services.graph_core import (
 from ciris_engine.schemas.types import JSONDict
 
 from .msaspdma import MSASPDMAEvaluator
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
 
 logger = logging.getLogger(__name__)
 
@@ -82,39 +83,50 @@ class FSASPDMAEvaluator(MSASPDMAEvaluator):
         context: Optional[Any] = None,
         conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
-        """Compose the FSASPDMA prompt message list."""
+        """The FSASPDMA messages alone (the composition seam); see :meth:`compose_prompt`."""
+        messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
+        return messages
+
+    def compose_prompt(
+        self,
+        original_thought: ProcessingQueueItem,
+        aspdma_result: ActionSelectionDMAResult,
+        context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """The FSASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage
+
         self._sync_language_from_context(context)
-        authorization = wa_authorization_of(context)
-        system_message = "\n\n".join(
-            filter(
-                None,
-                (
-                    self._require_prompt_value("system_guidance_header"),
-                    self._graph_block("memory_model"),
-                    self._graph_block("addressing_convention"),
-                    self._graph_block("scope_convention"),
-                    self._require_prompt_value("memory_prohibitions"),
-                    self._require_prompt_value("evaluation_steps"),
-                    self._require_prompt_value("response_format"),
-                    self._require_prompt_value("closing_reminder"),
-                    # The identity/environment prohibition is decidable only with
-                    # the approval, or the fact that there is none, in view —
-                    # the same two blocks MSASPDMA carries (#1320).
-                    format_wa_approval_block(authorization, language=self.prompt_loader.language),
-                    format_wa_approval_facts(authorization, language=self.prompt_loader.language),
-                ),
-            )
-        ).strip()
-        user_message = self._require_prompt_value("context_integration").format(
-            original_thought_content=getattr(getattr(original_thought, "content", None), "text", "") or "",
-            aspdma_reasoning=aspdma_result.rationale or "",
-            candidate_nodes=self._format_candidates(self.candidate_nodes_from_context(context)),
+        system = self._guide_segments(
+            [
+                ("system_guidance_header", self._require_prompt_value("system_guidance_header")),
+                ("memory_model", self._graph_block("memory_model")),
+                ("addressing_convention", self._graph_block("addressing_convention")),
+                ("scope_convention", self._graph_block("scope_convention")),
+                ("memory_prohibitions", self._require_prompt_value("memory_prohibitions")),
+                ("evaluation_steps", self._require_prompt_value("evaluation_steps")),
+                ("response_format", self._require_prompt_value("response_format")),
+                ("closing_reminder", self._require_prompt_value("closing_reminder")),
+            ],
+            keep_empty=False,
         )
-        # The verified sender of the message being answered (#1366 item 5).
-        user_message = with_verified_sender(user_message, original_thought, context, language=self.prompt_loader.language)
-        # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
-        user_message = with_conscience_feedback(user_message, conscience_feedback)
-        return self._frame_messages(system_message, user_message)
+        # The identity/environment prohibition is decidable only with the approval, or the fact that there is
+        # none, in view — the same two blocks MSASPDMA carries (#1320).
+        system = system + self._approval_segments(wa_authorization_of(context))
+        typed, plain = self._user_slots(original_thought, aspdma_result, self.candidate_nodes_from_context(context))
+        # The verified sender of the message being answered (#1366 item 5) and, on a conscience retry, the veto
+        # ASPDMA saw (#1366 item 1) follow the template in the user message.
+        return self._assemble(
+            PromptStage.FSASPDMA,
+            FSASPDMALLMResult.__name__,
+            system,
+            typed,
+            plain,
+            original_thought,
+            context,
+            conscience_feedback,
+        )
 
     def _convert_forget(
         self,
@@ -182,17 +194,18 @@ class FSASPDMAEvaluator(MSASPDMAEvaluator):
         if aspdma_result.selected_action != HandlerActionType.FORGET:
             raise ValueError(f"FSASPDMA requires FORGET action, got {aspdma_result.selected_action}")
 
-        messages = self.compose_messages(
+        messages, manifest = self.compose_prompt(
             original_thought, aspdma_result, context=context, conscience_feedback=conscience_feedback
         )
-        llm_result, resource_usage = await self.call_llm_structured(
-            messages=messages,
-            response_model=FSASPDMALLMResult,
-            max_tokens=8192,
-            temperature=0.0,
-            thought_id=original_thought.thought_id,
-            task_id=original_thought.source_task_id,
-        )
+        with prompt_manifest_scope(manifest):
+            llm_result, resource_usage = await self.call_llm_structured(
+                messages=messages,
+                response_model=FSASPDMALLMResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=original_thought.thought_id,
+                task_id=original_thought.source_task_id,
+            )
         usage: Optional[JSONDict] = (
             resource_usage.model_dump() if hasattr(resource_usage, "model_dump") else resource_usage
         )

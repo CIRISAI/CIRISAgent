@@ -87,10 +87,11 @@ HasEvidence(j) ==
     CASE scen = "S1" -> TRUE
       \* An ablated judge holding a stub of the chat rule knows an advisory rule exists, who stated it (role)
       \* and that the draft relates to it: enough to judge own-turn compliance, never enough to treat it as signed.
-      [] scen = "S2" -> (j \notin Ablated /\ p["rule_user_chat"]) \/ (j \in Ablated /\ p["rule_chat_stub"])
+      \* Only signed rules count (2026-11-18): a chat-stated rule has no segment of its own; a non-ablated judge sees
+      \* it inside the request. Ablated judges have no evidence for it, by design.
+      [] scen = "S2" -> j \notin Ablated /\ p["request"]
       [] scen = "S6" -> (attached \/ Trusted(p)) /\ (attached \/ p["sender_identity"])
-      [] OTHER       -> attached \/ Trusted(p) \/ (j \notin Ablated /\ p["rule_wa_chat"])
-                        \/ (scen = "S3" /\ j \in Ablated /\ p["rule_chat_stub"])
+      [] OTHER       -> attached \/ Trusted(p) \/ (scen = "S3" /\ j \notin Ablated /\ p["request"])
 
 \* Verdicts available to conscience j on the current draft (A2).
 Verdicts(j) ==
@@ -192,7 +193,6 @@ NoForcedDeferral == final # "auto_defer"
 DeferralInformative == (final \in {"defer", "auto_defer"}) => package
 \* I13 Stubs only where content is withheld: non-ablated stages get segments in full, never as stubs.
 StubsOnlyAblated == \A j \in Judges \ Ablated : \A it \in Stubs : ~inputs[j][it]
-\* I14 Informed ablation: wherever an advisory chat rule exists, each ablated judge holds its stub.
-StubInformed == (scen \in {"S2", "S3"}) => \A j \in Ablated : inputs[j]["rule_chat_stub"]
+\* (StubInformed withdrawn 2026-11-18: only signed rules count, and nothing structural marks a chat rule.)
 Terminates == <>(pc = "done")
 =============================================================================

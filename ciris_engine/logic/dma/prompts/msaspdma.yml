@@ -104,6 +104,9 @@ system_guidance_header: |
   conventions and the nodes that already exist, so you can check the write is
   addressed correctly.
 
+  PIPELINE POSITION: action selection chose the verb only; this step checks
+  where the write goes. The consciences then review the action before it runs.
+
   This is a second look, not a correction: nothing has been changed for you. If
   the node you chose is wrong, say what it should be. If you should not be
   storing this at all, switch action.

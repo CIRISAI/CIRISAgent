@@ -16,8 +16,10 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected FORGET. Action selection chose the verb only; this step
-  names the node.
+  You have selected FORGET.
+
+  PIPELINE POSITION: action selection chose the verb only; this step names the
+  node. The consciences then review the action before it runs.
 
   You are shown how the graph is addressed and the nodes that already exist, so
   the node removed is the one you mean.

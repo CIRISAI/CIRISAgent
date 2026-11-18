@@ -16,8 +16,10 @@ accord_header: true
 
 # PROCEDURAL — what this step is.
 system_guidance_header: |
-  You have selected RECALL. Action selection chose the verb only; this step
-  says what to read.
+  You have selected RECALL.
+
+  PIPELINE POSITION: action selection chose the verb only; this step says what
+  to read. A RECALL only reads, so it runs without a conscience review.
 
   You are shown how the graph is addressed and the nodes that already exist, so
   the read looks where the information is.

@@ -114,7 +114,7 @@ A segment is described on five independent axes. The kind says *what* it is. The
 
 Every segment can carry three optional ids. Required ones are set by policy.
 
-- **Authentication (`authn`):** the verified subject (user id + role) and the verifier (auth context, gateway token, signature). Required on `sender_identity`. Required on a `wa_chat` rule to be treated as authoritative.
+- **Authentication (`authn`):** the verified subject (user id + role) and the verifier (auth context, gateway token, signature). Required on `sender_identity`. (A `wa_chat` rule is never authoritative, authn or not: §15.1.)
 - **Authorization (`authz`):** the grant that makes it binding: amendment node id, deferral id, response attestation id, `signature_verified`. Required on `amendment`, `signed_guidance` rules and `wa_guidance`.
 - **Accounting (`acct`):** the record tying the segment to the audit trail: row hash, audit entry id, trace id. Plus veto ids and discharge records for `conscience_feedback` (§9).
 
@@ -179,7 +179,7 @@ The policy generates three artefacts, and none of them is hand-edited:
 
 ## 7. Composition with the verified-WA signal (#1365)
 
-The "response to request from authorized Wise Authority" block is not new machinery. It is a `rule` segment with provenance `signed_guidance` or `amendment`, or a verified `wa_chat`, carrying `authn` and `authz`. Policy requires it for every judge whenever a trusted rule is in force.
+The "response to request from authorized Wise Authority" block is not new machinery. It is a `rule` segment with provenance `signed_guidance` or `amendment` (never `wa_chat`, §15.1), carrying `authn` and `authz`. Policy requires it for every judge whenever a trusted rule is in force.
 
 A user's attempt (`user_chat`) never produces such a segment. So the ablated stages still judge a user-imposed policy blind, which is the intended firewall.
 

@@ -17,7 +17,8 @@ HANDLERS = ["CSDMAEvaluator", "BaseDSDMA", "EthicalPDMAEvaluator", "IDMAEvaluato
             "TSASPDMA", "coherence_conscience", "entropy_conscience", "epistemic_humility_conscience",
             "optimization_veto_conscience"]
 ITEMS = ["user_msg", "history", "sender_id", "sender_role", "display_name", "identity", "rule_any",
-         "rule_in_identity", "wa_guidance", "actions_ran", "prior_attempt", "veto_feedback", "raw_ctx_via_record"]
+         "rule_in_identity", "wa_guidance", "actions_ran", "prior_attempt", "veto_feedback", "raw_ctx_via_record",
+         "thought_as_user_msg"]
 
 
 def rule_snippet(text):
@@ -119,6 +120,9 @@ def detect(prompt_text, t, rule):
         "prior_attempt": "I attempted to" in p,
         "veto_feedback": "CONSCIENCE OVERRIDE GUIDANCE" in p,
         "raw_ctx_via_record": "Actions that ran in this task:" in p and "PREVIOUS CONTEXT" in p,
+        # CIRISAgent#1366 item 18: with ConscienceCheckContext.task None, coherence / epistemic humility label the
+        # follow-up thought's text "User message"; a real observation there starts "You observed".
+        "thought_as_user_msg": bool(re.search(r"User message:\s*(?!You observed)\S", p)),
     }
 
 

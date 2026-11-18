@@ -29,18 +29,48 @@ Engine issue: CIRISAgent#1366 (the 19 fixes, with reasons; copy in `FIXES.md`). 
 
 ## Model result (TLC; `TLA2TOOLS=… ./check.sh`)
 
-| Invariant | Contract | Measured v2.22.1 | Contract + one unreviewed post-review change |
+`check.sh` first compiles `context_policy.yaml` → `ContractPolicy.tla` (`gen_contract_policy.py`, which refuses a
+policy that fails its static checks) and `matrix.json` → `ContextData.tla`, then checks every invariant.
+Decisions of 2026-11-18 are in force: only **signed** rules (signed guidance, amendment) are authoritative; a WA
+rule stated in chat is advisory until signed (S3: follow in that conversation, answer normally, or defer asking for
+a signature).
+
+| Invariant | Contract (generated) | Measured v2.22.1 | Contract + one unreviewed post-review change |
 |---|---|---|---|
-| Ablation (no untrusted text to entropy / optimization veto) | holds | **violated** | holds |
-| EvidenceSufficiency (every conscience has trusted evidence of a WA rule) | holds | **violated** | holds |
-| VerifiedIdentity (sender ID as its own field) | holds | **violated** | holds |
+| Ablation | holds | **violated** | holds |
+| EvidenceSufficiency | holds | **violated** | holds |
+| VerifiedIdentity | holds | **violated** | holds |
 | NoWrongExecution | holds | **violated** | **violated** |
-| ReviewIntegrity (what executes is what was reviewed) | holds | holds | **violated** |
-| VetoContinuity (a vetoed action runs only if discharged on the record) | holds | **violated** | **violated** |
-| AuthMonotone (an ID-mismatch refusal never becomes filing) | holds | **violated** | **violated** |
+| ReviewIntegrity | holds | holds | **violated** |
+| VetoContinuity | holds | **violated** | **violated** |
+| AuthMonotone | holds | **violated** | **violated** |
 | NoForcedDeferral | holds | **violated** | holds |
 | DeferralInformative | holds | **violated** | holds |
+| NoLaundering (no system segment carries untrusted bytes) | holds | **violated** | holds |
+| NoCrossTaskLeak (WA guidance only in its task) | holds | holds (not exercised: no cross-task scenario measured) | holds |
+| IdentityLayout (display name never inside the sender line) | holds | **violated** | holds |
 | Terminates | holds | holds | holds |
+
+## Policy input shape (`context_policy.yaml`)
+
+```yaml
+version: <int>
+ablated_stages: [<stage>, ...]
+kinds:            # every kind used anywhere; closed set (gen_contract_policy.KINDS)
+  <kind>: {trust: untrusted|verified|system, lifecycle: standing|per-task|per-message|per-thought|retry-only|per-call,
+           authn: required?, authz: required?, acct: required?, render: labelled?, residual: true?, source: <src>?}
+rule_provenance:  # trust of a rule by provenance; user_chat and wa_chat MUST be untrusted
+  user_chat|wa_chat|signed_guidance|amendment: untrusted|verified
+stages:           # anything not listed is never
+  <stage>:
+    <kind> | rule.<provenance>: always|never|trusted_rule_in_force|id_scoped|signed_guidance_in_force|amendment_in_force|advisory_rule|retry
+```
+
+Predicates are a closed list, each defined once (scenario sets in `gen_contract_policy.PRED_SCEN`, TLA+ form in
+`PRED_TLA`); the engine's Python guard must implement the same list with a conformance test. Static checks:
+vocabulary, firewall (ablated stages get no untrusted kind except `residual` ones), signed-only authority, no
+laundering by declaration (`action_record` is system), identity layout (`display_name` labelled, `sender_identity`
+authn), evidence sufficiency (every judge gets signed rule evidence wherever a signed rule is in force), completeness.
 
 **How to read it.**
 - Assumptions: drafting stages are fallible; a conscience that holds the evidence judges correctly, and
@@ -73,17 +103,3 @@ Engine issue: CIRISAgent#1366 (the 19 fixes, with reasons; copy in `FIXES.md`). 
   rule; only the owner arm counts toward "obeyed".
 - **Red CI jobs with a verdict are infrastructure findings** (provider connection errors, timeouts, log
   floods), reported as such and never counted as behavioural failures.
-
-## Vendored into CIRISAgent (2026-11-18)
-
-Copied from RATCHET `experiments/claims_registry/m4_battery/ctxflow/` at commit 361371a (`ContextData_report.json`
-is one line: 568 `[stage, scenario, kind, item, fraction, n]` rows). Reproduced here with tla2tools v1.7.4 (sha256 936a2620…e050e88): the same table as above.
-
-Extended in CIRISAgent with two constants and three configs:
-- `VerbPassSeesVeto` (#1366 item 1): the veto reason reaches the verb second pass. `contract_noverbveto`: only
-  NoForcedDeferral breaks (a banned TOOL action is re-proposed until depth).
-- `ToolGate` (#1366 item 19): TaskEnvelope Phase 2 denies a filing by an unauthorized subject at dispatch.
-  `contract_postreview_gate` and `measured_gate`: AuthMonotone holds again; NoWrongExecution does not (the gate
-  covers TOOL actions only), so the gate is a second line, not a replacement for the consciences.
-
-Run: `TLA2TOOLS=/path/to/tla2tools.jar ./check.sh` (all configs) or `CFGS="contract measured" ./check.sh`.

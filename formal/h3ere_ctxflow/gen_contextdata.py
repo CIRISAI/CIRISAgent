@@ -16,9 +16,16 @@ STAGE = {"ActionSelectionPDMAEvaluator": "aspdma", "TSASPDMA": "tsaspdma", "cohe
 SCEN = {"S1 default (no rule)": "S1", "S2 rule stated by user (same message)": "S2",
         "S3 rule stated by WA (earlier message, same channel)": "S3", "S4 guidance task after WA answer": "S4",
         "S5 after amendment landed (other user)": "S5", "S6 impersonator after genuine correction": "S6"}
-ITEM = {"user_msg": "user_msg", "history": "history", "display_name": "display_name",
-        "raw_ctx_via_record": "raw_ctx_via_record", "identity": "identity", "rule_visible": "rule_any",
-        "rule_in_identity": "rule_in_identity", "wa_guidance": "wa_guidance"}
+# Model atoms (FSD §4; see gen_contract_policy.py) <- measured items. Measured prompts have no separate verified
+# sender field (sender_identity: never) and render the display name inside the sender line (unlabelled).
+# A rule seen in the prompt is attributed by scenario: S2 user chat; S3 WA chat without a verified carrier;
+# S4 the signed guidance (counted as wa_guidance); S5/S6 the amendment (counted as amendment).
+ITEM = {"request": "user_msg", "history": "history", "identity_base": "identity",
+        "amendment": "rule_in_identity", "wa_guidance": "wa_guidance",
+        "display_name_unlabelled": "display_name", "action_record_tainted": "raw_ctx_via_record",
+        "action_record_factual": "actions_ran", "rule_user_chat": "rule_any", "rule_wa_chat": "rule_any"}
+RULE_ATOM_SCEN = {"rule_user_chat": {"S2"}, "rule_wa_chat": {"S3"}}
+NEVER = ["sender_identity", "display_name_labelled", "rule_verified"]
 
 acc = collections.defaultdict(lambda: [0, collections.Counter()])
 for r in M["rows"]:
@@ -29,7 +36,12 @@ for r in M["rows"]:
     a = acc[(st, sc, k)]
     a[0] += r["n"]
     for it, src in ITEM.items():
-        a[1][it] += r.get(src, 0) * r["n"]
+        if it in RULE_ATOM_SCEN and sc not in RULE_ATOM_SCEN[it]:
+            continue
+        v = r.get(src, 0)
+        if it == "action_record_factual":   # a record carrying raw text is the tainted one, not factual
+            v = max(0.0, v - r.get("raw_ctx_via_record", 0))
+        a[1][it] += v * r["n"]
 
 
 def level(f):
@@ -49,11 +61,11 @@ tla = f"""---------------------------- MODULE ContextData ----------------------
 (* Measured presence of each context item in each stage's prompt, per scenario and thought.  *)
 (* >= 0.95 of calls: "always"; <= 0.05: "never"; otherwise "sometimes".                     *)
 (* No data for a combination (the stage never ran there): "never".                           *)
-(* gov_block and sender_id_verified do not exist in the engine: "never".                     *)
+(* sender_identity, display_name_labelled, rule_verified do not exist in the engine: "never".  *)
 
 MeasuredHas(stage, s, k, item) ==
   LET key == <<stage, s, k, item>> IN
-  IF item \\in {{"gov_block", "sender_id_verified"}} THEN "never"
+  IF item \\in {{{", ".join('"%s"' % x for x in NEVER)}}} THEN "never"
   ELSE
 {body}
     [] OTHER -> "never"

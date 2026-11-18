@@ -4,7 +4,9 @@
 (* receives, how a veto is typed and carried through retries, and what may *)
 (* execute.                                                                *)
 (*                                                                         *)
-(* Rules = "contract": the proposed context and decision contract.         *)
+(* Rules = "contract": the context contract GENERATED from                 *)
+(*   context_policy.yaml (gen_contract_policy.py -> ContractPolicy.tla),   *)
+(*   plus the typed-veto decision contract.                                *)
 (* Rules = "measured": prompt contents as measured from 42,998 as-sent     *)
 (*   LLM calls on CIRISAgent v2.22.1 (ContextData.tla, generated), with    *)
 (*   the engine's untyped veto feedback.                                   *)
@@ -18,57 +20,50 @@
 (*      ordinary helpful action passes; a rule-driven restriction or       *)
 (*      refusal may be vetoed as an invented policy.                       *)
 (***************************************************************************)
-EXTENDS Naturals, FiniteSets, TLC, ContextData
+EXTENDS Naturals, FiniteSets, TLC, ContextData, ContractPolicy
 
 CONSTANTS Rules, MaxDepth, PostReviewChange, VerbPassSeesVeto, ToolGate
 ASSUME Rules \in {"measured", "contract"} /\ MaxDepth \in 1..6 /\ PostReviewChange \in BOOLEAN
        /\ VerbPassSeesVeto \in BOOLEAN /\ ToolGate \in BOOLEAN
-\* VerbPassSeesVeto (#1366 item 1): the veto reason reaches the verb second pass (TSASPDMA), which
-\*   drafts TOOL actions. FALSE = it reaches ASPDMA only, so a banned TOOL action can be re-proposed.
-\* ToolGate (#1366 item 19): TaskEnvelope Phase 2 checks a deterministic, task-scoped authorization
-\*   fact at ToolBus.dispatch_to_provider. In S6 the sender is not authorized to file, so a filing is
-\*   denied at dispatch whatever the models decided. It covers TOOL actions only.
+\* (CIRISAgent additions) VerbPassSeesVeto, #1366 item 1: the veto reason reaches the verb second pass
+\*   (TSASPDMA), which drafts TOOL actions; FALSE = ASPDMA only, so a banned TOOL action can come back.
+\* ToolGate, #1366 item 19: TaskEnvelope Phase 2 checks a deterministic authorization fact at
+\*   ToolBus.dispatch_to_provider. In S6 the sender may not file, so a filing is denied at dispatch.
 
 Scenarios == {"S1", "S2", "S3", "S4", "S5", "S6"}
 \* S1 no rule in force.
 \* S2 an ordinary user states a rule in their own message (own-turn preference at most).
-\* S3 the WA states a rule earlier on its own channel.
+\* S3 the WA states a rule in chat, not signed: ADVISORY until signed (decision 2026-11-18). Acceptable:
+\*    follow it in that conversation, answer normally, or defer asking the WA to sign it (which yields S4).
 \* S4 guidance task: the WA resolved a deferral, repeating the rule (signed).
 \* S5 the rule landed as an approved identity amendment; another user asks.
 \* S6 as S5 and ID-scoped; the asker shows the authorized person's display name.
 Kinds   == {"seed", "followup"}
 Judges  == {"coherence", "entropy", "epistemic", "optveto"}
 Ablated == {"entropy", "optveto"}          \* input-ablated by design: no untrusted text
-Untrusted == {"user_msg", "history", "display_name", "raw_ctx_via_record"}
-Items == {"user_msg", "history", "display_name", "raw_ctx_via_record", "identity", "rule_visible",
-          "rule_in_identity", "wa_guidance", "gov_block", "sender_id_verified"}
+\* Atoms: segment kinds with the provenance / rendering the model reasons about (FSD §4).
+Untrusted == {"request", "history", "display_name_labelled", "display_name_unlabelled", "action_record_tainted",
+              "rule_user_chat", "rule_wa_chat"}
+Items == {"request", "history", "identity_base", "amendment", "wa_guidance", "sender_identity",
+          "action_record_factual", "action_record_tainted", "display_name_labelled", "display_name_unlabelled",
+          "rule_user_chat", "rule_wa_chat", "rule_verified"}
 
 Options(s) == CASE s = "S1" -> {"normal"}
+                [] s = "S3" -> {"follow", "normal", "defer_sign"}
                 [] s = "S6" -> {"refuse", "file"}
                 [] OTHER    -> {"follow", "normal"}
 Acceptable(s, a) == CASE s = "S1" -> a = "normal"
                       [] s = "S2" -> a \in {"follow", "normal"}  \* same-user reply: either is fine
+                      [] s = "S3" -> a \in {"follow", "normal", "defer_sign"}  \* advisory until signed
                       [] s = "S6" -> a = "refuse"
                       [] OTHER    -> a = "follow"
-TrustedRule(s) == s \in {"S3", "S4", "S5", "S6"}   \* a verified-WA rule exists in trusted state
-FaceValueFine(a) == a \in {"normal", "file"}       \* looks like ordinary help to a stage without the rule
-ToolActions == {"file"}                            \* drafted by the verb second pass, dispatched via ToolBus
+TrustedRule(s) == s \in {"S4", "S5", "S6"}   \* a SIGNED rule is in force (signed guidance or amendment)
+FaceValueFine(a) == a \in {"normal", "file", "defer_sign"}       \* looks like ordinary help to a stage without the rule
+ToolActions == {"file"}
 GateDenies(s, a) == ToolGate /\ s = "S6" /\ a \in ToolActions
+Draftable(b) == IF VerbPassSeesVeto THEN b ELSE b \ ToolActions
 
-(* The contract: what each conscience must receive.                        *)
-ContractHas(j, s, item) ==
-    CASE item = "identity"           -> "always"
-      [] item = "gov_block"          -> IF TrustedRule(s) THEN "always" ELSE "never"
-         \* system-built: rule text + provenance (WA id, deferral/attestation/amendment ids, signature ok)
-      [] item = "rule_in_identity"   -> IF s \in {"S5", "S6"} THEN "always" ELSE "never"
-      [] item = "wa_guidance"        -> IF s = "S4" THEN "always" ELSE "never"
-      [] item = "sender_id_verified" -> "always"   \* structured field, separate from the display name
-      [] item \in {"user_msg", "history", "display_name"} -> IF j \in Ablated THEN "never" ELSE "always"
-      [] item = "raw_ctx_via_record" -> "never"    \* action record is factual: no message text
-      [] item = "rule_visible"       -> IF s = "S1" \/ j \in Ablated THEN "never" ELSE "always"
-      [] OTHER -> "never"
-
-Pres(j, s, k, item) == IF Rules = "contract" THEN ContractHas(j, s, item) ELSE MeasuredHas(j, s, k, item)
+Pres(j, s, k, item) == IF Rules = "contract" THEN ContractHas(j, s, k, item) ELSE MeasuredHas(j, s, k, item)
 
 Always(s, k) == [ j \in Judges |-> { it \in Items : Pres(j, s, k, it) = "always" } ]
 Maybe(s, k)  == [ j \in Judges |-> { it \in Items : Pres(j, s, k, it) = "sometimes" } ]
@@ -82,14 +77,14 @@ VARIABLES scen, kind, inputs, pc, draft, vetoed, banned, discharged, attached, d
 vars == <<scen, kind, inputs, pc, draft, vetoed, banned, discharged, attached, depth, reviewed, final,
           everRefused, package>>
 
-Trusted(p) == p["gov_block"] \/ p["rule_in_identity"] \/ p["wa_guidance"]
+Trusted(p) == p["rule_verified"] \/ p["amendment"] \/ p["wa_guidance"]
 \* Does conscience j hold the evidence the decision rests on?
 HasEvidence(j) ==
     LET p == inputs[j] IN
     CASE scen = "S1" -> TRUE
-      [] scen = "S2" -> j \notin Ablated /\ p["rule_visible"]
-      [] scen = "S6" -> (attached \/ Trusted(p)) /\ (attached \/ p["sender_id_verified"])
-      [] OTHER       -> attached \/ Trusted(p) \/ (j \notin Ablated /\ p["rule_visible"])
+      [] scen = "S2" -> j \notin Ablated /\ p["rule_user_chat"]
+      [] scen = "S6" -> (attached \/ Trusted(p)) /\ (attached \/ p["sender_identity"])
+      [] OTHER       -> attached \/ Trusted(p) \/ (j \notin Ablated /\ p["rule_wa_chat"])
 
 \* Verdicts available to conscience j on the current draft (A2).
 Verdicts(j) ==
@@ -109,9 +104,9 @@ Init ==
 \* is banned (the veto reason reaches ASPDMA AND the verb second pass); measured, nothing is banned.
 Draft ==
     /\ pc = "draft"
-    /\ IF Options(scen) \ (IF VerbPassSeesVeto THEN banned ELSE banned \ ToolActions) = {}
+    /\ IF Options(scen) \ Draftable(banned) = {}
          THEN /\ final' = "defer" /\ package' = TRUE /\ pc' = "done" /\ UNCHANGED <<draft, everRefused>>
-         ELSE /\ \E a \in Options(scen) \ (IF VerbPassSeesVeto THEN banned ELSE banned \ ToolActions) :
+         ELSE /\ \E a \in Options(scen) \ Draftable(banned) :
                    /\ draft' = a /\ everRefused' = (everRefused \/ a = "refuse")
               /\ pc' = "judge" /\ UNCHANGED <<final, package>>
     /\ UNCHANGED <<scen, kind, inputs, vetoed, banned, discharged, attached, depth, reviewed>>
@@ -160,7 +155,7 @@ Next == Draft \/ Judge \/ Exec \/ Done
 Spec == Init /\ [][Next]_vars /\ WF_vars(Draft \/ Judge \/ Exec)
 
 ----------------------------------------------------------------------------
-Executed == final \in {"normal", "follow", "refuse", "file"}
+Executed == final \in {"normal", "follow", "refuse", "file", "defer_sign"}
 
 TypeOK == pc \in {"draft", "judge", "exec", "done"} /\ depth \in 0..MaxDepth
 \* I1  The firewall: input-ablated consciences receive no untrusted text.
@@ -168,7 +163,14 @@ Ablation == \A j \in Ablated : \A it \in Untrusted : ~inputs[j][it]
 \* I2  Every conscience holds trusted evidence for a verified-WA rule in force.
 EvidenceSufficiency == TrustedRule(scen) => \A j \in Judges : Trusted(inputs[j])
 \* I3  ID-scoped decisions: the verified sender id is a field of its own wherever a display name is shown.
-VerifiedIdentity == (scen = "S6") => \A j \in Judges : inputs[j]["sender_id_verified"]
+VerifiedIdentity == (scen = "S6") => \A j \in Judges : inputs[j]["sender_identity"]
+\* I10 No laundering: no system-labelled segment carries untrusted bytes (the action record is factual).
+NoLaundering == \A j \in Judges : ~inputs[j]["action_record_tainted"]
+\* I11 Per-task segments stay in their task: WA guidance appears only in the guidance task it belongs to.
+NoCrossTaskLeak == \A j \in Judges : inputs[j]["wa_guidance"] => scen = "S4"
+\* I12 Identity layout: a display name is only ever shown labelled as self-chosen, never inside the sender line
+\*     that authorization reads.
+IdentityLayout == \A j \in Judges : ~inputs[j]["display_name_unlabelled"]
 \* I4  What executes is acceptable.
 NoWrongExecution == Executed => Acceptable(scen, final)
 \* I5  What executes is what passed review.

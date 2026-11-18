@@ -11,6 +11,11 @@ from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tu
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.config.llm_budget import Deadline, active_budget, attempt_timeout, llm_call_deadline
+from ciris_engine.logic.conscience.veto_contract import (
+    VETO_RECORD_FEEDBACK_KEY,
+    format_prior_vetoes_block,
+    veto_entries_of_task,
+)
 from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
@@ -48,6 +53,7 @@ from ciris_engine.schemas.processors.core import (
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.veto_record import ObjectionType, VetoObjection
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -307,6 +313,11 @@ class ThoughtProcessor(
         self, thought_item: ProcessingQueueItem, thought: Thought, thought_context: Any, dma_results: Any
     ) -> JSONDict:
         """Execute action selection and conscience validation phases."""
+        # Veto continuity across thoughts (#1366 item 8): a follow-up thought's
+        # drafters read the task's earlier vetoes through the same conscience
+        # feedback a retry uses.
+        self._carry_task_vetoes(thought_item, thought, thought_context)
+
         # Phase 4: PERFORM_ASPDMA - LLM-powered action selection
         with timed_phase(RoundPhase.ASPDMA):
             action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
@@ -320,7 +331,13 @@ class ThoughtProcessor(
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
         with timed_phase(RoundPhase.ASPDMA):
-            action_result = await self._run_verb_second_pass(thought_item, action_result, thought_context)
+            # Both drafting passes read the same feedback (#1366 item 8).
+            action_result = await self._run_verb_second_pass(
+                thought_item,
+                action_result,
+                thought_context,
+                conscience_feedback=getattr(thought_item, "conscience_feedback", None),
+            )
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         with timed_phase(RoundPhase.CONSCIENCE):
@@ -1301,6 +1318,51 @@ class ThoughtProcessor(
         except Exception as e:
             logger.warning(f"VERB_SECOND_PASS: Failed to emit reasoning event ({verb}): {e}")
 
+    @staticmethod
+    def _retry_language(thought_item: Any, thought: Any, thought_context: Any) -> str:
+        """The agent's locale for retry and veto feedback (thought, then queue item, then context)."""
+        from ciris_engine.logic.utils.localization import (
+            _lang_from_obj_or_inner_context,
+            get_preferred_language,
+            get_user_language_from_context,
+        )
+
+        return (
+            _lang_from_obj_or_inner_context(thought)
+            or _lang_from_obj_or_inner_context(thought_item)
+            or get_user_language_from_context(thought_context)
+            or get_preferred_language()
+        )
+
+    def _carry_task_vetoes(self, thought_item: ProcessingQueueItem, thought: Any, thought_context: Any) -> None:
+        """Put the task's veto record in a fresh thought's conscience feedback (#1366 item 8).
+
+        A PONDER follow-up used to carry an earlier veto only as question text,
+        so the next draft could re-propose the vetoed action. The record reaches
+        ASPDMA and the verb second pass through ``conscience_feedback``, which
+        both already render; the conscience fold reads the same record and
+        vetoes an identical banned draft again. A retry's own feedback (already
+        set) is left alone: it carries the record too. Never raises.
+        """
+        if getattr(thought_item, "conscience_feedback", None):
+            return
+        task_id = getattr(thought, "source_task_id", None) or getattr(thought_item, "source_task_id", None)
+        if not isinstance(task_id, str) or not task_id:
+            return
+        try:
+            record = veto_entries_of_task(persistence.get_task_by_id_any_occurrence(task_id))
+        except Exception as e:  # noqa: BLE001 - no record is what the thought had before
+            logger.debug("Could not read the veto record of task %s: %s", task_id, e)
+            return
+        if not record:
+            return
+        language = self._retry_language(thought_item, thought, thought_context)
+        thought_item.conscience_feedback = {
+            VETO_RECORD_FEEDBACK_KEY: [e.model_dump(mode="json") for e in record],
+            "retry_guidance": format_prior_vetoes_block(record, language),
+        }
+        logger.info("[VETO_CONTRACT] Thought %s carries %d earlier veto(es) of its task", thought_item.thought_id, len(record))
+
     def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
         """Check if we should retry action selection with conscience guidance.
 
@@ -1533,14 +1595,22 @@ class ThoughtProcessor(
         )
 
         header = get_string(language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**")
-        intro = get_string(
-            language,
-            "conscience.retry_intro",
-            default="Your previous attempt to {action} was rejected because: {reason}",
-            action=attempted_action,
-            reason=override_reason,
-        )
+        if conscience_result is not None and conscience_result.vetoes:
+            intro = self._typed_veto_intro(attempted_action, conscience_result.vetoes[0], conscience_result, language)
+        else:
+            # Not a typed veto (a guardrail redirect, a forced retry PONDER):
+            # the generic line, unchanged.
+            intro = get_string(
+                language,
+                "conscience.retry_intro",
+                default="Your previous attempt to {action} was rejected because: {reason}",
+                action=attempted_action,
+                reason=override_reason,
+            )
         intro = f"{header}\n{intro}"
+        if conscience_result is not None and len(conscience_result.veto_record) > 1:
+            # Earlier vetoes in this task, so the retry does not walk back into one.
+            intro = f"{intro}\n\n{format_prior_vetoes_block(conscience_result.veto_record, language)}"
         materially_different_rule = get_string(
             language,
             "conscience.retry_must_be_different",
@@ -1590,6 +1660,57 @@ class ThoughtProcessor(
         )
         return f"{base_guidance}{materially_different_rule}\n{general_outro}"
 
+    @staticmethod
+    def _typed_veto_intro(
+        attempted_action: str,
+        veto: VetoObjection,
+        conscience_result: ConscienceApplicationResult,
+        language: str,
+    ) -> str:
+        """Name the objecting conscience, its objection type and whether it could see the rule (#1366 item 14).
+
+        The retry used to read every veto as "rejected because: <reason>", a
+        fact. On v2.21.0 "I cannot see this rule" was read as "the rule is a
+        hallucination" and a correct refusal became a filed ticket. An evidence
+        objection now says what it is: the conscience could not see a verified
+        rule, and only a signed rule changes that, never the drafter's argument.
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
+        lines = [
+            get_string(
+                language,
+                "conscience.retry_veto_intro",
+                action=attempted_action,
+                conscience=veto.conscience,
+                objection_type=veto.objection_type.value,
+                # Last: free text, never re-read as a placeholder.
+                reason=veto.reason or "-",
+            )
+        ]
+        if conscience_result.repeated_veto_id:
+            lines.append(
+                get_string(
+                    language,
+                    "conscience.retry_repeated_veto",
+                    conscience=veto.conscience,
+                    veto_id=conscience_result.repeated_veto_id,
+                    objection_type=veto.objection_type.value,
+                )
+            )
+        # Literal keys, one call each, so the research override facility sees every one.
+        if veto.held_trusted_rule:
+            lines.append(get_string(language, "conscience.retry_saw_rule", conscience=veto.conscience))
+        else:
+            lines.append(get_string(language, "conscience.retry_no_rule", conscience=veto.conscience))
+        if veto.objection_type == ObjectionType.EVIDENCE:
+            lines.append(get_string(language, "conscience.retry_objection_evidence", conscience=veto.conscience))
+        elif veto.objection_type == ObjectionType.JUSTIFICATION:
+            lines.append(get_string(language, "conscience.retry_objection_justification", conscience=veto.conscience))
+        else:
+            lines.append(get_string(language, "conscience.retry_objection_substantive", conscience=veto.conscience))
+        return "\n".join(lines)
+
     def _prepare_conscience_retry_context(
         self,
         thought_item: ProcessingQueueItem,
@@ -1622,18 +1743,7 @@ class ThoughtProcessor(
         # `.thought` / `.task` pointers (the OPT_VETO_DEBUG run on
         # 2026-04-26 confirmed retry was falling through to env="en" while
         # opt-veto resolved correctly off the Thought).
-        from ciris_engine.logic.utils.localization import (
-            _lang_from_obj_or_inner_context,
-            get_preferred_language,
-            get_user_language_from_context,
-        )
-
-        retry_language = (
-            _lang_from_obj_or_inner_context(thought)
-            or _lang_from_obj_or_inner_context(thought_item)
-            or get_user_language_from_context(thought_context)
-            or get_preferred_language()
-        )
+        retry_language = self._retry_language(thought_item, thought, thought_context)
         logger.info(f"[CONSCIENCE_RETRY] Retry guidance language: {retry_language}")
         retry_guidance = self._build_retry_guidance(
             attempted_action,
@@ -1643,11 +1753,18 @@ class ThoughtProcessor(
             language=retry_language,
         )
 
-        conscience_feedback = {
+        conscience_feedback: JSONDict = {
             "failed_action": attempted_action,
             "failure_reason": override_reason,
             "retry_guidance": retry_guidance,
         }
+        if conscience_result.veto_record:
+            # The task's veto record rides with the retry (#1366 item 8): the
+            # retry's conscience fold re-vetoes a banned draft from it even if
+            # the task write failed.
+            conscience_feedback[VETO_RECORD_FEEDBACK_KEY] = [
+                e.model_dump(mode="json") for e in conscience_result.veto_record
+            ]
         if updated_observation:
             conscience_feedback["new_observation"] = updated_observation
             conscience_feedback["updated_status_detected"] = "true"
@@ -1682,8 +1799,18 @@ class ThoughtProcessor(
         )
 
         if not retry_conscience_result.overridden:
-            logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} passed consciences")
+            # The earlier veto is not dropped: the fold recorded on this result
+            # what changed since (pass_after_veto: new evidence or a changed
+            # action), and the record keeps the veto (#1366 item 9).
+            logger.info(
+                "ThoughtProcessor: Retry action %s passed consciences (change since veto: %s)",
+                retry_result.selected_action,
+                retry_conscience_result.pass_after_veto.change if retry_conscience_result.pass_after_veto else "-",
+            )
             return retry_result, retry_conscience_result
+
+        # Keep the retry's vetoes with the result the thought ends on.
+        original_conscience_result.veto_record = retry_conscience_result.veto_record or original_conscience_result.veto_record
 
         # Check for benchmark mode bouncing
         from ciris_engine.logic.config.env_utils import get_env_var

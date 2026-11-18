@@ -65,6 +65,14 @@ class ConscienceCheckContext(BaseModel):
     # the agent as it is now, not as it was before an approved amendment.
     agent_identity: Optional[Any] = Field(None, description="Agent identity from the system snapshot")
 
+    # Set by the SYSTEM when it re-reviews an evidence objection (#1366 item 9):
+    # trusted governance exists that the objecting conscience was not shown, so
+    # it is attached (the verified WA governance block) and that conscience
+    # judges once more. Never set from drafter or message text.
+    attached_evidence: bool = Field(
+        False, description="The verified WA governance block is attached for an evidence re-review"
+    )
+
     # Additional context can be added via extra fields
     model_config = ConfigDict(
         extra="allow",  # Allow additional context fields

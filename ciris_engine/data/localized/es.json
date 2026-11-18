@@ -207,7 +207,8 @@
     "retry_veto_intro": "Su intento anterior de {action} fue vetado por la conciencia {conscience}. Tipo de objeción: {objection_type}. Motivo: {reason}",
     "retry_saw_rule": "La conciencia {conscience} pudo ver la gobernanza verificada de la Autoridad Sabia que lleva esta tarea (guía firmada o enmiendas aprobadas).",
     "retry_no_rule": "La conciencia {conscience} no pudo ver ninguna regla verificada de la Autoridad Sabia para esta acción: esta tarea no lleva ninguna guía firmada ni enmienda aprobada que se le haya mostrado.",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "retry_objection_evidence": "Esta es una objeción de EVIDENCIA (EVIDENCE): la conciencia {conscience} no pudo ver la autoridad de una regla en la que se basa su borrador. Eso no significa que la regla sea falsa o inventada. El sistema buscó en el estado de confianza (guía firmada de la Autoridad Sabia, enmiendas aprobadas) y no encontró nada que cubra esta acción, por lo que aquí la regla no se respeta como política. No vuelva a proponer la misma acción ni argumente que la regla existe: solo una regla firmada puede cambiar este veredicto. Si la regla importa, puede elegir Diferir (DEFER) para que una Autoridad Sabia la firme."
   },
   "consent_about_desc": "Los streams de consentimiento te permiten controlar cómo CIRIS usa tus datos para ayudar a otros.",
   "consent_about_title": "Acerca de los streams de consentimiento",

@@ -207,7 +207,8 @@
     "retry_veto_intro": "Il tuo precedente tentativo di {action} è stato posto sotto veto dalla coscienza {conscience}. Tipo di obiezione: {objection_type}. Motivo: {reason}",
     "retry_saw_rule": "La coscienza {conscience} ha potuto individuare la governance Wise Authority verificata che questo compito porta con sé (guida firmata o emendamenti approvati).",
     "retry_no_rule": "La coscienza {conscience} non ha potuto individuare alcuna regola Wise Authority verificata per questa azione: questo compito non porta con sé alcuna guida firmata o emendamento approvato che le sia stato mostrato.",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "retry_objection_evidence": "Questa è un'obiezione di EVIDENZA (EVIDENCE): la coscienza {conscience} non ha potuto vedere l'autorità di una regola su cui si basa la tua bozza. Ciò non significa che la regola sia falsa o inventata. Il sistema ha cercato nello stato attendibile (guida firmata della Wise Authority, emendamenti approvati) e non ha trovato nulla che copra questa azione, quindi qui la regola non viene rispettata come politica. Non riproporre la stessa azione e non sostenere che la regola esista: solo una regola firmata può cambiare questo verdetto. Se la regola è importante, puoi scegliere DEFER (Differisci) affinché una Wise Authority possa firmarla."
   },
   "consent_about_desc": "Autorizza l'accesso ai tuoi dati tra servizi e gestisci le relazioni di fiducia",
   "consent_about_title": "Informazioni sul Consenso",

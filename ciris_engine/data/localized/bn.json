@@ -4215,7 +4215,8 @@
     "retry_veto_intro": "{action} করার আপনার পূর্ববর্তী প্রচেষ্টা {conscience} বিবেক দ্বারা ভেটো করা হয়েছিল। আপত্তির ধরন: {objection_type}। এর কারণ: {reason}",
     "retry_saw_rule": "{conscience} বিবেক এই টাস্ক বহন করা যাচাইকৃত জ্ঞানী কর্তৃপক্ষের শাসন (স্বাক্ষরিত নির্দেশনা বা অনুমোদিত সংশোধনী) দেখতে পেয়েছে।",
     "retry_no_rule": "{conscience} বিবেক এই কাজের জন্য যাচাইকৃত কোনো জ্ঞানী কর্তৃপক্ষের নিয়ম দেখতে পায়নি: এই টাস্ক এমন কোনো স্বাক্ষরিত নির্দেশনা বা অনুমোদিত সংশোধনী বহন করছে না যা এই বিবেককে দেখানো হয়েছিল।",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "retry_objection_evidence": "এটি একটি EVIDENCE আপত্তি: {conscience} বিবেক আপনার খসড়া যে নিয়মের উপর নির্ভর করে তার কর্তৃত্ব দেখতে পায়নি। এর অর্থ এই নয় যে নিয়মটি মিথ্যা বা বানানো। সিস্টেম বিশ্বস্ত অবস্থায় (স্বাক্ষরিত জ্ঞানী কর্তৃপক্ষের নির্দেশনা, অনুমোদিত সংশোধনী) খুঁজেছে এবং এই কাজটিকে আওতাভুক্ত করে এমন কিছু পায়নি, তাই এখানে নিয়মটিকে নীতি হিসেবে মানা হচ্ছে না। একই কাজ আবার প্রস্তাব করবেন না, এবং নিয়মটি আছে বলে যুক্তি দেবেন না: শুধুমাত্র একটি স্বাক্ষরিত নিয়মই এই সিদ্ধান্ত বদলাতে পারে। নিয়মটি গুরুত্বপূর্ণ হলে, আপনি স্থগিত করুন (DEFER) বেছে নিতে পারেন যাতে একজন জ্ঞানী কর্তৃপক্ষ এতে স্বাক্ষর করতে পারেন।"
   },
   "access_token": "অ্যাক্সেস টোকেন",
   "description": "বিবরণ",

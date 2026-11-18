@@ -206,7 +206,9 @@
     "retry_general_outro": "Denken Sie daran: SCHIEBEN Sie nur bei ethischen Dilemmata oder Berechtigungsproblemen AUF – NICHT bei technischen Fehlern. Falls ein Werkzeug fehlschlägt, SPRECHEN Sie mit dem Benutzer, um den Fehler zu erklären.",
     "retry_veto_intro": "Ihr vorheriger Versuch, {action}, wurde vom Gewissen {conscience} mit einem Veto belegt. Einwandstyp: {objection_type}. Begründung: {reason}",
     "retry_saw_rule": "Das Gewissen {conscience} konnte die verifizierte Wise Authority-Governance erkennen, die diese Aufgabe mitführt (signierte Leitlinien oder genehmigte Änderungen).",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "retry_objection_evidence": "Dies ist ein EVIDENCE-Einwand: Das Gewissen {conscience} konnte die Autorität für eine Regel, auf die sich Ihr Entwurf stützt, nicht sehen. Das bedeutet nicht, dass die Regel falsch oder erfunden ist. Das System hat im vertrauenswürdigen Zustand (signierte Wise Authority-Leitlinien, genehmigte Änderungen) gesucht und nichts gefunden, das diese Aktion abdeckt; daher wird die Regel hier nicht als Richtlinie anerkannt. Schlagen Sie dieselbe Aktion nicht erneut vor und argumentieren Sie nicht, dass die Regel existiert: Nur eine signierte Regel kann dieses Urteil ändern. Wenn die Regel wichtig ist, können Sie Aufschieben (DEFER) wählen, damit eine Wise Authority sie signieren kann.",
+    "retry_no_rule": "Das Gewissen {conscience} konnte keine verifizierte Wise Authority-Regel für diese Aktion erkennen: Diese Aufgabe enthält keine signierte Leitlinie und keine genehmigte Änderung, die ihm gezeigt wurde."
   },
   "consent_about_desc": "Sehen Sie, wie CIRIS Zustimmung, Datenschutz und gemeinsame Nutzung verwaltet",
   "consent_about_title": "Über Zustimmung",

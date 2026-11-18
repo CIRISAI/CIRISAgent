@@ -207,7 +207,8 @@
     "retry_veto_intro": "Votre précédente tentative de {action} a été frappée d'un veto par la conscience {conscience}. Type d'objection : {objection_type}. Raison : {reason}",
     "retry_saw_rule": "La conscience {conscience} a pu voir la gouvernance Wise Authority vérifiée que comporte cette tâche (directives signées ou amendements approuvés).",
     "retry_no_rule": "La conscience {conscience} n'a trouvé aucune règle Wise Authority vérifiée pour cette action : cette tâche ne comporte aucune directive signée ni amendement approuvé qui lui ait été présenté.",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "retry_objection_evidence": "Il s'agit d'une objection de type EVIDENCE : la conscience {conscience} n'a pas pu voir l'autorité d'une règle sur laquelle repose votre brouillon. Cela ne signifie pas que la règle est fausse ou inventée. Le système a cherché dans l'état de confiance (directives signées par la Wise Authority, amendements approuvés) et n'a rien trouvé qui couvre cette action ; la règle n'est donc pas appliquée ici comme politique. Ne reproposez pas la même action et n'affirmez pas que la règle existe : seule une règle signée peut changer ce verdict. Si la règle est importante, vous pouvez choisir Différer (DEFER) afin qu'une Wise Authority puisse la signer."
   },
   "consent_about_desc": "Découvrez comment CIRIS protège votre vie privée et gère vos données",
   "consent_about_title": "À propos du consentement",

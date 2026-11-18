@@ -332,7 +332,8 @@
       "source": "jẹ́rìísí nípasẹ̀: {source}",
       "display_name": "Orúkọ ìfihàn '@{display_name}' jẹ́ èyí tí ẹni náà fúnra rẹ̀ yàn, kì í sì í ṣe ìdánimọ̀.",
       "wa_prefix": "Ìbẹ̀rẹ̀pẹ̀lẹ́ id 'wa-' kò fi hàn pé ó jẹ́ Aláṣẹ Ọlọ́gbọ́n; ipa nìkan ni ó fi hàn án.",
-      "footer": "=== ÌPARÍ OLÙRÁNṢẸ́ TÍ A JẸ́RÌÍSÍ ==="
+      "footer": "=== ÌPARÍ OLÙRÁNṢẸ́ TÍ A JẸ́RÌÍSÍ ===",
+      "role_not_verified": "role: a kò jẹ́rìísí rẹ̀ (ATÚNṢE yìí kì í jẹ́rìísí àwọn ipa)"
     }
   },
   "handlers": {
@@ -4212,7 +4213,9 @@
     "retry_general_outro": "Ranti: Lo DEFER nikan fun awon ọran dẹ ti ara rẹ tabi awon eto alagba, kii se awon aṣiṣẹ iyen. Ti errand kan ba fọ, lo SPEAK fun sọ aṣiṣẹ si ẹnikan.",
     "retry_veto_intro": "Ìgbìyànjú rẹ tẹ́lẹ̀ láti {action} ni ẹ̀rí-ọkàn {conscience} kọ̀. Irú àtakò: {objection_type}. Ìdí rẹ̀: {reason}",
     "retry_saw_rule": "Ẹ̀rí-ọkàn {conscience} lè rí ìṣàkóso ALÁṢẸ ỌLỌ́GBỌ́N tí a jẹ́rìí sí tí iṣẹ́ yìí gbé (ìtọ́ni tí a fọwọ́ sí tàbí àwọn àtúnṣe tí a fọwọ́ sí).",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "prior_vetoes_header": "**ÀWỌN ÀTAKÒ ẸRÍ-ỌKÀN TÍ Ó ṢẸLẸ̀ TẸ́LẸ̀ NÍNÚ IṢẸ́ YÌÍ:**",
+    "retry_no_rule": "ẸRÍ-ỌKÀN {conscience} kò lè rí òfin ALÁṢẸ ỌLỌ́GBỌ́N kankan tí a ti jẹ́rìísí fún ìgbésẹ̀ yìí: iṣẹ́ yìí kò gbé ìtọ́ni tí a fọwọ́ sí tàbí àtúnṣe tí a fọwọ́ sí kankan tí a fi hàn án."
   },
   "access_token": "Àmì Ìwọlé",
   "description": "Àpè̀jú",

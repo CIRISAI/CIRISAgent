@@ -4214,7 +4214,8 @@
     "prior_vetoes_header": "**இந்தப் பணியில் முன்னர் ஏற்பட்ட மனசாட்சி வீட்டோக்கள்:**",
     "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
     "veto_status_banned": "தடை செய்யப்பட்டது, மாற்றமின்றி மீண்டும் முன்மொழியாதீர்கள்",
-    "veto_status_open": "சிறந்த நியாயப்படுத்தலுடன் மீண்டும் முன்மொழியலாம்"
+    "veto_status_open": "சிறந்த நியாயப்படுத்தலுடன் மீண்டும் முன்மொழியலாம்",
+    "prior_veto_line": "- {action}: {conscience}-ஆல் வீட்டோ செய்யப்பட்டது ({objection_type}; {status}). காரணம்: {reason}"
   },
   "access_token": "அணுகல் டோக்கன்",
   "description": "விளக்கம்",

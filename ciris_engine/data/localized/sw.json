@@ -207,7 +207,8 @@
     "retry_veto_intro": "Jaribio lako la awali la {action} lilibatilishwa na dhamiri ya {conscience}. Aina ya pingamizi: {objection_type}. Sababu yake: {reason}",
     "retry_saw_rule": "Dhamiri ya {conscience} iliweza kuona uongozi wa Wise Authority uliothibitishwa unaobebwa na kazi hii (mwongozo uliotiwa sahihi au marekebisho yaliyoidhinishwa).",
     "retry_no_rule": "Dhamiri ya {conscience} haikuweza kuona kanuni yoyote ya Wise Authority iliyothibitishwa kwa ajili ya hatua hii: kazi hii haibebi mwongozo uliotiwa sahihi wala marekebisho yaliyoidhinishwa iliyoonyeshwa.",
-    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'"
+    "repeated_speak_guidance": "You already spoke in response to this task, do not speak twice unless your first utterance was so grossly inadequate you must correct yourself, and if so, start with, 'I apologize'",
+    "retry_objection_evidence": "Hili ni pingamizi la USHAHIDI (EVIDENCE): Dhamiri ya {conscience} haikuweza kuona mamlaka ya kanuni ambayo rasimu yako inaitegemea. Hilo halimaanishi kwamba kanuni hiyo ni ya uongo au imebuniwa. Mfumo ulitafuta katika hali inayoaminika (mwongozo wa Wise Authority uliotiwa sahihi, marekebisho yaliyoidhinishwa) na haukupata chochote kinachohusu hatua hii, kwa hiyo kanuni hiyo haiheshimiwi kama sera hapa. Usipendekeze tena hatua ile ile, na usibishane kwamba kanuni ipo: ni kanuni iliyotiwa sahihi pekee inayoweza kubadilisha uamuzi huu. Ikiwa kanuni ni muhimu, unaweza kuchagua Ahirisha (DEFER) ili Wise Authority aweze kuitia sahihi."
   },
   "consent_about_desc": "Jifunze jinsi idhini inavyofanya kazi katika CIRIS",
   "consent_about_title": "Kuhusu Idhini",

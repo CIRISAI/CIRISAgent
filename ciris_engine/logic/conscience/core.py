@@ -619,9 +619,12 @@ class _BaseConscience(ConscienceInterface):
     @staticmethod
     def _identity_write_attributes(action: ActionSelectionDMAResult) -> Dict[str, Any]:
         node = getattr(action.action_parameters, "node", None)
-        attrs = getattr(node, "attributes", None)
-        if hasattr(attrs, "model_dump"):
-            dumped = attrs.model_dump()
+        attrs: Any = getattr(node, "attributes", None)
+        if attrs is None:
+            return {}
+        dump = getattr(attrs, "model_dump", None)
+        if callable(dump):
+            dumped = dump()
             return dumped if isinstance(dumped, dict) else {}
         return dict(attrs) if isinstance(attrs, dict) else {}
 

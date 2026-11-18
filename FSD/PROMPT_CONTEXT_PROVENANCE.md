@@ -280,6 +280,6 @@ A veto is a `conscience_feedback` segment with:
 ## 15. Decisions (Eric, 2026-11-18; were open questions)
 
 1. **WA rules are authoritative only when signed.** A Wise Authority's rule stated in chat (`wa_chat`) is advisory, even with a verified WA role, until it lands as `signed_guidance` or an `amendment`. The agent may offer to defer so the WA signs it. Policy therefore admits `rule` segments to judges only with provenance `signed_guidance` or `amendment`; `wa_chat_verified` is not authoritative.
-2. **IDMA receives the trusted `rule` segments and `amendment` segments, with provenance, but not `identity_base`.** It keeps its independent-source view of the agent, and can tell governance from a single epistemic source (#1366 item 15).
+2. **IDMA receives the trusted `rule` segments and `amendment` segments, with provenance, but not `identity_base`.** It keeps its independent-source view of the agent, and can tell governance from a single epistemic source (#1366 item 15). It also receives chat-stated rules (`rule.user_chat`, `rule.wa_chat`) explicitly labelled advisory, not authoritative (Eric, 2026-11-18), so it can tell one person's request from governance.
 3. **The `accord` stays identical across stages** (the full polyglot text, as now).
 4. **Manifests ride the trace:** they are emitted in the reasoning stream next to `llm_call` and inherit the trace's signing, consent and retention. No new store.

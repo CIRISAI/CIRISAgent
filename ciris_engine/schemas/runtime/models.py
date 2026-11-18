@@ -71,6 +71,17 @@ class WAAuthorization(BaseModel):
             "so the node can check the approval answers THIS agent's deferral. None where response_attestation_id is."
         ),
     )
+    amendment_text: Optional[str] = Field(
+        None,
+        description=(
+            "The exact identity amendment the Wise Authority approved (CIRISAgent#1366 F1). An identity-scope "
+            "MEMORIZE in this task writes these bytes, never the model's wording. None: the approval approves no "
+            "identity change, and no amendment lands (Eric, 2026-11-18: no legacy grace)."
+        ),
+    )
+    amendment_sha256: Optional[str] = Field(
+        None, description="sha256 (lowercase hex) of amendment_text, as the signed resolution committed to it"
+    )
     verification: Literal["verified"] = Field(
         "verified",
         description="Only a verified approval can be represented; unsigned or failed ones grant nothing",

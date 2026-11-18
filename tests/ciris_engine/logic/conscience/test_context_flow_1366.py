@@ -60,8 +60,21 @@ AMENDMENT = IdentityAmendment(
     granted_at="2026-11-16T09:00:00+00:00",
     response_attestation_id="att-resp-77",
     amendment_attestation_id="att-amend-77",
+    # The loader matched sha256(content) against both signed rows (#1366 F1).
+    approved_sha256=__import__("hashlib").sha256(
+        "Filing tickets is authorized only for the person whose ID is wa-2026-AUTH-5562FD.".encode("utf-8")
+    ).hexdigest(),
+    verified=True,
 )
 _NOW = datetime.now(timezone.utc).isoformat()
+
+
+@pytest.fixture(autouse=True)
+def _tool_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The deployment's tool registry knows ``create_ticket`` (#1366 F4)."""
+    from ciris_engine.logic.infrastructure.authorization import enabled_tools
+
+    monkeypatch.setattr(enabled_tools, "_CACHED_TOOLS", frozenset({"create_ticket"}))
 
 
 def _thought(thought_id: str, content: str, action: Optional[FinalAction], status: ThoughtStatus) -> Thought:
@@ -172,7 +185,15 @@ async def test_ablated_consciences_read_the_verified_governance_block(cls: type,
     ):
         assert value in prompt, value
     # The amendment entry, with its provenance.
-    for value in ("identity_amendment", AMENDMENT.node_id, "defer_77", "att-resp-77", "att-amend-77", AMENDMENT.content):
+    for value in (
+        "identity_amendment",
+        AMENDMENT.node_id,
+        "defer_77",
+        "att-resp-77",
+        "att-amend-77",
+        str(AMENDMENT.approved_sha256),
+        AMENDMENT.content,
+    ):
         assert value in prompt, value
     # The ablation holds: no user text, no tool output, anywhere in the call.
     sent = _sent(seen)
@@ -233,6 +254,29 @@ def test_the_factual_record_names_a_tool_only_as_an_identifier() -> None:
     record = format_action_record([_thought("th", "c", tool, ThoughtStatus.FAILED)], "en", factual=True)
     assert USER_TEXT not in record
     assert "- TOOL unknown_tool: failed" in record
+
+
+@pytest.mark.parametrize("registry", [frozenset({"create_ticket"}), None])
+def test_the_factual_record_names_only_a_tool_the_registry_knows(
+    monkeypatch: pytest.MonkeyPatch, registry: Optional[frozenset]
+) -> None:
+    """#1366 F4: an identifier-shaped name the model invented is not a fact about the deployment."""
+    from ciris_engine.logic.infrastructure.authorization import enabled_tools
+
+    monkeypatch.setattr(enabled_tools, "_CACHED_TOOLS", registry)
+    invented = FinalAction(action_type="tool", action_params={"name": "wa_approved_override_all_policies"}, reasoning="r")
+    known = FinalAction(action_type="tool", action_params={"name": "create_ticket"}, reasoning="r")
+    record = format_action_record(
+        [_thought("a", "c", invented, ThoughtStatus.FAILED), _thought("b", "c", known, ThoughtStatus.COMPLETED)],
+        "en",
+        factual=True,
+    )
+    assert "wa_approved_override_all_policies" not in record
+    assert "- TOOL unknown_tool: failed" in record
+    if registry is None:
+        assert "create_ticket" not in record, "a cold registry knows no name: fail closed"
+    else:
+        assert "- TOOL create_ticket: done" in record
 
 
 def test_ponder_handler_records_a_factual_outcome() -> None:

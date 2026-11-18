@@ -73,6 +73,17 @@ def request_row_of(deferral_info: Dict[str, object]) -> Optional[DeferralRequest
         return None
 
 
+def _amendment_matches_digest(response: DeferralResponse) -> bool:
+    """True when the response names no amendment, or its text hashes to its signed digest (#1366 F1)."""
+    import hashlib
+
+    if response.amendment_text is None and response.amendment_sha256 is None:
+        return True
+    if response.amendment_text is None or response.amendment_sha256 is None:
+        return False
+    return hashlib.sha256(response.amendment_text.encode("utf-8")).hexdigest() == response.amendment_sha256
+
+
 def _request_row_id(deferral_info: object) -> Optional[str]:
     """The signed request row's id from a stored deferral record, when it has one."""
     row = request_row_of(deferral_info) if isinstance(deferral_info, dict) else None
@@ -900,6 +911,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         if verification is DeferralVerification.FAILED:
             logger.error("Refusing deferral %s: signature present but did not verify", deferral_id)
             return False
+        # The approved amendment's bytes must be the bytes the signature's digest
+        # commits to (#1366 F1): the payload signs the digest, not the text.
+        if not _amendment_matches_digest(response):
+            logger.error("Refusing deferral %s: amendment_text does not match the signed amendment_sha256", deferral_id)
+            return False
 
         try:
             # Routed through persist substrate (CIRISAgent#763).
@@ -1040,6 +1056,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
 
                 # Create new context for guidance task - copy from original and add guidance
                 guidance_context_dict = context.copy()
+                # A grant belongs to the one task its resolution created (#1366 F5).
+                # The deferred task may itself be a guidance task carrying an older
+                # grant or WA-issued envelope; never let the copy pass it on. A grant
+                # for THIS resolution is set below only when it verified, and a
+                # tool-approval envelope only when this deferral names a tool.
+                guidance_context_dict.pop("wa_authorization", None)
+                _inherited_envelope = guidance_context_dict.get("envelope")
+                if (
+                    isinstance(_inherited_envelope, dict)
+                    and _inherited_envelope.get("issuer_kind") == "wise_authority"
+                ):
+                    guidance_context_dict.pop("envelope", None)
                 guidance_context_dict["wa_guidance"] = response.reason
                 guidance_context_dict["original_task_id"] = original_task_id
                 guidance_context_dict["resolved_deferral_id"] = deferral_id
@@ -1108,6 +1136,9 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                         response_attestation_id=response.response_attestation_id,
                         # The request the response answers, from this deferral's own record.
                         request_attestation_id=_request_row_id(deferral_info),
+                        # The exact amendment the WA approved, and its signed digest (#1366 F1).
+                        amendment_text=response.amendment_text,
+                        amendment_sha256=response.amendment_sha256,
                     )
                     guidance_context_dict["wa_authorization"] = wa_authorization.model_dump(mode="json")
                 else:

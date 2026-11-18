@@ -157,7 +157,15 @@ def format_wa_governance_block(
     resolved deferral issues and the approved identity amendments with their
     provenance, never from message text. Each entry names its source, its ids
     and the directive verbatim from the signed row or amendment.
+
+    Only VERIFIED amendments are listed (#1366 F1): ones whose text's sha256
+    the loader matched against the WA's signed approval row and the node's
+    signed amendment row (``context.identity_amendments.verify_amendments``).
+    An amendment's ``content`` was written in a task that read the user's
+    message, so without that match it is model text, and this block is the
+    one place the input-ablated consciences would take it as a rule.
     """
+    amendments = [a for a in amendments if a.verified and a.approved_sha256]
     if authorization is None and not amendments:
         return ""
     from ciris_engine.logic.utils.localization import get_preferred_language, get_string
@@ -192,7 +200,9 @@ def format_wa_governance_block(
                 response_attestation_id=amendment.response_attestation_id or "-",
                 amendment_attestation_id=amendment.amendment_attestation_id or "-",
                 granted_at=amendment.granted_at or "-",
-                directive=amendment.content.strip(),
+                amendment_sha256=amendment.approved_sha256 or "-",
+                # The exact approved bytes: verified means sha256(content) is the approved digest.
+                directive=amendment.content,
             )
         )
     entries.append(get_string(lang, "prompts.wa_governance.footer"))

@@ -736,6 +736,55 @@ def get_preferred_language() -> str:
     return os.getenv("CIRIS_PREFERRED_LANGUAGE", DEFAULT_LANGUAGE)
 
 
+_SUPPORTED_LOCALES: Optional[frozenset[str]] = None
+
+
+def supported_locales() -> frozenset[str]:
+    """The closed set of locale codes CIRIS supports: the ``languages`` of the bundled manifest.
+
+    Read from the PACKAGE's ``data/localized/manifest.json`` (the source of
+    truth the CLAUDE.md names), not from an overridable directory, so the set
+    cannot be widened by a file someone drops beside it. Falls back to the
+    bundles on disk, then to the default language.
+    """
+    global _SUPPORTED_LOCALES
+    if _SUPPORTED_LOCALES is None:
+        codes: set[str] = set()
+        manifest = Path(__file__).resolve().parents[2] / "data" / "localized" / "manifest.json"
+        try:
+            languages = json.loads(manifest.read_text(encoding="utf-8")).get("languages")
+            if isinstance(languages, dict):
+                codes = {str(code) for code in languages}
+        except (OSError, ValueError, AttributeError) as e:
+            logger.warning(f"[LOCALIZATION] could not read the locale manifest {manifest}: {e}")
+        if not codes:
+            codes = set(get_available_languages())
+        codes.add(DEFAULT_LANGUAGE)
+        _SUPPORTED_LOCALES = frozenset(codes)
+    return _SUPPORTED_LOCALES
+
+
+def validate_locale(value: Any) -> Optional[str]:
+    """``value`` as a supported locale code, or None when it is not one (#1366 F3).
+
+    A caller-declared locale is user input: it is interpolated into prompts
+    (the optimization veto's ``{user_locale}``), keys the prompt-loader cache
+    and names a prompts directory. Only a code from :func:`supported_locales`
+    passes. A BCP 47 tag whose primary subtag is supported (``es-MX``,
+    ``pt_BR``) passes as that subtag; anything else is None.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > 35:
+        return None
+    supported = supported_locales()
+    if text in supported:
+        return text
+    primary = text.replace("_", "-").split("-", 1)[0].lower()
+    return primary if primary in supported else None
+
+
 def resolve_language_for_new_task(
     user_lang: Optional[str] = None,
     channel_lang: Optional[str] = None,
@@ -763,8 +812,11 @@ def resolve_language_for_new_task(
     Returns the resolved ISO 639-1 language code (always a non-empty str).
     """
     for candidate in (explicit_lang, user_lang, channel_lang):
+        locale = validate_locale(candidate)
+        if locale:
+            return locale
         if isinstance(candidate, str) and candidate.strip():
-            return candidate.strip()
+            logger.warning("[LOCALIZATION] unsupported locale %r ignored for a new task", candidate[:40])
     return get_preferred_language()
 
 
@@ -888,12 +940,14 @@ def get_user_language_from_context(context: Any) -> str:
         return get_preferred_language()
 
     try:
-        lang = _lang_from_thought_or_task(context)
+        # Validated at each layer (#1366 F3): a stored value that is not a
+        # supported locale is skipped, never interpolated into a prompt.
+        lang = validate_locale(_lang_from_thought_or_task(context))
         if lang:
             logger.debug(f"get_user_language_from_context: thought/task lang='{lang}'")
             return lang
 
-        lang = _lang_from_user_profiles(context)
+        lang = validate_locale(_lang_from_user_profiles(context))
         if lang:
             logger.debug(f"get_user_language_from_context: profile lang='{lang}'")
             return lang

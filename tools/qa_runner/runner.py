@@ -144,6 +144,9 @@ EXPECTED_QA_INCIDENT_PATTERNS = [
     #   finally surfaced still fails its call (and every terminal limit logs
     #   ERROR without either marker).
     "[LLM_IN_FLIGHT_BUDGET]",
+    # rc21 / #1366: every fresh QA agent has no base link, so its profile is unanchored by design
+    # until an owner approves one (identity_profile.py). A notice, not a defect, in QA.
+    "IDENTITY PROFILE UNANCHORED (profile_unanchored)",
     "LLM provider in-flight budget full",
 ]
 

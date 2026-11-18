@@ -604,6 +604,7 @@ class ConscienceExecutionPhase:
                 application_result.review_objection = objected
             if application_result.overridden or not REQUIRED_REVIEW_FACULTIES <= set(application_result.review_passes):
                 return
+            derivation = ConscienceExecutionPhase._declared_derivation(context)
             record = ReviewRecord(
                 fingerprint=fingerprint,
                 thought=thought_id,
@@ -615,10 +616,10 @@ class ConscienceExecutionPhase:
                     if objected is not None
                 ),
                 considered=objection_digests_for(thought_id),
+                # The wire record declares the KINDS of untrusted input (rc21 §4); the entry keeps their digests.
+                derived_from=ConscienceExecutionPhase._derivation_kinds(derivation),
             )
-            application_result.review_candidate = make_review_entry(
-                record, task_id=task_id, derived_from=ConscienceExecutionPhase._declared_derivation(context)
-            )
+            application_result.review_candidate = make_review_entry(record, task_id=task_id, derived_from=derivation)
         except Exception as exc:  # noqa: BLE001 - a record failure leaves the action unadmitted (fail closed)
             logger.error("[REVIEW_RECORD] could not build the review records for %s: %s", thought_id, exc)
 
@@ -638,6 +639,11 @@ class ConscienceExecutionPhase:
         if not isinstance(request, str) or not request:
             return []
         return ["request:sha256:" + hashlib.sha256(request.encode("utf-8")).hexdigest()]
+
+    @staticmethod
+    def _derivation_kinds(derivation: Sequence[str]) -> Tuple[str, ...]:
+        """The context kinds a declared derivation names (``request:sha256:<hex>`` -> ``request``), sorted, distinct."""
+        return tuple(sorted({entry.split(":", 1)[0] for entry in derivation if entry}))
 
     # ------------------------------------------------------------------
     # The decision contract (CIRISAgent#1366 items 7-9)

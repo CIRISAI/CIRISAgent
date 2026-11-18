@@ -7,7 +7,9 @@ using the exact fixtures in ``compose_golden.py``. These tests prove:
 1. ``evaluate()`` still produces byte-identical messages after the extraction
    (the rewiring changed nothing), and
 2. the new ``compose_messages()`` seams, called DIRECTLY with the gathered
-   inputs and no LLM/persistence access, reproduce the same bytes - i.e.
+   inputs (since #1366 Phase 3 the evaluators take the ORIGINAL TASK block as
+   typed segments and the identity record, not their rendered strings) and no
+   LLM/persistence access, reproduce the same bytes - i.e.
    composition is now callable without an LLM call (the #973 prerequisite).
 
 Any change to composition (block order, separator, interpolation, template
@@ -36,7 +38,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
+from ciris_engine.logic.formatters.identity import agent_identity_of
+from ciris_engine.logic.prompt_assembly.segmenting import original_task_segments, task_context_segments
 from ciris_engine.schemas.runtime.system_context import SystemSnapshot
 from ciris_engine.schemas.types import JSONDict
 from tests.ciris_engine.logic.dma.compose_golden import (
@@ -95,11 +98,13 @@ def test_pdma_compose_seam_matches_golden() -> None:
         # Gathered inputs, replicated from evaluate()'s data-gathering phase.
         task_context_str = dma.format_task_context(make_task(), item.thought_depth)
         system_snapshot_str, user_profile_str = dma._build_context_strings(make_context(), thought=item)
-        full_context_str = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n{system_snapshot_str}{user_profile_str}"
+        context = original_task_segments(
+            task_context_segments(task_context_str, None, dma.prompt_loader.language), system_snapshot_str, user_profile_str
+        )
 
-        identity_block = identity_block_of(agent_identity_of(make_context()), language=dma.prompt_loader.language)
-
-        messages = dma.compose_messages(str(item.content), full_context_str, [], identity_block=identity_block)
+        messages = dma.compose_messages(
+            str(item.content), context, [], agent_identity=agent_identity_of(make_context()), thought=item
+        )
     _assert_matches_golden("pdma", messages)
 
 
@@ -115,11 +120,14 @@ def test_csdma_compose_seam_matches_golden() -> None:
         messages = dma.compose_messages(
             str(item.content),
             context_summary,
-            task_context_str,
-            system_snapshot_str,
-            user_profiles_str,
+            original_task_segments(
+                task_context_segments(task_context_str, None, dma.prompt_loader.language),
+                system_snapshot_str,
+                user_profiles_str,
+            ),
             images=[],
-            identity_block=identity_block_of(agent_identity_of(make_context()), language=dma.prompt_loader.language),
+            agent_identity=agent_identity_of(make_context()),
+            thought=item,
         )
     _assert_matches_golden("csdma", messages)
 
@@ -139,11 +147,15 @@ def test_idma_compose_seam_matches_golden() -> None:
         messages = dma.compose_messages(
             str(item.content),
             context_summary,
-            task_context_str,
-            system_snapshot_str,
-            user_profiles_str,
+            original_task_segments(
+                task_context_segments(task_context_str, None, dma.prompt_loader.language),
+                system_snapshot_str,
+                user_profiles_str,
+            ),
             prior_dma_context,
             images=[],
+            agent_identity=agent_identity_of(make_context()),
+            thought=item,
         )
     _assert_matches_golden("idma", messages)
 
@@ -164,7 +176,6 @@ def test_dsdma_compose_seam_matches_golden() -> None:
         item = make_dsdma_queue_item()
         # Gathered inputs, replicated from evaluate_thought()'s no-DMAInputData path.
         task_context_str = dma.format_task_context(make_task(), item.thought_depth)
-        task_context_block = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n"
         context_str = "No specific platform context provided."
         rules_summary_str = _format_domain_specific_knowledge(dma.domain_specific_knowledge)
         assert isinstance(item.initial_context, dict)
@@ -185,13 +196,15 @@ def test_dsdma_compose_seam_matches_golden() -> None:
         messages = dma.compose_messages(
             str(item.content),
             item.thought_id,
-            task_context_block,
+            task_context_segments(task_context_str, None, dma.prompt_loader.language),
+            identity,
             identity_block,
             system_snapshot_block,
             user_profiles_block="",
             context_str=context_str,
             rules_summary_str=rules_summary_str,
             images=[],
+            thought=item,
         )
     _assert_matches_golden("dsdma", messages)
 

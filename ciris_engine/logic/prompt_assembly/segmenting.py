@@ -298,6 +298,158 @@ def policy_facts(
 
 
 
+# ------------------------------------------------------------------------------------------------ blocks
+
+
+def rendered_text(seg: PromptSegment, language: Optional[str]) -> str:
+    """A segment's bytes as the assembler renders them in ``language`` (the sender's lines from their carriers)."""
+    from ciris_engine.logic.prompt_assembly.rendering import render_display_name_line, render_sender_identity_lines
+    from ciris_engine.logic.utils.localization import get_preferred_language
+
+    if seg.kind == SegmentKind.SENDER_IDENTITY:
+        return render_sender_identity_lines(seg.authn, language or get_preferred_language())
+    if seg.kind == SegmentKind.DISPLAY_NAME:
+        return render_display_name_line(seg.text, language or get_preferred_language())
+    return seg.text
+
+
+def joined(block: Segments, language: Optional[str] = None) -> str:
+    """The text of a block laid out with its glue (what the assembler renders for it, untrusted text aside)."""
+    segments, layout = block
+    by_id = {seg.segment_id: seg for seg in segments}
+    out: List[str] = []
+    for item in layout:
+        if out:
+            out.append(item.glue)
+        out.append(rendered_text(by_id[item.segment_id], language))
+    return "".join(out)
+
+
+def concat(head: Segments, tail: Segments, glue: str) -> Segments:
+    """Two blocks as one, ``glue`` between them (none when either is empty)."""
+    h_segments, h_layout = head
+    t_segments, t_layout = tail
+    if not t_segments:
+        return h_segments, h_layout
+    if not h_segments:
+        return t_segments, [t_layout[0].model_copy(update={"glue": ""})] + t_layout[1:]
+    return h_segments + t_segments, h_layout + [t_layout[0].model_copy(update={"glue": glue})] + t_layout[1:]
+
+
+def block(*segments: Optional[PromptSegment]) -> Segments:
+    """Segments laid end to end with no glue; None and empty-text segments are left out."""
+    kept = [s for s in segments if s is not None and (s.text or s.kind == SegmentKind.SENDER_IDENTITY)]
+    return kept, items(kept, "", "")
+
+
+def expand(
+    whole: Segments, segment_id: str, parts: Segments, language: Optional[str] = None, id_prefix: str = ""
+) -> Segments:
+    """``whole`` with segment ``segment_id`` (and its ``#n`` repeats from :func:`split_template`) replaced by ``parts``.
+
+    ``parts`` must rejoin to the segment's text (SegmentationError otherwise); an empty slot is left as it is.
+    ``id_prefix`` is put before each part's id (one block expanded into two messages keeps its ids distinct).
+    """
+    segments, layout = whole
+    by_id = {seg.segment_id: seg for seg in segments}
+    out_segments: List[PromptSegment] = []
+    out_layout: List[LayoutItem] = []
+    for item in layout:
+        seg = by_id[item.segment_id]
+        suffix = item.segment_id[len(segment_id) :]
+        if not item.segment_id.startswith(segment_id) or (suffix and not suffix.startswith("#")) or not parts[0]:
+            out_segments.append(seg)
+            out_layout.append(item)
+            continue
+        if joined(parts, language) != seg.text:
+            raise SegmentationError(f"{segment_id}: parts do not rejoin to the slot's text")
+        renamed = [p.model_copy(update={"segment_id": id_prefix + p.segment_id + suffix}) for p in parts[0]]
+        out_segments.extend(renamed)
+        for i, (part_item, part) in enumerate(zip(parts[1], renamed)):
+            out_layout.append(LayoutItem(segment_id=part.segment_id, glue=item.glue if i == 0 else part_item.glue))
+    return out_segments, out_layout
+
+
+def task_context_segments(task_context: str, sender: Optional[VerifiedSender], language: Optional[str]) -> Segments:
+    """``BaseDMA.format_task_context``'s text as the task (``request``), its VERIFIED SENDER block and the rest.
+
+    The block is cut out where ``format_verified_sender_block`` rendered it; the follow-through guidance after it is
+    the engine's instruction. Without a sender block the follow-through is still cut off the task's text.
+    """
+    from ciris_engine.logic.formatters.verified_sender import format_verified_sender_block
+
+    follow = "\n\n\u26a0\ufe0f FOLLOW-THROUGH REQUIRED:"
+    sender_text = format_verified_sender_block(sender, language) if sender is not None else ""
+    at = task_context.find(sender_text) if sender_text else -1
+    if sender is not None and at >= 0:
+        head, tail = task_context[:at], task_context[at + len(sender_text) :]
+        result = concat(
+            block(_request("task", head)), sender_block_segments(sender, include_display_name=True, language=language), ""
+        )
+        return concat(result, block(_instruction("task:guidance", tail)), "")
+    cut = task_context.find(follow)
+    head, tail = (task_context, "") if cut < 0 else (task_context[:cut], task_context[cut:])
+    return block(_request("task", head), _instruction("task:guidance", tail))
+
+
+def _request(segment_id: str, text: str) -> PromptSegment:
+    return PromptSegment(segment_id=segment_id, kind=SegmentKind.REQUEST, source=SegmentSource.USER_INPUT, text=text)
+
+
+def history(segment_id: str, text: str) -> PromptSegment:
+    """Engine-gathered conversation state (snapshot, user profiles): ``history``."""
+    return PromptSegment(segment_id=segment_id, kind=SegmentKind.HISTORY, source=SegmentSource.ENGINE, text=text)
+
+
+def original_task_segments(task: Segments, snapshot: str, profiles: str) -> Segments:
+    """``=== ORIGINAL TASK ===\n{task}\n\n{snapshot}{profiles}``, the evaluators' context block."""
+    head = block(_instruction("ctx:task_header", "=== ORIGINAL TASK ===\n"))
+    whole = concat(concat(head, task, ""), block(_instruction("ctx:task_footer", "\n\n")), "")
+    return concat(whole, block(history("system_snapshot", snapshot), history("user_profiles", profiles)), "")
+
+
+def round1_preamble(builder: "PromptBuilder", language: str, accord_mode: str) -> None:
+    """``append_round1_accord_blocks``: accord, language guidance, crisis resources, prohibition context."""
+    from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+    from ciris_engine.logic.utils.constants import get_accord_text
+    from ciris_engine.logic.utils.localization import get_language_guidance, get_prohibition_guidance
+
+    builder.single("system", segment("accord", SegmentKind.ACCORD, get_accord_text(accord_mode) or ""))
+    builder.single("system", _instruction("instr:language", get_language_guidance(language) or ""))
+    builder.single("system", _instruction("instr:crisis", get_crisis_resources_system_block(language) or ""))
+    builder.single("system", _instruction("instr:prohibition", get_prohibition_guidance(language) or ""))
+
+
+def evaluator_call(response_model: str, thought: Any, language: str, authorization: Optional[WAAuthorization], agent_identity: Any) -> Any:
+    """An evaluator's AssemblyCall: the thought's ids and kind, and the facts from trusted state only."""
+    from ciris_engine.logic.prompt_assembly.assembler import AssemblyCall
+    from ciris_engine.schemas.context.prompt_provenance import ManifestThoughtKind
+
+    depth = getattr(thought, "thought_depth", 0)
+    kind = (
+        ManifestThoughtKind.GUIDANCE
+        if authorization is not None
+        else ManifestThoughtKind.FOLLOWUP if isinstance(depth, int) and depth > 0 else ManifestThoughtKind.SEED
+    )
+    task_id = getattr(thought, "source_task_id", None)
+    thought_id = getattr(thought, "thought_id", None)
+    return AssemblyCall(
+        task_id=task_id if isinstance(task_id, str) else None,
+        thought_id=thought_id if isinstance(thought_id, str) else None,
+        thought_kind=kind,
+        response_model=response_model,
+        facts=policy_facts(authorization, agent_identity, id_scoped=False),
+        language=language,
+    )
+
+
+def thought_request(segment_id: str, text: str, thought: Any) -> PromptSegment:
+    """The thought under evaluation: the user's message on a seed thought, model text on a follow-up."""
+    depth = getattr(thought, "thought_depth", 0)
+    source = SegmentSource.LLM_OUTPUT if isinstance(depth, int) and depth > 0 else SegmentSource.USER_INPUT
+    return PromptSegment(segment_id=segment_id, kind=SegmentKind.REQUEST, source=source, text=text)
+
+
 # ------------------------------------------------------------------------------------------------ builder
 
 
@@ -361,6 +513,16 @@ def stripped_ends(segments: List[PromptSegment]) -> List[PromptSegment]:
 
 __all__ = [
     "PromptBuilder",
+    "block",
+    "evaluator_call",
+    "thought_request",
+    "concat",
+    "expand",
+    "history",
+    "joined",
+    "original_task_segments",
+    "round1_preamble",
+    "task_context_segments",
     "SegmentationError",
     "Segments",
     "governance_segments",

@@ -768,10 +768,9 @@ def test_cde_integers_and_integral_numbers() -> None:
     assert cde_encode(True) == bytes.fromhex("f5") and cde_encode(None) == bytes.fromhex("f6")
 
 
-def test_cde_floats_are_the_shortest_that_keep_binary64() -> None:
-    assert cde_encode(1.5) == bytes.fromhex("f93e00")  # half
-    assert cde_encode(100000.5) == bytes.fromhex("fa47c35040")  # single
-    assert cde_encode(0.1) == bytes.fromhex("fb3fb999999999999a")  # double
+def test_cde_writes_no_float_a_parsed_float_is_its_shortest_decimal() -> None:
+    assert cde_encode(1.5) == bytes.fromhex("c482200f")  # 4([-1, 15])
+    assert cde_encode(0.1) == bytes.fromhex("c4822001")  # 4([-1, 1])
     with pytest.raises(ValueError):
         cde_encode(float("nan"))
 

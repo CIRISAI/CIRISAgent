@@ -86,15 +86,14 @@ OPERATOR_NOTICE_REFUSED = (
 
 
 def unit_manifest_digest(manifest: Mapping[str, bytes]) -> bytes:
-    """THE manifest encoding: SHA-256 over a deterministic encoding of {path: file digest}.
+    """THE manifest encoding (rc21 wire §1): SHA-256 over the CDE map ``{path: [-16, file digest]}``.
 
-    TODO(rc21 merge): switch to ``utils.cde.ceg_digest`` over the CDE map
-    ``{path: [-16, digest]}`` once the shared encoder lands; until then the
-    encoding is sorted-key JSON of hex digests, and every caller goes through
-    this one function so the switch is one edit.
+    A unit of several files is named by this digest; each path is text, each value the file's SHA-256 in its
+    wire form. CDE orders the keys, so the digest is independent of the order the files were read in.
     """
-    body = json.dumps({path: digest.hex() for path, digest in manifest.items()}, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(body.encode("utf-8")).digest()
+    from ciris_engine.logic.utils.cde import cde_encode, digest_wire
+
+    return hashlib.sha256(cde_encode({path: digest_wire(digest) for path, digest in manifest.items()})).digest()
 
 
 def digest_tag(digest: bytes) -> str:

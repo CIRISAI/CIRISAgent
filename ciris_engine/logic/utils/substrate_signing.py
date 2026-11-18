@@ -23,6 +23,14 @@ reviews. The durable fix is that no site chooses a signing verb at all.
 CIRISPersist#470). It works for both custody models, and its `classical_sig` is
 the same 64 raw Ed25519 bytes `local_sign` used to return — so callers that only
 need the classical half get a byte-identical result and unchanged wire shape.
+
+**persist v62 removes the PyO3 ``local_sign_hybrid``** (and ``verify_hybrid`` /
+``verify_signed_*``); ``local_sign`` and ``local_pqc_sign`` stay. When the verb is
+absent the hybrid is composed from those two exactly as persist's
+``LocalSigner::sign_hybrid`` does: ``classical = local_sign(m)``,
+``pqc = local_pqc_sign(m || classical)`` (persist test #470 pins the two as
+byte-identical). The engine carries no single-key verifier, so verification has
+no composition: without ``verify_hybrid`` it cannot be performed, and says so.
 """
 
 from __future__ import annotations
@@ -46,9 +54,18 @@ def sign_hybrid(engine: Any, canonical: bytes) -> Tuple[bytes, Optional[bytes]]:
     not be papered over: the failure modes this replaces were silent, and a
     caller that swallows this writes an unsigned row that reads as signed.
     """
-    signatures = engine.local_sign_hybrid(canonical)
-    classical = bytes(signatures["classical_sig"])
-    raw_pqc = signatures.get("pqc_sig")
+    if getattr(engine, "local_sign_hybrid", None) is not None:
+        signatures = engine.local_sign_hybrid(canonical)
+        classical = bytes(signatures["classical_sig"])
+        raw_pqc = signatures.get("pqc_sig")
+        return classical, (bytes(raw_pqc) if raw_pqc else None)
+    return _compose_hybrid(engine, canonical)
+
+
+def _compose_hybrid(engine: Any, canonical: bytes) -> Tuple[bytes, Optional[bytes]]:
+    """The hybrid from the single-key verbs (persist v62): ``pqc = Sign_PQC(message || ed25519_sig)``."""
+    classical = bytes(engine.local_sign(canonical))
+    raw_pqc = engine.local_pqc_sign(canonical + classical) if getattr(engine, "local_pqc_sign", None) else None
     return classical, (bytes(raw_pqc) if raw_pqc else None)
 
 
@@ -100,6 +117,9 @@ def verify_hybrid_required(
         raise ValueError("signature carries no ML-DSA-65 half (hybrid required)")
     if not pqc_pubkey_b64:
         raise ValueError("signer has no ML-DSA-65 public key (hybrid required)")
+    if getattr(engine, "verify_hybrid", None) is None:
+        # The engine exposes no single-key verifier to compose one from: the check cannot be performed.
+        raise RuntimeError("the substrate exposes no hybrid verifier (verify_hybrid); the signature was NOT verified")
     engine.verify_hybrid(
         canonical, classical_sig_b64, pqc_sig_b64, ed25519_pubkey_b64, pqc_pubkey_b64, _HYBRID_REQUIRED
     )

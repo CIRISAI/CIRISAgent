@@ -60,12 +60,6 @@ def _wire(value: Any) -> Any:
         (-1, "20"),
         (-1000, "3903e7"),
         (-18446744073709551616, "3bffffffffffffffff"),
-        (1.1, "fb3ff199999999999a"),
-        (1.5, "f93e00"),
-        (65504.5, "fa477fe080"),
-        (100000.5, "fa47c35040"),
-        (5.960464477539063e-8, "f90001"),
-        (-4.1, "fbc010666666666666"),
         (False, "f4"),
         (True, "f5"),
         (None, "f6"),
@@ -76,6 +70,7 @@ def _wire(value: Any) -> Any:
         ([], "80"),
         ([1, [2, 3], [4, 5]], "8301820203820405"),
         ({"a": 1, "b": [2, 3]}, "a26161016162820203"),
+        (Decimal("273.15"), "c48221196ab3"),  # RFC 8949 3.4.4: 4([-2, 27315])
     ],
 )
 def test_rfc8949_examples(value: Any, hex_: str) -> None:
@@ -103,11 +98,27 @@ def test_negative_zero_is_zero() -> None:
     assert cde_encode(loads_exact("-0.0")).hex() == "00"
 
 
-def test_non_integral_is_the_shortest_float_that_keeps_it() -> None:
-    assert cde_encode(loads_exact("1.5")).hex() == "f93e00"  # half
-    assert cde_encode(loads_exact("100000.5")).hex() == "fa47c35040"  # single
-    assert cde_encode(loads_exact("0.1")).hex() == "fb3fb999999999999a"  # double: nearest binary64
+@pytest.mark.parametrize("text", ["0.1", "1.0e-1", "0.10", "0.100000"])
+def test_a_non_integral_number_is_its_normalised_decimal_fraction(text: str) -> None:
+    assert cde_encode(loads_exact(text)).hex() == "c4822001"  # 4([-1, 1])
+
+
+def test_a_negative_decimal_fraction() -> None:
+    assert cde_encode(loads_exact("-273.15")).hex() == "c48221396ab2"  # 4([-2, -27315])
+
+
+def test_no_float_is_ever_written() -> None:
+    for value in (loads_exact("1.5"), loads_exact("100000.5"), 0.5, 1.1, 5.960464477539063e-8, -4.1):
+        encoded = cde_encode(value)
+        assert encoded[0] == 0xC4, (value, encoded.hex())  # tag 4, never a major-7 float head
+        assert not any(encoded.startswith(h) for h in (b"\xf9", b"\xfa", b"\xfb"))
+
+
+def test_a_parsed_float_is_read_as_its_shortest_round_trip_decimal() -> None:
+    """ToolParams arguments arrive as floats: Decimal(repr(f)) is the decimal the model wrote."""
     assert cde_encode(0.1) == cde_encode(loads_exact("0.1"))
+    assert cde_encode(-273.15) == cde_encode(loads_exact("-273.15"))
+    assert cde_encode(2.0).hex() == "02"
 
 
 def test_1e300_is_integral_and_beyond_cbor_integers_so_refused() -> None:
@@ -130,11 +141,24 @@ def test_non_finite_refused(value: Any) -> None:
         cde_encode(value)
 
 
-def test_a_halfway_tie_rounds_to_even_and_stays_a_float() -> None:
-    """1 + 2**-53 is not integral by value; its nearest binary64 (ties to even) is 1.0, written f93c00."""
-    tie = loads_exact("1.00000000000000011102230246251565404236316680908203125")
-    assert cde_encode(tie).hex() == "f93c00"
-    assert cde_encode(loads_exact("1.0")).hex() == "01"
+@pytest.mark.parametrize(
+    "text",
+    [
+        "1.00000000000000011102230246251565404236316680908203125",  # 1 + 2**-53 exactly: never rounded
+        "0.18446744073709551616",  # mantissa 2**64
+        "-0.18446744073709551617",  # mantissa -(2**64) - 1
+        "1." + "1" * 400,
+    ],
+)
+def test_a_mantissa_outside_cbor_integers_is_refused(text: str) -> None:
+    with pytest.raises(CdeError) as info:
+        cde_encode(loads_exact(text))
+    assert info.value.token == CALL_ARGUMENT_UNREPRESENTABLE
+
+
+def test_the_mantissa_range_ends_are_kept() -> None:
+    assert cde_encode(loads_exact("0.18446744073709551615")).hex() == "c482331bffffffffffffffff"
+    assert cde_encode(loads_exact("-0.18446744073709551616")).hex() == "c482333bffffffffffffffff"
 
 
 def test_the_cbor_integer_range_ends_are_integers() -> None:
@@ -143,10 +167,8 @@ def test_the_cbor_integer_range_ends_are_integers() -> None:
     assert cde_encode(loads_exact("1.8446744073709551615e19")).hex() == "1bffffffffffffffff"
 
 
-@pytest.mark.parametrize(
-    "text", ["1e400", "1e400000000", "-1e999999999", "100000000000000000000", "100000000000000000000.5", "1e20"]
-)
-def test_any_magnitude_from_1e20_is_refused_without_being_expanded(text: str) -> None:
+@pytest.mark.parametrize("text", ["1e400", "1e400000000", "-1e999999999", "100000000000000000000", "1e20"])
+def test_an_integral_magnitude_from_1e20_is_refused_without_being_expanded(text: str) -> None:
     with pytest.raises(CdeError) as info:
         cde_encode(loads_exact(text))
     assert info.value.token == CALL_ARGUMENT_UNREPRESENTABLE
@@ -154,6 +176,10 @@ def test_any_magnitude_from_1e20_is_refused_without_being_expanded(text: str) ->
 
 def test_a_zero_with_any_exponent_is_the_integer_zero() -> None:
     assert cde_encode(loads_exact("0e999999999")).hex() == "00"
+
+
+def test_a_tiny_decimal_keeps_its_exponent_without_expansion() -> None:
+    assert cde_encode(loads_exact("1e-999999")).hex() == "c4823a000f423e01"  # 4([-999999, 1])
 
 
 def test_refusal_is_a_value_error() -> None:

@@ -30,6 +30,7 @@ from ciris_engine.logic.prompt_assembly.segmenting import (
     sender_authn,
     sender_block_segments,
     split_template,
+    system_sender_block_segments,
 )
 from ciris_engine.schemas.context.prompt_provenance import (
     ManifestThoughtKind,
@@ -93,7 +94,7 @@ def assemble_conscience_prompt(
 ) -> ConsciencePrompt:
     """Segments, layout, guard and manifest for one conscience call."""
     from ciris_engine.logic.conscience.prompt_loader import get_conscience_prompt_loader
-    from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+    from ciris_engine.logic.formatters.verified_sender import system_sender_id, verified_sender_of
     from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
     from ciris_engine.logic.infrastructure.handlers.action_record import action_record_for_task
 
@@ -137,6 +138,10 @@ def assemble_conscience_prompt(
     # signed rule may name who it binds, and only the verified sender can be checked against it.
     if sender is not None and (not ablated or facts.trusted_rule_in_force):
         blocks["sender"] = sender_block_segments(sender, include_display_name=not ablated, language=language)
+    elif sender is None and ablated and facts.trusted_rule_in_force:
+        # A task no human sent (wakeup, shutdown, dream, system and guidance tasks the engine creates): the engine
+        # is its sender, so the required sender_identity is stated truthfully as role SYSTEM, source system.
+        blocks["sender"] = system_sender_block_segments(system_sender_id(context), language=language)
     occurrence = getattr(thought, "agent_occurrence_id", None) or "default"
     record = action_record_for_task(
         task_id, occurrence if isinstance(occurrence, str) else "default", language, factual=True

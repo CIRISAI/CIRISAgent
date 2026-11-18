@@ -136,21 +136,51 @@ def verified_sender_of(*contexts: Any) -> Optional[VerifiedSender]:
     return None
 
 
-def verified_sender_identity_lines(sender: VerifiedSender, language: Optional[str] = None) -> list[str]:
-    """The block's header, id, role and source lines: the ``sender_identity`` part (no display name)."""
+#: The sender of a task no human sent (wakeup, shutdown, dream, system and guidance tasks the engine creates):
+#: the engine itself. Not a UserRole: no authenticated user holds it (coordinator ruling 2026-11-18).
+SYSTEM_SENDER_ROLE = "SYSTEM"
+SYSTEM_SENDER_SOURCE = "system"
+#: The subject id when the agent's own id is not known: the component that built the prompt.
+SYSTEM_SENDER_FALLBACK_ID = "ciris_engine"
+
+
+def sender_identity_lines(
+    user_id: Optional[str], role: Optional[str], source: str, language: Optional[str] = None
+) -> list[str]:
+    """The block's header, id, role and source lines from plain values (``role`` None: not verified)."""
     from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 
     lang = language or get_preferred_language()
     return [
         get_string(lang, "prompts.verified_sender.header"),
-        get_string(lang, "prompts.verified_sender.id", user_id=_inline(sender.user_id or "unknown")),
+        get_string(lang, "prompts.verified_sender.id", user_id=_inline(user_id or "unknown")),
         (
-            get_string(lang, "prompts.verified_sender.role", role=sender.role.value)
-            if sender.role is not None
+            get_string(lang, "prompts.verified_sender.role", role=role)
+            if role is not None
             else get_string(lang, "prompts.verified_sender.role_not_verified")
         ),
-        get_string(lang, "prompts.verified_sender.source", source=_inline(sender.source)),
+        get_string(lang, "prompts.verified_sender.source", source=_inline(source)),
     ]
+
+
+def verified_sender_identity_lines(sender: VerifiedSender, language: Optional[str] = None) -> list[str]:
+    """The block's header, id, role and source lines: the ``sender_identity`` part (no display name)."""
+    role = sender.role.value if sender.role is not None else None
+    return sender_identity_lines(sender.user_id, role, sender.source, language)
+
+
+def system_sender_id(context: Any) -> str:
+    """The subject id of a task no human sent: the agent's own id, else the engine component's."""
+    identity = getattr(context, "agent_identity", None)
+    agent_id = identity.get("agent_id") if isinstance(identity, dict) else getattr(identity, "agent_id", None)
+    return agent_id if isinstance(agent_id, str) and agent_id else SYSTEM_SENDER_FALLBACK_ID
+
+
+def format_system_sender_block(subject_id: str, language: Optional[str] = None) -> str:
+    """The VERIFIED SENDER block of a task the engine created: id = agent/component, role SYSTEM, source system."""
+    lines = sender_identity_lines(subject_id, SYSTEM_SENDER_ROLE, SYSTEM_SENDER_SOURCE, language)
+    lines.extend(verified_sender_trailer_lines(language))
+    return "\n".join(lines)
 
 
 def verified_sender_display_name_line(display_name: str, language: Optional[str] = None) -> str:
@@ -243,18 +273,21 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     display name labelled as self-chosen (their display-name confusion vetoed
     a correct ID-mismatch refusal on v2.21.0, #1365). Entropy and the
     optimization veto (``ablated=True``): verified id, role and source only,
-    never the display name, whenever a trusted (signed) rule is in force.
-    Empty when there is no verified sender.
+    never the display name, whenever a trusted (signed) rule is in force; for
+    a task no human sent, the system sender (role SYSTEM, source system).
+    Otherwise empty when there is no verified sender.
     """
     sender = getattr(context, "verified_sender", None) or verified_sender_of(
         getattr(context, "thought", None), getattr(context, "task", None)
     )
-    if sender is None:
-        return ""
     if ablated:
         if not trusted_rule_in_force(context):
             return ""
+        if sender is None:  # a task no human sent: the engine is its sender
+            return format_system_sender_block(system_sender_id(context), language)
         return format_verified_sender_block(sender, language, include_display_name=False)
+    if sender is None:
+        return ""
     return format_verified_sender_block(sender, language)
 
 

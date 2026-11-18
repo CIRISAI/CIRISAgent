@@ -76,8 +76,8 @@ Engine issue: CIRISAgent#1366 (the 19 fixes, with reasons; copy in `FIXES.md`). 
 
 ## Vendored into CIRISAgent (2026-11-18)
 
-Copied from RATCHET `experiments/claims_registry/m4_battery/ctxflow/` at commit 361371a. `ContextData_report.json`
-was empty upstream. Reproduced here with tla2tools v1.7.4 (sha256 936a2620…e050e88): the same table as above.
+Copied from RATCHET `experiments/claims_registry/m4_battery/ctxflow/` at commit 361371a (`ContextData_report.json`
+is one line: 568 `[stage, scenario, kind, item, fraction, n]` rows). Reproduced here with tla2tools v1.7.4 (sha256 936a2620…e050e88): the same table as above.
 
 Extended in CIRISAgent with two constants and three configs:
 - `VerbPassSeesVeto` (#1366 item 1): the veto reason reaches the verb second pass. `contract_noverbveto`: only

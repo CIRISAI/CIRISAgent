@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
 from ciris_engine.logic.formatters.wa_approval import (
     format_wa_approval_block,
@@ -178,6 +179,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         original_thought: ProcessingQueueItem,
         aspdma_result: ActionSelectionDMAResult,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
         """Compose the MSASPDMA prompt message list."""
         self._sync_language_from_context(context)
@@ -245,6 +247,8 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             system_owned_attributes=self._format_system_owned(self.system_owned_attributes()),
         )
 
+        # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
+        user_message = with_conscience_feedback(user_message, conscience_feedback)
         return self._frame_messages(system_message, user_message)
 
     def _frame_messages(self, system_message: str, user_message: str) -> List[JSONDict]:
@@ -366,6 +370,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         aspdma_result: ActionSelectionDMAResult,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Give a proposed MEMORIZE a second look against the graph conventions."""
         if aspdma_result.selected_action != HandlerActionType.MEMORIZE:
@@ -375,7 +380,9 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if not isinstance(current_params, MemorizeParams):
             raise TypeError(f"MSASPDMA expects MemorizeParams, got {type(current_params)}")
 
-        messages = self.compose_messages(original_thought, aspdma_result, context=context)
+        messages = self.compose_messages(
+            original_thought, aspdma_result, context=context, conscience_feedback=conscience_feedback
+        )
         llm_result, resource_usage = await self.call_llm_structured(
             messages=messages,
             response_model=MSASPDMALLMResult,
@@ -408,6 +415,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             aspdma_result=aspdma_result,
             original_thought=input_data,
             context=kwargs.get("context"),
+            conscience_feedback=kwargs.get("conscience_feedback"),
         )
 
     @staticmethod

@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tu
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.config.llm_budget import Deadline, active_budget, attempt_timeout, llm_call_deadline
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
@@ -453,6 +454,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Dispatch the second-pass evaluator registered for the selected verb.
 
@@ -472,11 +474,19 @@ class ThoughtProcessor(
         tests/.../test_verb_second_pass_registry.py, which fails if a verb is
         neither registered nor explicitly listed as not needing one — so a gap
         shows up in CI rather than in a production PONDER loop (#1027).
+
+        ``conscience_feedback`` is the veto a conscience retry carries (#1366
+        item 1). The second pass re-decides the action, so it gets the same
+        CONSCIENCE OVERRIDE GUIDANCE ASPDMA got; without it TSASPDMA saw the
+        veto reason in 0 of 162 retry calls and re-proposed the vetoed call.
+        None on a first pass.
         """
         handler = self._VERB_SECOND_PASS.get(action_result.selected_action)
         if handler is None:
             return action_result
-        result: ActionSelectionDMAResult = await handler(self, thought_item, action_result, thought_context)
+        result: ActionSelectionDMAResult = await handler(
+            self, thought_item, action_result, thought_context, conscience_feedback=conscience_feedback
+        )
         result = self._ponder_if_second_pass_left_it_unfilled(thought_item, result)
         # A second pass returns a NEW result that never saw the action-selection
         # prompts, and ASPDMA_RESULT is built from whatever result comes out of
@@ -494,6 +504,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run TSASPDMA if action is TOOL and tool has documentation.
 
@@ -691,6 +702,7 @@ class ThoughtProcessor(
                     context=thought_context,
                     time_service=self._time_service,
                     context_enrichment=context_enrichment,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
 
@@ -743,6 +755,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run DSASPDMA when ASPDMA selected DEFER."""
 
@@ -772,6 +785,7 @@ class ThoughtProcessor(
                     original_thought=thought_item,
                     context=thought_context,
                     time_service=self._time_service,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
 
@@ -799,6 +813,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run MSASPDMA when ASPDMA selected MEMORIZE.
 
@@ -838,6 +853,7 @@ class ThoughtProcessor(
                     original_thought=thought_item,
                     context=thought_context,
                     time_service=self._time_service,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
 
@@ -912,12 +928,19 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run RSASPDMA when ASPDMA selected RECALL: the step that says what to read."""
         from ciris_engine.logic.dma.dma_executor import run_rsaspdma
 
         return await self._run_addressing_second_pass(
-            thought_item, action_result, thought_context, HandlerActionType.RECALL, "rsaspdma_evaluator", run_rsaspdma
+            thought_item,
+            action_result,
+            thought_context,
+            HandlerActionType.RECALL,
+            "rsaspdma_evaluator",
+            run_rsaspdma,
+            conscience_feedback=conscience_feedback,
         )
 
     async def _maybe_run_fsaspdma(
@@ -925,12 +948,19 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run FSASPDMA when ASPDMA selected FORGET: the step that names the node."""
         from ciris_engine.logic.dma.dma_executor import run_fsaspdma
 
         return await self._run_addressing_second_pass(
-            thought_item, action_result, thought_context, HandlerActionType.FORGET, "fsaspdma_evaluator", run_fsaspdma
+            thought_item,
+            action_result,
+            thought_context,
+            HandlerActionType.FORGET,
+            "fsaspdma_evaluator",
+            run_fsaspdma,
+            conscience_feedback=conscience_feedback,
         )
 
     async def _run_addressing_second_pass(
@@ -941,6 +971,7 @@ class ThoughtProcessor(
         verb: HandlerActionType,
         evaluator_attr: str,
         runner: Callable[..., Coroutine[Any, Any, ActionSelectionDMAResult]],
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Shared body of the RECALL and FORGET second passes.
 
@@ -964,6 +995,7 @@ class ThoughtProcessor(
                     original_thought=thought_item,
                     context=thought_context,
                     time_service=self._time_service,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
             params = result.action_parameters
@@ -1334,7 +1366,14 @@ class ThoughtProcessor(
                 # TOOL with parameters {} (RATCHET Market 4 run 43453725789: all 7
                 # failed create_ticket calls) and a retried MEMORIZE unaddressed.
                 # The recursive path got this in 2.21.0 (#1027); this one did not.
-                retry_result = await self._run_verb_second_pass(thought_item, retry_result, retry_context)
+                # ...and with the veto that sent it back: the second pass re-decides
+                # the action, so it sees the same guidance ASPDMA just saw (#1366).
+                retry_result = await self._run_verb_second_pass(
+                    thought_item,
+                    retry_result,
+                    retry_context,
+                    conscience_feedback=thought_item.conscience_feedback,
+                )
                 return await self._process_conscience_retry_result(
                     thought_item, thought, dma_results, retry_context, retry_result, conscience_result
                 )
@@ -1890,7 +1929,7 @@ class ThoughtProcessor(
 
         descriptions: Dict[HandlerActionType, Callable[[Any], str]] = {
             HandlerActionType.SPEAK: lambda p: self._format_speak_description(p),
-            HandlerActionType.TOOL: lambda p: f"use tool '{p.tool_name}'" if hasattr(p, "tool_name") else "use a tool",
+            HandlerActionType.TOOL: lambda p: self._format_tool_description(p),
             HandlerActionType.OBSERVE: lambda p: (
                 f"observe channel '{p.channel_id}'" if hasattr(p, "channel_id") else "observe"
             ),
@@ -2199,6 +2238,23 @@ class ThoughtProcessor(
             thought_depth_triggered=conscience_result.thought_depth_triggered,
             updated_status_detected=conscience_result.updated_status_detected,
         )
+
+    @staticmethod
+    def _format_tool_description(params: Any) -> str:
+        """Name the vetoed tool call in retry guidance (#1366).
+
+        ToolParams carries the tool as ``name``; this read ``tool_name`` and so
+        always said "use a tool", leaving the retry unable to tell which call
+        the conscience refused. Argument NAMES only, never values: a value can
+        hold a secret, and the name is what distinguishes one call from another.
+        """
+        tool_name = getattr(params, "name", None)
+        if not isinstance(tool_name, str) or not tool_name:
+            return "use a tool"
+        arguments = getattr(params, "parameters", None)
+        if isinstance(arguments, dict) and arguments:
+            return f"use tool '{tool_name}' with arguments: {', '.join(sorted(str(k) for k in arguments))}"
+        return f"use tool '{tool_name}'"
 
     def _format_speak_description(self, params: Any) -> str:
         """Format description for SPEAK action parameters."""

@@ -327,6 +327,16 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         "prompts.wa_governance.entry_resolution",
         "prompts.wa_governance.footer",
         "prompts.wa_governance.header",
+        # #1366 item 5: the verified-sender block (formatters/verified_sender.py),
+        # built from authentication, never from message text.
+        "prompts.verified_sender.display_name",
+        "prompts.verified_sender.footer",
+        "prompts.verified_sender.header",
+        "prompts.verified_sender.id",
+        "prompts.verified_sender.role",
+        "prompts.verified_sender.role_not_verified",
+        "prompts.verified_sender.source",
+        "prompts.verified_sender.wa_prefix",
         # The parent key: a whole-block replacement, and it WINS over the parts
         # (precedence declared in `get_language_guidance`). Still reachable
         # because the 24 unsplit locales resolve through it.

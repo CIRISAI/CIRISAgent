@@ -146,7 +146,9 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
     # 45 -> 55 (#1027): RSASPDMA and FSASPDMA, the recall and forget second
     # passes, five model-facing fields each.
     "dma_prompt": 55,
-    "string": 143,
+    # 143 -> 155 (#1366): the verified-WA governance block (4) and the
+    # verified-sender block (8).
+    "string": 155,
     "conscience_prompt": 12,
     "template": 3,
 }

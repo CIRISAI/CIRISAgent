@@ -66,6 +66,7 @@ from ciris_engine.schemas.services.llm import (
 )
 
 from .pricing_calculator import LLMPricingCalculator
+from .provider_limits import ProviderLimitError, ProviderLimitFault, provider_limit_fault
 
 
 def _coalesce_consecutive_roles(messages: List[MessageDict]) -> List[MessageDict]:
@@ -664,6 +665,15 @@ def _root_provider_fault(error: BaseException) -> str:
     404 only yields ``model_not_found`` when the body's own code or message says
     the model is what was missing.
     """
+    # SPENDING LIMITS FIRST (#1366 item 20). OpenRouter answers 402 for four
+    # different situations -- a transient in-flight budget, one request too big
+    # for the budget, an empty balance, the key's own limit -- and names which
+    # in error.metadata.limit_source. Branch on that, never on the prose; only
+    # a 402 WITHOUT a limit_source falls through to insufficient_quota below.
+    limit = provider_limit_fault(error)
+    if limit is not None:
+        return limit.code.value
+
     seen: set[int] = set()
     cur: BaseException | None = error
     while cur is not None and id(cur) not in seen:
@@ -2062,6 +2072,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
                 raise
 
             except Exception as e:
+                # A provider spending-limit refusal (402/403 with a
+                # limit_source): categorized by its structure, never trips the
+                # breaker when it is the transient in-flight budget (#1366).
+                limit = provider_limit_fault(e)
+                if limit is not None:
+                    self._raise_provider_limit(e, limit, resp_model.__name__, thought_id)
                 self._handle_general_exception(e, resp_model.__name__)
                 raise  # Should not reach here as _handle_general_exception always raises
 
@@ -2085,6 +2101,12 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
 
             except CircuitBreakerError:
                 logger.warning("LLM service circuit breaker is open, failing fast")
+                raise
+
+            except ProviderLimitError:
+                # A spending limit is the ACCOUNT's, not this endpoint's: rotating
+                # endpoints would only repeat the refusal. The LLM bus decides
+                # whether it is worth waiting for (the in-flight budget only).
                 raise
 
             except BadRequestError as e:
@@ -2128,6 +2150,38 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         if last_exception:
             raise last_exception
         raise RuntimeError("All endpoints exhausted without success")
+
+    def _raise_provider_limit(
+        self, e: Exception, fault: ProviderLimitFault, resp_model_name: str, thought_id: Optional[str]
+    ) -> NoReturn:
+        """Record and raise a provider spending-limit refusal as a ProviderLimitError.
+
+        The transient in-flight budget is not the provider failing: it logs a
+        WARNING and leaves the circuit breaker alone, exactly like a 429. Every
+        other limit (balance, key limit, a request too big for the budget)
+        cannot be waited out, so it is an ERROR and a breaker failure, as every
+        402 was before.
+        """
+        self._track_error(e)
+        self._total_errors += 1
+        self.last_error = fault.describe()
+        self.last_fault_code = fault.code.value
+        self.last_fault_at = time.monotonic()
+        where = (
+            f"model={self.model_name} provider={self.openai_config.base_url or 'default'} "
+            f"response_model={resp_model_name}" + (f" thought={thought_id}" if thought_id else "")
+        )
+        if fault.retryable:
+            logger.warning(
+                "LLM provider in-flight budget full (%s, retry_after=%s) -- transient, NOT a breaker failure: %s",
+                fault.limit_source,
+                fault.retry_after_s,
+                where,
+            )
+        else:
+            self.circuit_breaker.record_failure()
+            logger.error("LLM provider spending limit (%s): %s -- %s", fault.code.value, fault.describe(), where)
+        raise ProviderLimitError(fault) from e
 
     @staticmethod
     def _endpoint_host(base_url: str) -> str:
@@ -2837,6 +2891,10 @@ class OpenAICompatibleClient(BaseService, LLMServiceProtocol):
         - UNKNOWN: Unrecognized error
         """
         error_str = str(error).lower()
+
+        # A provider spending-limit refusal, read from its structure (#1366).
+        if provider_limit_fault(error) is not None:
+            return "PROVIDER_LIMIT"
 
         # An open breaker sent no request: the message embeds the provider's
         # last real error ("last: LLM API timeout"), which must not be read as

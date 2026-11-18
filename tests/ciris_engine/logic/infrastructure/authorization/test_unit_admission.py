@@ -158,6 +158,28 @@ class TestScope:
         assert ua.unit_digest(a) == ua.unit_digest(c)
         assert ua.digest_tag(ua.unit_digest(a)).startswith("canonical:sha256:")
 
+    def test_manifest_digest_is_sha256_of_the_cde_map_of_wire_digests(self, tmp_path: Path) -> None:
+        """rc21 wire §1: a multi-file unit is SHA-256(CDE({path: [-16, digest]})), written out by hand here."""
+        import hashlib
+
+        d1, d2 = hashlib.sha256(b"one").digest(), hashlib.sha256(b"two").digest()
+
+        def entry(path: str, digest: bytes) -> bytes:
+            key = bytes([0x60 | len(path)]) + path.encode()
+            return key + b"\x82\x2f\x58\x20" + digest  # [-16, bstr(32)]
+
+        expected = hashlib.sha256(b"\xa2" + entry("a.py", d1) + entry("b/c.py", d2)).digest()
+        assert ua.unit_manifest_digest({"b/c.py": d2, "a.py": d1}) == expected
+
+        unit = tmp_path / "unit"
+        (unit / "b").mkdir(parents=True)
+        (unit / "a.py").write_bytes(b"one")
+        (unit / "b" / "c.py").write_bytes(b"two")
+        assert ua.unit_digest(unit) == expected
+        single = tmp_path / "one.py"
+        single.write_bytes(b"one")
+        assert ua.unit_digest(single) == d1  # one file: its own bytes
+
 
 # ---------------------------------------------------------------------------
 # Who may admit

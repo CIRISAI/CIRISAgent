@@ -1,5 +1,6 @@
 """Tests for the DSASPDMA (Deferral-Specific Action Selection PDMA) evaluator."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,6 +30,15 @@ def reset_dma_prompt_language() -> None:
     _loader_cache.clear()
     yield
     _loader_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def stored_agent_identity() -> Any:
+    """DSASPDMA carries the agent's identity on every call; these contexts carry none, so the stored one is used."""
+    from tests.ciris_engine.logic.dma.compose_golden import stored_identity_environment
+
+    with stored_identity_environment():
+        yield
 
 
 @pytest.fixture

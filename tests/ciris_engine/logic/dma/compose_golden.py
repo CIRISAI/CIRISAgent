@@ -321,7 +321,8 @@ def prompt_content_environment(
 
 @contextmanager
 def deterministic_prompt_environment() -> Iterator[None]:
-    """The #972 golden environment: language pinned to en, loaders to sentinels."""
+    """The #972 golden environment: language pinned to en, loaders to sentinels, and the stored agent identity
+    (DSASPDMA's fallback when a fixture's context carries none) pinned to the fixture identity."""
     with prompt_content_environment(
         language="en",
         accord=_sentinel_accord,
@@ -329,8 +330,25 @@ def deterministic_prompt_environment() -> Iterator[None]:
         language_guidance=_sentinel_language_guidance,
         prohibition_guidance=_sentinel_prohibition_guidance,
         crisis_resources=_sentinel_crisis_resources,
-    ):
+    ), stored_identity_environment():
         yield
+
+
+def stored_identity_environment() -> Any:
+    """Pin the stored agent identity (DSASPDMA's fallback when the context carries none) to the fixture's."""
+    return patch(
+        "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity", side_effect=lambda: stored_identity()
+    )
+
+
+def stored_identity() -> Any:
+    """The fixture agent's stored identity node, shaped as ``retrieve_agent_identity`` returns it."""
+    identity = make_system_snapshot().agent_identity
+    get = (lambda k: identity.get(k)) if isinstance(identity, dict) else (lambda k: getattr(identity, k))
+    return SimpleNamespace(
+        agent_id=get("agent_id"),
+        core_profile=SimpleNamespace(description=get("description"), role_description=get("role")),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -17,8 +17,11 @@ from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, RulePro
 from tests.ciris_engine.logic.dma import msaspdma_golden as mg
 
 SITES = ("msaspdma", "rsaspdma", "fsaspdma", "dsaspdma")
-#: Fixtures whose bytes the policy changes (MSASPDMA reads the identity block when the context carries one).
-POLICY_CHANGED = {("msaspdma", "ms_full"), ("msaspdma", "ms_addressed_full")}
+#: Fixtures whose bytes the policy changes (MSASPDMA reads the identity block when the context carries one;
+#: DSASPDMA always, from the store when the context has none: RATCHET context map, S3).
+POLICY_CHANGED = {("msaspdma", "ms_full"), ("msaspdma", "ms_addressed_full")} | {
+    ("dsaspdma", name) for name in mg.NAMES["dsaspdma"]
+}
 ALL = [(site, name) for site in SITES for name in mg.NAMES[site]]
 
 
@@ -99,3 +102,24 @@ async def test_dsaspdma_provisional_deferral_is_aspdma_output_never_instruction_
     by_id = {r.segment_id: r for r in seen["manifest"].segments}
     for sid in ("proposed_reason", "proposed_context", "proposed_defer_until", "aspdma_reasoning"):
         assert by_id[sid].kind == SegmentKind.DMA_OUTPUT and by_id[sid].trust == TrustLevel.UNTRUSTED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", mg.NAMES["dsaspdma"])
+async def test_every_dsaspdma_call_carries_the_agents_identity(name: str) -> None:
+    """context_policy.yaml: identity_base at dsaspdma always, from the thought context or else the stored identity."""
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        messages = await mg.capture(name, seen)
+    identity = [r for r in seen["manifest"].segments if r.kind == SegmentKind.IDENTITY_BASE]
+    assert identity and all(r.trust == TrustLevel.SYSTEM for r in identity)
+    body = messages[identity[0].message_index]["content"][identity[0].span_start : identity[-1].span_end]
+    assert "golden_agent" in body
+
+
+@pytest.mark.asyncio
+async def test_dsaspdma_without_any_identity_fails_closed_in_qa() -> None:
+    with _mode(AssemblyMode.FAIL_CLOSED), patch(
+        "tests.ciris_engine.logic.dma.compose_golden.stored_identity", return_value=None
+    ), pytest.raises(ValueError, match="no agent identity"):
+        await mg.capture("ds_plain")

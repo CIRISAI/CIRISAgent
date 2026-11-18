@@ -6,7 +6,7 @@ Provides typed context for conscience check operations, replacing Dict[str, Any]
 
 from typing import Any, Optional
 
-from ciris_engine.schemas.runtime.models import WAAuthorization
+from ciris_engine.schemas.runtime.models import VerifiedSender, WAAuthorization
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -71,6 +71,15 @@ class ConscienceCheckContext(BaseModel):
     # judges once more. Never set from drafter or message text.
     attached_evidence: bool = Field(
         False, description="The verified WA governance block is attached for an evidence re-review"
+    )
+
+    # The verified sender of the message the thought answers (#1366 item 5):
+    # the thought's own sender when it took up a coalesced message, else the
+    # task creator's. Consciences render it apart from the self-chosen display
+    # name; the input-ablated pair get id and role only, and only when an
+    # ID-scoped trusted rule is in force (formal/h3ere_ctxflow/context_policy.yaml).
+    verified_sender: Optional[VerifiedSender] = Field(
+        None, description="Verified sender of the message being answered (never the display name as identity)"
     )
 
     # Additional context can be added via extra fields

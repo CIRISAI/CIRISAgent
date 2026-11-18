@@ -319,15 +319,19 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             logger.error(f"[DMA] Failed to fetch task {source_task_id}: {e}")
             return None
 
-    def _verified_sender_block(self, task: Optional[Task]) -> str:
-        """The VERIFIED SENDER block for ``task`` in this DMA's language; "" when it has none (#1366 item 5)."""
+    def _verified_sender_block(self, task: Optional[Task], thought: Any = None) -> str:
+        """The VERIFIED SENDER block in this DMA's language; "" when there is none (#1366 item 5).
+
+        The sender of the message the THOUGHT answers when it carries one (a
+        message coalesced onto the task), else the task creator's.
+        """
         from ciris_engine.logic.formatters.verified_sender import verified_sender_block_of
 
         loader = getattr(self, "prompt_loader", None)
         language = getattr(loader, "language", None)
-        return verified_sender_block_of(task, language=language if isinstance(language, str) else None)
+        return verified_sender_block_of(thought, task, language=language if isinstance(language, str) else None)
 
-    def format_task_context(self, task: Optional[Task], thought_depth: int = 0) -> str:
+    def format_task_context(self, task: Optional[Task], thought_depth: int = 0, thought: Any = None) -> str:
         """Format task context for inclusion in DMA prompts.
 
         Args:
@@ -353,7 +357,7 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
         # The sender as authentication verified it, apart from the message
         # text (#1366 item 5). Empty when the task carries no verified sender.
-        sender_block = self._verified_sender_block(task)
+        sender_block = self._verified_sender_block(task, thought)
         if sender_block:
             parts.append("")
             parts.append(sender_block)

@@ -245,6 +245,8 @@ def create_thought(
                 parent_thought_id=context.parent_thought_id,
                 correlation_id=context.correlation_id,
                 agent_occurrence_id=agent_occurrence_id,  # Override with correct one
+                preferred_language=context.preferred_language,
+                verified_sender=context.verified_sender,
             )
 
     # Mirror preferred_language onto the Thought's top-level field so the
@@ -337,6 +339,8 @@ def create_seed_thought_for_task(
         correlation_id=correlation_id,
         agent_occurrence_id=task.agent_occurrence_id,  # Inherit from task
         preferred_language=inherited_language,
+        # A seed thought answers the message that created its task (#1366 item 5).
+        verified_sender=task.context.verified_sender if task.context else None,
     )
 
     return create_thought(
@@ -414,6 +418,8 @@ def create_follow_up_thought(
             correlation_id=correlation_id,
             agent_occurrence_id=parent_thought.agent_occurrence_id,  # Inherit from parent
             preferred_language=parent_lang,
+            # Still answering the parent's message (#1366 item 5).
+            verified_sender=getattr(parent_thought.context, "verified_sender", None),
         )
 
     # Extract correlation_id from parent

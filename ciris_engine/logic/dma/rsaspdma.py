@@ -22,6 +22,7 @@ from typing import Any, List, Optional
 
 from pydantic import ConfigDict, Field
 
+from ciris_engine.logic.formatters.verified_sender import with_verified_sender
 from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.schemas.actions.parameters import (
@@ -89,6 +90,8 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
             aspdma_reasoning=aspdma_result.rationale or "",
             candidate_nodes=self._format_candidates(self.candidate_nodes_from_context(context)),
         )
+        # The verified sender of the message being answered (#1366 item 5).
+        user_message = with_verified_sender(user_message, original_thought, context, language=self.prompt_loader.language)
         # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
         user_message = with_conscience_feedback(user_message, conscience_feedback)
         return self._frame_messages(system_message, user_message)

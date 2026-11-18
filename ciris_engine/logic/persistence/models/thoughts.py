@@ -18,7 +18,8 @@ from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.core import EventPayload
 from ciris_engine.schemas.persistence.core import ThoughtSummary
 from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
-from ciris_engine.schemas.runtime.models import FinalAction, Thought, ThoughtContext
+from ciris_engine.logic.persistence.utils import decode_verified_sender
+from ciris_engine.schemas.runtime.models import FinalAction, Thought, ThoughtContext, VerifiedSender
 from ciris_engine.schemas.services.graph.audit import AuditEventData
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,8 @@ def _persist_row_to_thought(row: Dict[str, Any]) -> Thought:
                         "agent_occurrence_id", agent_occurrence_id
                     ),
                     preferred_language=ctx_data.get("preferred_language"),
+                    # The sender of the message this thought answers (#1366 item 5).
+                    verified_sender=decode_verified_sender(ctx_data.get("verified_sender"), row.get("thought_id")),
                 )
             except Exception:  # nosec B110 - corrupt rows tolerate context loss
                 context = None
@@ -414,6 +417,33 @@ def get_thought_by_id(
     if str(row.get("agent_occurrence_id")) != occurrence_id:
         return None
     return _persist_row_to_thought(row)
+
+
+def set_thought_verified_sender(thought_id: str, sender: VerifiedSender) -> bool:
+    """Record that a thought now answers a message from ``sender`` (#1366 item 5).
+
+    Written when a thought consumes a message coalesced onto its task: from
+    then on the thought, and every follow-up that copies its context, answers
+    that message, so it must render that message's verified sender and not the
+    task creator's. Returns True on a write.
+    """
+    engine = _get_engine()
+    try:
+        raw = engine.thought_get(thought_id)
+        if raw is None:
+            return False
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(row, dict):
+            return False
+        thought = _persist_row_to_thought(row)
+        if thought.context is None:
+            return False
+        thought.context.verified_sender = sender
+        engine.thought_upsert(json.dumps(_thought_to_persist_payload(thought)))
+        return True
+    except Exception as e:
+        logger.exception(f"Failed to record the verified sender on thought {thought_id}: {e}")
+        return False
 
 
 async def async_get_thought_by_id(

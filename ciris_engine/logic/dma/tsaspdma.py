@@ -133,6 +133,19 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         return identity_block_of(agent_identity_of(context), language=self.prompt_loader.language)
 
+    def _sender_block(self, context: Optional[Any], original_thought: Optional[Any] = None) -> str:
+        """The VERIFIED SENDER block, rendered beside the identity block (#1366 item 5).
+
+        TSASPDMA re-decides the tool call, including who it is for. In sh-un-08
+        it called an OBSERVER "a designated Wise Authority" (the ``wa-`` id
+        prefix) and once filed under the authorized person's id: it had only
+        the ``@display (ID: …)`` line. The sender is the thought's own (a
+        coalesced message's) when it has one, else the task creator's.
+        """
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_block_of
+
+        return verified_sender_block_of(original_thought, context, language=self.prompt_loader.language)
+
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
         """Sync prompt language using the full localization priority chain.
 
@@ -340,6 +353,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         context_enrichment: Optional[Dict[str, Any]] = None,
         identity_block: str = "",
         conscience_feedback: Optional[ConscienceFeedback] = None,
+        sender_block: str = "",
     ) -> List[JSONDict]:
         """Assemble prompt messages for TSASPDMA evaluation.
 
@@ -381,7 +395,8 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         # The agent's identity, approved amendments included: the same block
         # every DMA reads (formatters.identity.identity_block_of). Eric, 2026-11-13.
         formatted_system = format_system_prompt_blocks(
-            identity_block,
+            # The verified sender beside the identity (#1366 item 5).
+            "\n\n".join(part for part in (identity_block, sender_block) if part),
             "",  # additional context
             "",  # system snapshot
             "",  # user profiles
@@ -473,6 +488,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             original_thought_content=thought_content_str,
             context_enrichment=context_enrichment,
             identity_block=self._identity_block(context),
+            sender_block=self._sender_block(context, original_thought),
             conscience_feedback=conscience_feedback,
         )
 
@@ -566,6 +582,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
             identity_block=self._identity_block(context),
+            sender_block=self._sender_block(context, original_thought),
         )
 
         logger.info(
@@ -652,6 +669,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         aspdma_reasoning: str,
         original_thought_content: str,
         identity_block: str = "",
+        sender_block: str = "",
     ) -> List[JSONDict]:
         """Create prompt messages for TSASPDMA correction mode."""
         messages: List[JSONDict] = []
@@ -680,8 +698,8 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             self.prompt_template_data,
             tool_name=requested_tool,
         )
-        if identity_block:
-            system_message = "\n\n".join((identity_block, system_message))
+        if identity_block or sender_block:
+            system_message = "\n\n".join(part for part in (identity_block, sender_block, system_message) if part)
         messages.append({"role": "system", "content": system_message})
 
         # Get the correction section template (stored in custom_prompts by loader)

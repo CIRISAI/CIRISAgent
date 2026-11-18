@@ -127,9 +127,8 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         IDMA keeps its independent-source view of the agent: no identity block (``identity_base``). It does read
         the rules in force, as signed ``rule`` segments with their provenance and grants (the verified WA
         governance block: the WA grant and each verified amendment), so it can tell governance from one epistemic
-        source (FSD §15.2, #1366 item 15: it scored a WA instruction as "rigidity"). Chat-stated rules would ride
-        as advisory ``rule.user_chat`` / ``rule.wa_chat`` segments; the engine records none structurally yet
-        (``policy_facts(advisory_rule=False)``), so there are none to send. The prior DMAs' results are this
+        source (FSD §15.2, #1366 item 15: it scored a WA instruction as "rigidity"). Only signed rules count: a
+        rule stated in chat produces no segment. The prior DMAs' results are this
         thought's reasoning under analysis: the ``draft`` IDMA judges (llm_output, untrusted).
         """
         from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block

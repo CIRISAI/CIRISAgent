@@ -35,6 +35,8 @@ class MainUserParts(NamedTuple):
     slots: Dict[str, Any]
     appended: List[Tuple[str, str]]
     conscience_feedback: Optional[Union[JSONDict, ConscienceFailureContext]]
+    #: The verified sender whose VERIFIED SENDER block ``original_task_str`` carries (#1366 item 5), or None.
+    sender: Optional[Any] = None
 
 
 class ActionSelectionContextBuilder:
@@ -373,7 +375,16 @@ class ActionSelectionContextBuilder:
             slots=_slots,
             appended=appended,
             conscience_feedback=conscience_feedback if self._build_conscience_guidance(conscience_feedback) else None,
+            sender=self._task_sender(original_thought),
         )
+
+    def _task_sender(self, original_thought: Any) -> Optional[Any]:
+        """The verified sender ``_build_original_task_context`` renders (only with a cached task), or None."""
+        if not self._cached_task:
+            return None
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+
+        return verified_sender_of(original_thought, self._cached_task)
 
     def _load_user_template(self) -> "tuple[DMAPromptLoader, PromptCollection]":
         """Resolve the ASPDMA user-message template (#974 step 1).

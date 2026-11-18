@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, SegmentKind
+from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, RuleProvenance, SegmentKind
 from tests.ciris_engine.logic.dma import aspdma_golden as ag
 
 
@@ -53,7 +53,10 @@ async def test_the_retry_veto_and_the_governed_carriers() -> None:
     with _qa():
         messages = await ag.capture("governed")
     segments = ag.LAST["manifest"].segments
-    (grant,) = [r for r in segments if r.kind == SegmentKind.WA_GUIDANCE]
+    # The grant is one rule.signed_guidance segment (the former wa_guidance kind is merged into it, 2026-11-18).
+    assert not [r for r in segments if r.kind == SegmentKind.WA_GUIDANCE]
+    (grant,) = [r for r in segments if r.segment_id == "rule:wa_grant"]
+    assert grant.kind == SegmentKind.RULE and grant.provenance == RuleProvenance.SIGNED_GUIDANCE
     assert grant.authz is not None and grant.authz.grant_id == ag.GRANT.deferral_id and grant.authz.signature_verified
     (amendment,) = [r for r in segments if r.kind == SegmentKind.AMENDMENT]
     assert amendment.authz is not None and amendment.authz.grant_id == ag.AMENDMENT.node_id

@@ -62,7 +62,10 @@ def full_context() -> Any:
     profile = SimpleNamespace(
         user_id="wa-user-0eve", display_name="eve the admin", memorized_attributes={"preferred_name": "Eve"}
     )
-    snapshot = SimpleNamespace(user_profiles=[profile], channel_id="golden-channel", agent_identity=None)
+    from tests.ciris_engine.logic.dma.compose_golden import make_system_snapshot
+
+    identity = make_system_snapshot().agent_identity  # MSASPDMA reads it; RSASPDMA and FSASPDMA do not
+    snapshot = SimpleNamespace(user_profiles=[profile], channel_id="golden-channel", agent_identity=identity)
     return SimpleNamespace(system_snapshot=snapshot, verified_sender=SENDER, wa_authorization=GRANT)
 
 

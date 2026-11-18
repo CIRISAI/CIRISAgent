@@ -1,8 +1,8 @@
 """The memory second passes and DSASPDMA build their prompts with PromptAssembler (CIRISAgent#1366 Phase 3; FSD §6).
 
 Against goldens captured from the unmigrated tree (msaspdma_golden.py): MSASPDMA, RSASPDMA and FSASPDMA send the
-same bytes, now with a manifest naming every segment. The verified WA grant is a ``wa_guidance`` segment with its
-authz; the conscience's veto on a retry is a ``conscience_feedback`` segment carrying its veto id; ASPDMA's
+same bytes, now with a manifest naming every segment, except that MSASPDMA reads the agent's identity block (#1366
+item 2: ``<name>@policy``). The verified WA grant is a ``rule.signed_guidance`` segment with its authz; the conscience's veto on a retry is a ``conscience_feedback`` segment carrying its veto id; ASPDMA's
 reasoning and proposed node are its output, never instruction text; the candidate nodes (display names included)
 are untrusted history.
 """
@@ -13,10 +13,12 @@ from unittest.mock import patch
 
 import pytest
 
-from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, SegmentKind, TrustLevel
+from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, RuleProvenance, SegmentKind, TrustLevel
 from tests.ciris_engine.logic.dma import msaspdma_golden as mg
 
 SITES = ("msaspdma", "rsaspdma", "fsaspdma", "dsaspdma")
+#: Fixtures whose bytes the policy changes (MSASPDMA reads the identity block when the context carries one).
+POLICY_CHANGED = {("msaspdma", "ms_full"), ("msaspdma", "ms_addressed_full")}
 ALL = [(site, name) for site in SITES for name in mg.NAMES[site]]
 
 
@@ -30,7 +32,18 @@ async def test_the_prompt_is_the_pre_migration_bytes_with_a_clean_manifest(site:
     seen: Dict[str, Any] = {}
     with _mode(AssemblyMode.FAIL_CLOSED):
         messages = await mg.capture(name, seen)
-    assert messages == mg.load_golden(site)[name]
+    golden = mg.load_golden(site)
+    if (site, name) in POLICY_CHANGED:
+        # Recorded after the change; the identity block (and its glue) is the one addition to the pre-migration bytes.
+        assert messages == golden[f"{name}@policy"]
+        identity = [r for r in seen["manifest"].segments if r.kind == SegmentKind.IDENTITY_BASE]
+        assert identity
+        index, end = identity[0].message_index, max(r.span_end for r in identity)
+        assert identity[0].span_start == 0 and messages[index]["content"][end : end + 2] == "\n\n"
+        stripped = dict(messages[index], content=messages[index]["content"][end + 2 :])
+        assert messages[:index] + [stripped] + messages[index + 1 :] == golden[name]
+    else:
+        assert messages == golden[name]
     manifest = seen["manifest"]
     assert manifest is not None and manifest.guard_violations == [] and manifest.stage.value == site
     for r in manifest.segments:  # spans point at the bytes sent
@@ -50,11 +63,14 @@ async def test_the_prompt_is_the_pre_migration_bytes_with_a_clean_manifest(site:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("name", ["ms_full", "fs_full"])
-async def test_the_verified_grant_is_wa_guidance_with_its_authz(name: str) -> None:
+async def test_the_verified_grant_is_a_signed_guidance_rule_with_its_authz(name: str) -> None:
     seen: Dict[str, Any] = {}
     with _mode(AssemblyMode.FAIL_CLOSED):
         await mg.capture(name, seen)
-    (grant,) = [r for r in seen["manifest"].segments if r.kind == SegmentKind.WA_GUIDANCE]
+    # One WA guidance kind, rule.signed_guidance: no wa_guidance segment at all (decision 2026-11-18).
+    assert not [r for r in seen["manifest"].segments if r.kind == SegmentKind.WA_GUIDANCE]
+    (grant,) = [r for r in seen["manifest"].segments if r.segment_id == "rule:wa_grant"]
+    assert grant.kind == SegmentKind.RULE and grant.provenance == RuleProvenance.SIGNED_GUIDANCE
     assert grant.authz is not None and grant.authz.grant_id == mg.GRANT.deferral_id and grant.authz.signature_verified
     assert grant.trust == TrustLevel.VERIFIED
 

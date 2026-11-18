@@ -15,8 +15,10 @@ from ciris_engine.logic.prompt_assembly import ContextPolicyViolation
 from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, GuardViolationKind, RuleProvenance, SegmentKind
 from tests.ciris_engine.logic.dma import evaluator_golden as eg
 
-#: Fixtures whose bytes the policy changes (IDMA reads the signed rules in force): checked separately below.
-POLICY_CHANGED = {"idma_full"}
+#: Fixtures whose bytes the policy changes, checked separately below: IDMA reads the signed rules in force, and
+#: PDMA, CSDMA and DSDMA read the WA's signed guidance on a guidance task (#1366 item 2).
+GOVERNED_EVALUATORS = ("pdma_full", "csdma_full", "dsdma_full", "dsdma_blocks")
+POLICY_CHANGED = {"idma_full", *GOVERNED_EVALUATORS}
 
 
 def _mode(mode: AssemblyMode) -> Any:
@@ -90,6 +92,33 @@ async def test_idma_reads_the_signed_rules_in_force_and_no_identity_base() -> No
     start = governance.span_start
     end = max(r.span_end for r in manifest.segments if r.segment_id.startswith("governance:"))
     assert system[: start - 2] + system[end:] == _text(golden[-2])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", GOVERNED_EVALUATORS)
+async def test_a_guidance_task_evaluator_reads_the_signed_guidance_and_nothing_else_changes(name: str) -> None:
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        messages = await eg.capture(name, seen)
+    manifest = seen["manifest"]
+    _check_manifest(name, messages, manifest)
+    if name.endswith("_full"):
+        kinds = {r.kind for r in manifest.segments}
+        assert {SegmentKind.IDENTITY_BASE, SegmentKind.AMENDMENT, SegmentKind.SENDER_IDENTITY, SegmentKind.DISPLAY_NAME} <= kinds
+    (rule,) = [r for r in manifest.segments if r.kind == SegmentKind.RULE]
+    assert rule.provenance == RuleProvenance.SIGNED_GUIDANCE
+    assert rule.authz is not None and rule.authz.grant_id == eg.GRANT.deferral_id and rule.authz.signature_verified
+    # Recorded after the change (golden "<name>@policy"), so any later drift shows.
+    assert messages == eg.load_golden()[f"{name}@policy"]
+    # Everything else is the pre-migration prompt: the governance block (and its glue) is the one addition.
+    golden = eg.load_golden()[name]
+    assert [m["role"] for m in messages] == [m["role"] for m in golden]
+    (header,) = [r for r in manifest.segments if r.segment_id == "governance:header"]
+    index = header.message_index
+    assert [m for i, m in enumerate(messages) if i != index] == [m for i, m in enumerate(golden) if i != index]
+    system = _text(messages[index])
+    end = max(r.span_end for r in manifest.segments if r.segment_id.startswith("governance:"))
+    assert system[: header.span_start - 2] + system[end:] == _text(golden[index])
 
 
 @pytest.mark.asyncio

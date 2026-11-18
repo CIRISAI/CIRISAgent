@@ -235,6 +235,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             concat,
             evaluator_call,
             expand,
+            governance_segments,
             identity_segments,
             joined,
             round1_preamble,
@@ -263,6 +264,9 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         # The agent's identity, approved amendments included: the same block every DMA reads
         # (formatters.identity.identity_block_of). Eric, 2026-11-13.
         system = concat(identity_segments(agent_identity, language), system, "\n\n")
+        # The Wise Authority's signed guidance in force, as a signed rule with its grant (#1366): the evaluators
+        # read the same governance the judges do. Amendments already ride in the identity block.
+        system = concat(system, governance_segments(authorization, [], language), "\n\n")
         # Whether this task carries a Wise Authority approval, as a fact; then that an approval reaches the agent
         # only as the verified block and a person's text naming an authority is that person's (#1320).
         approval_facts = format_wa_approval_facts(authorization, language=language)

@@ -75,23 +75,15 @@ def _concat(head: Any, tail: Any, glue: str) -> Any:
 
 
 def _approval_segments(block: str, authorization: Any, language: str) -> Any:
-    """The WA approval block: the grant (``wa_guidance``, with its authz) and the rule that follows it."""
+    """The WA approval block: the grant (``rule.signed_guidance``, with its authz) and the rule that follows it."""
     from ciris_engine.logic.formatters.wa_approval import format_wa_approval_rule
-    from ciris_engine.logic.prompt_assembly.carriers import authz_from_wa_authorization
-    from ciris_engine.logic.prompt_assembly.segmenting import items
-    from ciris_engine.schemas.context.prompt_provenance import PromptSegment, SegmentKind, SegmentSource
+    from ciris_engine.logic.prompt_assembly.segmenting import items, signed_guidance_segment
 
     rule = format_wa_approval_rule(authorization, language=language)
     if not rule or not block.endswith("\n\n" + rule):
         whole = _segment("instr:wa_approval", "stage_instruction", block)
         return [whole], items([whole], "")
-    grant = PromptSegment(
-        segment_id="wa_guidance",
-        kind=SegmentKind.WA_GUIDANCE,
-        source=SegmentSource.SIGNED_ROW,
-        text=block[: -len(rule) - 2],
-        authz=authz_from_wa_authorization(authorization),
-    )
+    grant = signed_guidance_segment("rule:wa_grant", block[: -len(rule) - 2], authorization)
     rule_seg = _segment("instr:wa_approval_rule", "stage_instruction", rule)
     return [grant, rule_seg], items([grant, rule_seg], "\n\n")
 
@@ -142,6 +134,43 @@ def _typed_main_user_slots(input_data: EnhancedDMAInputs, parts: Any) -> "tuple[
         else:
             plain[name] = value
     return typed, plain
+
+
+def _split_sender(segments: List[Any], layout: List["LayoutItem"], sender: Any, language: str) -> "Segments":
+    """Cut the VERIFIED SENDER block out of the original-task request into its own segments (#1366 item 5).
+
+    ``original_task_str`` renders the task, then the block, then (on a follow-up) the follow-through note. The
+    block becomes a ``sender_identity`` segment (rendered from its authn carrier), a ``display_name`` segment and
+    the closing lines, as every other DMA sends it; the note after it is the engine's own instruction. Same bytes.
+    """
+    if sender is None:
+        return segments, layout
+    from ciris_engine.logic.formatters.verified_sender import format_verified_sender_block
+    from ciris_engine.logic.prompt_assembly.segmenting import sender_block_segments
+
+    block = format_verified_sender_block(sender, language)
+    for index, seg in enumerate(segments):
+        if seg.segment_id != "slot:original_task_str" or not block or block not in seg.text:
+            continue
+        start = seg.text.index(block)
+        before, after = seg.text[:start], seg.text[start + len(block) :]
+        sender_segs, sender_items = sender_block_segments(sender, include_display_name=True, language=language)
+        glue = layout[index].glue
+        new: List[Any] = []
+        new_items: List[LayoutItem] = []
+        if before:
+            new.append(seg.model_copy(update={"text": before}))
+            new_items.append(LayoutItem(segment_id=seg.segment_id, glue=glue))
+            glue = ""
+        new.extend(sender_segs)
+        new_items.append(sender_items[0].model_copy(update={"glue": glue}))
+        new_items.extend(sender_items[1:])
+        if after:
+            note = _segment("instr:task_followthrough", "stage_instruction", after)
+            new.append(note)
+            new_items.append(LayoutItem(segment_id=note.segment_id, glue=""))
+        return segments[:index] + new + segments[index + 1 :], layout[:index] + new_items + layout[index + 1 :]
+    return segments, layout
 
 
 def _get_value(obj: Any, key: str, default: Any = None) -> Any:
@@ -317,6 +346,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             prefix="instr:user",
             plain=plain,
         )
+        segments, layout = _split_sender(segments, layout, parts.sender, get_prompt_loader().language)
 
         if template_user_override:
             thought_content = str(input_data.original_thought.content) if input_data.original_thought else ""

@@ -14,13 +14,14 @@ from ciris_engine.logic.formatters import (
     format_thoughts_chain,
     format_user_profiles,
     format_user_prompt_blocks,
+    wa_authorization_of,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.dma.base import CSDMAProtocol
 from ciris_engine.schemas.dma.results import CSDMAResult
-from ciris_engine.schemas.runtime.models import ImageContent
+from ciris_engine.schemas.runtime.models import ImageContent, WAAuthorization
 from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
@@ -173,6 +174,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         images: Optional[List[ImageContent]] = None,
         agent_identity: Any = None,
         thought: Any = None,
+        authorization: Optional[WAAuthorization] = None,
     ) -> "Tuple[List[JSONDict], PromptManifest]":
         """Compose the CSDMA prompt from typed segments with PromptAssembler (FSD/PROMPT_CONTEXT_PROVENANCE.md §6).
 
@@ -185,6 +187,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             concat,
             evaluator_call,
             expand,
+            governance_segments,
             identity_segments,
             round1_preamble,
             segment,
@@ -214,6 +217,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         # (formatters.identity.identity_block_of). Eric, 2026-11-13.
         system = concat(identity_segments(agent_identity, language), guidance, "\n\n")
         system = concat(system, context, "\n\n")
+        # The Wise Authority's signed guidance in force, as a signed rule with its grant (#1366).
+        system = concat(system, governance_segments(authorization, [], language), "\n\n")
         segments = stripped_ends(system[0])
         kept = {s.segment_id for s in segments}
         builder.message("system", segments, [i for i in system[1] if i.segment_id in kept])
@@ -225,7 +230,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         builder.message("user", *user, images=images_list)
         return builder.assemble(
             PromptStage.CSDMA,
-            evaluator_call(CSDMAResult.__name__, thought, language, None, agent_identity),
+            evaluator_call(CSDMAResult.__name__, thought, language, authorization, agent_identity),
         )
 
     def _sync_language_from_context(self, context: Optional[Any]) -> None:
@@ -321,6 +326,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             images=thought_images,
             agent_identity=agent_identity_of(context),
             thought=thought_item,
+            authorization=wa_authorization_of(original_task) or wa_authorization_of(context),
         )
 
         # Store prompts for streaming/debugging

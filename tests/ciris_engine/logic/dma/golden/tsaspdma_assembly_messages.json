@@ -61,7 +61,7 @@
    "role": "system"
   },
   {
-   "content": "=== ASPDMA'S SELECTION ===\nTool: golden_tool\nReasoning: Golden fixture: tool selected.\n\n=== ORIGINAL THOUGHT (user's intent - use to infer parameters) ===\nShould the agent reply with a summary of the weather report?\n\n\n\n=== TOOL DOCUMENTATION (with Parameter Schema) ===\n**Tool:** golden_tool\n**Description:** Deterministic golden fixture tool\n**When to Use:** Golden fixture only\n\n### Parameter Schema (FILL THESE IN)\nType: object\nRequired: target\nProperties:\n  - target* (string): Golden target\n\n\nGolden fixture: CONSCIENCE OVERRIDE GUIDANCE: do not file the ticket for someone else.\n",
+   "content": "=== ASPDMA'S SELECTION ===\nTool: golden_tool\nReasoning: Golden fixture: tool selected.\n\n=== ORIGINAL THOUGHT (user's intent - use to infer parameters) ===\nShould the agent reply with a summary of the weather report?\n\n=== AVAILABLE RESOURCES (from context enrichment) ===\n--- Home Assistant Entities (1 shown) ---\n  light.kitchen: 'Kitchen light' (state: on)\n\nIMPORTANT: Use the EXACT entity_id values from the list above.\nDo NOT use friendly names directly - map them to entity_id first.\n\n=== TOOL DOCUMENTATION (with Parameter Schema) ===\n**Tool:** golden_tool\n**Description:** Deterministic golden fixture tool\n**When to Use:** Golden fixture only\n\n### Parameter Schema (FILL THESE IN)\nType: object\nRequired: target\nProperties:\n  - target* (string): Golden target\n\n\nGolden fixture: CONSCIENCE OVERRIDE GUIDANCE: do not file the ticket for someone else.\n",
    "role": "user"
   }
  ],

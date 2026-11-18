@@ -62,7 +62,9 @@ FEEDBACK = {
         ).model_dump()
     ],
 }
-ENRICHMENT = {"ha_list_entities": {"light.kitchen": "Kitchen light", "light.porch": "Porch light"}}
+ENRICHMENT = {
+    "ha_list_entities": {"entities": [{"entity_id": "light.kitchen", "friendly_name": "Kitchen light", "state": "on"}]}
+}
 
 
 def full_context() -> Any:

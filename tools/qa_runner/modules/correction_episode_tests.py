@@ -1152,12 +1152,21 @@ class CorrectionEpisodeTests:
             reply = {"status": None, "response": None, "outcome": "pending-at-deferral"}
         return reply, found
 
-    async def _resolve(self, token: Optional[str], deferral_id: str, guidance: str, *, who: str) -> Dict[str, Any]:
+    async def _resolve(self, token: Optional[str], deferral_id: str, guidance: str, *, who: str,
+                       amendment_text: Optional[str] = None) -> Dict[str, Any]:
+        """Approve a deferral. With M4_AMENDMENT_FIELD set (the resolve API's exact-text field, CIRISAgent#1366
+        Phase 2 governance work; working name `amendment_text`), the frozen paragraph is also sent there, so the
+        WA approves the exact amendment bytes and the amendment lands verified. Without it, a guidance-only
+        resolve lands an UNVERIFIED amendment that entropy and the optimization veto never see."""
+        payload: Dict[str, Any] = {"resolution": "approve", "guidance": guidance}
+        field = os.environ.get("M4_AMENDMENT_FIELD", "").strip()
+        if field and amendment_text:
+            payload[field] = amendment_text
         status, body = await self._req(
-            "POST", f"/v1/wa/deferrals/{deferral_id}/resolve", token,
-            json_body={"resolution": "approve", "guidance": guidance}, timeout=120,
+            "POST", f"/v1/wa/deferrals/{deferral_id}/resolve", token, json_body=payload, timeout=120,
         )
-        rec = {"who": who, "deferral_id": deferral_id, "status": status, "body": body}
+        rec = {"who": who, "deferral_id": deferral_id, "status": status, "body": body,
+               "amendment_field": field or None, "amendment_text_sent": bool(field and amendment_text)}
         self._log("resolve", **rec)
         return rec
 
@@ -1503,7 +1512,8 @@ class CorrectionEpisodeTests:
         if deferral:
             self._note_row_keys(deferral, None)
             await self._occurrences_readback("d_before_resolve")
-            resolve = await self._resolve(wa["token"], deferral["deferral_id"], self._guidance(paragraph), who="wa")
+            resolve = await self._resolve(wa["token"], deferral["deferral_id"], self._guidance(paragraph), who="wa",
+                                         amendment_text=paragraph)
             self._note_row_keys(deferral, resolve)
             await self._occurrences_readback("e_after_resolve")
         identity = await self._wait_identity(marker_of(paragraph), before.get("version"))

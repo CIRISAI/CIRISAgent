@@ -255,6 +255,15 @@ class ActionSelectionDMAResult(PromptCarrier):
     # any WA approval live, so a trace can show what identity the model had.
     system_prompt: Optional[str] = Field(None, description="System prompt passed to ASPDMA")
 
+    # Review integrity (CIRISAgent#1366 item 10). Set ONLY by the thought
+    # processor when the consciences pass a TOOL action, and always overwritten
+    # there (to None when nothing was reviewed), so a value arriving from any
+    # other producer never survives to dispatch. ToolHandler recomputes it over
+    # what is about to run and refuses on a mismatch or absence.
+    reviewed_action_hash: Optional[str] = Field(
+        None, description="Fingerprint of the action as the consciences reviewed it (reviewed_action.py)"
+    )
+
     # selection_confidence / alternatives_considered removed — see comment on
     # ASPDMALLMResult. extra="ignore" so stale consumers or older event wire
     # formats that still include them don't raise validation errors.

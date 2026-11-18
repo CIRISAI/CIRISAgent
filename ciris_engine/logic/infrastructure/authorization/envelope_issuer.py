@@ -218,6 +218,7 @@ def issue_authority_envelope(
     target_roots: Tuple[TargetRoot, ...] = (),
     credentials: Tuple[IssuedCredential, ...] = (),
     time_service: Optional["TimeServiceProtocol"] = None,
+    approved_calls: Iterable[str] = (),
 ) -> TaskEnvelope:
     """Mint an envelope from an explicit owner/WA grant.
 
@@ -246,6 +247,7 @@ def issue_authority_envelope(
         requester=requester or RequesterAuthorization(),
         granted_tools=frozenset(granted_tools),
         capabilities=frozenset(capabilities),
+        approved_calls=frozenset(approved_calls),
         target_roots=tuple(target_roots),
         credentials=tuple(credentials),
     )

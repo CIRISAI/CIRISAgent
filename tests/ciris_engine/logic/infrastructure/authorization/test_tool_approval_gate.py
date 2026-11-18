@@ -99,13 +99,18 @@ def _deployment_envelope(task_id: str, granted: frozenset) -> TaskEnvelope:
     )
 
 
-def _wa_envelope(task_id: str, tool: str) -> TaskEnvelope:
+def _wa_envelope(task_id: str, tool: str, arguments: Optional[dict] = None) -> TaskEnvelope:
+    """A WA approval of ``tool`` called with ``arguments`` (default: the call
+    ``_tool_selection`` makes). #1366 item 10: approvals bind the call."""
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import tool_call_fingerprint
+
     return issue_authority_envelope(
         task_id=task_id,
         issuer_kind=EnvelopeIssuerKind.WISE_AUTHORITY,
         issuer_id="wa-2026-08-01-ABC123",
         granted_tools=frozenset({tool}),
         capabilities=frozenset(),
+        approved_calls=frozenset({tool_call_fingerprint(tool, arguments if arguments is not None else {"amount": 100})}),
     )
 
 

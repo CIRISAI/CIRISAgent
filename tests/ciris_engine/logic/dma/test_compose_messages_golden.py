@@ -26,6 +26,9 @@ inserting exactly one message (never regenerated from the code under test):
   included, ``formatters.identity.identity_block_of``) at the head of their
   system message, joined by a blank line: the fixture identity's block was
   prepended to message 4 of each snapshot, nothing else changed.
+- #1366: DSASPDMA's response format names ``m1_justification`` beside
+  ``proposed_amendment``: that one line was inserted after the
+  ``proposed_amendment`` line of the dsaspdma snapshot's system message.
 """
 
 from typing import List, cast

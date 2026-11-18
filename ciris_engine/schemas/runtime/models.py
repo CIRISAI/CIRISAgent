@@ -83,6 +83,20 @@ class WAAuthorization(BaseModel):
     amendment_sha256: Optional[str] = Field(
         None, description="sha256 (lowercase hex) of amendment_text, as the signed resolution committed to it"
     )
+    proposed_amendment: Optional[str] = Field(
+        None,
+        description=(
+            "The text the agent's deferral proposed (#1366). Differs from amendment_text when the Wise Authority "
+            "edited it; the edited text is what the consciences review, and it needs its own M-1 justification."
+        ),
+    )
+    m1_justification: Optional[str] = Field(
+        None,
+        description="The deferral's M-1 (Adaptive Coherence) justification of proposed_amendment, as the WA saw it",
+    )
+    identity_change_kind: Optional[str] = Field(
+        None, description="amendment | reapproval: what the deferral proposed (schemas.api.wa.IdentityChangeKind)"
+    )
     verification: Literal["verified"] = Field(
         "verified",
         description="Only a verified approval can be represented; unsigned or failed ones grant nothing",

@@ -250,6 +250,53 @@ async def emit_identity_amendment(approved_text: str, authorized_by: str, reques
     return await _call("emit_identity_amendment", sha256_hex(approved_text), authorized_by, request_id)
 
 
+#: The keyword the node takes for an identity_amendment row's ``refs.prev`` (rc21; persist v62 / verify 23).
+PREV_PARAM = "prev"
+#: The refusal when the node cannot write ``refs.prev`` (so cannot tell a base link from a legacy row).
+REASON_PREV_UNSUPPORTED = "deferral.identity_amendment_prev_unsupported"
+
+
+def identity_amendment_rows_take_prev() -> bool:
+    """True when the node's ``emit_identity_amendment`` writes ``refs.prev`` (the rc21 profile chain).
+
+    Read from the function's signature, like
+    :func:`response_rows_commit_amendment_digest`. False on an older node, or
+    a binding without a text signature: it cannot write a chain link, so no
+    base link is recorded there.
+    """
+    import inspect
+
+    fn = _server_function("emit_identity_amendment")
+    if fn is None:
+        return False
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return PREV_PARAM in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+async def emit_base_link(amendment_digest: str, authorized_by: str, request_id: str) -> str:
+    """Sign the profile's BASE link: ``identity_amendment`` with no ``prev`` (rc21 section 3).
+
+    ``amendment_digest`` is the template's digest the Wise Authority approved
+    (the response row's ``amendment_digest``), 64-hex. The call is
+    ``emit_identity_amendment(amendment_digest, authorized_by, request_id,
+    prev=None)``. On a node without ``prev`` this refuses
+    (:data:`REASON_PREV_UNSUPPORTED`, an outage) and records nothing: a row
+    there would carry no chain position, and the profile stays unanchored.
+    """
+    if not identity_amendment_rows_take_prev():
+        raise DeferralRowRefused(
+            DeferralRowRefusal(
+                reason_id=REASON_PREV_UNSUPPORTED,
+                text="this node cannot write an identity_amendment's refs.prev, so it cannot record a base link",
+                kind=DeferralRowRefusalKind.OUTAGE,
+            )
+        )
+    return await _call_kw("emit_identity_amendment", amendment_digest, authorized_by, request_id, **{PREV_PARAM: None})
+
+
 # --------------------------------------------------------------------- read back
 
 
@@ -329,9 +376,13 @@ __all__ = [
     "DeferralRowRefused",
     "DeferralRowsUnavailable",
     "deferral_room_id",
+    "PREV_PARAM",
+    "REASON_PREV_UNSUPPORTED",
+    "emit_base_link",
     "emit_deferral_request",
     "emit_deferral_response",
     "emit_identity_amendment",
+    "identity_amendment_rows_take_prev",
     "parse_refusal",
     "read_deferral_row",
     "read_deferral_rows",

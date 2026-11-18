@@ -376,11 +376,12 @@ def proposed_call_fingerprint(deferral_context: object) -> Optional[str]:
 
     ``DeferParams.context`` is model-authorable, so the fingerprint is
     RECOMPUTED from the proposed tool, arguments and channel and must match the
-    one stated; anything else is ``None`` (no binding, fail closed).
+    one stated; anything else is ``None`` (no binding, fail closed). The JSON
+    text is parsed with exact decimals (``cde.loads_exact``), so a number goes
+    into the fingerprint by its exact value, never through a binary64 round.
     """
-    import json
-
     from ciris_engine.logic.infrastructure.authorization.reviewed_action import tool_call_fingerprint
+    from ciris_engine.logic.utils.cde import loads_exact
 
     if not isinstance(deferral_context, dict):
         return None
@@ -388,7 +389,7 @@ def proposed_call_fingerprint(deferral_context: object) -> Optional[str]:
     if not isinstance(raw, str):
         return None
     try:
-        call = json.loads(raw)
+        call = loads_exact(raw)
         stated = call["call_fingerprint"]
         recomputed = tool_call_fingerprint(call["tool"], call["arguments"], call.get("channel") or None)
     except (ValueError, KeyError, TypeError):

@@ -354,7 +354,11 @@ async def test_a_proposed_amendment_rides_from_dsaspdma_into_the_listing(wise_au
     (listed,) = [d for d in response.data.deferrals if d.task_id == "task-amend"]
     assert listed.context["proposed_amendment"] == proposed
     assert response.data.capabilities.exact_amendment_text is True
-    assert response.data.model_dump(mode="json")["capabilities"] == {"exact_amendment_text": True}
+    assert response.data.model_dump(mode="json")["capabilities"] == {
+        "exact_amendment_text": True,
+        "exact_call_approval": True,
+        "base_link_approval": True,
+    }
 
 
 @pytest.mark.asyncio

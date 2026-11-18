@@ -7,7 +7,7 @@ Manages human-in-the-loop deferrals and permissions.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, NoReturn, Optional, TypeVar, cast
+from typing import Annotated, List, NoReturn, Optional, TypeVar, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
@@ -15,7 +15,11 @@ from pydantic import BaseModel
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.schemas.api.responses import ErrorCode, ErrorDetail, ErrorResponse, ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.api.wa import (
+    PROPOSED_BASE_LINK_KEY,
+    DeferralListProfile,
     DeferralListResponse,
+    ProfileAnchorStatus,
+    ProposedBaseLink,
     PermissionsListResponse,
     ResolveDeferralRequest,
     ResolveDeferralResponse,
@@ -148,6 +152,48 @@ def create_wa_success_response(data: _T) -> SuccessResponse[_T]:
 REASON_AMENDMENT_TEXT_REQUIRES_APPROVE = "wa.amendment_text_requires_approve"
 REASON_CALL_FINGERPRINT_REQUIRES_APPROVE = "wa.call_fingerprint_requires_approve"
 REASON_RESOLVE_ONE_SUBJECT = "wa.resolve_one_subject"
+REASON_BASE_LINK_DIGEST_REQUIRES_APPROVE = "wa.base_link_digest_requires_approve"
+REASON_BASE_LINK_DIGEST_MISMATCH = "wa.base_link_digest_mismatch"
+
+
+def _proposed_base_link(pending: Optional[PendingDeferral]) -> Optional[ProposedBaseLink]:
+    """The base link a pending deferral proposes (``context.proposed_base_link``), or ``None``."""
+    raw = pending.context.get(PROPOSED_BASE_LINK_KEY) if pending is not None else None
+    if not raw:
+        return None
+    try:
+        return ProposedBaseLink.model_validate_json(raw)
+    except ValueError:
+        return None
+
+
+_PROFILE_STATUS = {
+    "verified": ProfileAnchorStatus.ANCHORED,
+    "unanchored": ProfileAnchorStatus.UNANCHORED,
+    "mismatch": ProfileAnchorStatus.MISMATCH,
+    "contested": ProfileAnchorStatus.CONTESTED,
+}
+
+
+def deferral_list_profile(deferrals: List[PendingDeferral]) -> DeferralListProfile:
+    """The identity profile beside the deferral list (rc21 section 3).
+
+    The status and digest are the newest whole-profile check this process made
+    (unanchored, digest null, before the first identity load: no base link is
+    known yet). The proposed base link is the one a PENDING deferral asks
+    approval of: what resolve's ``base_link_digest`` can approve.
+    """
+    from ciris_engine.logic.context.identity_profile import latest_identity_profile
+
+    profile = latest_identity_profile()
+    proposal = next((p for p in (_proposed_base_link(d) for d in deferrals) if p is not None), None)
+    return DeferralListProfile(
+        status=_PROFILE_STATUS.get(profile.status.value, ProfileAnchorStatus.UNANCHORED)
+        if profile is not None
+        else ProfileAnchorStatus.UNANCHORED,
+        profile_digest=profile.profile_digest if profile is not None else None,
+        proposed_base_link=proposal,
+    )
 
 
 def raise_wa_error(message: str, status_code: int = 500, reason_id: Optional[str] = None) -> NoReturn:
@@ -208,7 +254,9 @@ async def get_deferrals(
 
     try:
         deferrals = await wa_service.get_pending_deferrals(wa_id=wa_id)
-        response = DeferralListResponse(deferrals=deferrals, total=len(deferrals))
+        response = DeferralListResponse(
+            deferrals=deferrals, total=len(deferrals), profile=deferral_list_profile(deferrals)
+        )
         return create_wa_success_response(response)
 
     except Exception as e:
@@ -515,7 +563,35 @@ async def resolve_deferral(
                 status_code=400,
                 reason_id=REASON_AMENDMENT_TEXT_REQUIRES_APPROVE,
             )
-        amendment_sha256 = sha256_hex(amendment_text) if amendment_text is not None else None
+        # THE BASE LINK (rc21 section 3): the WA approves the template digest the
+        # deferral proposes; the node signs it as the response row's
+        # amendment_digest. One subject per resolution, approve only, and only
+        # the proposed digest.
+        base_link_digest = resolve_request.base_link_digest
+        if base_link_digest is not None:
+            if amendment_text is not None or call_fingerprint is not None:
+                raise_wa_error(
+                    "base_link_digest cannot be resolved together with amendment_text or call_fingerprint: a "
+                    "deferral approves one subject",
+                    status_code=400,
+                    reason_id=REASON_RESOLVE_ONE_SUBJECT,
+                )
+            if not approved:
+                raise_wa_error(
+                    "base_link_digest is only accepted with resolution='approve': a rejection or modification "
+                    "approves no base link",
+                    status_code=400,
+                    reason_id=REASON_BASE_LINK_DIGEST_REQUIRES_APPROVE,
+                )
+            proposal = _proposed_base_link(_pending)
+            if proposal is None or proposal.manifest_digest != base_link_digest:
+                raise_wa_error(
+                    "base_link_digest must equal the manifest_digest this deferral proposes "
+                    "(context.proposed_base_link)",
+                    status_code=400,
+                    reason_id=REASON_BASE_LINK_DIGEST_MISMATCH,
+                )
+        amendment_sha256 = sha256_hex(amendment_text) if amendment_text is not None else base_link_digest
         signed_at = datetime.now(timezone.utc).isoformat()
         deferral_response = DeferralResponse(
             approved=approved,

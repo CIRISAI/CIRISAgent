@@ -17,7 +17,7 @@ rc21 §4 (action scope):
   objection digests, constitution answer 2026-11-18). Record digest:
   ``SHA-256(CDE(["CEG-review/2", record]))``.
 * **Dispatch tokens**: ``action_not_reviewed``, ``action_review_incomplete``,
-  ``action_objection_undischarged``, ``action_approval_mismatch``,
+  ``action_objection_undischarged``, ``action_objection_not_carried``, ``action_approval_mismatch``,
   ``effect_untrusted_unacknowledged``.
 
 Dependency-light on purpose (no ``task_envelope`` import): the subject schema
@@ -79,6 +79,10 @@ class ReviewRecord(BaseModel):
     faculties: Tuple[str, ...] = Field(..., description="passed: all four; objected: those that objected")
     discharges: Tuple[ReviewDischarge, ...] = Field(default=(), description="passed only")
     considered: Tuple[str, ...] = Field(default=(), description="passed only: earlier objection digests of the thought")
+    derived_from: Tuple[str, ...] = Field(
+        default=(),
+        description="passed only: the KINDS of untrusted input the arguments derive from (request, history, tool_output)",
+    )
 
     @property
     def missing_faculties(self) -> FrozenSet[str]:
@@ -139,6 +143,7 @@ class GateRefusalReason(str, Enum):
     NOT_REVIEWED = "action_not_reviewed"  # also: a changed call
     REVIEW_INCOMPLETE = "action_review_incomplete"
     OBJECTION_UNDISCHARGED = "action_objection_undischarged"
+    OBJECTION_NOT_CARRIED = "action_objection_not_carried"
     APPROVAL_MISMATCH = "action_approval_mismatch"
     EFFECT_UNTRUSTED_UNACKNOWLEDGED = "effect_untrusted_unacknowledged"
     # envelope gate

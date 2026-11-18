@@ -1,0 +1,266 @@
+{
+ "_note": "Known answers for CC 2.7.11's derived digests; written by digest_vectors.py.",
+ "call": [
+  {
+   "arguments_json": "{\"url\": \"https://example.org/a\", \"token\": \"{SECRET:7f3c}\"}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c68687474705f676574a26375726c7568747470733a2f2f6578616d706c652e6f72672f6165746f6b656e6d7b5345435245543a376633637d626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "8641471506ee86a84289dbcd139dac5f803eafc9da9d4fea73822245e633cde0"
+   ],
+   "tool": "http_get",
+   "verb": "tool",
+   "what": "a secret stands as its reference"
+  },
+  {
+   "arguments_json": "{\"limit\": 3, \"offset\": -42, \"id\": 4294967296}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c6864625f7175657279a36269641b0000000100000000656c696d697403666f66667365743829626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "5528da8c64d7c8c6fa7df36ff7592b20776ccd239469dabb436cf8ee292a33ca"
+   ],
+   "tool": "db_query",
+   "verb": "tool",
+   "what": "integers, a negative and a large one"
+  },
+  {
+   "arguments_json": "{\"temperature\": 0.5, \"ratio\": 1.1, \"gain\": 100000.5, \"steps\": 2.0}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c6a746865726d6f73746174a4646761696efa47c3504065726174696ffb3ff199999999999a657374657073026b74656d7065726174757265f93800626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "e4237c227a0c07465fd7e277eb5f115b73665381b42408beed6b287661365505"
+   ],
+   "tool": "thermostat",
+   "verb": "tool",
+   "what": "floats: half, single, double, and an integral number read as an integer"
+  },
+  {
+   "arguments_json": "{\"filter\": null, \"dry_run\": true, \"safe\": false}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c66736561726368a36473616665f46666696c746572f6676472795f72756ef5626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "edecd9fc90e945f5035dff5f01d0e8f52b48a841bf8959772712575b54cf165c"
+   ],
+   "tool": "search",
+   "verb": "tool",
+   "what": "null, true and false"
+  },
+  {
+   "arguments_json": "{\"body\": {\"tags\": [\"b\", \"a\"], \"meta\": {\"z\": -1, \"a\": [1, {\"k\": \"v\"}]}}, \"to\": \"room\"}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c64706f7374a262746f64726f6f6d64626f6479a2646d657461a261618201a1616b6176617a2064746167738261626161626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "86fae7e40bac6245603c9cad4bbcf67ce3d5e5cd1c119fcf7a6c54cfec9ee543"
+   ],
+   "tool": "post",
+   "verb": "tool",
+   "what": "nested maps and arrays"
+  },
+  {
+   "arguments_json": "{}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c65636c6f636ba060",
+   "channel": "",
+   "digest": [
+    -16,
+    "54104a42207eea4794b2d70fbe2c1f95696f97ffdb1d141c915ee58af0ebe2a9"
+   ],
+   "tool": "clock",
+   "verb": "tool",
+   "what": "no channel: the empty text"
+  },
+  {
+   "arguments_json": "{\"x\": 1e2}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c616ea161781864626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "8c033d67c9b1addbbe88afd79c3bb4327f794dea92cedc353988a1974d57eb31"
+   ],
+   "tool": "n",
+   "verb": "tool",
+   "what": "1e2 is the integer 100"
+  },
+  {
+   "arguments_json": "{\"x\": 9007199254740993.0}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c616ea161781b0020000000000001626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "6ce928401ba398f3c848eff8dc10154f7a7f7d8fb4042fb5bb136a51779bc34f"
+   ],
+   "tool": "n",
+   "verb": "tool",
+   "what": "9007199254740993.0 is that integer exactly, not the nearest binary64"
+  },
+  {
+   "arguments_json": "{\"x\": -0.0}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c616ea1617800626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "298438113a4b3b4d0cacdbad4efd7740a8f6e9f4a3cd559cc5918f2f9da4bf25"
+   ],
+   "tool": "n",
+   "verb": "tool",
+   "what": "-0.0 is integral by value: the integer 0"
+  },
+  {
+   "arguments_json": "{\"x\": 0.1}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c616ea16178fb3fb999999999999a626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "8227562df7817aa403f4883a7f8611ad8acd07d5832fff940135da339fe90cb2"
+   ],
+   "tool": "n",
+   "verb": "tool",
+   "what": "0.1 is the nearest binary64, which needs a double"
+  },
+  {
+   "arguments_json": "{\"x\": 1.00000000000000011102230246251565404236316680908203125}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c616ea16178f93c00626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "db66ef3ed52d3b0d1f998a212016f910e28885c626eb8e0c12b391192a50d155"
+   ],
+   "tool": "n",
+   "verb": "tool",
+   "what": "a value exactly halfway between two binary64 values rounds to even: 1 + 2^-53 is the float 1.0"
+  },
+  {
+   "arguments_json": "{\"x\": 18446744073709551615}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c616ea161781bffffffffffffffff626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "a4babcc21a53a280f48b41b521ced697b4b03decc8b420e3be68d481a1ecac4a"
+   ],
+   "tool": "n",
+   "verb": "tool",
+   "what": "the largest CBOR integer, 2^64 - 1"
+  },
+  {
+   "arguments_json": "{\"x\": -18446744073709551616}",
+   "cde_hex": "856a4345472d63616c6c2f3264746f6f6c616ea161783bffffffffffffffff626331",
+   "channel": "c1",
+   "digest": [
+    -16,
+    "d926a21e6929f7f7f4aa831334a9db35d9154db3ba3bfc281546975920411eb8"
+   ],
+   "tool": "n",
+   "verb": "tool",
+   "what": "the least CBOR integer, -2^64"
+  },
+  {
+   "arguments_json": "{\"x\": 1e400}",
+   "channel": "c1",
+   "refused": "call_argument_unrepresentable",
+   "tool": "n",
+   "verb": "tool",
+   "what": "1e400 is integral and outside CBOR's integer range: refused"
+  },
+  {
+   "arguments_json": "{\"x\": 18446744073709551616}",
+   "channel": "c1",
+   "refused": "call_argument_unrepresentable",
+   "tool": "n",
+   "verb": "tool",
+   "what": "2^64 is outside CBOR's integer range: refused"
+  }
+ ],
+ "profile": [
+  {
+   "cde_hex": "826d4345472d70726f66696c652f32822f58201fc5e1614081d12ba4ce5607e6bce3f3968ccdbf47045be2244d4a4a1d946673",
+   "digest": [
+    -16,
+    "4b54dc7f68686f6f65f3e8765e5ad938fd2b8f5159c907b9c793a7b0f2af2463"
+   ],
+   "links": [
+    [
+     -16,
+     "1fc5e1614081d12ba4ce5607e6bce3f3968ccdbf47045be2244d4a4a1d946673"
+    ]
+   ],
+   "what": "the base link alone"
+  },
+  {
+   "cde_hex": "846d4345472d70726f66696c652f32822f58201fc5e1614081d12ba4ce5607e6bce3f3968ccdbf47045be2244d4a4a1d946673822f58209792516f60d07259e13122f32826463bca9f5d3e62fcbb472e2fa556f726e5d0822f5820f06110ff50a24ffc91e2e0a2054b3b0e60a52d9ab1e25c9d22d931549d21e61a",
+   "digest": [
+    -16,
+    "cca8198ffad53830787479f97578b1282713fca942a0f1c342950665cb52d309"
+   ],
+   "links": [
+    [
+     -16,
+     "1fc5e1614081d12ba4ce5607e6bce3f3968ccdbf47045be2244d4a4a1d946673"
+    ],
+    [
+     -16,
+     "9792516f60d07259e13122f32826463bca9f5d3e62fcbb472e2fa556f726e5d0"
+    ],
+    [
+     -16,
+     "f06110ff50a24ffc91e2e0a2054b3b0e60a52d9ab1e25c9d22d931549d21e61a"
+    ]
+   ],
+   "what": "the base and two amendments, in chain order"
+  },
+  {
+   "cde_hex": "846d4345472d70726f66696c652f32822f58201fc5e1614081d12ba4ce5607e6bce3f3968ccdbf47045be2244d4a4a1d946673822f5820f06110ff50a24ffc91e2e0a2054b3b0e60a52d9ab1e25c9d22d931549d21e61a822f58209792516f60d07259e13122f32826463bca9f5d3e62fcbb472e2fa556f726e5d0",
+   "digest": [
+    -16,
+    "27ab8190b4c6e6d6568f86ac87e44c7055a3cd8f23f08769cc82caadae49c69c"
+   ],
+   "links": [
+    [
+     -16,
+     "1fc5e1614081d12ba4ce5607e6bce3f3968ccdbf47045be2244d4a4a1d946673"
+    ],
+    [
+     -16,
+     "f06110ff50a24ffc91e2e0a2054b3b0e60a52d9ab1e25c9d22d931549d21e61a"
+    ],
+    [
+     -16,
+     "9792516f60d07259e13122f32826463bca9f5d3e62fcbb472e2fa556f726e5d0"
+    ]
+   ],
+   "what": "the same three in another order: another digest"
+  }
+ ],
+ "review": [
+  {
+   "cde_hex": "826c4345472d7265766965772f32a4676f7574636f6d65686f626a65637465646774686f756768746474682d3169666163756c7469657381716f7074696d697a6174696f6e5f7665746f6b66696e6765727072696e74822f58208641471506ee86a84289dbcd139dac5f803eafc9da9d4fea73822245e633cde0",
+   "digest": [
+    -16,
+    "7fe4f7899ade4b90201bcc11705a317c5c5d4dda049f9700668798c3603198b5"
+   ],
+   "record_cde_hex": "a4676f7574636f6d65686f626a65637465646774686f756768746474682d3169666163756c7469657381716f7074696d697a6174696f6e5f7665746f6b66696e6765727072696e74822f58208641471506ee86a84289dbcd139dac5f803eafc9da9d4fea73822245e633cde0",
+   "what": "an objection by one faculty"
+  },
+  {
+   "cde_hex": "826c4345472d7265766965772f32a4676f7574636f6d65667061737365646774686f756768746474682d3169666163756c746965738467656e74726f707969636f686572656e6365716f7074696d697a6174696f6e5f7665746f726570697374656d69635f68756d696c6974796b66696e6765727072696e74822f58208641471506ee86a84289dbcd139dac5f803eafc9da9d4fea73822245e633cde0",
+   "digest": [
+    -16,
+    "f795864d6cbb19200c647be0ed0cd39fa27aaecdd66ff87389abc54d5bf4b980"
+   ],
+   "record_cde_hex": "a4676f7574636f6d65667061737365646774686f756768746474682d3169666163756c746965738467656e74726f707969636f686572656e6365716f7074696d697a6174696f6e5f7665746f726570697374656d69635f68756d696c6974796b66696e6765727072696e74822f58208641471506ee86a84289dbcd139dac5f803eafc9da9d4fea73822245e633cde0",
+   "what": "a pass of all four, nothing derived from untrusted input"
+  },
+  {
+   "cde_hex": "826c4345472d7265766965772f32a7676f7574636f6d65667061737365646774686f756768746474682d3169666163756c746965738467656e74726f707969636f686572656e6365716f7074696d697a6174696f6e5f7665746f726570697374656d69635f68756d696c6974796a636f6e7369646572656481822f582004040404040404040404040404040404040404040404040404040404040404046a646973636861726765738182822f58207fe4f7899ade4b90201bcc11705a317c5c5d4dda049f9700668798c3603198b58202822f582009090909090909090909090909090909090909090909090909090909090909096b66696e6765727072696e74822f58208641471506ee86a84289dbcd139dac5f803eafc9da9d4fea73822245e633cde06c646572697665645f66726f6d8267726571756573746b746f6f6c5f6f7574707574",
+   "digest": [
+    -16,
+    "66b395e5b2595c6006790ce81db6928b7f07b6c891d495dc7018214ddbed8c80"
+   ],
+   "record_cde_hex": "a7676f7574636f6d65667061737365646774686f756768746474682d3169666163756c746965738467656e74726f707969636f686572656e6365716f7074696d697a6174696f6e5f7665746f726570697374656d69635f68756d696c6974796a636f6e7369646572656481822f582004040404040404040404040404040404040404040404040404040404040404046a646973636861726765738182822f58207fe4f7899ade4b90201bcc11705a317c5c5d4dda049f9700668798c3603198b58202822f582009090909090909090909090909090909090909090909090909090909090909096b66696e6765727072696e74822f58208641471506ee86a84289dbcd139dac5f803eafc9da9d4fea73822245e633cde06c646572697665645f66726f6d8267726571756573746b746f6f6c5f6f7574707574",
+   "what": "a pass that discharges an objection to the same draft, carries one to another, and declares its derivation"
+  }
+ ]
+}

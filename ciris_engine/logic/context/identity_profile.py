@@ -30,16 +30,19 @@ usually an edited template or a pending approval, not an attack.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from ciris_engine.logic.utils.cde import SHA256_ALG, cde_encode, ceg_digest
+from ciris_engine.schemas.api.wa import ProposedBaseLink
 from ciris_engine.schemas.infrastructure.identity_variance import (
     IdentityAmendment,
     IdentityProfile,
@@ -50,8 +53,6 @@ logger = logging.getLogger(__name__)
 
 #: The first member of the profile array (rc21 wire, section 3).
 PROFILE_DIGEST_DOMAIN = "CEG-profile/2"
-#: The COSE algorithm id of SHA-256: each digest is written ``[-16, digest]``.
-SHA256_ALG = -16
 #: Domain of the statement a root WA signs over the template manifest (bootstrap check).
 TEMPLATE_MANIFEST_DOMAIN = "ciris.template_manifest.v1"
 #: The root-WA hybrid signature over the template manifest, beside it. Signers
@@ -91,62 +92,6 @@ class IdentityBase(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-# --------------------------------------------------------------------------- CDE
-
-
-def cde_encode(value: Any) -> bytes:
-    """CBOR Deterministic Encoding (RFC 8949 section 4.2.1) of ``value``: the ONE encoder here.
-
-    TODO(rc21 CDE): ciris_server has no CDE encoder yet; swap this body for the
-    server's when it lands (and unify with the call-fingerprint encoder at
-    merge). Until then: cbor2 with ``canonical=True`` where cbor2 is installed
-    (it is not a declared dependency), else the built-in encoder below. The
-    profile array holds only text, integers, byte strings and arrays, for which
-    cbor2's canonical form IS CDE (shortest-form heads, definite lengths); its
-    map-key order is RFC 7049's length-first, not CDE's bytewise order, so maps
-    are refused rather than encoded wrong.
-    """
-    _refuse_maps(value)
-    try:
-        import cbor2
-    except ImportError:
-        return _cde_builtin(value)
-    return bytes(cbor2.dumps(value, canonical=True))
-
-
-def _refuse_maps(value: Any) -> None:
-    if isinstance(value, dict):
-        raise TypeError("cde_encode: maps are not encoded until the server's CDE encoder lands")
-    if isinstance(value, (list, tuple)):
-        for item in value:
-            _refuse_maps(item)
-
-
-def _cde_head(major: int, argument: int) -> bytes:
-    if argument < 24:
-        return bytes([(major << 5) | argument])
-    for info, size in ((24, 1), (25, 2), (26, 4), (27, 8)):
-        if argument < 1 << (8 * size):
-            return bytes([(major << 5) | info]) + argument.to_bytes(size, "big")
-    raise ValueError("cde_encode: integer out of range")
-
-
-def _cde_builtin(value: Any) -> bytes:
-    """Deterministic CBOR for text, bytes, integers and arrays (the profile array's types)."""
-    if isinstance(value, bool) or value is None:
-        raise TypeError("cde_encode: unsupported type")
-    if isinstance(value, int):
-        return _cde_head(0, value) if value >= 0 else _cde_head(1, -1 - value)
-    if isinstance(value, (bytes, bytearray)):
-        return _cde_head(2, len(value)) + bytes(value)
-    if isinstance(value, str):
-        raw = value.encode("utf-8")
-        return _cde_head(3, len(raw)) + raw
-    if isinstance(value, (list, tuple)):
-        return _cde_head(4, len(value)) + b"".join(_cde_builtin(v) for v in value)
-    raise TypeError(f"cde_encode: unsupported type {type(value).__name__}")
-
-
 # ----------------------------------------------------------------------- digest
 
 
@@ -160,15 +105,16 @@ def encode_profile(base_digest: str, amendment_digests: Sequence[str]) -> bytes:
     The digests stay 64-hex text on the 0.5.250 wire (``amendment_digest``);
     they become ``[-16, digest]`` byte strings only here.
     """
-    items: List[Any] = [PROFILE_DIGEST_DOMAIN]
-    for digest in (base_digest, *amendment_digests):
-        items.append([SHA256_ALG, bytes.fromhex(_bare_hex(digest))])
-    return cde_encode(items)
+    return cde_encode([PROFILE_DIGEST_DOMAIN, *_profile_members(base_digest, amendment_digests)])
+
+
+def _profile_members(base_digest: str, amendment_digests: Sequence[str]) -> List[Any]:
+    return [[SHA256_ALG, bytes.fromhex(_bare_hex(d))] for d in (base_digest, *amendment_digests)]
 
 
 def profile_digest(base_digest: str, amendment_digests: Sequence[str]) -> str:
-    """SHA-256 (hex) of :func:`encode_profile`."""
-    return hashlib.sha256(encode_profile(base_digest, amendment_digests)).hexdigest()
+    """SHA-256 (hex) of :func:`encode_profile` (``ceg_digest`` of the shared CDE encoder)."""
+    return ceg_digest(PROFILE_DIGEST_DOMAIN, _profile_members(base_digest, amendment_digests)).hex()
 
 
 # --------------------------------------------------------------------- held base
@@ -472,13 +418,129 @@ def check_identity_profile(
 async def load_identity_profile(
     memory_service: object, base: IdentityBase
 ) -> Tuple[List[IdentityAmendment], IdentityProfile]:
-    """Load the amendments, verify each against its rows, then check the whole profile (the one identity load path)."""
+    """Load the amendments, verify each against its rows, then check the whole profile (the one identity load path).
+
+    The latest result is kept for the deferral list (:func:`latest_identity_profile`),
+    and an unanchored profile asks a Wise Authority for its base link
+    (:func:`maybe_open_base_link`), once.
+    """
+    global _latest_profile
     from ciris_engine.logic.context.identity_amendments import load_identity_amendments
 
-    return check_identity_profile(base, await load_identity_amendments(memory_service))
+    amendments, profile = check_identity_profile(base, await load_identity_amendments(memory_service))
+    _latest_profile = profile
+    maybe_open_base_link(profile)
+    return amendments, profile
+
+
+# --------------------------------------------------------------- the base link
+
+
+#: The newest whole-profile check this process made (``None`` before the first).
+_latest_profile: Optional[IdentityProfile] = None
+
+#: Opens the base-link deferral: the Wise Authority service registers it at start.
+BaseLinkOpener = Callable[[ProposedBaseLink], Awaitable[Optional[str]]]
+_base_link_opener: Optional[BaseLinkOpener] = None
+#: Digests this process already asked for (or found pending): one request per process.
+_base_link_requested: Set[str] = set()
+_base_link_tasks: Set["asyncio.Task[None]"] = set()
+
+
+def latest_identity_profile() -> Optional[IdentityProfile]:
+    """The newest whole-profile check, or ``None`` before the first identity load."""
+    return _latest_profile
+
+
+def set_base_link_opener(opener: Optional[BaseLinkOpener]) -> None:
+    """Register (or clear) what opens the base-link deferral. The Wise Authority service, at start/stop."""
+    global _base_link_opener
+    _base_link_opener = opener
+
+
+def _template_manifest_version(manifest_dirs: Optional[Sequence[Path]] = None) -> Optional[str]:
+    for directory in manifest_dirs or MANIFEST_DIRS:
+        manifest = directory / TEMPLATE_MANIFEST_FILE
+        if manifest.is_file():
+            try:
+                version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
+            except (OSError, ValueError, AttributeError):
+                return None
+            return str(version) if version is not None else None
+    return None
+
+
+def proposed_base_link(profile: IdentityProfile) -> Optional[ProposedBaseLink]:
+    """The base link an UNANCHORED profile asks for, or ``None``.
+
+    Its digest is the held base template's (sha256 of the shipped template's
+    bytes, the checksum the template manifest records for it): the ``d0`` the
+    profile check derives. A held identity that is no shipped template has no
+    base to propose.
+    """
+    if profile.status is not IdentityProfileStatus.UNANCHORED or not profile.template:
+        return None
+    return ProposedBaseLink(
+        template_name=profile.template,
+        template_version=_template_manifest_version(),
+        manifest_digest=_bare_hex(profile.base_digest),
+    )
+
+
+async def request_base_link(proposal: ProposedBaseLink) -> Optional[str]:
+    """Ask the registered opener for the base-link deferral; its id, or ``None``. Never raises."""
+    opener = _base_link_opener
+    if opener is None:
+        _base_link_requested.discard(proposal.manifest_digest)
+        return None
+    try:
+        deferral_id = await opener(proposal)
+    except Exception as exc:  # noqa: BLE001 - asking must never take identity loading down
+        logger.warning(f"identity profile: could not open the base-link deferral ({type(exc).__name__}: {exc})")
+        _base_link_requested.discard(proposal.manifest_digest)
+        return None
+    if deferral_id:
+        logger.warning(
+            "identity profile unanchored: base-link deferral %s asks a Wise Authority to approve template %s (%s)",
+            deferral_id,
+            proposal.template_name,
+            proposal.manifest_digest,
+        )
+    return deferral_id
+
+
+def maybe_open_base_link(profile: IdentityProfile) -> None:
+    """When the profile is unanchored, open ONE base-link deferral (in the background, once per process).
+
+    Idempotent twice over: this process asks once per digest, and the opener
+    re-uses a pending base-link deferral instead of opening another.
+    """
+    proposal = proposed_base_link(profile)
+    if proposal is None or _base_link_opener is None or proposal.manifest_digest in _base_link_requested:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _base_link_requested.add(proposal.manifest_digest)
+
+    async def _run() -> None:
+        await request_base_link(proposal)
+
+    task = loop.create_task(_run())
+    _base_link_tasks.add(task)
+    task.add_done_callback(_base_link_tasks.discard)
+
+
+def reset_base_link_state() -> None:
+    """For tests and runtime teardown."""
+    global _latest_profile
+    _latest_profile = None
+    _base_link_requested.clear()
 
 
 __all__ = [
+    "BaseLinkOpener",
     "IdentityBase",
     "PROFILE_DIGEST_DOMAIN",
     "ProfileChain",
@@ -488,7 +550,13 @@ __all__ = [
     "encode_profile",
     "expected_profile_digest",
     "held_base_digest",
+    "latest_identity_profile",
     "load_identity_profile",
+    "maybe_open_base_link",
+    "proposed_base_link",
+    "request_base_link",
+    "reset_base_link_state",
+    "set_base_link_opener",
     "profile_digest",
     "shipped_template_verified",
     "verified_template_manifest",

@@ -21,6 +21,7 @@ from ciris_engine.logic.infrastructure.handlers.shared_helpers import (
     is_config_node,
     is_identity_amendment_candidate,
     is_identity_node,
+    is_reviewed_amendment_write,
     is_user_node,
     serialize_attributes_to_json,
     validate_config_node,
@@ -56,6 +57,9 @@ logger = logging.getLogger(__name__)
 #: The notice an identity-scope MEMORIZE gets when its approval named no exact text (#1366 F1).
 #: Beside a reason id (an enum value), so it is not localized either.
 NO_APPROVED_TEXT_NOTICE = "the Wise Authority approved no exact amendment text; re-approval with amendment_text is required"
+
+#: An identity-scope write that is not the engine-bound, conscience-reviewed approved text (#1366).
+REASON_NOT_REVIEWED = "identity_amendment.not_conscience_reviewed"
 
 
 class MemorizeHandler(BaseActionHandler):
@@ -146,6 +150,15 @@ class MemorizeHandler(BaseActionHandler):
                 return self._refuse_amendment(thought, result, REASON_MODEL_PROVENANCE, name_reason=False)
             return self._refuse_amendment(thought, result, REASON_MODEL_PROVENANCE, name_reason=True)
         if authorization is not None and is_identity_amendment_candidate(node):
+            approved = approved_amendment_text(authorization)
+            if approved is not None and not is_reviewed_amendment_write(node, approved):
+                # The write the consciences review is the one the engine binds before they run (#1366):
+                # the approved bytes with their M-1 justification. Anything else did not pass that review.
+                self.logger.warning(
+                    f"Identity amendment for deferral {authorization.deferral_id} refused: the write is not the "
+                    f"conscience-reviewed approved text with its M-1 justification. Thought {thought_id}."
+                )
+                return self._refuse_amendment(thought, result, REASON_NOT_REVIEWED, name_reason=True)
             amended = self._approved_amendment(node, authorization, thought)
             if amended is None:
                 return self._refuse_amendment(
@@ -176,11 +189,12 @@ class MemorizeHandler(BaseActionHandler):
         guidance-only approval lands no amendment; the WA re-approves with the
         exact text.
 
-        When the draft's wording differs from the approved text, the APPROVED
-        text is written and the difference logged (digests only). Not refused:
-        the WA approved these bytes and this task exists to apply them; a
-        memorize second pass rewording them (RATCHET Market 4: 8 of 80 rewritten)
-        must not be able to block, or alter, what was approved.
+        The draft reaching here is the one the engine bound before conscience
+        execution (``bind_approved_amendment``): the approved bytes with their
+        M-1 justification, which the consciences reviewed (#1366). A memorize
+        second pass rewording them (RATCHET Market 4: 8 of 80 rewritten) is
+        overwritten by that binding before review, so it can neither block nor
+        alter what was approved; the caller refuses any draft that skipped it.
         """
         approved = approved_amendment_text(authorization)
         if approved is None:
@@ -249,8 +263,17 @@ class MemorizeHandler(BaseActionHandler):
         approved = approved_amendment_text(authorization)
         if approved is None:  # _approved_amendment already refused this; never sign other bytes
             return self._refuse_amendment(thought, result, REASON_NO_APPROVED_TEXT, name_reason=True)
+        # The link this amendment follows (rc21 section 3): the verified profile chain's head.
+        from ciris_engine.logic.context.identity_profile import chain_head_row_id, note_chain_link
+
+        prev, no_head = chain_head_row_id()
+        if prev is None:
+            self.logger.warning(
+                f"Identity amendment {node.id} NOT recorded: no chain head to follow ({no_head}). Thought {thought_id}."
+            )
+            return self._refuse_amendment(thought, result, no_head, name_reason=True)
         try:
-            amendment_id = await emit_identity_amendment(approved, response_id, request_id)
+            amendment_id = await emit_identity_amendment(approved, response_id, request_id, prev)
         except DeferralRowsUnavailable:
             return self._refuse_amendment(thought, result, REASON_ROWS_UNAVAILABLE, name_reason=True)
         except DeferralRowRefused as refused:
@@ -273,7 +296,8 @@ class MemorizeHandler(BaseActionHandler):
         provenance["response_attestation_id"] = authorization.response_attestation_id
         provenance["request_attestation_id"] = authorization.request_attestation_id
         attributes["wa_amendment"] = provenance
-        self.logger.info(f"Identity amendment {node.id}: signed row {amendment_id}")
+        note_chain_link(amendment_id)
+        self.logger.info(f"Identity amendment {node.id}: signed row {amendment_id} (prev {prev})")
         return node.model_copy(update={"attributes": attributes})
 
     def _refuse_amendment(

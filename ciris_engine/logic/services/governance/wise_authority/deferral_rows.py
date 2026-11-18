@@ -237,7 +237,13 @@ async def emit_deferral_response(
     )
 
 
-async def emit_identity_amendment(approved_text: str, authorized_by: str, request_id: str) -> str:
+#: The keyword the node takes for an identity_amendment row's ``refs.prev`` (rc21; persist v62 / verify 23).
+PREV_PARAM = "prev"
+#: The refusal when the node cannot write ``refs.prev`` (so cannot tell a base link from a legacy row).
+REASON_PREV_UNSUPPORTED = "deferral.identity_amendment_prev_unsupported"
+
+
+async def emit_identity_amendment(approved_text: str, authorized_by: str, request_id: str, prev: str) -> str:
     """Sign ``identity_amendment:v1`` citing the approved response to ``request_id``, this agent's deferral.
 
     ``approved_text`` is the EXACT text the Wise Authority approved (#1366 F1),
@@ -246,14 +252,26 @@ async def emit_identity_amendment(approved_text: str, authorized_by: str, reques
     response has not already authorized an amendment
     (``deferral.response_already_used``), and (0.5.250+) that the response row's
     ``amendment_digest`` equals this one (``amendment_digest_mismatch``).
+
+    ``prev`` is the row id of the profile chain's current head (rc21 section
+    3): the link this amendment follows. On a node that cannot write
+    ``refs.prev`` this refuses (:data:`REASON_PREV_UNSUPPORTED`, an outage)
+    and records nothing, as :func:`emit_base_link` does: a row there would
+    carry no chain position and could never count.
     """
-    return await _call("emit_identity_amendment", sha256_hex(approved_text), authorized_by, request_id)
-
-
-#: The keyword the node takes for an identity_amendment row's ``refs.prev`` (rc21; persist v62 / verify 23).
-PREV_PARAM = "prev"
-#: The refusal when the node cannot write ``refs.prev`` (so cannot tell a base link from a legacy row).
-REASON_PREV_UNSUPPORTED = "deferral.identity_amendment_prev_unsupported"
+    if _server_function("emit_identity_amendment") is None:
+        raise DeferralRowsUnavailable("ciris_server.emit_identity_amendment is not available on this node")
+    if not identity_amendment_rows_take_prev():
+        raise DeferralRowRefused(
+            DeferralRowRefusal(
+                reason_id=REASON_PREV_UNSUPPORTED,
+                text="this node cannot write an identity_amendment's refs.prev, so the amendment could never join the profile chain",
+                kind=DeferralRowRefusalKind.OUTAGE,
+            )
+        )
+    return await _call_kw(
+        "emit_identity_amendment", sha256_hex(approved_text), authorized_by, request_id, **{PREV_PARAM: prev}
+    )
 
 
 def identity_amendment_rows_take_prev() -> bool:

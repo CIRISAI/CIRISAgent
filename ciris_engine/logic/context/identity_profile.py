@@ -42,7 +42,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict
 
 from ciris_engine.logic.utils.cde import SHA256_ALG, cde_encode, ceg_digest
-from ciris_engine.schemas.api.wa import ProposedBaseLink
+from ciris_engine.schemas.api.wa import IdentityChangeProposal, ProposedBaseLink
 from ciris_engine.schemas.infrastructure.identity_variance import (
     IdentityAmendment,
     IdentityProfile,
@@ -427,9 +427,12 @@ async def load_identity_profile(
     global _latest_profile
     from ciris_engine.logic.context.identity_amendments import load_identity_amendments
 
-    amendments, profile = check_identity_profile(base, await load_identity_amendments(memory_service))
+    per_row = await load_identity_amendments(memory_service)
+    amendments, profile = check_identity_profile(base, per_row)
     _latest_profile = profile
+    _settle_appended_head(profile)
     maybe_open_base_link(profile)
+    maybe_open_reapprovals(per_row, profile)
     return amendments, profile
 
 
@@ -532,11 +535,151 @@ def maybe_open_base_link(profile: IdentityProfile) -> None:
     task.add_done_callback(_base_link_tasks.discard)
 
 
+# ------------------------------------------------------------ the chain's head
+
+
+#: Why a text amendment has no link to follow (rc21 section 3): the profile is not anchored and verified.
+REASON_NO_CHAIN_HEAD = "identity_amendment.no_chain_head"
+
+#: The newest link THIS process appended since the last profile check, so two
+#: amendments applied between checks chain on each other instead of forking.
+_appended_head: Optional[str] = None
+
+
+def chain_head_row_id() -> Tuple[Optional[str], str]:
+    """The row id a new text amendment names as ``refs.prev``, or ``(None, why)``.
+
+    The head is the last counted link of a VERIFIED profile (the base link when
+    no amendment follows it yet). Any other standing has no head to extend: an
+    unanchored profile has no base, a mismatched or contested one would fork.
+    Nothing is written then; the caller says why.
+    """
+    profile = _latest_profile
+    if profile is None:
+        return None, f"{REASON_NO_CHAIN_HEAD} (identity profile not yet checked)"
+    if profile.status is not IdentityProfileStatus.VERIFIED:
+        return None, f"{REASON_NO_CHAIN_HEAD} ({profile.reason})"
+    head = _appended_head or (profile.chain_row_ids[-1] if profile.chain_row_ids else profile.base_row_id)
+    if not head:
+        return None, f"{REASON_NO_CHAIN_HEAD} (verified profile names no base row)"
+    return head, ""
+
+
+def note_chain_link(row_id: str) -> None:
+    """Record the link this process just appended: the next amendment follows it."""
+    global _appended_head
+    _appended_head = row_id
+
+
+def _settle_appended_head(profile: IdentityProfile) -> None:
+    """Forget the appended head once a profile check counts it (the check is then the source)."""
+    global _appended_head
+    if _appended_head is not None and _appended_head in profile.chain_row_ids:
+        _appended_head = None
+
+
+# ------------------------------------------------------------- re-approval
+
+
+#: The M-1 justification a re-approval deferral carries. Engine-authored: the amendment's text is not the agent's
+#: new proposal but text a Wise Authority approved before exact-text binding, offered back unchanged.
+REAPPROVAL_M1_JUSTIFICATION = (
+    "Meta-Goal M-1 (Adaptive Coherence): this amendment is already part of how the agent describes itself, but it "
+    "was approved before approvals bound exact text, so it no longer counts. Re-approving these exact bytes keeps "
+    "the agent's identity continuous and accountable to its Wise Authority; declining removes it from authority."
+)
+
+#: Opens one re-approval deferral: the Wise Authority service registers it at start.
+ReapprovalOpener = Callable[["IdentityChangeProposal"], Awaitable[Optional[str]]]
+_reapproval_opener: Optional[ReapprovalOpener] = None
+#: Amendment node ids this process already asked to re-approve.
+_reapproval_requested: Set[str] = set()
+
+
+def set_reapproval_opener(opener: Optional[ReapprovalOpener]) -> None:
+    """Register (or clear) what opens a re-approval deferral. The Wise Authority service, at start/stop."""
+    global _reapproval_opener
+    _reapproval_opener = opener
+
+
+def amendments_needing_reapproval(per_row: Sequence[IdentityAmendment]) -> List[IdentityAmendment]:
+    """Held text amendments that can never count as they stand: re-approve each by its exact bytes.
+
+    ``per_row`` is each amendment checked against its own signed rows
+    (``load_identity_amendments``). One needs re-approval when it did not
+    verify (approved before exact-text binding, or its rows are not held), or
+    when it verified but names no ``prev`` (written before the profile chain),
+    so it can never join the chain. Skipped when a verified chained amendment
+    already holds the same text: it was re-approved.
+    """
+    rechained = {a.content for a in per_row if not a.base and a.verified and a.amendment_row_prev}
+    return [
+        a
+        for a in per_row
+        if not a.base and a.content and (not a.verified or not a.amendment_row_prev) and a.content not in rechained
+    ]
+
+
+def reapproval_proposal(amendment: IdentityAmendment) -> "IdentityChangeProposal":
+    """The re-approval deferral's proposal: the held text unchanged, with its M-1 justification."""
+    from ciris_engine.schemas.api.wa import IdentityChangeKind, IdentityChangeProposal
+
+    return IdentityChangeProposal(
+        kind=IdentityChangeKind.REAPPROVAL,
+        summary=(
+            f"Re-approve identity amendment {amendment.node_id} (approved by {amendment.wa_id or 'unknown'} "
+            "before exact-text binding) by its exact text; until then it does not apply."
+        ),
+        proposed_text=amendment.content,
+        m1_justification=REAPPROVAL_M1_JUSTIFICATION,
+        supersedes_node_id=amendment.node_id,
+    )
+
+
+def maybe_open_reapprovals(per_row: Sequence[IdentityAmendment], profile: IdentityProfile) -> None:
+    """Open ONE re-approval deferral per held amendment that cannot count (in the background, once per process).
+
+    Only once the profile is anchored and verified: a re-approved amendment is
+    written as a link naming the chain's head, so before the base link is
+    approved it would have nothing to follow. Idempotent: this process asks once
+    per amendment, and the opener re-uses a pending re-approval of the same node.
+    """
+    if _reapproval_opener is None or profile.status is not IdentityProfileStatus.VERIFIED:
+        return
+    pending = [a for a in amendments_needing_reapproval(per_row) if a.node_id not in _reapproval_requested]
+    if not pending:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    opener = _reapproval_opener
+    for amendment in pending:
+        _reapproval_requested.add(amendment.node_id)
+        proposal = reapproval_proposal(amendment)
+
+        async def _run(p: "IdentityChangeProposal" = proposal, node_id: str = amendment.node_id) -> None:
+            try:
+                deferral_id = await opener(p)
+            except Exception as exc:  # noqa: BLE001 - asking must never take identity loading down
+                logger.warning(f"identity profile: could not open the re-approval of {node_id} ({type(exc).__name__}: {exc})")
+                _reapproval_requested.discard(node_id)
+                return
+            if deferral_id:
+                logger.warning("identity amendment %s awaits re-approval by exact text: deferral %s", node_id, deferral_id)
+
+        task = loop.create_task(_run())
+        _base_link_tasks.add(task)
+        task.add_done_callback(_base_link_tasks.discard)
+
+
 def reset_base_link_state() -> None:
     """For tests and runtime teardown."""
-    global _latest_profile
+    global _latest_profile, _appended_head
     _latest_profile = None
+    _appended_head = None
     _base_link_requested.clear()
+    _reapproval_requested.clear()
 
 
 __all__ = [
@@ -552,7 +695,13 @@ __all__ = [
     "held_base_digest",
     "latest_identity_profile",
     "load_identity_profile",
+    "amendments_needing_reapproval",
+    "chain_head_row_id",
     "maybe_open_base_link",
+    "maybe_open_reapprovals",
+    "note_chain_link",
+    "reapproval_proposal",
+    "set_reapproval_opener",
     "proposed_base_link",
     "request_base_link",
     "reset_base_link_state",

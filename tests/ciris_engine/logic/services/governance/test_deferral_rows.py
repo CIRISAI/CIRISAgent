@@ -86,7 +86,7 @@ async def test_a_server_older_than_0_5_234_means_rows_unavailable(monkeypatch: p
     with pytest.raises(DeferralRowsUnavailable):
         await emit_deferral_response("att-1", True, "sess:x")
     with pytest.raises(DeferralRowsUnavailable):
-        await emit_identity_amendment("text", "att-2", "att-1")
+        await emit_identity_amendment("text", "att-2", "att-1", "att-0")
 
 
 @pytest.mark.asyncio
@@ -112,8 +112,9 @@ async def test_each_call_reaches_the_node_with_the_contract_arguments(monkeypatc
         seen["response"] = args
         return "att-resp"
 
-    def amendment(*args: object) -> str:
+    def amendment(*args: object, prev: object = "<not passed>") -> str:
         seen["amendment"] = args
+        seen["prev"] = prev
         return "att-amend"
 
     _server(
@@ -132,10 +133,34 @@ async def test_each_call_reaches_the_node_with_the_contract_arguments(monkeypatc
     assert await emit_deferral_response("att-req", False, "sess:wa-1:mac") == "att-resp"
     assert seen["response"] == ("att-req", False, "sess:wa-1:mac")
 
-    assert await emit_identity_amendment("I mentor", "att-resp", "att-req") == "att-amend"
+    assert await emit_identity_amendment("I mentor", "att-resp", "att-req", "att-head") == "att-amend"
     assert seen["amendment"] == (hashlib.sha256(b"I mentor").hexdigest(), "att-resp", "att-req"), (
         "the request id binds the amendment to its own deferral"
     )
+    assert seen["prev"] == "att-head", "a text amendment names the chain head it follows (rc21 section 3)"
+
+
+@pytest.mark.asyncio
+async def test_a_text_amendment_on_a_node_without_prev_records_nothing_and_says_why(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from ciris_engine.logic.services.governance.wise_authority.deferral_rows import (
+        REASON_PREV_UNSUPPORTED,
+        DeferralRowRefused,
+    )
+
+    _fold_on(monkeypatch)
+    calls: list = []
+    _server(
+        monkeypatch,
+        emit_deferral_request=lambda *a: "att-req",
+        emit_deferral_response=lambda *a: "att-resp",
+        emit_identity_amendment=lambda digest, by, req: calls.append(digest) or "att-amend",
+    )
+    with pytest.raises(DeferralRowRefused) as refused:
+        await emit_identity_amendment("I mentor", "att-resp", "att-req", "att-head")
+    assert refused.value.refusal.reason_id == REASON_PREV_UNSUPPORTED
+    assert calls == [], "nothing is signed without a chain position"
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from ciris_engine.schemas.actions.parameters import IDENTITY_CHANGE_CONTEXT_KEY
+from ciris_engine.schemas.runtime.veto_record import ObjectionType
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import WAPermission
 from ciris_engine.schemas.types import JSONDict
@@ -18,6 +20,8 @@ from ciris_engine.schemas.types import JSONDict
 #: Deferral-context key carrying the base link the agent asks a Wise Authority to approve (rc21 section 3):
 #: JSON text of :class:`ProposedBaseLink`.
 PROPOSED_BASE_LINK_KEY = "proposed_base_link"
+#: Deferral-context key carrying the whole identity change as JSON text of :class:`IdentityChangeProposal`.
+IDENTITY_CHANGE_KEY = IDENTITY_CHANGE_CONTEXT_KEY
 
 _HEX64 = "^[0-9a-f]{64}$"
 
@@ -35,6 +39,55 @@ class ProposedBaseLink(BaseModel):
     template_version: Optional[str] = Field(None, description="The template manifest's version, when it states one")
     manifest_digest: str = Field(
         ..., pattern=_HEX64, description="sha256 (lowercase hex) of the template, as the template manifest records it"
+    )
+
+
+class IdentityChangeKind(str, Enum):
+    """What an identity-change deferral asks a Wise Authority to approve (#1366)."""
+
+    AMENDMENT = "amendment"  # a new identity amendment: approve its exact text (amendment_text)
+    BASE_LINK = "base_link"  # the profile's base link: approve the template digest (base_link_digest)
+    REAPPROVAL = "reapproval"  # an amendment held from before exact-text binding: re-approve its exact text
+
+
+class IdentityChangeObjection(BaseModel):
+    """A conscience's typed objection to applying the approved text, carried back to the WA."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    conscience: str = Field(..., description="Registry name of the objecting conscience")
+    objection_type: ObjectionType = Field(..., description="evidence | justification | substantive")
+    reason: str = Field("", description="The conscience's stated reason")
+
+
+class IdentityChangeProposal(BaseModel):
+    """The identity change a deferral proposes, as the WA reviews it (deferral context ``identity_change``).
+
+    Eric, 2026-11-18: any identity change initiates a deferral; once a WA approves it applies, until then it does
+    not; every edit carries its M-1 (Adaptive Coherence) justification and goes through the agent's consciences.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: IdentityChangeKind = Field(..., description="amendment | base_link | reapproval")
+    summary: str = Field(..., description="What changes, in one line")
+    proposed_text: Optional[str] = Field(
+        None, description="amendment / reapproval: the exact text to approve (resolve with amendment_text)"
+    )
+    template: Optional[ProposedBaseLink] = Field(
+        None, description="base_link: the template to approve (resolve with base_link_digest)"
+    )
+    m1_justification: Optional[str] = Field(
+        None, description="Why the change serves ACCORD Meta-Goal M-1 (Adaptive Coherence); null when none was stated"
+    )
+    supersedes_node_id: Optional[str] = Field(
+        None, description="reapproval: the held amendment node this re-approves"
+    )
+    wa_edited: bool = Field(
+        False, description="True when the text is a WA's edit of the agent's proposal (re-deferred after review)"
+    )
+    objection: Optional[IdentityChangeObjection] = Field(
+        None, description="Set when the agent's consciences objected to applying the approved text"
     )
 
 
@@ -86,6 +139,15 @@ class DeferralListCapabilities(BaseModel):
         description=(
             "Resolve accepts base_link_digest with resolution='approve': the WA approves the profile's base link "
             "(rc21 section 3). A deferral that proposes one carries it as context.proposed_base_link."
+        ),
+    )
+    identity_change_review: bool = Field(
+        True,
+        description=(
+            "Every identity-change deferral carries context.identity_change (JSON IdentityChangeProposal: kind "
+            "amendment | base_link | reapproval, what changes, the exact text or template, the M-1 justification, "
+            "and any conscience objection). An approved change is applied only after the agent's consciences "
+            "review it; an objection comes back as a new deferral naming it."
         ),
     )
 

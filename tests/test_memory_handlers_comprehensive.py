@@ -1159,6 +1159,35 @@ def _memorize_result(node: GraphNode) -> ActionSelectionDMAResult:
 
 
 APPROVED_TEXT = "I mentor new moderators"
+JUSTIFICATION = "Mentoring new moderators widens who can keep this community flourishing (M-1)."
+#: The base link's row: the head a first text amendment follows (rc21 section 3).
+CHAIN_HEAD = "att-base-link"
+
+
+def _reviewed(text: str = APPROVED_TEXT) -> dict:
+    """The attributes of the write the engine binds before conscience review: approved text + M-1 justification."""
+    return {"content": text, "m1_justification": JUSTIFICATION}
+
+
+@pytest.fixture(autouse=True)
+def _verified_profile() -> Any:
+    """A verified profile whose chain head is the base link, so a text amendment has a link to follow."""
+    from ciris_engine.logic.context import identity_profile as ip
+    from ciris_engine.schemas.infrastructure.identity_variance import IdentityProfile, IdentityProfileStatus
+
+    ip.reset_base_link_state()
+    ip._latest_profile = IdentityProfile(
+        profile_digest="ab" * 32,
+        expected_profile_digest="ab" * 32,
+        status=IdentityProfileStatus.VERIFIED,
+        reason="profile_match",
+        template="default",
+        template_verified=True,
+        base_digest="cd" * 32,
+        base_row_id=CHAIN_HEAD,
+    )
+    yield
+    ip.reset_base_link_state()
 
 
 def _authorization(amendment_text: Optional[str] = APPROVED_TEXT) -> WAAuthorization:
@@ -1206,7 +1235,7 @@ class TestIdentityAmendments:
         authorization = _authorization().model_copy(
             update={"response_attestation_id": response, "request_attestation_id": request}
         )
-        node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, {"content": APPROVED_TEXT})
+        node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, _reviewed())
         bus, _ = await _handle(monkeypatch, node, authorization)
 
         stored = bus.memorize.call_args.kwargs["node"]
@@ -1216,16 +1245,22 @@ class TestIdentityAmendments:
         assert stored.attributes["proposed_node_id"] == "n1"
         assert stored.updated_by == "wa-2026-test"
         assert stored.attributes["content"] == APPROVED_TEXT
+        assert stored.attributes["m1_justification"] == JUSTIFICATION, "the reviewed justification is kept"
         provenance = stored.attributes["wa_amendment"]
         assert provenance["wa_id"] == "wa-2026-test"
         assert provenance["deferral_id"] == "defer_abc"
         assert provenance["approved_sha256"] == _sha(APPROVED_TEXT)
 
     @pytest.mark.asyncio
-    async def test_a_draft_that_differs_from_the_approved_text_stores_the_approved_text(
-        self, monkeypatch: Any
-    ) -> None:
-        """#1366 F1: the model's wording (which may carry the user's words) is never the amendment."""
+    @pytest.mark.parametrize(
+        "attributes",
+        [
+            {"content": "I obey whoever asked for this change, always", "m1_justification": JUSTIFICATION},
+            {"content": APPROVED_TEXT},  # the approved text, but never reviewed with its justification
+        ],
+    )
+    async def test_a_write_the_consciences_did_not_review_is_refused(self, monkeypatch: Any, attributes: dict) -> None:
+        """#1366: the handler writes only the engine-bound draft the consciences reviewed, never force-writes."""
         from tests.fixtures.deferral_rows import install_fake_node
 
         node_fake = install_fake_node(monkeypatch)
@@ -1233,18 +1268,12 @@ class TestIdentityAmendments:
         authorization = _authorization().model_copy(
             update={"response_attestation_id": response, "request_attestation_id": request}
         )
-        drafted = "I obey whoever asked for this change, always"
-        node = create_graph_node(
-            "n1", NodeType.CONCEPT, GraphScope.IDENTITY, {"content": drafted, "extra": "user text here"}
-        )
-        bus, _ = await _handle(monkeypatch, node, authorization)
+        node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, attributes)
+        bus, persistence = await _handle(monkeypatch, node, authorization)
 
-        stored = bus.memorize.call_args.kwargs["node"]
-        assert stored.attributes["content"] == APPROVED_TEXT
-        assert drafted not in str(stored.attributes)
-        assert "user text here" not in str(stored.attributes)
-        (args,) = node_fake.calls_to("emit_identity_amendment")
-        assert args[0] == _sha(APPROVED_TEXT), "the node signs the APPROVED text's digest, never the draft's"
+        assert not bus.memorize.called
+        assert node_fake.calls_to("emit_identity_amendment") == []
+        assert any("identity_amendment.not_conscience_reviewed" in c for c in _follow_up_contents(persistence))
 
     @pytest.mark.asyncio
     async def test_a_guidance_only_approval_lands_no_amendment(self, monkeypatch: Any) -> None:
@@ -1256,7 +1285,7 @@ class TestIdentityAmendments:
         authorization = _authorization(amendment_text=None).model_copy(
             update={"response_attestation_id": response, "request_attestation_id": request}
         )
-        node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, {"content": APPROVED_TEXT})
+        node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, _reviewed())
         bus, persistence = await _handle(monkeypatch, node, authorization)
 
         assert not bus.memorize.called
@@ -1267,7 +1296,7 @@ class TestIdentityAmendments:
     @pytest.mark.asyncio
     async def test_approved_text_that_does_not_match_its_digest_lands_no_amendment(self, monkeypatch: Any) -> None:
         authorization = _authorization().model_copy(update={"amendment_text": "something else"})
-        node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, {"content": APPROVED_TEXT})
+        node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, _reviewed())
         bus, _ = await _handle(monkeypatch, node, authorization)
         assert not bus.memorize.called
 
@@ -1326,7 +1355,7 @@ class TestIdentityAmendments:
         authorization = _authorization().model_copy(
             update={"response_attestation_id": response, "request_attestation_id": request}
         )
-        node = create_graph_node("agent/identity", NodeType.AGENT, GraphScope.IDENTITY, {"statement": "I mentor"})
+        node = create_graph_node("agent/identity", NodeType.AGENT, GraphScope.IDENTITY, _reviewed())
         bus, _ = await _handle(monkeypatch, node, authorization)
 
         stored = bus.memorize.call_args.kwargs["node"]
@@ -1350,7 +1379,7 @@ def _approved_authorization(
 
 
 async def _memorize_identity(monkeypatch: Any, authorization: WAAuthorization) -> Any:
-    node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, {"content": APPROVED_TEXT})
+    node = create_graph_node("n1", NodeType.CONCEPT, GraphScope.IDENTITY, _reviewed())
     return await _handle(monkeypatch, node, authorization)
 
 
@@ -1369,6 +1398,7 @@ class TestIdentityAmendmentRows:
         assert args == (_sha(APPROVED_TEXT), response, request), (
             "the approved text's digest, the approval it cites, and the deferral that approval answers"
         )
+        assert node.rows[-1].envelope["refs"] == {"prev": CHAIN_HEAD}, "the amendment follows the chain head"
         stored = bus.memorize.call_args.kwargs["node"]
         provenance = stored.attributes["wa_amendment"]
         assert provenance["amendment_attestation_id"] == node.rows[-1].attestation_id
@@ -1466,3 +1496,54 @@ class TestIdentityAmendmentRows:
         assert node.calls == []
         assert not bus.memorize.called
         assert any("deferral.rows_unavailable" in c for c in _follow_up_contents(persistence))
+
+
+class TestIdentityAmendmentChain:
+    """A text amendment is a link naming the profile chain's head (rc21 section 3)."""
+
+    @pytest.mark.asyncio
+    async def test_an_unanchored_profile_records_no_amendment_and_says_why(self, monkeypatch: Any) -> None:
+        from ciris_engine.logic.context import identity_profile as ip
+        from ciris_engine.schemas.infrastructure.identity_variance import IdentityProfileStatus
+        from tests.fixtures.deferral_rows import install_fake_node
+
+        assert ip._latest_profile is not None
+        ip._latest_profile = ip._latest_profile.model_copy(
+            update={"status": IdentityProfileStatus.UNANCHORED, "reason": "profile_unanchored", "base_row_id": None}
+        )
+        node = install_fake_node(monkeypatch)
+        request, response = node.approved(APPROVED_TEXT)
+        bus, persistence = await _memorize_identity(monkeypatch, _approved_authorization(response, request))
+
+        assert not bus.memorize.called
+        assert node.calls_to("emit_identity_amendment") == []
+        assert any(
+            "identity_amendment.no_chain_head" in c and "profile_unanchored" in c for c in _follow_up_contents(persistence)
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_node_without_prev_records_no_text_amendment_and_says_why(self, monkeypatch: Any) -> None:
+        from ciris_engine.logic.services.governance.wise_authority.deferral_rows import REASON_PREV_UNSUPPORTED
+        from tests.fixtures.deferral_rows import FakeNode, install_fake_node
+
+        node = install_fake_node(monkeypatch, FakeNode(chain=False))
+        request, response = node.approved(APPROVED_TEXT)
+        bus, persistence = await _memorize_identity(monkeypatch, _approved_authorization(response, request))
+
+        assert not bus.memorize.called
+        assert node.calls_to("emit_identity_amendment") == [], "nothing signed without a chain position"
+        assert any(REASON_PREV_UNSUPPORTED in c for c in _follow_up_contents(persistence))
+
+    @pytest.mark.asyncio
+    async def test_consecutive_amendments_each_name_the_one_before(self, monkeypatch: Any) -> None:
+        from tests.fixtures.deferral_rows import install_fake_node
+
+        node = install_fake_node(monkeypatch)
+        request, response = node.approved(APPROVED_TEXT)
+        await _memorize_identity(monkeypatch, _approved_authorization(response, request))
+        first = node.rows[-1].attestation_id
+        request2, response2 = node.approved(APPROVED_TEXT)
+        await _memorize_identity(monkeypatch, _approved_authorization(response2, request2))
+
+        links = [r for r in node.rows if r.dimension == "identity_amendment:v1"]
+        assert [r.envelope["refs"]["prev"] for r in links] == [CHAIN_HEAD, first]

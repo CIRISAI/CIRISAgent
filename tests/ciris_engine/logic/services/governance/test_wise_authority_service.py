@@ -319,6 +319,7 @@ async def test_a_proposed_amendment_rides_from_dsaspdma_into_the_listing(wise_au
             operational_reason=DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED,
             primary_need_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
             proposed_amendment=f"  {proposed}\n",
+            m1_justification="It keeps my care for users coherent (M-1).",
         ),
         DeferParams(reason="change my identity", context={"proposed_amendment": "smuggled by action selection"}),
     )
@@ -358,7 +359,16 @@ async def test_a_proposed_amendment_rides_from_dsaspdma_into_the_listing(wise_au
         "exact_amendment_text": True,
         "exact_call_approval": True,
         "base_link_approval": True,
+        "identity_change_review": True,
     }
+    # #1366: the WA sees the whole change: kind, what changes, the exact text, the M-1 justification.
+    from ciris_engine.schemas.api.wa import IdentityChangeKind, IdentityChangeProposal
+
+    change = IdentityChangeProposal.model_validate_json(listed.context["identity_change"])
+    assert change.kind is IdentityChangeKind.AMENDMENT
+    assert change.proposed_text == proposed
+    assert change.summary == "Identity change needs Wise Authority approval."
+    assert change.m1_justification == listed.context["m1_justification"] == "It keeps my care for users coherent (M-1)."
 
 
 @pytest.mark.asyncio

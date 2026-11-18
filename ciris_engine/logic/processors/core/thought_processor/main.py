@@ -356,11 +356,18 @@ class ThoughtProcessor(
             conscience_result = await self._conscience_execution_step(
                 thought_item, action_result, thought, dma_results, thought_context
             )
+            # An approved identity change a conscience objected to goes back to the WA, not to a retry (#1366).
+            conscience_result = self._redefer_objected_identity_amendment(
+                thought_item, action_result, conscience_result, thought_context
+            )
 
             # Phase 6: Handle conscience overrides (retry logic)
             if self._should_retry_with_conscience_guidance(conscience_result):
                 action_result, conscience_result = await self._handle_conscience_retry(
                     thought_item, thought, thought_context, dma_results, conscience_result, profile_name
+                )
+                conscience_result = self._redefer_objected_identity_amendment(
+                    thought_item, action_result, conscience_result, thought_context
                 )
 
         self._log_final_action_results(action_result, conscience_result, thought)
@@ -602,6 +609,9 @@ class ThoughtProcessor(
         )
         result = self._resolve_tool_alias(result)
         result = self._ponder_if_second_pass_left_it_unfilled(thought_item, result)
+        # An approved identity change is reviewed as the write it will be (#1366): the WA's
+        # approved bytes with their M-1 justification, bound HERE, before the consciences run.
+        result = self._bind_approved_identity_amendment(thought_item, result, thought_context)
         # A second pass returns a NEW result that never saw the action-selection
         # prompts, and ASPDMA_RESULT is built from whatever result comes out of
         # here. Carry them across, or the trace loses the prompt on exactly the
@@ -1150,6 +1160,59 @@ class ThoughtProcessor(
         except Exception as e:
             logger.error("%s: Failed for thought %s: %s", name, thought_item.thought_id, e, exc_info=True)
             return action_result
+
+    @staticmethod
+    def _task_wa_authorization(thought_item: ProcessingQueueItem, thought_context: Optional[Any]) -> Optional[Any]:
+        """The task's verified WA approval: from the thought's context or, where it does not carry it, the task."""
+        from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+
+        authorization = wa_authorization_of(thought_context)
+        if authorization is not None:
+            return authorization
+        try:
+            task = persistence.get_task_by_id_any_occurrence(thought_item.source_task_id)
+        except Exception as e:  # noqa: BLE001 - no task found is no approval found
+            logger.debug("IDENTITY-CHANGE: could not read task %s: %s", thought_item.source_task_id, e)
+            return None
+        return wa_authorization_of(task)
+
+    def _bind_approved_identity_amendment(
+        self, thought_item: ProcessingQueueItem, action_result: ActionSelectionDMAResult, thought_context: Optional[Any]
+    ) -> ActionSelectionDMAResult:
+        """Bind an identity-scope MEMORIZE to the WA's approved text and its M-1 justification (#1366).
+
+        Eric, 2026-11-18: an approved identity change applies through the
+        agent's consciences, with its justification under M-1. The write the
+        consciences review is therefore built here, before they run, from the
+        approval: the handler writes only that reviewed draft.
+        """
+        if action_result.selected_action != HandlerActionType.MEMORIZE:
+            return action_result
+        from ciris_engine.logic.infrastructure.handlers.shared_helpers import bind_approved_amendment
+
+        bound: ActionSelectionDMAResult = bind_approved_amendment(
+            action_result, self._task_wa_authorization(thought_item, thought_context)
+        )
+        return bound
+
+    def _redefer_objected_identity_amendment(
+        self,
+        thought_item: ProcessingQueueItem,
+        reviewed_draft: Any,
+        conscience_result: ConscienceApplicationResult,
+        thought_context: Optional[Any],
+    ) -> ConscienceApplicationResult:
+        """A DEFER to the WA, naming the objection, in place of an approved amendment a conscience objected to."""
+        if conscience_result is None or not conscience_result.overridden:
+            return conscience_result
+        if getattr(reviewed_draft, "selected_action", None) != HandlerActionType.MEMORIZE:
+            return conscience_result
+        from ciris_engine.logic.infrastructure.handlers.shared_helpers import redefer_objected_amendment
+
+        redeferred: ConscienceApplicationResult = redefer_objected_amendment(
+            reviewed_draft, conscience_result, self._task_wa_authorization(thought_item, thought_context)
+        )
+        return redeferred
 
     async def _refuse_unapproved_identity_memorize(
         self,

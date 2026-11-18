@@ -64,6 +64,9 @@ class FakeNode:
     #: ciris-server 0.5.250 exact-bytes approval: the response row signs an
     #: ``amendment_digest`` and the amendment row must match it. False = an older node.
     exact_bytes: bool = True
+    #: rc21 profile chain (persist v62 / verify 23): ``emit_identity_amendment`` takes ``prev`` and writes
+    #: ``refs.prev``. False = an older node whose function has no ``prev``.
+    chain: bool = True
 
     def _row(self, row_id: str) -> Optional[FakeRow]:
         return next((r for r in self.rows if r.attestation_id == row_id), None)
@@ -99,7 +102,10 @@ class FakeNode:
         """< 0.5.250: no amendment digest."""
         return self.emit_deferral_response(request_id, approved, bearer)
 
-    def emit_identity_amendment(self, amendment_digest: str, authorized_by: str, request_id: str) -> str:
+    def emit_identity_amendment(
+        self, amendment_digest: str, authorized_by: str, request_id: str, prev: Optional[str] = None
+    ) -> str:
+        """``prev`` is written as the row's ``refs.prev``; the base link passes None explicitly."""
         args = (amendment_digest, authorized_by, request_id)
         self.calls.append(("emit_identity_amendment", args))
         if "emit_identity_amendment" not in self.fail:
@@ -122,6 +128,7 @@ class FakeNode:
                     f"deferral.response_already_used: {authorized_by} already authorised amendment "
                     f"{prior[0].attestation_id}"
                 )
+        refs: Dict[str, object] = {"refs": {"prev": prev}} if prev else {}
         return self._sign(
             "emit_identity_amendment",
             "identity_amendment:v1",
@@ -129,7 +136,12 @@ class FakeNode:
             amendment_digest=amendment_digest,
             authorized_by=authorized_by,
             evidence_refs=[authorized_by],
+            **refs,
         )
+
+    def emit_identity_amendment_legacy(self, amendment_digest: str, authorized_by: str, request_id: str) -> str:
+        """Before the rc21 chain: no ``prev``."""
+        return self.emit_identity_amendment(amendment_digest, authorized_by, request_id)
 
     def deferral_rows(self, ids: List[str]) -> str:
         self.calls.append(("deferral_rows", (list(ids),)))
@@ -146,6 +158,8 @@ class FakeNode:
             return None
         if name == "emit_deferral_response" and not self.exact_bytes:
             return self.emit_deferral_response_legacy
+        if name == "emit_identity_amendment" and not self.chain:
+            return self.emit_identity_amendment_legacy
         fn: Optional[Callable[..., object]] = getattr(self, name, None)
         return fn
 

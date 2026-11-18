@@ -23,7 +23,12 @@ from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_localized_accord_text
-from ciris_engine.schemas.actions.parameters import PROPOSED_AMENDMENT_CONTEXT_KEY, DeferParams
+from ciris_engine.schemas.actions.parameters import (
+    IDENTITY_CHANGE_CONTEXT_KEY,
+    M1_JUSTIFICATION_CONTEXT_KEY,
+    PROPOSED_AMENDMENT_CONTEXT_KEY,
+    DeferParams,
+)
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -78,6 +83,10 @@ class DSASPDMALLMResult(PromptCarrier):
         None,
         description="Only when the deferral proposes a change to the agent's identity: the proposed identity text",
     )
+    m1_justification: Optional[str] = Field(
+        None,
+        description="With proposed_amendment: why the change serves ACCORD Meta-Goal M-1 (Adaptive Coherence)",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -101,6 +110,38 @@ def _proposed_amendment(text: Optional[str]) -> Optional[str]:
         )
         return None
     return value
+
+
+def _m1_justification(text: Optional[str]) -> Optional[str]:
+    """The proposal's M-1 justification, stripped; None when the model stated none."""
+    value = (text or "").strip()
+    return value or None
+
+
+def _identity_change_context(
+    reason_summary: str, proposed_amendment: str, m1_justification: Optional[str]
+) -> Dict[str, str | List[str]]:
+    """The deferral context a proposed identity amendment carries to the WA (GET /v1/wa/deferrals).
+
+    ``identity_change`` is the whole proposal (kind, what changes, the exact
+    text, the M-1 justification); ``m1_justification`` rides beside
+    ``proposed_amendment`` for clients that read the flat keys.
+    """
+    from ciris_engine.schemas.api.wa import IdentityChangeKind, IdentityChangeProposal
+
+    proposal = IdentityChangeProposal(
+        kind=IdentityChangeKind.AMENDMENT,
+        summary=reason_summary,
+        proposed_text=proposed_amendment,
+        m1_justification=m1_justification,
+    )
+    context: Dict[str, str | List[str]] = {
+        PROPOSED_AMENDMENT_CONTEXT_KEY: proposed_amendment,
+        IDENTITY_CHANGE_CONTEXT_KEY: proposal.model_dump_json(),
+    }
+    if m1_justification is not None:
+        context[M1_JUSTIFICATION_CONTEXT_KEY] = m1_justification
+    return context
 
 
 class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
@@ -309,10 +350,16 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             merged_context["domain_hint"] = llm_result.domain_hint.value
         # The typed field is the one source: a context key of the same name set
         # earlier (action selection writes free-form context) is not carried.
-        merged_context.pop(PROPOSED_AMENDMENT_CONTEXT_KEY, None)
+        for key in (PROPOSED_AMENDMENT_CONTEXT_KEY, M1_JUSTIFICATION_CONTEXT_KEY, IDENTITY_CHANGE_CONTEXT_KEY):
+            merged_context.pop(key, None)
         proposed_amendment = _proposed_amendment(llm_result.proposed_amendment)
+        m1_justification = _m1_justification(llm_result.m1_justification) if proposed_amendment else None
         if proposed_amendment is not None:
-            merged_context[PROPOSED_AMENDMENT_CONTEXT_KEY] = proposed_amendment
+            if m1_justification is None:
+                logger.warning("DSASPDMA: proposed identity amendment states no M-1 justification")
+            merged_context.update(
+                _identity_change_context(llm_result.reason_summary, proposed_amendment, m1_justification)
+            )
 
         params = DeferParams(
             channel_id=original_params.channel_id,
@@ -325,6 +372,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             rights_basis=rights_basis,
             domain_hint=llm_result.domain_hint or original_params.domain_hint,
             proposed_amendment=proposed_amendment,
+            m1_justification=m1_justification,
         )
         # ActionSelectionDMAResult.resource_usage is JSONDict; LLMBus returns
         # a ResourceUsage Pydantic object. Convert via model_dump or pass
@@ -384,6 +432,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
                 domain_hint=llm_result.domain_hint,
                 defer_until=llm_result.defer_until,
                 proposed_amendment=llm_result.proposed_amendment,
+                m1_justification=llm_result.m1_justification,
             )
 
         result = self._convert_result(llm_result, current_params, resource_usage=resource_usage)

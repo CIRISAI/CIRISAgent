@@ -193,7 +193,7 @@ async def test_an_approved_base_link_is_written_with_no_prev(
 async def test_a_node_without_prev_records_nothing_and_says_so(
     wise_authority_service: Any, auth_service: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    node = install_fake_node(monkeypatch)  # FakeNode: emit_identity_amendment has no prev
+    node = install_fake_node(monkeypatch, FakeNode(chain=False))  # emit_identity_amendment has no prev
     deferral_id, pending, response = await _open_and_answer(wise_authority_service, node, auth_service)
 
     assert await wise_authority_service.resolve_deferral(deferral_id, response) is True

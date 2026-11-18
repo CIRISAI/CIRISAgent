@@ -73,6 +73,11 @@ class RejectParams(BaseModel):
 #: The deferral context key a proposed identity amendment rides under, from the
 #: DEFER parameters to the listing (GET /v1/wa/deferrals -> context.proposed_amendment).
 PROPOSED_AMENDMENT_CONTEXT_KEY = "proposed_amendment"
+#: The deferral context key the proposal's M-1 (Adaptive Coherence) justification rides under (#1366).
+M1_JUSTIFICATION_CONTEXT_KEY = "m1_justification"
+#: The deferral context key of the whole identity-change proposal the WA reviews: JSON text of
+#: ``schemas.api.wa.IdentityChangeProposal`` (kind, what changes, exact text or template, justification).
+IDENTITY_CHANGE_CONTEXT_KEY = "identity_change"
 
 
 class DeferParams(BaseModel):
@@ -110,6 +115,14 @@ class DeferParams(BaseModel):
             "When the deferral asks a Wise Authority to change the agent's identity: the proposed amendment text, "
             "exactly as the WA would approve it (resolve with amendment_text). Model-written: a proposal, never an "
             "amendment until a WA approves these exact bytes."
+        ),
+    )
+    m1_justification: Optional[str] = Field(
+        None,
+        description=(
+            "With proposed_amendment (or any identity change): why the change serves ACCORD Meta-Goal M-1, "
+            "Adaptive Coherence. Part of the reviewed action: the consciences read it with the proposal, and the "
+            "Wise Authority sees it beside the exact text."
         ),
     )
 

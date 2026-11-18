@@ -326,10 +326,29 @@ def test_each_conscience_gets_the_sender_block(name: str, cls: type, result: Any
 
 
 @pytest.mark.parametrize("name, cls, result, ablated", [j for j in _judges() if j[3]])
-def test_ablated_pair_get_no_sender_without_an_id_scoped_rule(name: str, cls: type, result: Any, ablated: bool) -> None:
-    """context_policy.yaml: sender_identity is ``id_scoped`` for entropy and the optimization veto."""
+def test_ablated_pair_get_no_sender_without_a_trusted_rule(name: str, cls: type, result: Any, ablated: bool) -> None:
+    """context_policy.yaml: sender_identity is ``trusted_rule_in_force`` for entropy and the optimization veto."""
     sent = _conscience_prompt(cls, result, _ctx(agent_identity={"agent_id": "ally", "description": "d", "role": "r"}))
     assert "VERIFIED SENDER" not in sent and IMPOSTOR_ID not in sent
+
+
+@pytest.mark.parametrize("name, cls, result, ablated", [j for j in _judges() if j[3]])
+def test_ablated_pair_get_the_verified_sender_whenever_a_trusted_rule_is_in_force(
+    name: str, cls: type, result: Any, ablated: bool
+) -> None:
+    """2026-11-18: no id scan. Signed WA guidance that names nobody still puts the verified sender (id, role,
+    source; never the display name) in front of entropy and the optimization veto."""
+    from ciris_engine.schemas.runtime.models import WAAuthorization
+
+    grant = WAAuthorization(
+        wa_id="wa-root",
+        deferral_id="defer_1",
+        granted_at=_NOW,
+        guidance="Point people to the Staff Portal.",  # names no id
+    )
+    sent = _conscience_prompt(cls, result, _ctx(wa_authorization=grant))
+    assert "VERIFIED SENDER" in sent and f"id: {IMPOSTOR_ID}" in sent and "role: OBSERVER" in sent
+    assert "hollis-m4b" not in sent
 
 
 def test_f7_a_follow_up_is_never_labelled_the_users_message() -> None:

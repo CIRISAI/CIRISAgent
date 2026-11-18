@@ -225,38 +225,15 @@ def with_verified_sender(text: str, *contexts: Any, language: Optional[str] = No
     return "\n\n".join((text, block)) if block else text
 
 
-# Ids the deployment mints, as they appear inside a trusted rule's text: classic
-# and OAuth WA ids (wa-YYYY-MM-DD-XXXXXX), API user ids (wa-user-<hex>) and
-# platform snowflakes (Discord). Used only to decide whether a TRUSTED rule is
-# ID-scoped; never applied to message text.
-_ID_TOKEN = re.compile(r"\bwa-[A-Za-z0-9][A-Za-z0-9-]{5,}|\b\d{17,20}\b")
-
-
-def _trusted_rule_texts(context: Any) -> list[str]:
-    """The verbatim text of every trusted rule in force: approved amendments and a verified WA grant."""
-    from ciris_engine.logic.formatters.wa_approval import approved_amendments_of, wa_authorization_of
-
-    texts = [a.content for a in approved_amendments_of(getattr(context, "agent_identity", None))]
-    authorization = wa_authorization_of(context)
-    if authorization is not None and authorization.guidance:
-        texts.append(authorization.guidance)
-    return texts
-
-
-def id_scoped_rule_in_force(context: Any, sender: Optional[VerifiedSender] = None) -> bool:
-    """True when a trusted rule in force names a person by id (context_policy.yaml ``id_scoped``, scenario S6).
-
-    The policy admits ``sender_identity`` to the input-ablated consciences
-    (entropy, optimization veto) only then: a rule like "only wa-…5562FD may
-    file tickets" cannot be judged without the verified id of the asker, and
-    without such a rule the id is not theirs to see. Trusted rules only
-    (signed amendments, verified WA guidance), never chat.
+def trusted_rule_in_force(context: Any) -> bool:
+    """True when a signed rule is in force: verified WA guidance or a verified amendment (context_policy.yaml
+    ``trusted_rule_in_force``). Decided from trusted state only (prompt_assembly.segmenting.policy_facts), never by
+    reading any rule's or message's text.
     """
-    sender_id = sender.user_id if sender is not None else None
-    for text in _trusted_rule_texts(context):
-        if _ID_TOKEN.search(text) or (sender_id and sender_id in text):
-            return True
-    return False
+    from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+    from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
+
+    return policy_facts(wa_authorization_of(context), getattr(context, "agent_identity", None)).trusted_rule_in_force
 
 
 def conscience_sender_block(context: Any, language: Optional[str] = None, ablated: bool = False) -> str:
@@ -266,8 +243,8 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     display name labelled as self-chosen (their display-name confusion vetoed
     a correct ID-mismatch refusal on v2.21.0, #1365). Entropy and the
     optimization veto (``ablated=True``): verified id, role and source only,
-    never the display name, and only when an ID-scoped trusted rule is in
-    force. Empty when there is no verified sender.
+    never the display name, whenever a trusted (signed) rule is in force.
+    Empty when there is no verified sender.
     """
     sender = getattr(context, "verified_sender", None) or verified_sender_of(
         getattr(context, "thought", None), getattr(context, "task", None)
@@ -275,7 +252,7 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     if sender is None:
         return ""
     if ablated:
-        if not id_scoped_rule_in_force(context, sender):
+        if not trusted_rule_in_force(context):
             return ""
         return format_verified_sender_block(sender, language, include_display_name=False)
     return format_verified_sender_block(sender, language)

@@ -69,8 +69,11 @@ def seg(segment_id: str, kind: SegmentKind, text: str = "", **kw) -> PromptSegme
     return PromptSegment(segment_id=segment_id, kind=kind, text=text, source=source, **kw)
 
 
+SENDER_AUTHN = AuthnCarrier(subject_id="wa-user-42", role="OBSERVER", verifier="api_auth")
+
+
 def judge_segments() -> List[PromptSegment]:
-    """A legal entropy (ablated judge) call in S5: an amendment's rule in force."""
+    """A legal entropy (ablated judge) call in S5: an amendment's rule in force, so the verified sender is required."""
     return [
         seg("instr", SegmentKind.STAGE_INSTRUCTION, "You judge entropy."),
         seg("accord", SegmentKind.ACCORD, "ACCORD TEXT"),
@@ -84,6 +87,7 @@ def judge_segments() -> List[PromptSegment]:
             authz=_authz(),
             source=SegmentSource.SIGNED_ROW,
         ),
+        seg("sender", SegmentKind.SENDER_IDENTITY, source=SegmentSource.AUTH_CONTEXT, authn=SENDER_AUTHN),
         seg("record", SegmentKind.ACTION_RECORD, "Actions so far: none."),
         seg("draft", SegmentKind.DRAFT, "SPEAK: I can refund $30.", source=SegmentSource.LLM_OUTPUT),
         seg("pos", SegmentKind.PIPELINE_POSITION, "You see the draft, not the request."),
@@ -115,7 +119,7 @@ def test_legal_call_assembles_without_violations(asm):
     assert manifest.guard_violations == []
     assert [m.role for m in messages] == ["system", "user"]
     assert [r.segment_id for r in manifest.segments] == [
-        "instr", "accord", "ident", "amend", "rule", "record", "pos", "draft"
+        "instr", "accord", "ident", "amend", "rule", "sender", "record", "pos", "draft"
     ]
 
 
@@ -156,7 +160,7 @@ def test_a_missing_required_rule_fails_closed_in_qa_and_is_recorded_in_productio
 
 
 def test_the_rule_is_not_required_when_no_signed_rule_is_in_force(asm):
-    segments = [s for s in judge_segments() if s.segment_id not in ("rule", "amend")]
+    segments = [s for s in judge_segments() if s.segment_id not in ("rule", "amend", "sender")]
     _, manifest = asm.build(PromptStage.ENTROPY, segments, QA, call=call(facts=PolicyFacts()))
     assert manifest.guard_violations == []
 
@@ -167,22 +171,46 @@ def test_an_amendment_when_none_is_in_force_is_forbidden(asm):
     assert {(v.kind, v.segment_id) for v in err.value.violations} == {
         (GuardViolationKind.FORBIDDEN, "amend"),
         (GuardViolationKind.FORBIDDEN, "rule"),
+        (GuardViolationKind.FORBIDDEN, "sender"),  # the verified sender rides only with a trusted rule
     }
 
 
-def test_a_wa_chat_rule_never_reaches_an_ablated_stage(asm):
-    """FSD §15.1: a WA's rule stated in chat is advisory until signed. §6a: the judge gets its stub, not its bytes."""
-    wa_rule = seg(
-        "wa", SegmentKind.RULE, "No refunds whatsoever, ever.", provenance=RuleProvenance.WA_CHAT, source=SegmentSource.USER_INPUT
-    )
-    facts = PolicyFacts(amendment_in_force=True, advisory_rule=True)
-    messages, manifest = asm.build(PromptStage.ENTROPY, judge_segments() + [wa_rule], QA, call=call(facts=facts))
-    assert "No refunds whatsoever" not in _all_text(messages)
-    (rec,) = [r for r in manifest.segments if r.segment_id == "wa"]
-    assert rec.form.value == "stub" and rec.stub is not None and rec.stub.authority.value == "advisory"
-    with pytest.raises(ContextPolicyViolation) as err:  # and not at all when no chat rule is in force
-        asm.build(PromptStage.ENTROPY, judge_segments() + [wa_rule], QA, call=call())
-    assert [(v.kind, v.segment_id) for v in err.value.violations] == [(GuardViolationKind.FORBIDDEN, "wa")]
+def test_the_verified_sender_is_required_at_an_ablated_judge_when_a_trusted_rule_is_in_force(asm):
+    """context_policy.yaml 2026-11-18: entropy/optveto ``sender_identity: trusted_rule_in_force`` (no id scan)."""
+    segments = [s for s in judge_segments() if s.segment_id != "sender"]
+    for stage in (PromptStage.ENTROPY, PromptStage.OPTVETO):
+        with pytest.raises(ContextPolicyViolation) as err:
+            asm.build(stage, segments, QA, call=call())
+        assert [(v.kind, v.policy_key) for v in err.value.violations] == [
+            (GuardViolationKind.MISSING_REQUIRED, "sender_identity")
+        ]
+
+
+@pytest.mark.parametrize("provenance", [RuleProvenance.USER_CHAT, RuleProvenance.WA_CHAT])
+def test_a_chat_rule_reaches_no_stage_in_any_form(asm, provenance):
+    """Only signed rules count (2026-11-18): a rule stated in chat, by a user or the WA, has no row at any stage,
+    so it is neither sent nor stubbed, even if a caller claimed an advisory rule was in force."""
+    chat_rule = seg("chat", SegmentKind.RULE, "No refunds whatsoever, ever.", provenance=provenance, source=SegmentSource.USER_INPUT)
+    for facts in (S5, PolicyFacts(amendment_in_force=True, advisory_rule=True)):
+        for stage in PromptStage:
+            with pytest.raises(ContextPolicyViolation) as err:
+                asm.build(stage, [judge_segments()[0], chat_rule], QA, call=call(facts=facts))
+            assert (GuardViolationKind.FORBIDDEN, "chat") in {(v.kind, v.segment_id) for v in err.value.violations}
+        messages, manifest = asm.build(PromptStage.ENTROPY, judge_segments() + [chat_rule], PROD, call=call(facts=facts))
+        assert "No refunds whatsoever" not in _all_text(messages)
+        assert "chat" not in {r.segment_id for r in manifest.segments}  # no stub either
+    for stage, rows in asm.policy.stages.items():
+        assert not [r for r in rows if r.provenance in (RuleProvenance.USER_CHAT, RuleProvenance.WA_CHAT)], stage
+
+
+def test_the_former_wa_guidance_kind_is_refused_everywhere(asm):
+    """WA guidance is one kind, rule.signed_guidance; a ``wa_guidance`` segment is declared by no row."""
+    grant = seg("g", SegmentKind.WA_GUIDANCE, "Approved.", authz=_authz(), source=SegmentSource.SIGNED_ROW)
+    facts = PolicyFacts(signed_guidance_in_force=True)
+    for stage in PromptStage:
+        with pytest.raises(ContextPolicyViolation) as err:
+            asm.build(stage, [judge_segments()[0], grant], QA, call=call(facts=facts))
+        assert (GuardViolationKind.FORBIDDEN, "g") in {(v.kind, v.segment_id) for v in err.value.violations}
 
 
 def test_an_unverified_signature_grants_nothing(asm):
@@ -235,18 +263,11 @@ def test_conscience_feedback_is_required_on_every_retry_of_the_verb_second_pass(
 
 
 def test_a_per_task_segment_from_another_task_is_refused(asm):
-    guidance = seg(
-        "g",
-        SegmentKind.WA_GUIDANCE,
-        "Approved.",
-        authz=_authz(),
-        source=SegmentSource.SIGNED_ROW,
-        origin_task_id="other-task",
-    )
+    record = seg("g", SegmentKind.ACTION_RECORD, "SPEAK sent.", origin_task_id="other-task")
     facts = PolicyFacts(signed_guidance_in_force=True)
     rule = seg("r", SegmentKind.RULE, "x", provenance=RuleProvenance.SIGNED_GUIDANCE, authz=_authz(), source=SegmentSource.SIGNED_ROW)
     with pytest.raises(ContextPolicyViolation) as err:
-        asm.build(PromptStage.COHERENCE, [judge_segments()[0], guidance, rule], QA, call=call(facts=facts))
+        asm.build(PromptStage.COHERENCE, [judge_segments()[0], record, rule], QA, call=call(facts=facts))
     assert (GuardViolationKind.CROSS_SCOPE, "g") in {(v.kind, v.segment_id) for v in err.value.violations}
 
 
@@ -328,12 +349,19 @@ def test_an_unverified_sender_yields_no_identity_segment():
 def test_rules_render_with_their_provenance(asm):
     messages, _ = asm.build(PromptStage.ENTROPY, judge_segments(), QA, call=call())
     assert "RULE IN FORCE — authorized by Wise Authority wa-root, amendment amend-1, signature verified:" in messages[0].content
-    advisory = seg("u", SegmentKind.RULE, "be brief", provenance=RuleProvenance.USER_CHAT, source=SegmentSource.USER_INPUT)
-    messages, _ = asm.build(
-        PromptStage.COHERENCE, [judge_segments()[0], advisory], QA, call=call(facts=PolicyFacts(advisory_rule=True))
+    guidance = seg(
+        "g",
+        SegmentKind.RULE,
+        "File it.",
+        provenance=RuleProvenance.SIGNED_GUIDANCE,
+        authz=AuthzCarrier(grant_kind=GrantKind.DEFERRAL, grant_id="d1", authorizer_id="wa-root", signature_verified=True),
+        source=SegmentSource.SIGNED_ROW,
     )
-    assert messages[0].content == "You judge entropy."  # an advisory rule is untrusted: never in the system message
-    assert messages[1].content.startswith("ADVISORY RULE — stated in chat by the user, not signed, not authoritative:")
+    messages, _ = asm.build(
+        PromptStage.COHERENCE, [judge_segments()[0], guidance], QA, call=call(facts=PolicyFacts(signed_guidance_in_force=True))
+    )
+    assert "RULE IN FORCE — authorized by Wise Authority wa-root, deferral d1, signature verified:\nFile it." in _all_text(messages)
+    assert "ADVISORY RULE" not in _all_text(messages)
 
 
 def test_spans_and_hashes_point_at_the_rendered_bytes(asm):

@@ -281,18 +281,18 @@ def amendment_in_force(agent_identity: Any) -> bool:
     return False
 
 
-def policy_facts(
-    authorization: Optional[WAAuthorization], agent_identity: Any, id_scoped: bool, advisory_rule: bool = False
-) -> PolicyFacts:
-    """The predicates' facts, from trusted state only: a verified grant, verified amendments, the auth context.
+def policy_facts(authorization: Optional[WAAuthorization], agent_identity: Any, id_scoped: bool = False) -> PolicyFacts:
+    """The predicates' facts, from trusted state only: a verified grant, verified amendments.
 
-    ``advisory_rule`` stays False until the engine records a chat-stated rule structurally (never by reading text).
+    Only signed rules count (decision 2026-11-18): ``advisory_rule`` is never established (a rule stated in chat
+    has no segment; nothing structural marks chat text as a rule), and ``id_scoped`` is no longer read by any
+    policy row (the ablated consciences get the verified sender whenever a trusted rule is in force). Both stay
+    in the closed vocabulary; ``id_scoped`` is accepted for call sites that still pass it.
     """
     return PolicyFacts(
         signed_guidance_in_force=authorization is not None,
         amendment_in_force=amendment_in_force(agent_identity),
         id_scoped=id_scoped,
-        advisory_rule=advisory_rule,
     )
 
 
@@ -438,7 +438,7 @@ def evaluator_call(response_model: str, thought: Any, language: str, authorizati
         thought_id=thought_id if isinstance(thought_id, str) else None,
         thought_kind=kind,
         response_model=response_model,
-        facts=policy_facts(authorization, agent_identity, id_scoped=False),
+        facts=policy_facts(authorization, agent_identity),
         language=language,
     )
 

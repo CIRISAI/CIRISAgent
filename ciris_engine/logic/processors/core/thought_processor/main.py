@@ -1931,6 +1931,8 @@ class ThoughtProcessor(
 
         context = ConscienceCheckContext(
             thought=thought,
+            # The real user message for coherence / epistemic humility (#1366 item 18).
+            task=self._task_for_conscience(thought),
             idma_result=idma_result,
             wa_authorization=wa_authorization_of(processing_context),
             agent_identity=agent_identity_of(processing_context),

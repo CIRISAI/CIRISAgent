@@ -320,6 +320,13 @@ DECLARED_STRING_KEY_SPACE: FrozenSet[str] = frozenset(
         # memorize second pass (never a conscience).
         "prompts.wa_approval.only_verified",
         "prompts.wa_approval.rule",
+        # #1365 / #1366 items 2-3: the verified Wise Authority governance block
+        # entropy and the optimization veto read (formatters/wa_approval.py),
+        # built only from trusted state, never message text.
+        "prompts.wa_governance.entry_amendment",
+        "prompts.wa_governance.entry_resolution",
+        "prompts.wa_governance.footer",
+        "prompts.wa_governance.header",
         # The parent key: a whole-block replacement, and it WINS over the parts
         # (precedence declared in `get_language_guidance`). Still reachable
         # because the 24 unsplit locales resolve through it.

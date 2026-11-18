@@ -48,6 +48,29 @@ class ConscienceExecutionPhase:
         conscience_registry: Registry of conscience validation functions
     """
 
+    @staticmethod
+    def _task_for_conscience(thought: Any) -> Any:
+        """The task the thought belongs to, for ``ConscienceCheckContext.task`` (CIRISAgent#1366 item 18).
+
+        The context was always built with ``task=None``, so coherence and
+        epistemic humility, whose prompt names the user's message, fell back
+        to the THOUGHT's content: on a follow-up that is the agent's own
+        follow-up text, cut head-first at 2,000 characters and labelled the
+        user's message. The task description is the observed message itself.
+        Read by id across occurrences (a shared task lives under
+        ``__shared__``). Never raises: no task is what the context had before.
+        """
+        task_id = getattr(thought, "source_task_id", None)
+        if not isinstance(task_id, str) or not task_id:
+            return None
+        from ciris_engine.logic import persistence
+
+        try:
+            return persistence.get_task_by_id_any_occurrence(task_id)
+        except Exception as e:  # noqa: BLE001 - a missing task must not take the conscience stage down
+            logger.debug("Could not read task %s for the conscience context: %s", task_id, e)
+            return None
+
     if TYPE_CHECKING:
         conscience_registry: Any
 
@@ -97,7 +120,8 @@ class ConscienceExecutionPhase:
 
         context = ConscienceCheckContext(
             thought=thought or thought_item,
-            task=None,  # Will be populated by conscience checks if needed
+            # The real user message for coherence / epistemic humility (#1366 item 18).
+            task=self._task_for_conscience(thought or thought_item),
             round_number=None,
             system_snapshot=dma_results or {},  # Store DMA results in system_snapshot
             idma_result=idma_result,

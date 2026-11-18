@@ -8,7 +8,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-from ciris_engine.logic.formatters.wa_approval import format_wa_approval_block, wa_authorization_of
+from ciris_engine.logic.formatters.wa_approval import (
+    format_wa_approval_rule,
+    wa_authorization_of,
+    wa_governance_block_of,
+)
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, Deadline, attempt_timeout, llm_call_deadline
@@ -182,8 +186,15 @@ class _BaseConscience(ConscienceInterface):
         RATCHET Market 4 ac-20 (run 43667023655) the veto refused "I have filed a
         ticket", the ticket stood, and the agent told the user it could not file
         one. They need the context to judge the next action (Eric, 2026-11-15).
-        Same record the follow-up thought carries (action_record.py); empty when
-        nothing has run, so a seed thought's prompt is unchanged.
+        Empty when nothing has run, so a seed thought's prompt is unchanged.
+
+        The FACTUAL form of the record the follow-up thought carries
+        (action_record.py, CIRISAgent#1366 items 4 and 18): verb, tool name,
+        status and scope, never an outcome. The outcome text carried the user's
+        message after a PONDER ("=== PREVIOUS CONTEXT === You observed @... say:
+        ...") and tool output after a TOOL, which reopened the channel the
+        input ablation of entropy and the optimization veto closes (#1365).
+        Every conscience reads this same form.
         """
         from ciris_engine.logic.infrastructure.handlers.action_record import action_record_for_task
 
@@ -194,10 +205,31 @@ class _BaseConscience(ConscienceInterface):
             task_id if isinstance(task_id, str) else None,
             occurrence_id if isinstance(occurrence_id, str) else "default",
             language,
+            factual=True,
         )
         if not record or not messages:
             return messages, user_prompt
         user_prompt = "\n\n".join((record, user_prompt))
+        return [*messages[:-1], LLMMessage(role="user", content=user_prompt)], user_prompt
+
+    @staticmethod
+    def _with_wa_governance(
+        messages: List[LLMMessage], user_prompt: str, context: ConscienceCheckContext, language: str, extra: str = ""
+    ) -> tuple[List[LLMMessage], str]:
+        """Lead the user prompt with the verified Wise Authority governance block (#1365, #1366 items 2-3).
+
+        For the two input-ablated consciences only. Built from trusted state
+        alone (``formatters.wa_approval.wa_governance_block_of``): the verified
+        grant of a resolved deferral and the approved identity amendments, with
+        their ids. Nothing verified, nothing added. ``extra`` follows the block
+        (the optimization veto's approval rule). It leads the user prompt rather
+        than riding as its own system message, so the recorded prompt is exactly
+        what the model read.
+        """
+        block = "\n\n".join(part for part in (wa_governance_block_of(context, language=language), extra) if part)
+        if not block or not messages:
+            return messages, user_prompt
+        user_prompt = "\n\n".join((block, user_prompt))
         return [*messages[:-1], LLMMessage(role="user", content=user_prompt)], user_prompt
 
     def _resolve_language(self, context: ConscienceCheckContext) -> str:
@@ -655,6 +687,10 @@ class EntropyConscience(_BaseConscience):
                 text, image_context, language=self._resolve_language(context)
             )
             messages = self._with_identity(messages, context, self._resolve_language(context))
+            # The WA's verified guidance, which entropy alone never had (#1366 item 2).
+            messages, entropy_user_prompt = self._with_wa_governance(
+                messages, entropy_user_prompt, context, self._resolve_language(context)
+            )
             messages, entropy_user_prompt = self._with_action_record(
                 messages, entropy_user_prompt, context, self._resolve_language(context)
             )
@@ -820,6 +856,10 @@ class CoherenceConscience(_BaseConscience):
                 user_message=self._extract_user_message(context),
             )
             messages = self._with_identity(messages, context, self._resolve_language(context))
+            # The same factual record entropy and the veto read (#1366 item 18).
+            messages, coherence_user_prompt = self._with_action_record(
+                messages, coherence_user_prompt, context, self._resolve_language(context)
+            )
             if hasattr(sink, "llm"):
                 coherence_eval, _ = await self._call_llm_with_budget(
                     sink,
@@ -945,14 +985,15 @@ class OptimizationVetoConscience(_BaseConscience):
         messages = self._with_identity(messages, context, self._resolve_language(context))
         # The veto was sending approved identity changes back for "Wise
         # Authority review" they had already had (formatters/wa_approval.py).
-        # Leads the user prompt rather than riding as its own system message, so
-        # the recorded optimization_veto_prompt is exactly what the model read.
-        approval_block = format_wa_approval_block(
-            wa_authorization_of(context), language=self._resolve_language(context)
+        # The governance block carries the grant with its ids (#1365); the
+        # approval rule follows it, as before, so nothing is said twice.
+        messages, opt_veto_user_prompt = self._with_wa_governance(
+            messages,
+            opt_veto_user_prompt,
+            context,
+            self._resolve_language(context),
+            extra=format_wa_approval_rule(wa_authorization_of(context), language=self._resolve_language(context)),
         )
-        if approval_block:
-            opt_veto_user_prompt = "\n\n".join((approval_block, opt_veto_user_prompt))
-            messages[-1] = LLMMessage(role="user", content=opt_veto_user_prompt)
         messages, opt_veto_user_prompt = self._with_action_record(
             messages, opt_veto_user_prompt, context, self._resolve_language(context)
         )
@@ -1089,6 +1130,10 @@ class EpistemicHumilityConscience(_BaseConscience):
             user_message=self._extract_user_message(context),
         )
         messages = self._with_identity(messages, context, self._resolve_language(context))
+        # The same factual record entropy and the veto read (#1366 item 18).
+        messages, epistemic_humility_user_prompt = self._with_action_record(
+            messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
+        )
 
         try:
             if hasattr(sink, "llm"):

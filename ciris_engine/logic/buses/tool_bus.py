@@ -276,6 +276,29 @@ class ToolBus(BaseBus[ToolService]):
         from ciris_engine.logic.infrastructure.authorization.dispatch_gate import authorize_dispatch, gated_dispatch
 
         self._note_subject(tool_name, handler_name, subject)
+        # Code admission (rc21 CC 2.7.11): a tool served by a unit loaded beyond the
+        # attested build runs only if every capability it exercises is admitted by
+        # a live admission:unit row, held by the unit that started it, and (for an
+        # effect) not under a latched halt. Built-in providers return None here.
+        from ciris_engine.logic.infrastructure.authorization.unit_admission import (
+            check_unit_tool_call,
+            held_for,
+            unit_scope,
+        )
+
+        unit_decision = await check_unit_tool_call(service, tool_name)
+        if unit_decision is not None and not unit_decision.admitted:
+            self._executions_count += 1
+            self._errors_count += 1
+            self._denials_count += 1
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.UNAUTHORIZED,
+                success=False,
+                data=None,
+                error=unit_decision.message(),
+                correlation_id=str(uuid.uuid4()),
+            )
         # CC 4.2.1.1 backstop, here so both paths inherit it: no tool runs for
         # the reasoning loop under a halt — the enrichment tools included.
         halt = await bus_backstop(BusBackstopCall.TOOL_EXECUTE)
@@ -308,8 +331,14 @@ class ToolBus(BaseBus[ToolService]):
             # (_call_async_or_sync_method). Keep tolerating them: routing that
             # path through here must not break a provider it used to accept.
             with gated_dispatch(tool_name):
-                raw = service.execute_tool(tool_name, parameters)
-                result: ToolExecutionResult = await raw if inspect.isawaitable(raw) else raw
+                if unit_decision is not None:
+                    # Units this one starts hold at most what it holds (attenuation).
+                    with unit_scope(held_for(unit_decision)):
+                        raw = service.execute_tool(tool_name, parameters)
+                        result: ToolExecutionResult = await raw if inspect.isawaitable(raw) else raw
+                else:
+                    raw = service.execute_tool(tool_name, parameters)
+                    result = await raw if inspect.isawaitable(raw) else raw
 
             # Track metrics
             self._executions_count += 1

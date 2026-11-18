@@ -279,7 +279,7 @@ class AdapterDiscoveryService:
             # Try each loader to find one that can load this manifest
             for candidate_loader in self._loaders:
                 try:
-                    cls = candidate_loader.load_service_class(manifest, class_path)
+                    cls = self._admitted_load(candidate_loader, manifest, class_path)
                     if cls:
                         self._manifest_loaders[manifest.module.name] = candidate_loader
                         return cls
@@ -294,7 +294,43 @@ class AdapterDiscoveryService:
 
             return None
 
-        return loader.load_service_class(manifest, class_path)
+        return self._admitted_load(loader, manifest, class_path)
+
+    @staticmethod
+    def unit_dir_for(loader: AdapterLoader, manifest: ServiceManifest) -> Path:
+        """The directory a discovered adapter loads from (its unit, for admission)."""
+        path = getattr(manifest, "_path", None)
+        return Path(path) if path is not None else loader.services_dir / manifest.module.name
+
+    def _admitted_load(self, loader: AdapterLoader, manifest: ServiceManifest, class_path: str) -> Optional[Type[Any]]:
+        """Load through code admission (rc21 CC 2.7.11).
+
+        An adapter under an installed package root is in the attested build and
+        loads as before. Any other root (user, workspace, CIRIS_EXTRA_ADAPTERS,
+        imported and built skills) loads only under a live admission:unit row
+        for the digest of its bytes, and its service class is tagged so each tool
+        call it serves is checked against what that row admits.
+        """
+        from ciris_engine.logic.infrastructure.authorization.unit_admission import (
+            admitted_unit_record,
+            check_unit_load_sync,
+            tag_unit_class,
+        )
+
+        unit_dir = self.unit_dir_for(loader, manifest)
+        decision = check_unit_load_sync(unit_dir, manifest.module.name)
+        if decision is None:  # inside the attested build
+            return loader.load_service_class(manifest, class_path)
+        if not decision.admitted:
+            self._record_enumeration_failure(
+                manifest.module.name, f"it is not admitted on this host ({decision.message()})"
+            )
+            return None
+        cls = loader.load_service_class(manifest, class_path)
+        if cls is not None:
+            declared = frozenset(manifest.unit_capabilities) if manifest.unit_capabilities is not None else None
+            tag_unit_class(cls, admitted_unit_record(decision, unit_dir, manifest.module.name, declared))
+        return cast(Optional[Type[Any]], cls)
 
     def _load_class_via_importlib(self, _adapter_name: str, class_path: str) -> Optional[Type[Any]]:
         """Load a service class via importlib (for Android/Chaquopy).

@@ -226,7 +226,14 @@ def test_a_signed_rule_may_repeat_the_request(asm):
         authz=AuthzCarrier(grant_kind=GrantKind.DEFERRAL, grant_id="d1", signature_verified=True),
     )
     facts = PolicyFacts(signed_guidance_in_force=True)
-    _, manifest = asm.build(PromptStage.ENTROPY, base() + [signed, request()], QA, call=call(facts=facts))
+    # With a trusted rule in force the ablated judge also gets the verified sender (id, role, source).
+    sender = seg(
+        "sender",
+        SegmentKind.SENDER_IDENTITY,
+        source=SegmentSource.AUTH_CONTEXT,
+        authn=AuthnCarrier(subject_id="wa-user-1", role="OBSERVER", verifier="api_auth"),
+    )
+    _, manifest = asm.build(PromptStage.ENTROPY, base() + [signed, sender, request()], QA, call=call(facts=facts))
     assert manifest.guard_violations == []
 
 

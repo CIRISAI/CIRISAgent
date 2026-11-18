@@ -55,9 +55,10 @@ STAGE_ROLES: Dict[PromptStage, StageRole] = {
 }
 
 #: Predicates under which a row's segment is REQUIRED when the predicate holds, not merely allowed. The TLA+
-#: contract reads every holding predicate as "present"; at runtime ``always`` and ``advisory_rule`` rows are
-#: allowance only (not every message has history or a display name; an own-turn preference is optional), while
-#: the state-conditioned rows are the evidence the judges must not lack (FSD §5 ``require``, §14).
+#: contract reads every holding predicate as "present"; at runtime ``always`` rows are allowance only (not every
+#: message has history or a display name), while the state-conditioned rows are the evidence the judges must not
+#: lack (FSD §5 ``require``, §14): the signed rule, and at entropy and the optimization veto the verified sender
+#: whenever a trusted rule is in force (context_policy.yaml, decision 2026-11-18).
 REQUIRING_PREDICATES = frozenset(
     {
         PolicyPredicate.TRUSTED_RULE_IN_FORCE,
@@ -71,12 +72,13 @@ REQUIRING_PREDICATES = frozenset(
 #: Kinds every call must carry wherever the policy allows them: the stage's own prompt.
 ALWAYS_REQUIRED_KINDS = frozenset({SegmentKind.STAGE_INSTRUCTION})
 
-#: Kinds whose state-conditioned rows ALLOW, never require: the grant (``wa_guidance``) and the identity text
-#: (``amendment``) may accompany the verified rule, and one signed entry is never required twice under two kinds.
-ALLOWANCE_ONLY_KINDS = frozenset({SegmentKind.WA_GUIDANCE, SegmentKind.AMENDMENT})
+#: Kinds whose state-conditioned rows ALLOW, never require: the identity text (``amendment``) may accompany the
+#: verified ``rule.amendment``, and one signed entry is never required twice under two kinds. (WA guidance is one
+#: kind, ``rule.signed_guidance``: the former ``wa_guidance`` kind is merged into it, decision 2026-11-18.)
+ALLOWANCE_ONLY_KINDS = frozenset({SegmentKind.AMENDMENT})
 
-#: Predicates whose rows are required at every stage that lists them: the verified id where an ID-scoped rule is
-#: in force, the conscience's veto on every retry (#1366 item 1).
+#: Predicates whose rows are required at every stage that lists them: ``id_scoped`` (in the vocabulary; no row reads
+#: it since 2026-11-18), the conscience's veto on every retry (#1366 item 1).
 ALWAYS_REQUIRING_PREDICATES = frozenset({PolicyPredicate.ID_SCOPED, PolicyPredicate.RETRY})
 
 
@@ -259,9 +261,12 @@ def _default_policy() -> ContextPolicy:
 
 
 def declared_trust(policy: ContextPolicy, kind: SegmentKind, provenance: Optional[RuleProvenance]) -> TrustLevel:
-    """The policy's trust for a kind (for a rule, its provenance's)."""
+    """The policy's trust for a kind (for a rule, its provenance's). A kind or provenance the policy does not
+    declare (``wa_guidance`` since 2026-11-18) is untrusted: the guard forbids it at every stage."""
     if provenance is not None:
-        return policy.rule_provenance[provenance]
+        return policy.rule_provenance.get(provenance, TrustLevel.UNTRUSTED)
+    if kind not in policy.kinds:
+        return TrustLevel.UNTRUSTED
     trust = policy.kinds[kind].trust
     if trust is None:  # parse_context_policy refuses this for every kind but rule
         raise ContextPolicyError(f"kind {kind.value!r} has no trust")

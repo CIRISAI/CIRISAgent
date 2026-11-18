@@ -25,6 +25,8 @@ class SegmentKind(str, Enum):
     IDENTITY_BASE = "identity_base"
     AMENDMENT = "amendment"
     RULE = "rule"
+    # Closed-vocabulary name only (gen_contract_policy.KINDS): merged into ``rule.signed_guidance`` on 2026-11-18,
+    # declared by no policy row, so the guard forbids a segment of this kind at every stage.
     WA_GUIDANCE = "wa_guidance"
     REQUEST = "request"
     HISTORY = "history"
@@ -39,7 +41,9 @@ class SegmentKind(str, Enum):
 
 
 class RuleProvenance(str, Enum):
-    """Where a rule came from (FSD §4.2). Only signed provenances are authoritative (FSD §15.1)."""
+    """Where a rule came from (FSD §4.2). Only signed rules count (decision 2026-11-18): ``user_chat`` and
+    ``wa_chat`` stay in the closed vocabulary (untrusted) but no stage lists them, so no chat-rule segment or stub
+    is ever produced; a rule stated in chat stays in the request / history."""
 
     USER_CHAT = "user_chat"
     WA_CHAT = "wa_chat"
@@ -437,8 +441,10 @@ class PolicyFacts(BaseModel):
 
     signed_guidance_in_force: bool = Field(False, description="Signed WA guidance from a resolved deferral applies")
     amendment_in_force: bool = Field(False, description="A landed identity amendment carries a rule that applies")
-    id_scoped: bool = Field(False, description="The rule in force is scoped to a verified identity")
-    advisory_rule: bool = Field(False, description="A rule was stated in chat (user or WA), not signed")
+    id_scoped: bool = Field(False, description="The rule in force is scoped to a verified identity (no row reads it)")
+    advisory_rule: bool = Field(
+        False, description="A rule was stated in chat, not signed. Vocabulary only: the engine never sets it (2026-11-18)"
+    )
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 

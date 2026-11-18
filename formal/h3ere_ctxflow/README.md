@@ -49,7 +49,35 @@ a signature).
 | NoLaundering (no system segment carries untrusted bytes) | holds | **violated** | holds |
 | NoCrossTaskLeak (WA guidance only in its task) | holds | holds (not exercised: no cross-task scenario measured) | holds |
 | IdentityLayout (display name never inside the sender line) | holds | **violated** | holds |
+| StubsOnlyAblated (stubs only where content is withheld) | holds | holds (trivially: no stubs in v2.22.1) | holds |
 | Terminates | holds | holds | holds |
+
+**Item 1 and item 19 (constants from CIRISAgent `formal/h3ere_ctxflow/`, 3b23b0faf).**
+
+- `VerbPassSeesVeto`: the veto reason reaches the verb second pass. It is FALSE in `measured`, matching 0 of 162
+  calls.
+- `ToolGate`: TaskEnvelope Phase 2 denies at dispatch. A denied filing becomes a refusal; ReviewIntegrity admits
+  only that case.
+
+| Configuration | Violated |
+|---|---|
+| `contract` | none (14 invariants + termination; signed-only revision, 2026-11-18; TLC -Xmx1200m, 1 worker) |
+| `contract_noverbveto` (contract without item 1) | NoForcedDeferral |
+| `contract_postreview` | AuthMonotone, NoWrongExecution, ReviewIntegrity, VetoContinuity |
+| `contract_postreview_gate` (+ item 19) | NoWrongExecution, ReviewIntegrity, VetoContinuity. The gate restores AuthMonotone |
+| `measured` | 10 (all but TypeOK, ReviewIntegrity, NoCrossTaskLeak, StubsOnlyAblated) |
+| `measured_gate` | 10. The gate alone restores AuthMonotone and nothing else |
+
+So the gate backs the consciences up on authorization, but cannot replace the context fixes.
+
+**Decisions applied 2026-11-18 (Eric):**
+- Only signed rules count. Chat-stated rules have no segment of their own, and their stub rows and StubInformed are
+  withdrawn.
+- WA guidance is the single kind `rule.signed_guidance`.
+- sender_identity reaches entropy and the optimization veto whenever a trusted rule is in force.
+
+The policy file is the engine's copy (CIRISAgent `ciris_engine/data/context_policy.yaml`) with these edits.
+`measured_gate` and the post-review configurations were not rerun on this revision.
 
 ## Policy input shape (`context_policy.yaml`)
 

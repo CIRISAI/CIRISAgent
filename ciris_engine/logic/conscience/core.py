@@ -732,7 +732,8 @@ class EntropyConscience(_BaseConscience):
             if image_context:
                 logger.info("[CONSCIENCE] EntropyConscience: Image context detected, using textual metadata")
             # Input-ablated (#1365): the verified WA governance (#1366 item 2), the factual action record, the
-            # verified id/role only when an ID-scoped rule is in force (item 5), and the request as a stub only.
+            # verified id/role/source (never the display name) whenever a trusted rule is in force (item 5;
+            # context_policy.yaml 2026-11-18), and the request as a stub only.
             prompt = self._assemble(
                 PromptStage.ENTROPY,
                 context,
@@ -1051,7 +1052,8 @@ class OptimizationVetoConscience(_BaseConscience):
             # Input-ablated (#1365). The veto was sending approved identity changes back for "Wise Authority
             # review" they had already had (formatters/wa_approval.py): the governance block carries the grant
             # with its ids, and the approval rule follows it, so nothing is said twice. The factual action
-            # record, the verified id/role only when an ID-scoped rule is in force, the request as a stub only.
+            # record, the verified id/role/source (never the display name) whenever a trusted rule is in force,
+            # the request as a stub only.
             language = self._resolve_language(context)
             prompt = self._assemble(
                 PromptStage.OPTVETO,

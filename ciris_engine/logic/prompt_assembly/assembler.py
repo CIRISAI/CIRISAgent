@@ -208,6 +208,9 @@ class PromptAssembler:
     ) -> List[Tuple[GuardViolationKind, str]]:
         found: List[Tuple[GuardViolationKind, str]] = []
         retry = call.retry_index > 0
+        if seg.kind not in self.policy.kinds:
+            # Not in the policy at all (e.g. the former ``wa_guidance`` kind, merged into rule.signed_guidance).
+            return [(GuardViolationKind.FORBIDDEN, f"kind {seg.kind.value} is not declared by the policy")]
         if row is None or not predicate_holds(row.predicate, call.facts, retry):
             why = "not listed for this stage" if row is None else f"predicate {row.predicate.value} does not hold"
             found.append((GuardViolationKind.FORBIDDEN, why))
@@ -309,11 +312,9 @@ class PromptAssembler:
             return f"VERIFIED SENDER: id={a.subject_id}, role={a.role} (verified by {a.verifier})"
         if seg.kind == SegmentKind.DISPLAY_NAME:
             return f"Display name (self-chosen, not identity): {seg.text}"
-        if seg.kind == SegmentKind.RULE:
-            if seg.provenance in (RuleProvenance.SIGNED_GUIDANCE, RuleProvenance.AMENDMENT):
-                return f"RULE IN FORCE — {self._authority_clause(seg)}:\n{seg.text}"
-            who = "the Wise Authority" if seg.provenance == RuleProvenance.WA_CHAT else "the user"
-            return f"ADVISORY RULE — stated in chat by {who}, not signed, not authoritative:\n{seg.text}"
+        if seg.kind == SegmentKind.RULE and seg.provenance in (RuleProvenance.SIGNED_GUIDANCE, RuleProvenance.AMENDMENT):
+            # Only signed rules count (2026-11-18): a chat-stated rule has no row anywhere, so none reaches here.
+            return f"RULE IN FORCE — {self._authority_clause(seg)}:\n{seg.text}"
         if seg.kind == SegmentKind.AMENDMENT:
             return f"APPROVED IDENTITY AMENDMENT — {self._authority_clause(seg)}:\n{seg.text}"
         return seg.text
@@ -668,9 +669,7 @@ def _author_role(seg: PromptSegment) -> StubAuthorRole:
 def _authority(seg: PromptSegment) -> StubAuthority:
     if seg.authz is not None and seg.authz.signature_verified:
         return StubAuthority.SIGNED
-    if seg.kind == SegmentKind.RULE and seg.provenance in (RuleProvenance.USER_CHAT, RuleProvenance.WA_CHAT):
-        return StubAuthority.ADVISORY
-    return StubAuthority.NONE
+    return StubAuthority.NONE  # no chat-rule stubs: only signed rules count (2026-11-18)
 
 
 def _check_layout(segments: Sequence[PromptSegment], layout: Sequence[LayoutMessage]) -> None:

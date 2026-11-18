@@ -9,7 +9,9 @@ values, the accord, the draft under judgement. The segments keep the legacy layo
 
 What the policy changes, and nothing else:
 
-- entropy and the optimization veto receive the request as a stub (``WITHHELD request — ...``), never its bytes;
+- entropy and the optimization veto receive the request as a stub (``WITHHELD request — ...``), never its bytes,
+  and the verified sender (id, role, source; never the display name) whenever a trusted rule is in force;
+- only signed rules count: a rule stated in chat has no segment and no stub at any stage (decision 2026-11-18);
 - coherence and epistemic humility receive the verified governance block whenever a trusted rule is in force (the
   policy requires a verified ``rule`` segment at every judge then, FSD §14), not only on an evidence re-review;
 - an amendment whose signature did not verify grants nothing: production strips it and records an incident.
@@ -91,7 +93,7 @@ def assemble_conscience_prompt(
 ) -> ConsciencePrompt:
     """Segments, layout, guard and manifest for one conscience call."""
     from ciris_engine.logic.conscience.prompt_loader import get_conscience_prompt_loader
-    from ciris_engine.logic.formatters.verified_sender import id_scoped_rule_in_force, verified_sender_of
+    from ciris_engine.logic.formatters.verified_sender import UNVERIFIED_SENDER, verified_sender_of
     from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
     from ciris_engine.logic.infrastructure.handlers.action_record import action_record_for_task
 
@@ -107,8 +109,7 @@ def assemble_conscience_prompt(
     sender = getattr(context, "verified_sender", None)
     if not isinstance(sender, VerifiedSender):
         sender = verified_sender_of(thought, getattr(context, "task", None))
-    id_scoped = sender is not None and id_scoped_rule_in_force(context, sender)
-    facts = policy_facts(authorization, identity, id_scoped)
+    facts = policy_facts(authorization, identity)
 
     segments: List[PromptSegment] = []
     layout: List[LayoutMessage] = []
@@ -131,8 +132,15 @@ def assemble_conscience_prompt(
 
     # The user message, block by block.
     blocks: Dict[str, tuple[List[PromptSegment], List[LayoutItem]]] = {}
-    if sender is not None and (not ablated or id_scoped):
+    # Entropy and the optimization veto get the verified id, role and source (never the display name) whenever a
+    # trusted rule is in force (context_policy.yaml ``sender_identity: trusted_rule_in_force``, 2026-11-18): a
+    # signed rule may name who it binds, and only the verified sender can be checked against it.
+    if sender is not None and (not ablated or facts.trusted_rule_in_force):
         blocks["sender"] = sender_block_segments(sender, include_display_name=not ablated, language=language)
+    elif ablated and facts.trusted_rule_in_force:
+        # No verified sender on the task: the required sender_identity says exactly that (id unknown, role not
+        # verified, verified by nothing). Never SYSTEM: absence of a sender is not evidence the engine sent it.
+        blocks["sender"] = sender_block_segments(UNVERIFIED_SENDER, include_display_name=False, language=language)
     occurrence = getattr(thought, "agent_occurrence_id", None) or "default"
     record = action_record_for_task(
         task_id, occurrence if isinstance(occurrence, str) else "default", language, factual=True

@@ -136,21 +136,35 @@ def verified_sender_of(*contexts: Any) -> Optional[VerifiedSender]:
     return None
 
 
-def verified_sender_identity_lines(sender: VerifiedSender, language: Optional[str] = None) -> list[str]:
-    """The block's header, id, role and source lines: the ``sender_identity`` part (no display name)."""
+def sender_identity_lines(
+    user_id: Optional[str], role: Optional[str], source: str, language: Optional[str] = None
+) -> list[str]:
+    """The block's header, id, role and source lines from plain values (``role`` None: not verified)."""
     from ciris_engine.logic.utils.localization import get_preferred_language, get_string
 
     lang = language or get_preferred_language()
     return [
         get_string(lang, "prompts.verified_sender.header"),
-        get_string(lang, "prompts.verified_sender.id", user_id=_inline(sender.user_id or "unknown")),
+        get_string(lang, "prompts.verified_sender.id", user_id=_inline(user_id or "unknown")),
         (
-            get_string(lang, "prompts.verified_sender.role", role=sender.role.value)
-            if sender.role is not None
+            get_string(lang, "prompts.verified_sender.role", role=role)
+            if role is not None
             else get_string(lang, "prompts.verified_sender.role_not_verified")
         ),
-        get_string(lang, "prompts.verified_sender.source", source=_inline(sender.source)),
+        get_string(lang, "prompts.verified_sender.source", source=_inline(source)),
     ]
+
+
+def verified_sender_identity_lines(sender: VerifiedSender, language: Optional[str] = None) -> list[str]:
+    """The block's header, id, role and source lines: the ``sender_identity`` part (no display name)."""
+    role = sender.role.value if sender.role is not None else None
+    return sender_identity_lines(sender.user_id, role, sender.source, language)
+
+
+#: The sender a conscience is shown when the task carries no verified sender: id unknown, role not verified,
+#: verified by nothing. Never SYSTEM: an adapter that failed to attach a sender must not raise the message's
+#: apparent authority (coordinator ruling 2026-11-18).
+UNVERIFIED_SENDER = VerifiedSender()
 
 
 def verified_sender_display_name_line(display_name: str, language: Optional[str] = None) -> str:
@@ -225,38 +239,15 @@ def with_verified_sender(text: str, *contexts: Any, language: Optional[str] = No
     return "\n\n".join((text, block)) if block else text
 
 
-# Ids the deployment mints, as they appear inside a trusted rule's text: classic
-# and OAuth WA ids (wa-YYYY-MM-DD-XXXXXX), API user ids (wa-user-<hex>) and
-# platform snowflakes (Discord). Used only to decide whether a TRUSTED rule is
-# ID-scoped; never applied to message text.
-_ID_TOKEN = re.compile(r"\bwa-[A-Za-z0-9][A-Za-z0-9-]{5,}|\b\d{17,20}\b")
-
-
-def _trusted_rule_texts(context: Any) -> list[str]:
-    """The verbatim text of every trusted rule in force: approved amendments and a verified WA grant."""
-    from ciris_engine.logic.formatters.wa_approval import approved_amendments_of, wa_authorization_of
-
-    texts = [a.content for a in approved_amendments_of(getattr(context, "agent_identity", None))]
-    authorization = wa_authorization_of(context)
-    if authorization is not None and authorization.guidance:
-        texts.append(authorization.guidance)
-    return texts
-
-
-def id_scoped_rule_in_force(context: Any, sender: Optional[VerifiedSender] = None) -> bool:
-    """True when a trusted rule in force names a person by id (context_policy.yaml ``id_scoped``, scenario S6).
-
-    The policy admits ``sender_identity`` to the input-ablated consciences
-    (entropy, optimization veto) only then: a rule like "only wa-…5562FD may
-    file tickets" cannot be judged without the verified id of the asker, and
-    without such a rule the id is not theirs to see. Trusted rules only
-    (signed amendments, verified WA guidance), never chat.
+def trusted_rule_in_force(context: Any) -> bool:
+    """True when a signed rule is in force: verified WA guidance or a verified amendment (context_policy.yaml
+    ``trusted_rule_in_force``). Decided from trusted state only (prompt_assembly.segmenting.policy_facts), never by
+    reading any rule's or message's text.
     """
-    sender_id = sender.user_id if sender is not None else None
-    for text in _trusted_rule_texts(context):
-        if _ID_TOKEN.search(text) or (sender_id and sender_id in text):
-            return True
-    return False
+    from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+    from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
+
+    return policy_facts(wa_authorization_of(context), getattr(context, "agent_identity", None)).trusted_rule_in_force
 
 
 def conscience_sender_block(context: Any, language: Optional[str] = None, ablated: bool = False) -> str:
@@ -266,18 +257,19 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     display name labelled as self-chosen (their display-name confusion vetoed
     a correct ID-mismatch refusal on v2.21.0, #1365). Entropy and the
     optimization veto (``ablated=True``): verified id, role and source only,
-    never the display name, and only when an ID-scoped trusted rule is in
-    force. Empty when there is no verified sender.
+    never the display name, whenever a trusted (signed) rule is in force; with
+    no verified sender, the block says so (id unknown, role not verified).
+    Otherwise empty when there is no verified sender.
     """
     sender = getattr(context, "verified_sender", None) or verified_sender_of(
         getattr(context, "thought", None), getattr(context, "task", None)
     )
+    if ablated:
+        if not trusted_rule_in_force(context):
+            return ""
+        return format_verified_sender_block(sender or UNVERIFIED_SENDER, language, include_display_name=False)
     if sender is None:
         return ""
-    if ablated:
-        if not id_scoped_rule_in_force(context, sender):
-            return ""
-        return format_verified_sender_block(sender, language, include_display_name=False)
     return format_verified_sender_block(sender, language)
 
 

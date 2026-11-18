@@ -110,7 +110,29 @@ $defer <reason>            - Defer to authority
 $reject <reason>           - Reject request
 $task_complete             - Complete task
 $help                      - Show help
+
+# Directives (combine with any message, see README):
+$veto <conscience>[:<n>]   - Fail a conscience n times in this task
+$ponder_loop               - PONDER on every round of this task
 ```
+
+## RATCHET Context-Flow Controls (CIRISAgent#1366)
+
+Deterministic controls so RATCHET's harness can drive every pipeline path under
+the mock (see `README.md` § "RATCHET context-flow controls" for the full syntax):
+
+- `$veto <entropy|coherence|optveto|epistemic>[:<n>]` - directive, anywhere in
+  the message: fail the first n (default 1) evaluations of that conscience in
+  the task, then pass.
+- `$ponder_loop` - directive: every action selection in the task is PONDER, so
+  the depth guardrail eventually defers it.
+- `MOCK_LLM_RESPONSE_MODE=echo` - SPEAK drafts and PONDER questions quote the request.
+
+Directives are lifted out of the message before the `$command` is parsed and
+recorded in `directives.py` under the task id. The LLM bus passes `task_id` to
+every provider's `call_llm_structured`; `service.py` forwards it to
+`create_response`, which answers a conscience call from the registry. Never put
+user text into a conscience prompt to make a control work.
 
 ## Schema Compliance
 

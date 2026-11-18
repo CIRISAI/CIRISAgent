@@ -596,8 +596,50 @@ class _BaseConscience(ConscienceInterface):
             return f"TOOL CALL: {name}({arg_str})"
         if action.selected_action == HandlerActionType.DEFER:
             reason = getattr(params, "reason", "") or ""
-            return f"DEFER REASON: {reason}" if reason else ""
+            lines = [f"DEFER REASON: {reason}"] if reason else []
+            # An identity-change proposal is part of the reviewed action (#1366, Eric:
+            # "any edits go through the agent's conscience ... with the justification under M1").
+            proposed = getattr(params, "proposed_amendment", None)
+            if proposed:
+                lines.append(f"PROPOSED IDENTITY AMENDMENT: {proposed}")
+            justification = getattr(params, "m1_justification", None)
+            if justification:
+                lines.append(f"M-1 JUSTIFICATION: {justification}")
+            return "\n".join(lines)
+        if action.selected_action == HandlerActionType.MEMORIZE and self._is_identity_amendment_write(action):
+            attrs = self._identity_write_attributes(action)
+            content = str(attrs.get("content") or "").strip()
+            justification = str(attrs.get("m1_justification") or "").strip()
+            lines = [f"IDENTITY AMENDMENT TO WRITE (Wise Authority-approved text): {content}"] if content else []
+            if justification:
+                lines.append(f"M-1 JUSTIFICATION: {justification}")
+            return "\n".join(lines)
         return ""
+
+    @staticmethod
+    def _identity_write_attributes(action: ActionSelectionDMAResult) -> Dict[str, Any]:
+        node = getattr(action.action_parameters, "node", None)
+        attrs = getattr(node, "attributes", None)
+        if hasattr(attrs, "model_dump"):
+            dumped = attrs.model_dump()
+            return dumped if isinstance(dumped, dict) else {}
+        return dict(attrs) if isinstance(attrs, dict) else {}
+
+    @staticmethod
+    def _is_identity_amendment_write(action: ActionSelectionDMAResult) -> bool:
+        """An identity-scope MEMORIZE (an amendment write): reviewed like any action (#1366)."""
+        if action.selected_action != HandlerActionType.MEMORIZE:
+            return False
+        node = getattr(action.action_parameters, "node", None)
+        if node is None:
+            return False
+        try:
+            from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_identity_node
+            from ciris_engine.schemas.services.graph_core import NodeType
+
+            return bool(is_identity_node(node) or node.type == NodeType.IDENTITY_AMENDMENT)
+        except Exception:  # noqa: BLE001 - unreadable node: not an identity write we can render
+            return False
 
     def _get_image_context_info(self, context: ConscienceCheckContext) -> Optional[str]:
         """
@@ -650,7 +692,13 @@ class EntropyConscience(_BaseConscience):
         # Entropy verb-scope: SPEAK + TOOL (per FSD/CONSCIENCE_V3.md Stage 1
         # migration plan; "Lift SPEAK-only short-circuits to {SPEAK, TOOL}").
         # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
-        if action.selected_action not in (HandlerActionType.SPEAK, HandlerActionType.TOOL):
+        # Identity changes are reviewed by all four (#1366): a DEFER that proposes an amendment
+        # and an identity-scope MEMORIZE that writes an approved one join SPEAK and TOOL here.
+        identity_change = self._is_identity_amendment_write(action) or (
+            action.selected_action == HandlerActionType.DEFER
+            and bool(getattr(action.action_parameters, "proposed_amendment", None))
+        )
+        if action.selected_action not in (HandlerActionType.SPEAK, HandlerActionType.TOOL) and not identity_change:
             self._update_trace_correlation(correlation, True, "Verb out of Entropy scope (SPEAK+TOOL only)", start_time)
             return ConscienceCheckResult(
                 status=ConscienceStatus.PASSED,
@@ -821,10 +869,14 @@ class CoherenceConscience(_BaseConscience):
         # coherence per the 2026-05-03 verb-scope investigation (Phase 2):
         # catches defensive-mimicry refusal framing in DEFER reasons.
         # Other verbs are handled by EOV/EpistemicHumility or are outer-exempt.
-        if action.selected_action not in (
-            HandlerActionType.SPEAK,
-            HandlerActionType.TOOL,
-            HandlerActionType.DEFER,
+        if (
+            action.selected_action
+            not in (
+                HandlerActionType.SPEAK,
+                HandlerActionType.TOOL,
+                HandlerActionType.DEFER,
+            )
+            and not self._is_identity_amendment_write(action)
         ):
             self._update_trace_correlation(
                 correlation, True, "Verb out of Coherence scope (SPEAK+TOOL+DEFER only)", start_time

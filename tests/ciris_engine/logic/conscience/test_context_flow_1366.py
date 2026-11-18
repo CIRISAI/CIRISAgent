@@ -226,13 +226,13 @@ async def test_the_veto_states_the_grant_once() -> None:
     assert "Do not choose the DEFER action for this change again" in prompt
 
 
-def test_get_string_falls_back_to_english_for_the_new_keys() -> None:
-    """The governance keys ship in en.json only; every other locale renders English until the lane runs."""
+def test_the_governance_block_renders_in_every_locale_without_raw_keys() -> None:
+    """The governance keys render in each locale: translated once the CI lane ran, English until then."""
     from ciris_engine.logic.formatters.wa_approval import format_wa_governance_block
 
-    english = format_wa_governance_block(GRANT, [AMENDMENT], language="en")
-    assert format_wa_governance_block(GRANT, [AMENDMENT], language="am") == english
-    assert "prompts.wa_governance" not in english
+    for language in ("en", "am", "zh"):
+        rendered = format_wa_governance_block(GRANT, [AMENDMENT], language=language)
+        assert rendered and "prompts.wa_governance" not in rendered
 
 
 # ---------------------------------------------------------------- item 4

@@ -122,8 +122,8 @@ def test_the_tool_step_reads_the_amended_identity():
 
 
 @pytest.mark.parametrize("module, needle", [
-    ("ciris_engine.logic.dma.pdma", "identity_block=identity_block_of(agent_identity_of(context)"),
-    ("ciris_engine.logic.dma.csdma", "identity_block=identity_block_of(agent_identity_of(context)"),
+    ("ciris_engine.logic.dma.pdma", "identity_segments(agent_identity, language)"),  # assembler path (#1366 Phase 3)
+    ("ciris_engine.logic.dma.csdma", "identity_segments(agent_identity, language)"),  # assembler path (#1366 Phase 3)
     ("ciris_engine.logic.dma.tsaspdma", "agent_identity = self._agent_identity(context)"),
 ])
 def test_every_judging_dma_passes_the_shared_identity(module, needle):

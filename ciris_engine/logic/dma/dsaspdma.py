@@ -12,14 +12,13 @@ that classifies the deferral against a rights/needs taxonomy so the result is:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ciris_engine.logic.formatters.verified_sender import with_verified_sender
-from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback, with_conscience_feedback
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
-from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_localized_accord_text
@@ -46,6 +45,8 @@ from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
 
 if TYPE_CHECKING:
+    from ciris_engine.logic.prompt_assembly import AssemblyCall
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 logger = logging.getLogger(__name__)
@@ -248,12 +249,37 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         context: Optional[Any] = None,
         conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
-        """Compose the full DSASPDMA prompt message list (#972).
+        """The DSASPDMA messages alone (the composition seam, #972); see :meth:`compose_prompt`."""
+        messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
+        return messages
 
-        Pure prompt composition - no LLM call, no data fetching. This was
-        already a seam (``_create_messages``); renamed to the canonical
-        ``compose_messages`` with a thin backward-compatible alias.
+    def compose_prompt(
+        self,
+        original_thought: ProcessingQueueItem,
+        aspdma_result: ActionSelectionDMAResult,
+        context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """The DSASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6).
+
+        Accord, language guidance and crisis resources (one system message each), the stage's guide, then the
+        user message: ``context_integration`` with its slots typed, the VERIFIED SENDER block of the message
+        being answered (#1366 item 5) and, on a conscience retry, the veto ASPDMA saw (#1366 item 1).
         """
+        from ciris_engine.logic.dma.conscience_feedback import conscience_feedback_segment
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+        from ciris_engine.logic.prompt_assembly.assembler import LayoutItem
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            PromptBuilder,
+            items,
+            segment,
+            sender_block_segments,
+            split_template,
+            stripped_ends,
+        )
+        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
         self._sync_language_from_context(context)
 
@@ -261,61 +287,110 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if not isinstance(current_params, DeferParams):
             raise TypeError(f"DSASPDMA expects DeferParams, got {type(current_params)}")
 
-        system_message = format_system_prompt_blocks(
-            self._require_prompt_value("system_guidance_header"),
-            self._require_prompt_value("evaluation_steps"),
-            self._require_prompt_value("response_format"),
-            self._require_prompt_value("closing_reminder"),
+        language = self.prompt_loader.language
+        builder = PromptBuilder()
+        builder.single("system", segment("accord", SegmentKind.ACCORD, get_localized_accord_text(language) or ""))
+        # Per-language guidance — empty for most languages, populated for locales where systematic terminology
+        # gaps were observed (am as of 2.7.6).
+        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or ""))
+        # Crisis resources ride directly after language guidance (#1248).
+        builder.single(
+            "system", segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or "")
         )
+        guide = [
+            segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, self._require_prompt_value(key))
+            for key in ("system_guidance_header", "evaluation_steps", "response_format", "closing_reminder")
+        ]
+        system = stripped_ends([s for s in guide if s.text])
+        builder.message("system", system, items(system, "\n\n", ""))
 
-        original_thought_content = getattr(getattr(original_thought, "content", None), "text", "") or ""
-        taxonomy_text = self._get_prompt_value("taxonomy_text") or build_deferral_taxonomy_prompt(
-            self.prompt_loader.language
-        )
-        context_block = self._get_prompt_value("context_integration") or (
+        taxonomy_text = self._get_prompt_value("taxonomy_text") or build_deferral_taxonomy_prompt(language)
+        template = self._get_prompt_value("context_integration") or (
             "Original thought:\n{original_thought_content}\n\n"
             "ASPDMA reasoning:\n{aspdma_reasoning}\n\n"
             "Current deferral reason:\n{current_reason}\n\n"
             "Current context:\n{current_context}\n\n"
             "{taxonomy_text}"
         )
-        user_message = context_block.format(
-            original_thought_content=original_thought_content,
-            aspdma_reasoning=aspdma_result.rationale,
-            current_reason=current_params.reason,
-            current_context=self._format_original_context(current_params),
-            current_defer_until=current_params.defer_until or "none",
-            current_domain_hint=self._get_original_domain_hint(current_params),
-            taxonomy_text=taxonomy_text,
-            domain_hint_options=", ".join(domain.value for domain in DomainCategory),
+        depth = getattr(original_thought, "thought_depth", 0)
+        follow_up = isinstance(depth, int) and depth > 0
+        llm = SegmentSource.LLM_OUTPUT
+        # slot: (segment id, kind, value, source, the engine's text when there is no value)
+        values = {
+            "original_thought_content": (
+                "request",
+                SegmentKind.REQUEST,
+                getattr(getattr(original_thought, "content", None), "text", "") or "",
+                llm if follow_up else SegmentSource.USER_INPUT,
+                "",
+            ),
+            # ASPDMA's output: its reasoning and the provisional deferral it proposed.
+            "aspdma_reasoning": ("aspdma_reasoning", SegmentKind.DMA_OUTPUT, aspdma_result.rationale or "", llm, ""),
+            "current_reason": ("proposed_reason", SegmentKind.DMA_OUTPUT, current_params.reason, llm, ""),
+            "current_context": (
+                "proposed_context",
+                SegmentKind.DMA_OUTPUT,
+                self._format_original_context(current_params) if current_params.context else "",
+                llm,
+                self._format_original_context(current_params),
+            ),
+            "current_defer_until": (
+                "proposed_defer_until", SegmentKind.DMA_OUTPUT, current_params.defer_until or "", llm, "none"
+            ),
+        }
+        typed: Dict[str, Any] = {}
+        plain: Dict[str, str] = {
+            "current_domain_hint": self._get_original_domain_hint(current_params),
+            "taxonomy_text": taxonomy_text,
+            "domain_hint_options": ", ".join(domain.value for domain in DomainCategory),
+        }
+        for slot, (segment_id, kind, text, source, absent) in values.items():
+            if text:
+                typed[slot] = segment(segment_id, kind, text, source)
+            else:
+                plain[slot] = absent
+        user, user_items = split_template(
+            lambda **v: template.format(**v), typed, prefix="instr:user", plain=plain
+        )
+        sender = verified_sender_of(original_thought, context)
+        if sender is not None:
+            sender_segs, sender_items = sender_block_segments(sender, include_display_name=True, language=language)
+            user, user_items = user + sender_segs, user_items + sender_items
+        feedback = conscience_feedback_segment(conscience_feedback)
+        if feedback is not None:
+            user.append(feedback)
+            user_items.append(LayoutItem(segment_id=feedback.segment_id))
+        builder.message("user", user, user_items)
+        return builder.assemble(
+            PromptStage.DSASPDMA, self._assembly_call(original_thought, context, retry=feedback is not None)
         )
 
+    def _assembly_call(self, original_thought: Any, context: Optional[Any], retry: bool) -> "AssemblyCall":
+        """The manifest's call facts, from trusted state only (the verified grant, verified amendments)."""
+        from ciris_engine.logic.formatters.identity import agent_identity_of
+        from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+        from ciris_engine.logic.prompt_assembly import AssemblyCall
+        from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
+        from ciris_engine.schemas.context.prompt_provenance import ManifestThoughtKind
 
-        messages: List[JSONDict] = []
-        accord_text = get_localized_accord_text(self.prompt_loader.language)
-        if accord_text:
-            messages.append({"role": "system", "content": accord_text})
-        # Per-language guidance — empty for most languages, populated for
-        # locales where systematic terminology gaps were observed (am as
-        # of 2.7.6). See ciris_engine.logic.utils.localization.get_language_guidance.
-        from ciris_engine.logic.utils.localization import get_language_guidance
-        _lang_guidance = get_language_guidance(self.prompt_loader.language)
-        if _lang_guidance:
-            messages.append({"role": "system", "content": _lang_guidance})
-        # Crisis resources ride directly after language guidance (#1248) — the
-        # locale's verified numbers, from the one composer every DMA shares.
-        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
-
-        _crisis_block = get_crisis_resources_system_block(self.prompt_loader.language)
-        if _crisis_block:
-            messages.append({"role": "system", "content": _crisis_block})
-        messages.append({"role": "system", "content": system_message})
-        # The verified sender of the message being answered (#1366 item 5).
-        user_message = with_verified_sender(user_message, original_thought, context, language=self.prompt_loader.language)
-        # On a conscience retry, the veto ASPDMA saw (#1366 item 1).
-        user_message = with_conscience_feedback(user_message, conscience_feedback)
-        messages.append({"role": "user", "content": user_message})
-        return messages
+        authorization = wa_authorization_of(context)
+        depth = getattr(original_thought, "thought_depth", 0)
+        kind = (
+            ManifestThoughtKind.GUIDANCE
+            if authorization is not None
+            else ManifestThoughtKind.FOLLOWUP if isinstance(depth, int) and depth > 0 else ManifestThoughtKind.SEED
+        )
+        task_id = getattr(original_thought, "source_task_id", None)
+        thought_id = getattr(original_thought, "thought_id", None)
+        return AssemblyCall(
+            task_id=task_id if isinstance(task_id, str) else None,
+            thought_id=thought_id if isinstance(thought_id, str) else None,
+            thought_kind=kind,
+            retry_index=1 if retry else 0,
+            response_model=DSASPDMALLMResult.__name__,
+            facts=policy_facts(authorization, agent_identity_of(context), id_scoped=False),
+            language=self.prompt_loader.language,
+        )
 
     def _create_messages(
         self,
@@ -408,17 +483,18 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if not isinstance(current_params, DeferParams):
             raise TypeError(f"DSASPDMA expects DeferParams, got {type(current_params)}")
 
-        messages = self.compose_messages(
+        messages, manifest = self.compose_prompt(
             original_thought, aspdma_result, context=context, conscience_feedback=conscience_feedback
         )
-        llm_result, resource_usage = await self.call_llm_structured(
-            messages=messages,
-            response_model=DSASPDMALLMResult,
-            max_tokens=8192,
-            temperature=0.0,
-            thought_id=original_thought.thought_id,
-            task_id=original_thought.source_task_id,
-        )
+        with prompt_manifest_scope(manifest):
+            llm_result, resource_usage = await self.call_llm_structured(
+                messages=messages,
+                response_model=DSASPDMALLMResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=original_thought.thought_id,
+                task_id=original_thought.source_task_id,
+            )
 
         sent_source = llm_result
         if llm_result.domain_hint and not llm_result.rights_basis:

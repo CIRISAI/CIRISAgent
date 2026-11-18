@@ -1,4 +1,4 @@
-"""The memory second passes build their prompts with PromptAssembler (CIRISAgent#1366 Phase 3; FSD §6).
+"""The memory second passes and DSASPDMA build their prompts with PromptAssembler (CIRISAgent#1366 Phase 3; FSD §6).
 
 Against goldens captured from the unmigrated tree (msaspdma_golden.py): MSASPDMA, RSASPDMA and FSASPDMA send the
 same bytes, now with a manifest naming every segment. The verified WA grant is a ``wa_guidance`` segment with its
@@ -16,7 +16,7 @@ import pytest
 from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, SegmentKind, TrustLevel
 from tests.ciris_engine.logic.dma import msaspdma_golden as mg
 
-SITES = ("msaspdma", "rsaspdma", "fsaspdma")
+SITES = ("msaspdma", "rsaspdma", "fsaspdma", "dsaspdma")
 ALL = [(site, name) for site in SITES for name in mg.NAMES[site]]
 
 
@@ -39,7 +39,8 @@ async def test_the_prompt_is_the_pre_migration_bytes_with_a_clean_manifest(site:
     kinds = {r.kind for r in manifest.segments}
     assert {SegmentKind.ACCORD, SegmentKind.STAGE_INSTRUCTION, SegmentKind.REQUEST, SegmentKind.DMA_OUTPUT} <= kinds
     if name.endswith("full"):
-        assert {SegmentKind.SENDER_IDENTITY, SegmentKind.DISPLAY_NAME, SegmentKind.HISTORY} <= kinds
+        assert {SegmentKind.SENDER_IDENTITY, SegmentKind.DISPLAY_NAME} <= kinds
+        assert (SegmentKind.HISTORY in kinds) == (site != "dsaspdma")  # DSASPDMA reads no candidate nodes
         assert manifest.retry_index == 1
         (fb,) = [r for r in manifest.segments if r.kind == SegmentKind.CONSCIENCE_FEEDBACK]
         assert fb.acct is not None and fb.acct.veto_id == "veto-golden-1"
@@ -72,3 +73,13 @@ async def test_aspdma_output_and_candidates_are_never_instruction_text() -> None
         if r.kind == SegmentKind.STAGE_INSTRUCTION:
             text = messages[r.message_index]["content"][r.span_start : r.span_end]
             assert "user/wa-user-0eve" not in text and "eve the admin" not in text
+
+
+@pytest.mark.asyncio
+async def test_dsaspdma_provisional_deferral_is_aspdma_output_never_instruction_text() -> None:
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        await mg.capture("ds_addressed_full", seen)
+    by_id = {r.segment_id: r for r in seen["manifest"].segments}
+    for sid in ("proposed_reason", "proposed_context", "proposed_defer_until", "aspdma_reasoning"):
+        assert by_id[sid].kind == SegmentKind.DMA_OUTPUT and by_id[sid].trust == TrustLevel.UNTRUSTED

@@ -136,6 +136,40 @@ def verified_sender_of(*contexts: Any) -> Optional[VerifiedSender]:
     return None
 
 
+def verified_sender_identity_lines(sender: VerifiedSender, language: Optional[str] = None) -> list[str]:
+    """The block's header, id, role and source lines: the ``sender_identity`` part (no display name)."""
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    lang = language or get_preferred_language()
+    return [
+        get_string(lang, "prompts.verified_sender.header"),
+        get_string(lang, "prompts.verified_sender.id", user_id=_inline(sender.user_id or "unknown")),
+        (
+            get_string(lang, "prompts.verified_sender.role", role=sender.role.value)
+            if sender.role is not None
+            else get_string(lang, "prompts.verified_sender.role_not_verified")
+        ),
+        get_string(lang, "prompts.verified_sender.source", source=_inline(sender.source)),
+    ]
+
+
+def verified_sender_display_name_line(display_name: str, language: Optional[str] = None) -> str:
+    """The block's line labelling the self-chosen display name as not identity: the ``display_name`` part."""
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    return get_string(
+        language or get_preferred_language(), "prompts.verified_sender.display_name", display_name=_inline(display_name)
+    )
+
+
+def verified_sender_trailer_lines(language: Optional[str] = None) -> list[str]:
+    """The block's closing instruction lines (the WA prefix rule and the footer)."""
+    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+    lang = language or get_preferred_language()
+    return [get_string(lang, "prompts.verified_sender.wa_prefix"), get_string(lang, "prompts.verified_sender.footer")]
+
+
 def format_verified_sender_block(
     sender: Optional[VerifiedSender], language: Optional[str] = None, include_display_name: bool = True
 ) -> str:
@@ -148,29 +182,10 @@ def format_verified_sender_block(
     """
     if sender is None:
         return ""
-    from ciris_engine.logic.utils.localization import get_preferred_language, get_string
-
-    lang = language or get_preferred_language()
-    lines = [
-        get_string(lang, "prompts.verified_sender.header"),
-        get_string(lang, "prompts.verified_sender.id", user_id=_inline(sender.user_id or "unknown")),
-        (
-            get_string(lang, "prompts.verified_sender.role", role=sender.role.value)
-            if sender.role is not None
-            else get_string(lang, "prompts.verified_sender.role_not_verified")
-        ),
-        get_string(lang, "prompts.verified_sender.source", source=_inline(sender.source)),
-    ]
+    lines = verified_sender_identity_lines(sender, language)
     if include_display_name and sender.self_chosen_display_name:
-        lines.append(
-            get_string(
-                lang,
-                "prompts.verified_sender.display_name",
-                display_name=_inline(sender.self_chosen_display_name),
-            )
-        )
-    lines.append(get_string(lang, "prompts.verified_sender.wa_prefix"))
-    lines.append(get_string(lang, "prompts.verified_sender.footer"))
+        lines.append(verified_sender_display_name_line(sender.self_chosen_display_name, language))
+    lines.extend(verified_sender_trailer_lines(language))
     return "\n".join(lines)
 
 

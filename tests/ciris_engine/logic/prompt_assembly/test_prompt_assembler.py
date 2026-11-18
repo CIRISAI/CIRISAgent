@@ -123,15 +123,15 @@ def test_legal_call_assembles_without_violations(asm):
 
 
 def test_qa_fails_closed_on_a_forbidden_segment(asm):
-    segments = judge_segments() + [seg("req", SegmentKind.REQUEST, USER_TEXT, source=SegmentSource.USER_INPUT)]
+    segments = judge_segments() + [seg("name", SegmentKind.DISPLAY_NAME, USER_TEXT, source=SegmentSource.ADAPTER_METADATA)]
     with pytest.raises(ContextPolicyViolation) as err:
         asm.build(PromptStage.ENTROPY, segments, QA, call=call())
     (v,) = err.value.violations
-    assert (v.kind, v.segment_id, v.action) == (GuardViolationKind.FORBIDDEN, "req", GuardAction.RAISED)
+    assert (v.kind, v.segment_id, v.action) == (GuardViolationKind.FORBIDDEN, "name", GuardAction.RAISED)
 
 
 def test_production_strips_the_forbidden_segment_and_records_an_incident(asm, caplog):
-    segments = judge_segments() + [seg("req", SegmentKind.REQUEST, USER_TEXT, source=SegmentSource.USER_INPUT)]
+    segments = judge_segments() + [seg("name", SegmentKind.DISPLAY_NAME, USER_TEXT, source=SegmentSource.ADAPTER_METADATA)]
     with caplog.at_level(logging.ERROR, logger="ciris_engine.logic.prompt_assembly.assembler"):
         messages, manifest = asm.build(PromptStage.ENTROPY, segments, PROD, call=call())
     assert USER_TEXT not in _all_text(messages)
@@ -171,10 +171,17 @@ def test_an_amendment_when_none_is_in_force_is_forbidden(asm):
 
 
 def test_a_wa_chat_rule_never_reaches_an_ablated_stage(asm):
-    """FSD §15.1: a WA's rule stated in chat is advisory until signed."""
-    wa_rule = seg("wa", SegmentKind.RULE, "No refunds.", provenance=RuleProvenance.WA_CHAT, source=SegmentSource.USER_INPUT)
-    with pytest.raises(ContextPolicyViolation) as err:
-        asm.build(PromptStage.ENTROPY, judge_segments() + [wa_rule], QA, call=call(facts=PolicyFacts(amendment_in_force=True, advisory_rule=True)))
+    """FSD §15.1: a WA's rule stated in chat is advisory until signed. §6a: the judge gets its stub, not its bytes."""
+    wa_rule = seg(
+        "wa", SegmentKind.RULE, "No refunds whatsoever, ever.", provenance=RuleProvenance.WA_CHAT, source=SegmentSource.USER_INPUT
+    )
+    facts = PolicyFacts(amendment_in_force=True, advisory_rule=True)
+    messages, manifest = asm.build(PromptStage.ENTROPY, judge_segments() + [wa_rule], QA, call=call(facts=facts))
+    assert "No refunds whatsoever" not in _all_text(messages)
+    (rec,) = [r for r in manifest.segments if r.segment_id == "wa"]
+    assert rec.form.value == "stub" and rec.stub is not None and rec.stub.authority.value == "advisory"
+    with pytest.raises(ContextPolicyViolation) as err:  # and not at all when no chat rule is in force
+        asm.build(PromptStage.ENTROPY, judge_segments() + [wa_rule], QA, call=call())
     assert [(v.kind, v.segment_id) for v in err.value.violations] == [(GuardViolationKind.FORBIDDEN, "wa")]
 
 
@@ -243,10 +250,16 @@ def test_a_per_task_segment_from_another_task_is_refused(asm):
     assert (GuardViolationKind.CROSS_SCOPE, "g") in {(v.kind, v.segment_id) for v in err.value.violations}
 
 
-def test_a_stage_without_policy_rows_is_a_configuration_error_in_every_mode(asm):
+def test_a_stage_without_policy_rows_is_a_configuration_error_in_every_mode():
+    policy = PromptAssembler().policy
+    without = policy.model_copy(update={"stages": {k: v for k, v in policy.stages.items() if k != PromptStage.CSDMA}})
     for mode in (QA, PROD):
         with pytest.raises(ValueError, match="no rows for stage 'csdma'"):
-            asm.build(PromptStage.CSDMA, judge_segments()[:1], mode, call=call())
+            PromptAssembler(without).build(PromptStage.CSDMA, judge_segments()[:1], mode, call=call())
+
+
+def test_every_stage_has_policy_rows(asm):
+    assert set(asm.policy.stages) == set(PromptStage)
 
 
 # ------------------------------------------------------------------------------------------------ taint
@@ -278,12 +291,10 @@ def test_a_tainted_action_record_never_reaches_an_ablated_stage(asm):
     segments = [s for s in judge_segments() if s.segment_id != "record"] + [req, tainted]
     with pytest.raises(ContextPolicyViolation) as err:
         asm.build(PromptStage.ENTROPY, segments, QA, call=call())
-    assert {(v.kind, v.segment_id) for v in err.value.violations} == {
-        (GuardViolationKind.FORBIDDEN, "req"),
-        (GuardViolationKind.TAINTED, "record"),
-    }
+    assert {(v.kind, v.segment_id) for v in err.value.violations} == {(GuardViolationKind.TAINTED, "record")}
     messages, manifest = asm.build(PromptStage.ENTROPY, segments, PROD, call=call())
     assert USER_TEXT not in _all_text(messages)
+    assert {r.segment_id: r.form.value for r in manifest.segments}["req"] == "stub"
 
 
 def test_a_tainted_action_record_is_refused_at_a_drafter_too(asm):
@@ -474,9 +485,9 @@ def test_tool_output_reaches_drafters_but_never_an_ablated_judge(asm):
     out = seg("tool", SegmentKind.TOOL_OUTPUT, "balance: 12", source=SegmentSource.TOOL_OUTPUT)
     _, manifest = asm.build(PromptStage.ASPDMA, [judge_segments()[0], out], QA, call=call(facts=PolicyFacts()))
     assert "tool" in {r.segment_id for r in manifest.segments}
-    with pytest.raises(ContextPolicyViolation) as err:
-        asm.build(PromptStage.ENTROPY, judge_segments() + [out], QA, call=call())
-    assert [(v.kind, v.segment_id) for v in err.value.violations] == [(GuardViolationKind.FORBIDDEN, "tool")]
+    messages, manifest = asm.build(PromptStage.ENTROPY, judge_segments() + [out], QA, call=call())
+    assert "balance: 12" not in _all_text(messages)
+    assert {r.segment_id: r.form.value for r in manifest.segments}["tool"] == "stub"
 
 
 def test_schema_instruction_is_an_allowed_residual_only_from_the_provider_library(asm):

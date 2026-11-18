@@ -25,9 +25,12 @@ from ciris_engine.schemas.context.prompt_provenance import (
     PolicyRow,
     PromptStage,
     RuleProvenance,
+    STUB_DISPOSITIONS,
+    SegmentForm,
     SegmentKind,
     SegmentSource,
     StageRole,
+    StubField,
     TrustLevel,
 )
 
@@ -67,6 +70,19 @@ REQUIRING_PREDICATES = frozenset(
 
 #: Kinds every call must carry wherever the policy allows them: the stage's own prompt.
 ALWAYS_REQUIRED_KINDS = frozenset({SegmentKind.STAGE_INSTRUCTION})
+
+#: Kinds whose state-conditioned rows ALLOW, never require. The evidence a stage must not lack when a trusted rule
+#: is in force is the verified ``rule`` segment (FSD §5 ``require: {kind: rule, when: trusted_rule_in_force}``, §14):
+#: the grant (``wa_guidance``) and the identity text (``amendment``) may accompany it, and one signed entry is never
+#: required twice under two kinds.
+ALLOWANCE_ONLY_KINDS = frozenset({SegmentKind.WA_GUIDANCE, SegmentKind.AMENDMENT})
+
+
+def row_is_required(row: PolicyRow) -> bool:
+    """Whether the row's segment must be present whenever its predicate holds."""
+    if row.kind in ALWAYS_REQUIRED_KINDS:
+        return True
+    return row.predicate in REQUIRING_PREDICATES and row.kind not in ALLOWANCE_ONLY_KINDS
 
 
 class ContextPolicyError(ValueError):
@@ -119,19 +135,61 @@ def _parse_kind(kind_name: str, attrs: Mapping[str, object]) -> Tuple[SegmentKin
     )
 
 
-def _parse_row(stage: str, key: str, predicate: object, kinds: Mapping[SegmentKind, KindSpec]) -> PolicyRow:
+def _parse_row(stage: str, key: str, cell: object, kinds: Mapping[SegmentKind, KindSpec]) -> PolicyRow:
+    """One cell: a predicate, or ``{when: <predicate>, form: full|stub}`` (FSD §6a)."""
     kind_name, _, prov_name = key.partition(".")
+    predicate: object = cell
+    form_name: object = SegmentForm.FULL.value
+    if isinstance(cell, dict):
+        if set(cell) - {"when", "form"}:
+            raise ContextPolicyError(f"{stage}.{key}: a cell is a predicate or {{when, form}}")
+        predicate = cell.get("when", PolicyPredicate.ALWAYS.value)
+        form_name = cell.get("form", SegmentForm.FULL.value)
     try:
         kind = SegmentKind(kind_name)
         provenance = RuleProvenance(prov_name) if prov_name else None
         pred = PolicyPredicate(str(predicate))
+        form = SegmentForm(str(form_name))
     except ValueError as exc:
         raise ContextPolicyError(f"{stage}.{key}: {exc}") from exc
     if kind not in kinds:
         raise ContextPolicyError(f"{stage}.{key}: kind not declared")
     if (provenance is not None) != (kind == SegmentKind.RULE):
         raise ContextPolicyError(f"{stage}.{key}: a provenance is required on rule rows and only on them")
-    return PolicyRow(kind=kind, provenance=provenance, predicate=pred)
+    return PolicyRow(kind=kind, provenance=provenance, predicate=pred, form=form)
+
+
+def _check_stubs_and_firewall(
+    stages: Mapping[PromptStage, List[PolicyRow]],
+    ablated: List[PromptStage],
+    kinds: Mapping[SegmentKind, KindSpec],
+    provenance: Mapping[RuleProvenance, TrustLevel],
+    stub_fields: List[StubField],
+) -> None:
+    """The compiler's §6a checks, at load: the engine refuses a policy the model would refuse."""
+
+    def trust_of(row: PolicyRow) -> Optional[TrustLevel]:
+        return provenance[row.provenance] if row.provenance is not None else kinds[row.kind].trust
+
+    for stage, rows in stages.items():
+        for row in rows:
+            if row.form != SegmentForm.STUB:
+                continue
+            if stage not in ablated:
+                raise ContextPolicyError(f"{stage.value}.{row.key}: stub form is for ablated stages only")
+            if trust_of(row) != TrustLevel.UNTRUSTED:
+                raise ContextPolicyError(f"{stage.value}.{row.key}: only untrusted segments are stubbed")
+            if not stub_fields:
+                raise ContextPolicyError("stub form used but no stub_fields declared")
+            if row.kind.value not in STUB_DISPOSITIONS:
+                raise ContextPolicyError(f"{stage.value}.{row.key}: no disposition vocabulary for kind {row.kind.value}")
+    for stage in ablated:
+        for row in stages[stage]:
+            if row.predicate == PolicyPredicate.NEVER:
+                continue
+            untrusted = trust_of(row) == TrustLevel.UNTRUSTED
+            if untrusted and row.form != SegmentForm.STUB and not kinds[row.kind].residual:
+                raise ContextPolicyError(f"firewall: ablated stage {stage.value} allows untrusted {row.key} in full")
 
 
 def parse_context_policy(raw: bytes) -> ContextPolicy:
@@ -145,8 +203,11 @@ def parse_context_policy(raw: bytes) -> ContextPolicy:
         stages: Dict[PromptStage, List[PolicyRow]] = {}
         for stage_name, rows in data["stages"].items():
             stage = PromptStage(str(stage_name))
-            stages[stage] = [_parse_row(stage.value, str(key), pred, kinds) for key, pred in rows.items()]
+            # YAML anchors alias ONE dict across stages: copy before reading, so no stage's cells are another's.
+            cells = dict(rows)
+            stages[stage] = [_parse_row(stage.value, str(key), cell, kinds) for key, cell in cells.items()]
         ablated = [PromptStage(str(s)) for s in data["ablated_stages"]]
+        stub_fields = [StubField(str(f)) for f in data.get("stub_fields") or []]
         version = int(data["version"])
     except (KeyError, TypeError, AttributeError) as exc:
         raise ContextPolicyError(f"policy is missing or misshapes a section: {exc!r}") from exc
@@ -162,12 +223,16 @@ def parse_context_policy(raw: bytes) -> ContextPolicy:
     for stage in ablated:
         if stage not in stages:
             raise ContextPolicyError(f"ablated stage {stage.value!r} has no rows")
+    if len(set(stub_fields)) != len(stub_fields):
+        raise ContextPolicyError("stub_fields lists a field twice")
+    _check_stubs_and_firewall(stages, ablated, kinds, provenance, stub_fields)
     return ContextPolicy(
         version=version,
         ablated_stages=ablated,
         kinds=kinds,
         rule_provenance=provenance,
         stages=stages,
+        stub_fields=stub_fields,
         source_sha256=hashlib.sha256(raw).hexdigest(),
     )
 
@@ -195,6 +260,7 @@ def declared_trust(policy: ContextPolicy, kind: SegmentKind, provenance: Optiona
 
 
 __all__ = [
+    "ALLOWANCE_ONLY_KINDS",
     "ALWAYS_REQUIRED_KINDS",
     "ContextPolicyError",
     "DEFAULT_POLICY_PATH",
@@ -204,4 +270,5 @@ __all__ = [
     "load_context_policy",
     "parse_context_policy",
     "predicate_holds",
+    "row_is_required",
 ]

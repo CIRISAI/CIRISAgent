@@ -17,7 +17,7 @@ from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.processors.results import WakeupResult
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskOrigin, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, Thought, ThoughtContext
 from ciris_engine.schemas.types import JSONDict
 
@@ -692,6 +692,7 @@ class WakeupProcessor(BaseProcessor):
                 user_id="system",
                 parent_task_id=root_task.task_id,
                 preferred_language=wakeup_lang,
+                origin=TaskOrigin.ENGINE_WAKEUP,
             )
             await add_system_task(step_task, auth_service=self.auth_service)
             self.wakeup_tasks.append(step_task)

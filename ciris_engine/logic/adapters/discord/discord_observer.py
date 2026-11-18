@@ -9,7 +9,7 @@ from ciris_engine.logic.secrets.service import SecretsService
 from ciris_engine.logic.utils.halt_latch import refuse_agent_send_under_halt
 from ciris_engine.logic.utils.task_thought_factory import create_task, create_thought
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
-from ciris_engine.schemas.runtime.enums import ThoughtType
+from ciris_engine.schemas.runtime.enums import TaskOrigin, ThoughtType
 from ciris_engine.schemas.runtime.messages import DiscordMessage
 from ciris_engine.schemas.runtime.models import TaskContext
 from ciris_engine.schemas.types import JSONDict
@@ -397,7 +397,11 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
     def _create_task_context_with_extras(self, msg: DiscordMessage) -> TaskContext:
         """Create a TaskContext from a Discord message."""
         return TaskContext(
-            channel_id=msg.channel_id, user_id=msg.author_id, correlation_id=msg.message_id, parent_task_id=None
+            channel_id=msg.channel_id,
+            user_id=msg.author_id,
+            correlation_id=msg.message_id,
+            parent_task_id=None,
+            origin=TaskOrigin.USER,
         )
 
     async def _handle_passive_observation(self, msg: DiscordMessage) -> None:
@@ -616,6 +620,7 @@ class DiscordObserver(BaseObserver[DiscordMessage]):
                 status=TaskStatus.PENDING,
                 priority=8,  # High priority for guidance
                 user_id=msg.author_id,
+                origin=TaskOrigin.WISE_AUTHORITY,
             )
             # Task-scoped authorization envelope, issued outside the reasoning
             # loop at task creation (CIRISAgent#938).

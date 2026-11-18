@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, ca
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.core import EventPayload
-from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.logic.persistence.utils import decode_verified_sender, decode_wa_authorization
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskOrigin, TaskStatus, ThoughtStatus
+from ciris_engine.logic.persistence.utils import decode_task_origin, decode_verified_sender, decode_wa_authorization
 from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome, VerifiedSender
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
 from ciris_engine.schemas.runtime.veto_record import VetoRecordEntry
@@ -185,6 +185,8 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
                 # The verified sender (#1366 item 5). Dropped here, every task
                 # read back from the store lost it, and no prompt rendered it.
                 verified_sender=decode_verified_sender(ctx_data.get("verified_sender"), row.get("task_id")),
+                # Who created the task (#1366). Dropped here, every engine task read back looked like a user's.
+                origin=decode_task_origin(ctx_data.get("origin"), row.get("task_id")),
             )
         except Exception as e:
             logger.warning(f"Failed to decode context for task {row.get('task_id')}: {e}")
@@ -719,7 +721,12 @@ async def add_system_task(
     The task carries a deployment envelope (CIRISAgent#1366 item 19): the tool
     gate denies a task with none. Issued before signing, so the signature covers
     the bound task as stored.
+
+    Only engine code adds a system task, so one with no recorded origin is marked ``ENGINE_SYSTEM`` here (#1366):
+    the origin comes from this call path, never from the task lacking a sender. A set origin is kept.
     """
+    if task.context is not None and task.context.origin is None:
+        task.context = task.context.model_copy(update={"origin": TaskOrigin.ENGINE_SYSTEM})
     if task.context is None or task.context.envelope is None:
         from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
 
@@ -1118,15 +1125,25 @@ def get_shared_claim_failures() -> List[Dict[str, str]]:
     return list(_SHARED_CLAIM_FAILURES)
 
 
+#: The origin of each shared coordination task, by ``try_claim_shared_task``'s task_type.
+_SHARED_TASK_ORIGINS: Dict[str, TaskOrigin] = {
+    "wakeup": TaskOrigin.ENGINE_WAKEUP,
+    "shutdown": TaskOrigin.ENGINE_SHUTDOWN,
+}
+
+
 def _shared_task_context(
-    task_id: str, channel_id: str, time_service: TimeServiceProtocol
-) -> Optional[TaskContext]:
-    """The context a shared coordination task is created with: its deployment envelope.
+    task_id: str, channel_id: str, time_service: TimeServiceProtocol, task_type: str = ""
+) -> TaskContext:
+    """The context a shared coordination task is created with: its deployment envelope and origin.
 
     Whichever occurrence claims a shared WAKEUP/SHUTDOWN task would otherwise
     inherit an envelope-less task, which the tool gate denies (FSD/TASK_ENVELOPE.md
-    §8). ``None`` on an issuance failure: the task is still created, and denied.
+    §8). No envelope on an issuance failure: the task is still created, and denied.
+    The origin is the engine's (#1366): ``ENGINE_SYSTEM`` for a task type not listed.
     """
+    origin = _SHARED_TASK_ORIGINS.get(task_type.lower(), TaskOrigin.ENGINE_SYSTEM)
+    envelope = None
     try:
         from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
             issue_deployment_envelope_from_cache,
@@ -1137,7 +1154,6 @@ def _shared_task_context(
         )
     except Exception as exc:
         logger.warning("Shared task %s: no envelope issued (%s); the tool gate will deny it", task_id, exc)
-        return None
     return TaskContext(
         channel_id=channel_id,
         user_id=None,
@@ -1145,6 +1161,7 @@ def _shared_task_context(
         parent_task_id=None,
         agent_occurrence_id="__shared__",
         envelope=envelope,
+        origin=origin,
     )
 
 
@@ -1207,9 +1224,7 @@ def try_claim_shared_task(
         "created_at": now,
         "updated_at": now,
     }
-    shared_context = _shared_task_context(task_id, channel_id, time_service)
-    if shared_context is not None:
-        payload["context"] = shared_context.model_dump(mode="json")
+    payload["context"] = _shared_task_context(task_id, channel_id, time_service, task_type).model_dump(mode="json")
 
     engine = _get_engine()
     try:

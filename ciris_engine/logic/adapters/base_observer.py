@@ -35,7 +35,7 @@ from ciris_engine.protocols.services.infrastructure.resource_monitor import Reso
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
-from ciris_engine.schemas.runtime.enums import ThoughtType
+from ciris_engine.schemas.runtime.enums import TaskOrigin, ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
 from ciris_engine.logic.formatters.verified_sender import sanitize_display_text
 from ciris_engine.schemas.runtime.models import TaskContext, VerifiedSender
@@ -1053,6 +1053,7 @@ class BaseObserver(Generic[MessageT], ABC):
                 priority=priority,
                 user_id=msg.author_id,  # type: ignore[attr-defined]
                 verified_sender=self._verified_sender(msg),
+                origin=TaskOrigin.USER,
                 images=msg_images,
                 # Use the centralized resolver so the locale chain is uniform
                 # across every task-creating site (base_observer, discord_observer,

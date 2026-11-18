@@ -32,7 +32,7 @@ from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
-from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskOrigin, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 
 if TYPE_CHECKING:
@@ -233,6 +233,7 @@ class MinimalDreamProcessor(BaseProcessor):
                 correlation_id=session_id,
                 parent_task_id=None,
                 agent_occurrence_id=self.agent_occurrence_id,
+                origin=TaskOrigin.ENGINE_DREAM,
             ),
             priority=10,
             status=TaskStatus.ACTIVE,

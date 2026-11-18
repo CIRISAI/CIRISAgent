@@ -683,12 +683,13 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             prefix="instr:system",
             first_glue="",
         )
+        # The render split_template just proved its pieces rejoin to: read back, not rendered a third time.
+        real = "".join(seg.text for seg in system[0])
         if identity_block:
             system = expand(system, "sys:identity", identity, language)
         # CRITICAL: Identity block must ALWAYS be first in system message after accord. Prepend identity to the
         # system message if the template did not already include it. (Stored prompts are the bytes sent, identity
         # included: RATCHET runs 39844408349, 39845804302.)
-        real = system_render(identity_block, system_snapshot_block, user_profiles_block)
         if identity_block and "CORE IDENTITY" not in real:
             system = concat(identity, system, "\n\n")
         # The Wise Authority's signed guidance in force, as a signed rule with its grant (#1366).

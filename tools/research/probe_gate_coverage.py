@@ -150,7 +150,10 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
     # verified-sender block (8).
     # 155 -> 166 (#1366 items 7-9, 14): the typed-veto retry wording (9) and
     # the task's veto record block (2 status words).
-    "string": 166,
+    # 166 -> 167 (#1366, 694f04dc1): ``prompts.identity_amendment_unverified``,
+    # rendered only when the identity carries an unverified amendment. No golden
+    # fixture does, so it is dark -- a FIXTURE gap; the floor does not move.
+    "string": 167,
     "conscience_prompt": 12,
     "template": 3,
 }

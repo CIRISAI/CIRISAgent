@@ -153,3 +153,55 @@ def test_a_failed_signature_propagates() -> None:
 
     with pytest.raises(RuntimeError):
         substrate_signing.sign_classical(_SealedEngine(), b"x")
+
+
+class _SingleKeyEngine:
+    """The persist v62 surface: ``local_sign`` and ``local_pqc_sign``, no ``local_sign_hybrid``.
+
+    Deterministic stand-ins for the two keys; the bound input is whatever the caller passes.
+    """
+
+    def local_sign(self, data: bytes) -> bytes:
+        import hashlib
+
+        return hashlib.sha512(b"ed25519|" + data).digest()
+
+    def local_pqc_sign(self, data: bytes) -> bytes:
+        import hashlib
+
+        return hashlib.sha512(b"mldsa65|" + data).digest() * 52
+
+
+class _BothEngine(_SingleKeyEngine):
+    """A pre-v62 engine: the hybrid verb, computed as persist's ``LocalSigner::sign_hybrid`` does."""
+
+    def local_sign_hybrid(self, data: bytes) -> dict:
+        classical = self.local_sign(data)
+        return {"classical_sig": classical, "pqc_sig": self.local_pqc_sign(data + classical)}
+
+
+def test_the_composed_hybrid_is_byte_identical_to_the_hybrid_verb() -> None:
+    """Without ``local_sign_hybrid`` the hybrid is ``local_sign(m)`` + ``local_pqc_sign(m || classical)``."""
+    from ciris_engine.logic.utils import substrate_signing
+
+    message = b"canonical bytes"
+    via_verb = substrate_signing.sign_hybrid(_BothEngine(), message)
+    composed = substrate_signing.sign_hybrid(_SingleKeyEngine(), message)
+    assert composed == via_verb
+    assert composed[1] is not None and composed[1] != _SingleKeyEngine().local_pqc_sign(message)
+
+
+def test_a_v62_engine_without_the_hybrid_verb_still_signs_hybrid_required() -> None:
+    from ciris_engine.logic.utils import substrate_signing
+
+    classical, pqc = substrate_signing.sign_hybrid_required(_SingleKeyEngine(), b"m")
+    assert len(classical) == 64 and pqc
+    assert substrate_signing.sign_classical(_SingleKeyEngine(), b"m") == classical
+
+
+def test_verification_without_a_verifier_is_not_performed_not_passed() -> None:
+    """The engine has no single-key verifier: no ``verify_hybrid`` means the check cannot run, never a pass."""
+    from ciris_engine.logic.utils import substrate_signing
+
+    with pytest.raises(RuntimeError, match="NOT verified"):
+        substrate_signing.verify_hybrid_required(_SingleKeyEngine(), b"m", "c", "p", "ek", "pk")

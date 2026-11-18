@@ -11,8 +11,17 @@ Captures detailed results from all 6 consciences:
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+import uuid
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
+from ciris_engine.logic.conscience.veto_contract import (
+    action_fingerprint,
+    banned_entry_for,
+    merge_veto_entries,
+    trusted_evidence_ids,
+    veto_entries_of_feedback,
+    veto_entries_of_task,
+)
 from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
 from ciris_engine.logic.processors.core.step_decorators import step_point, streaming_step
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
@@ -27,6 +36,13 @@ from ciris_engine.schemas.conscience.core import (
 )
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.runtime.veto_record import (
+    ObjectionType,
+    VetoChange,
+    VetoDischarge,
+    VetoObjection,
+    VetoRecordEntry,
+)
 from ciris_engine.schemas.services.runtime_control import StepPoint
 
 if TYPE_CHECKING:
@@ -254,10 +270,32 @@ class ConscienceExecutionPhase:
         # and every completed check's results are folded in — so
         # epistemic_data and the per-check result fields are complete even
         # when an early check fails. The override decision is unchanged.
-        entries = self.conscience_registry.get_consciences()
-        check_results = await asyncio.gather(
-            *(self._run_single_conscience(entry, final_action, context) for entry in entries)
+        # Veto continuity (#1366 item 8): an action already vetoed in this task
+        # -- substantively, or on evidence no trusted state discharged -- is
+        # vetoed again here, without a model call. Each conscience call is
+        # stateless; without this the same draft could pass on a later roll.
+        fingerprint = action_fingerprint(action_result)
+        prior_record = merge_veto_entries(
+            veto_entries_of_task(context.task),
+            veto_entries_of_feedback(getattr(thought_item, "conscience_feedback", None)),
         )
+        available_evidence = trusted_evidence_ids(context)
+        repeated = banned_entry_for(fingerprint, prior_record, available_evidence)
+        if repeated is not None:
+            return self._repeated_veto_result(action_result, repeated, prior_record, processing_context)
+
+        entries = self.conscience_registry.get_consciences()
+        check_results = list(
+            await asyncio.gather(*(self._run_single_conscience(entry, final_action, context) for entry in entries))
+        )
+
+        # Typed vetoes (#1366 item 7) and the SYSTEM's evidence discharge (item 9).
+        objections = self._objections_of(entries, check_results, fingerprint)
+        discharges, discharged_entries = await self._discharge_evidence_objections(
+            entries, check_results, objections, action_result, context, available_evidence, thought_item
+        )
+        if discharges:
+            objections = self._objections_of(entries, check_results, fingerprint)
 
         for entry, result in zip(entries, check_results):
             # No `None` skip here (#1247): _run_single_conscience always
@@ -457,7 +495,260 @@ class ConscienceExecutionPhase:
             optimization_veto_prompt=optimization_veto_prompt,
             epistemic_humility_prompt=epistemic_humility_prompt,
         )
+        self._apply_veto_contract(
+            application_result,
+            objections=objections,
+            discharges=discharges,
+            discharged_entries=discharged_entries,
+            prior_record=prior_record,
+            fingerprint=fingerprint,
+            thought_item=thought_item,
+            conscience_unavailable=conscience_unavailable,
+        )
         return application_result
+
+    # ------------------------------------------------------------------
+    # The decision contract (CIRISAgent#1366 items 7-9)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_veto(result: Any) -> bool:
+        """A judgement that objected to THIS draft.
+
+        Not a veto: a pass; a check that did not run (#1049/#1247: fail-closed,
+        but no judgement was formed); a guardrail that redirects with its own
+        replacement action (thought depth, a newly arrived message), which is
+        not an objection to the action.
+        """
+        return (not result.passed) and bool(getattr(result, "check_ran", True)) and not result.replacement_action
+
+    def _objections_of(
+        self, entries: Sequence[Any], results: Sequence[Any], fingerprint: str
+    ) -> List[Tuple[int, VetoObjection]]:
+        """Each veto as a typed objection, in registry priority order; untyped reads as SUBSTANTIVE."""
+        objections: List[Tuple[int, VetoObjection]] = []
+        for index, (entry, result) in enumerate(zip(entries, results)):
+            if not self._is_veto(result):
+                continue
+            objection_type = getattr(result, "objection_type", None)
+            held_ids = list(getattr(result, "held_evidence_ids", None) or [])
+            objections.append(
+                (
+                    index,
+                    VetoObjection(
+                        veto_id=f"veto_{uuid.uuid4().hex[:12]}",
+                        conscience=entry.name,
+                        objection_type=(
+                            objection_type if isinstance(objection_type, ObjectionType) else ObjectionType.SUBSTANTIVE
+                        ),
+                        reason=result.reason or "",
+                        held_trusted_rule=bool(getattr(result, "held_trusted_rule", None) or held_ids),
+                        held_evidence_ids=held_ids,
+                        action_fingerprint=fingerprint,
+                    ),
+                )
+            )
+        return objections
+
+    async def _discharge_evidence_objections(
+        self,
+        entries: Sequence[Any],
+        check_results: List[Any],
+        objections: List[Tuple[int, VetoObjection]],
+        action_result: ActionSelectionDMAResult,
+        context: Any,
+        available_evidence: Sequence[str],
+        thought_item: Any,
+    ) -> Tuple[List[VetoDischarge], List[VetoRecordEntry]]:
+        """Discharge evidence objections from trusted state, never from the drafter (#1366 item 9).
+
+        Only when no conscience objected on substance (the draft is banned
+        then anyway, formal model: Judge). For each evidence objection, if the
+        task carries trusted governance the objecting conscience was not shown
+        (a signed WA grant, an approved amendment), the system attaches it and
+        that conscience judges once more; its new verdict replaces the old one
+        in ``check_results`` and the discharge is recorded. With no such
+        evidence the rule is not honoured as policy: the objection stands and
+        bans the draft.
+        """
+        discharges: List[VetoDischarge] = []
+        discharged: List[VetoRecordEntry] = []
+        if any(o.objection_type == ObjectionType.SUBSTANTIVE for _, o in objections):
+            return discharges, discharged
+        for index, objection in objections:
+            if objection.objection_type != ObjectionType.EVIDENCE:
+                continue
+            new_ids = [i for i in available_evidence if i not in objection.held_evidence_ids]
+            if not new_ids:
+                continue
+            logger.info(
+                "[VETO_CONTRACT] %s raised an evidence objection without %s; attaching it for one re-review",
+                objection.conscience,
+                new_ids,
+            )
+            attached = context.model_copy(update={"attached_evidence": True})
+            check_results[index] = await self._run_single_conscience(entries[index], action_result, attached)
+            discharges.append(
+                VetoDischarge(
+                    veto_id=objection.veto_id,
+                    conscience=objection.conscience,
+                    kind="new_evidence",
+                    discharged_by=new_ids[0],
+                )
+            )
+            discharged.append(
+                self._record_entry(objection, thought_item, action_result, banned=False, discharged_by=new_ids[0])
+            )
+        return discharges, discharged
+
+    def _record_entry(
+        self,
+        objection: VetoObjection,
+        thought_item: Any,
+        action_result: ActionSelectionDMAResult,
+        *,
+        banned: bool,
+        discharged_by: Optional[str] = None,
+    ) -> VetoRecordEntry:
+        try:
+            summary = self._describe_action(action_result)[:200]
+        except Exception:  # noqa: BLE001 - a description is a convenience
+            summary = ""
+        return VetoRecordEntry(
+            veto_id=objection.veto_id,
+            thought_id=getattr(thought_item, "thought_id", None),
+            action_fingerprint=objection.action_fingerprint,
+            action_summary=summary,
+            objection_type=objection.objection_type,
+            conscience=objection.conscience,
+            reason=objection.reason,
+            held_evidence_ids=list(objection.held_evidence_ids),
+            banned=banned,
+            discharged_by=discharged_by,
+        )
+
+    def _apply_veto_contract(
+        self,
+        application_result: "ConscienceApplicationResult",
+        *,
+        objections: List[Tuple[int, VetoObjection]],
+        discharges: List[VetoDischarge],
+        discharged_entries: List[VetoRecordEntry],
+        prior_record: List[VetoRecordEntry],
+        fingerprint: str,
+        thought_item: Any,
+        conscience_unavailable: bool,
+    ) -> None:
+        """Record the vetoes on the result and on the task; on a pass after a veto, record what changed."""
+        vetoes = [o for _, o in objections]
+        application_result.vetoes = vetoes
+        application_result.veto_discharges = discharges
+        substantive = any(o.objection_type == ObjectionType.SUBSTANTIVE for o in vetoes)
+        new_entries = list(discharged_entries)
+        if application_result.overridden and not conscience_unavailable:
+            for objection in vetoes:
+                # The ban (formal model, Judge): a substantive objection, or an
+                # evidence objection no trusted state discharged -- the rule it
+                # relies on is not honoured as policy. A justification objection
+                # alone does not ban: the drafter may restate.
+                banned = objection.objection_type != ObjectionType.JUSTIFICATION or substantive
+                new_entries.append(
+                    self._record_entry(objection, thought_item, application_result.original_action, banned=banned)
+                )
+        elif not application_result.overridden and (prior_record or discharges):
+            vetoed_fingerprints = {e.action_fingerprint for e in prior_record}
+            change = (
+                "new_evidence"
+                if discharges
+                else ("unchanged" if fingerprint in vetoed_fingerprints else "changed_action")
+            )
+            application_result.pass_after_veto = VetoChange(
+                prior_veto_ids=[e.veto_id for e in prior_record] + [d.veto_id for d in discharges],
+                change=change,
+                evidence_ids=[d.discharged_by for d in discharges],
+                action_fingerprint=fingerprint,
+            )
+        application_result.veto_record = merge_veto_entries(prior_record, new_entries)
+        self._persist_vetoes(thought_item, new_entries)
+
+    @staticmethod
+    def _persist_vetoes(thought_item: Any, entries: List[VetoRecordEntry]) -> None:
+        """Keep the vetoes with the task, so retries and follow-up thoughts read them (#1366 item 8)."""
+        task_id = getattr(thought_item, "source_task_id", None)
+        if not entries or not isinstance(task_id, str) or not task_id:
+            return
+        from ciris_engine.logic.persistence.models.tasks import append_task_vetoes
+
+        append_task_vetoes(task_id, entries)
+
+    def _repeated_veto_result(
+        self,
+        action_result: ActionSelectionDMAResult,
+        repeated: VetoRecordEntry,
+        prior_record: List[VetoRecordEntry],
+        processing_context: Any,
+    ) -> "ConscienceApplicationResult":
+        """The draft repeats an action banned in this task: vetoed again, no model call (#1366 item 8)."""
+        from ciris_engine.schemas.conscience.core import EpistemicData
+        from ciris_engine.schemas.processors.core import ConscienceApplicationResult
+
+        lang = get_user_language_from_context(processing_context)
+        reason = get_string(
+            lang,
+            "conscience.retry_repeated_veto",
+            conscience=repeated.conscience,
+            veto_id=repeated.veto_id,
+            objection_type=repeated.objection_type.value,
+        )
+        logger.info(
+            "[VETO_CONTRACT] Draft %s repeats banned action (veto %s by %s): vetoed again without review",
+            repeated.action_fingerprint,
+            repeated.veto_id,
+            repeated.conscience,
+        )
+        attempted_action_desc = self._describe_action(action_result)
+        ponder = ActionSelectionDMAResult(
+            selected_action=HandlerActionType.PONDER,
+            action_parameters=PonderParams(
+                questions=[
+                    get_string(lang, "conscience.ponder_attempted", action=attempted_action_desc),
+                    reason,
+                    get_string(lang, "conscience.ponder_alternative_approach"),
+                ]
+            ),
+            rationale=get_string(
+                lang,
+                "conscience.override_rationale",
+                conscience_name=repeated.conscience,
+                action=attempted_action_desc,
+            ),
+            raw_llm_response=None,
+            reasoning=None,
+            evaluation_time_ms=None,
+            resource_usage=None,
+        )
+        return ConscienceApplicationResult(
+            original_action=action_result,
+            final_action=ponder,
+            overridden=True,
+            override_reason=reason,
+            epistemic_data=EpistemicData(uncertainty_acknowledged=True, reasoning_transparency=1.0),
+            # No faculty ran: nothing was measured, and the result says so.
+            ethical_faculties_skipped=True,
+            vetoes=[
+                VetoObjection(
+                    veto_id=repeated.veto_id,
+                    conscience=repeated.conscience,
+                    objection_type=repeated.objection_type,
+                    reason=repeated.reason,
+                    held_trusted_rule=bool(repeated.held_evidence_ids),
+                    held_evidence_ids=list(repeated.held_evidence_ids),
+                    action_fingerprint=repeated.action_fingerprint,
+                )
+            ],
+            repeated_veto_id=repeated.veto_id,
+            veto_record=list(prior_record),
+        )
 
     def _create_ponder_fallback_action(
         self,

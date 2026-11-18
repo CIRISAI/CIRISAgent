@@ -858,7 +858,9 @@ class TestDriftGuard:
         # 216 -> 217 (2.22.0): prompts.universal_guidance.30_ticket_model.
         # 217 -> 221 (#1366): prompts.wa_governance.{header, entry_resolution,
         # entry_amendment, footer}, the verified WA governance block.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 229
+        # 229 -> 240 (#1366 items 7-9, 14): the typed-veto retry wording and
+        # the task's veto record block, eleven conscience.* keys.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 240
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

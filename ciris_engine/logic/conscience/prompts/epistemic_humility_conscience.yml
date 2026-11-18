@@ -142,7 +142,8 @@ system_prompt: |
   2. Contested claims presented with false certainty (propaganda vector)
   3. State narratives that eliminate nuance (epistemic capture)
 
-  Output ONLY JSON: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer"}
+  Output ONLY JSON: {"epistemic_certainty": <0.0-1.0>, "identified_uncertainties": ["list"], "reflective_justification": "explanation", "recommended_action": "proceed|ponder|defer", "objection_type": "evidence|justification|substantive"}
+  objection_type = when you recommend ponder or defer, the kind of objection: "evidence" — the action relies on a rule or authority you cannot see in your input; "justification" — the action may be acceptable but its stated justification is insufficient; "substantive" — an ethical, safety or coherence problem with the action itself. "substantive" when unsure or when you recommend proceed.
 
 user_prompt_template: |
   User message:

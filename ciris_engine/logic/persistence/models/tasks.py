@@ -23,6 +23,7 @@ from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, Th
 from ciris_engine.logic.persistence.utils import decode_wa_authorization
 from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
+from ciris_engine.schemas.runtime.veto_record import VetoRecordEntry
 from ciris_engine.schemas.services.graph.audit import AuditEventData
 
 if TYPE_CHECKING:
@@ -78,7 +79,8 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
     # context so load-time round-trips correctly (legacy parity).
     ctx = task_dict.get("context")
     images = task_dict.get("images") or []
-    if ctx is None and (images or task.preferred_language is not None or task.signature_pqc):
+    veto_record = task_dict.get("veto_record") or []
+    if ctx is None and (images or task.preferred_language is not None or task.signature_pqc or veto_record):
         ctx = {}
     if ctx is not None:
         ctx = dict(ctx)
@@ -89,12 +91,31 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
         # Persist's task row has one signature column; the PQC half rides here.
         if task.signature_pqc:
             ctx["__agent_signature_pqc__"] = task.signature_pqc
+        # The task's conscience veto record (#1366 item 8) rides the same way.
+        if veto_record:
+            ctx[VETO_RECORD_CONTEXT_KEY] = veto_record
         payload["context"] = ctx
 
     outcome = task_dict.get("outcome")
     if outcome is not None:
         payload["outcome"] = outcome
     return payload
+
+
+#: Private context namespace that carries ``Task.veto_record`` (#1366 item 8).
+VETO_RECORD_CONTEXT_KEY = "__agent_veto_record__"
+
+
+def _decode_veto_record(ctx_data: Any, task_id: Any) -> List[VetoRecordEntry]:
+    """The typed veto record a persisted context carries; entries that do not validate are dropped, loudly."""
+    raw = ctx_data.get(VETO_RECORD_CONTEXT_KEY) if isinstance(ctx_data, dict) else None
+    entries: List[VetoRecordEntry] = []
+    for item in raw if isinstance(raw, list) else []:
+        try:
+            entries.append(VetoRecordEntry.model_validate(item))
+        except Exception as e:  # noqa: BLE001 - one bad entry must not lose the rest
+            logger.warning("Dropping an unreadable veto record entry on task %s: %s", task_id, e)
+    return entries
 
 
 def _decode_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
@@ -221,6 +242,7 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
         updated_info_available=updated_info_available,
         updated_info_content=row.get("updated_info_content"),
         images=images,
+        veto_record=_decode_veto_record(ctx_data, row.get("task_id")),
     )
 
 
@@ -602,6 +624,43 @@ def update_task_context_and_signing(
             occurrence_id,
             e,
         )
+        return False
+
+
+def append_task_vetoes(task_id: str, entries: List[VetoRecordEntry]) -> bool:
+    """Add conscience vetoes to a task's record (any occurrence; #1366 item 8).
+
+    Entries already recorded (same ``veto_id``) are replaced, so a later
+    discharge updates the entry in place. Raw context keys this layer does not
+    model (the deferral resolution, ...) are kept: the context is merged, not
+    rebuilt from the materialized ``TaskContext``. Never raises: a record that
+    cannot be written still holds for the current thought, which carries it in
+    its conscience feedback.
+    """
+    if not entries:
+        return True
+    try:
+        engine = _get_engine()
+        raw = engine.task_get(task_id)
+        if raw is None:
+            return False
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(row, dict):
+            return False
+        raw_ctx = row.get("context")
+        if isinstance(raw_ctx, str):
+            raw_ctx = json.loads(raw_ctx)
+        task = _persist_row_to_task(row)
+        by_id = {e.veto_id: e for e in task.veto_record}
+        for entry in entries:
+            by_id[entry.veto_id] = entry
+        task.veto_record = list(by_id.values())
+        payload = _task_to_persist_payload(task)
+        payload["context"] = {**(raw_ctx if isinstance(raw_ctx, dict) else {}), **(payload.get("context") or {})}
+        engine.task_upsert(json.dumps(payload))
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Could not record conscience vetoes on task %s: %s", task_id, e)
         return False
 
 

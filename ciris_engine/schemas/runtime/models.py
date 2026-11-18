@@ -14,6 +14,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .enums import TaskStatus, ThoughtStatus, ThoughtType
 from .task_envelope import TaskEnvelope
+from .veto_record import VetoRecordEntry
 
 
 class ImageContent(BaseModel):
@@ -273,6 +274,12 @@ class Task(BaseModel):
     # Native multimodal support - images attached to task flow through to LLM
     images: List[ImageContent] = Field(
         default_factory=list, description="Images attached to this task for multimodal processing"
+    )
+    # The conscience vetoes raised on this task's drafts (CIRISAgent#1366 item
+    # 8). Each conscience call is stateless, so without this a vetoed action
+    # could pass on a later roll; every retry and follow-up thought reads it.
+    veto_record: List[VetoRecordEntry] = Field(
+        default_factory=list, description="Typed conscience vetoes raised on this task's drafts"
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)

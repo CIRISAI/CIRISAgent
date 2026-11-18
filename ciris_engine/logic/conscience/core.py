@@ -39,8 +39,11 @@ from ciris_engine.schemas.telemetry.core import (
     TraceContext,
 )
 
+from ciris_engine.schemas.runtime.veto_record import coerce_objection_type
+
 from .interface import ConscienceInterface
 from .prompt_loader import get_conscience_prompt_loader
+from .veto_contract import held_evidence_ids
 
 
 # Simple conscience config
@@ -231,6 +234,36 @@ class _BaseConscience(ConscienceInterface):
             return messages, user_prompt
         user_prompt = "\n\n".join((block, user_prompt))
         return [*messages[:-1], LLMMessage(role="user", content=user_prompt)], user_prompt
+
+    @classmethod
+    def _with_attached_evidence(
+        cls, messages: List[LLMMessage], user_prompt: str, context: ConscienceCheckContext, language: str
+    ) -> tuple[List[LLMMessage], str]:
+        """Attach the verified governance block on the system's evidence re-review (#1366 item 9).
+
+        For coherence and epistemic humility, which are not otherwise shown the
+        signed grant. Only the fold sets ``attached_evidence``, and only when
+        trusted state holds evidence this conscience did not have; nothing is
+        added otherwise, so a normal prompt is unchanged.
+        """
+        if not getattr(context, "attached_evidence", False):
+            return messages, user_prompt
+        return cls._with_wa_governance(messages, user_prompt, context, language)
+
+    @staticmethod
+    def _objection(passed: bool, answered: object, context: ConscienceCheckContext, *, sees_governance: bool) -> Dict[str, Any]:
+        """The typed-veto fields of a judgement (#1366 item 7): what kind of objection, and what it could see.
+
+        ``answered`` is the model's objection_type; anything but an exact
+        evidence/justification answer is SUBSTANTIVE (fail safe). Nothing is
+        typed when the check passed.
+        """
+        held = held_evidence_ids(context, sees_governance=sees_governance)
+        return {
+            "objection_type": None if passed else coerce_objection_type(answered),
+            "held_trusted_rule": bool(held),
+            "held_evidence_ids": held,
+        }
 
     def _resolve_language(self, context: ConscienceCheckContext) -> str:
         """Determine the language for THIS conscience check.
@@ -678,6 +711,7 @@ class EntropyConscience(_BaseConscience):
         # Inline the entropy evaluation
         entropy_user_prompt: Optional[str] = None
         entropy_why = ""
+        entropy_objection: object = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
@@ -727,6 +761,7 @@ class EntropyConscience(_BaseConscience):
                 entropy_alternatives = list(entropy_eval.alternative_meanings)
                 entropy_actual_is_representative = entropy_eval.actual_is_representative
                 entropy_why = entropy_eval.reason.strip()
+                entropy_objection = entropy_eval.objection_type
             else:
                 return unusable_answer_result(
                     "EntropyConscience",
@@ -761,6 +796,8 @@ class EntropyConscience(_BaseConscience):
             entropy_alternatives=entropy_alternatives,
             entropy_actual_is_representative=entropy_actual_is_representative,
             check_timestamp=ts_datetime,
+            # Entropy always reads the verified governance block.
+            **self._objection(passed, entropy_objection, context, sees_governance=True),
         )
 
     def _create_entropy_messages(
@@ -844,6 +881,7 @@ class CoherenceConscience(_BaseConscience):
         # Inline the coherence evaluation
         coherence_user_prompt: Optional[str] = None
         coherence_why = ""
+        coherence_objection: object = None
         try:
             # Get textual image context info (NOT raw images - prevents injection attacks)
             image_context = self._get_image_context_info(context)
@@ -858,6 +896,10 @@ class CoherenceConscience(_BaseConscience):
             messages = self._with_identity(messages, context, self._resolve_language(context))
             # The same factual record entropy and the veto read (#1366 item 18).
             messages, coherence_user_prompt = self._with_action_record(
+                messages, coherence_user_prompt, context, self._resolve_language(context)
+            )
+            # The signed grant, on the system's evidence re-review only (#1366 item 9).
+            messages, coherence_user_prompt = self._with_attached_evidence(
                 messages, coherence_user_prompt, context, self._resolve_language(context)
             )
             if hasattr(sink, "llm"):
@@ -882,6 +924,7 @@ class CoherenceConscience(_BaseConscience):
                 )
             coherence = float(coherence_eval.coherence)
             coherence_why = coherence_eval.reason.strip()
+            coherence_objection = coherence_eval.objection_type
         except Exception as e:
             # FAIL CLOSED either way — see EntropyConscience above; the default
             # `coherence` would otherwise be reported as a measurement.
@@ -907,6 +950,9 @@ class CoherenceConscience(_BaseConscience):
             coherence_score=coherence,
             coherence_prompt=coherence_user_prompt,
             check_timestamp=ts_datetime,
+            **self._objection(
+                passed, coherence_objection, context, sees_governance=bool(getattr(context, "attached_evidence", False))
+            ),
         )
 
     def _create_coherence_messages(
@@ -1055,6 +1101,8 @@ class OptimizationVetoConscience(_BaseConscience):
             optimization_veto_check=result,
             optimization_veto_prompt=opt_veto_user_prompt,
             check_timestamp=ts_datetime,
+            # The veto always reads the verified governance block.
+            **self._objection(passed, result.objection_type, context, sees_governance=True),
         )
 
     def _create_optimization_veto_messages(
@@ -1134,6 +1182,10 @@ class EpistemicHumilityConscience(_BaseConscience):
         messages, epistemic_humility_user_prompt = self._with_action_record(
             messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
         )
+        # The signed grant, on the system's evidence re-review only (#1366 item 9).
+        messages, epistemic_humility_user_prompt = self._with_attached_evidence(
+            messages, epistemic_humility_user_prompt, context, self._resolve_language(context)
+        )
 
         try:
             if hasattr(sink, "llm"):
@@ -1192,6 +1244,9 @@ class EpistemicHumilityConscience(_BaseConscience):
             epistemic_humility_check=result,
             epistemic_humility_prompt=epistemic_humility_user_prompt,
             check_timestamp=ts_datetime,
+            **self._objection(
+                passed, result.objection_type, context, sees_governance=bool(getattr(context, "attached_evidence", False))
+            ),
         )
 
     def _create_epistemic_humility_messages(

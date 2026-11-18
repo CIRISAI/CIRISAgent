@@ -148,7 +148,9 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "dma_prompt": 55,
     # 143 -> 155 (#1366): the verified-WA governance block (4) and the
     # verified-sender block (8).
-    "string": 155,
+    # 155 -> 166 (#1366 items 7-9, 14): the typed-veto retry wording (9) and
+    # the task's veto record block (2 status words).
+    "string": 166,
     "conscience_prompt": 12,
     "template": 3,
 }

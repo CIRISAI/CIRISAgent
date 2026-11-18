@@ -15,29 +15,36 @@ deterministic encoding):
 * integers, lengths and tags in the shortest head; definite lengths only;
 * map keys ordered by the bytewise order of their encodings (for text keys
   this is length-first, then bytewise); two keys with one encoding refused;
-* a non-integral number in the shortest of half, single and double precision
-  that keeps its binary64 value exactly; NaN and infinities refused;
 * ``False``/``True``/``None`` as simple values 20/21/22;
-* a digest is written ``[-16, digest-bytes]`` (an ordinary array).
+* a digest is written ``[-16, digest-bytes]`` (an ordinary array);
+* NO float is written anywhere (wire.md revision 4).
 
-Numbers go by their EXACT value (constitution/server agreement, 2026-11-18):
+Numbers go by their EXACT decimal value (rc21 wire §4):
 
 * an integral value is an integer (``1e2`` -> 100,
-  ``9007199254740993.0`` -> 9007199254740993, ``-0.0`` -> 0);
-* an integer outside CBOR's range (major types 0/1: -2**64 .. 2**64-1) is
-  refused with :data:`CALL_ARGUMENT_UNREPRESENTABLE`; so is ANY number of
-  magnitude 10**20 or more, decided from the decimal exponent without
-  expanding it (``1e400`` never becomes a 400-digit integer);
-* a non-integral value is its nearest binary64 (ties to even), written as the
-  shortest float that keeps it: ``1 + 2**-53`` is the float 1.0, ``f93c00``,
-  not the integer 1 (integrality is judged on the exact decimal value).
+  ``9007199254740993.0`` -> 9007199254740993, ``-0.0`` -> 0); outside CBOR's
+  integer range (major types 0/1: -2**64 .. 2**64-1) it is refused with
+  :data:`CALL_ARGUMENT_UNREPRESENTABLE`; an integral value of 10**20 or more
+  is refused from its decimal exponent without being expanded (``1e400``
+  never becomes a 400-digit integer);
+* a non-integral value is CBOR tag 4, a decimal fraction
+  ``[exponent, mantissa]`` (RFC 8949 section 3.4.4), NORMALISED: the exponent
+  negative and the mantissa not divisible by ten. ``0.1``, ``1.0e-1`` and
+  ``0.10`` all encode as ``4([-1, 1])``; ``-273.15`` as ``4([-2, -27315])``.
+  Never rounded: a mantissa outside CBOR's integer range is refused
+  (``1 + 2**-53`` written out exactly has a 54-digit mantissa).
 
-A float already parsed by plain ``json.loads`` has lost the exact decimal
-(``9007199254740993.0`` reads as ``9007199254740992.0``). Where the JSON text
-is at hand, parse it with :func:`loads_exact` (``Decimal`` for every
-non-integer literal). A float that reaches the encoder is taken at its own
-binary64 value, which is exact for that float; both sides of a check that hash
-the same parsed object still agree.
+Where the JSON text is at hand, parse it with :func:`loads_exact` (``Decimal``
+for every non-integer literal), so the value is the one the text states.
+
+A Python ``float`` (the agent has only that for ``ToolParams`` arguments,
+already parsed) is read as ``Decimal(repr(f))``: Python's ``repr`` is the
+shortest decimal that round-trips to that binary64, which is the decimal a
+model writes in its JSON (``0.1`` -> ``0.1``, never
+``0.1000000000000000055511151231257827``). The one loss is a literal that
+plain ``json.loads`` already rounded (``9007199254740993.0`` reads as
+``9007199254740992.0``); both sides of a check that hash the same parsed object
+still agree.
 """
 
 from __future__ import annotations
@@ -85,41 +92,37 @@ def _int(value: int) -> bytes:
     return _head(0, value) if value >= 0 else _head(1, -1 - value)
 
 
-def _float(value: float) -> bytes:
-    """The shortest of half/single/double that keeps ``value`` (non-integral, finite)."""
-    for info, fmt in ((25, ">e"), (26, ">f")):
-        try:
-            packed = struct.pack(fmt, value)
-        except (OverflowError, struct.error):
-            continue
-        if struct.unpack(fmt, packed)[0] == value:
-            return bytes([0xE0 | info]) + packed
-    return b"\xfb" + struct.pack(">d", value)
-
-
-def _number_float(value: float) -> bytes:
-    if not math.isfinite(value):
-        raise CdeError(f"{value!r} has no CDE form")
-    if abs(value) >= 10.0**_MAGNITUDE_LIMIT_EXP10:
-        raise CdeError(f"{value!r} is at or beyond 10**{_MAGNITUDE_LIMIT_EXP10}")
-    if value.is_integer():
-        return _int(int(value))  # exact; -0.0 -> 0
-    return _float(value)
+def _tag(tag: int, encoded: bytes) -> bytes:
+    return _head(6, tag) + encoded
 
 
 def _number_decimal(value: Decimal) -> bytes:
+    """An exact decimal: an integer when integral by value, else tag 4 ``[exponent, mantissa]`` normalised."""
     if not value.is_finite():
         raise CdeError(f"{value} has no CDE form")
     if value.is_zero():
         return _int(0)  # -0, 0e999: integral by value
-    if value.adjusted() >= _MAGNITUDE_LIMIT_EXP10:
-        raise CdeError(f"a number at or beyond 10**{_MAGNITUDE_LIMIT_EXP10} ({str(value)[:32]})")
     if value == value.to_integral_value():
-        return _int(int(value))  # exact decimal value, never through binary64
-    nearest = float(value)  # correctly rounded to the nearest binary64
-    if not math.isfinite(nearest):
-        raise CdeError(f"{value} is beyond binary64")
-    return _float(nearest)
+        # Integral: refuse a magnitude of 10**20 or more from its exponent, never expanding it (10**20 > 2**64).
+        if value.adjusted() >= _MAGNITUDE_LIMIT_EXP10:
+            raise CdeError(f"an integral number at or beyond 10**{_MAGNITUDE_LIMIT_EXP10} ({str(value)[:32]})")
+        return _int(int(value))
+    sign, digits, exponent = value.as_tuple()
+    assert isinstance(exponent, int)  # finite
+    # The digit count bounds the work: a mantissa of more than 20 digits is past 2**64 whatever its digits are.
+    significant = "".join(map(str, digits)).rstrip("0")
+    exponent += len(digits) - len(significant)
+    if len(significant) > _MAGNITUDE_LIMIT_EXP10:
+        raise CdeError(f"a decimal mantissa outside CBOR's integer range ({str(value)[:32]})")
+    mantissa = int(significant) * (-1 if sign else 1)
+    return _tag(4, _head(4, 2) + _int(exponent) + _int(mantissa))
+
+
+def _number_float(value: float) -> bytes:
+    """A parsed float, read as its shortest round-trip decimal (``Decimal(repr(f))``): no float is written."""
+    if not math.isfinite(value):
+        raise CdeError(f"{value!r} has no CDE form")
+    return _number_decimal(Decimal(repr(value)))
 
 
 def cde_encode(value: Any) -> bytes:

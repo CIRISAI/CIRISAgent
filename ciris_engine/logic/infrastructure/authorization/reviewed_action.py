@@ -27,13 +27,15 @@ model-supplied ``task_id`` argument IS hashed, then overwritten).
 The CDE encoding is the shared pure-Python encoder
 (:mod:`ciris_engine.logic.utils.cde`), the same one the profile digest uses;
 the constitution's golden vectors pin its bytes
-(``tests/fixtures/rc21_digest_vectors.json``). Numbers go by exact value: an
-integral number is an integer, a value outside CBOR's integer range or a
-non-finite one is refused (``CdeError``, token
+(``tests/fixtures/rc21_digest_vectors.json``). Numbers go by exact decimal
+value and no float is written: an integral number is an integer, any other is
+CBOR tag 4 ``[exponent, mantissa]`` normalised; an integer or mantissa outside
+CBOR's integer range, or a non-finite value, is refused (``CdeError``, token
 ``call_argument_unrepresentable``). Arguments parsed from JSON text should be
 parsed with ``cde.loads_exact``; ``ToolParams`` arguments arrive already
-parsed as floats, so their binary64 value is what is hashed, identically on
-the review and the dispatch side.
+parsed as floats and are read as ``Decimal(repr(f))``, the shortest round-trip
+decimal (the one a model writes), identically on the review and the dispatch
+side.
 """
 
 from __future__ import annotations

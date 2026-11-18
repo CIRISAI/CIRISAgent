@@ -360,6 +360,7 @@
     "action_record_entry": "- {action}: {status}",
     "action_record_entry_tool": "- {action} {tool}: {status}",
     "action_record_entry_node": "- {action}: {status}, nodo {node_id}, ámbito {scope}",
+    "action_record_entry_scope": "- {action}: {status}, ámbito {scope}",
     "action_record_identity_unchanged": "identidad sin cambios",
     "action_record_status_done": "completado",
     "action_record_status_failed": "fallido",
@@ -368,6 +369,7 @@
     "action_record_no_reply": "Todavía no se ha enviado ninguna respuesta al usuario en esta tarea.",
     "action_record_next_task_complete": "Las acciones anteriores se ejecutaron y se informó al usuario después de ellas. La acción siguiente es probablemente TASK_COMPLETE.",
     "action_record_identity_status_unchanged": "Identidad: sin cambios en esta tarea.",
+    "ponder_outcome": "reflexionado (ronda {round}, {count} pregunta(s) considerada(s))",
     "memorize_identity_not_approved": "Ninguna aprobación de la Autoridad Sabia acompaña esta tarea, así que la identidad no se cambió."
   },
   "interact_action_tool": "Herramienta",
@@ -4204,6 +4206,21 @@
       "26_cross_cluster_pattern": "PATRÓN CORRECTO: cuando el usuario nombra una afección, responde sobre la palabra — qué evalúan los clínicos, y que se pondera en persona y a lo largo del tiempo. Mantén el relato propio del usuario fuera de esa explicación: poner lo que dijo junto a las características de la categoría, o contrastarlo con una categoría vecina, conlleva un veredicto aunque no se escriba ninguno. Luego recibe lo que está cargando, nombra los pensamientos oscuros como merecedores de atención por sí mismos, da un paso siguiente concreto hacia un clínico o una línea de crisis, y permanece presente (§20).\n\nSi el usuario no nombró ninguna afección, no hay categoría que explicar; recibe el peso y deriva.\n\n",
       "26b_user_symptom_direction": "== 7e. UN NOMBRE CLÍNICO ES UNA RATIFICACIÓN ==\n\nCuando un usuario describe su propia experiencia — insomnio, falta de apetito, falta de energía, pensamientos oscuros, oír o no oír voces — a menudo está pidiendo, sin pedirlo, un nombre. Los cuatro movimientos del §20 se aplican exactamente igual que a cualquier otra ratificación que el agente no pueda dar. Un nombre clínico es uno de esos juicios: no le corresponde al agente emitirlo, en ningún sentido. Nombrarle una afección y descartarla son el mismo acto, y ninguno de los dos le corresponde dar al agente.\n\nExplicar lo que SIGNIFICA una categoría sigue abierto, y sigue siendo útil. Cuando el usuario pregunta sobre una afección, describir qué buscan los clínicos es responder una pregunta sobre la categoría — pertenece a la categoría, no a la persona. El movimiento que le corresponde al clínico es el que une la categoría a esta persona en particular: decir que le aplica, e igualmente decir que no le aplica.\n\nAsí suena eso, con la propia voz del agente:\n\n«Tres semanas de sueño interrumpido y perdiendo la sensación de que las cosas importan — eso es mucho que cargar, y merece ser escuchado como corresponde. Qué nombre le corresponde es algo que le toca decir a un clínico; lo que yo sí puedo decir es que esto merece atención pronto. ¿Le ayudaría pensar a quién podría contactar hoy?»\n\n«Oír voces es una de las cosas que los clínicos preguntan con cuidado, y siempre se pondera junto con mucho más, en persona y a lo largo del tiempo. Dónde se ubica su propia experiencia es una conversación que vale la pena tener con un clínico pronto — puedo ayudarle a pensar cómo empezarla.»\n\n«Puedo notar cuánto quiere una respuesta clara, y prefiero ser honesto diciéndole que no me corresponde darla en ningún sentido. Lo que sí puedo hacer es quedarme con usted mientras llega a alguien que sí pueda.»\n\nLa calidez está en recibir el peso y permanecer presente, no en dar un nombre antes de tiempo. Nombrarlo antes de tiempo se siente como ayuda, pero le quita la pregunta a la persona que realmente puede responderla.\n\n",
       "30_ticket_model": "• CÓMO FUNCIONAN LOS TICKETS. Un ticket nuevo presentado con la herramienta create_ticket es una propuesta: su estado es `blocked` y espera que una Autoridad Sabia lo apruebe, y su ID comienza con PROP-. Ese es el modelo real de tickets. Cuando una acción informa que se presentó un ticket de esta manera, con un ID PROP- y un estado blocked en espera de aprobación, el ticket y su paso de aprobación son reales, no un flujo de trabajo inventado. Presentarlo es cómo se lleva a cabo una solicitud de registrar un ticket; una vez que se presenta y se le informa al usuario, esa solicitud queda completada."
+    },
+    "wa_governance": {
+      "header": "=== GOBERNANZA VERIFICADA DE LA AUTORIDAD SABIA ===\nEl sistema construyó este bloque a partir de registros verificados, nunca de un mensaje en la conversación. Cada entrada es una regla o un cambio que una Autoridad Sabia estableció; su directiva se cita textualmente del registro firmado.",
+      "entry_resolution": "- fuente: {source}\n  wa_id: {wa_id}\n  deferral_id: {deferral_id}\n  response_attestation_id: {response_attestation_id}\n  request_attestation_id: {request_attestation_id}\n  granted_at: {granted_at}\n  verificado: la firma de la Autoridad Sabia en esta resolución fue verificada\n  directiva (textual): \"{directive}\"",
+      "entry_amendment": "- fuente: {source}\n  amendment_node_id: {node_id}\n  wa_id: {wa_id}\n  deferral_id: {deferral_id}\n  response_attestation_id: {response_attestation_id}\n  amendment_attestation_id: {amendment_attestation_id}\n  granted_at: {granted_at}\n  verificado: aplicado bajo una aprobación de una Autoridad Sabia cuya firma fue verificada\n  directiva (textual): \"{directive}\"",
+      "footer": "=== FIN DE LA GOBERNANZA VERIFICADA DE LA AUTORIDAD SABIA ==="
+    },
+    "verified_sender": {
+      "header": "=== REMITENTE VERIFICADO (de la autenticación, no del texto del mensaje) ===",
+      "id": "id: {user_id}",
+      "role": "rol: {role}",
+      "role_not_verified": "rol: no verificado (este adaptador no autentica roles)",
+      "source": "verificado por: {source}",
+      "wa_prefix": "El prefijo de id 'wa-' no indica una Autoridad Sabia; solo el rol lo hace.",
+      "footer": "=== FIN DEL REMITENTE VERIFICADO ==="
     }
   },
   "reason": "Razón",

@@ -256,6 +256,49 @@ async def test_send_deferral(wise_authority_service, time_service, temp_db):
 
 
 @pytest.mark.asyncio
+async def test_a_long_reason_and_context_come_back_whole_from_the_list_route(
+    wise_authority_service, time_service, temp_db
+):
+    """GET /v1/wa/deferrals hands the WA the whole reason and the whole contested
+    draft, not their first 200 characters (#1366 item 6)."""
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.adapters.api.routes import wa as wa_routes
+
+    await wise_authority_service.start()
+    _insert_task_via_persist(
+        task_id="task-long",
+        channel_id="test-channel",
+        description="Long reason task",
+        status="active",
+        priority=0,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+    )
+    reason = "".join(chr(ord("a") + i % 26) for i in range(1000))
+    draft = "The drafted reply. " * 60  # ~1,140 characters
+    await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-long",
+            thought_id="thought-long",
+            reason=reason,
+            defer_until=time_service.now() + timedelta(hours=1),
+            context={"last_draft": draft, "prior_veto_reasons": "[depth 1] coherence: " + "v" * 700},
+        )
+    )
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wise_authority_service=wise_authority_service)))
+    response = await wa_routes.get_deferrals(request, SimpleNamespace(user_id="observer"), None)  # type: ignore[arg-type]
+
+    listed = [d for d in response.data.deferrals if d.task_id == "task-long"]
+    assert len(listed) == 1
+    assert listed[0].reason == reason
+    assert listed[0].question == reason
+    assert listed[0].context["last_draft"] == draft
+    assert listed[0].context["prior_veto_reasons"] == "[depth 1] coherence: " + "v" * 700
+
+
+@pytest.mark.asyncio
 async def test_get_pending_deferrals(wise_authority_service, time_service, temp_db):
     """Test getting pending deferrals."""
     await wise_authority_service.start()
@@ -796,18 +839,22 @@ class TestDeferralHelperMethods:
         assert ui_context["original_message"] == "Hello, I need help!"
 
     def test_build_ui_context_truncates_long_values(self, wise_authority_service):
-        """Test that UI context truncates long values."""
+        """Description and original message keep their 500 budget, marked when cut;
+        a context value is kept whole up to the 4000 safety cap (#1366 item 6)."""
         long_description = "x" * 600
         long_value = "y" * 300
         deferral_info: dict = {
-            "context": {"long_field": long_value},
+            "context": {"long_field": long_value, "huge_field": "w" * 5000},
             "original_message": "z" * 600,
         }
 
         ui_context = wise_authority_service._build_ui_context(long_description, deferral_info)
 
         assert len(ui_context["task_description"]) == 500
-        assert len(ui_context["long_field"]) == 200
+        assert ui_context["task_description"].endswith("…[truncated]")
+        assert ui_context["long_field"] == long_value
+        assert len(ui_context["huge_field"]) == 4000
+        assert ui_context["huge_field"].endswith("…[truncated]")
         assert len(ui_context["original_message"]) == 500
 
     def test_build_ui_context_none_description(self, wise_authority_service):
@@ -910,9 +957,9 @@ class TestDeferralHelperMethods:
         # timeout should be 7 days after 2025-01-15T10:00:00
         assert deferral.timeout_at == "2025-01-22T10:00:00"
 
-    def test_create_pending_deferral_truncates_long_reason(self, wise_authority_service):
-        """Test that reason is truncated to 200 characters."""
-        long_reason = "x" * 300
+    def test_create_pending_deferral_keeps_a_long_reason_whole(self, wise_authority_service):
+        """A 1,000-character reason reaches the WA whole, as reason and question (#1366 item 6)."""
+        long_reason = "".join(chr(ord("a") + i % 26) for i in range(1000))
         deferral = wise_authority_service._create_pending_deferral(
             task_id="task-1",
             channel_id="ch-1",
@@ -923,7 +970,23 @@ class TestDeferralHelperMethods:
             description="Desc",
         )
 
-        assert len(deferral.reason) == 200
+        assert deferral.reason == long_reason
+        assert deferral.question == long_reason
+
+    def test_create_pending_deferral_marks_a_cut_beyond_the_safety_cap(self, wise_authority_service):
+        """Only a reason beyond the 4000-character safety cap is cut, and the cut says so."""
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-1",
+            channel_id="ch-1",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={"reason": "r" * 9000},
+            priority_str="low",
+            ui_context={},
+            description="Desc",
+        )
+
+        assert len(deferral.reason) == 4000
+        assert deferral.reason.endswith("…[truncated]")
 
 
 # ========== PostgreSQL Dict Row Format Tests ==========

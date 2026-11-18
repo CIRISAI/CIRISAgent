@@ -25,6 +25,7 @@ from ciris_engine.logic.services.governance.wise_authority.deferral_rows import 
     emit_deferral_request,
 )
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
+from ciris_engine.logic.utils.deferral_text import clip_deferral_text
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
@@ -224,7 +225,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         )
 
         ui_context: Dict[str, str] = {
-            "task_description": (description[:500] if description else ""),
+            "task_description": clip_deferral_text(description or "", 500),
         }
         # Add deferral-specific context fields (converted to strings for UI)
         deferral_context = deferral_info.get("context", {})
@@ -237,12 +238,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # it at the generic 200-char UI budget would truncate it into
                 # unparseable JSON, and the human would be back to approving a
                 # sentence. It has its own cap, applied where it is encoded.
-                limit = TOOL_APPROVAL_DETAIL_MAX_CHARS if key == TOOL_APPROVAL_DETAIL_KEY else 200
-                ui_context[key] = str(value)[:limit]
+                if key == TOOL_APPROVAL_DETAIL_KEY:
+                    ui_context[key] = str(value)[:TOOL_APPROVAL_DETAIL_MAX_CHARS]
+                    continue
+                # Everything else is what the WA reads to decide what was
+                # contested (the last draft, its rationale, the veto reasons --
+                # CIRISAgent#1366 item 6). Not clipped at a UI budget: only at
+                # a large safety cap, and a cut says so.
+                ui_context[key] = clip_deferral_text(str(value))
         # Include original message if available
         original_message = deferral_info.get("original_message")
         if original_message:
-            ui_context["original_message"] = str(original_message)[:500]
+            ui_context["original_message"] = clip_deferral_text(str(original_message), 500)
         return ui_context
 
     def _create_pending_deferral(
@@ -271,7 +278,10 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         """
         deferral_id = str(deferral_info.get("deferral_id", f"defer_{task_id}"))
         thought_id = str(deferral_info.get("thought_id", ""))
-        reason = str(deferral_info.get("reason", description or ""))[:200]
+        # The whole reason (CIRISAgent#1366 item 6): it used to be cut at 200
+        # characters, so the WA saw "Maximum action depth (5) reached" and not
+        # what to validate. Only a large safety cap remains, marked when hit.
+        reason = clip_deferral_text(str(deferral_info.get("reason", description or "")))
 
         deferral_context = deferral_info.get("context", {})
         user_id = deferral_context.get("user_id") if isinstance(deferral_context, dict) else None

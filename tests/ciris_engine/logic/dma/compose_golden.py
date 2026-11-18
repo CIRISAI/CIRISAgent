@@ -635,7 +635,7 @@ async def capture_dsaspdma() -> List[JSONDict]:
             primary_need_category=list(DeferralNeedCategory)[0],
         ),
     )
-    await dma.evaluate(make_defer_aspdma_result(), make_queue_item(), context=None)
+    await dma.evaluate(make_defer_aspdma_result(), make_queue_item(), context=make_context())
     return captured["messages"]  # type: ignore[no-any-return]
 
 

@@ -202,6 +202,7 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
         "crisis",  # #1248: crisis block directly after language guidance
+        "system.head",  # #1366: the agent identity block opens every DSASPDMA guide
         "dsaspdma.system_guidance_header",
         "system.join1",
         "dsaspdma.evaluation_steps",

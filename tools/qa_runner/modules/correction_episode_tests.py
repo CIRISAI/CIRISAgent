@@ -1160,13 +1160,21 @@ class CorrectionEpisodeTests:
         resolve lands an UNVERIFIED amendment that entropy and the optimization veto never see."""
         payload: Dict[str, Any] = {"resolution": "approve", "guidance": guidance}
         field = os.environ.get("M4_AMENDMENT_FIELD", "").strip()
-        if field and amendment_text:
-            payload[field] = amendment_text
+        exact = (amendment_text or "").strip()   # API: 1-4000 chars, no leading/trailing whitespace, approve only
+        digest = None
+        if field and exact:
+            if len(exact) > 4000:
+                raise ValueError(f"frozen paragraph is {len(exact)} chars; the resolve API accepts at most 4000")
+            import hashlib
+            payload[field] = exact
+            digest = hashlib.sha256(exact.encode("utf-8")).hexdigest()
         status, body = await self._req(
             "POST", f"/v1/wa/deferrals/{deferral_id}/resolve", token, json_body=payload, timeout=120,
         )
         rec = {"who": who, "deferral_id": deferral_id, "status": status, "body": body,
-               "amendment_field": field or None, "amendment_text_sent": bool(field and amendment_text)}
+               "amendment_field": field or None, "amendment_text_sent": bool(field and exact),
+               # Compare with amendment_digest in the signed response row / resolution payload.
+               "amendment_text_sha256": digest}
         self._log("resolve", **rec)
         return rec
 

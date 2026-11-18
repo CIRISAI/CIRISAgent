@@ -38,6 +38,8 @@ rule_provenance:
 stages:
   coherence: &nonablated_judge
     stage_instruction: always
+    schema_instruction: always   # residual: provider-appended output schema (kernel review 2026-11-18)
+    tool_output: always          # a tool's result, for the follow-up thought (untrusted)
     accord: always
     identity_base: always
     amendment: amendment_in_force
@@ -56,6 +58,7 @@ stages:
   epistemic: *nonablated_judge
   entropy: &ablated_judge
     stage_instruction: always
+    schema_instruction: always   # residual
     accord: always
     identity_base: always
     amendment: amendment_in_force
@@ -69,6 +72,8 @@ stages:
   optveto: *ablated_judge
   aspdma: &drafter
     stage_instruction: always
+    schema_instruction: always   # residual
+    tool_output: always
     accord: always
     identity_base: always
     amendment: amendment_in_force
@@ -89,6 +94,13 @@ stages:
   # IDMA (decision 2026-11-18): signed rule and amendment segments with provenance, NOT identity_base.
   idma:
     stage_instruction: always
+    schema_instruction: always   # residual
+    pipeline_position: always    # #1366 item 12: every stage
+    # Advisory chat rules carry their label at IDMA too (recommended, NOT an owner decision yet: the 2026-11-18
+    # IDMA ruling covers signed rules only). Without it IDMA reads a chat-stated rule as unlabelled text
+    # (#1366 item 15: IDMA scored a WA instruction as "rigidity").
+    rule.user_chat: advisory_rule
+    rule.wa_chat: advisory_rule
     accord: always
     amendment: amendment_in_force
     wa_guidance: signed_guidance_in_force

@@ -48,6 +48,7 @@ from ciris_engine.logic.infrastructure.authorization.reviewed_action import (
     passed_entry_for,
     review_entries_for,
     reviewed_call_fingerprint,
+    uncarried_objections,
     undischarged_objections,
 )
 from ciris_engine.schemas.runtime.reviewed_action_admission import (
@@ -278,6 +279,14 @@ def _check_reasoning(
             GateRefusalReason.OBJECTION_UNDISCHARGED,
             tool_name,
             f"objections {[b.digest for b in blocking]} against this call are not discharged by a trusted row",
+            subject,
+        )
+    uncarried = uncarried_objections(entry, review_entries_for(thought_id))
+    if uncarried:
+        return _refuse(
+            GateRefusalReason.OBJECTION_NOT_CARRIED,
+            tool_name,
+            f"earlier objections {[u.digest for u in uncarried]} of this thought are not in the record's considered",
             subject,
         )
     if envelope.issuer.kind in _APPROVAL_ISSUERS and tool_name in envelope.granted_tools:

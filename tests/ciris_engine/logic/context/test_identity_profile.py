@@ -88,11 +88,11 @@ def test_the_profile_encoding_is_the_rc21_cde_array() -> None:
     assert ip.profile_digest(d0, []) == hashlib.sha256(expected).hexdigest()
 
 
-def test_the_cbor2_path_and_the_builtin_encoder_agree() -> None:
-    value = ["CEG-profile/2", [-16, bytes(range(32))], [-16, b"\xff" * 32], 0, 23, 24, 255, 256, 65536, -1, -25, "é" * 30]
-    assert ip.cde_encode(value) == ip._cde_builtin(value)
-    with pytest.raises(TypeError):
-        ip.cde_encode([{"b": 1, "a": 2}])  # maps wait for the server's CDE encoder
+def test_the_profile_uses_the_one_shared_cde_encoder() -> None:
+    from ciris_engine.logic.utils import cde
+
+    assert ip.cde_encode is cde.cde_encode
+    assert ip.profile_digest("ab" * 32, []) == cde.ceg_digest("CEG-profile/2", [[-16, bytes.fromhex("ab" * 32)]]).hex()
 
 
 def test_order_and_every_digest_are_part_of_the_profile() -> None:

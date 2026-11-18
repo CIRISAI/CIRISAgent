@@ -24,12 +24,16 @@ the model does not author: the ``channel_id`` copied into the argument map (it
 is ``channel``), and ``task_id`` (handler-authoritative, CIRISAgent#938; a
 model-supplied ``task_id`` argument IS hashed, then overwritten).
 
-The CDE encoding lives behind ONE function, :func:`cde_encode`. The substrate
-(ciris_server) has no CDE encoder yet; this uses cbor2's canonical encoding,
-which for the JSON-derived values used here (text map keys, shortest ints,
-shortest float that keeps the binary64 value, bytewise-ordered map keys)
-coincides with CDE. Swap to the substrate's encoder when it lands; the
-self-check test pins the bytes.
+The CDE encoding is the shared pure-Python encoder
+(:mod:`ciris_engine.logic.utils.cde`), the same one the profile digest uses;
+the constitution's golden vectors pin its bytes
+(``tests/fixtures/rc21_digest_vectors.json``). Numbers go by exact value: an
+integral number is an integer, a value outside CBOR's integer range or a
+non-finite one is refused (``CdeError``, token
+``call_argument_unrepresentable``). Arguments parsed from JSON text should be
+parsed with ``cde.loads_exact``; ``ToolParams`` arguments arrive already
+parsed as floats, so their binary64 value is what is hashed, identically on
+the review and the dispatch side.
 """
 
 from __future__ import annotations
@@ -37,10 +41,10 @@ from __future__ import annotations
 import hashlib
 import inspect
 import logging
-import math
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from ciris_engine.logic.utils.cde import cde_encode, cde_set
 from ciris_engine.schemas.runtime.reviewed_action_admission import (
     CEG_CALL_SCHEME,
     CEG_REVIEW_SCHEME,
@@ -63,45 +67,6 @@ TOOL_VERB = "tool"
 # ---------------------------------------------------------------------------
 # CDE
 # ---------------------------------------------------------------------------
-
-
-def _cde_value(value: Any) -> Any:
-    """JSON -> CDE data model (rc21 §4).
-
-    object -> map (text keys), array -> array (order kept), string -> text,
-    integral number -> integer, other number -> float (the encoder writes the
-    shortest float that keeps its binary64 value), true/false/null -> simple
-    values. Bytes pass through (digests inside records). NaN/infinity refused.
-    """
-    if value is None or isinstance(value, bool):
-        return value
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise ValueError("a non-finite number has no CDE form in a fingerprint")
-        return int(value) if value.is_integer() else value
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (bytes, bytearray)):
-        return bytes(value)
-    if isinstance(value, Mapping):
-        out: Dict[str, Any] = {}
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise ValueError("map keys must be text")
-            out[key] = _cde_value(item)
-        return out
-    if isinstance(value, (list, tuple)):
-        return [_cde_value(v) for v in value]
-    raise ValueError(f"{type(value).__name__} has no CDE form in a fingerprint")
-
-
-def cde_encode(value: Any) -> bytes:
-    """CDE bytes of a JSON-shaped value. THE encoder seam (cbor2 canonical until the substrate's lands)."""
-    import cbor2
-
-    return bytes(cbor2.dumps(_cde_value(value), canonical=True))
 
 
 def _digest_text(encoded: bytes) -> str:
@@ -200,12 +165,40 @@ def action_review_fingerprint(action: Any) -> str:
 
 def _sorted_set(items: Sequence[Any]) -> List[Any]:
     """A CDE set: an array of distinct members ordered by their encoding."""
-    unique = {cde_encode(i): i for i in items}
-    return [unique[k] for k in sorted(unique)]
+    return cde_set(items)
+
+
+#: The edition constant of a row-ref (CC 2.6.1.3): ``[2, [-16, row id]]``.
+ROW_REF_EDITION = 2
+
+
+def row_ref_wire(row_id: str) -> Any:
+    """A row id as the wire's row-ref ``[2, [-16, id]]``.
+
+    The id may be bare 64-hex, ``sha256:<hex>`` or ``-16:<hex>``. An id in no
+    digest form (a legacy node id) stays text: it names no signed row, so no
+    row-ref can be written for it.
+    """
+    bare = row_id
+    for prefix in ("sha256:", FINGERPRINT_PREFIX):
+        if bare.startswith(prefix):
+            bare = bare[len(prefix) :]
+            break
+    try:
+        raw = bytes.fromhex(bare)
+    except ValueError:
+        return row_id
+    if len(raw) != 32:
+        return row_id
+    return [ROW_REF_EDITION, [SHA256_ALG_ID, raw]]
 
 
 def review_record_wire(record: ReviewRecord) -> Dict[str, Any]:
-    """The record as the CDE map rc21 §4 defines."""
+    """The record as the CDE map rc21 §4 defines.
+
+    ``discharges``, ``considered`` and ``derived_from`` are ``passed``-only and
+    ABSENT where there is none (the golden vectors' plain pass has four members).
+    """
     wire: Dict[str, Any] = {
         "fingerprint": fingerprint_wire(record.fingerprint),
         "thought": record.thought,
@@ -213,8 +206,14 @@ def review_record_wire(record: ReviewRecord) -> Dict[str, Any]:
         "faculties": _sorted_set(list(record.faculties)),
     }
     if record.outcome is ReviewOutcome.PASSED:
-        wire["discharges"] = _sorted_set([[fingerprint_wire(d.objection), d.evidence] for d in record.discharges])
-        wire["considered"] = _sorted_set([fingerprint_wire(c) for c in record.considered])
+        if record.discharges:
+            wire["discharges"] = _sorted_set(
+                [[fingerprint_wire(d.objection), row_ref_wire(d.evidence)] for d in record.discharges]
+            )
+        if record.considered:
+            wire["considered"] = _sorted_set([fingerprint_wire(c) for c in record.considered])
+        if record.derived_from:
+            wire["derived_from"] = _sorted_set(list(record.derived_from))
     return wire
 
 
@@ -367,6 +366,28 @@ def undischarged_objections(passed: ReviewEntry, entries: Sequence[ReviewEntry])
     return blocking
 
 
+def uncarried_objections(passed: ReviewEntry, entries: Sequence[ReviewEntry]) -> List[ReviewEntry]:
+    """The thought's earlier objections against ANOTHER fingerprint that ``passed`` does not carry.
+
+    rc21 rev 2 (``action_objection_not_carried``): every objection record of
+    the thought raised against another fingerprint before this pass must be
+    named, by its digest, in the pass's ``considered``, so a retry never loses
+    the evidence. Objections against the SAME fingerprint are the discharge
+    rule's (:func:`undischarged_objections`), not this one's.
+    """
+    considered = set(passed.record.considered)
+    missing: List[ReviewEntry] = []
+    for entry in entries:
+        if entry is passed:
+            break
+        record = entry.record
+        if record.outcome is not ReviewOutcome.OBJECTED or record.fingerprint == passed.record.fingerprint:
+            continue
+        if entry.digest not in considered:
+            missing.append(entry)
+    return missing
+
+
 def consume_passed_record(thought_id: str, fingerprint: str) -> None:
     """Spend the admission: one review admits one execution."""
     entries = _RECORDS.get(thought_id)
@@ -400,11 +421,13 @@ __all__ = [
     "record_review",
     "reset_admitted_records",
     "resolve_tool_name_via_bus",
+    "row_ref_wire",
     "review_entries_for",
     "review_record_digest",
     "review_record_wire",
     "reviewed_action_fingerprint",
     "reviewed_call_fingerprint",
     "tool_call_fingerprint",
+    "uncarried_objections",
     "undischarged_objections",
 ]

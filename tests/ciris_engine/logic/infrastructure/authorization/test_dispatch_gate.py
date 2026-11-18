@@ -181,6 +181,7 @@ def _passed(
     channel: Optional[str] = "ch-1",
     discharges: tuple = (),
     derived_from: tuple = DERIVED,
+    considered: tuple = (),
 ) -> ReviewEntry:
     return make_review_entry(
         ReviewRecord(
@@ -189,6 +190,7 @@ def _passed(
             outcome=ReviewOutcome.PASSED,
             faculties=passes,
             discharges=discharges,
+            considered=considered,
         ),
         task_id=TASK,
         derived_from=derived_from,
@@ -701,10 +703,28 @@ async def test_a_substantive_objection_on_the_same_call_always_blocks(bus: ToolB
 
 @pytest.mark.asyncio
 async def test_an_objection_binds_its_own_fingerprint(bus: ToolBus, service: FakeToolService) -> None:
-    """A changed action is a new action: an objection to an earlier draft does not block it."""
-    _object("file_ticket", {"title": "earlier draft"}, ObjectionType.EVIDENCE)
-    _admit("file_ticket", ARGS)
+    """A changed action is a new action: an objection to an earlier draft does not block it (once carried)."""
+    earlier = _object("file_ticket", {"title": "earlier draft"}, ObjectionType.EVIDENCE)
+    _admit("file_ticket", ARGS, considered=(earlier.digest,))
     subject = _reasoning(_envelope(["file_ticket"]), _reviewed("file_ticket", ARGS))
+    ok = await _run(bus, service, "file_ticket", _dispatch_args(ARGS), subject)
+    assert ok.success, ok.error
+
+
+@pytest.mark.asyncio
+async def test_an_earlier_objection_not_in_considered_is_action_objection_not_carried(
+    bus: ToolBus, service: FakeToolService
+) -> None:
+    """rc21 rev 2: every earlier objection of the thought against ANOTHER fingerprint travels in ``considered``."""
+    first = _object("file_ticket", {"title": "first draft"}, ObjectionType.EVIDENCE)
+    second = _object("file_ticket", {"title": "second draft"}, ObjectionType.SUBSTANTIVE)
+    _admit("file_ticket", ARGS, considered=(first.digest,))  # drops the second objection
+    subject = _reasoning(_envelope(["file_ticket"]), _reviewed("file_ticket", ARGS))
+    refused = await _run(bus, service, "file_ticket", _dispatch_args(ARGS), subject)
+    assert _reason(refused) == GateRefusalReason.OBJECTION_NOT_CARRIED.value
+    assert second.digest in (refused.error or "") and first.digest not in (refused.error or "")
+    assert service.calls == []
+    _admit("file_ticket", ARGS, considered=(first.digest, second.digest))
     ok = await _run(bus, service, "file_ticket", _dispatch_args(ARGS), subject)
     assert ok.success, ok.error
 

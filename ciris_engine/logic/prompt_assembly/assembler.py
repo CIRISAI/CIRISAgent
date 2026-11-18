@@ -442,7 +442,10 @@ class PromptAssembler:
                 text = self.render(seg, call.language)
                 rendered[seg.segment_id] = neutralise(text) if trust[seg.segment_id] == TrustLevel.UNTRUSTED else text
         if stage in self.policy.ablated_stages and withheld_ids:
+            # Not probed: the declared residuals (the draft may quote the request, FSD §10), and segments whose
+            # bytes a verified grant attests (a WA's signed directive may repeat what was asked: it was signed).
             residual = {s.segment_id for s in kept if self.policy.kinds[s.kind].residual} | withheld_ids
+            residual |= {s.segment_id for s in kept if s.authz is not None and s.authz.signature_verified}
             action = GuardAction.RAISED if mode == AssemblyMode.FAIL_CLOSED else GuardAction.STRIPPED
             leaks = self._leak_violations(
                 stage,

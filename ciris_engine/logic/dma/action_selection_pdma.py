@@ -2,11 +2,18 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
+if TYPE_CHECKING:
+    from ciris_engine.logic.prompt_assembly import AssemblyCall
+    from ciris_engine.logic.prompt_assembly.segmenting import PromptBuilder, Segments
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
+
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
+from ciris_engine.logic.prompt_assembly.assembler import LayoutItem
 from ciris_engine.schemas.dma.sent_prompts import carry_sent_prompts, sent_prompts_of
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
-from ciris_engine.logic.formatters import format_system_prompt_blocks, format_system_snapshot, format_user_profiles
+from ciris_engine.logic.formatters import format_system_snapshot, format_user_profiles
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils.constants import get_localized_accord_text
 from ciris_engine.protocols.dma.base import ActionSelectionDMAProtocol
@@ -25,11 +32,116 @@ from ciris_engine.schemas.types import JSONDict
 
 from .action_selection import ActionSelectionContextBuilder, ActionSelectionSpecialCases
 from .prompt_loader import get_prompt_loader
-from .template_overrides import additive
 from .action_selection.faculty_integration import FacultyIntegration
 from .base_dma import BaseDMA
 
 logger = logging.getLogger(__name__)
+
+
+def _segment(segment_id: str, kind: str, text: str, source: str = "engine") -> Any:
+    """A prompt segment (kinds and sources by their policy names)."""
+    from ciris_engine.schemas.context.prompt_provenance import AcctCarrier, PromptSegment, SegmentKind, SegmentSource
+
+    seg_kind = SegmentKind(kind)
+    return PromptSegment(
+        segment_id=segment_id,
+        kind=seg_kind,
+        source=SegmentSource(source),
+        text=text,
+        acct=AcctCarrier() if seg_kind == SegmentKind.CONSCIENCE_FEEDBACK else None,
+    )
+
+
+def _joined(segments: List[Any], layout: List["LayoutItem"]) -> str:
+    """The text of segments laid out with their glue (what the assembler renders for them)."""
+    out: List[str] = []
+    by_id = {seg.segment_id: seg for seg in segments}
+    for item in layout:
+        if out:
+            out.append(item.glue)
+        out.append(by_id[item.segment_id].text)
+    return "".join(out)
+
+
+def _concat(head: Any, tail: Any, glue: str) -> Any:
+    """Two (segments, layout) blocks as one, ``glue`` between them (none when the head is empty)."""
+    h_segments, h_layout = head
+    t_segments, t_layout = tail
+    if not t_segments:
+        return h_segments, h_layout
+    if not h_segments:
+        return t_segments, [t_layout[0].model_copy(update={"glue": ""})] + t_layout[1:]
+    return h_segments + t_segments, h_layout + [t_layout[0].model_copy(update={"glue": glue})] + t_layout[1:]
+
+
+def _approval_segments(block: str, authorization: Any, language: str) -> Any:
+    """The WA approval block: the grant (``wa_guidance``, with its authz) and the rule that follows it."""
+    from ciris_engine.logic.formatters.wa_approval import format_wa_approval_rule
+    from ciris_engine.logic.prompt_assembly.carriers import authz_from_wa_authorization
+    from ciris_engine.logic.prompt_assembly.segmenting import items
+    from ciris_engine.schemas.context.prompt_provenance import PromptSegment, SegmentKind, SegmentSource
+
+    rule = format_wa_approval_rule(authorization, language=language)
+    if not rule or not block.endswith("\n\n" + rule):
+        whole = _segment("instr:wa_approval", "stage_instruction", block)
+        return [whole], items([whole], "")
+    grant = PromptSegment(
+        segment_id="wa_guidance",
+        kind=SegmentKind.WA_GUIDANCE,
+        source=SegmentSource.SIGNED_ROW,
+        text=block[: -len(rule) - 2],
+        authz=authz_from_wa_authorization(authorization),
+    )
+    rule_seg = _segment("instr:wa_approval_rule", "stage_instruction", rule)
+    return [grant, rule_seg], items([grant, rule_seg], "\n\n")
+
+
+#: The ASPDMA main-user slots that carry something other than the engine's own instruction text.
+_MAIN_USER_SLOT_KINDS: Dict[str, "tuple[str, str]"] = {
+    "original_thought_content": ("request", "user_input"),
+    "original_task_str": ("request", "user_input"),
+    "ponder_notes_str": ("dma_output", "llm_output"),
+    "user_profile_context_str": ("history", "engine"),
+    "system_snapshot_context_str": ("history", "engine"),
+    "ethical_summary": ("dma_output", "llm_output"),
+    "csdma_summary": ("dma_output", "llm_output"),
+    "dsdma_summary_str": ("dma_output", "llm_output"),
+    "idma_summary_str": ("dma_output", "llm_output"),
+}
+
+
+def _typed_main_user_slots(input_data: EnhancedDMAInputs, parts: Any) -> "tuple[Dict[str, Any], Dict[str, Any]]":
+    """(typed slot segments, plain slot values) for the ASPDMA main user template.
+
+    ``conscience_guidance`` is the retry veto (``conscience_feedback``) when the thought carries one, else the
+    exhausted-bounce advisory alone (a DMA's rationale, ``dma_output``). A follow-up thought's content is model
+    text, so its request segment's source is ``llm_output``.
+    """
+    from ciris_engine.logic.conscience.veto_contract import veto_entries_of_feedback
+    from ciris_engine.schemas.context.prompt_provenance import AcctCarrier
+
+    typed: Dict[str, Any] = {}
+    plain: Dict[str, Any] = {}
+    depth = getattr(input_data.original_thought, "thought_depth", 0)
+    follow_up = isinstance(depth, int) and depth > 0
+    for name, value in parts.slots.items():
+        text = format(value)
+        if name in _MAIN_USER_SLOT_KINDS and text:
+            kind, source = _MAIN_USER_SLOT_KINDS[name]
+            if name == "original_thought_content" and follow_up:
+                source = "llm_output"
+            typed[name] = _segment(f"slot:{name}", kind, text, source)
+        elif name == "conscience_guidance" and text:
+            if parts.conscience_feedback is not None:
+                entries = veto_entries_of_feedback(parts.conscience_feedback)
+                typed[name] = _segment("conscience_feedback", "conscience_feedback", text, "llm_output").model_copy(
+                    update={"acct": AcctCarrier(veto_id=entries[-1].veto_id if entries else None)}
+                )
+            else:
+                typed[name] = _segment("slot:bounce_advisory", "dma_output", text, "llm_output")
+        else:
+            plain[name] = value
+    return typed, plain
 
 
 def _get_value(obj: Any, key: str, default: Any = None) -> Any:
@@ -182,7 +294,11 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         return None
 
     def _build_main_user_content(self, input_data: EnhancedDMAInputs, agent_name: str) -> str:
-        """Build the main user content.
+        """The main user content as text (the segments of :meth:`_user_segments`, joined)."""
+        return _joined(*self._user_segments(input_data, agent_name))
+
+    def _user_segments(self, input_data: EnhancedDMAInputs, agent_name: str) -> "Segments":
+        """The main user content as typed segments, in the bytes it has always had.
 
         A template's `user_prompt_template` is ADDITIVE (#996): it leads, and
         the composed integration layer follows undiminished. It does not
@@ -190,7 +306,17 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         replacing it would disable every summary, advisory and guidance block
         those slots render.
         """
+        from ciris_engine.logic.prompt_assembly.segmenting import split_template
+
         template_user_override = self.prompts.get("user_prompt_template") if isinstance(self.prompts, dict) else None
+        parts = self.context_builder.main_user_parts(input_data, agent_name)
+        typed, plain = _typed_main_user_slots(input_data, parts)
+        segments, layout = split_template(
+            lambda **values: self.context_builder.render_main_user(parts, values),
+            typed,
+            prefix="instr:user",
+            plain=plain,
+        )
 
         if template_user_override:
             thought_content = str(input_data.original_thought.content) if input_data.original_thought else ""
@@ -198,9 +324,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
                 ", ".join(a.value for a in input_data.permitted_actions)
                 if input_data.permitted_actions
                 else "speak, task_complete"
-            )
-            framing = template_user_override.format(
-                thought_content=thought_content, available_actions=available_actions
             )
             # #996 — APPEND the composition, do not replace it.
             #
@@ -244,15 +367,23 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             # action list therefore appear twice — once in the persona framing,
             # once in the structured composition; that duplication is accepted
             # deliberately over losing either the voice or the integration layer.
-            composed = self.context_builder.build_main_user_content(input_data, agent_name)
-            logger.debug(
-                "ASPDMA template user_prompt_template override: %d chars framing + %d chars composition",
-                len(framing),
-                len(composed),
+            framing, framing_layout = split_template(
+                lambda **values: template_user_override.format(**values),
+                {"thought_content": _segment("request:framing", "request", thought_content, "user_input")},
+                prefix="instr:framing",
+                plain={"available_actions": available_actions},
             )
-            return additive(framing, composed)
-
-        return self.context_builder.build_main_user_content(input_data, agent_name)
+            if framing and segments:
+                logger.debug(
+                    "ASPDMA template user_prompt_template override: %d chars framing + %d chars composition",
+                    len(_joined(framing, framing_layout)),
+                    len(_joined(segments, layout)),
+                )
+                layout = framing_layout + [layout[0].model_copy(update={"glue": "\n\n"})] + layout[1:]
+                segments = framing + segments
+            elif framing:
+                segments, layout = framing, framing_layout
+        return segments, layout
 
     @staticmethod
     def _working_language(original_thought: Any, processing_context: Any) -> str:
@@ -269,14 +400,21 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         ASPDMA uses the localized accord (single language) for clearer action selection guidance.
         Other DMAs (PDMA, CSDMA, IDMA, DSDMA) use the polyglot accord for cross-cultural depth.
         """
+        return _joined(*self._accord_segments(original_thought, processing_context))
+
+    def _accord_segments(self, original_thought: Any, processing_context: Any = None) -> "Segments":
+        """The thought-type line, then the localized accord (one system message); ([], []) without an accord."""
+        from ciris_engine.logic.prompt_assembly.segmenting import items
+
         # ASPDMA uses the localized accord, in the same language as its guidance.
         accord_text = get_localized_accord_text(self._working_language(original_thought, processing_context))
         if not accord_text:
-            return ""
-
+            return [], []
+        accord = _segment("accord", "accord", accord_text)
         if original_thought and hasattr(original_thought, "thought_type"):
-            return f"THOUGHT_TYPE={original_thought.thought_type.value}\n\n{accord_text}"
-        return accord_text
+            line = _segment("instr:thought_type", "stage_instruction", f"THOUGHT_TYPE={original_thought.thought_type.value}")
+            return [line, accord], items([line, accord], "\n\n")
+        return [accord], items([accord], "")
 
     async def _perform_main_evaluation(
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool
@@ -292,19 +430,20 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # Pre-cache tools AND task context BEFORE building prompt
         await self.context_builder.pre_cache_context(original_thought)
 
-        # Compose messages via the extracted seam (#972)
-        messages = self.compose_messages(input_data, agent_name)
+        # Compose messages via the extracted seam (#972), built by PromptAssembler (#1366 Phase 3)
+        messages, manifest = self.compose_prompt(input_data, agent_name)
 
         # Use Gemini-compatible flat schema (no Union types)
         # This enables compatibility with providers that don't support Union (Google Gemini)
-        result_tuple = await self.call_llm_structured(
-            messages=messages,
-            response_model=ASPDMALLMResult,
-            max_tokens=8192,
-            temperature=0.0,
-            thought_id=input_data.original_thought.thought_id,
-            task_id=input_data.original_thought.source_task_id,
-        )
+        with prompt_manifest_scope(manifest):
+            result_tuple = await self.call_llm_structured(
+                messages=messages,
+                response_model=ASPDMALLMResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=input_data.original_thought.thought_id,
+                task_id=input_data.original_thought.source_task_id,
+            )
 
         # Extract the LLM result and convert to typed ActionSelectionDMAResult
         llm_result = cast(ASPDMALLMResult, result_tuple[0])
@@ -342,6 +481,16 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         ``context_builder.pre_cache_context()`` (tools + task cache) must run
         in ``_perform_main_evaluation()`` before this is called.
         """
+        messages, _ = self.compose_prompt(input_data, agent_name)
+        return messages
+
+    def compose_prompt(self, input_data: EnhancedDMAInputs, agent_name: str) -> "tuple[List[JSONDict], PromptManifest]":
+        """The ASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        from ciris_engine.logic.prompt_assembly.segmenting import PromptBuilder
+        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage
+
         # #1007 — SYSTEM FIRST, matching the order the messages are emitted in.
         #
         # The #997 dump records each field render as it happens and matches those
@@ -358,27 +507,25 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         #
         # The two builders are independent (both read only `input_data`), so the
         # swap is order-of-evaluation only. The 12 goldens are the proof.
-        system_message = self._build_system_message(input_data)
+        system_segments, system_layout = self._system_segments(input_data)
 
         # Build main user content
-        main_user_content = self._build_main_user_content(input_data, agent_name)
+        user_segments, user_layout = self._user_segments(input_data, agent_name)
 
         # Append faculty insights if available
         if input_data.faculty_evaluations and self.faculty_integration:
             faculty_insights = self.faculty_integration.build_faculty_insights_string(input_data.faculty_evaluations)
-            main_user_content += faculty_insights
-        accord_with_metadata = self._build_accord_with_metadata(
-            input_data.original_thought, input_data.processing_context
-        )
+            if faculty_insights:
+                insights = _segment("faculty_insights", "dma_output", faculty_insights, "llm_output")
+                user_segments = user_segments + [insights]
+                user_layout = user_layout + [LayoutItem(segment_id=insights.segment_id, glue="")]
 
         input_images = getattr(input_data, "images", []) or []
         if input_images:
             logger.info(f"[VISION] ActionSelectionPDMA building multimodal content with {len(input_images)} images")
-        user_content = self.build_multimodal_content(main_user_content, input_images)
 
-        messages: List[JSONDict] = []
-        if accord_with_metadata:
-            messages.append({"role": "system", "content": accord_with_metadata})
+        builder = PromptBuilder()
+        builder.message("system", *self._accord_segments(input_data.original_thought, input_data.processing_context))
         # Per-language guidance, in THIS THOUGHT'S language. ASPDMA writes the
         # reply, so it needs the user's guidance more than any other DMA. It used
         # to read the env var (CIRIS_PREFERRED_LANGUAGE) while IDMA, DSDMA,
@@ -386,25 +533,45 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # user on a deployment without that variable got English guidance and
         # English crisis numbers here while coherence judged the reply in bn
         # (2.18.0 bn battery, q04/q06/q07).
-        from ciris_engine.logic.utils.localization import get_language_guidance
-
         _lang = self._working_language(input_data.original_thought, input_data.processing_context)
-        _lang_guidance = get_language_guidance(_lang)
-        if _lang_guidance:
-            messages.append({"role": "system", "content": _lang_guidance})
+        builder.single("system", _segment("instr:language", "stage_instruction", get_language_guidance(_lang) or ""))
         # Crisis resources ride directly after language guidance (#1248) — the
         # locale's verified numbers, from the one composer every DMA shares.
-        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        builder.single("system", _segment("instr:crisis", "stage_instruction", get_crisis_resources_system_block(_lang) or ""))
+        builder.message("system", system_segments, system_layout)
+        builder.message("user", user_segments, user_layout, images=input_images)
+        return builder.assemble(PromptStage.ASPDMA, self._assembly_call(input_data, _lang, builder))
 
-        _crisis_block = get_crisis_resources_system_block(_lang)
-        if _crisis_block:
-            messages.append({"role": "system", "content": _crisis_block})
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": user_content})
+    def _assembly_call(self, input_data: EnhancedDMAInputs, language: str, builder: "PromptBuilder") -> "AssemblyCall":
+        """The manifest's call facts, from trusted state only (the verified grant, verified amendments)."""
+        from ciris_engine.logic.formatters import wa_authorization_of
+        from ciris_engine.logic.prompt_assembly import AssemblyCall
+        from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
+        from ciris_engine.schemas.context.prompt_provenance import ManifestThoughtKind, SegmentKind
 
-        # Store prompts for streaming/debugging
-
-        return messages
+        processing_context = input_data.processing_context
+        authorization = wa_authorization_of(processing_context)
+        snapshot = _get_value(processing_context, "system_snapshot") if processing_context else None
+        agent_identity = _get_value(snapshot, "agent_identity") if snapshot else None
+        thought = input_data.original_thought
+        depth = getattr(thought, "thought_depth", 0)
+        kind = (
+            ManifestThoughtKind.GUIDANCE
+            if authorization is not None
+            else ManifestThoughtKind.FOLLOWUP if isinstance(depth, int) and depth > 0 else ManifestThoughtKind.SEED
+        )
+        retry = any(seg.kind == SegmentKind.CONSCIENCE_FEEDBACK for seg in builder.segments)
+        task_id = getattr(thought, "source_task_id", None)
+        thought_id = getattr(thought, "thought_id", None)
+        return AssemblyCall(
+            task_id=task_id if isinstance(task_id, str) else None,
+            thought_id=thought_id if isinstance(thought_id, str) else None,
+            thought_kind=kind,
+            retry_index=1 if retry else 0,
+            response_model=ASPDMALLMResult.__name__,
+            facts=policy_facts(authorization, agent_identity, id_scoped=False),
+            language=language,
+        )
 
     def _extract_system_blocks(self, processing_context: Any) -> tuple[str, str, Any]:
         """Extract system snapshot block, user profiles block, and system snapshot object."""
@@ -454,6 +621,18 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             str(agent_id), str(description), str(role), amendments=amendment_texts(agent_identity)
         )
 
+    def _identity_segments(self, system_snapshot: Any) -> "Segments":
+        """The validated identity block as segments: identity_base pieces and one amendment segment per grant."""
+        from ciris_engine.logic.prompt_assembly.segmenting import identity_segments, items
+
+        legacy = self._validate_and_build_identity_block(system_snapshot)
+        segments, layout = identity_segments(_get_value(system_snapshot, "agent_identity"), None)
+        if _joined(segments, layout) != legacy:  # an identity the shared renderer reads differently: keep its bytes
+            logger.warning("[ASPDMA] identity block not segmentable; sent as one identity_base segment")
+            whole = _segment("identity:base:0", "identity_base", legacy, "agent_profile")
+            return [whole], items([whole], "")
+        return segments, layout
+
     def _build_conscience_guidance_block(self, processing_context: Any) -> str:
         """Build conscience guidance block for retry format enforcement."""
         if not processing_context:
@@ -486,12 +665,19 @@ WRONG: "The expectation is reasonable..."
 """
 
     def _build_system_message(self, input_data: EnhancedDMAInputs) -> str:
-        """Build the system message for LLM evaluation."""
+        """Build the system message for LLM evaluation (the segments of :meth:`_system_segments`, joined)."""
+        return _joined(*self._system_segments(input_data))
+
+    def _system_segments(self, input_data: EnhancedDMAInputs) -> "Segments":
+        """The system message as typed segments: identity, the WA approval, guidance, snapshot, profiles."""
+        from ciris_engine.logic.prompt_assembly.segmenting import items, stripped_ends
+
         processing_context = input_data.processing_context
 
         system_snapshot_block = ""
         user_profiles_block = ""
-        identity_block = ""
+        identity: List[Any] = []
+        identity_layout: List[LayoutItem] = []
         from ciris_engine.logic.formatters import wa_authorization_of
 
         authorization = wa_authorization_of(processing_context)
@@ -500,15 +686,16 @@ WRONG: "The expectation is reasonable..."
             system_snapshot_block, user_profiles_block, system_snapshot = self._extract_system_blocks(
                 processing_context
             )
-            identity_block = self._validate_and_build_identity_block(system_snapshot)
+            identity, identity_layout = self._identity_segments(system_snapshot)
             # A verified WA approval sits with the identity it may change, so
             # the choice between applying, declining and deferring is made
             # knowing the review already happened (formatters/wa_approval.py).
             from ciris_engine.logic.formatters import format_wa_approval_block
 
             approval_block = format_wa_approval_block(authorization, language=get_prompt_loader().language)
-            if approval_block:
-                identity_block = "\n\n".join((identity_block, approval_block))
+            if approval_block and authorization is not None:
+                approval = _approval_segments(approval_block, authorization, get_prompt_loader().language)
+                identity, identity_layout = _concat((identity, identity_layout), approval, "\n\n")
 
         # Always, grant or not: with no grant, the fact that there is none; then
         # the rule that an approval exists only as the verified block above, and
@@ -516,8 +703,9 @@ WRONG: "The expectation is reasonable..."
         from ciris_engine.logic.formatters import format_wa_approval_facts
 
         approval_facts = format_wa_approval_facts(authorization, language=get_prompt_loader().language)
-        identity_block = "\n\n".join(part for part in (identity_block, approval_facts) if part)
-
+        if approval_facts:
+            facts = _segment("instr:approval_facts", "stage_instruction", approval_facts)
+            identity, identity_layout = _concat((identity, identity_layout), ([facts], items([facts], "")), "\n\n")
         # Check for direct system_prompt override from template (e.g., HE-300 format instructions)
         # Template overrides take precedence over YAML-based prompts
         template_system_override = None
@@ -578,14 +766,30 @@ WRONG: "The expectation is reasonable..."
         # Extract conscience_guidance from processing_context for retry format enforcement
         conscience_guidance_block = self._build_conscience_guidance_block(processing_context)
 
-        return format_system_prompt_blocks(
-            identity_block,
-            "",
-            system_snapshot_block,
-            user_profiles_block,
-            None,
-            system_guidance + conscience_guidance_block,
-        )
+        # format_system_prompt_blocks: identity, guidance, snapshot, profiles; blank-line joined, stripped.
+        guidance = _segment("instr:system", "stage_instruction", system_guidance)
+        blocks: List[Any] = [(identity, identity_layout)]
+        if system_guidance or conscience_guidance_block:
+            g_segments = [guidance] if system_guidance else []
+            if conscience_guidance_block:
+                g_segments.append(
+                    _segment("conscience_guidance", "conscience_feedback", conscience_guidance_block, "llm_output")
+                )
+            blocks.append((g_segments, items(g_segments, "")))
+        if system_snapshot_block:
+            snap = _segment("system_snapshot", "history", system_snapshot_block)
+            blocks.append(([snap], items([snap], "")))
+        if user_profiles_block:
+            profiles = _segment("user_profiles", "history", user_profiles_block)
+            blocks.append(([profiles], items([profiles], "")))
+        segments: List[Any] = []
+        layout: List[LayoutItem] = []
+        for block in blocks:
+            if block[0]:
+                segments, layout = _concat((segments, layout), block, "\n\n")
+        segments = stripped_ends(segments)
+        kept = {seg.segment_id for seg in segments}
+        return segments, [i for i in layout if i.segment_id in kept]
 
     def _create_fallback_result(self, error_message: str) -> ActionSelectionDMAResult:
         """Create a fallback result for error cases."""

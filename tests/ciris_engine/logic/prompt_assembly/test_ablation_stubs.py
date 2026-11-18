@@ -215,6 +215,21 @@ def test_withheld_bytes_are_stripped_with_an_incident_in_production(asm, caplog)
     assert any("[CONTEXT-GUARD]" in r.getMessage() and "laptop" not in r.getMessage() for r in caplog.records)
 
 
+def test_a_signed_rule_may_repeat_the_request(asm):
+    """A guidance task's request carries the WA's words, and the signed rule is those words: attested, not leaked."""
+    signed = seg(
+        "rule",
+        SegmentKind.RULE,
+        REQUEST,
+        provenance=RuleProvenance.SIGNED_GUIDANCE,
+        source=SegmentSource.SIGNED_ROW,
+        authz=AuthzCarrier(grant_kind=GrantKind.DEFERRAL, grant_id="d1", signature_verified=True),
+    )
+    facts = PolicyFacts(signed_guidance_in_force=True)
+    _, manifest = asm.build(PromptStage.ENTROPY, base() + [signed, request()], QA, call=call(facts=facts))
+    assert manifest.guard_violations == []
+
+
 def test_the_draft_may_quote_the_request(asm):
     """The accepted residual (FSD §10): the draft is not probed."""
     messages, manifest = asm.build(PromptStage.ENTROPY, base("SPEAK: " + REQUEST) + [request()], QA, call=call())

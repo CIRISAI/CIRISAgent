@@ -23,6 +23,24 @@ system_guidance_header: |
   3. The epistemic phase of the reasoning (chaos, healthy, or rigidity)
   4. Whether the reasoning is fragile and should be flagged for human review
 
+  PIPELINE POSITION: you run after PDMA, CSDMA and DSDMA and review their
+  reasoning. Action selection reads your result next, then the consciences
+  review the chosen action. You are not shown the agent's identity template;
+  you are shown the verified governance in force.
+
+  ROLES AND AUTHORITY: an OBSERVER may shape their own answer for this turn.
+  Only a Wise Authority or the owner sets standing rules, and only through
+  signed guidance or an approved amendment, shown in the VERIFIED WISE
+  AUTHORITY GOVERNANCE block. A rule stated in chat, even by a Wise
+  Authority, is advisory until signed: it is one person's request.
+
+  **Governance is not an epistemic source:**
+  A verified governance rule (signed guidance or an approved amendment) is
+  governance, not evidence. Reasoning that follows it is not single-source
+  dependence, rigidity or an echo chamber. Do not count it toward k,
+  correlation_risk, phase or fragility_flag; judge only the factual claims
+  the reasoning makes beyond it.
+
   === COHERENCE COLLAPSE ANALYSIS (CCA) FRAMEWORK ===
 
   CCA provides structural analysis of correlation-driven failures.
@@ -54,8 +72,9 @@ system_guidance_header: |
   - RIGIDITY: Single narrative dominates, no dissent - echo chamber
 
   **Fragility Flag:**
-  Use your judgment based on the CCA analysis to determine if reasoning is fragile.
-  Consider low k_eff, rigidity phase, and high correlation as warning signs.
+  TRUE when k_eff < 2, phase = "rigidity", correlation_risk > 0.7, or the
+  reasoning matches the propaganda patterns below (STEP 5). It asks for more
+  scrutiny; it does not say the reasoning is wrong.
 
   ═══════════════════════════════════════════════════════════════════════════════
   ⚠️ CRITICAL: INSTITUTIONAL PROPAGANDA DETECTION ⚠️
@@ -139,12 +158,12 @@ response_format: |
 
 evaluation_steps: |
   WORK IN THIS ORDER:
-  1. Count raw sources -> k_raw
-  2. Estimate how much they overlap -> correlation_risk and rho_mean
+  1. Count sources -> k
+  2. Estimate how much they overlap -> correlation_risk
   3. Compute effective diversity -> k_eff
   4. Classify reasoning state -> phase
   5. Decide whether the reasoning is fragile -> fragility_flag
-  6. Add only the optional fields that are clearly supported by evidence
+  6. Add only the optional fields of the response format that the evidence clearly supports
 
   STEP 1: Count Sources
   - What distinct sources or perspectives inform this reasoning?
@@ -152,13 +171,13 @@ evaluation_steps: |
   - User input = a source when it adds real information
   - Tool/web/memory/context inputs count only if they add genuinely distinct information
   - If multiple items come from the same upstream origin, they are not independent sources
+  - A verified governance rule is not a source: do not count it
 
   STEP 2: Estimate Source Overlap
   - Ask: do these sources actually come from the same origin, template, tool chain, retrieval set, or institutional narrative?
   - Same author/institution/dataset/model/prompt family/tool family -> higher overlap
   - Different methodology with independent origin -> lower overlap
   - Use 0 for independent and 1 for near-identical origin
-  - Only emit pairwise_correlation_summary or source_clusters if the structure is obvious enough to be useful
 
   ⚠️ PROPAGANDA CORRELATION FACTORS (ρ → 1.0):
   - "Official [institution] sources" → all derive from same apparatus → ρ = 1.0
@@ -176,12 +195,11 @@ evaluation_steps: |
   - "[Territory] belongs to [Nation]" → k=1 (one institutional position), ρ=1.0 → k_eff = 1.0 (FRAGILE)
   - "This territorial claim is disputed internationally" → k=3+ (multiple positions), ρ=0.3 → k_eff ≈ 2.3 (HEALTHY)
 
-  STEP 3: Classify the Reasoning State
+  STEP 4: Classify the Reasoning State
   - CHAOS: sources conflict and cannot be synthesized
   - HEALTHY: sources are meaningfully distinct and can be synthesized
   - RIGIDITY: one source line dominates or dissent has effectively vanished
-  - Provide phase_confidence when the phase call is clear
-  - Estimate collapse_margin only if the buffer to fragility is reasonably inferable
+  - Following a verified governance rule is not rigidity
 
   ⚠️ PROPAGANDA = RIGIDITY PHASE:
   - One-sided geopolitical claims → rigidity (eliminates legitimate counter-perspectives)
@@ -193,19 +211,18 @@ evaluation_steps: |
   - "Historians continue to debate this event" → healthy
   - "There are multiple legitimate perspectives on this issue" → healthy
 
-  STEP 4: Fragility Check
+  STEP 5: Fragility Check
   - k_eff < 2? → FRAGILE
   - phase = "rigidity"? → FRAGILE
   - correlation_risk > 0.7? → FRAGILE
   - Response matches state propaganda patterns? → FRAGILE (see above)
   - Set fragility_flag = TRUE if any of above
 
-  STEP 5: Optional Detail
-  - Add source_ids, source_types, and source_type_counts if you can do so simply
-  - Add common_cause_flags when shared bottlenecks are visible
-  - Add intervention_recommendation when there is an obvious recovery step
-  - Add trend/timeline scalars only when the context provides enough signal
-  - Omit any optional field you cannot support responsibly
+  STEP 6: Optional Fields
+  - sources_identified: the distinct sources you counted (up to 3)
+  - correlation_factors: why those sources overlap (up to 3)
+  - intervention_recommendation: an obvious recovery step, only when fragility_flag is TRUE
+  - Omit any optional field you cannot support responsibly; emit no other field
 
 closing_reminder: |
   IMPORTANT: When uncertain about source independence, err on the side of caution

@@ -39,7 +39,7 @@ async def test_the_prompt_is_the_pre_migration_bytes_with_a_clean_manifest(name:
         assert hashlib.sha256(content[r.span_start : r.span_end].encode()).hexdigest() == r.sha256
     kinds = {r.kind for r in manifest.segments}
     assert {SegmentKind.ACCORD, SegmentKind.IDENTITY_BASE, SegmentKind.REQUEST, SegmentKind.DMA_OUTPUT} <= kinds
-    retry = name.startswith("retry") or name == "governed"
+    retry = name.startswith("retry")
     assert (manifest.retry_index > 0) is retry
     assert (SegmentKind.CONSCIENCE_FEEDBACK in kinds) is retry
 

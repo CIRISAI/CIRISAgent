@@ -1796,8 +1796,9 @@ class ThoughtProcessor(
             language,
             "conscience.retry_must_be_different",
             default=(
-                "If you re-select SPEAK, your speak_content MUST be MATERIALLY DIFFERENT "
-                "from the previous attempt — not a paraphrase. Use the IRIS-E alternatives "
+                "Unless the objection above lets you keep the action with a better "
+                "justification: if you re-select SPEAK, your speak_content MUST be "
+                "MATERIALLY DIFFERENT from the previous attempt — not a paraphrase. Use the IRIS-E alternatives "
                 "above as pivot directions if provided. CRITICAL: respond in the same "
                 "language you were responding in before — do not switch the user's "
                 "language. If the conscience flagged propaganda/defensive-mimicry patterns "

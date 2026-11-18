@@ -633,37 +633,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             return [whole], items([whole], "")
         return segments, layout
 
-    def _build_conscience_guidance_block(self, processing_context: Any) -> str:
-        """Build conscience guidance block for retry format enforcement."""
-        if not processing_context:
-            return ""
-
-        conscience_guidance = _get_value(processing_context, "conscience_guidance")
-        if not conscience_guidance:
-            return ""
-
-        retry_attempt = conscience_guidance.get("retry_attempt", 1)
-        original_failure = conscience_guidance.get("original_action_failed_because", "")
-
-        logger.warning(f"[ASPDMA] Conscience guidance detected - retry {retry_attempt}: {original_failure[:100]}")
-
-        return f"""
-=== CRITICAL FORMAT RETRY ===
-RETRY ATTEMPT: {retry_attempt}
-PREVIOUS FAILURE: {original_failure}
-
-YOUR PREVIOUS RESPONSE WAS REJECTED because it did not start with a classification word.
-
-MANDATORY FIX: Your SPEAK content MUST start with exactly ONE of these words:
-ETHICAL, UNETHICAL, REASONABLE, UNREASONABLE, MATCHES, CONTRADICTS, FAIR, UNFAIR, JUST, UNJUST, VALID, INVALID, MORAL, IMMORAL
-
-DO NOT start with: "The", "This", "Your", "I", "In", "It", "My" or any other word.
-
-CORRECT: "REASONABLE. The expectation is..."
-WRONG: "The expectation is reasonable..."
-=== END FORMAT RETRY ===
-"""
-
     def _build_system_message(self, input_data: EnhancedDMAInputs) -> str:
         """Build the system message for LLM evaluation (the segments of :meth:`_system_segments`, joined)."""
         return _joined(*self._system_segments(input_data))
@@ -763,19 +732,11 @@ WRONG: "The expectation is reasonable..."
             )
         )
 
-        # Extract conscience_guidance from processing_context for retry format enforcement
-        conscience_guidance_block = self._build_conscience_guidance_block(processing_context)
-
         # format_system_prompt_blocks: identity, guidance, snapshot, profiles; blank-line joined, stripped.
         guidance = _segment("instr:system", "stage_instruction", system_guidance)
         blocks: List[Any] = [(identity, identity_layout)]
-        if system_guidance or conscience_guidance_block:
-            g_segments = [guidance] if system_guidance else []
-            if conscience_guidance_block:
-                g_segments.append(
-                    _segment("conscience_guidance", "conscience_feedback", conscience_guidance_block, "llm_output")
-                )
-            blocks.append((g_segments, items(g_segments, "")))
+        if system_guidance:
+            blocks.append(([guidance], items([guidance], "")))
         if system_snapshot_block:
             snap = _segment("system_snapshot", "history", system_snapshot_block)
             blocks.append(([snap], items([snap], "")))

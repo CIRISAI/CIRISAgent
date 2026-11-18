@@ -264,3 +264,36 @@ def test_occurrence_agreement():
 def test_retry_after():
     assert m._retry_after_s("7", 1) == 7 and m._retry_after_s(None, 3) == 8
     assert m._retry_after_s("9999", 1) == m.RETRY_AFTER_CAP_S and m._retry_after_s("Wed, 21 Oct", 2) == 4
+
+
+def test_guidance_reply_picks_the_new_task_after_the_resolve():
+    from tools.qa_runner.modules.correction_episode_tests import guidance_reply
+
+    ev = [
+        {"event_type": "action_result", "task_id": "orig", "timestamp": "2026-11-17T10:00:05", "action_executed": "defer",
+         "action_parameters": "{'reason': 'validate'}"},
+        {"event_type": "action_result", "task_id": "other", "timestamp": "2026-11-17T09:59:00", "action_executed": "speak",
+         "action_parameters": "{'channel_id': None, 'content': 'too early'}"},
+        {"event_type": "dma_results", "task_id": "g", "timestamp": "2026-11-17T10:01:00"},
+        {"event_type": "action_result", "task_id": "orig", "timestamp": "2026-11-17T10:01:30", "action_executed": "speak",
+         "action_parameters": "{'content': 'original task, excluded'}"},
+        {"event_type": "action_result", "task_id": "g", "timestamp": "2026-11-17T10:02:00", "action_executed": "speak",
+         "action_parameters": "{'channel_id': None, 'channel_context': None, 'content': \"Please contact Language Services; it's their job.\"}"},
+    ]
+    got = guidance_reply(ev, "2026-11-17T10:00:30", ["orig"])
+    assert got == {"task_id": "g", "action": "speak", "timestamp": "2026-11-17T10:02:00",
+                   "response": "Please contact Language Services; it's their job."}
+    assert guidance_reply(ev, "2026-11-17T10:03:00", ["orig"]) is None
+    ev2 = [{"event_type": "action_result", "task_id": "g", "timestamp": "2026-11-17T10:02:00", "action_executed": "defer",
+            "action_parameters": "{}"}]
+    assert guidance_reply(ev2, "2026-11-17T10:00:00", ["orig"])["action"] == "defer"
+    assert guidance_reply(ev2, "2026-11-17T10:00:00", ["orig"])["response"] is None
+
+
+def test_action_content_parses_dict_repr_and_dict():
+    from tools.qa_runner.modules.correction_episode_tests import _action_content
+
+    assert _action_content({"content": "hi"}) == "hi"
+    assert _action_content("{'channel_id': None, 'content': 'a\\nb'}") == "a\nb"
+    assert _action_content("{'content': 'x', 'extra': SomeObject(1)}") == "x"
+    assert _action_content("{}") is None

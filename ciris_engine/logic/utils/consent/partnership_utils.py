@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import TaskStatus
+from ciris_engine.schemas.runtime.enums import TaskOrigin, TaskStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,8 @@ class PartnershipRequestHandler:
             user_id=user_id,
             correlation_id=f"consent_partnership_{uuid.uuid4().hex[:8]}",
             parent_task_id=None,
+            # The engine opens this task on the user's request; the request is not the user's message.
+            origin=TaskOrigin.ENGINE_PARTNERSHIP,
         )
 
         # Create the task

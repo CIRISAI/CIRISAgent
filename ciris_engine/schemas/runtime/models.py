@@ -12,7 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.types import JSONDict
 
-from .enums import TaskStatus, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.services.authority_core import WARole
+
+from .enums import TaskOrigin, TaskStatus, ThoughtStatus, ThoughtType
 from .task_envelope import TaskEnvelope
 from .veto_record import VetoRecordEntry
 
@@ -96,6 +98,13 @@ class WAAuthorization(BaseModel):
     )
     identity_change_kind: Optional[str] = Field(
         None, description="amendment | reapproval: what the deferral proposed (schemas.api.wa.IdentityChangeKind)"
+    )
+    wa_role: Optional[WARole] = Field(
+        None,
+        description=(
+            "The resolving Wise Authority's role, read from its certificate when the approval was applied. None "
+            "when the certificate was not found: the role is then not verified."
+        ),
     )
     verification: Literal["verified"] = Field(
         "verified",
@@ -185,6 +194,13 @@ class TaskContext(BaseModel):
         description=(
             "The sender of the message that created this task, as the adapter verified it "
             "(#1366 item 5). None for tasks not created from a message."
+        ),
+    )
+    origin: Optional[TaskOrigin] = Field(
+        None,
+        description=(
+            "Who created the task, set by the creating code (#1366). None on records written before the field "
+            "existed, and never read as an engine origin."
         ),
     )
 

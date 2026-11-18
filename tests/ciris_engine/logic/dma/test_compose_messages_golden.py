@@ -31,6 +31,10 @@ inserting exactly one message (never regenerated from the code under test):
 - #1366: DSASPDMA's response format names ``m1_justification`` beside
   ``proposed_amendment``: that one line was inserted after the
   ``proposed_amendment`` line of the dsaspdma snapshot's system message.
+- #1366 (RATCHET context map, S3): DSASPDMA carries the agent's identity block at the head of its guide message,
+  joined by a blank line (the fixture has no context, so it is the stored identity): the fixture identity's block
+  was prepended to message 3 of the dsaspdma snapshot, nothing else changed.
+- #1366 item 12: the four verb second passes gained a PIPELINE POSITION paragraph in their header.
 """
 
 from typing import List, cast

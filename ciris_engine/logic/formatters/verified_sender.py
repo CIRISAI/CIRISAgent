@@ -18,9 +18,13 @@ byte-identical to before.
 
 import re
 import unicodedata
-from typing import Any, Iterable, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Optional
 
+from ciris_engine.schemas.runtime.enums import TaskOrigin
 from ciris_engine.schemas.runtime.models import VerifiedSender
+
+if TYPE_CHECKING:
+    from ciris_engine.schemas.context.prompt_provenance import AuthnCarrier
 
 VERIFIED_SENDER_KEYS = (
     "prompts.verified_sender.header",
@@ -167,6 +171,90 @@ def verified_sender_identity_lines(sender: VerifiedSender, language: Optional[st
 UNVERIFIED_SENDER = VerifiedSender()
 
 
+#: The sender of a task the engine created (TaskContext.origin ENGINE_*, set by the creating code): the engine
+#: itself, id = the agent's id. Not a UserRole: no authenticated user holds it. Selected only by the task's
+#: structural origin, never because a sender is missing (#1366, coordinator rulings 2026-11-18).
+SYSTEM_SENDER_ROLE = "SYSTEM"
+SYSTEM_SENDER_SOURCE = "system"
+#: The subject id when the agent's own id is not known: the component that built the prompt.
+SYSTEM_SENDER_FALLBACK_ID = "ciris_engine"
+#: What vouches for a Wise Authority named as the sender of its guidance task: the resolution's verified signature.
+WA_SENDER_SOURCE = "wa_signature"
+
+_ORIGIN_PATHS: tuple[tuple[str, ...], ...] = (
+    ("origin",),
+    ("context", "origin"),
+    ("initial_task_context", "origin"),
+    ("task", "context", "origin"),
+)
+
+
+def task_origin_of(*contexts: Any) -> Optional[TaskOrigin]:
+    """The recorded origin of the task a task, task context or conscience context belongs to; None if unrecorded."""
+    for context in contexts:
+        if context is None:
+            continue
+        for path in _ORIGIN_PATHS:
+            value: Any = context
+            for attr in path:
+                value = value.get(attr) if isinstance(value, dict) else getattr(value, attr, None)
+                if value is None:
+                    break
+            if isinstance(value, TaskOrigin):
+                return value
+            if isinstance(value, str):
+                try:
+                    return TaskOrigin(value)
+                except ValueError:
+                    return None
+    return None
+
+
+def system_sender_id(context: Any) -> str:
+    """The subject id of an engine-created task: the agent's own id, else the engine component's."""
+    identity = getattr(context, "agent_identity", None)
+    agent_id = identity.get("agent_id") if isinstance(identity, dict) else getattr(identity, "agent_id", None)
+    return agent_id if isinstance(agent_id, str) and agent_id else SYSTEM_SENDER_FALLBACK_ID
+
+
+def engine_sender_authn(context: Any) -> Optional["AuthnCarrier"]:
+    """The sender of an engine-created task, for the input-ablated consciences; None for any other task.
+
+    Only a task whose recorded origin is ``ENGINE_*`` qualifies, and only while the thought answers no message of
+    its own: a message coalesced onto the task (a thought sender other than the one the task was created with, or
+    a recorded update sender) keeps that message's sender. A guidance task names the Wise Authority whose verified
+    resolution created it, when its certificate role was read at resolution; otherwise, as every engine task, the
+    engine: id = the agent's id, role SYSTEM, verified by ``system``.
+    """
+    from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+    from ciris_engine.schemas.context.prompt_provenance import AuthnCarrier
+
+    task = getattr(context, "task", None)
+    origin = task_origin_of(task, context)
+    if origin is None or not origin.is_engine:
+        return None
+    if getattr(task, "updated_info_sender", None) is not None:
+        return None
+    thought = getattr(context, "thought", None)
+    thought_sender = _follow(thought, ("initial_context", "verified_sender"))
+    inner = getattr(thought, "context", None)
+    if thought_sender is None and type(inner).__name__ == "ThoughtContext":
+        thought_sender = _follow(inner, ("verified_sender",))
+    if thought_sender is not None and thought_sender != _follow(task, ("context", "verified_sender")):
+        return None
+    grant = wa_authorization_of(context)
+    if origin is TaskOrigin.ENGINE_GUIDANCE and grant is not None and grant.wa_role is not None:
+        return AuthnCarrier(subject_id=grant.wa_id, role=grant.wa_role.value.upper(), verifier=WA_SENDER_SOURCE)
+    return AuthnCarrier(subject_id=system_sender_id(context), role=SYSTEM_SENDER_ROLE, verifier=SYSTEM_SENDER_SOURCE)
+
+
+def format_authn_sender_block(authn: "AuthnCarrier", language: Optional[str] = None) -> str:
+    """The VERIFIED SENDER block of an authn carrier (an engine-created task's sender): no display name."""
+    lines = sender_identity_lines(authn.subject_id, authn.role, authn.verifier, language)
+    lines.extend(verified_sender_trailer_lines(language))
+    return "\n".join(lines)
+
+
 def verified_sender_display_name_line(display_name: str, language: Optional[str] = None) -> str:
     """The block's line labelling the self-chosen display name as not identity: the ``display_name`` part."""
     from ciris_engine.logic.utils.localization import get_preferred_language, get_string
@@ -257,8 +345,10 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     display name labelled as self-chosen (their display-name confusion vetoed
     a correct ID-mismatch refusal on v2.21.0, #1365). Entropy and the
     optimization veto (``ablated=True``): verified id, role and source only,
-    never the display name, whenever a trusted (signed) rule is in force; with
-    no verified sender, the block says so (id unknown, role not verified).
+    never the display name, whenever a trusted (signed) rule is in force; for
+    an engine-created task (recorded origin ENGINE_*) the engine or resolving
+    Wise Authority (``engine_sender_authn``); otherwise with no verified
+    sender, the block says so (id unknown, role not verified).
     Otherwise empty when there is no verified sender.
     """
     sender = getattr(context, "verified_sender", None) or verified_sender_of(
@@ -267,6 +357,9 @@ def conscience_sender_block(context: Any, language: Optional[str] = None, ablate
     if ablated:
         if not trusted_rule_in_force(context):
             return ""
+        engine = engine_sender_authn(context)
+        if engine is not None:
+            return format_authn_sender_block(engine, language)
         return format_verified_sender_block(sender or UNVERIFIED_SENDER, language, include_display_name=False)
     if sender is None:
         return ""

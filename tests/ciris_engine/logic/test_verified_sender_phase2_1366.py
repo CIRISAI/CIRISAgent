@@ -235,7 +235,7 @@ async def test_dsaspdma_prompt_has_the_verified_block() -> None:
 
     item = cg.make_queue_item()
     item.initial_context = ThoughtContext(task_id="t", correlation_id="c", verified_sender=IMPOSTOR)
-    with patch.object(cg, "make_queue_item", return_value=item):
+    with patch.object(cg, "make_queue_item", return_value=item), cg.stored_identity_environment():
         messages = await cg.capture_dsaspdma()
     assert f"id: {IMPOSTOR_ID}" in "\n".join(str(m["content"]) for m in messages)
 

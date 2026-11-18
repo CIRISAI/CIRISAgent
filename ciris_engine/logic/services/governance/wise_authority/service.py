@@ -39,7 +39,7 @@ from ciris_engine.schemas.api.wa import (
     IdentityChangeProposal,
     ProposedBaseLink,
 )
-from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskOrigin, TaskStatus
 from ciris_engine.schemas.runtime.models import TaskContext, WAAuthorization
 from ciris_engine.schemas.services.authority.deferral_rows import DeferralRequestRow, DeferralRowStatus
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
@@ -906,6 +906,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             status=TaskStatus.DEFERRED,
             priority=5,
             task_id=task_id,
+            origin=TaskOrigin.ENGINE_SYSTEM,
         )
         from ciris_engine.logic.persistence.models.tasks import _task_to_persist_payload
 
@@ -977,6 +978,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             status=TaskStatus.DEFERRED,
             priority=5,
             task_id=task_id,
+            origin=TaskOrigin.ENGINE_SYSTEM,
         )
         engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
         return await self.send_deferral(
@@ -1460,6 +1462,9 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                         proposed_amendment=_context_text(deferral_info, PROPOSED_AMENDMENT_CONTEXT_KEY),
                         m1_justification=_context_text(deferral_info, M1_JUSTIFICATION_CONTEXT_KEY),
                         identity_change_kind=identity_change.kind.value if identity_change is not None else None,
+                        # The resolving WA's role, from its certificate: only then does a prompt name it as a
+                        # verified sender (#1366). Unknown certificate: None, and the task's sender is SYSTEM.
+                        wa_role=await self._wa_role(response.wa_id),
                     )
                     guidance_context_dict["wa_authorization"] = wa_authorization.model_dump(mode="json")
                 else:
@@ -1477,7 +1482,10 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     agent_occurrence_id=agent_occurrence_id,
                     preferred_language=resolved_language,
                     wa_authorization=wa_authorization,
+                    origin=TaskOrigin.ENGINE_GUIDANCE,
                 )
+                # The copied context carries the deferred task's origin; this task is the engine's (#1366).
+                guidance_context_dict["origin"] = TaskOrigin.ENGINE_GUIDANCE.value
 
                 # Create new task description incorporating WA guidance
                 new_description = f"[WA GUIDANCE] Original: {original_description}\n\nWA Response: {response.reason}"
@@ -1546,6 +1554,15 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         except Exception as e:
             logger.error(f"Failed to resolve deferral: {e}")
             return False
+
+    async def _wa_role(self, wa_id: str) -> Optional[WARole]:
+        """The role on a Wise Authority's certificate; None when it is not found or cannot be read."""
+        try:
+            wa = await self.auth_service.get_wa(wa_id)
+        except Exception as exc:
+            logger.warning("Could not read the certificate of WA %s: %s", wa_id, exc)
+            return None
+        return wa.role if wa is not None else None
 
     def _attach_deployment_envelope(
         self,

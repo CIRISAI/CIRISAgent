@@ -21,7 +21,7 @@ from typing import List, Optional
 
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import TaskOrigin, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, Thought, ThoughtContext, VerifiedSender
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,7 @@ def create_task(
     images: Optional[List[ImageContent]] = None,
     preferred_language: Optional[str] = None,
     verified_sender: Optional[VerifiedSender] = None,
+    origin: Optional[TaskOrigin] = None,
 ) -> Task:
     """
     Create a Task with proper occurrence_id handling.
@@ -62,6 +63,8 @@ def create_task(
         images: Optional list of images for multimodal tasks
         verified_sender: The sender of the originating message as the adapter
             verified it (#1366 item 5); ignored when ``context`` is given
+        origin: Who created the task (#1366), set by the calling code; ignored
+            when ``context`` is given (the context's own origin is kept)
 
     Returns:
         Task with proper occurrence_id in both task and context
@@ -96,6 +99,7 @@ def create_task(
             agent_occurrence_id=agent_occurrence_id,
             preferred_language=preferred_language,
             verified_sender=verified_sender,
+            origin=origin,
         )
     else:
         # Verify existing context has correct occurrence_id
@@ -120,6 +124,8 @@ def create_task(
                 wa_authorization=context.wa_authorization,
                 # And the verified sender (#1366 item 5).
                 verified_sender=context.verified_sender,
+                # And who created it (#1366).
+                origin=context.origin,
             )
 
     # Task is the record of truth for preferred_language. Mirror the value

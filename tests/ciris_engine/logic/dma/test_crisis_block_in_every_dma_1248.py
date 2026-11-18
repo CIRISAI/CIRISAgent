@@ -62,7 +62,7 @@ def _locale_environment(lang: str) -> Any:
 
 
 async def _compose(step: str, lang: str) -> List[Dict[str, Any]]:
-    with _locale_environment(lang):
+    with _locale_environment(lang), cg.stored_identity_environment():
         return await cg.capture_step(step)  # type: ignore[no-any-return]
 
 

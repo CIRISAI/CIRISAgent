@@ -272,6 +272,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         from ciris_engine.logic.prompt_assembly.assembler import LayoutItem
         from ciris_engine.logic.prompt_assembly.segmenting import (
             PromptBuilder,
+            identity_segments,
             items,
             segment,
             sender_block_segments,
@@ -302,7 +303,15 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             for key in ("system_guidance_header", "evaluation_steps", "response_format", "closing_reminder")
         ]
         system = stripped_ends([s for s in guide if s.text])
-        builder.message("system", system, items(system, "\n\n", ""))
+        layout = items(system, "\n\n", "")
+        # The agent's identity leads the guide, as at every drafter (context_policy.yaml: identity_base always at
+        # dsaspdma). A deferral classified without it judged a self it could not see (RATCHET context map, S3).
+        agent_identity = self._agent_identity(context)
+        head, head_layout = identity_segments(agent_identity, language)
+        if head:
+            layout = list(head_layout) + ([layout[0].model_copy(update={"glue": "\n\n"})] + layout[1:] if layout else [])
+            system = list(head) + system
+        builder.message("system", system, layout)
 
         taxonomy_text = self._get_prompt_value("taxonomy_text") or build_deferral_taxonomy_prompt(language)
         template = self._get_prompt_value("context_integration") or (
@@ -362,12 +371,43 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             user_items.append(LayoutItem(segment_id=feedback.segment_id))
         builder.message("user", user, user_items)
         return builder.assemble(
-            PromptStage.DSASPDMA, self._assembly_call(original_thought, context, retry=feedback is not None)
+            PromptStage.DSASPDMA,
+            self._assembly_call(original_thought, context, retry=feedback is not None, agent_identity=agent_identity),
         )
 
-    def _assembly_call(self, original_thought: Any, context: Optional[Any], retry: bool) -> "AssemblyCall":
-        """The manifest's call facts, from trusted state only (the verified grant, verified amendments)."""
+    @staticmethod
+    def _agent_identity(context: Optional[Any]) -> Any:
+        """The agent's identity, approved amendments included: from the thought's context as the other drafters
+        read it, else the stored identity node (base identity only: amendments load with the snapshot). Raises
+        in QA when neither has one (fail closed); in production the call proceeds and the guard records it."""
         from ciris_engine.logic.formatters.identity import agent_identity_of
+
+        identity = agent_identity_of(context)
+        if identity:
+            return identity
+        from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
+        from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
+
+        stored = retrieve_agent_identity()
+        if stored is not None:
+            logger.warning("DSASPDMA: the thought context carries no agent identity; using the stored identity node")
+            return IdentityData(
+                agent_id=stored.agent_id,
+                description=stored.core_profile.description,
+                role=stored.core_profile.role_description,
+            )
+        from ciris_engine.logic.prompt_assembly.assembler import current_guard_mode
+        from ciris_engine.schemas.context.prompt_provenance import AssemblyMode
+
+        if current_guard_mode() == AssemblyMode.FAIL_CLOSED:
+            raise ValueError("DSASPDMA: no agent identity in the thought context or the store")
+        logger.error("DSASPDMA: no agent identity in the thought context or the store; classifying without it")
+        return None
+
+    def _assembly_call(
+        self, original_thought: Any, context: Optional[Any], retry: bool, agent_identity: Any = None
+    ) -> "AssemblyCall":
+        """The manifest's call facts, from trusted state only (the verified grant, verified amendments)."""
         from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
         from ciris_engine.logic.prompt_assembly import AssemblyCall
         from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
@@ -388,7 +428,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             thought_kind=kind,
             retry_index=1 if retry else 0,
             response_model=DSASPDMALLMResult.__name__,
-            facts=policy_facts(authorization, agent_identity_of(context), id_scoped=False),
+            facts=policy_facts(authorization, agent_identity, id_scoped=False),
             language=self.prompt_loader.language,
         )
 

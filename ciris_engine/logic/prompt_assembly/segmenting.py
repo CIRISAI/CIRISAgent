@@ -240,6 +240,18 @@ def sender_block_segments(
     return segments, items(segments, "\n")
 
 
+def authn_sender_block_segments(
+    authn: AuthnCarrier, source: SegmentSource, *, prefix: str = "sender", language: Optional[str] = None
+) -> Segments:
+    """The VERIFIED SENDER block of an engine-built sender (``formatters.verified_sender.engine_sender_authn``): a
+    ``sender_identity`` carrying ``authn`` and the block's closing lines. No display name."""
+    from ciris_engine.logic.formatters.verified_sender import verified_sender_trailer_lines
+
+    segments = [PromptSegment(segment_id=f"{prefix}:identity", kind=SegmentKind.SENDER_IDENTITY, source=source, authn=authn)]
+    segments.append(_instruction(f"{prefix}:trailer", "\n".join(verified_sender_trailer_lines(language))))
+    return segments, items(segments, "\n")
+
+
 # ------------------------------------------------------------------------------------------------ governance
 
 
@@ -558,6 +570,7 @@ __all__ = [
     "items",
     "policy_facts",
     "sender_authn",
+    "authn_sender_block_segments",
     "sender_block_segments",
     "segment",
     "split_template",

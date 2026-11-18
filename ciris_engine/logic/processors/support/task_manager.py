@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
-from ciris_engine.schemas.runtime.enums import TaskStatus
+from ciris_engine.schemas.runtime.enums import TaskOrigin, TaskStatus
 from ciris_engine.schemas.runtime.models import Task, TaskContext, VerifiedSender
 from ciris_engine.schemas.types import JSONDict
 
@@ -51,6 +51,7 @@ class TaskManager:
         context: Optional[JSONDict] = None,
         parent_task_id: Optional[str] = None,
         verified_sender: Optional[VerifiedSender] = None,
+        origin: Optional[TaskOrigin] = None,
     ) -> Task:
         """Create a new task with v1 schema.
 
@@ -70,6 +71,7 @@ class TaskManager:
             parent_task_id=parent_task_id,
             agent_occurrence_id=self.agent_occurrence_id,
             verified_sender=verified_sender,
+            origin=origin,
         )
 
         task = Task(
@@ -271,6 +273,7 @@ class TaskManager:
             correlation_id=str(uuid.uuid4()),
             parent_task_id=None,
             agent_occurrence_id=self.agent_occurrence_id,
+            origin=TaskOrigin.ENGINE_WAKEUP,
         )
 
         root_task = Task(
@@ -330,6 +333,7 @@ class TaskManager:
                 correlation_id=str(uuid.uuid4()),
                 parent_task_id=root_task.task_id,
                 agent_occurrence_id=self.agent_occurrence_id,
+                origin=TaskOrigin.ENGINE_WAKEUP,
             )
 
             step_task = Task(

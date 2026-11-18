@@ -10,7 +10,7 @@ for cfg in ${CFGS:-contract measured contract_postreview contract_noverbveto con
   for inv in $INVS Terminates; do
     W=$(mktemp -d); cp H3EREContextFlow.tla ContextData.tla ContractPolicy.tla "$W/"; cp "$cfg.cfg" "$W/c.cfg"
     if [ "$inv" = Terminates ]; then echo "PROPERTY Terminates" >> "$W/c.cfg"; else echo "INVARIANT $inv" >> "$W/c.cfg"; fi
-    out=$(cd "$W" && java -XX:+UseParallelGC -cp "$TLA2TOOLS" tlc2.TLC -config c.cfg -workers 2 H3EREContextFlow.tla 2>&1)
+    out=$(cd "$W" && java ${TLC_JAVA_OPTS:-} -XX:+UseParallelGC -cp "$TLA2TOOLS" tlc2.TLC -config c.cfg -workers ${TLC_WORKERS:-2} H3EREContextFlow.tla 2>&1)
     if echo "$out" | grep -q "No error has been found"; then r=holds
     elif echo "$out" | grep -q "is violated\|Temporal properties were violated"; then r=VIOLATED
     else r="ERROR"; echo "$out" | tail -15; fi

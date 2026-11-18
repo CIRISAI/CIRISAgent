@@ -12,6 +12,7 @@ import logging
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ciris_engine.schemas.runtime.enums import ServiceType
+from ciris_engine.schemas.runtime.unit_admission import UnitCapability
 from ciris_engine.schemas.types import JSONDict
 
 
@@ -340,6 +341,13 @@ class ServiceManifest(BaseModel):
     )
     cli_dependencies: List[str] = Field(
         default_factory=list, description="Required CLI tools/binaries (e.g., 'tmux', 'mcporter')"
+    )
+    unit_capabilities: Optional[List[UnitCapability]] = Field(
+        None,
+        description=(
+            "admission:unit capabilities this module's tools exercise when a tool declares none "
+            "(rc21 CC 2.7.11; read only for a unit beyond the attested build; None: every effect)"
+        ),
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)

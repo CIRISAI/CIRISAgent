@@ -400,5 +400,14 @@ def mock_runtime_with_enrichment(mock_enrichment_tool_service):
     # Keep get_services_by_type for backward compatibility with some tests
     runtime.service_registry.get_services_by_type.return_value = [mock_enrichment_tool_service]
     runtime.bus_manager = Mock()
+    # A real ToolBus: enrichment never invokes a provider outside its dispatch
+    # gate (CIRISAgent#1366 item 19), so a Mock bus would execute nothing.
+    from datetime import datetime, timezone
+
+    from ciris_engine.logic.buses.tool_bus import ToolBus
+
+    time_service = Mock()
+    time_service.now.return_value = datetime(2026, 11, 18, tzinfo=timezone.utc)
+    runtime.bus_manager.tool = ToolBus(runtime.service_registry, time_service)
 
     return runtime

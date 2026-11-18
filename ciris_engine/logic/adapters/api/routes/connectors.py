@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_system_component_envelope
 from ciris_engine.logic.utils.log_sanitizer import sanitize_for_log
 from ciris_engine.schemas.api.auth import UserRole
+from ciris_engine.schemas.runtime.reviewed_action_admission import CONNECTOR_SETUP_COMPONENT, SYSTEM_CALLERS
 from ciris_engine.schemas.runtime.task_envelope import (
     RequesterAuthorization,
     ToolCallOrigin,
@@ -26,12 +27,12 @@ from ciris_engine.schemas.runtime.task_envelope import (
 from ..auth import get_current_user
 from ..models import StandardResponse, TokenData
 
-_CONNECTOR_COMPONENT = "api.routes.connectors"
+_CONNECTOR_COMPONENT = CONNECTOR_SETUP_COMPONENT
 
-# The exact tools this route's code calls. Enumerated here so operator connector
-# setup runs under a *narrower* grant than a reasoning task rather than as an
-# exemption from authorization (CIRISAgent#938).
-_CONNECTOR_TOOLS = ("initialize_sql_connector", "sql_query")
+# The exact tools this route's code calls, from the gate's enumeration of
+# unreviewed system callers, so operator connector setup runs under a *narrower*
+# grant than a reasoning task rather than as an exemption (CIRISAgent#938, #1366 item 19).
+_CONNECTOR_TOOLS = tuple(sorted(SYSTEM_CALLERS[CONNECTOR_SETUP_COMPONENT].tools or ()))
 
 
 def _connector_subject(connector_id: str, current_user: Optional[TokenData] = None) -> ToolInvocationSubject:

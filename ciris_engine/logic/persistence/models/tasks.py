@@ -714,7 +714,16 @@ async def add_system_task(
     task: Task,
     auth_service: Optional["AuthenticationServiceProtocol"] = None,
 ) -> str:
-    """Add a system task, signed by the agent: tasks are the agent's work."""
+    """Add a system task, signed by the agent: tasks are the agent's work.
+
+    The task carries a deployment envelope (CIRISAgent#1366 item 19): the tool
+    gate denies a task with none. Issued before signing, so the signature covers
+    the bound task as stored.
+    """
+    if task.context is None or task.context.envelope is None:
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
+
+        issue_task_envelope_best_effort(task)
     if auth_service:
         try:
             task.signed_by, task.signature, task.signed_at, task.signature_pqc = await auth_service.sign_system_task(
@@ -1109,6 +1118,36 @@ def get_shared_claim_failures() -> List[Dict[str, str]]:
     return list(_SHARED_CLAIM_FAILURES)
 
 
+def _shared_task_context(
+    task_id: str, channel_id: str, time_service: TimeServiceProtocol
+) -> Optional[TaskContext]:
+    """The context a shared coordination task is created with: its deployment envelope.
+
+    Whichever occurrence claims a shared WAKEUP/SHUTDOWN task would otherwise
+    inherit an envelope-less task, which the tool gate denies (FSD/TASK_ENVELOPE.md
+    §8). ``None`` on an issuance failure: the task is still created, and denied.
+    """
+    try:
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+            issue_deployment_envelope_from_cache,
+        )
+
+        envelope = issue_deployment_envelope_from_cache(
+            task_id=task_id, agent_occurrence_id="__shared__", time_service=time_service
+        )
+    except Exception as exc:
+        logger.warning("Shared task %s: no envelope issued (%s); the tool gate will deny it", task_id, exc)
+        return None
+    return TaskContext(
+        channel_id=channel_id,
+        user_id=None,
+        correlation_id=f"shared_{uuid.uuid4().hex[:8]}",
+        parent_task_id=None,
+        agent_occurrence_id="__shared__",
+        envelope=envelope,
+    )
+
+
 def try_claim_shared_task(
     task_type: str,
     channel_id: str,
@@ -1158,7 +1197,7 @@ def try_claim_shared_task(
             return (existing, False)
 
     now = time_service.now_iso()
-    payload = {
+    payload: Dict[str, Any] = {
         "task_id": task_id,
         "channel_id": channel_id,
         "agent_occurrence_id": "__shared__",
@@ -1168,6 +1207,9 @@ def try_claim_shared_task(
         "created_at": now,
         "updated_at": now,
     }
+    shared_context = _shared_task_context(task_id, channel_id, time_service)
+    if shared_context is not None:
+        payload["context"] = shared_context.model_dump(mode="json")
 
     engine = _get_engine()
     try:

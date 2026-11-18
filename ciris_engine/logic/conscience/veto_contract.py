@@ -2,10 +2,19 @@
 
 Pure helpers the conscience fold and the retry path share:
 
-* ``action_fingerprint`` -- what "the same action" means for the ban: the verb,
-  the tool name, and a hash of the normalized arguments (TOOL) or speak text
-  (SPEAK). Whitespace never makes two drafts different; for SPEAK neither does
-  case.
+* ``action_fingerprint`` -- THE reviewed-action fingerprint (item 10's canonical
+  form, ``reviewed_action.action_review_fingerprint``): the same value dispatch
+  admits for a TOOL. One fingerprint for the veto record and for execution.
+* ``action_equivalence_key`` -- what "the same action" means for the BAN only:
+  the verb, the tool name, and a hash of the normalized arguments (TOOL) or
+  speak text (SPEAK). Whitespace never makes two drafts different; for SPEAK
+  neither does case. Kept separate because the two jobs need opposite
+  properties: the ban must not be evaded by a cosmetic re-roll of a vetoed
+  draft, while dispatch must bind the exact bytes reviewed (whitespace and
+  case are meaning in a tool argument: a shell line, a SQL filter, a ticket
+  body). A coarser key cannot authorize; an exact key cannot ban. The key is a
+  pure coarsening of the fingerprint: equal fingerprints always have equal
+  keys.
 * ``trusted_evidence_ids`` / ``held_evidence_ids`` -- the trusted Wise Authority
   state a task carries (the signed ``WAAuthorization`` of a resolved deferral,
   approved identity amendments) and the part of it a given conscience was
@@ -63,7 +72,14 @@ def _params_dict(params: Any) -> dict[str, Any]:
 
 
 def action_fingerprint(action: Any) -> str:
-    """``verb:tool:hash`` for a draft (#1366 item 8).
+    """THE reviewed-action fingerprint of a draft (#1366 items 8 + 10): what the record names."""
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import action_review_fingerprint
+
+    return action_review_fingerprint(action)
+
+
+def action_equivalence_key(action: Any) -> str:
+    """``verb:tool:hash`` ban-equivalence key for a draft (#1366 item 8).
 
     SPEAK hashes the speak text (whitespace collapsed, case folded); TOOL hashes
     the tool's arguments (whitespace collapsed inside strings, keys sorted);
@@ -158,10 +174,16 @@ def merge_veto_entries(*records: Iterable[VetoRecordEntry]) -> List[VetoRecordEn
     return list(by_id.values())
 
 
+def entry_equivalence_key(entry: VetoRecordEntry) -> str:
+    """The ban key of a recorded veto. A record written before the split carries
+    its key in ``action_fingerprint`` (that field WAS the ``verb:tool:hash`` key)."""
+    return entry.equivalence_key or entry.action_fingerprint
+
+
 def banned_entry_for(
-    fingerprint: str, entries: Iterable[VetoRecordEntry], available_evidence_ids: Iterable[str] = ()
+    equivalence_key: str, entries: Iterable[VetoRecordEntry], available_evidence_ids: Iterable[str] = ()
 ) -> Optional[VetoRecordEntry]:
-    """The recorded veto that bans this exact draft, if any.
+    """The recorded veto that bans this draft (by ban-equivalence key), if any.
 
     A banned evidence veto stops applying once trusted state holds evidence the
     objecting conscience did not have (a WA has since signed): the draft then
@@ -170,7 +192,7 @@ def banned_entry_for(
     """
     available = set(available_evidence_ids)
     for entry in entries:
-        if entry.action_fingerprint != fingerprint or not entry.banned or entry.discharged_by:
+        if entry_equivalence_key(entry) != equivalence_key or not entry.banned or entry.discharged_by:
             continue
         if entry.objection_type == ObjectionType.EVIDENCE and available - set(entry.held_evidence_ids):
             continue
@@ -209,7 +231,9 @@ def format_prior_vetoes_block(entries: List[VetoRecordEntry], language: str) -> 
 __all__ = [
     "MAX_PRIOR_VETOES_SHOWN",
     "VETO_RECORD_FEEDBACK_KEY",
+    "action_equivalence_key",
     "action_fingerprint",
+    "entry_equivalence_key",
     "authorization_evidence_id",
     "banned_entry_for",
     "format_prior_vetoes_block",

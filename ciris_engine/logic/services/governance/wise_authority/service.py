@@ -1186,7 +1186,16 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     guidance_task_id=guidance_task.task_id,
                     agent_occurrence_id=agent_occurrence_id,
                     wa_id=response.wa_id,
+                    response=response,
                 )
+                # Every other guidance task gets the deployment envelope
+                # (#1366 item 19): this path writes the row straight to the
+                # substrate, bypassing every issuance site, and the tool gate
+                # denies an envelope-less task.
+                if "envelope" not in guidance_context_dict:
+                    self._attach_deployment_envelope(
+                        guidance_context_dict, guidance_task.task_id, agent_occurrence_id, ctx_user_id_str, channel_id
+                    )
 
                 # Persist the new guidance task via the substrate.
                 guidance_payload = {
@@ -1215,6 +1224,35 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             logger.error(f"Failed to resolve deferral: {e}")
             return False
 
+    def _attach_deployment_envelope(
+        self,
+        guidance_context_dict: Dict[str, object],
+        task_id: str,
+        agent_occurrence_id: str,
+        user_id: Optional[str],
+        channel_id: Optional[str],
+    ) -> None:
+        """Bind the deployment-resolved envelope to a guidance task with no approval envelope.
+
+        Best-effort: on failure the task has no envelope, which the gate denies.
+        """
+        try:
+            from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+                issue_deployment_envelope_from_cache,
+            )
+            from ciris_engine.schemas.runtime.task_envelope import RequesterAuthorization
+
+            envelope = issue_deployment_envelope_from_cache(
+                task_id=task_id,
+                agent_occurrence_id=agent_occurrence_id,
+                requester=RequesterAuthorization(user_id=user_id, channel_id=channel_id),
+                time_service=self._time_service,
+            )
+        except Exception as exc:
+            logger.warning("Guidance task %s: no envelope issued (%s); the tool gate will deny it", task_id, exc)
+            return
+        guidance_context_dict["envelope"] = envelope.model_dump(mode="json")
+
     # ========== Tool-Approval Envelope Issuance (CIRISAgent#942) ==========
 
     def _attach_tool_approval_envelope(
@@ -1225,6 +1263,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         guidance_task_id: str,
         agent_occurrence_id: str,
         wa_id: str,
+        response: object = None,
     ) -> None:
         """Mint the approval envelope for a ``[WA GUIDANCE]`` task and bind it.
 
@@ -1263,7 +1302,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         fail-closed direction — a broken issuance can never turn into a grant.
         """
         from ciris_engine.logic.infrastructure.authorization.tool_approval import (
-            pending_call_fingerprint_from_deferral_context,
+            approved_call_fingerprint,
             pending_tool_from_deferral_context,
         )
 
@@ -1276,7 +1315,8 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         # deferral raised before calls were bound: the envelope is then minted
         # tool-only, which the gate treats as legacy and defers again for
         # re-approval of a specific call.
-        approved_call = pending_call_fingerprint_from_deferral_context(deferral_info.get("context"))
+        # rc21 §4: the approval's own call_fingerprint, else the verified proposed call.
+        approved_call = approved_call_fingerprint(deferral_info.get("context"), response)
 
         try:
             from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_authority_envelope

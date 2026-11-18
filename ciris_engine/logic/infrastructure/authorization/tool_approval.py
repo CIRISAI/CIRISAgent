@@ -65,6 +65,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, FrozenSet, List, Optional, Union
 
+from ciris_engine.schemas.runtime.reviewed_action_admission import PROPOSED_CALL_KEY
 from ciris_engine.schemas.runtime.task_envelope import EnvelopeIssuerKind, TaskEnvelope
 from ciris_engine.schemas.types import JSONDict
 
@@ -295,6 +296,11 @@ def build_approval_deferral(
     }
     if call_fingerprint:
         context[PENDING_TOOL_CALL_FINGERPRINT_KEY] = call_fingerprint
+        # rc21 §4: the call the Wise Authority is asked to approve, whole, so
+        # the client can show it and send back its call_fingerprint.
+        context[PROPOSED_CALL_KEY] = encode_proposed_call(
+            tool_name, dict(intended_parameters or {}), channel_id, call_fingerprint
+        )
 
     defer_params = DeferParams(
         channel_id=channel_id,
@@ -352,20 +358,79 @@ def pending_tool_from_deferral_context(deferral_context: object) -> Optional[str
     return value
 
 
+def encode_proposed_call(
+    tool_name: str, arguments: ToolArgumentMap, channel_id: Optional[str], call_fingerprint: str
+) -> str:
+    """``proposed_call`` as the deferral context carries it: JSON text (the context is a string map)."""
+    import json
+
+    return json.dumps(
+        {"tool": tool_name, "arguments": arguments, "channel": channel_id or "", "call_fingerprint": call_fingerprint},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def proposed_call_fingerprint(deferral_context: object) -> Optional[str]:
+    """The ``call_fingerprint`` of the deferral's ``proposed_call``, verified, or ``None``.
+
+    ``DeferParams.context`` is model-authorable, so the fingerprint is
+    RECOMPUTED from the proposed tool, arguments and channel and must match the
+    one stated; anything else is ``None`` (no binding, fail closed).
+    """
+    import json
+
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import tool_call_fingerprint
+
+    if not isinstance(deferral_context, dict):
+        return None
+    raw = deferral_context.get(PROPOSED_CALL_KEY)
+    if not isinstance(raw, str):
+        return None
+    try:
+        call = json.loads(raw)
+        stated = call["call_fingerprint"]
+        recomputed = tool_call_fingerprint(call["tool"], call["arguments"], call.get("channel") or None)
+    except (ValueError, KeyError, TypeError):
+        return None
+    return stated if isinstance(stated, str) and stated == recomputed else None
+
+
 def pending_call_fingerprint_from_deferral_context(deferral_context: object) -> Optional[str]:
     """The fingerprint of the call awaiting approval, or ``None`` (legacy / absent).
 
-    ``None`` means the envelope minted from this deferral carries no
-    ``approved_calls`` and so approves nothing at the gate — fail-closed.
+    The verified ``proposed_call`` first (rc21 §4), then the bare key. ``None``
+    means the envelope minted from this deferral carries no ``approved_calls``
+    and so approves nothing at the gate — fail-closed.
     """
     from ciris_engine.logic.infrastructure.authorization.reviewed_action import FINGERPRINT_PREFIX
 
     if not isinstance(deferral_context, dict):
         return None
+    proposed = proposed_call_fingerprint(deferral_context)
+    if proposed is not None:
+        return proposed
     value = deferral_context.get(PENDING_TOOL_CALL_FINGERPRINT_KEY)
     if not isinstance(value, str) or not value.startswith(FINGERPRINT_PREFIX):
         return None
     return value
+
+
+def approved_call_fingerprint(deferral_context: object, response: object) -> Optional[str]:
+    """The call a Wise Authority's approval binds (rc21 §4), or ``None``.
+
+    The approval's own ``call_fingerprint`` (``DeferralResponse`` /
+    ``WAAuthorization``; the WA approved exactly that call) wins; without one
+    (a client that predates exact-call approval) the deferral's verified
+    proposed call -- what the WA was shown. A malformed approval fingerprint
+    binds nothing.
+    """
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import FINGERPRINT_PREFIX
+
+    stated = getattr(response, "call_fingerprint", None)
+    if stated is not None:
+        return stated if isinstance(stated, str) and stated.startswith(FINGERPRINT_PREFIX) else None
+    return pending_call_fingerprint_from_deferral_context(deferral_context)
 
 
 def _detail_names_tool(detail: object, tool_name: str) -> bool:
@@ -387,11 +452,14 @@ __all__ = [
     "PENDING_TOOL_CALL_FINGERPRINT_KEY",
     "TOOL_APPROVAL_DETAIL_KEY",
     "TOOL_APPROVAL_DETAIL_MAX_CHARS",
+    "approved_call_fingerprint",
     "build_approval_deferral",
+    "encode_proposed_call",
     "encode_tool_approval_detail",
     "envelope_approves_call",
     "envelope_approves_tool",
     "pending_call_fingerprint_from_deferral_context",
     "pending_tool_from_deferral_context",
+    "proposed_call_fingerprint",
     "tool_requires_approval",
 ]

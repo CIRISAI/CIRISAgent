@@ -589,6 +589,9 @@ class ShutdownProcessor(BaseProcessor):
             correlation_id=f"shutdown_{uuid.uuid4().hex[:8]}",
             parent_task_id=None,
             agent_occurrence_id=self.agent_occurrence_id,
+            # Keep the envelope the shared task was created with (#1366 item 19):
+            # replacing the context must not strip the task's authorization.
+            envelope=claimed_task.context.envelope if claimed_task.context is not None else None,
         )
         claimed_task.context = shutdown_context
 

@@ -498,3 +498,12 @@ def test_schema_instruction_is_an_allowed_residual_only_from_the_provider_librar
     with pytest.raises(ContextPolicyViolation) as err:
         asm.build(PromptStage.ENTROPY, judge_segments() + [bad], QA, call=call())
     assert [(v.kind, v.segment_id) for v in err.value.violations] == [(GuardViolationKind.WRONG_SOURCE, "schema")]
+
+
+def test_the_signed_rule_is_required_at_the_judges_and_allowed_elsewhere(asm):
+    """FSD §5 require / §14: a trusted rule in force must reach every judge; a drafter may read it."""
+    no_rule = [s for s in judge_segments() if s.segment_id not in ("rule", "draft")]
+    _, manifest = asm.build(PromptStage.TSASPDMA, no_rule, QA, call=call())
+    assert manifest.guard_violations == []
+    with pytest.raises(ContextPolicyViolation):
+        asm.build(PromptStage.ENTROPY, no_rule, QA, call=call())

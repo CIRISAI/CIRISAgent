@@ -146,6 +146,12 @@ def make_action() -> ActionSelectionDMAResult:
 def make_conscience(cls: type, seen: Dict[str, Any], result: Any, image_context: Optional[str]) -> Any:
     async def _llm(_sink: Any, **kwargs: Any) -> Any:
         seen["messages"] = kwargs["messages"]
+        try:  # the manifest the call site bound (absent on the unmigrated tree)
+            from ciris_engine.logic.prompt_assembly import current_prompt_manifest
+
+            seen["manifest"] = current_prompt_manifest()
+        except ImportError:
+            seen["manifest"] = None
         return result, None
 
     conscience = object.__new__(cls)
@@ -176,11 +182,11 @@ def golden_environment(prior: bool) -> Iterator[None]:
         yield
 
 
-async def capture(conscience_name: str, fixture: str) -> Tuple[List[Dict[str, str]], Any]:
-    """(the messages the conscience sent, its check result)."""
+async def capture(conscience_name: str, fixture: str, seen: Optional[Dict[str, Any]] = None) -> Tuple[List[Dict[str, str]], Any]:
+    """(the messages the conscience sent, its check result). ``seen`` also receives the bound manifest."""
     cls, result = CONSCIENCES[conscience_name]
     fields, image_context, prior = FIXTURES[fixture]
-    seen: Dict[str, Any] = {}
+    seen = {} if seen is None else seen
     conscience = make_conscience(cls, seen, result, image_context)
     with golden_environment(prior):
         check = await conscience.check(make_action(), make_context(dict(fields)))

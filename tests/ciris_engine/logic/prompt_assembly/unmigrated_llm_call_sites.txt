@@ -1,9 +1,5 @@
 # LLM call sites in logic/dma and logic/conscience not yet built by PromptAssembler (CIRISAgent#1366).
 # Phase 3 migrates each and deletes its line; test_llm_call_sites_ratchet.py fails on any new site.
-ciris_engine/logic/conscience/core.py::CoherenceConscience.check::_call_llm_with_budget
-ciris_engine/logic/conscience/core.py::EntropyConscience.check::_call_llm_with_budget
-ciris_engine/logic/conscience/core.py::EpistemicHumilityConscience.check::_call_llm_with_budget
-ciris_engine/logic/conscience/core.py::OptimizationVetoConscience.check::_call_llm_with_budget
 ciris_engine/logic/dma/action_selection_pdma.py::ActionSelectionPDMAEvaluator._perform_main_evaluation::call_llm_structured
 ciris_engine/logic/dma/csdma.py::CSDMAEvaluator.evaluate_thought::call_llm_structured
 ciris_engine/logic/dma/dsaspdma.py::DSASPDMAEvaluator.evaluate_deferral_action::call_llm_structured

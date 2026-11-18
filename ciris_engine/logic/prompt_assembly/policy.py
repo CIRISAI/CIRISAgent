@@ -71,18 +71,27 @@ REQUIRING_PREDICATES = frozenset(
 #: Kinds every call must carry wherever the policy allows them: the stage's own prompt.
 ALWAYS_REQUIRED_KINDS = frozenset({SegmentKind.STAGE_INSTRUCTION})
 
-#: Kinds whose state-conditioned rows ALLOW, never require. The evidence a stage must not lack when a trusted rule
-#: is in force is the verified ``rule`` segment (FSD §5 ``require: {kind: rule, when: trusted_rule_in_force}``, §14):
-#: the grant (``wa_guidance``) and the identity text (``amendment``) may accompany it, and one signed entry is never
-#: required twice under two kinds.
+#: Kinds whose state-conditioned rows ALLOW, never require: the grant (``wa_guidance``) and the identity text
+#: (``amendment``) may accompany the verified rule, and one signed entry is never required twice under two kinds.
 ALLOWANCE_ONLY_KINDS = frozenset({SegmentKind.WA_GUIDANCE, SegmentKind.AMENDMENT})
 
+#: Predicates whose rows are required at every stage that lists them: the verified id where an ID-scoped rule is
+#: in force, the conscience's veto on every retry (#1366 item 1).
+ALWAYS_REQUIRING_PREDICATES = frozenset({PolicyPredicate.ID_SCOPED, PolicyPredicate.RETRY})
 
-def row_is_required(row: PolicyRow) -> bool:
-    """Whether the row's segment must be present whenever its predicate holds."""
+
+def row_is_required(row: PolicyRow, role: StageRole) -> bool:
+    """Whether the row's segment must be present whenever its predicate holds.
+
+    The trusted-rule rows are required at the judges (FSD §5 ``require: {kind: rule, when: trusted_rule_in_force}``,
+    §14; the compiler's evidence sufficiency is over the judges too) and allowed elsewhere: a drafter or an evaluator
+    may read a signed rule, but its absence there is not a breach the guard enforces.
+    """
     if row.kind in ALWAYS_REQUIRED_KINDS:
         return True
-    return row.predicate in REQUIRING_PREDICATES and row.kind not in ALLOWANCE_ONLY_KINDS
+    if row.predicate in ALWAYS_REQUIRING_PREDICATES:
+        return True
+    return role == StageRole.JUDGE and row.predicate in REQUIRING_PREDICATES and row.kind not in ALLOWANCE_ONLY_KINDS
 
 
 class ContextPolicyError(ValueError):
@@ -261,6 +270,7 @@ def declared_trust(policy: ContextPolicy, kind: SegmentKind, provenance: Optiona
 
 __all__ = [
     "ALLOWANCE_ONLY_KINDS",
+    "ALWAYS_REQUIRING_PREDICATES",
     "ALWAYS_REQUIRED_KINDS",
     "ContextPolicyError",
     "DEFAULT_POLICY_PATH",

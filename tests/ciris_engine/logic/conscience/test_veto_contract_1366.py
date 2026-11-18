@@ -146,7 +146,7 @@ def _failing(cls: type, objection: Optional[str]) -> Any:
 
 
 ALL = [core.EntropyConscience, core.CoherenceConscience, core.OptimizationVetoConscience, core.EpistemicHumilityConscience]
-SEES_GOVERNANCE = {core.EntropyConscience, core.OptimizationVetoConscience}
+SEES_GOVERNANCE = set(ALL)  # with a grant in force, every judge reads it (#1366 Phase 3)
 
 
 @pytest.mark.asyncio
@@ -157,10 +157,10 @@ async def test_every_conscience_types_its_objection(cls: type) -> None:
         result = await conscience.check(_speak(), _cctx(wa_authorization=GRANT))
     assert not result.passed
     assert result.objection_type == ObjectionType.EVIDENCE
-    # Whether it held the trusted rule is what it was shown: the ablated pair
-    # always reads the governance block, the other two do not.
-    assert result.held_trusted_rule is (cls in SEES_GOVERNANCE)
-    assert ("att-resp-01" in result.held_evidence_ids) is (cls in SEES_GOVERNANCE)
+    # Whether it held the trusted rule is what it was shown. With a grant in force every conscience reads the
+    # governance block: the context policy requires the verified rule at every judge (FSD §14, #1366 Phase 3).
+    assert result.held_trusted_rule is True
+    assert "att-resp-01" in result.held_evidence_ids
 
 
 @pytest.mark.asyncio
@@ -193,15 +193,19 @@ def test_each_english_prompt_states_the_objection_contract(name: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_attached_evidence_shows_coherence_the_governance_block() -> None:
+async def test_coherence_reads_the_governance_block_whenever_a_trusted_rule_is_in_force() -> None:
+    """Before #1366 Phase 3 only the evidence re-review attached it; the policy now requires it at every judge."""
     seen: Dict[str, Any] = {}
     conscience = _conscience(core.CoherenceConscience, seen, CoherenceResult(coherence=0.9))
     with patch("ciris_engine.logic.persistence.get_thoughts_by_task_id", return_value=[]):
-        plain = await conscience.check(_speak(), _cctx(wa_authorization=GRANT))
+        none = await conscience.check(_speak(), _cctx())
         assert "VERIFIED WISE AUTHORITY GOVERNANCE" not in seen["messages"][-1].content
+        plain = await conscience.check(_speak(), _cctx(wa_authorization=GRANT))
+        assert "VERIFIED WISE AUTHORITY GOVERNANCE" in seen["messages"][-1].content
         attached = await conscience.check(_speak(), _cctx(wa_authorization=GRANT, attached_evidence=True))
     assert "VERIFIED WISE AUTHORITY GOVERNANCE" in seen["messages"][-1].content
-    assert plain.held_trusted_rule is False and attached.held_trusted_rule is True
+    assert none.held_trusted_rule is False
+    assert plain.held_trusted_rule is True and attached.held_trusted_rule is True
 
 
 # ---------------------------------------------------------------- the fold (items 8, 9)

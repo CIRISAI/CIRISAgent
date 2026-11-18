@@ -260,7 +260,7 @@ class PromptAssembler:
         present = {seg.policy_key for seg in kept}
         retry = call.retry_index > 0
         for key, row in rows.items():
-            if row_is_required(row) and predicate_holds(row.predicate, call.facts, retry) and key not in present:
+            if row_is_required(row, STAGE_ROLES[stage]) and predicate_holds(row.predicate, call.facts, retry) and key not in present:
                 violations.append(
                     GuardViolation(
                         kind=GuardViolationKind.MISSING_REQUIRED,

@@ -129,8 +129,9 @@ def held_evidence_ids(context: Any, *, sees_governance: bool) -> List[str]:
 
     Every conscience reads the identity block, approved amendments included.
     Only a conscience shown the verified governance block (entropy and the
-    optimization veto always; coherence and epistemic humility only when the
-    system attaches it on re-review) also holds the signed grant.
+    optimization veto always; coherence and epistemic humility whenever a
+    trusted rule is in force, as the context policy requires, and on an
+    evidence re-review) also holds the signed grant.
     """
     amendments = _amendment_ids(context)
     if not sees_governance:

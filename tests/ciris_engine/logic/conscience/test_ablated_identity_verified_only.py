@@ -3,7 +3,10 @@
 An amendment's text was written in a task that read the user's message. Unless
 its sha256 is the WA-approved digest (and the profile checked at load), it is
 that message laundered into the identity, so entropy and the optimization veto
-never see it. The other stages still read it, labelled unverified.
+never see it. The DMAs still read it, labelled unverified. Since the consciences moved onto PromptAssembler
+(#1366 Phase 3) coherence and epistemic humility no longer do either: an amendment segment whose grant did not
+verify grants nothing (FSD/PROMPT_CONTEXT_PROVENANCE.md §4.4, §6), so production strips it and records an
+incident, and a QA run fails the conscience closed.
 """
 
 from __future__ import annotations
@@ -113,10 +116,14 @@ async def test_an_unverified_amendment_never_reaches_the_ablated_pair(cls: type,
         (core.EpistemicHumilityConscience, EpistemicHumilityResult(epistemic_certainty=0.9, identified_uncertainties=[], reflective_justification="j", recommended_action="proceed")),
     ],
 )
-async def test_the_other_consciences_read_it_labelled_unverified(cls: type, result: Any) -> None:
-    prompt = await _prompt(cls, result)
-    assert LAUNDERED + " [unverified:" in prompt
-    assert APPROVED + " [unverified:" not in prompt
+async def test_the_other_consciences_no_longer_read_it(cls: type, result: Any, caplog: Any) -> None:
+    from ciris_engine.schemas.context.prompt_provenance import AssemblyMode
+
+    with patch("ciris_engine.logic.prompt_assembly.assembler.current_guard_mode", return_value=AssemblyMode.STRIP_AND_INCIDENT):
+        prompt = await _prompt(cls, result)
+    assert LAUNDERED not in prompt
+    assert APPROVED in prompt and APPROVED + " [unverified:" not in prompt
+    assert any("[CONTEXT-GUARD]" in r.getMessage() for r in caplog.records)
 
 
 def test_the_identity_block_labels_or_omits_unverified_text() -> None:

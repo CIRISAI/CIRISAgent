@@ -52,9 +52,17 @@ def test_conscience_does_not_bind_the_accord_constant() -> None:
 
 
 def test_all_four_faculties_take_the_accord_through_the_seam() -> None:
-    """Four faculties: entropy, coherence, optimization veto, epistemic humility."""
+    """Four faculties: entropy, coherence, optimization veto, epistemic humility.
+
+    Since the consciences moved onto PromptAssembler (#1366 Phase 3) all four take the accord from ONE seam call,
+    ``_BaseConscience._accord_text``, which both their assembled prompt and the compose-dump seams read.
+    """
     calls = _calls(CORE, "get_accord_text")
-    assert len(calls) == 4, f"expected 4 seam-routed accord injections, found {len(calls)}"
+    assert len(calls) == 1, f"expected the one seam-routed accord injection, found {len(calls)}"
+    from ciris_engine.logic.conscience import core
+
+    for cls in (core.EntropyConscience, core.CoherenceConscience, core.OptimizationVetoConscience, core.EpistemicHumilityConscience):
+        assert cls._accord_text is core._BaseConscience._accord_text
 
 
 def test_the_seam_call_forces_full_not_the_default_mode() -> None:

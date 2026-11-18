@@ -258,6 +258,10 @@ class MockLLMService(BaseService, MockLLMServiceProtocol):
                 response_model=response_model,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                # Request metadata the bus passes every provider; the mock keys
+                # its per-task test directives on it (directives.py).
+                task_id=task_id,
+                thought_id=thought_id,
             )
         except Exception as e:
             self._total_errors += 1

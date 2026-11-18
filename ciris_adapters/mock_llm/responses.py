@@ -18,6 +18,8 @@ from ciris_engine.schemas.dma.results import (
     IDMAResult,
 )
 
+from . import directives
+
 logger = logging.getLogger(__name__)
 
 #: Sentinel carried by attachment fixtures (tools/qa_runner/attachment_fixtures.py).
@@ -78,6 +80,13 @@ def set_mock_config(**kwargs: Any) -> None:
 
 #: Prefix of the internal context item that carries the serialized messages.
 MESSAGES_CONTEXT_PREFIX = "__messages__:"
+
+
+def _lift_directives(message: str, context_items: List[str]) -> str:
+    """``message`` with its test directives ($veto, $ponder_loop) lifted out into ``context_items``."""
+    cleaned, items = directives.strip_directives(message)
+    context_items.extend(items)
+    return cleaned
 
 
 def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
@@ -239,7 +248,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                             # NOSONAR - simple pattern on short test input, no ReDoS risk
                             obs_match = re.search(r"\):\s*(.+)", new_observation)
                             if obs_match:
-                                new_user_message = obs_match.group(1).strip()
+                                new_user_message = _lift_directives(obs_match.group(1).strip(), context_items)
                                 logger.info(f"[MOCK_LLM] Extracted new user message: {new_user_message}")
 
                                 # Check if it's a command
@@ -358,6 +367,7 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                         wa_guidance = re.search(r"WA Response:\s*(.+)", actual_thought_content, re.DOTALL)
                         if "[WA GUIDANCE]" in actual_thought_content and wa_guidance:
                             guidance = wa_guidance.group(1).split("\n")[0].split("\\n")[0].strip().strip('"')
+                            guidance = _lift_directives(guidance, context_items)
                             logger.info(f"[MOCK_LLM] TYPE: WA GUIDANCE TASK: {guidance[:100]}")
                             context_items.append(f"user_input:{guidance}")
                             context_items.append(f"task:{guidance}")
@@ -412,8 +422,9 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                                     f"[MOCK_LLM DEBUG] Remaining content length: {len(remaining_content)}, first 200 chars: {remaining_content[:200]}"
                                 )
                                 # Extract message, stopping at | or newline
-                                actual_user_message = (
-                                    remaining_content.split("|")[0].split("\n")[0].split("\\n")[0].strip()
+                                actual_user_message = _lift_directives(
+                                    remaining_content.split("|")[0].split("\n")[0].split("\\n")[0].strip(),
+                                    context_items,
                                 )
                                 logger.info(f"[MOCK_LLM] Extracted user message from thought: {actual_user_message}")
                                 context_items.append(f"user_input:{actual_user_message}")
@@ -472,7 +483,9 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
                     remaining_content = content[say_index + 6 :]  # 6 is len(" say: ")
                     # Split on newline to get just the message, not the history
                     # Also handle case where there's a literal \n in the string
-                    actual_user_message = remaining_content.split("\n")[0].split("\\n")[0].strip()
+                    actual_user_message = _lift_directives(
+                        remaining_content.split("\n")[0].split("\\n")[0].strip(), context_items
+                    )
                     logger.info(f"[MOCK_LLM] Extracted user message: {actual_user_message}")
                     # Add this to context items so it gets processed properly
                     context_items.append(f"user_input:{actual_user_message}")
@@ -759,8 +772,13 @@ from .responses_action_selection import (
     rsaspdma_llm_result,
     tsaspdma_llm_result,
 )
-from .responses_epistemic import coherence, coherence_raw, entropy, entropy_raw
-from .responses_feedback import epistemic_humility, optimization_veto
+from .responses_epistemic import coherence, coherence_raw, coherence_vetoed, entropy, entropy_raw, entropy_vetoed
+from .responses_feedback import (
+    epistemic_humility,
+    epistemic_humility_vetoed,
+    optimization_veto,
+    optimization_veto_vetoed,
+)
 
 _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
     EthicalDMAResult: ethical_dma,
@@ -783,11 +801,61 @@ _RESPONSE_MAP: Dict[Any, Callable[..., Any]] = {
 }
 
 
-def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]] = None, **kwargs: Any) -> Any:
-    """Create a mock LLM response with context analysis."""
+#: The conscience each ``$veto`` name fails, and its failing answer.
+_VETO_RESPONSES: Dict[Any, Any] = {
+    EntropyResult: ("entropy", entropy_vetoed),
+    CoherenceResult: ("coherence", coherence_vetoed),
+    OptimizationVetoResult: ("optveto", optimization_veto_vetoed),
+    EpistemicHumilityResult: ("epistemic", epistemic_humility_vetoed),
+}
+
+#: What a ``$ponder_loop`` task asks when the thought gives it no questions.
+PONDER_LOOP_QUESTION = "[MOCK LLM] $ponder_loop: what is still unresolved here?"
+
+
+def _ponder_loop_result(response_model: Any, result: Any) -> Any:
+    """``result`` as a PONDER (a ``$ponder_loop`` task always ponders)."""
+    from ciris_engine.schemas.actions import PonderParams
+    from ciris_engine.schemas.runtime.enums import HandlerActionType
+
+    if result.selected_action == HandlerActionType.PONDER:
+        return result
+    if response_model is ASPDMALLMResult:
+        return ASPDMALLMResult(
+            selected_action=HandlerActionType.PONDER,
+            reasoning="[MOCK LLM] $ponder_loop: pondering again",
+            ponder_questions=[PONDER_LOOP_QUESTION],
+        )
+    return ActionSelectionDMAResult(
+        selected_action=HandlerActionType.PONDER,
+        action_parameters=PonderParams(questions=[PONDER_LOOP_QUESTION]).model_dump(),
+        rationale="[MOCK LLM] $ponder_loop: pondering again",
+    )
+
+
+def create_response(
+    response_model: Any,
+    messages: Optional[List[Dict[str, Any]]] = None,
+    task_id: Optional[str] = None,
+    thought_id: Optional[str] = None,
+    **kwargs: Any,
+) -> Any:
+    """Create a mock LLM response with context analysis.
+
+    ``task_id`` / ``thought_id`` are the request metadata the LLM bus passes to
+    every provider. The mock keys its per-task directives on ``task_id``
+    (directives.py); they never enter a prompt.
+    """
     messages = messages or []
     # Extract context from messages
     context = extract_context_from_messages(messages)
+    directives.record(task_id, context)
+    veto = _VETO_RESPONSES.get(response_model)
+    if veto is not None:
+        forced = directives.take_veto(task_id, veto[0])
+        if forced is not None:
+            logger.info(f"[MOCK_LLM] $veto {veto[0]}: failing evaluation {forced[0]} of {forced[1]} for task {task_id}")
+            return veto[1](*forced)
     # Debug for any structured calls
     logger.debug(f"Request for: {response_model}")
     # Get the appropriate handler
@@ -805,6 +873,8 @@ def create_response(response_model: Any, messages: Optional[List[Dict[str, Any]]
         else:
             result = handler()
         logger.debug(f"Handler returned: {type(result)}")
+        if response_model in (ASPDMALLMResult, ActionSelectionDMAResult) and directives.ponder_loop_active(task_id):
+            result = _ponder_loop_result(response_model, result)
         return result
     # Handle None response models - these should not happen in a properly structured system
     if response_model is None:

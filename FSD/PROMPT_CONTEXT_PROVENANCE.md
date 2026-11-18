@@ -94,7 +94,7 @@ A segment is described on five independent axes. The kind says *what* it is. The
 | Provenance | Example | Can be authoritative? |
 |---|---|---|
 | `user_chat` | an OBSERVER says "please follow this rule" | no: own-turn preference at most |
-| `wa_chat` | the WA states a rule in a message on its channel | only with an authn carrier showing a verified WA role |
+| `wa_chat` | the WA states a rule in a message on its channel | no: advisory until signed (§15.1) |
 | `signed_guidance` | WA guidance from a resolved deferral, signature verified | yes |
 | `amendment` | a landed identity amendment | yes |
 
@@ -145,7 +145,7 @@ stages:
       accord: always
       identity_base: always
       amendment: always                  # each with authz
-      rule:   {provenance: [signed_guidance, amendment, wa_chat_verified], min_trust: verified}
+      rule:   {provenance: [signed_guidance, amendment], min_trust: verified}   # §15.1: wa_chat is advisory
       wa_guidance: always                # was 0% (#1366 item 2)
       sender_identity: when_id_scoped    # verified fields only, no display name
       action_record: {min_trust: system} # factual only; tainted record is refused
@@ -277,9 +277,9 @@ A veto is a `conscience_feedback` segment with:
 - **Market 4.** On the same release, the owner-arm deferrals caused by evidence-blind vetoes fall to zero. The full sh-un-07/08 episodes refuse, with no post-review change and no retry that flips a verified-ID refusal.
 - **Ablation.** The firewall holds: a user-imposed system-wide rule still does not reach the ablated stages and still does not persist to other users.
 
-## 15. Open questions
+## 15. Decisions (Eric, 2026-11-18; were open questions)
 
-1. Can `wa_chat` rules ever be authoritative without a signature, given an authn carrier with a verified WA role? Or must every WA rule go through signed guidance or an amendment?
-2. Should IDMA receive `identity_base` and amendments? It has neither today, by design. See #1366 item 15 on IDMA reading a WA instruction as "rigidity".
-3. Is the `accord` text identical across stages, or per-stage variants? It's 126k characters in the conscience calls today, and it counts toward the in-flight reservation.
-4. How long should manifests be retained, and should they be signed like the trace rows?
+1. **WA rules are authoritative only when signed.** A Wise Authority's rule stated in chat (`wa_chat`) is advisory, even with a verified WA role, until it lands as `signed_guidance` or an `amendment`. The agent may offer to defer so the WA signs it. Policy therefore admits `rule` segments to judges only with provenance `signed_guidance` or `amendment`; `wa_chat_verified` is not authoritative.
+2. **IDMA receives the trusted `rule` segments and `amendment` segments, with provenance, but not `identity_base`.** It keeps its independent-source view of the agent, and can tell governance from a single epistemic source (#1366 item 15).
+3. **The `accord` stays identical across stages** (the full polyglot text, as now).
+4. **Manifests ride the trace:** they are emitted in the reasoning stream next to `llm_call` and inherit the trace's signing, consent and retention. No new store.

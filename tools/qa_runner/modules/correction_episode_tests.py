@@ -389,6 +389,22 @@ def guidance_reply(events: List[Dict[str, Any]], since_iso: str, exclude_task_id
     return None
 
 
+def task_deliberation(events: List[Dict[str, Any]], task_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Every PONDER, DEFER and REJECT a task took, in order, with its full action parameters as the reasoning stream
+    carries them (ponder questions, the deferral's reason and context). Pure. GET /v1/wa/deferrals truncates a
+    deferral's reason and question to 200 characters (seen 2026-11-17), so this is where the deferral's contents
+    are kept."""
+    out = []
+    for e in events:
+        if not task_id or e.get("task_id") != task_id or str(e.get("event_type", "")).lower() != "action_result":
+            continue
+        act = str(e.get("action_executed") or "").lower()
+        if act in ("ponder", "defer", "reject"):
+            out.append({"action": act, "thought_id": e.get("thought_id"), "timestamp": e.get("timestamp"),
+                        "action_parameters": e.get("action_parameters")})
+    return out
+
+
 def probe_passes(regex: Dict[str, Any], facts: List[Dict[str, Any]]) -> bool:
     """The frozen regex + fact rule alone (logged as `regex_passes`; a null reply can satisfy it)."""
     return bool(regex.get("passes")) and all(f.get("passes") for f in facts)
@@ -1164,6 +1180,9 @@ class CorrectionEpisodeTests:
             await asyncio.sleep(POLL_S)
         rec["deferral_id"] = deferral and deferral.get("deferral_id")
         rec["deferral_reason"] = deferral and deferral.get("reason")
+        rec["deferral"] = deferral  # the API record in full (its reason/question are cut at 200 characters)
+        rs = getattr(self, "_recorder", None)
+        rec["deliberation"] = task_deliberation(rs.events, reply.get("task_id")) if rs is not None else None
         if not deferral:
             rec["outcome"] = "deferral_not_found"
             self._log("deferral_answered", **rec)
@@ -1623,7 +1642,11 @@ class CorrectionEpisodeTests:
                    "role": p.get("role", "target"), "scored": p.get("scored", True) is not False,
                    "deferral_answered": None if answered is None else {
                        k: answered.get(k) for k in ("outcome", "deferral_id", "deferral_reason", "resolve_status",
-                                                    "first_response", "original_task_id")}}
+                                                    "first_response", "original_task_id", "deferral",
+                                                    "deliberation", "guidance")},
+                   # Any probe whose task pondered, deferred or rejected (every arm, default included): the full
+                   # parameters from the reasoning stream, since the deferral API truncates them.
+                   "deliberation": task_deliberation(rec.events, reply.get("task_id")) if rec is not None else None}
             self._log("probe", **row, stream=stream)
             results.append(row)
         return {"phase": phase, **phase_summary(results), "probes": results}
@@ -2192,7 +2215,10 @@ class CorrectionEpisodeTests:
             row["sender_dependent"] = sender_dependent(p)
             row["rule_ack"] = ack.get("response")
             row["rule_ack_deferral_answered"] = None if ack_answered is None else {
-                k: ack_answered.get(k) for k in ("outcome", "deferral_id", "first_response")}
+                k: ack_answered.get(k) for k in ("outcome", "deferral_id", "deferral_reason", "first_response",
+                                                 "deferral", "deliberation", "guidance")}
+            rs = getattr(self, "_recorder", None)
+            row["rule_ack_deliberation"] = task_deliberation(rs.events, ack.get("task_id")) if rs is not None else None
             results.append(row)
         return {"phase": phase, **phase_summary(results), "probes": results}
 
@@ -2207,7 +2233,8 @@ class CorrectionEpisodeTests:
             return [{k: r.get(k) for k in ("probe_id", "sender", "username", "role", "scored", "passes",
                                            "regex_passes", "null_reason", "regex", "facts", "response",
                                            "audited_actions", "sender_dependent", "rule_ack",
-                                           "deferral_answered", "rule_ack_deferral_answered", "text")}
+                                           "deferral_answered", "rule_ack_deferral_answered", "text",
+                                           "deliberation", "rule_ack_deliberation")}
                     for r in ph["probes"]]
 
         arms: Dict[str, Any] = {}

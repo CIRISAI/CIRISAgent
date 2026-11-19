@@ -156,3 +156,4 @@ user_prompt_with_image_template: |-
   {image_context}
 
   የቀረበ እርምጃ ውፅዓት: {action_description}
+pipeline_position: "የፓይፕላይን አቀማመጥ፦ ከተግባር ምርጫ በኋላ፣ ከሌሎች ህሊናዎች ጎን፣ ምንም ነገር ከመፈጸሙ በፊት የወኪሉን የተረቀቀ ተግባር ትገመግማላችሁ። ጥያቄውን እና በሥራ ላይ ያለውን የተረጋገጠ አስተዳደር ታያላችሁ።"

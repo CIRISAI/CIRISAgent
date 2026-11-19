@@ -122,3 +122,6 @@ response_format: |
 # DEONTIC — closing categorical।
 closing_reminder: |
   Address को सही पाना इस step का पूरा point है।
+pipeline_position: |-
+  पाइपलाइन स्थिति: क्रिया चयन ने केवल क्रिया चुनी है; यह चरण जांचता है
+  कि write कहाँ जाता है। इसके बाद विवेक, क्रिया के चलने से पहले, उसकी समीक्षा करते हैं।

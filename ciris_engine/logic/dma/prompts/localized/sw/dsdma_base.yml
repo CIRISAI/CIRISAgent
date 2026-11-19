@@ -86,3 +86,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "Nafasi ya bomba: unaendesha kwanza, pamoja na PDMA na CSDMA. IDMA kisha inakagua hizo tatu, uchaguzi wa kitendo huchagua kitendo, na dhamiri zinakikagua."

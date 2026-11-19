@@ -81,3 +81,4 @@ user_prompt_with_image_template: |-
 
   RESPUESTA DEL ASISTENTE PARA EVALUAR PARA ENTROPÍA SEMÁNTICA:
   {text}
+pipeline_position: "POSICIÓN EN EL PIPELINE: revisas la acción redactada por el agente después de la selección de acción, junto a las demás conciencias, antes de que se ejecute nada. Por diseño, no ves el mensaje del usuario. Las entradas que no se te muestran aparecen como marcadores RETENIDOS (su tipo, rol del autor, autoridad y relación con el borrador), nunca su texto."

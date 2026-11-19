@@ -87,3 +87,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "Position dans le pipeline : vous vous exécutez en premier, aux côtés de PDMA et CSDMA. IDMA examine ensuite les trois, la sélection d'action choisit l'action, et les consciences l'examinent."

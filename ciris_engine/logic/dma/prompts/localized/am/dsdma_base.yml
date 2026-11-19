@@ -84,3 +84,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "የፓይፕላይን አቀማመጥ፦ ከPDMA እና CSDMA ጎን መጀመሪያ ትሮጣላችሁ። ከዚያ የማሰብ ፍተሻ ሦስቱንም ይገመግማል፣ የተግባር ምርጫ ተግባሩን ይመርጣል፣ እና ህሊናዎቹ ይገመግሙታል።"

@@ -187,3 +187,4 @@ context_integration: |-
   "selected_action".
 
   Your response begins now with the literal character `{{` —
+pipeline_position: "ПОЗИЦІЯ В КОНВЕЄРІ: ви обираєте дієслово дії. Для TOOL, DEFER, MEMORIZE, RECALL та FORGET наступний крок заповнює деталі цього дієслова. Потім совісті переглядають обрану дію, перш ніж щось виконається."

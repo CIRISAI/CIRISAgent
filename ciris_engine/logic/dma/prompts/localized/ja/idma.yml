@@ -2,7 +2,7 @@
 # Semantic implementation of Coherence Collapse Analysis (CCA) principles
 
 component_name: idma
-description: "Intuition DMA - applies CCA k_eff formula and phase classification"
+description: "直感チェック — CCA k_eff 式と位相分類を適用するもの"
 version: "1.1"
 
 # Include the CIRIS Accord as context
@@ -227,3 +227,4 @@ closing_reminder: |
   忘れないでください:プロパガンダは、統合ではなくソースの排除を通じて、見かけ上の合意を達成します。
   IDMAの仕事は、この認識論的な捕獲を検出し、良心レビューのためにフラグを立てることです。
   疑わしい場合は、フラグを立ててください。
+pipeline_position: "パイプラインにおける位置：あなたは PDMA、CSDMA、DSDMA の後に実行され、それらの推論を確認します。次にアクション選択があなたの結果を読み取り、その後、良心が選択されたアクションを確認します。あなたにはエージェントのアイデンティティテンプレートは示されませんが、現在有効な検証済みガバナンスは示されます。"

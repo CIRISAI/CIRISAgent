@@ -109,3 +109,6 @@ closing_reminder: |
   - Lisanslı işlem gerçekten ima edilmiyorsa domain_hint uydurmayın.
   - Hukuki ve finansal erişim, genel idari sorunlar değil, hakları etkileyen ihtiyaçlar olarak ele alınmalıdır.
   - En açık hak dayanağına sahip en dar doğru kategoriyi tercih edin.
+pipeline_position: |-
+  HAT KONUMU: ASPDMA zaten DEFER'i seçti. Siz erteleme işlemini sınıflandırırsınız.
+  Vicdanlar daha sonra bu bir Bilge Otorite'ye ulaşmadan önce inceler.

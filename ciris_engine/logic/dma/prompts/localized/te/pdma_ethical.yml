@@ -157,3 +157,4 @@ context_integration: |
   మూల్యాంకనం చేయవలసిన ఆలోచన: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "పైప్‌లైన్ స్థానం: నువ్వు మొదట, CSDMA మరియు DSDMA తో పాటు నడుస్తావు. తర్వాత IDMA నీ తార్కికతను సమీక్షిస్తుంది, చర్య ఎంపిక చర్యను ఎంచుకుంటుంది, మరియు మనస్సాక్షులు దానిని సమీక్షిస్తాయి. నువ్వు సిఫార్సు చేస్తావు; తుది చర్యను నువ్వు ఎంచుకోవు."

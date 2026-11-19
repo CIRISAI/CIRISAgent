@@ -71,3 +71,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "పైప్‌లైన్ స్థానం: నువ్వు మొదట, PDMA మరియు CSDMA తో పాటు నడుస్తావు. తర్వాత IDMA ఈ మూడింటిని సమీక్షిస్తుంది, చర్య ఎంపిక చర్యను ఎంచుకుంటుంది, మరియు మనస్సాక్షులు దానిని సమీక్షిస్తాయి."

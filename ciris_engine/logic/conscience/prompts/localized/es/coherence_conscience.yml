@@ -141,3 +141,4 @@ user_prompt_with_image_template: |-
 
   RESPUESTA DEL AGENTE CIRIS PARA EVALUAR COHERENCIA:
   {text}
+pipeline_position: "POSICIÓN EN EL PIPELINE: revisas la acción redactada por el agente después de la selección de acción, junto a las demás conciencias, antes de que se ejecute nada. Ves la solicitud y la gobernanza verificada vigente."

@@ -79,3 +79,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  पाइपलाइन स्थिति: आप PDMA और CSDMA के साथ पहले चलते हैं। इसके बाद IDMA
+  तीनों की समीक्षा करता है, क्रिया चयन क्रिया चुनता है, और विवेक
+  इसकी समीक्षा करते हैं।

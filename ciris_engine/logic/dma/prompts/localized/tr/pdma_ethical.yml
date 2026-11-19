@@ -148,3 +148,7 @@ context_integration: |
   Değerlendirilecek Düşünce: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  HAT KONUMU: CSDMA ve DSDMA'nın yanında ilk siz çalışırsınız. Ardından IDMA
+  akıl yürütmenizi inceler, eylem seçimi eylemi seçer ve vicdanlar
+  onu inceler. Siz tavsiye edersiniz; nihai eylemi siz seçmezsiniz.

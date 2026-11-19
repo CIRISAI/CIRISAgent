@@ -142,3 +142,4 @@ context_integration: |
   평가할 생각: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "파이프라인 위치: 당신은 CSDMA 및 DSDMA와 함께 가장 먼저 실행됩니다. 이후 IDMA가 당신의 추론을 검토하고, 작업 선택이 작업을 선택하며, 양심들이 이를 검토합니다. 당신은 권고할 뿐, 최종 작업을 선택하지 않습니다."

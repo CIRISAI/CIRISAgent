@@ -158,3 +158,4 @@ response_format: |
 # DEÓNTICO — la categórica de cierre.
 closing_reminder: |
   Acertar en la dirección es todo el punto de este paso.
+pipeline_position: "POSICIÓN EN EL PIPELINE: la selección de acción eligió solo el verbo; este paso verifica dónde va la escritura. Las conciencias luego revisan la acción antes de que se ejecute."

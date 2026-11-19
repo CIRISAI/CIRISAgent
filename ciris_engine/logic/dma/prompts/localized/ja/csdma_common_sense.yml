@@ -52,3 +52,4 @@ context_integration: |
   元の思考: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**パイプラインにおける位置**：最初に実行され、PDMA と DSDMA と並びます。その後、直感チェックがこの三つを確認し、アクション選択がアクションを選び、良心がそれを確認します。"

@@ -52,3 +52,4 @@ context_integration: |
   Originalgedanke: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**Pipeline-Position**: Sie laufen zuerst, neben PDMA und DSDMA. IDMA überprüft anschließend die drei, die Aktionsauswahl wählt die Aktion, und die Gewissen überprüfen sie."

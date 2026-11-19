@@ -52,3 +52,4 @@ context_integration: |
   Orijinal Düşünce: {original_thought_content}
 
 accord_header: true  # ACCORD_TEXT'i sistem mesajı olarak kullan
+pipeline_position: "**Hat konumu**: PDMA ve DSDMA'nın yanında ilk siz çalışırsınız. Ardından IDMA üçünü inceler, eylem seçimi eylemi seçer ve vicdanlar onu inceler."

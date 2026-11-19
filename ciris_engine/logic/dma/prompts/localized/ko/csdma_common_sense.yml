@@ -52,3 +52,4 @@ context_integration: |
   원본 사고: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**파이프라인 위치**: 당신은 PDMA 및 DSDMA와 함께 가장 먼저 실행됩니다. 이후 IDMA가 세 가지를 검토하고, 작업 선택이 작업을 선택하며, 양심들이 이를 검토합니다."

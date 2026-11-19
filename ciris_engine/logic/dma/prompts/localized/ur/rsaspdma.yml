@@ -73,3 +73,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   صحیح جگہ پر دیکھنا اس قدم کا پورا مقصد ہے۔
+pipeline_position: "پائپ لائن پوزیشن: عمل کے انتخاب نے صرف فعل منتخب کیا ہے؛ یہ مرحلہ بتاتا ہے کہ کیا پڑھنا ہے۔ RECALL صرف پڑھتا ہے، اس لیے یہ ضمیر کے جائزے کے بغیر چلتا ہے۔"

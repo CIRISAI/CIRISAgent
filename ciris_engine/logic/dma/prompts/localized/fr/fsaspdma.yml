@@ -80,3 +80,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Supprimer le bon nœud, et seulement celui-là, est tout l'objet de cette étape.
+pipeline_position: "POSITION DANS LE PIPELINE : la sélection d'action a choisi uniquement le verbe ; cette étape nomme le nœud. Les consciences examinent ensuite l'action avant qu'elle ne s'exécute."

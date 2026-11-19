@@ -138,3 +138,4 @@ context_integration: |
   評価する思考: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "パイプラインにおける位置：あなたは最初に実行され、CSDMA と DSDMA と並びます。その後、直感チェックがあなたの推論を確認し、アクション選択がアクションを選び、良心がそれを確認します。あなたは推奨するのみで、最終的なアクションを選択するわけではありません。"

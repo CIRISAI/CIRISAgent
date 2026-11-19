@@ -82,3 +82,6 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  Позиція в конвеєрі: ви запускаєтесь першим, поряд з PDMA та CSDMA. Перевірка Інтуїції потім переглядає всі три, Вибір Дії обирає дію, а совісті
+  переглядають її.

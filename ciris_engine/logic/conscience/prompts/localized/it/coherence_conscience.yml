@@ -140,3 +140,4 @@ user_prompt_with_image_template: |-
 
   RISPOSTA DELL'AGENTE CIRIS DA VALUTARE PER LA COERENZA:
   {text}
+pipeline_position: "POSIZIONE NELLA PIPELINE: Lei esamina l'azione redatta dall'agente dopo la selezione dell'azione, insieme alle altre coscienze, prima che venga eseguito qualcosa. Lei vede la richiesta e la governance verificata in vigore."

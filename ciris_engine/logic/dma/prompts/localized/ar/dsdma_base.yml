@@ -82,3 +82,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  موقع خط الأنابيب: تعمل أولاً، إلى جانب PDMA وCSDMA. ثم تراجع IDMA
+  نواتج الثلاثة، ويختار اختيار الإجراء الإجراء، وتراجعه
+  الضمائر.

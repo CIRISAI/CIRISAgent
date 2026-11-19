@@ -81,3 +81,9 @@ user_prompt_with_image_template: |-
 
   RÉPONSE DE L'ASSISTANT À ÉVALUER POUR L'ENTROPIE SÉMANTIQUE:
   {text}
+pipeline_position: |-
+  POSITION DANS LE PIPELINE : vous examinez l'action rédigée par l'agent après la
+  sélection d'action, aux côtés des autres consciences, avant que quoi que ce soit ne s'exécute. Vous ne
+  voyez pas le message de l'utilisateur, par conception. Les entrées qui ne vous sont pas montrées apparaissent comme
+  des stubs WITHHELD (leur type, le rôle de l'auteur, l'autorité et leur relation avec le
+  brouillon), jamais leur texte.

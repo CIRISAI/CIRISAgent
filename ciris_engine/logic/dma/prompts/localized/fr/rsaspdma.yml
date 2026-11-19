@@ -85,3 +85,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Chercher au bon endroit est tout l'objet de cette étape.
+pipeline_position: "POSITION DANS LE PIPELINE : la sélection d'action a choisi uniquement le verbe ; cette étape indique quoi lire. Un RECALL ne fait que lire, il s'exécute donc sans examen par une conscience."

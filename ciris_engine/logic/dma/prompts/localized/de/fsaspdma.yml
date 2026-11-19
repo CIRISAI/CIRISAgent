@@ -82,3 +82,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Das Entfernen des richtigen Knotens, und nur dieses Knotens, ist der ganze Sinn dieses Schritts.
+pipeline_position: |-
+  PIPELINE-POSITION: Die Aktionsauswahl hat nur das Verb gewählt; dieser Schritt benennt den
+  Knoten. Die Gewissen überprüfen die Aktion anschließend, bevor sie ausgeführt wird.

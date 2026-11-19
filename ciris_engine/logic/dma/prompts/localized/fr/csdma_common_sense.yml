@@ -52,3 +52,4 @@ context_integration: |
   Pensée Originale : {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**Position dans le pipeline** : vous vous exécutez en premier, aux côtés de PDMA et DSDMA. IDMA examine ensuite les trois, la sélection d'action choisit l'action, et les consciences l'examinent."

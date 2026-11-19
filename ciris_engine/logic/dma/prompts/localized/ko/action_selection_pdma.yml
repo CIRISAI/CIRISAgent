@@ -187,3 +187,4 @@ context_integration: |-
   "selected_action".
 
   Your response begins now with the literal character `{{` —
+pipeline_position: "파이프라인 위치: 당신은 작업 동사를 선택합니다. TOOL, DEFER, MEMORIZE, RECALL, FORGET의 경우 후속 단계가 해당 동사의 세부 사항을 채웁니다. 이후 양심들이 무엇이든 실행되기 전에 선택된 작업을 검토합니다."

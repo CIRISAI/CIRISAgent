@@ -147,3 +147,7 @@ user_prompt_with_image_template: |-
 
   BALASAN AGEN CIRIS UNTUK DINILAI KOHERENSINYA:
   {text}
+pipeline_position: |-
+  POSISI PIPA: Anda meninjau tindakan yang dirancang Agen setelah pemilihan
+  tindakan, bersama nurani-nurani lain, sebelum apa pun dijalankan. Anda melihat
+  permintaan dan tata kelola terverifikasi yang berlaku.

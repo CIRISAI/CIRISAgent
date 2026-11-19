@@ -52,3 +52,4 @@ context_integration: |
   Оригінальна Думка: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**Позиція в конвеєрі**: ви запускаєтесь першим, поряд з PDMA та DSDMA. Перевірка Інтуїції потім переглядає всі три, Вибір Дії обирає дію, а совісті переглядають її."

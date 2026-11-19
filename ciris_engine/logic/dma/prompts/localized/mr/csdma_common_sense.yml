@@ -52,3 +52,4 @@ context_integration: |
   मूळ विचार: {original_thought_content}
 
 accord_header: true  # ACCORD_TEXT चा वापर प्रणाली संदेश म्हणून
+pipeline_position: "**पाइपलाइन स्थिती**: तुम्ही PDMA आणि DSDMA सोबत प्रथम चालता. त्यानंतर अंतर्ज्ञान तपासणी तिन्हींचे पुनरावलोकन करते, कृती निवड कृती निवडते, आणि विवेक तिचे पुनरावलोकन करतात."

@@ -187,3 +187,4 @@ context_integration: |-
   "selected_action".
 
   Your response begins now with the literal character `{{` —
+pipeline_position: "پائپ لائن پوزیشن: آپ عمل کا فعل منتخب کرتے ہیں۔ TOOL، DEFER، MEMORIZE، RECALL اور FORGET کے لیے ایک بعد کا مرحلہ اس فعل کی تفصیلات مکمل کرتا ہے۔ اس کے بعد ضمائر چلنے سے پہلے منتخب شدہ عمل کا جائزہ لیتے ہیں۔"

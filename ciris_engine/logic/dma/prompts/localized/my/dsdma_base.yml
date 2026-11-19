@@ -89,3 +89,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "ပိုက်လိုင်းတည်နေရာ: သင်သည် PDMA နှင့် CSDMA နှင့်အတူ ပထမဆုံး လုပ်ဆောင်သည်။ ထို့နောက် IDMA (အလိုလိုသိစစ်ဆေး) က သုံးခုလုံးကို ပြန်လည်သုံးသပ်ပြီး၊ လုပ်ဆောင်ချက်ရွေးချယ်မှုက လုပ်ဆောင်ချက်ကို ရွေးချယ်ကာ၊ အသိစိတ်များက ၎င်းကို ပြန်လည်သုံးသပ်သည်။"

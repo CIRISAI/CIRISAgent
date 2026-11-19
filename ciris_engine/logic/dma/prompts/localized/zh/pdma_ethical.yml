@@ -122,3 +122,4 @@ context_integration: |
   待评估的思考：{original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "流水线位置：您首先运行，与 CSDMA 和 DSDMA 并列。随后由直觉检查审查您的推理，动作选择环节选定动作，并由各良知对其进行审查。您负责提出建议；最终动作并非由您选定。"

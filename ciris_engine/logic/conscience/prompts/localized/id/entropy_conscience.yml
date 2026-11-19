@@ -139,3 +139,9 @@ user_prompt_with_image_template: |-
 
   BALASAN ASISTEN UNTUK MENILAI ENTROPI SEMANTIK:
   {text}
+pipeline_position: |-
+  POSISI PIPA: Anda meninjau tindakan yang dirancang Agen setelah pemilihan
+  tindakan, bersama nurani-nurani lain, sebelum apa pun dijalankan. Anda tidak
+  melihat pesan pengguna, secara sengaja. Input yang tidak ditampilkan kepada Anda muncul sebagai
+  stub WITHHELD (jenis, peran penulis, otoritas, dan hubungannya dengan
+  rancangan tersebut), tidak pernah teksnya.

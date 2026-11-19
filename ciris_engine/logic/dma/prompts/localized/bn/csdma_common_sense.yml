@@ -52,3 +52,4 @@ context_integration: |
   মূল চিন্তা: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**পাইপলাইন অবস্থান**: আপনি PDMA এবং DSDMA-এর পাশাপাশি প্রথমে চলেন। এরপর IDMA তিনটি পর্যালোচনা করে, কর্ম নির্বাচন কর্মটি বেছে নেয়, এবং বিবেকগুলো তা পর্যালোচনা করে।"

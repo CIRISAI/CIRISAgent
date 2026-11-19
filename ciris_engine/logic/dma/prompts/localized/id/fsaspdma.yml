@@ -81,3 +81,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Menghapus node yang benar, dan hanya node itu, adalah keseluruhan tujuan dari langkah ini.
+pipeline_position: |-
+  POSISI PIPA: pemilihan tindakan hanya memilih kata kerja; langkah ini menyebutkan
+  node. Para nurani kemudian meninjau tindakan tersebut sebelum dijalankan.

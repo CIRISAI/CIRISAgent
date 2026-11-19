@@ -84,3 +84,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  Hat konumu: PDMA ve CSDMA'nın yanında ilk siz çalışırsınız. Ardından IDMA
+  üçünü inceler, eylem seçimi eylemi seçer ve vicdanlar
+  onu inceler.

@@ -97,3 +97,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "Matsayi a bututun sarrafa: kana gudana da farko, tare da PDMA da CSDMA. Sannan IDMA tana bitar su ukun, Zaɓin Aiki yana zaɓar aikin, kuma Lamirori suna bitar sa."

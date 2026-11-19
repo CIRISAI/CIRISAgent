@@ -187,3 +187,4 @@ context_integration: |-
   "selected_action".
 
   Your response begins now with the literal character `{{` —
+pipeline_position: "موقع خط الأنابيب: أنت تختار فعل الإجراء. بالنسبة إلى TOOL وDEFER وMEMORIZE وRECALL وFORGET، تملأ خطوة لاحقة تفاصيل ذلك الفعل. ثم تراجع الضمائر الإجراء المختار قبل تنفيذ أي شيء."

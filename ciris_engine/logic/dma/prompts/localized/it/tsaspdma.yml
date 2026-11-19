@@ -177,3 +177,4 @@ closing_reminder: 'IMPORTANTE: Il tuo ruolo è catturare problemi che ASPDMA non
   Quando scegli TOOL, riconosci: "Procedo con consapevolezza dell''insidia X"
 
   '
+pipeline_position: "POSIZIONE NELLA PIPELINE: ASPDMA ha scelto solo il nome dello strumento e non fornisce alcun parametro. Lei compila ogni parametro dello strumento, basandosi sulla documentazione e sulla richiesta. Le coscienze esaminano poi la chiamata prima che venga eseguita."

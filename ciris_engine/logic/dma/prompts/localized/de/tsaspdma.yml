@@ -177,3 +177,7 @@ closing_reminder: 'WICHTIG: Ihre Rolle ist es, Probleme zu erfassen, die ASPDMA 
   Bei Auswahl von TOOL, anerkennen Sie: "Fortfahren mit Bewusstsein für Fallstrick X"
 
   '
+pipeline_position: |-
+  PIPELINE-POSITION: ASPDMA hat nur den Werkzeugnamen gewählt und liefert keine Parameter.
+  Sie füllen jeden Werkzeugparameter aus, anhand der Dokumentation und der Anfrage.
+  Die Gewissen überprüfen den Aufruf anschließend, bevor er ausgeführt wird.

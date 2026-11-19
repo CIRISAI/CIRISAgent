@@ -187,3 +187,4 @@ context_integration: |-
   "selected_action".
 
   Your response begins now with the literal character `{{` —
+pipeline_position: "குழாய்வழி நிலை: நீங்கள் செயல் வினைச்சொல்லைத் தேர்ந்தெடுக்கிறீர்கள். TOOL, DEFER, MEMORIZE, RECALL மற்றும் FORGET-க்கு, அந்த வினைச்சொல்லின் விவரங்களை ஒரு தொடர்ச்சி படி நிரப்புகிறது. பின்னர் மனசாட்சிகள் எதுவும் இயங்குவதற்கு முன் தேர்ந்தெடுக்கப்பட்ட செயலை மதிப்பாய்வு செய்கின்றன."

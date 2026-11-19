@@ -37,6 +37,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader, safe_format
+from ciris_engine.logic.utils.localization import in_thought_language
 
 
 class TSASPDMALLMResult(PromptCarrier):
@@ -115,17 +116,12 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         # Store last user prompt for debugging/streaming
 
-        # Per-thought language override populated from user_profiles. None
-        # falls back to env var. Avoids the legacy global set_prompt_language
-        # path which mutated shared state.
-        self._explicit_language: Optional[str] = None
-
         logger.info(f"TSASPDMAEvaluator initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
         """Get prompt loader for the thread's currently-active language."""
-        return get_prompt_loader(language=self._explicit_language)
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -238,25 +234,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         builder.single(
             "system", segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or "")
         )
-
-    def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync prompt language using the full localization priority chain.
-
-        Walks thought/task preferred_language → user_profile.preferred_language →
-        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
-        Accepts dataclass-style or dict-style contexts.
-        """
-        from ciris_engine.logic.utils.localization import (
-            get_preferred_language,
-            get_user_language_from_context,
-        )
-
-        new_language = (
-            get_user_language_from_context(context) if context is not None else get_preferred_language()
-        )
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            logger.debug(f"TSASPDMA: Synced prompt language to {new_language}")
 
     def _convert_tsaspdma_result(
         self,
@@ -557,6 +534,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             self._assembly_call(original_thought, context, agent_identity, retry=feedback is not None),
         )
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_tool_action(
         self,
         tool_name: str,
@@ -589,9 +567,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         logger.info(
             f"[TSASPDMA] Context enrichment received: {list(context_enrichment.keys()) if context_enrichment else 'None'}"
         )
-
-        # Sync user's language preference before building prompts
-        self._sync_language_from_context(context)
 
         # Access the text content directly from ThoughtContent, not str() which gives repr
         thought_content_str = (
@@ -672,6 +647,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             # NO FALLBACK - re-raise to trigger proper deferral/ponder behavior
             raise
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_tool_correction(
         self,
         requested_tool_name: str,
@@ -688,8 +664,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - Asks for clarification (returns SPEAK)
         - Reconsiders approach (returns PONDER)
         """
-        # Sync user's language preference before building prompts
-        self._sync_language_from_context(context)
 
         thought_content_str = (
             original_thought.content.text

@@ -71,7 +71,6 @@ def _thought(text: str) -> ProcessingQueueItem:
 
 def _evaluator(cls: Any) -> Any:
     evaluator = cls.__new__(cls)  # no service registry needed to compose or convert
-    evaluator._explicit_language = "en"
     evaluator._prompt_template_name = {
         RSASPDMAEvaluator: "rsaspdma",
         FSASPDMAEvaluator: "fsaspdma",
@@ -162,7 +161,6 @@ def test_the_prompt_carries_the_shared_graph_guide_and_the_nodes_that_exist(
 
     # One description of the graph for all three memory verbs: MSASPDMA's own blocks.
     memorize = MSASPDMAEvaluator.__new__(MSASPDMAEvaluator)
-    memorize._explicit_language = "en"
     memorize._prompt_template_name = "msaspdma"
     for key in ("memory_model", "addressing_convention", "scope_convention"):
         assert memorize._require_prompt_value(key) in system

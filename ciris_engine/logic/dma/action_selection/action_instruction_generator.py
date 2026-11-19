@@ -145,8 +145,9 @@ class ActionInstructionGenerator:
         locale before the routing, so composed bytes are unchanged.
         """
         from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE, get_prompt_loader
+        from ciris_engine.logic.utils.localization import current_thought_language
 
-        loader = get_prompt_loader()
+        loader = get_prompt_loader(language=current_thought_language())
         text = loader.load_prompt_template("action_selection_pdma").action_params_defer_guidance
         if text:
             return text

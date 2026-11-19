@@ -37,6 +37,7 @@ from ciris_engine.schemas.services.graph_core import GraphScope
 from ciris_engine.schemas.types import JSONDict
 
 from .msaspdma import MSASPDMAEvaluator
+from ciris_engine.logic.utils.localization import in_thought_language
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ciris_engine.schemas.context.prompt_provenance import PromptManifest
@@ -78,6 +79,7 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
         messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
         return messages
 
+    @in_thought_language("original_thought", "context")
     def compose_prompt(
         self,
         original_thought: ProcessingQueueItem,
@@ -88,7 +90,6 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
         """The RSASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
         from ciris_engine.schemas.context.prompt_provenance import PromptStage
 
-        self._sync_language_from_context(context)
         # Joined without a filter, as ever: an empty block keeps its place (keep_empty).
         system = self._guide_segments(
             [
@@ -175,6 +176,7 @@ class RSASPDMAEvaluator(MSASPDMAEvaluator):
             resource_usage=resource_usage,
         )
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_recall_action(
         self,
         aspdma_result: ActionSelectionDMAResult,

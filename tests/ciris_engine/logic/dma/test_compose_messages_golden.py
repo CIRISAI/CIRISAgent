@@ -194,7 +194,6 @@ def test_dsdma_compose_seam_matches_golden() -> None:
             f"Role: {identity['role']}\n"
             "============================================"
         )
-        dma._sync_language_from_context(snapshot_raw)
         system_snapshot_block = format_system_snapshot(cast(SystemSnapshot, snapshot_raw))
 
         messages = dma.compose_messages(

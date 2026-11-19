@@ -31,6 +31,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader, safe_format
+from ciris_engine.logic.utils.localization import in_thought_language
 
 logger = logging.getLogger(__name__)
 
@@ -126,31 +127,12 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         # Store last prompts for debugging/streaming
 
-        # Per-thought language override populated from user_profiles in the
-        # context-building paths below. None means fall back to env var.
-        self._explicit_language: Optional[str] = None
-
         logger.info(f"BaseDSDMA '{self.domain_name}' initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
         """Get prompt loader for the thread's currently-active language."""
-        return get_prompt_loader(language=self._explicit_language)
-
-    def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync prompt language using the full localization priority chain.
-
-        Walks thought/task preferred_language → user_profile.preferred_language →
-        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
-        Accepts both an object with ``.system_snapshot`` and a raw snapshot
-        (dict or dataclass) — the helper auto-unwraps either form.
-        """
-        from ciris_engine.logic.utils.localization import get_preferred_language, get_user_language_from_context
-
-        new_language = get_user_language_from_context(context) if context is not None else get_preferred_language()
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            logger.debug(f"DSDMA: Synced prompt language to {new_language}")
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> PromptCollection:
@@ -195,6 +177,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         return await self.evaluate_thought(input_data, dma_input_data)
 
+    @in_thought_language("thought_item", "current_context")
     async def evaluate_thought(
         self, thought_item: ProcessingQueueItem, current_context: Optional[DMAInputData]
     ) -> DSDMAResult:
@@ -206,7 +189,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         agent_occurrence_id = getattr(thought_item, "agent_occurrence_id", "default")
         original_task = await self.fetch_original_task(thought_item.source_task_id, agent_occurrence_id)
         task_context_str = self.format_task_context(original_task, thought_depth, thought=thought_item)
-        task_language = self.prompt_loader.language  # the language format_task_context rendered the sender in
+        task_language = self.thought_language  # the language format_task_context rendered the sender in
 
         # Use DMAInputData if provided, otherwise fall back to ProcessingQueueItem context
         if current_context:
@@ -221,8 +204,6 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 )
             system_snapshot = current_context.system_snapshot
             user_profiles_data = system_snapshot.user_profiles
-
-            self._sync_language_from_context(current_context)
 
             # Convert list of UserProfile to dict format expected by format_user_profiles
             user_profiles_dict = {}
@@ -269,7 +250,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 str(agent_id),
                 str(description),
                 str(role),
-                language=self._explicit_language,
+                language=self.thought_language,
                 amendments=amendment_texts(agent_identity),
             )
             agent_identity_for_prompt: Any = agent_identity
@@ -328,15 +309,11 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 )
 
             # Build identity block — routed (#974 step 3), see branch above.
-            # NOTE: language sync happens a few lines below in this branch
-            # (pre-existing order); the block renders under the previously
-            # synced language, and en-fallback keeps bytes identical wherever
-            # the bundle has no translation.
             identity_block = format_core_identity_block(
                 str(agent_id),
                 str(description),
                 str(role),
-                language=self._explicit_language,
+                language=self.thought_language,
                 amendments=amendment_texts(agent_identity_raw),
             )
             agent_identity_for_prompt = agent_identity_raw
@@ -347,15 +324,12 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 # format_user_profiles accepts Union[List[Any], dict[str, Any], None]
                 user_profiles_block = format_user_profiles(user_profiles_data_raw) if user_profiles_data_raw else ""
 
-                self._sync_language_from_context(system_snapshot_raw)
                 # Cast dict to SystemSnapshot for format_system_snapshot
                 system_snapshot_block = format_system_snapshot(cast(SystemSnapshot, system_snapshot_raw))
             else:
                 # system_snapshot_raw is not a dict - shouldn't happen but handle gracefully
                 user_profiles_block = ""
                 system_snapshot_block = ""
-                # No profiles → reset language so previous thought doesn't bleed.
-                self._sync_language_from_context(None)
 
         # Get images from thought item for multimodal
         thought_images = getattr(thought_item, "images", []) or []
@@ -654,7 +628,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         from ciris_engine.logic.prompt_assembly.segmenting import block, identity_segments, joined
         from ciris_engine.schemas.context.prompt_provenance import PromptSegment, SegmentKind, SegmentSource
 
-        segments = identity_segments(agent_identity, self._explicit_language)
+        segments = identity_segments(agent_identity, self.thought_language)
         if joined(segments) == identity_block:
             return segments
         # An identity the shared renderer reads differently: keep its bytes.

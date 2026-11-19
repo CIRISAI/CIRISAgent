@@ -48,6 +48,7 @@ from ciris_engine.schemas.services.graph_core import (
 from ciris_engine.schemas.types import JSONDict
 
 from .msaspdma import MSASPDMAEvaluator
+from ciris_engine.logic.utils.localization import in_thought_language
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ciris_engine.schemas.context.prompt_provenance import PromptManifest
@@ -87,6 +88,7 @@ class FSASPDMAEvaluator(MSASPDMAEvaluator):
         messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
         return messages
 
+    @in_thought_language("original_thought", "context")
     def compose_prompt(
         self,
         original_thought: ProcessingQueueItem,
@@ -97,7 +99,6 @@ class FSASPDMAEvaluator(MSASPDMAEvaluator):
         """The FSASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
         from ciris_engine.schemas.context.prompt_provenance import PromptStage
 
-        self._sync_language_from_context(context)
         system = self._guide_segments(
             [
                 ("system_guidance_header", self._require_prompt_value("system_guidance_header")),
@@ -184,6 +185,7 @@ class FSASPDMAEvaluator(MSASPDMAEvaluator):
             resource_usage=resource_usage,
         )
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_forget_action(
         self,
         aspdma_result: ActionSelectionDMAResult,

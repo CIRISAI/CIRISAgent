@@ -228,8 +228,8 @@ class _BaseConscience(ConscienceInterface):
     def _resolve_language(self, context: ConscienceCheckContext) -> str:
         """Determine the language for THIS conscience check.
 
-        Defers ALL resolution to the canonical helper
-        `get_user_language_from_context`, which walks the priority chain:
+        Defers ALL resolution to the one resolver every DMA uses,
+        `resolve_thought_language`, which walks the priority chain:
         thought.preferred_language → task.preferred_language →
         system_snapshot.user_profiles[*].preferred_language → env var.
 
@@ -246,9 +246,9 @@ class _BaseConscience(ConscienceInterface):
         agent could end up running its conscience checks under the
         environment's CIRIS_PREFERRED_LANGUAGE setting.
         """
-        from ciris_engine.logic.utils.localization import get_user_language_from_context
+        from ciris_engine.logic.utils.localization import resolve_thought_language
 
-        return get_user_language_from_context(context)
+        return resolve_thought_language(getattr(context, "thought", None), context)
 
     def _create_trace_correlation(
         self, conscience_type: str, context: ConscienceCheckContext, start_time: datetime

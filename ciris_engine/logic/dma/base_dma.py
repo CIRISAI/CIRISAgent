@@ -65,6 +65,20 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             raise ValueError(f"{type(self).__name__} prompt template missing required key: {key}")
         return value
 
+    @property
+    def thought_language(self) -> str:
+        """The language of the thought this evaluator is evaluating right now.
+
+        Never instance state: one evaluator serves every concurrent thought.
+        It is the task-local scope its stage method opened with
+        :func:`~ciris_engine.logic.utils.localization.in_thought_language`
+        (resolved by ``resolve_thought_language``); outside one, the
+        deployment default.
+        """
+        from ciris_engine.logic.utils.localization import current_thought_language
+
+        return current_thought_language()
+
     def _position_entries(self) -> List[Tuple[str, str]]:
         """The guide entries that follow ``system_guidance_header``: its pipeline position, then the rest of it.
 

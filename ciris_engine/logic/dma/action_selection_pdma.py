@@ -32,6 +32,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .action_selection import ActionSelectionContextBuilder, ActionSelectionSpecialCases
 from .prompt_loader import get_prompt_loader
+from ciris_engine.logic.utils.localization import current_thought_language, in_thought_language
 from .action_selection.faculty_integration import FacultyIntegration
 from .base_dma import BaseDMA
 
@@ -204,7 +205,7 @@ def _stage_contract() -> str:
     """
     from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE, DMAPromptLoader
 
-    loader = get_prompt_loader()
+    loader = get_prompt_loader(language=current_thought_language())
     text = loader.load_prompt_template("action_selection_pdma").stage_contract
     if not text and loader.language != DEFAULT_LANGUAGE:
         text = DMAPromptLoader(language=DEFAULT_LANGUAGE).load_prompt_template("action_selection_pdma").stage_contract
@@ -214,7 +215,7 @@ def _stage_contract() -> str:
 def _pipeline_position() -> str:
     """The ASPDMA pipeline-position paragraph (#1366 item 12): engine-read like :func:`_stage_contract`, with the
     same English fallback. It opened ``stage_contract`` until it became a structural field of its own."""
-    return get_prompt_loader().pipeline_position("action_selection_pdma")
+    return get_prompt_loader(language=current_thought_language()).pipeline_position("action_selection_pdma")
 
 
 class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMAResult], ActionSelectionDMAProtocol):
@@ -243,6 +244,9 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         **kwargs: Any,
     ) -> None:
         """Initialize ActionSelectionPDMAEvaluator."""
+        # The caller's explicit overrides (the agent template's
+        # action_selection_pdma_overrides): they win in every language.
+        self._caller_overrides: Dict[str, str] = dict(prompt_overrides) if isinstance(prompt_overrides, dict) else {}
         super().__init__(
             service_registry=service_registry,
             model_name=model_name,
@@ -253,10 +257,48 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         )
 
         self.context_builder = ActionSelectionContextBuilder(self.prompts, service_registry, self.sink)
+        # The builder reads the prompts of the thought being evaluated, not the init-time English copy.
+        self.context_builder.prompts_provider = lambda: self.prompts
         self.faculty_integration = FacultyIntegration(faculties) if faculties else None
 
         # Store last prompts for debugging/streaming
 
+    @property
+    def prompts(self) -> Union[Dict[str, str], PromptCollection]:
+        """This thought's ASPDMA prompts: the engine file, its localized copy, then the caller's overrides.
+
+        BaseDMA loads ``PROMPT_FILE`` (the English root template) once at construction, so every
+        thought used to read ``decision_format``, ``closing_reminder``, the action schemas and the
+        guidance fields in English whatever its language. The localized template's copy of each of
+        those keys now takes their place in the thought's language; a key the locale lacks keeps the
+        English text, and an explicit caller override still wins.
+        """
+        base = self._file_prompts
+        if isinstance(base, PromptCollection):
+            return base
+        language = current_thought_language()
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE
+
+        if language == DEFAULT_LANGUAGE:
+            return base
+        try:
+            localized = get_prompt_loader(language=language).load_prompt_template("action_selection_pdma")
+        except (FileNotFoundError, ValueError) as e:
+            logger.warning(f"ASPDMA: no localized prompts for {language!r} ({e}); using the base template")
+            return base
+        merged = dict(base)
+        for key in base:
+            value = localized.get_prompt(key)
+            if isinstance(value, str) and value:
+                merged[key] = value
+        merged.update(self._caller_overrides)
+        return merged
+
+    @prompts.setter
+    def prompts(self, value: Union[Dict[str, str], PromptCollection]) -> None:
+        self._file_prompts = value
+
+    @in_thought_language("input_data.original_thought", "input_data.processing_context")
     async def evaluate(  # type: ignore[override]  # Extends base signature with enable_recursive_evaluation
         self, input_data: EnhancedDMAInputs, enable_recursive_evaluation: bool = False
     ) -> ActionSelectionDMAResult:
@@ -376,7 +418,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             prefix="instr:user",
             plain=plain,
         )
-        segments, layout = _split_sender(segments, layout, parts.sender, get_prompt_loader().language)
+        segments, layout = _split_sender(segments, layout, parts.sender, current_thought_language())
 
         if template_user_override:
             thought_content = str(input_data.original_thought.content) if input_data.original_thought else ""
@@ -447,12 +489,10 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
     @staticmethod
     def _working_language(original_thought: Any, processing_context: Any) -> str:
-        """This thought's language, by the chain every other DMA and conscience uses:
-        thought / task preferred_language, then the user's profile, then the env var."""
-        from ciris_engine.logic.utils.localization import get_user_language_from_context
+        """This thought's language, by the one resolver every DMA and conscience uses (resolve_thought_language)."""
+        from ciris_engine.logic.utils.localization import resolve_thought_language
 
-        snapshot = _get_value(processing_context, "system_snapshot") if processing_context else None
-        return get_user_language_from_context({"thought": original_thought, "system_snapshot": snapshot})
+        return resolve_thought_language(original_thought, processing_context)
 
     def _build_accord_with_metadata(self, original_thought: Any, processing_context: Any = None) -> str:
         """Build accord text with thought type metadata (uses LOCALIZED ACCORD for ASPDMA).
@@ -544,6 +584,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         messages, _ = self.compose_prompt(input_data, agent_name)
         return messages
 
+    @in_thought_language("input_data.original_thought", "input_data.processing_context")
     def compose_prompt(self, input_data: EnhancedDMAInputs, agent_name: str) -> "tuple[List[JSONDict], PromptManifest]":
         """The ASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
         from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
@@ -721,9 +762,9 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             # knowing the review already happened (formatters/wa_approval.py).
             from ciris_engine.logic.formatters import format_wa_approval_block
 
-            approval_block = format_wa_approval_block(authorization, language=get_prompt_loader().language)
+            approval_block = format_wa_approval_block(authorization, language=current_thought_language())
             if approval_block and authorization is not None:
-                approval = _approval_segments(approval_block, authorization, get_prompt_loader().language)
+                approval = _approval_segments(approval_block, authorization, current_thought_language())
                 identity, identity_layout = _concat((identity, identity_layout), approval, "\n\n")
 
         # Always, grant or not: with no grant, the fact that there is none; then
@@ -731,7 +772,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # a person's text naming an authority is that person's (#1320).
         from ciris_engine.logic.formatters import format_wa_approval_facts
 
-        approval_facts = format_wa_approval_facts(authorization, language=get_prompt_loader().language)
+        approval_facts = format_wa_approval_facts(authorization, language=current_thought_language())
         if approval_facts:
             facts = _segment("instr:approval_facts", "stage_instruction", approval_facts)
             identity, identity_layout = _concat((identity, identity_layout), ([facts], items([facts], "")), "\n\n")
@@ -790,7 +831,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # so with no override the message bytes are unchanged.
         from ciris_engine.logic.dma.prompt_loader import safe_format
 
-        _lang = get_prompt_loader().language
+        _lang = current_thought_language()
         rendered = [
             (_field, safe_format(_text, source=f"action_selection_pdma.{_field}[{_lang}]"))
             for _field, _text in (

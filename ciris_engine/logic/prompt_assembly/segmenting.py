@@ -551,25 +551,29 @@ def segment(segment_id: str, kind: SegmentKind, text: str, source: SegmentSource
 PIPELINE_POSITION_ID = "instr:system:pipeline_position"
 
 
-def pipeline_position_segment(text: str, segment_id: str = PIPELINE_POSITION_ID) -> PromptSegment:
+def pipeline_position_segment(
+    text: str, segment_id: str = PIPELINE_POSITION_ID, locale: Optional[str] = None
+) -> PromptSegment:
     """The stage's ``pipeline_position`` field as its own segment (system trust, standing, engine source).
 
     Built from the template FIELD the caller read from the engine template, never found in rendered text: the
     paragraph's heading is translatable, so segmentation cannot depend on its wording.
     """
     return PromptSegment(
-        segment_id=segment_id, kind=SegmentKind.PIPELINE_POSITION, source=SegmentSource.ENGINE, text=text
+        segment_id=segment_id, kind=SegmentKind.PIPELINE_POSITION, source=SegmentSource.ENGINE, text=text, locale=locale
     )
 
 
-def pipeline_position_slot(text: Any) -> Dict[str, PromptSegment]:
+def pipeline_position_slot(text: Any, locale: Optional[str] = None) -> Dict[str, PromptSegment]:
     """``{"pipeline_position": segment}`` for :func:`split_template`, or ``{}`` when the paragraph is empty.
 
     Empty only when a research manifest replaced the field it was split out of (the render then omits it, so a
     sentinel for it would mark bytes the real render does not have).
     """
     # isinstance, not truthiness: tests substitute a Mock for the prompt loader.
-    return {"pipeline_position": pipeline_position_segment(text)} if isinstance(text, str) and text else {}
+    # isinstance for the locale too: a Mock loader's locale is not a string.
+    locale = locale if isinstance(locale, str) else None
+    return {"pipeline_position": pipeline_position_segment(text, locale=locale)} if isinstance(text, str) and text else {}
 
 
 def stripped_ends(segments: List[PromptSegment]) -> List[PromptSegment]:

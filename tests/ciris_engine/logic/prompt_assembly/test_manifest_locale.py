@@ -104,3 +104,62 @@ def test_conscience_locales_mark_the_polyglot_veto_as_mul():
     assert user in ("am", "en")
     system, _, _ = loader.prompt_locales("coherence_conscience")
     assert system == loader.load_prompts("coherence_conscience").served_language
+
+
+# ------------------------------------------------------------------------------------------------ review of #1368
+
+
+def test_research_overrides_clear_the_served_locale(monkeypatch):
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.utils import research_overrides
+
+    fake = SimpleNamespace(overrides=SimpleNamespace(dma_prompt={"csdma_common_sense.closing_reminder": "X"}))
+    monkeypatch.setattr(research_overrides, "get_active_overrides", lambda: fake)
+    collection = DMAPromptLoader(language="en").load_prompt_template("csdma_common_sense")
+    assert collection.closing_reminder == "X"
+    assert collection.served_language is None
+
+
+def test_a_locale_copy_without_the_pipeline_position_serves_it_in_english(tmp_path):
+    import yaml
+
+    loader = DMAPromptLoader(language="am")
+    source = loader.localized_dir / "csdma_common_sense.yml"
+    data = yaml.safe_load(source.read_text(encoding="utf-8"))
+    data.pop("pipeline_position", None)
+    (tmp_path / "csdma_common_sense.yml").write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    loader.localized_dir = tmp_path
+    text, locale = loader.pipeline_position_served("csdma_common_sense")
+    assert text and locale == "en"
+    assert DMAPromptLoader(language="am").pipeline_position_served("csdma_common_sense")[1] == "am"
+    # Recorded as declared English in an Amharic call: listed as a fallback.
+    _, manifest = PromptAssembler().build(
+        PromptStage.COHERENCE,
+        [
+            seg("instr", SegmentKind.STAGE_INSTRUCTION, "ትዕዛዝ", locale="am"),
+            seg("accord", SegmentKind.ACCORD, "ACCORD"),
+            seg("ident", SegmentKind.IDENTITY_BASE, "I am Ally.", source=SegmentSource.AGENT_PROFILE),
+            seg("draft", SegmentKind.DRAFT, "SPEAK: hi", source=SegmentSource.LLM_OUTPUT),
+            seg("pos", SegmentKind.PIPELINE_POSITION, text, locale=locale),
+        ],
+        QA,
+        call=AssemblyCall(response_model="Verdict", task_id="t", thought_id="th", facts=PolicyFacts(), language="am"),
+    )
+    assert manifest.locale_fallbacks == ["pos"]
+
+
+def test_aspdma_stage_contract_in_ta_is_served_in_english_and_marks_its_piece():
+    from ciris_engine.logic.dma.action_selection_pdma import _merged_locale, _stage_contract_served
+    from ciris_engine.logic.utils import localization
+
+    token = localization._THOUGHT_LANGUAGE.set("ta")
+    try:
+        text, locale = _stage_contract_served()
+    finally:
+        localization._THOUGHT_LANGUAGE.reset(token)
+    assert text and locale == "en"  # ta has no stage_contract yet (translation lane)
+    # after_position joins stage_contract (en) with decision_format and closing_reminder (ta): the piece is a fallback.
+    assert _merged_locale(["en", "ta", "ta"], "ta") == "en"
+    assert _merged_locale(["ta", "ta"], "ta") == "ta"
+    assert _merged_locale(["ta", None], "ta") is None

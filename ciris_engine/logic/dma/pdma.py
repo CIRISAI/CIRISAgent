@@ -225,7 +225,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             }
 
         # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
-        position = pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+        position = pipeline_position_slot(*self._position_served(self._prompt_template_name))
         system = split_template(
             self._build_system_message_text,
             {**slots("sys:"), **position},

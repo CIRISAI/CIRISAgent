@@ -904,7 +904,7 @@ Return your response as a FLAT JSON object."""
         """The engine template's pipeline-position paragraph as its own segment (#1366 item 12), as a slot."""
         from ciris_engine.logic.prompt_assembly.segmenting import pipeline_position_slot
 
-        return pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+        return pipeline_position_slot(*self._position_served(self._prompt_template_name))
 
     def _identity_and_sender(self, agent_identity: Any, sender: Optional["VerifiedSender"]) -> "Segments":
         """Identity (+ amendments) then the VERIFIED SENDER block, joined by a blank line ("" when neither)."""

@@ -177,7 +177,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         sys_slots = slots("sys:")
         del sys_slots["prior_dma_context"]
         # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
-        sys_slots.update(pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name)))
+        sys_slots.update(pipeline_position_slot(*self._position_served(self._prompt_template_name)))
         guidance = split_template(
             system_render, sys_slots, prefix="instr:system", first_glue="", locale=self.served_locale
         )

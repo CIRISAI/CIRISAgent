@@ -254,7 +254,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             }
 
         # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
-        position = pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+        position = pipeline_position_slot(*self._position_served(self._prompt_template_name))
         guidance = split_template(
             self._system_message_text,
             {**slots("sys:"), **position, **self._system_prompt_slot()},

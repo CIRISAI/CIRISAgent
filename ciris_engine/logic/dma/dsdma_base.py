@@ -461,6 +461,13 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         # isinstance, not truthiness: tests substitute a Mock for `prompt_template_data`.
         return tail if isinstance(tail, str) else ""
 
+    def _pipeline_position_served(self) -> Tuple[str, Optional[str]]:
+        """``(paragraph, locale served)`` of :meth:`_pipeline_position` (English on the fallback branch)."""
+        try:
+            return self._position_served(self._prompt_template_name)
+        except FileNotFoundError:
+            return "", None
+
     def _pipeline_position(self) -> str:
         """The engine template's pipeline-position paragraph (#1366 item 12); a custom template cannot replace it."""
         try:
@@ -848,7 +855,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 "user_profiles_block": history("sys:user_profiles", user_profiles_block),
                 **knowledge,
                 # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
-                **pipeline_position_slot(self._pipeline_position()),
+                **pipeline_position_slot(*self._pipeline_position_served()),
                 **custom,
             },
             prefix="instr:system",

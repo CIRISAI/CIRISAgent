@@ -259,6 +259,8 @@ The agent prompts in 29 languages, and a stage that silently gets English text i
   - `declared`: the producer stated the locale it actually served. The DMA and conscience prompt loaders record the file they read after any fallback to English (`PromptCollection.served_language`, `ConsciencePrompts.served_language`), and every instruction piece cut from it carries that locale. Code that renders an English string whatever the thought language says `en`.
   - `assembler_rendered`: the assembler rendered the bytes itself: the sender's lines from their carriers in the call's language, and stub lines, which are closed-vocabulary tokens (`zxx`).
   - `unstated`: nobody vouches for a locale: user text, model output, and an agent template's own text.
+- **Per-field English fallbacks** are declared `en`: a pipeline position whose locale copy lacks the field (`DMAPromptLoader.pipeline_position_served`), and ASPDMA's `stage_contract` while a locale lacks it (ta, uk and ur today). A piece joined from fields served in different locales records the one that is not the call's language, so it is listed.
+- **A research manifest that replaces any field** clears the collection's `served_language`: replaced text has no served locale, and its pieces record `unstated`.
 - **Not fallbacks:** `mul` (a deliberately polyglot prompt; the optimization veto's system prompt declares `polyglot_system_prompt: true`), `zxx`, and a regional variant of the call's language (`pt-BR` in a `pt` call).
 
 A localization gap is then a manifest fact, not a script-counting heuristic: an English pipeline position in an Amharic call, or a template piece whose locale is unstated, is listed per call.

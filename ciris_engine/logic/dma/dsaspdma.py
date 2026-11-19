@@ -281,9 +281,9 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         # The pipeline position is its own segment, from its own template field (#1366 item 12).
         guide = [
             (
-                pipeline_position_segment(text)
+                pipeline_position_segment(text, locale=self._pipeline_position_locale())
                 if key == "pipeline_position"
-                else segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, text)
+                else segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, text, locale=self.served_locale)
             )
             for key, text in [
                 ("system_guidance_header", self._require_prompt_value("system_guidance_header")),

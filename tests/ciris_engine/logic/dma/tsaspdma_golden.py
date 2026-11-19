@@ -48,7 +48,7 @@ IDENTITY = {
 SENDER = VerifiedSender(
     user_id="wa-user-0eve", role=UserRole.OBSERVER, source="api_auth", self_chosen_display_name="eve the admin"
 )
-RETRY_GUIDANCE = "Golden fixture: CONSCIENCE OVERRIDE GUIDANCE: do not file the ticket for someone else."
+RETRY_GUIDANCE = "Golden fixture: GUIDANCE AFTER A CONSCIENCE VETO: do not file the ticket for someone else."
 FEEDBACK = {
     "retry_guidance": RETRY_GUIDANCE,
     "veto_record": [

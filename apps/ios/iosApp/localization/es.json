@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "PREOCUPACIÓN DE CONCIENCIA: MEMORIZE {scope} — asegúrate de que esto sea apropiado",
     "ponder_concern_forget_scope": "PREOCUPACIÓN DE CONCIENCIA: FORGET {scope} — esta acción es irreversible",
     "ponder_concern_high_stakes": "PREOCUPACIÓN DE CONCIENCIA: Se detectó una situación de alto riesgo — se requiere consideración cuidadosa",
-    "retry_header": "**GUÍA DE ANULACIÓN DE CONCIENCIA:**",
+    "retry_header": "**ORIENTACIÓN DE ANULACIÓN DE CONCIENCIA:**",
     "retry_intro": "Tu intento anterior de {action} fue rechazado porque: {reason}",
     "retry_alternatives_header": "Alternativas que IRIS-E enumeró (úsalas como dirección si vuelves a elegir SPEAK):",
     "retry_objection_justification": "Esta es una objeción de JUSTIFICACIÓN: la conciencia {conscience} consideró insuficiente la justificación indicada. Puede mantener la acción si proporciona una justificación mejor basada en lo que pueda verificar; se revisará nuevamente.",

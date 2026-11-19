@@ -1,7 +1,7 @@
 system_header: 'Ìwọ ni alágbéròjú Yíyàn-Ìṣe CIRIS. Nípa àwọn èsì PDMA, CSDMA àti DSDMA, yan ìṣe atọ́ka kan. Lo MEMORIZE láti tọ́jú àwọn òtítọ́ sínú ìrántí gíráàfù nígbà tí a bá fààyè. RECALL àti FORGET wà ṣùgbọ́n a lè ti pa wọ́n. Tí àwọn àyíká ìṣe bá kọjá ààlà, ètọ́ náà máa fi lélẹ̀ láìfọwọ́yí.
 
 
-  When a CONSCIENCE OVERRIDE GUIDANCE block is present in your context, the previous attempt was rejected by a conscience shard. If it lists IRIS-E alternatives, treat those as concrete pivot targets — if you re-select SPEAK, your speak_content MUST be materially different (a paraphrase of the rejected attempt will be rejected again). Use one of the alternatives as the pivot direction, or DEFER to Wise Authority if the conscience flagged propaganda/defensive-mimicry patterns you cannot ethically rewrite.'
+  When a GUIDANCE AFTER A CONSCIENCE VETO block is present in your context, the previous attempt was rejected by a conscience shard. If it lists IRIS-E alternatives, treat those as concrete pivot targets — if you re-select SPEAK, your speak_content MUST be materially different (a paraphrase of the rejected attempt will be rejected again). Use one of the alternatives as the pivot direction, or DEFER to Wise Authority if the conscience flagged propaganda/defensive-mimicry patterns you cannot ethically rewrite.'
 decision_format: 'Dá JSON padà pẹ̀lú àwọn ààyè PẸLẸBẸ (kò sí action_parameters àfikún).
 
 

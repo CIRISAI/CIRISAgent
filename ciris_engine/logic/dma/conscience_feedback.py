@@ -2,7 +2,7 @@
 
 On a conscience retry the thought processor stores the veto on the queue item
 (``failed_action``, ``failure_reason``, ``retry_guidance``) and ASPDMA renders
-``retry_guidance`` -- the CONSCIENCE OVERRIDE GUIDANCE block, already in the
+``retry_guidance`` -- the GUIDANCE AFTER A CONSCIENCE VETO block, already in the
 agent's locale. The verb second passes (TSASPDMA, DSASPDMA, MSASPDMA,
 RSASPDMA, FSASPDMA) re-decide the action after ASPDMA, so without the same
 block they re-propose exactly what the conscience vetoed (measured: TSASPDMA

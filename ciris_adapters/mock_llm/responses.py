@@ -230,9 +230,9 @@ def extract_context_from_messages(messages: List[Dict[str, Any]]) -> List[str]:
 
                         # === CONSCIENCE OVERRIDE CHECK ===
                         # When bypass conscience detects a new observation, it passes it in the
-                        # CONSCIENCE OVERRIDE GUIDANCE section. This takes priority!
+                        # GUIDANCE AFTER A CONSCIENCE VETO section. This takes priority!
                         conscience_override_match = re.search(
-                            r"\*\*CONSCIENCE OVERRIDE GUIDANCE:\*\*.*?"
+                            r"\*\*GUIDANCE AFTER A CONSCIENCE VETO:\*\*.*?"
                             r"A NEW MESSAGE arrived from the user.*?:\s*'([^']+)'",
                             content,
                             re.DOTALL | re.IGNORECASE,

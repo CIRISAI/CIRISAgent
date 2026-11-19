@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "PREOCCUPAZIONE DELLA COSCIENZA: MEMORIZZA {scope} - verificare che sia appropriato",
     "ponder_concern_forget_scope": "PREOCCUPAZIONE DELLA COSCIENZA: DIMENTICA {scope} - questa azione è irreversibile",
     "ponder_concern_high_stakes": "PREOCCUPAZIONE DELLA COSCIENZA: Situazione ad alto rischio rilevata - è richiesta un'attenta valutazione",
-    "retry_header": "**GUIDA AL SUPERAMENTO DELLA COSCIENZA:**",
+    "retry_header": "**GUIDA ALLA SOVRASCRITTURA DELLA COSCIENZA:**",
     "retry_intro": "Il tuo precedente tentativo di {action} è stato rifiutato perché: {reason}",
     "retry_alternatives_header": "Alternative enumerate da IRIS-E (usale come punti perno se ri-PARLI):",
     "retry_objection_justification": "Questa è un'obiezione di GIUSTIFICAZIONE: la coscienza {conscience} ha ritenuto insufficiente la giustificazione dichiarata. Puoi mantenere l'azione se fornisci una giustificazione migliore, basata su ciò che puoi verificare; verrà riesaminata.",

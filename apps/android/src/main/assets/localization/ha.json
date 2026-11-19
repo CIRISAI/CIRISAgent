@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "DAMUWA NA LAMIRI: TUNA {scope} - tabbatar da wannan shine mafi kyau",
     "ponder_concern_forget_scope": "DAMUWA NA LAMIRI: MANTA {scope} - wannan aiki ba ya dawowa",
     "ponder_concern_high_stakes": "DAMUWA NA LAMIRI: Yanayin mai girma da aka gano - tunani mai kyau yana da buƙata",
-    "retry_header": "**JAGORAN RATAYE NA CONSCIENCE:**",
+    "retry_header": "**JAGORAR SOKEWAR LAMIRI:**",
     "retry_intro": "An katso ƙoƙarin ka na jimawa na {action} saboda: {reason}",
     "retry_alternatives_header": "Mababu IRIS-E ta kai tufa (yi amfani su azaman budu idan ka sake SPEAK):",
     "retry_uncertainties_label": "shakkar",

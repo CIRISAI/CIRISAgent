@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "ਜ਼ਮੀਰ ਦੀ ਚਿੰਤਾ: MEMORIZE {scope} — ਇਹ ਯਕੀਨੀ ਕਰੋ ਕਿ ਇਹ ਉਚਿਤ ਹੈ",
     "ponder_concern_forget_scope": "ਜ਼ਮੀਰ ਦੀ ਚਿੰਤਾ: FORGET {scope} — ਇਹ ਕਾਰਵਾਈ ਵਾਪਸ ਨਹੀਂ ਹੋ ਸਕਦੀ",
     "ponder_concern_high_stakes": "ਜ਼ਮੀਰ ਦੀ ਚਿੰਤਾ: ਉੱਚ-ਦਾਅ ਵਾਲੀ ਸਥਿਤੀ ਦੇਖੀ ਗਈ — ਸਾਵਧਾਨੀ ਨਾਲ ਸੋਚਣਾ ਜ਼ਰੂਰੀ ਹੈ",
-    "retry_header": "**ਜ਼ਮੀਰ ਓਵਰਰਾਈਡ ਨਿਰਦੇਸ਼:**",
+    "retry_header": "**ਜ਼ਮੀਰ ਓਵਰਰਾਈਡ ਮਾਰਗਦਰਸ਼ਨ:**",
     "retry_intro": "ਤੁਹਾਡੀ {action} ਕਰਨ ਦੀ ਪਿਛਲੀ ਕੋਸ਼ਿਸ਼ ਰੱਦ ਕਰ ਦਿਤੀ ਗਈ ਹੈ ਕਿਉਂਕਿ: {reason}",
     "retry_alternatives_header": "IRIS-E ਦੁਆਰਾ ਗਣਨਾ ਕੀਤੇ ਗਏ ਵਿਕਲਪ (ਜੇਕਰ ਤੁਸੀਂ ਦੁਬਾਰਾ ਬੋਲੋ ਤਾ ਪਿਵਟ ਮੰਜ਼ਿਲਾਂ ਵਜੋਂ ਵਰਤੋ):",
     "retry_uncertainties_label": "ਅਨਿਸ਼ਚਤਤਾਵਾਂ",

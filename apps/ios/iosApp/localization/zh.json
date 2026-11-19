@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "良知警示：MEMORIZE {scope} — 请确认此操作适当",
     "ponder_concern_forget_scope": "良知警示：FORGET {scope} — 此操作不可逆",
     "ponder_concern_high_stakes": "良知警示：检测到高风险情况 — 需要谨慎考虑",
-    "retry_header": "**良知覆盖指引：**",
+    "retry_header": "**良知覆盖指导：**",
     "retry_intro": "你之前尝试 {action} 被拒绝，原因是：{reason}",
     "retry_alternatives_header": "IRIS-E 列举的替代方案（如果你再次选择 SPEAK，请以此为方向）：",
     "retry_uncertainties_label": "不确定性",

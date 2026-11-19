@@ -593,7 +593,7 @@ class ThoughtProcessor(
 
         ``conscience_feedback`` is the veto a conscience retry carries (#1366
         item 1). The second pass re-decides the action, so it gets the same
-        CONSCIENCE OVERRIDE GUIDANCE ASPDMA got; without it TSASPDMA saw the
+        GUIDANCE AFTER A CONSCIENCE VETO ASPDMA got; without it TSASPDMA saw the
         veto reason in 0 of 162 retry calls and re-proposed the vetoed call.
         None on a first pass.
         """
@@ -1775,7 +1775,7 @@ class ThoughtProcessor(
             self._build_structured_shard_detail(conscience_result, language=language) if conscience_result else ""
         )
 
-        header = get_string(language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**")
+        header = get_string(language, "conscience.retry_header", default="**GUIDANCE AFTER A CONSCIENCE VETO:**")
         if conscience_result is not None and conscience_result.vetoes:
             intro = self._typed_veto_intro(attempted_action, conscience_result.vetoes[0], conscience_result, language)
         else:

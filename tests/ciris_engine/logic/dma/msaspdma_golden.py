@@ -42,7 +42,7 @@ GRANT = WAAuthorization(
     response_attestation_id="att-resp-01",
     request_attestation_id="att-req-01",
 )
-RETRY_GUIDANCE = "Golden fixture: CONSCIENCE OVERRIDE GUIDANCE: do not store facts about someone else."
+RETRY_GUIDANCE = "Golden fixture: GUIDANCE AFTER A CONSCIENCE VETO: do not store facts about someone else."
 FEEDBACK = {
     "retry_guidance": RETRY_GUIDANCE,
     "veto_record": [

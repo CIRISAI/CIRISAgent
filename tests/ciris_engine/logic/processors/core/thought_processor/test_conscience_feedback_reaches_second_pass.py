@@ -2,7 +2,7 @@
 
 On a conscience retry the processor stores the veto on the queue item
 (``failed_action``, ``failure_reason``, ``retry_guidance``) and ASPDMA renders
-the CONSCIENCE OVERRIDE GUIDANCE block. The second pass then re-decides the
+the GUIDANCE AFTER A CONSCIENCE VETO block. The second pass then re-decides the
 action -- and never saw that block: TSASPDMA got the veto reason in 0 of 162
 retry calls and re-proposed the same vetoed ticket four times.
 
@@ -155,7 +155,7 @@ async def test_retry_second_pass_prompt_carries_the_veto(verb: HandlerActionType
     feedback = _feedback(_processor([]))
     prompt = await _run(verb, feedback)
     assert VETO_REASON in prompt
-    assert "**CONSCIENCE OVERRIDE GUIDANCE:**" in prompt
+    assert "**GUIDANCE AFTER A CONSCIENCE VETO:**" in prompt
     # The same text ASPDMA receives, verbatim -- not a rewording.
     assert feedback["retry_guidance"] in prompt
 
@@ -165,7 +165,7 @@ async def test_retry_second_pass_prompt_carries_the_veto(verb: HandlerActionType
 async def test_first_pass_prompt_carries_no_veto(verb: HandlerActionType) -> None:
     prompt = await _run(verb, None)
     assert VETO_REASON not in prompt
-    assert "CONSCIENCE OVERRIDE GUIDANCE" not in prompt
+    assert "GUIDANCE AFTER A CONSCIENCE VETO" not in prompt
 
 
 _EP = EpistemicData(entropy_level=0.1, coherence_level=0.9, uncertainty_acknowledged=True, reasoning_transparency=1.0)

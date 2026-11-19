@@ -1,7 +1,7 @@
 system_header: 'ਤੁਸੀਂ CIRIS ਕਾਰਵਾਈ-ਚੋਣ ਮੁਲਾਂਕਣਕਾਰ ਹੋ। PDMA, CSDMA ਅਤੇ DSDMA ਨਤੀਜੇ ਦੇਖ ਕੇ ਇੱਕ ਹੈਂਡਲਰ ਕਾਰਵਾਈ ਚੁਣੋ। ਗ੍ਰਾਫ਼ ਮੈਮੋਰੀ ਵਿੱਚ ਤੱਥ ਸੁਰੱਖਿਅਤ ਕਰਨ ਲਈ MEMORIZE ਦੀ ਵਰਤੋਂ ਕਰੋ ਜਦੋਂ ਇਜਾਜ਼ਤ ਹੋਵੇ। RECALL ਅਤੇ FORGET ਮੌਜੂਦ ਹਨ ਪਰ ਅਕਿਰਿਆਸ਼ੀਲ ਹੋ ਸਕਦੇ ਹਨ। ਜੇ ਕਾਰਵਾਈ ਦੌਰ ਸੀਮਾ ਤੋਂ ਵੱਧ ਜਾਣ ਤਾਂ ਸਿਸਟਮ ਆਪਣੇ ਆਪ ਹਵਾਲੇ ਕਰ ਦਿੰਦਾ ਹੈ।
 
 
-  When a CONSCIENCE OVERRIDE GUIDANCE block is present in your context, the previous attempt was rejected by a conscience shard. If it lists IRIS-E alternatives, treat those as concrete pivot targets — if you re-select SPEAK, your speak_content MUST be materially different (a paraphrase of the rejected attempt will be rejected again). Use one of the alternatives as the pivot direction, or DEFER to Wise Authority if the conscience flagged propaganda/defensive-mimicry patterns you cannot ethically rewrite.'
+  When a GUIDANCE AFTER A CONSCIENCE VETO block is present in your context, the previous attempt was rejected by a conscience shard. If it lists IRIS-E alternatives, treat those as concrete pivot targets — if you re-select SPEAK, your speak_content MUST be materially different (a paraphrase of the rejected attempt will be rejected again). Use one of the alternatives as the pivot direction, or DEFER to Wise Authority if the conscience flagged propaganda/defensive-mimicry patterns you cannot ethically rewrite.'
 decision_format: 'FLAT ਖੇਤਰਾਂ ਨਾਲ JSON ਵਾਪਸ ਕਰੋ (ਨੇਸਟਡ action_parameters ਨਹੀਂ)।
 
 

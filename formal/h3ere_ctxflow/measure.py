@@ -118,7 +118,7 @@ def detect(prompt_text, t, rule):
         "wa_guidance": "Wise Authority: I confirm this instruction" in p or "Approved by the Wise Authority" in p,
         "actions_ran": "Actions that ran in this task:" in p,
         "prior_attempt": "I attempted to" in p,
-        "veto_feedback": "CONSCIENCE OVERRIDE GUIDANCE" in p,
+        "veto_feedback": "GUIDANCE AFTER A CONSCIENCE VETO" in p,
         "raw_ctx_via_record": "Actions that ran in this task:" in p and "PREVIOUS CONTEXT" in p,
         # CIRISAgent#1366 item 18: with ConscienceCheckContext.task None, coherence / epistemic humility label the
         # follow-up thought's text "User message"; a real observation there starts "You observed".

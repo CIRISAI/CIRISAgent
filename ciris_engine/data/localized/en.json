@@ -4223,7 +4223,7 @@
     "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: MEMORIZE {scope} - ensure this is appropriate",
     "ponder_concern_forget_scope": "CONSCIENCE CONCERN: FORGET {scope} - this action is irreversible",
     "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful consideration required",
-    "retry_header": "**CONSCIENCE OVERRIDE GUIDANCE:**",
+    "retry_header": "**GUIDANCE AFTER A CONSCIENCE VETO:**",
     "retry_intro": "Your previous attempt to {action} was rejected because: {reason}",
     "retry_alternatives_header": "Alternatives IRIS-E enumerated (use as pivot targets if you re-SPEAK):",
     "retry_uncertainties_label": "uncertainties",

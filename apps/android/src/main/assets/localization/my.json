@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "အသိစိတ် CONCERN: မှတ်သားပါ {scope} - ensure this is appropriate",
     "ponder_concern_forget_scope": "အသိစိတ် CONCERN: မေ့ပါ {scope} - this လုပ်ဆောင်ion is irreversible",
     "ponder_concern_high_stakes": "အသိစိတ် CONCERN: High-stakes situation detected - careful consideration required",
-    "retry_header": "**ရှုသိုက်အညှိုးအခြင်းလမ်းညွှန်:**",
+    "retry_header": "**အသိစိတ် ကျော်လွှားမှု လမ်းညွှန်ချက်:**",
     "retry_intro": "သင်၏အရှေ့ ကြိုးပမ်းချက် {action} ကိုငြင်းပယ်ခြင်းခံခဲ့ရသည်: {reason}",
     "retry_alternatives_header": "IRIS-E မှတည်ဆောက်ထားသောအစီအစဥ်များ (သင် re-SPEAK ပါက ပင်ကိုအသုံးပြုပါ):",
     "retry_uncertainties_label": "သေချာမှုမရှိခြင်းများ",

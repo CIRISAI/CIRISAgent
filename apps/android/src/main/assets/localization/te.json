@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "మనస్సాక్షి ఆందోళన: MEMORIZE {scope} - ఇది సరైనదని నిర్ధారించుకోండి",
     "ponder_concern_forget_scope": "మనస్సాక్షి ఆందోళన: FORGET {scope} - ఈ చర్య తిప్పికొట్టలేనిది",
     "ponder_concern_high_stakes": "మనస్సాక్షి ఆందోళన: అధిక-ప్రమాద పరిస్థితి గుర్తించబడింది - జాగ్రత్తగా పరిశీలించడం అవసరం",
-    "retry_header": "**మనస్సాక్షి ఓవర్‌రైడ్ నిర్దేశనం:**",
+    "retry_header": "**మనస్సాక్షి భర్తీ మార్గదర్శకత్వం:**",
     "retry_intro": "మీరు {action} చేయడానికి చేసిన గత ప్రయత్నం తిరస్కరించబడింది ఎందుకంటే: {reason}",
     "retry_alternatives_header": "IRIS-E గుర్తించిన ప్రత్యామ్నాయాలు (మీరు re-SPEAK చేస్తే కేంద్ర దిశలుగా ఉపయోగించండి):",
     "retry_uncertainties_label": "అనిశ్చితులు",

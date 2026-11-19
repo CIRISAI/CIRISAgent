@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "KEKHAWATIRAN NURANI: INGAT {scope} - pastikan ini sesuai",
     "ponder_concern_forget_scope": "KEKHAWATIRAN NURANI: LUPAKAN {scope} - tindakan ini tidak dapat dibatalkan",
     "ponder_concern_high_stakes": "KEKHAWATIRAN NURANI: Situasi berisiko tinggi terdeteksi - diperlukan pertimbangan yang cermat",
-    "retry_header": "**PANDUAN PENOLAKAN NURANI:**",
+    "retry_header": "**PANDUAN PENIMPAAN NURANI:**",
     "retry_intro": "Upaya sebelumnya Anda untuk {action} ditolak karena: {reason}",
     "retry_alternatives_header": "Alternatif yang IRIS-E identifikasi (gunakan sebagai arah pivot jika Anda re-SPEAK):",
     "retry_uncertainties_label": "ketidakpastian",

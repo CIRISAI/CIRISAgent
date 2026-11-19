@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "มโนธรรม CONCERN: จดจำ {scope} - ensure this is appropriate",
     "ponder_concern_forget_scope": "มโนธรรม CONCERN: ลืม {scope} - this กระทำion is irreversible",
     "ponder_concern_high_stakes": "มโนธรรม CONCERN: High-stakes situation detected - careful consideration required",
-    "retry_header": "**คำแนะนำการปฏิเสธจากสมาธิ:**",
+    "retry_header": "**คำแนะนำสำหรับการแทนที่มโนธรรม:**",
     "retry_intro": "ความพยายามก่อนหน้านี้ของคุณในการ {action} ถูกปฏิเสธเพราะ: {reason}",
     "retry_alternatives_header": "ทางเลือกที่ IRIS-E ระบุ (ใช้เป็นทิศทางหลักหากคุณ re-SPEAK):",
     "retry_uncertainties_label": "ความไม่แน่นอน",

@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "양심 우려: MEMORIZE {scope} — 이 작업이 적절한지 확인하세요",
     "ponder_concern_forget_scope": "양심 우려: FORGET {scope} — 이 작업은 되돌릴 수 없습니다",
     "ponder_concern_high_stakes": "양심 우려: 중요한 상황이 감지되었습니다 — 신중한 검토가 필요합니다",
-    "retry_header": "**양심 무시 지침:**",
+    "retry_header": "**양심 재정의 지침:**",
     "retry_intro": "{action}에 대한 이전 시도가 다음 이유로 거부되었습니다: {reason}",
     "retry_alternatives_header": "IRIS-E가 열거한 대안(SPEAK을 다시 선택하는 경우 피벗 대상으로 사용):",
     "retry_uncertainties_label": "불확실성",

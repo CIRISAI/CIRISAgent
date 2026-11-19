@@ -91,8 +91,33 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         """
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
+    def _template_override(self, key: str) -> Optional[str]:
+        """The agent template's ``csdma_overrides[key]``, when it supplies one."""
+        value = self.prompts.get(key) if isinstance(self.prompts, dict) else None
+        return value if isinstance(value, str) and value else None
+
+    def _system_prompt_slot(self) -> Dict[str, Any]:
+        """``{"template_system_prompt": segment}`` for the template's ``system_prompt`` (its own bytes, agent-profile
+        source), or ``{}``. A brace-free override only: one carrying slots or escapes is formatted into the header
+        like any template field, so it stays inside the engine instruction (no shipped override has braces)."""
+        from ciris_engine.logic.prompt_assembly.segmenting import segment
+        from ciris_engine.schemas.context.prompt_provenance import SegmentKind, SegmentSource
+
+        override = self._template_override("system_prompt")
+        if not override or "{" in override or "}" in override:
+            return {}
+        return {
+            "template_system_prompt": segment(
+                "sys:template_system_prompt", SegmentKind.STAGE_INSTRUCTION, override, SegmentSource.AGENT_PROFILE
+            )
+        }
+
     def _system_message_text(
-        self, context_summary: str, original_thought_content: str, pipeline_position: Optional[str] = None
+        self,
+        context_summary: str,
+        original_thought_content: str,
+        pipeline_position: Optional[str] = None,
+        template_system_prompt: Optional[str] = None,
     ) -> str:
         """The stage's system guidance.
 
@@ -106,14 +131,19 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         The header is two fields around the engine's pipeline-position paragraph (#1366 item 12): the override
         replaces both (``system_guidance_header`` and ``system_guidance_header_tail``, the one header it
         replaced before), never the paragraph, which is read from the engine template.
+
+        ``template_system_prompt`` is the override's text as the assembler's slot value (:meth:`_system_prompt_slot`):
+        it renders verbatim in the header's place, so the override is its own agent-profile segment.
         """
-        template_system_override = None
-        if isinstance(self.prompts, dict):
-            template_system_override = self.prompts.get("system_prompt")
+        template_system_override = self._template_override("system_prompt")
         template_data = self.prompt_template_data
+        extra: Dict[str, Any] = {}
         if template_system_override:
+            header = template_system_override
+            if template_system_prompt is not None:
+                header, extra = "{template_system_prompt}", {"template_system_prompt": template_system_prompt}
             template_data = template_data.model_copy(
-                update={"system_guidance_header": template_system_override, "system_guidance_header_tail": None}
+                update={"system_guidance_header": header, "system_guidance_header_tail": None}
             )
             logger.debug(
                 "CSDMA template system_prompt override replaces system_guidance_header (%d chars); "
@@ -125,18 +155,24 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             context_summary=context_summary,
             original_thought_content=original_thought_content,
             pipeline_position=pipeline_position,
+            **extra,
         )
 
-    def _user_message_text(self, context_summary: str, original_thought_content: str) -> str:
+    def _framing_text(self, context_summary: str, original_thought_content: str) -> str:
+        """The template's ``user_prompt_template`` framing, rendered ("" when it supplies none)."""
+        template_user_override = self._template_override("user_prompt_template")
+        if not template_user_override:
+            return ""
+        return template_user_override.format(thought_content=original_thought_content, context_summary=context_summary)
+
+    def _user_message_text(self, context_summary: str, original_thought_content: str, framing: bool = True) -> str:
         """The user message.
 
         `user_prompt_template` is ADDITIVE (#996): `context_integration` carries live slots (`context_summary`,
         `original_thought_content`), so it is not fit for replacement: substituting a template's text for it
         dropped `context_summary` outright. The authored framing leads, the composition follows undiminished.
+        ``framing`` False renders the composition alone (the assembler segments the framing on its own).
         """
-        template_user_override = None
-        if isinstance(self.prompts, dict):
-            template_user_override = self.prompts.get("user_prompt_template")
 
         user_message_text = self.prompt_loader.get_user_message(
             self.prompt_template_data, context_summary=context_summary, original_thought_content=original_thought_content
@@ -147,17 +183,14 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
                 format_thoughts_chain([{"content": original_thought_content}]),
                 None,
             )
-        if template_user_override:
-            framing = template_user_override.format(
-                thought_content=original_thought_content,
-                context_summary=context_summary,
-            )
+        framing_text = self._framing_text(context_summary, original_thought_content) if framing else ""
+        if framing_text:
             logger.debug(
                 "CSDMA template user_prompt_template override: %d chars framing + %d chars composition",
-                len(framing),
+                len(framing_text),
                 len(user_message_text),
             )
-            user_message_text = additive(framing, user_message_text)
+            user_message_text = additive(framing_text, user_message_text)
         return user_message_text
 
     def compose_messages(
@@ -224,7 +257,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         position = pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
         guidance = split_template(
             self._system_message_text,
-            {**slots("sys:"), **position},
+            {**slots("sys:"), **position, **self._system_prompt_slot()},
             prefix="instr:system",
             first_glue="",
         )
@@ -238,7 +271,22 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         kept = {s.segment_id for s in segments}
         builder.message("system", segments, [i for i in system[1] if i.segment_id in kept])
 
-        user = split_template(self._user_message_text, slots(""), prefix="instr:user", first_glue="")
+        user = split_template(
+            lambda **values: self._user_message_text(**values, framing=False),
+            slots(""),
+            prefix="instr:user",
+            first_glue="",
+        )
+        # The template's user_prompt_template framing leads (additive, #996) as the agent's own text (FSD §4.3).
+        if self._template_override("user_prompt_template"):
+            framing = split_template(
+                self._framing_text,
+                slots("framing:"),
+                prefix="instr:framing",
+                first_glue="",
+                instruction_source=SegmentSource.AGENT_PROFILE,
+            )
+            user = concat(framing, user, "\n\n")
         images_list = images or []
         if images_list:
             logger.info(f"[VISION] CSDMA building multimodal content with {len(images_list)} images")

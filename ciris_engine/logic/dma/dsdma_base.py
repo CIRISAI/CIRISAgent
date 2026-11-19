@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple, Uni
 
 if TYPE_CHECKING:
     from ciris_engine.logic.prompt_assembly.segmenting import Segments
-    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest, PromptSegment
 
 from pydantic import BaseModel, Field
 
@@ -149,9 +149,12 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
     @property
     def prompt_template(self) -> str:
-        """Get system guidance header, respecting language changes."""
-        if self._custom_prompt_template is not None:
-            return self._custom_prompt_template
+        """The engine's system guidance header in the thought's language.
+
+        Engine-owned (#1366): an agent's custom DSDMA template (``core_profile.dsdma_prompt_template``) is added
+        after the engine header as agent-profile text (:meth:`_custom_body`), never in its place, so the role and
+        instructions render in the thought's language whatever the agent supplies.
+        """
         system_guidance = self.prompt_template_data.get_prompt("system_guidance_header")
         if system_guidance:
             return system_guidance
@@ -177,7 +180,11 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         return await self.evaluate_thought(input_data, dma_input_data)
 
-    @in_thought_language("thought_item", "current_context")
+    # The orchestrator hands DSDMA DMAMetadata, never the processing context PDMA and CSDMA resolve against, so
+    # the context is the one the queue item carries (gather_context stores the ProcessingThoughtContext there):
+    # its initial_task_context holds the message's language. Reading only the item fell to the deployment
+    # default -- the English primer and template in an `am` thought (#1366, RATCHET am context map).
+    @in_thought_language("thought_item", "thought_item.initial_context", "current_context")
     async def evaluate_thought(
         self, thought_item: ProcessingQueueItem, current_context: Optional[DMAInputData]
     ) -> DSDMAResult:
@@ -449,12 +456,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         )
 
     def _header_tail(self) -> str:
-        """``system_guidance_header_tail``: the rest of the engine header after its pipeline-position paragraph.
-
-        Empty under a custom (domain-config) template, which replaces the whole header as before.
-        """
-        if self._custom_prompt_template is not None:
-            return ""
+        """``system_guidance_header_tail``: the rest of the engine header after its pipeline-position paragraph."""
         tail = getattr(self.prompt_template_data, "system_guidance_header_tail", None)
         # isinstance, not truthiness: tests substitute a Mock for `prompt_template_data`.
         return tail if isinstance(tail, str) else ""
@@ -467,7 +469,39 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             return ""
         return text if isinstance(text, str) else ""
 
-    def _system_body(
+    def _render_template(
+        self,
+        template: str,
+        identity_block: str,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        escalation_guidance_block: Optional[str] = None,
+        crisis_resources_block: str = DSDMA_CRISIS_BLOCK_POINTER,
+    ) -> str:
+        """One DSDMA template with its slots filled (the legacy block placeholders included)."""
+        # The crisis block is NOT rendered into the template any more (#1248):
+        # it arrives as its own system message right after language guidance,
+        # the same block every DMA sees. A template that still carries a
+        # `{crisis_resources_block}` slot (the echo-speculative identity, under
+        # "For Mental Health Concerns:") gets a number-free pointer to it, so
+        # DSDMA never carries the block twice.
+        return template.format(
+            identity_block=identity_block,
+            task_history_block="",
+            escalation_guidance_block=(
+                get_escalation_guidance(0) if escalation_guidance_block is None else escalation_guidance_block
+            ),
+            system_snapshot_block=system_snapshot_block,
+            user_profiles_block=user_profiles_block,
+            crisis_resources_block=crisis_resources_block,
+            domain_name=self.domain_name,
+            rules_summary_str=rules_summary_str,
+            context_str=context_str,
+        )
+
+    def _engine_body(
         self,
         identity_block: str,
         system_snapshot_block: str,
@@ -476,97 +510,72 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         rules_summary_str: str,
         pipeline_position: Optional[str] = None,
     ) -> str:
-        """The system message before the identity prepend: the domain template, then response_format /
-        closing_reminder (#990).
-
-        The engine header is ``system_guidance_header``, the pipeline position (#1366 item 12), then
-        ``system_guidance_header_tail``, joined by blank lines: the bytes the one header field rendered. A custom
-        template replaces both header fields, never the paragraph, which follows it.
-        ``pipeline_position`` None reads it from the engine template (the assembler passes a slot value)."""
+        """The engine header: ``system_guidance_header``, the pipeline position (#1366 item 12), then
+        ``system_guidance_header_tail``, joined by blank lines, in the thought's language. Engine-owned: no agent
+        template replaces it. ``pipeline_position`` None reads it from the engine template (the assembler passes
+        a slot value)."""
         position = self._pipeline_position() if pipeline_position is None else pipeline_position
-        escalation_guidance_block = get_escalation_guidance(0)
-
-        # The crisis block is NOT rendered into the template any more (#1248):
-        # it arrives as its own system message right after language guidance,
-        # the same block every DMA sees. A template that still carries a
-        # `{crisis_resources_block}` slot (the echo-speculative identity, under
-        # "For Mental Health Concerns:") gets a number-free pointer to it, so
-        # DSDMA never carries the block twice.
-        crisis_resources_block = DSDMA_CRISIS_BLOCK_POINTER
-
-        task_history_block = ""
-
-        head = self.prompt_template
-        tail = self._header_tail()
-        template_has_blocks = any(
-            placeholder in head + tail
-            for placeholder in [
-                "{identity_block}",
-                "{task_history_block}",
-                "{escalation_guidance_block}",
-                "{system_snapshot_block}",
-                "{user_profiles_block}",
-                "{crisis_resources_block}",
-            ]
+        head = self.prompt_template or (
+            "You are a domain-specific evaluator for the '{domain_name}' domain. "
+            "Your primary goal is to assess how well a given 'thought' aligns with the specific rules, "
+            "objectives, and knowledge pertinent to this domain. "
+            "Consider the provided domain rules: '{rules_summary_str}' and the general platform context: '{context_str}'. "
+            "Additionally, user profile information and system snapshot details will be provided with the thought for background awareness. "
+            "Focus your evaluation on domain alignment."
         )
-
-        def placed(rendered_head: str, rendered_tail: str) -> str:
-            return "\n\n".join(part for part in (rendered_head, position, rendered_tail) if part)
-
-        if template_has_blocks:
-            try:
-                rendered = [
-                    template.format(
-                        identity_block=identity_block,
-                        task_history_block=task_history_block,
-                        escalation_guidance_block=escalation_guidance_block,
-                        system_snapshot_block=system_snapshot_block,
-                        user_profiles_block=user_profiles_block,
-                        crisis_resources_block=crisis_resources_block,
-                        domain_name=self.domain_name,
-                        rules_summary_str=rules_summary_str,
-                        context_str=context_str,
-                    )
-                    for template in (head, tail)
-                ]
-                system_message_content = placed(rendered[0], rendered[1])
-            except KeyError as e:
-                logger.error(f"Missing template variable in DSDMA template: {e}")
-                system_message_content = placed(
-                    format_system_prompt_blocks(
-                        identity_block,  # Now guaranteed to be non-empty when we have current_context
-                        task_history_block,
-                        system_snapshot_block,
-                        user_profiles_block,
-                        escalation_guidance_block,
-                        f"You are a domain-specific evaluator for the '{self.domain_name}' domain. "
-                        f"Consider the domain rules: '{rules_summary_str}' and context: '{context_str}'.",
-                    ),
+        args = (identity_block, system_snapshot_block, user_profiles_block, context_str, rules_summary_str)
+        try:
+            rendered = [self._render_template(template, *args) for template in (head, self._header_tail())]
+        except KeyError as e:
+            logger.error(f"Missing template variable in DSDMA template: {e}")
+            rendered = [
+                format_system_prompt_blocks(
+                    identity_block,
                     "",
-                )
-        else:
-            system_message_template = head
-            if not system_message_template:
-                system_message_template = (
-                    "You are a domain-specific evaluator for the '{domain_name}' domain. "
-                    "Your primary goal is to assess how well a given 'thought' aligns with the specific rules, "
-                    "objectives, and knowledge pertinent to this domain. "
-                    "Consider the provided domain rules: '{rules_summary_str}' and the general platform context: '{context_str}'. "
-                    "Additionally, user profile information and system snapshot details will be provided with the thought for background awareness. "
-                    "Focus your evaluation on domain alignment."
-                )
+                    system_snapshot_block,
+                    user_profiles_block,
+                    get_escalation_guidance(0),
+                    f"You are a domain-specific evaluator for the '{self.domain_name}' domain. "
+                    f"Consider the domain rules: '{rules_summary_str}' and context: '{context_str}'.",
+                ),
+                "",
+            ]
+        return "\n\n".join(part for part in (rendered[0], position, rendered[1]) if part)
 
-            system_message_content = placed(
-                *(
-                    template.format(
-                        domain_name=self.domain_name, rules_summary_str=rules_summary_str, context_str=context_str
-                    )
-                    for template in (system_message_template, tail)
-                )
-            )
+    def _custom_body(
+        self,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        escalation_guidance_block: Optional[str] = None,
+        crisis_resources_block: str = DSDMA_CRISIS_BLOCK_POINTER,
+    ) -> str:
+        """The agent's own DSDMA template (``core_profile.dsdma_prompt_template``), ADDED after the engine header.
 
-        # Append response_format / closing_reminder — #990.
-        #
+        It used to replace the engine header, so a custom template sent its own (English) role framing in place
+        of the localized one. Its ``{identity_block}`` renders empty: the identity always leads the system
+        message (:meth:`compose_prompt` prepends it), so it is never carried twice.
+        """
+        if not self._custom_prompt_template:
+            return ""
+        try:
+            return self._render_template(
+                self._custom_prompt_template,
+                "",
+                system_snapshot_block,
+                user_profiles_block,
+                context_str,
+                rules_summary_str,
+                escalation_guidance_block,
+                crisis_resources_block,
+            ).strip()
+        except KeyError as e:
+            logger.error(f"Missing template variable in the agent's DSDMA template, not sent: {e}")
+            return ""
+
+    def _response_body(self, context_str: str, rules_summary_str: str) -> str:
+        """``response_format`` / ``closing_reminder`` (#990), engine-owned, in the thought's language."""
         # BaseDSDMA has never used `DMAPromptLoader.get_system_message()`: it
         # renders `system_guidance_header` alone, via the `prompt_template`
         # property, so every OTHER populated field in dsdma_base.yml was inert —
@@ -578,20 +587,131 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         # namespace intercepting these keys.
         _template_data = self.prompt_template_data
         _lang = self.prompt_loader.language
+        parts: List[str] = []
         for _field in ("response_format", "closing_reminder"):
             _value = getattr(_template_data, _field, None)
             # isinstance, not truthiness: `prompt_template_data` is a property
             # and tests substitute a Mock for it, where every attribute is a
             # truthy Mock.
             if isinstance(_value, str) and _value:
-                system_message_content += "\n\n" + safe_format(
-                    _value,
-                    source=f"{self._prompt_template_name}.{_field}[{_lang}]",
-                    domain_name=self.domain_name,
-                    rules_summary_str=rules_summary_str,
-                    context_str=context_str,
+                parts.append(
+                    safe_format(
+                        _value,
+                        source=f"{self._prompt_template_name}.{_field}[{_lang}]",
+                        domain_name=self.domain_name,
+                        rules_summary_str=rules_summary_str,
+                        context_str=context_str,
+                    )
                 )
-        return system_message_content
+        return "\n\n".join(parts)
+
+    def _system_body(
+        self,
+        identity_block: str,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        pipeline_position: Optional[str] = None,
+        custom_body: Optional[str] = None,
+    ) -> str:
+        """The system message before the identity prepend: the engine header, the agent's custom template when it
+        has one, then response_format / closing_reminder (#990), joined by blank lines. ``custom_body`` None
+        renders the custom template (the assembler passes a slot value)."""
+        if custom_body is None:
+            custom_body = self._custom_body(system_snapshot_block, user_profiles_block, context_str, rules_summary_str)
+        return "\n\n".join(
+            part
+            for part in (
+                self._engine_body(
+                    identity_block,
+                    system_snapshot_block,
+                    user_profiles_block,
+                    context_str,
+                    rules_summary_str,
+                    pipeline_position,
+                ),
+                custom_body,
+                self._response_body(context_str, rules_summary_str),
+            )
+            if part
+        )
+
+    def _domain_knowledge_slot(self, segment_id: str, rules_summary_str: str) -> "Dict[str, PromptSegment]":
+        """``{"rules_summary_str": segment}`` when the text is the agent template's domain knowledge, else ``{}``
+        (the engine's own "General domain guidance" placeholder stays engine text)."""
+        from ciris_engine.logic.prompt_assembly.segmenting import segment
+        from ciris_engine.schemas.context.prompt_provenance import SegmentKind, SegmentSource
+
+        if not self.domain_specific_knowledge or not rules_summary_str:
+            return {}
+        return {
+            "rules_summary_str": segment(
+                segment_id, SegmentKind.STAGE_INSTRUCTION, rules_summary_str, SegmentSource.AGENT_PROFILE
+            )
+        }
+
+    def _expand_custom_body(
+        self,
+        system: "Segments",
+        custom_text: str,
+        system_snapshot_block: str,
+        user_profiles_block: str,
+        context_str: str,
+        rules_summary_str: str,
+        language: str,
+    ) -> "Segments":
+        """The custom-template segment cut into its agent-profile pieces and the engine values it renders."""
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            SegmentationError,
+            expand,
+            history,
+            segment,
+            split_template,
+        )
+        from ciris_engine.schemas.context.prompt_provenance import SegmentKind, SegmentSource
+
+        def render(
+            system_snapshot_block: str,
+            user_profiles_block: str,
+            escalation_guidance_block: str,
+            crisis_resources_block: str,
+            rules_summary_str: str = rules_summary_str,
+        ) -> str:
+            return self._custom_body(
+                system_snapshot_block,
+                user_profiles_block,
+                context_str,
+                rules_summary_str,
+                escalation_guidance_block,
+                crisis_resources_block,
+            )
+
+        # The engine's own blocks the template places stay engine text; the template's words are the agent's.
+        engine_blocks = {
+            name: segment(f"sys:agent_template:{name}", SegmentKind.STAGE_INSTRUCTION, text)
+            for name, text in (
+                ("escalation_guidance_block", get_escalation_guidance(0)),
+                ("crisis_resources_block", DSDMA_CRISIS_BLOCK_POINTER),
+            )
+        }
+        try:
+            parts = split_template(
+                render,
+                {
+                    **engine_blocks,
+                    "system_snapshot_block": history("sys:agent_template:system_snapshot", system_snapshot_block),
+                    "user_profiles_block": history("sys:agent_template:user_profiles", user_profiles_block),
+                    **self._domain_knowledge_slot("sys:agent_template:domain_knowledge", rules_summary_str),
+                },
+                prefix="instr:agent_template",
+                first_glue="",
+                instruction_source=SegmentSource.AGENT_PROFILE,
+            )
+            return expand(system, "sys:agent_template", parts, language)
+        except SegmentationError as e:
+            logger.warning(f"[DSDMA] agent template not segmentable ({e}); sent as one agent_profile segment")
+            return system
 
     def compose_messages(
         self,
@@ -678,7 +798,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             split_template,
             thought_request,
         )
-        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
         language = self.prompt_loader.language
         builder = PromptBuilder()
@@ -692,26 +812,54 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             identity_block: str,
             system_snapshot_block: str,
             user_profiles_block: str,
+            rules_summary_str: str = rules_summary_str,
             pipeline_position: Optional[str] = None,
+            custom_body: Optional[str] = None,
         ) -> str:
             return self._system_body(
-                identity_block, system_snapshot_block, user_profiles_block, context_str, rules_summary_str, pipeline_position
+                identity_block,
+                system_snapshot_block,
+                user_profiles_block,
+                context_str,
+                rules_summary_str,
+                pipeline_position,
+                custom_body,
             )
 
+        # The agent template's pieces carry its source (FSD §4.3): its domain knowledge (the template's
+        # dsdma_kwargs.domain_specific_knowledge, rendered verbatim into the engine's AGENT'S DOMAIN KNOWLEDGE
+        # section) and, when the agent has one, its custom DSDMA template, added after the engine header.
+        knowledge = self._domain_knowledge_slot("sys:domain_knowledge", rules_summary_str)
+        custom_text = self._custom_body(system_snapshot_block, user_profiles_block, context_str, rules_summary_str)
+        custom = (
+            {
+                "custom_body": segment(
+                    "sys:agent_template", SegmentKind.STAGE_INSTRUCTION, custom_text, SegmentSource.AGENT_PROFILE
+                )
+            }
+            if custom_text
+            else {}
+        )
         system = split_template(
             system_render,
             {
                 "identity_block": segment("sys:identity", SegmentKind.IDENTITY_BASE, identity_block),
                 "system_snapshot_block": history("sys:system_snapshot", system_snapshot_block),
                 "user_profiles_block": history("sys:user_profiles", user_profiles_block),
+                **knowledge,
                 # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
                 **pipeline_position_slot(self._pipeline_position()),
+                **custom,
             },
             prefix="instr:system",
             first_glue="",
         )
         # The render split_template just proved its pieces rejoin to: read back, not rendered a third time.
         real = "".join(seg.text for seg in system[0])
+        if custom_text:
+            system = self._expand_custom_body(
+                system, custom_text, system_snapshot_block, user_profiles_block, context_str, rules_summary_str, language
+            )
         if identity_block:
             system = expand(system, "sys:identity", identity, language)
         # CRITICAL: Identity block must ALWAYS be first in system message after accord. Prepend identity to the

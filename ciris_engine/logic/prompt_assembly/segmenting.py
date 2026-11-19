@@ -73,8 +73,12 @@ def split_template(
     prefix: str,
     plain: Optional[Mapping[str, str]] = None,
     first_glue: str = "\n\n",
+    instruction_source: SegmentSource = SegmentSource.ENGINE,
 ) -> Segments:
     """Cut a template's render into instruction pieces and the given slot segments, in template order.
+
+    ``instruction_source`` is the source of the instruction pieces: the engine's, or ``agent_profile`` for text
+    an agent template authored (FSD §4.3).
 
     ``render(**values)`` must render the template; ``slots`` maps a slot name to the segment its value is.
     ``plain`` slot values stay inside the instruction text (engine-built values such as a locale code).
@@ -94,7 +98,7 @@ def split_template(
     n = 0
     for match in _SENTINEL_RE.finditer(marked):
         if match.start() > cursor:
-            segments.append(_instruction(f"{prefix}:{n}", marked[cursor : match.start()]))
+            segments.append(_instruction(f"{prefix}:{n}", marked[cursor : match.start()], instruction_source))
             n += 1
         name = match.group(1)
         if name not in slots:
@@ -106,7 +110,7 @@ def split_template(
         segments.append(seg)
         cursor = match.end()
     if cursor < len(marked):
-        segments.append(_instruction(f"{prefix}:{n}", marked[cursor:]))
+        segments.append(_instruction(f"{prefix}:{n}", marked[cursor:], instruction_source))
     if "".join(s.text for s in segments) != real:
         raise SegmentationError(f"{prefix}: template pieces do not rejoin to the rendered template")
     return segments, items(segments, "", first_glue)

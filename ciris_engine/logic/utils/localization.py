@@ -1009,11 +1009,14 @@ def _arg_path(bound: Dict[str, Any], path: Optional[str]) -> Any:
     return value
 
 
-def in_thought_language(thought: str, context: Optional[str] = None) -> Callable[[_F], _F]:
+def in_thought_language(thought: str, *contexts: str) -> Callable[[_F], _F]:
     """Run the decorated stage method in its thought's language.
 
-    ``thought`` / ``context`` name the method's parameters (dotted paths reach
-    into one, e.g. ``"input_data.original_thought"``). The language is
+    ``thought`` / ``contexts`` name the method's parameters (dotted paths reach
+    into one, e.g. ``"input_data.original_thought"``). With several context
+    paths the first that is present is the context: DSDMA is handed no
+    processing context, so it names the one the queue item carries
+    (``thought_item.initial_context``) before its optional DMA inputs. The language is
     resolved by :func:`resolve_thought_language` from the call's own
     arguments and held in a task-local scope for the call's duration, so the
     stage's prompt loader, guidance and every block it renders agree, and a
@@ -1028,7 +1031,8 @@ def in_thought_language(thought: str, context: Optional[str] = None) -> Callable
                 bound: Dict[str, Any] = dict(signature.bind_partial(*args, **kwargs).arguments)
             except TypeError:
                 bound = {}
-            return resolve_thought_language(_arg_path(bound, thought), _arg_path(bound, context))
+            context = next((c for c in (_arg_path(bound, path) for path in contexts) if c is not None), None)
+            return resolve_thought_language(_arg_path(bound, thought), context)
 
         if inspect.iscoroutinefunction(fn):
 

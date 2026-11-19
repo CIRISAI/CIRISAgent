@@ -435,7 +435,13 @@ class DMAPromptLoader:
                 elif key not in PromptCollection.model_fields and isinstance(value, str):
                     prompt_collection.custom_prompts[key] = value
 
-            return _apply_research_overrides(template_name, prompt_collection)
+            served = self.language if template_path.parent == self.localized_dir else DEFAULT_LANGUAGE
+            prompt_collection.served_language = served
+            overridden = _apply_research_overrides(template_name, prompt_collection)
+            if overridden is not prompt_collection:
+                # A research manifest may have replaced fields: their locale is not the file's.
+                overridden.served_language = None
+            return overridden
 
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse YAML template {template_path}: {e}")

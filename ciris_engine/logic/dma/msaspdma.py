@@ -412,7 +412,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
 
         template = self._require_prompt_value("context_integration")
         user, user_items = split_template(
-            lambda **values: template.format(**values), typed, prefix="instr:user", plain=plain
+            lambda **values: template.format(**values), typed, prefix="instr:user", plain=plain, locale=self.served_locale
         )
         sender = verified_sender_of(original_thought, context)
         if sender is not None:

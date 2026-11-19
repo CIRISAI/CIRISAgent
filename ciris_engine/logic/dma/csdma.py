@@ -260,6 +260,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             {**slots("sys:"), **position, **self._system_prompt_slot()},
             prefix="instr:system",
             first_glue="",
+            locale=self.served_locale,
         )
         # The agent's identity, approved amendments included: the same block every DMA reads
         # (formatters.identity.identity_block_of). Eric, 2026-11-13.
@@ -276,6 +277,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             slots(""),
             prefix="instr:user",
             first_glue="",
+            locale=self.served_locale,
         )
         # The template's user_prompt_template framing leads (additive, #996) as the agent's own text (FSD §4.3).
         if self._template_override("user_prompt_template"):

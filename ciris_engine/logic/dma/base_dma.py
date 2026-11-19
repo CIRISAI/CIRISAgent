@@ -79,6 +79,16 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
 
         return current_thought_language()
 
+    @property
+    def served_locale(self) -> Optional[str]:
+        """Locale of the engine template file this evaluator is reading now, after any fallback to English.
+
+        Recorded on the instruction pieces cut from it, so the manifest says which language each piece was in
+        (and lists a missing locale file as a fallback). None when the template is not a loaded collection.
+        """
+        template = getattr(self, "prompt_template_data", None)
+        return template.served_language if isinstance(template, PromptCollection) else None
+
     def _position_entries(self) -> List[Tuple[str, str]]:
         """The guide entries that follow ``system_guidance_header``: its pipeline position, then the rest of it.
 

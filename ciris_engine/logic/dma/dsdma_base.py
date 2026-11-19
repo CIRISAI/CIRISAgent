@@ -853,6 +853,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             },
             prefix="instr:system",
             first_glue="",
+            locale=self.served_locale,
         )
         # The render split_template just proved its pieces rejoin to: read back, not rendered a third time.
         real = "".join(seg.text for seg in system[0])
@@ -903,6 +904,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             },
             prefix="instr:user",
             first_glue="",
+            locale=user_template_data.served_language if isinstance(user_template_data, PromptCollection) else None,
         )
         user = expand(user, "ctx", context, language)
 

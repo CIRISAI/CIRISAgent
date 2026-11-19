@@ -351,7 +351,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             else:
                 plain[slot] = absent
         user, user_items = split_template(
-            lambda **v: template.format(**v), typed, prefix="instr:user", plain=plain
+            lambda **v: template.format(**v), typed, prefix="instr:user", plain=plain, locale=self.served_locale
         )
         sender = verified_sender_of(original_thought, context)
         if sender is not None:

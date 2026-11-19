@@ -475,6 +475,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             self._position_slot(),
             prefix="instr:system",
             plain={"tool_name": tool_name},
+            locale=self.served_locale,
         )
         builder.message("system", *self._system_segments(instruction, agent_identity, sender, "instr"))
 
@@ -520,6 +521,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             slots,
             prefix="instr:user",
             plain=plain,
+            locale=self.served_locale,
         )
         # On a conscience retry, the veto ASPDMA saw (#1366 item 1): without it
         # this pass re-proposed the vetoed call (0 of 162 retries carried it).
@@ -809,6 +811,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             lambda **values: self.prompt_loader.get_system_message(self.prompt_template_data, **values),
             {"tool_name": requested(0), **self._position_slot()},
             prefix="instr:system",
+            locale=self.served_locale,
         )
         segs, its = self._identity_and_sender(agent_identity, sender)
         if segs:
@@ -866,6 +869,7 @@ Return your response as a FLAT JSON object."""
                 ),
             },
             prefix="instr:correction",
+            locale=self.served_locale,
         )
         section = "".join(s.text for s in section_segments)
         user_segments, user_items = split_template(
@@ -882,6 +886,7 @@ Return your response as a FLAT JSON object."""
                 "correction_section": segment("instr:correction_section", SegmentKind.STAGE_INSTRUCTION, section),
             },
             prefix="instr:user",
+            locale="en",  # an English f-string in code, whatever the thought language
         )
         # The correction section's own pieces replace its placeholder segment, in place.
         at = next(i for i, s in enumerate(user_segments) if s.segment_id == "instr:correction_section")

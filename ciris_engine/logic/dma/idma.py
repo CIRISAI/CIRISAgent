@@ -178,7 +178,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         del sys_slots["prior_dma_context"]
         # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
         sys_slots.update(pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name)))
-        guidance = split_template(system_render, sys_slots, prefix="instr:system", first_glue="")
+        guidance = split_template(
+            system_render, sys_slots, prefix="instr:system", first_glue="", locale=self.served_locale
+        )
         # format_system_prompt_blocks("", "", context, "", None, guidance): guidance, then the context; stripped.
         system = concat(guidance, context, "\n\n")
         segments = stripped_ends(system[0])
@@ -201,7 +203,9 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
                 prior_dma_context=prior_dma_context,
             )
 
-        user = split_template(user_render, slots(""), prefix="instr:user", first_glue="")
+        user = split_template(
+            user_render, slots(""), prefix="instr:user", first_glue="", locale=self.served_locale
+        )
         images_list = images or []
         if images_list:
             logger.info(f"[VISION] IDMA building multimodal content with {len(images_list)} images")

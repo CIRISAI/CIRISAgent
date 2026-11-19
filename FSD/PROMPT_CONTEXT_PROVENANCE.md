@@ -238,15 +238,30 @@ Each LLM call emits a manifest in the reasoning stream, as a sidecar next to `ll
 - `call_id`, `task_id`, `thought_id`, `thought_kind` (seed / followup / guidance), `retry_index`;
 - `stage`, `stage_role` (drafter / second_pass / evaluator / judge), `response_model`;
 - `max_tokens_sent`, `policy_version`, `assembler_version`;
-- `guard_violations` (list).
+- `guard_violations` (list);
+- `language`, `locale_fallbacks` (§8.1).
 
 **Per segment, in order:**
 - `segment_id`, `kind`, `provenance`, `source`, `trust` (after taint), `lifecycle`;
 - `authn`, `authz`, `acct` (ids);
 - `message_index`, `span` [start, end), `sha256`, `truncated`;
-- `derived_from` (segment ids whose bytes this segment contains).
+- `derived_from` (segment ids whose bytes this segment contains);
+- `locale`, `locale_basis` (§8.1).
 
 `derived_from` is what makes laundering visible: a ponder question, a conscience reason or a draft quoting the request carries the request's id.
+
+### 8.1 Locale
+
+The agent prompts in 29 languages, and a stage that silently gets English text in an Amharic call judges differently. So the manifest records language as evidence, not as a setting.
+
+- **Per call:** `language`, the locale the call was rendered for (the thought's resolved language); and `locale_fallbacks`, the ids of segments whose stated locale is not that language.
+- **Per segment:** `locale` and `locale_basis`:
+  - `declared`: the producer stated the locale it actually served. The DMA and conscience prompt loaders record the file they read after any fallback to English (`PromptCollection.served_language`, `ConsciencePrompts.served_language`), and every instruction piece cut from it carries that locale. Code that renders an English string whatever the thought language says `en`.
+  - `assembler_rendered`: the assembler rendered the bytes itself: the sender's lines from their carriers in the call's language, and stub lines, which are closed-vocabulary tokens (`zxx`).
+  - `unstated`: nobody vouches for a locale: user text, model output, and an agent template's own text.
+- **Not fallbacks:** `mul` (a deliberately polyglot prompt; the optimization veto's system prompt declares `polyglot_system_prompt: true`), `zxx`, and a regional variant of the call's language (`pt-BR` in a `pt` call).
+
+A localization gap is then a manifest fact, not a script-counting heuristic: an English pipeline position in an Amharic call, or a template piece whose locale is unstated, is listed per call.
 
 **Consumers:**
 - **`measure.py`** reads manifests directly. The context matrix becomes exact per call, with no pattern matching. The current text matching stays on as a **differential check** for at least one release: manifest-says vs bytes-contain. That is the only way to catch a call that bypassed the assembler, or a manifest that misdescribes its prompt.

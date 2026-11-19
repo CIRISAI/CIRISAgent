@@ -57,8 +57,12 @@ class SegmentationError(ValueError):
     """A block's parts did not rejoin to its legacy bytes."""
 
 
-def _instruction(segment_id: str, text: str, source: SegmentSource = SegmentSource.ENGINE) -> PromptSegment:
-    return PromptSegment(segment_id=segment_id, kind=SegmentKind.STAGE_INSTRUCTION, source=source, text=text)
+def _instruction(
+    segment_id: str, text: str, source: SegmentSource = SegmentSource.ENGINE, locale: Optional[str] = None
+) -> PromptSegment:
+    return PromptSegment(
+        segment_id=segment_id, kind=SegmentKind.STAGE_INSTRUCTION, source=source, text=text, locale=locale
+    )
 
 
 def items(segments: Sequence[PromptSegment], glue: str, first_glue: str = "\n\n") -> List[LayoutItem]:
@@ -74,6 +78,7 @@ def split_template(
     plain: Optional[Mapping[str, str]] = None,
     first_glue: str = "\n\n",
     instruction_source: SegmentSource = SegmentSource.ENGINE,
+    locale: Optional[str] = None,
 ) -> Segments:
     """Cut a template's render into instruction pieces and the given slot segments, in template order.
 
@@ -84,6 +89,9 @@ def split_template(
     ``plain`` slot values stay inside the instruction text (engine-built values such as a locale code).
     A slot used twice yields its segment twice, the second as ``<id>#2``. Raises SegmentationError when the cut
     does not rejoin to the real render (a template that transforms its values).
+
+    ``locale`` is the locale of the template file actually served (``PromptCollection.served_language``, after any
+    fallback): the instruction pieces record it. None when unknown (an agent template's own text).
     """
     plain = dict(plain or {})
     real = render(**plain, **{name: seg.text for name, seg in slots.items()})
@@ -98,7 +106,7 @@ def split_template(
     n = 0
     for match in _SENTINEL_RE.finditer(marked):
         if match.start() > cursor:
-            segments.append(_instruction(f"{prefix}:{n}", marked[cursor : match.start()], instruction_source))
+            segments.append(_instruction(f"{prefix}:{n}", marked[cursor : match.start()], instruction_source, locale))
             n += 1
         name = match.group(1)
         if name not in slots:
@@ -110,7 +118,7 @@ def split_template(
         segments.append(seg)
         cursor = match.end()
     if cursor < len(marked):
-        segments.append(_instruction(f"{prefix}:{n}", marked[cursor:], instruction_source))
+        segments.append(_instruction(f"{prefix}:{n}", marked[cursor:], instruction_source, locale))
     if "".join(s.text for s in segments) != real:
         raise SegmentationError(f"{prefix}: template pieces do not rejoin to the rendered template")
     return segments, items(segments, "", first_glue)

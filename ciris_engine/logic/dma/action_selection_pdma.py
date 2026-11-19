@@ -417,6 +417,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             typed,
             prefix="instr:user",
             plain=plain,
+            locale=self.served_locale,
         )
         segments, layout = _split_sender(segments, layout, parts.sender, current_thought_language())
 

@@ -288,7 +288,24 @@ def test_conscience_fields_are_staged_and_settings_and_tails_are_not(tmp_path: P
     es = json.loads((tmp_path / "es.json").read_text(encoding="utf-8"))
     for t in CONSCIENCES:
         assert "system_prompt" in es[t]  # translated: not offered again
-        assert "pipeline_position" not in es[t]  # no locale has it yet: missing, so the lane picks it up
+        assert "pipeline_position" in es[t]  # the shipped es translates it: not offered again either
+
+
+def test_a_conscience_field_a_locale_lacks_is_offered_to_the_lane(tmp_path: Path) -> None:
+    """Synthetic: the shipped ``es`` consciences with ``pipeline_position`` removed.
+
+    A missing field is absent from the locale's staged bundle, so the lane picks it up; the locale's other
+    translated fields stay staged (not offered again).
+    """
+    from tests.fixtures.synthetic_locale import CONSCIENCE_PROMPTS, prompts_dir_without_field
+
+    synthetic = prompts_dir_without_field(CONSCIENCE_PROMPTS, tmp_path / "prompts", "es", "pipeline_position")
+    en = PL.build_stage(tmp_path / "stage", (synthetic,))
+    es = json.loads((tmp_path / "stage" / "es.json").read_text(encoding="utf-8"))
+    for t in CONSCIENCES:
+        assert "pipeline_position" in en[t], t
+        assert "system_prompt" in es[t], t
+        assert "pipeline_position" not in es[t], t
 
 
 def test_the_dry_run_lists_the_conscience_positions_for_all_28_locales(capsys: pytest.CaptureFixture[str]) -> None:

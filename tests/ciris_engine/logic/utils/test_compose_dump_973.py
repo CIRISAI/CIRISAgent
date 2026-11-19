@@ -585,3 +585,30 @@ def test_residue_fragments_are_normalized_and_bounded() -> None:
         assert "::" in fragment_id
         assert "\n" not in text  # whitespace-normalized
         assert len(text) >= 40
+
+
+@pytest.mark.parametrize("step", ["dsaspdma", "msaspdma"])
+def test_an_english_fallback_position_is_attributed_not_a_gap(step: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1366 item 12: a locale copy lacking ``pipeline_position`` renders the English paragraph.
+
+    DSASPDMA / MSASPDMA read that fallback outside ``_get_prompt_value``; unrecorded, its bytes were an
+    unattributed ``<step>.system.gap1`` (``mixed``, refused by §10.2.1 — the am compose gate before am
+    translated the field). It must report as the field it is. Synthetic: ``am`` with the field removed.
+    """
+    from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+
+    real_load = DMAPromptLoader.load_prompt_template
+
+    def without_position(self: DMAPromptLoader, template_name: str):  # type: ignore[no-untyped-def]
+        collection = real_load(self, template_name)
+        if self.language == "am" and template_name == step:
+            return collection.model_copy(update={"pipeline_position": None})
+        return collection
+
+    monkeypatch.setattr(DMAPromptLoader, "load_prompt_template", without_position)
+    _, rows = compose_dump_rows(arm="h3ere-ciris", locales=["am"], steps=[step])
+    system = [r for r in rows if r.parent_block_id == f"{step}.system"]
+    assert system, "premise: the step composed a system guide"
+    assert not [r.block_id for r in system if ".gap" in r.block_id]
+    position = [r for r in system if r.block_id == f"{step}.{step}.pipeline_position"]
+    assert len(position) == 1 and position[0].block_class is BlockClass.PROCEDURAL

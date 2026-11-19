@@ -1021,6 +1021,10 @@ class _RoutedRecorder:
         from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator
 
         self._real_msaspdma_prompt: Callable[..., Optional[str]] = MSASPDMAEvaluator._get_prompt_value
+        from ciris_engine.logic.dma.base_dma import BaseDMA
+
+        #: Bound from the BASE class: both subclasses inherit it, and each is patched separately.
+        self._real_position_fallback: Callable[..., Optional[str]] = BaseDMA._pipeline_position_fallback
         #: Parts recorded since the last ``take_parts()``. INSTANCE state, never
         #: a module global: one recorder is constructed per dump run
         #: (``compose_dump_rows``) and dies with it.
@@ -1197,6 +1201,27 @@ class _RoutedRecorder:
                 _RecordedPart(
                     key=f"msaspdma.{key}",
                     label=f"dma_prompt:msaspdma.{key}",
+                    text=value,
+                    frame=None,
+                    payload=None,
+                )
+            )
+        return value
+
+    def position_fallback(self, evaluator: object, prefix: str) -> Optional[str]:
+        """Recording pass-through around ``BaseDMA._pipeline_position_fallback`` (#1366 item 12).
+
+        DSASPDMA / MSASPDMA render the ENGINE ``pipeline_position``; a locale copy lacking it gets the English
+        paragraph from this read, not from ``_get_prompt_value``. Unrecorded, those bytes reached the prompt as an
+        unattributed ``<parent>.gap1`` (a ``mixed`` block §10.2.1 refuses). Recorded under the same key as the
+        locale's own field: it IS that field, in its English copy.
+        """
+        value = self._real_position_fallback(evaluator)
+        if isinstance(value, str) and value and not _is_splitter_probe():
+            self._parts.append(
+                _RecordedPart(
+                    key=f"{prefix}.pipeline_position",
+                    label=f"dma_prompt:{prefix}.pipeline_position",
                     text=value,
                     frame=None,
                     payload=None,
@@ -1547,6 +1572,14 @@ def compose_dump_rows(
         """Plain function, same descriptor-binding reason as above."""
         return recorder.msaspdma_prompt_value(evaluator, key)
 
+    def _dsaspdma_position_seam(evaluator: object) -> Optional[str]:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.position_fallback(evaluator, "dsaspdma")
+
+    def _msaspdma_position_seam(evaluator: object) -> Optional[str]:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.position_fallback(evaluator, "msaspdma")
+
     for locale in locales:
         env = golden.prompt_content_environment(  # type: ignore[attr-defined]
             language=locale,
@@ -1562,6 +1595,8 @@ def compose_dump_rows(
             aspdma_system_message=_aspdma_system_seam,
             dsaspdma_prompt_value=_dsaspdma_prompt_seam,
             msaspdma_prompt_value=_msaspdma_prompt_seam,
+            dsaspdma_position_fallback=_dsaspdma_position_seam,
+            msaspdma_position_fallback=_msaspdma_position_seam,
         )
         with env:
             for step in step_names:

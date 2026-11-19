@@ -92,13 +92,16 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
     def _position_served(self, template_name: str) -> Tuple[str, Optional[str]]:
         """``(pipeline position paragraph, locale it was served in)`` from the engine template (English on the
         fallback branch). Tolerates a substituted loader in tests: a non-string locale reads as unknown."""
-        served = getattr(self.prompt_loader, "pipeline_position_served", None)
+        loader: Any = getattr(self, "prompt_loader", None)
+        if loader is None:
+            return "", None
+        served = getattr(loader, "pipeline_position_served", None)
         if served is None:
-            return self.prompt_loader.pipeline_position(template_name), None
+            return str(loader.pipeline_position(template_name) or ""), None
         try:
             text, locale = served(template_name)
         except (TypeError, ValueError):
-            return self.prompt_loader.pipeline_position(template_name), None
+            return str(loader.pipeline_position(template_name) or ""), None
         return text, locale if isinstance(locale, str) else None
 
     def _pipeline_position_locale(self) -> Optional[str]:

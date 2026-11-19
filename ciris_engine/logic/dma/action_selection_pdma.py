@@ -319,6 +319,10 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         merged.update(self._caller_overrides)
         return merged
 
+    @prompts.setter
+    def prompts(self, value: Union[Dict[str, str], PromptCollection]) -> None:
+        self._file_prompts = value
+
     def _prompt_locale(self, key: str) -> Optional[str]:
         """The locale ``self.prompts[key]`` was served in, by the same per-key merge (FSD §8.1).
 
@@ -343,10 +347,6 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         if isinstance(value, str) and value:
             return localized.served_language
         return DEFAULT_LANGUAGE
-
-    @prompts.setter
-    def prompts(self, value: Union[Dict[str, str], PromptCollection]) -> None:
-        self._file_prompts = value
 
     @in_thought_language("input_data.original_thought", "input_data.processing_context")
     async def evaluate(  # type: ignore[override]  # Extends base signature with enable_recursive_evaluation

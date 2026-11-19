@@ -52,3 +52,4 @@ context_integration: |
   Suy Nghĩ Gốc: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**Vị trí đường ống**: bạn chạy đầu tiên, bên cạnh PDMA và DSDMA. IDMA sau đó xem xét cả ba, lựa chọn hành động sẽ chọn ra hành động, và các Lương Tâm xem xét hành động đó."

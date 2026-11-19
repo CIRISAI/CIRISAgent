@@ -16,6 +16,8 @@ from ciris_engine.schemas.conscience.core import (
     OptimizationVetoResult,
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.runtime.reviewed_action_admission import ReviewEntry
+from ciris_engine.schemas.runtime.veto_record import VetoChange, VetoDischarge, VetoObjection, VetoRecordEntry
 
 from ..actions.parameters import (
     DeferParams,
@@ -141,6 +143,40 @@ class ConscienceApplicationResult(BaseModel):
     coherence_prompt: Optional[str] = Field(None, description="User prompt used for coherence evaluation")
     optimization_veto_prompt: Optional[str] = Field(None, description="User prompt used for optimization veto")
     epistemic_humility_prompt: Optional[str] = Field(None, description="User prompt used for epistemic humility")
+
+    # === DECISION CONTRACT (CIRISAgent#1366 items 7-9) ===
+    vetoes: List[VetoObjection] = Field(
+        default_factory=list, description="Typed objections raised on this draft, in priority order (first = override)"
+    )
+    veto_discharges: List[VetoDischarge] = Field(
+        default_factory=list, description="Evidence objections the system discharged from trusted state"
+    )
+    repeated_veto_id: Optional[str] = Field(
+        None, description="Set when the draft repeated a banned action and was vetoed again without review"
+    )
+    pass_after_veto: Optional[VetoChange] = Field(
+        None, description="What changed when this draft passed after earlier vetoes in the task"
+    )
+    veto_record: List[VetoRecordEntry] = Field(
+        default_factory=list, description="The task's veto record after this pass (prior + new)"
+    )
+
+    # === REVIEWED-ACTION ADMISSION (CIRISAgent#1366 items 10 + 19) ===
+    reviewed_fingerprint: Optional[str] = Field(
+        None, description="Reviewed-action fingerprint of the draft the consciences judged in this pass"
+    )
+    review_passes: List[str] = Field(
+        default_factory=list, description="Consciences that ran and passed that fingerprint in this pass"
+    )
+    review_objection: Optional[ReviewEntry] = Field(
+        None, description="rc21 §4 'objected' review record of this pass, when a faculty objected"
+    )
+    review_candidate: Optional[ReviewEntry] = Field(
+        None, description="rc21 §4 'passed' record of this pass (all four passed); stamped only if dispatch-bound"
+    )
+    reviewed_admission: Optional[ReviewEntry] = Field(
+        None, description="The passed record admitted for dispatch, when the final TOOL action was stamped"
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

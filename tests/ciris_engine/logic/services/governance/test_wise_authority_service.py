@@ -256,6 +256,122 @@ async def test_send_deferral(wise_authority_service, time_service, temp_db):
 
 
 @pytest.mark.asyncio
+async def test_a_long_reason_and_context_come_back_whole_from_the_list_route(
+    wise_authority_service, time_service, temp_db
+):
+    """GET /v1/wa/deferrals hands the WA the whole reason and the whole contested
+    draft, not their first 200 characters (#1366 item 6)."""
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.adapters.api.routes import wa as wa_routes
+
+    await wise_authority_service.start()
+    _insert_task_via_persist(
+        task_id="task-long",
+        channel_id="test-channel",
+        description="Long reason task",
+        status="active",
+        priority=0,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+    )
+    reason = "".join(chr(ord("a") + i % 26) for i in range(1000))
+    draft = "The drafted reply. " * 60  # ~1,140 characters
+    await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-long",
+            thought_id="thought-long",
+            reason=reason,
+            defer_until=time_service.now() + timedelta(hours=1),
+            context={"last_draft": draft, "prior_veto_reasons": "[depth 1] coherence: " + "v" * 700},
+        )
+    )
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wise_authority_service=wise_authority_service)))
+    response = await wa_routes.get_deferrals(request, SimpleNamespace(user_id="observer"), None)  # type: ignore[arg-type]
+
+    listed = [d for d in response.data.deferrals if d.task_id == "task-long"]
+    assert len(listed) == 1
+    assert listed[0].reason == reason
+    assert listed[0].question == reason
+    assert listed[0].context["last_draft"] == draft
+    assert listed[0].context["prior_veto_reasons"] == "[depth 1] coherence: " + "v" * 700
+
+
+@pytest.mark.asyncio
+async def test_a_proposed_amendment_rides_from_dsaspdma_into_the_listing(wise_authority_service, time_service, temp_db):
+    """DSASPDMA's typed proposed_amendment reaches GET /v1/wa/deferrals as context.proposed_amendment,
+    and the list says exact amendment text is supported (client 0.5.243)."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from ciris_engine.logic.adapters.api.routes import wa as wa_routes
+    from ciris_engine.logic.dma.dsaspdma import DSASPDMAEvaluator, DSASPDMALLMResult
+    from ciris_engine.logic.handlers.control.defer_handler import DeferHandler
+    from ciris_engine.schemas.actions.parameters import DeferParams
+    from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
+    proposed = "I end every reply with a short check-in question."
+    evaluator = object.__new__(DSASPDMAEvaluator)
+    result = evaluator._convert_result(
+        DSASPDMALLMResult(
+            reason_summary="Identity change needs Wise Authority approval.",
+            operational_reason=DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED,
+            primary_need_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
+            proposed_amendment=f"  {proposed}\n",
+            m1_justification="It keeps my care for users coherent (M-1).",
+        ),
+        DeferParams(reason="change my identity", context={"proposed_amendment": "smuggled by action selection"}),
+    )
+    params = result.action_parameters
+    assert isinstance(params, DeferParams) and params.proposed_amendment == proposed
+
+    metadata: dict = {}
+    object.__new__(DeferHandler)._add_context_metadata(metadata, params.context)
+
+    await wise_authority_service.start()
+    _insert_task_via_persist(
+        task_id="task-amend",
+        channel_id="test-channel",
+        description="Amendment task",
+        status="active",
+        priority=0,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+    )
+    await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-amend",
+            thought_id="thought-amend",
+            reason=params.reason,
+            defer_until=time_service.now() + timedelta(hours=1),
+            context=metadata,
+        )
+    )
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(wise_authority_service=wise_authority_service)))
+    response = await wa_routes.get_deferrals(request, SimpleNamespace(user_id="observer"), None)  # type: ignore[arg-type]
+
+    (listed,) = [d for d in response.data.deferrals if d.task_id == "task-amend"]
+    assert listed.context["proposed_amendment"] == proposed
+    assert response.data.capabilities.exact_amendment_text is True
+    assert response.data.model_dump(mode="json")["capabilities"] == {
+        "exact_amendment_text": True,
+        "exact_call_approval": True,
+        "base_link_approval": True,
+        "identity_change_review": True,
+    }
+    # #1366: the WA sees the whole change: kind, what changes, the exact text, the M-1 justification.
+    from ciris_engine.schemas.api.wa import IdentityChangeKind, IdentityChangeProposal
+
+    change = IdentityChangeProposal.model_validate_json(listed.context["identity_change"])
+    assert change.kind is IdentityChangeKind.AMENDMENT
+    assert change.proposed_text == proposed
+    assert change.summary == "Identity change needs Wise Authority approval."
+    assert change.m1_justification == listed.context["m1_justification"] == "It keeps my care for users coherent (M-1)."
+
+
+@pytest.mark.asyncio
 async def test_get_pending_deferrals(wise_authority_service, time_service, temp_db):
     """Test getting pending deferrals."""
     await wise_authority_service.start()
@@ -796,18 +912,22 @@ class TestDeferralHelperMethods:
         assert ui_context["original_message"] == "Hello, I need help!"
 
     def test_build_ui_context_truncates_long_values(self, wise_authority_service):
-        """Test that UI context truncates long values."""
+        """Description and original message keep their 500 budget, marked when cut;
+        a context value is kept whole up to the 4000 safety cap (#1366 item 6)."""
         long_description = "x" * 600
         long_value = "y" * 300
         deferral_info: dict = {
-            "context": {"long_field": long_value},
+            "context": {"long_field": long_value, "huge_field": "w" * 5000},
             "original_message": "z" * 600,
         }
 
         ui_context = wise_authority_service._build_ui_context(long_description, deferral_info)
 
         assert len(ui_context["task_description"]) == 500
-        assert len(ui_context["long_field"]) == 200
+        assert ui_context["task_description"].endswith("…[truncated]")
+        assert ui_context["long_field"] == long_value
+        assert len(ui_context["huge_field"]) == 4000
+        assert ui_context["huge_field"].endswith("…[truncated]")
         assert len(ui_context["original_message"]) == 500
 
     def test_build_ui_context_none_description(self, wise_authority_service):
@@ -910,9 +1030,9 @@ class TestDeferralHelperMethods:
         # timeout should be 7 days after 2025-01-15T10:00:00
         assert deferral.timeout_at == "2025-01-22T10:00:00"
 
-    def test_create_pending_deferral_truncates_long_reason(self, wise_authority_service):
-        """Test that reason is truncated to 200 characters."""
-        long_reason = "x" * 300
+    def test_create_pending_deferral_keeps_a_long_reason_whole(self, wise_authority_service):
+        """A 1,000-character reason reaches the WA whole, as reason and question (#1366 item 6)."""
+        long_reason = "".join(chr(ord("a") + i % 26) for i in range(1000))
         deferral = wise_authority_service._create_pending_deferral(
             task_id="task-1",
             channel_id="ch-1",
@@ -923,7 +1043,23 @@ class TestDeferralHelperMethods:
             description="Desc",
         )
 
-        assert len(deferral.reason) == 200
+        assert deferral.reason == long_reason
+        assert deferral.question == long_reason
+
+    def test_create_pending_deferral_marks_a_cut_beyond_the_safety_cap(self, wise_authority_service):
+        """Only a reason beyond the 4000-character safety cap is cut, and the cut says so."""
+        deferral = wise_authority_service._create_pending_deferral(
+            task_id="task-1",
+            channel_id="ch-1",
+            updated_at="2025-01-15T10:00:00",
+            deferral_info={"reason": "r" * 9000},
+            priority_str="low",
+            ui_context={},
+            description="Desc",
+        )
+
+        assert len(deferral.reason) == 4000
+        assert deferral.reason.endswith("…[truncated]")
 
 
 # ========== PostgreSQL Dict Row Format Tests ==========
@@ -1346,3 +1482,77 @@ async def test_a_grant_without_a_request_row_names_none(wise_authority_service, 
     assert await wise_authority_service.resolve_deferral(deferral_id, _verified_response()) is True
     grant = _guidance_task_of("task-row-grant-none").context.wa_authorization
     assert grant.request_attestation_id is None and grant.response_attestation_id is None
+
+
+# ========== Exact-bytes approval and per-task grants (#1366 F1, F5) ==========
+
+
+@pytest.mark.asyncio
+async def test_a_stale_grant_is_not_inherited_by_a_new_guidance_task(wise_authority_service, time_service, temp_db):
+    """#1366 F5: a deferred guidance task's own grant never rides into the next guidance task."""
+    from ciris_engine.schemas.runtime.models import WAAuthorization
+
+    await wise_authority_service.start()
+    stale = WAAuthorization(
+        wa_id="wa-old", deferral_id="defer_old", granted_at="2026-11-01T00:00:00+00:00", guidance="old rule"
+    )
+    _insert_task_via_persist(
+        task_id="task-stale-grant",
+        channel_id="test-channel",
+        description="[WA GUIDANCE] earlier",
+        status="active",
+        priority=5,
+        created_at_iso=time_service.now().isoformat(),
+        updated_at_iso=time_service.now().isoformat(),
+        agent_occurrence_id="default",
+        context={
+            "correlation_id": "corr-task-stale-grant",
+            "wa_authorization": stale.model_dump(mode="json"),
+        },
+    )
+    deferral_id = await wise_authority_service.send_deferral(
+        DeferralRequest(
+            task_id="task-stale-grant",
+            thought_id="thought-task-stale-grant",
+            reason="again",
+            defer_until=time_service.now() + timedelta(hours=1),
+            context={},
+        )
+    )
+    # Unsigned: this resolution issues no grant of its own.
+    response = DeferralResponse(approved=True, reason="Approved", wa_id="wa-2025-06-24-AUTH01", signature="")
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+
+    guidance = _guidance_task_of("task-stale-grant")
+    assert guidance.context.wa_authorization is None, "the old deferral's grant must not authorize this task"
+
+
+@pytest.mark.asyncio
+async def test_the_grant_carries_the_exact_approved_text(wise_authority_service, auth_service, time_service, temp_db):
+    import hashlib
+
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-exact-bytes")
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+    text = "I mentor new moderators"
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    response = _verified_response().model_copy(update={"amendment_text": text, "amendment_sha256": digest})
+
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is True
+    grant = _guidance_task_of("task-exact-bytes").context.wa_authorization
+    assert grant.amendment_text == text and grant.amendment_sha256 == digest
+
+
+@pytest.mark.asyncio
+async def test_text_that_does_not_match_its_signed_digest_is_refused(
+    wise_authority_service, auth_service, time_service, temp_db
+):
+    await wise_authority_service.start()
+    deferral_id = await _seed_deferral(wise_authority_service, time_service, "task-bytes-mismatch")
+    auth_service.verify_deferral_resolution = AsyncMock(return_value=True)
+    import hashlib
+
+    response = _verified_response().model_copy(
+        update={"amendment_text": "other text", "amendment_sha256": hashlib.sha256(b"approved text").hexdigest()}
+    )
+    assert await wise_authority_service.resolve_deferral(deferral_id, response) is False

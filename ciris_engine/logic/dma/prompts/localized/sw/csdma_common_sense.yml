@@ -52,3 +52,4 @@ context_integration: |
   Fikra ya Asili: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**Nafasi ya bomba**: unaendesha kwanza, pamoja na PDMA na DSDMA. IDMA kisha inakagua hizo tatu, uchaguzi wa kitendo huchagua kitendo, na dhamiri zinakikagua."

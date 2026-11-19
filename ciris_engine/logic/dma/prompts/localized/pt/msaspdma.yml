@@ -156,3 +156,6 @@ response_format: |
 # DEÔNTICO — o categórico de fechamento.
 closing_reminder: |
   Acertar o endereço é todo o ponto deste passo.
+pipeline_position: |-
+  POSIÇÃO NO PIPELINE: a seleção de ação escolheu apenas o verbo; esta etapa verifica
+  para onde vai a escrita. As consciências então revisam a ação antes que ela seja executada.

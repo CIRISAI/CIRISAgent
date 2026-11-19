@@ -177,3 +177,7 @@ closing_reminder: 'PENTING: Peran Anda adalah menangkap masalah yang tidak dapat
   Saat memilih TOOL, akui: "Melanjutkan dengan kesadaran gotcha X"
 
   '
+pipeline_position: |-
+  POSISI PIPA: ASPDMA hanya memilih nama alat dan tidak menyediakan parameter.
+  Anda mengisi setiap parameter alat, dari dokumentasi dan permintaan.
+  Para nurani kemudian meninjau pemanggilan tersebut sebelum dijalankan.

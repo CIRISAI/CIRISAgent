@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
-from ciris_engine.schemas.runtime.enums import TaskStatus
-from ciris_engine.schemas.runtime.models import Task, TaskContext
+from ciris_engine.schemas.runtime.enums import TaskOrigin, TaskStatus
+from ciris_engine.schemas.runtime.models import Task, TaskContext, VerifiedSender
 from ciris_engine.schemas.types import JSONDict
 
 if TYPE_CHECKING:
@@ -50,8 +50,14 @@ class TaskManager:
         priority: int = 0,
         context: Optional[JSONDict] = None,
         parent_task_id: Optional[str] = None,
+        verified_sender: Optional[VerifiedSender] = None,
+        origin: Optional[TaskOrigin] = None,
     ) -> Task:
-        """Create a new task with v1 schema."""
+        """Create a new task with v1 schema.
+
+        ``verified_sender`` is the sender of the message the task answers, as
+        the adapter verified it (#1366 item 5).
+        """
         now_iso = self.time_service.now_iso()
 
         # Build context dict
@@ -64,6 +70,8 @@ class TaskManager:
             correlation_id=context_dict.get("correlation_id", str(uuid.uuid4())),
             parent_task_id=parent_task_id,
             agent_occurrence_id=self.agent_occurrence_id,
+            verified_sender=verified_sender,
+            origin=origin,
         )
 
         task = Task(
@@ -192,13 +200,18 @@ class TaskManager:
                 # Nothing to answer, or a flag left on an old row from before this
                 # path existed: cleared, not answered hours late.
                 continue
-            user_id = getattr(task.context, "user_id", None) if task.context else None
+            # The re-queued message is the NEWCOMER's: its own verified sender
+            # and user id, never the refused task creator's (#1366 item 5; it was
+            # filed under the creator's user_id). No recorded sender means none.
+            sender = getattr(task, "updated_info_sender", None)
+            user_id = sender.user_id if sender is not None else None
             self.create_task(
                 description=f"Respond to message in #{task.channel_id}: '{content}'",
                 channel_id=task.channel_id,
                 priority=task.priority,
                 context={"user_id": user_id} if user_id else None,
                 parent_task_id=task.task_id,
+                verified_sender=sender,
             )
             created += 1
             logger.info(f"[REJECT] Re-queued the message that arrived during the refusal of task {task.task_id}")
@@ -260,6 +273,7 @@ class TaskManager:
             correlation_id=str(uuid.uuid4()),
             parent_task_id=None,
             agent_occurrence_id=self.agent_occurrence_id,
+            origin=TaskOrigin.ENGINE_WAKEUP,
         )
 
         root_task = Task(
@@ -319,6 +333,7 @@ class TaskManager:
                 correlation_id=str(uuid.uuid4()),
                 parent_task_id=root_task.task_id,
                 agent_occurrence_id=self.agent_occurrence_id,
+                origin=TaskOrigin.ENGINE_WAKEUP,
             )
 
             step_task = Task(

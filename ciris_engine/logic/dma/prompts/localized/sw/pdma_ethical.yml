@@ -152,3 +152,4 @@ context_integration: |
   Wazo la Kutathmini: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "NAFASI YA BOMBA: unaendesha kwanza, pamoja na CSDMA na DSDMA. IDMA kisha inakagua hoja zako, uchaguzi wa kitendo huchagua kitendo, na dhamiri zinakikagua. Wewe unapendekeza; huchagui kitendo cha mwisho."

@@ -11,7 +11,7 @@ prompts/localized/{lang}/ directories.
 import logging
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import yaml
 from pydantic import BaseModel, Field
@@ -48,6 +48,11 @@ class ConsciencePrompts(BaseModel):
     description: str = Field(default="")
     language: str = Field(default="en")
     system_prompt: str = Field(default="")
+    # #1366 item 12 — where the conscience sits and what it cannot see: a STRUCTURAL field, emitted as its own
+    # `pipeline_position` segment between `system_prompt` and `system_prompt_tail` (the bytes the one
+    # system_prompt field rendered before). A locale without its own copy gets the English one.
+    pipeline_position: Optional[str] = Field(default=None)
+    system_prompt_tail: str = Field(default="")
     user_prompt_template: str = Field(default="")
     user_prompt_with_image_template: str = Field(default="")
 
@@ -171,6 +176,8 @@ class ConsciencePromptLoader:
                 description=data.get("description", ""),
                 language=data.get("language", self.language),
                 system_prompt=data.get("system_prompt", ""),
+                pipeline_position=data.get("pipeline_position"),
+                system_prompt_tail=data.get("system_prompt_tail", ""),
                 user_prompt_template=data.get("user_prompt_template", ""),
                 user_prompt_with_image_template=data.get("user_prompt_with_image_template", ""),
             )
@@ -187,6 +194,12 @@ class ConsciencePromptLoader:
                     if name != conscience_type:
                         continue
                     setattr(prompts, field, value)
+                    applied.append(field)
+                # #1366 item 12: a replaced system_prompt also replaces the fields split out of it (empty).
+                from ciris_engine.logic.utils.research_overrides import implied_blank_fields
+
+                for field in sorted(implied_blank_fields("conscience_prompt", conscience_type, set(applied))):
+                    setattr(prompts, field, "")
                     applied.append(field)
                 if applied:
                     logger.warning(
@@ -207,9 +220,22 @@ class ConsciencePromptLoader:
             raise
 
     def get_system_prompt(self, conscience_type: str) -> str:
-        """Get the system prompt for a conscience type."""
+        """Get the system prompt for a conscience type: its parts (:meth:`get_system_prompt_parts`) joined."""
+        return "\n\n".join(part for part in self.get_system_prompt_parts(conscience_type) if part)
+
+    def get_system_prompt_parts(self, conscience_type: str) -> Tuple[str, str, str]:
+        """``(system_prompt, pipeline_position, system_prompt_tail)`` for a conscience type (#1366 item 12).
+
+        The pipeline position is read from the conscience's own prompt file (no agent template reaches it); a
+        locale whose copy lacks it gets the English paragraph, so every language carries the segment.
+        """
         prompts = self.load_prompts(conscience_type)
-        return prompts.system_prompt
+        position = prompts.pipeline_position
+        # None: the locale's copy has no such field. "" (a research manifest replaced system_prompt) is an answer.
+        if position is None and self.language != DEFAULT_LANGUAGE:
+            english = ConsciencePromptLoader(prompts_dir=str(self.prompts_dir), language=DEFAULT_LANGUAGE)
+            position = english.load_prompts(conscience_type).pipeline_position
+        return prompts.system_prompt, position or "", prompts.system_prompt_tail
 
     def get_user_prompt(self, conscience_type: str, image_context: Optional[str] = None, **kwargs: str) -> str:
         """Build user prompt from template with optional image context.

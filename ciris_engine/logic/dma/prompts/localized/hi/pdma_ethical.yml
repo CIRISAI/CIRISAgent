@@ -149,3 +149,7 @@ context_integration: |
   मूल्यांकन के लिए विचार: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  पाइपलाइन स्थिति: आप CSDMA और DSDMA के साथ पहले चलते हैं। इसके बाद IDMA
+  आपके तर्क की समीक्षा करता है, क्रिया चयन क्रिया चुनता है, और विवेक
+  इसकी समीक्षा करते हैं। आप सुझाव देते हैं; आप अंतिम क्रिया नहीं चुनते।

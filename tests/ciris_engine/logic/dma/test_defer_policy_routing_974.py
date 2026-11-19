@@ -295,8 +295,9 @@ def test_dsdma_stale_localized_template_falls_back_to_base_doctrine(
     # reads — self.prompt_template_data — rather than from tree state.
     from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
 
+    from ciris_engine.logic.utils.localization import thought_language_scope
+
     dma = _make_dsdma()
-    dma._explicit_language = "am"
 
     # prompt_template_data is a fresh-resolving property; the honest seam is
     # the loader call it makes. Patch it to serve a STALE collection for the
@@ -314,7 +315,9 @@ def test_dsdma_stale_localized_template_falls_back_to_base_doctrine(
 
     clean_overrides.setattr(DMAPromptLoader, "load_prompt_template", _stale_for_am)
 
-    loader, template_data = dma._resolve_user_template()
+    with thought_language_scope("am"):
+        assert dma.prompt_loader.language == "am"
+        loader, template_data = dma._resolve_user_template()
     assert loader.language == "en"
     assert template_data.context_integration is not None
     assert _LIVE_DSDMA_SLOT in template_data.context_integration

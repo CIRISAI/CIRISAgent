@@ -99,13 +99,18 @@ def _deployment_envelope(task_id: str, granted: frozenset) -> TaskEnvelope:
     )
 
 
-def _wa_envelope(task_id: str, tool: str) -> TaskEnvelope:
+def _wa_envelope(task_id: str, tool: str, arguments: Optional[dict] = None) -> TaskEnvelope:
+    """A WA approval of ``tool`` called with ``arguments`` (default: the call
+    ``_tool_selection`` makes). #1366 item 10: approvals bind the call."""
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import tool_call_fingerprint
+
     return issue_authority_envelope(
         task_id=task_id,
         issuer_kind=EnvelopeIssuerKind.WISE_AUTHORITY,
         issuer_id="wa-2026-08-01-ABC123",
         granted_tools=frozenset({tool}),
         capabilities=frozenset(),
+        approved_calls=frozenset({tool_call_fingerprint(tool, arguments if arguments is not None else {"amount": 100})}),
     )
 
 
@@ -418,8 +423,8 @@ def test_deferral_shows_the_human_what_they_are_approving() -> None:
 
 
 def test_detail_survives_the_ui_context_truncation() -> None:
-    """``_build_ui_context`` clips context values to 200 chars. The detail blob is
-    JSON and would become unparseable; it must be exempted."""
+    """``_build_ui_context`` caps context values (4000 chars since #1366). The detail
+    blob is JSON and would become unparseable if cut; it must be exempted."""
     import json
 
     from ciris_engine.logic.infrastructure.authorization.tool_approval import (
@@ -444,8 +449,9 @@ def test_detail_survives_the_ui_context_truncation() -> None:
     )
     # Parses -> the approval screen can render structure, not a truncated string.
     assert json.loads(ui[TOOL_APPROVAL_DETAIL_KEY])["name"] == OTHER_APPROVAL_TOOL
-    # Everything else keeps the existing 200-char UI budget.
-    assert len(ui["other"]) == 200
+    # Everything else is kept whole up to the 4000-char safety cap (#1366 item 6;
+    # it used to be clipped to 200, which hid what the Wise Authority was asked).
+    assert ui["other"] == "y" * 400
 
 
 def test_oversized_arguments_are_dropped_not_truncated_into_invalid_json() -> None:

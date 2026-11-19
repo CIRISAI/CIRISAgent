@@ -64,3 +64,21 @@ def test_literal_sample_text_identical_to_english_is_not_corrupt() -> None:
     en = {"k": '{"transport_destination": {…}, "signature": …}'}
     found = check("am", {"k": '{"transport_destination": {…}, "signature": …} ምሳሌ'}, en, set())
     assert [f for f in found if f.check == "placeholder-corrupt"] == []
+
+
+def test_the_integrity_gate_loads_after_the_lane_copy_of_the_sync_module(monkeypatch) -> None:
+    """``localization/check_localization_sync.py`` (the lane copy) shares the bare module name with
+    ``tools/dev/check_localization_sync.py``. A worker that imported the lane copy first made the
+    integrity gate's bare import resolve to it (no ``PRIMARY_BUNDLE``): CI shard 6 at 39dc561a0."""
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    spec = importlib.util.spec_from_file_location(
+        "check_localization_sync", root / "localization" / "check_localization_sync.py"
+    )
+    assert spec and spec.loader
+    lane = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lane)
+    assert not hasattr(lane, "PRIMARY_BUNDLE"), "premise: the lane copy is a different module"
+    monkeypatch.setitem(sys.modules, "check_localization_sync", lane)
+    assert _integrity().PRIMARY_BUNDLE

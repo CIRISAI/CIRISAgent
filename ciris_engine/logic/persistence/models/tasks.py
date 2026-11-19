@@ -19,10 +19,11 @@ from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple, ca
 from ciris_engine.protocols.services.graph.audit import AuditServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.audit.core import EventPayload
-from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
-from ciris_engine.logic.persistence.utils import decode_wa_authorization
-from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskOrigin, TaskStatus, ThoughtStatus
+from ciris_engine.logic.persistence.utils import decode_task_origin, decode_verified_sender, decode_wa_authorization
+from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, TaskOutcome, VerifiedSender
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
+from ciris_engine.schemas.runtime.veto_record import VetoRecordEntry
 from ciris_engine.schemas.services.graph.audit import AuditEventData
 
 if TYPE_CHECKING:
@@ -78,7 +79,14 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
     # context so load-time round-trips correctly (legacy parity).
     ctx = task_dict.get("context")
     images = task_dict.get("images") or []
-    if ctx is None and (images or task.preferred_language is not None or task.signature_pqc):
+    veto_record = task_dict.get("veto_record") or []
+    if ctx is None and (
+        images
+        or task.preferred_language is not None
+        or task.signature_pqc
+        or veto_record
+        or task.updated_info_sender is not None
+    ):
         ctx = {}
     if ctx is not None:
         ctx = dict(ctx)
@@ -89,12 +97,35 @@ def _task_to_persist_payload(task: Task) -> Dict[str, Any]:
         # Persist's task row has one signature column; the PQC half rides here.
         if task.signature_pqc:
             ctx["__agent_signature_pqc__"] = task.signature_pqc
+        # The task's conscience veto record (#1366 item 8) rides the same way.
+        if veto_record:
+            ctx[VETO_RECORD_CONTEXT_KEY] = veto_record
+        # Persist's task row has no column for the coalesced message's sender
+        # (#1366 item 5); it rides beside updated_info_content here.
+        if task.updated_info_sender is not None:
+            ctx["__agent_updated_info_sender__"] = task.updated_info_sender.model_dump(mode="json")
         payload["context"] = ctx
 
     outcome = task_dict.get("outcome")
     if outcome is not None:
         payload["outcome"] = outcome
     return payload
+
+
+#: Private context namespace that carries ``Task.veto_record`` (#1366 item 8).
+VETO_RECORD_CONTEXT_KEY = "__agent_veto_record__"
+
+
+def _decode_veto_record(ctx_data: Any, task_id: Any) -> List[VetoRecordEntry]:
+    """The typed veto record a persisted context carries; entries that do not validate are dropped, loudly."""
+    raw = ctx_data.get(VETO_RECORD_CONTEXT_KEY) if isinstance(ctx_data, dict) else None
+    entries: List[VetoRecordEntry] = []
+    for item in raw if isinstance(raw, list) else []:
+        try:
+            entries.append(VetoRecordEntry.model_validate(item))
+        except Exception as e:  # noqa: BLE001 - one bad entry must not lose the rest
+            logger.warning("Dropping an unreadable veto record entry on task %s: %s", task_id, e)
+    return entries
 
 
 def _decode_envelope(raw: Any, task_id: Any) -> Optional[TaskEnvelope]:
@@ -151,6 +182,11 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
                 preferred_language=ctx_data.get("preferred_language"),
                 envelope=_decode_envelope(ctx_data.get("envelope"), row.get("task_id")),
                 wa_authorization=decode_wa_authorization(ctx_data.get("wa_authorization"), row.get("task_id")),
+                # The verified sender (#1366 item 5). Dropped here, every task
+                # read back from the store lost it, and no prompt rendered it.
+                verified_sender=decode_verified_sender(ctx_data.get("verified_sender"), row.get("task_id")),
+                # Who created the task (#1366). Dropped here, every engine task read back looked like a user's.
+                origin=decode_task_origin(ctx_data.get("origin"), row.get("task_id")),
             )
         except Exception as e:
             logger.warning(f"Failed to decode context for task {row.get('task_id')}: {e}")
@@ -220,7 +256,13 @@ def _persist_row_to_task(row: Dict[str, Any]) -> Task:
         signature_pqc=_signature_pqc(ctx_data),
         updated_info_available=updated_info_available,
         updated_info_content=row.get("updated_info_content"),
+        updated_info_sender=(
+            decode_verified_sender(ctx_data.get("__agent_updated_info_sender__"), row.get("task_id"))
+            if isinstance(ctx_data, dict)
+            else None
+        ),
         images=images,
+        veto_record=_decode_veto_record(ctx_data, row.get("task_id")),
     )
 
 
@@ -605,6 +647,43 @@ def update_task_context_and_signing(
         return False
 
 
+def append_task_vetoes(task_id: str, entries: List[VetoRecordEntry]) -> bool:
+    """Add conscience vetoes to a task's record (any occurrence; #1366 item 8).
+
+    Entries already recorded (same ``veto_id``) are replaced, so a later
+    discharge updates the entry in place. Raw context keys this layer does not
+    model (the deferral resolution, ...) are kept: the context is merged, not
+    rebuilt from the materialized ``TaskContext``. Never raises: a record that
+    cannot be written still holds for the current thought, which carries it in
+    its conscience feedback.
+    """
+    if not entries:
+        return True
+    try:
+        engine = _get_engine()
+        raw = engine.task_get(task_id)
+        if raw is None:
+            return False
+        row = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(row, dict):
+            return False
+        raw_ctx = row.get("context")
+        if isinstance(raw_ctx, str):
+            raw_ctx = json.loads(raw_ctx)
+        task = _persist_row_to_task(row)
+        by_id = {e.veto_id: e for e in task.veto_record}
+        for entry in entries:
+            by_id[entry.veto_id] = entry
+        task.veto_record = list(by_id.values())
+        payload = _task_to_persist_payload(task)
+        payload["context"] = {**(raw_ctx if isinstance(raw_ctx, dict) else {}), **(payload.get("context") or {})}
+        engine.task_upsert(json.dumps(payload))
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Could not record conscience vetoes on task %s: %s", task_id, e)
+        return False
+
+
 def clear_task_images(
     task_id: str,
     occurrence_id: str,
@@ -637,7 +716,21 @@ async def add_system_task(
     task: Task,
     auth_service: Optional["AuthenticationServiceProtocol"] = None,
 ) -> str:
-    """Add a system task, signed by the agent: tasks are the agent's work."""
+    """Add a system task, signed by the agent: tasks are the agent's work.
+
+    The task carries a deployment envelope (CIRISAgent#1366 item 19): the tool
+    gate denies a task with none. Issued before signing, so the signature covers
+    the bound task as stored.
+
+    Only engine code adds a system task, so one with no recorded origin is marked ``ENGINE_SYSTEM`` here (#1366):
+    the origin comes from this call path, never from the task lacking a sender. A set origin is kept.
+    """
+    if task.context is not None and task.context.origin is None:
+        task.context = task.context.model_copy(update={"origin": TaskOrigin.ENGINE_SYSTEM})
+    if task.context is None or task.context.envelope is None:
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
+
+        issue_task_envelope_best_effort(task)
     if auth_service:
         try:
             task.signed_by, task.signature, task.signed_at, task.signature_pqc = await auth_service.sign_system_task(
@@ -961,8 +1054,14 @@ def set_task_updated_info_flag(
     time_service: TimeServiceProtocol,
     db_path: Optional[str] = None,
     images: Optional[List[Any]] = None,
+    sender: Optional[VerifiedSender] = None,
 ) -> bool:
     """Set the updated_info_available flag on a task with new observation content.
+
+    ``sender`` is the coalesced message's own verified sender (#1366 item 5).
+    It replaces any earlier update's sender together with the content, so the
+    pair never mixes two messages; None records "not verified", never the task
+    creator.
 
     Returns False if task already committed to non-PONDER action or doesn't belong to occurrence.
     """
@@ -978,6 +1077,7 @@ def set_task_updated_info_flag(
 
     task.updated_info_available = True
     task.updated_info_content = updated_content
+    task.updated_info_sender = sender
     task.updated_at = time_service.now_iso()
     if images:
         combined, new_count = _prepare_images(task, images)
@@ -1023,6 +1123,46 @@ def record_shared_claim_failure(task_id: str, outcome: str) -> None:
 def get_shared_claim_failures() -> List[Dict[str, str]]:
     """Claim verifications that failed in this process, for health reporting."""
     return list(_SHARED_CLAIM_FAILURES)
+
+
+#: The origin of each shared coordination task, by ``try_claim_shared_task``'s task_type.
+_SHARED_TASK_ORIGINS: Dict[str, TaskOrigin] = {
+    "wakeup": TaskOrigin.ENGINE_WAKEUP,
+    "shutdown": TaskOrigin.ENGINE_SHUTDOWN,
+}
+
+
+def _shared_task_context(
+    task_id: str, channel_id: str, time_service: TimeServiceProtocol, task_type: str = ""
+) -> TaskContext:
+    """The context a shared coordination task is created with: its deployment envelope and origin.
+
+    Whichever occurrence claims a shared WAKEUP/SHUTDOWN task would otherwise
+    inherit an envelope-less task, which the tool gate denies (FSD/TASK_ENVELOPE.md
+    §8). No envelope on an issuance failure: the task is still created, and denied.
+    The origin is the engine's (#1366): ``ENGINE_SYSTEM`` for a task type not listed.
+    """
+    origin = _SHARED_TASK_ORIGINS.get(task_type.lower(), TaskOrigin.ENGINE_SYSTEM)
+    envelope = None
+    try:
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+            issue_deployment_envelope_from_cache,
+        )
+
+        envelope = issue_deployment_envelope_from_cache(
+            task_id=task_id, agent_occurrence_id="__shared__", time_service=time_service
+        )
+    except Exception as exc:
+        logger.warning("Shared task %s: no envelope issued (%s); the tool gate will deny it", task_id, exc)
+    return TaskContext(
+        channel_id=channel_id,
+        user_id=None,
+        correlation_id=f"shared_{uuid.uuid4().hex[:8]}",
+        parent_task_id=None,
+        agent_occurrence_id="__shared__",
+        envelope=envelope,
+        origin=origin,
+    )
 
 
 def try_claim_shared_task(
@@ -1074,7 +1214,7 @@ def try_claim_shared_task(
             return (existing, False)
 
     now = time_service.now_iso()
-    payload = {
+    payload: Dict[str, Any] = {
         "task_id": task_id,
         "channel_id": channel_id,
         "agent_occurrence_id": "__shared__",
@@ -1084,6 +1224,7 @@ def try_claim_shared_task(
         "created_at": now,
         "updated_at": now,
     }
+    payload["context"] = _shared_task_context(task_id, channel_id, time_service, task_type).model_dump(mode="json")
 
     engine = _get_engine()
     try:

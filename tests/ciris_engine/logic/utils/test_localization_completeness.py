@@ -362,6 +362,39 @@ class TestDMAPromptCompleteness:
         assert len(missing) == 0, f"{lang_code} DMA prompts missing {len(missing)} files: {missing}"
 
 
+class TestConsciencePromptCompleteness:
+    """Every conscience prompt the i18n lane translates exists in every locale.
+
+    The ``prompts`` lane target covers the DMA and the conscience roots
+    (``localization/prompt_localize.py``, ``PROMPT_ROOTS``). It can only write a
+    field into a locale file that exists, so a missing file is a conscience that
+    never leaves English. The polyglot optimization veto is the exception: one
+    universal prompt, and a per-locale mirror would shadow it.
+    """
+
+    @pytest.fixture(scope="class")
+    def lane(self):
+        import sys
+
+        sys.path.insert(0, str(PROJECT_ROOT / "localization"))
+        import prompt_localize
+
+        return prompt_localize
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_every_lane_owned_prompt_file_exists(self, lane, lang_code: str):
+        paths = lane.locale_rel_paths(lang_code)
+        conscience = [p for p in paths if p.startswith(lane.CONSCIENCE_PROMPTS_REL + "/")]
+        assert len(conscience) == 3, conscience  # coherence, entropy, epistemic humility
+        missing = [p for p in paths if not (PROJECT_ROOT / p).is_file()]
+        assert missing == [], f"{lang_code}: the prompts lane cannot write {missing}"
+
+    @pytest.mark.parametrize("lang_code", SUPPORTED_LANGUAGES)
+    def test_no_polyglot_conscience_is_mirrored(self, lane, lang_code: str):
+        localized = lane.CONSCIENCE_PROMPTS / "localized" / lang_code
+        assert not [t for t in lane.POLYGLOT_TEMPLATES if (localized / f"{t}.yml").exists()]
+
+
 class TestGlossaryCompleteness:
     """Tests that translation glossaries exist for all languages."""
 

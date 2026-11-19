@@ -12,16 +12,22 @@ that classifies the deferral against a rights/needs taxonomy so the result is:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
-from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_localized_accord_text
-from ciris_engine.schemas.actions.parameters import DeferParams
+from ciris_engine.schemas.actions.parameters import (
+    IDENTITY_CHANGE_CONTEXT_KEY,
+    M1_JUSTIFICATION_CONTEXT_KEY,
+    PROPOSED_AMENDMENT_CONTEXT_KEY,
+    DeferParams,
+)
 from ciris_engine.schemas.dma.prompts import PromptCollection
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
@@ -37,8 +43,11 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from ciris_engine.logic.utils.localization import in_thought_language
 
 if TYPE_CHECKING:
+    from ciris_engine.logic.prompt_assembly import AssemblyCall
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 logger = logging.getLogger(__name__)
@@ -72,8 +81,69 @@ class DSASPDMALLMResult(PromptCarrier):
         None,
         description="Optional override for when the task should be reconsidered",
     )
+    proposed_amendment: Optional[str] = Field(
+        None,
+        description="Only when the deferral proposes a change to the agent's identity: the proposed identity text",
+    )
+    m1_justification: Optional[str] = Field(
+        None,
+        description="With proposed_amendment: why the change serves ACCORD Meta-Goal M-1 (Adaptive Coherence)",
+    )
 
     model_config = ConfigDict(extra="forbid")
+
+
+def _proposed_amendment(text: Optional[str]) -> Optional[str]:
+    """The proposed identity text as a WA could approve it verbatim, or None.
+
+    Stripped, because approved amendment text carries no outer whitespace
+    (``ResolveDeferralRequest.amendment_text``). Text longer than one approval
+    accepts is dropped whole rather than cut: a cut proposal is not the text the
+    agent proposed.
+    """
+    from ciris_engine.schemas.api.wa import MAX_AMENDMENT_TEXT_CHARS
+
+    value = (text or "").strip()
+    if not value:
+        return None
+    if len(value) > MAX_AMENDMENT_TEXT_CHARS:
+        logger.warning(
+            "DSASPDMA: proposed amendment of %d characters exceeds %d; not attached", len(value), MAX_AMENDMENT_TEXT_CHARS
+        )
+        return None
+    return value
+
+
+def _m1_justification(text: Optional[str]) -> Optional[str]:
+    """The proposal's M-1 justification, stripped; None when the model stated none."""
+    value = (text or "").strip()
+    return value or None
+
+
+def _identity_change_context(
+    reason_summary: str, proposed_amendment: str, m1_justification: Optional[str]
+) -> Dict[str, str | List[str]]:
+    """The deferral context a proposed identity amendment carries to the WA (GET /v1/wa/deferrals).
+
+    ``identity_change`` is the whole proposal (kind, what changes, the exact
+    text, the M-1 justification); ``m1_justification`` rides beside
+    ``proposed_amendment`` for clients that read the flat keys.
+    """
+    from ciris_engine.schemas.api.wa import IdentityChangeKind, IdentityChangeProposal
+
+    proposal = IdentityChangeProposal(
+        kind=IdentityChangeKind.AMENDMENT,
+        summary=reason_summary,
+        proposed_text=proposed_amendment,
+        m1_justification=m1_justification,
+    )
+    context: Dict[str, str | List[str]] = {
+        PROPOSED_AMENDMENT_CONTEXT_KEY: proposed_amendment,
+        IDENTITY_CHANGE_CONTEXT_KEY: proposal.model_dump_json(),
+    }
+    if m1_justification is not None:
+        context[M1_JUSTIFICATION_CONTEXT_KEY] = m1_justification
+    return context
 
 
 class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
@@ -95,15 +165,12 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             **kwargs,
         )
         self._prompt_template_name = "dsaspdma"
-        # Per-thought language override; populated by _sync_language_from_context.
-        # When None, the loader falls back to env var (CIRIS_PREFERRED_LANGUAGE).
-        self._explicit_language: Optional[str] = None
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
         """Get prompt loader for the thread's currently-active language."""
 
-        return get_prompt_loader(language=self._explicit_language)
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -133,24 +200,6 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             return profile.get("preferred_language")
         return getattr(profile, "preferred_language", None)
 
-    def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync prompt language using the full localization priority chain.
-
-        Walks thought/task preferred_language → user_profile.preferred_language →
-        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
-        """
-        from ciris_engine.logic.utils.localization import (
-            get_preferred_language,
-            get_user_language_from_context,
-        )
-
-        new_language = (
-            get_user_language_from_context(context) if context is not None else get_preferred_language()
-        )
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            logger.debug(f"DSASPDMA: Synced prompt language to {new_language}")
-
     def _format_original_context(self, params: DeferParams) -> str:
         """Render the provisional deferral context for prompt inclusion."""
 
@@ -178,71 +227,202 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         original_thought: ProcessingQueueItem,
         aspdma_result: ActionSelectionDMAResult,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> List[JSONDict]:
-        """Compose the full DSASPDMA prompt message list (#972).
+        """The DSASPDMA messages alone (the composition seam, #972); see :meth:`compose_prompt`."""
+        messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
+        return messages
 
-        Pure prompt composition - no LLM call, no data fetching. This was
-        already a seam (``_create_messages``); renamed to the canonical
-        ``compose_messages`` with a thin backward-compatible alias.
+    @in_thought_language("original_thought", "context")
+    def compose_prompt(
+        self,
+        original_thought: ProcessingQueueItem,
+        aspdma_result: ActionSelectionDMAResult,
+        context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """The DSASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6).
+
+        Accord, language guidance and crisis resources (one system message each), the stage's guide, then the
+        user message: ``context_integration`` with its slots typed, the VERIFIED SENDER block of the message
+        being answered (#1366 item 5) and, on a conscience retry, the veto ASPDMA saw (#1366 item 1).
         """
-
-        self._sync_language_from_context(context)
+        from ciris_engine.logic.dma.conscience_feedback import conscience_feedback_segment
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+        from ciris_engine.logic.prompt_assembly.assembler import LayoutItem
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            PromptBuilder,
+            identity_segments,
+            items,
+            pipeline_position_segment,
+            segment,
+            sender_block_segments,
+            split_template,
+            stripped_ends,
+        )
+        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
         current_params = aspdma_result.action_parameters
         if not isinstance(current_params, DeferParams):
             raise TypeError(f"DSASPDMA expects DeferParams, got {type(current_params)}")
 
-        system_message = format_system_prompt_blocks(
-            self._require_prompt_value("system_guidance_header"),
-            self._require_prompt_value("evaluation_steps"),
-            self._require_prompt_value("response_format"),
-            self._require_prompt_value("closing_reminder"),
+        language = self.prompt_loader.language
+        builder = PromptBuilder()
+        builder.single("system", segment("accord", SegmentKind.ACCORD, get_localized_accord_text(language) or ""))
+        # Per-language guidance — empty for most languages, populated for locales where systematic terminology
+        # gaps were observed (am as of 2.7.6).
+        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or ""))
+        # Crisis resources ride directly after language guidance (#1248).
+        builder.single(
+            "system", segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or "")
         )
+        # The pipeline position is its own segment, from its own template field (#1366 item 12).
+        guide = [
+            (
+                pipeline_position_segment(text)
+                if key == "pipeline_position"
+                else segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, text)
+            )
+            for key, text in [
+                ("system_guidance_header", self._require_prompt_value("system_guidance_header")),
+                *self._position_entries(),
+                *[
+                    (key, self._require_prompt_value(key))
+                    for key in ("evaluation_steps", "response_format", "closing_reminder")
+                ],
+            ]
+        ]
+        system = stripped_ends([s for s in guide if s.text])
+        layout = items(system, "\n\n", "")
+        # The agent's identity leads the guide, as at every drafter (context_policy.yaml: identity_base always at
+        # dsaspdma). A deferral classified without it judged a self it could not see (RATCHET context map, S3).
+        agent_identity = self._agent_identity(context)
+        head, head_layout = identity_segments(agent_identity, language)
+        if head:
+            layout = list(head_layout) + ([layout[0].model_copy(update={"glue": "\n\n"})] + layout[1:] if layout else [])
+            system = list(head) + system
+        builder.message("system", system, layout)
 
-        original_thought_content = getattr(getattr(original_thought, "content", None), "text", "") or ""
-        taxonomy_text = self._get_prompt_value("taxonomy_text") or build_deferral_taxonomy_prompt(
-            self.prompt_loader.language
-        )
-        context_block = self._get_prompt_value("context_integration") or (
+        taxonomy_text = self._get_prompt_value("taxonomy_text") or build_deferral_taxonomy_prompt(language)
+        template = self._get_prompt_value("context_integration") or (
             "Original thought:\n{original_thought_content}\n\n"
             "ASPDMA reasoning:\n{aspdma_reasoning}\n\n"
             "Current deferral reason:\n{current_reason}\n\n"
             "Current context:\n{current_context}\n\n"
             "{taxonomy_text}"
         )
-        user_message = context_block.format(
-            original_thought_content=original_thought_content,
-            aspdma_reasoning=aspdma_result.rationale,
-            current_reason=current_params.reason,
-            current_context=self._format_original_context(current_params),
-            current_defer_until=current_params.defer_until or "none",
-            current_domain_hint=self._get_original_domain_hint(current_params),
-            taxonomy_text=taxonomy_text,
-            domain_hint_options=", ".join(domain.value for domain in DomainCategory),
+        depth = getattr(original_thought, "thought_depth", 0)
+        follow_up = isinstance(depth, int) and depth > 0
+        llm = SegmentSource.LLM_OUTPUT
+        # slot: (segment id, kind, value, source, the engine's text when there is no value)
+        values = {
+            "original_thought_content": (
+                "request",
+                SegmentKind.REQUEST,
+                getattr(getattr(original_thought, "content", None), "text", "") or "",
+                llm if follow_up else SegmentSource.USER_INPUT,
+                "",
+            ),
+            # ASPDMA's output: its reasoning and the provisional deferral it proposed.
+            "aspdma_reasoning": ("aspdma_reasoning", SegmentKind.DMA_OUTPUT, aspdma_result.rationale or "", llm, ""),
+            "current_reason": ("proposed_reason", SegmentKind.DMA_OUTPUT, current_params.reason, llm, ""),
+            "current_context": (
+                "proposed_context",
+                SegmentKind.DMA_OUTPUT,
+                self._format_original_context(current_params) if current_params.context else "",
+                llm,
+                self._format_original_context(current_params),
+            ),
+            "current_defer_until": (
+                "proposed_defer_until", SegmentKind.DMA_OUTPUT, current_params.defer_until or "", llm, "none"
+            ),
+        }
+        typed: Dict[str, Any] = {}
+        plain: Dict[str, str] = {
+            "current_domain_hint": self._get_original_domain_hint(current_params),
+            "taxonomy_text": taxonomy_text,
+            "domain_hint_options": ", ".join(domain.value for domain in DomainCategory),
+        }
+        for slot, (segment_id, kind, text, source, absent) in values.items():
+            if text:
+                typed[slot] = segment(segment_id, kind, text, source)
+            else:
+                plain[slot] = absent
+        user, user_items = split_template(
+            lambda **v: template.format(**v), typed, prefix="instr:user", plain=plain
+        )
+        sender = verified_sender_of(original_thought, context)
+        if sender is not None:
+            sender_segs, sender_items = sender_block_segments(sender, include_display_name=True, language=language)
+            user, user_items = user + sender_segs, user_items + sender_items
+        feedback = conscience_feedback_segment(conscience_feedback)
+        if feedback is not None:
+            user.append(feedback)
+            user_items.append(LayoutItem(segment_id=feedback.segment_id))
+        builder.message("user", user, user_items)
+        return builder.assemble(
+            PromptStage.DSASPDMA,
+            self._assembly_call(original_thought, context, retry=feedback is not None, agent_identity=agent_identity),
         )
 
+    @staticmethod
+    def _agent_identity(context: Optional[Any]) -> Any:
+        """The agent's identity, approved amendments included: from the thought's context as the other drafters
+        read it, else the stored identity node (base identity only: amendments load with the snapshot). Raises
+        in QA when neither has one (fail closed); in production the call proceeds and the guard records it."""
+        from ciris_engine.logic.formatters.identity import agent_identity_of
 
-        messages: List[JSONDict] = []
-        accord_text = get_localized_accord_text(self.prompt_loader.language)
-        if accord_text:
-            messages.append({"role": "system", "content": accord_text})
-        # Per-language guidance — empty for most languages, populated for
-        # locales where systematic terminology gaps were observed (am as
-        # of 2.7.6). See ciris_engine.logic.utils.localization.get_language_guidance.
-        from ciris_engine.logic.utils.localization import get_language_guidance
-        _lang_guidance = get_language_guidance(self.prompt_loader.language)
-        if _lang_guidance:
-            messages.append({"role": "system", "content": _lang_guidance})
-        # Crisis resources ride directly after language guidance (#1248) — the
-        # locale's verified numbers, from the one composer every DMA shares.
-        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        identity = agent_identity_of(context)
+        if identity:
+            return identity
+        from ciris_engine.logic.persistence.models.identity import retrieve_agent_identity
+        from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 
-        _crisis_block = get_crisis_resources_system_block(self.prompt_loader.language)
-        if _crisis_block:
-            messages.append({"role": "system", "content": _crisis_block})
-        messages.append({"role": "system", "content": system_message})
-        messages.append({"role": "user", "content": user_message})
-        return messages
+        stored = retrieve_agent_identity()
+        if stored is not None:
+            logger.warning("DSASPDMA: the thought context carries no agent identity; using the stored identity node")
+            return IdentityData(
+                agent_id=stored.agent_id,
+                description=stored.core_profile.description,
+                role=stored.core_profile.role_description,
+            )
+        from ciris_engine.logic.prompt_assembly.assembler import current_guard_mode
+        from ciris_engine.schemas.context.prompt_provenance import AssemblyMode
+
+        if current_guard_mode() == AssemblyMode.FAIL_CLOSED:
+            raise ValueError("DSASPDMA: no agent identity in the thought context or the store")
+        logger.error("DSASPDMA: no agent identity in the thought context or the store; classifying without it")
+        return None
+
+    def _assembly_call(
+        self, original_thought: Any, context: Optional[Any], retry: bool, agent_identity: Any = None
+    ) -> "AssemblyCall":
+        """The manifest's call facts, from trusted state only (the verified grant, verified amendments)."""
+        from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+        from ciris_engine.logic.prompt_assembly import AssemblyCall
+        from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
+        from ciris_engine.schemas.context.prompt_provenance import ManifestThoughtKind
+
+        authorization = wa_authorization_of(context)
+        depth = getattr(original_thought, "thought_depth", 0)
+        kind = (
+            ManifestThoughtKind.GUIDANCE
+            if authorization is not None
+            else ManifestThoughtKind.FOLLOWUP if isinstance(depth, int) and depth > 0 else ManifestThoughtKind.SEED
+        )
+        task_id = getattr(original_thought, "source_task_id", None)
+        thought_id = getattr(original_thought, "thought_id", None)
+        return AssemblyCall(
+            task_id=task_id if isinstance(task_id, str) else None,
+            thought_id=thought_id if isinstance(thought_id, str) else None,
+            thought_kind=kind,
+            retry_index=1 if retry else 0,
+            response_model=DSASPDMALLMResult.__name__,
+            facts=policy_facts(authorization, agent_identity, id_scoped=False),
+            language=self.prompt_loader.language,
+        )
 
     def _create_messages(
         self,
@@ -275,6 +455,18 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         merged_context["rights_basis"] = rights_basis
         if llm_result.domain_hint is not None:
             merged_context["domain_hint"] = llm_result.domain_hint.value
+        # The typed field is the one source: a context key of the same name set
+        # earlier (action selection writes free-form context) is not carried.
+        for key in (PROPOSED_AMENDMENT_CONTEXT_KEY, M1_JUSTIFICATION_CONTEXT_KEY, IDENTITY_CHANGE_CONTEXT_KEY):
+            merged_context.pop(key, None)
+        proposed_amendment = _proposed_amendment(llm_result.proposed_amendment)
+        m1_justification = _m1_justification(llm_result.m1_justification) if proposed_amendment else None
+        if proposed_amendment is not None:
+            if m1_justification is None:
+                logger.warning("DSASPDMA: proposed identity amendment states no M-1 justification")
+            merged_context.update(
+                _identity_change_context(llm_result.reason_summary, proposed_amendment, m1_justification)
+            )
 
         params = DeferParams(
             channel_id=original_params.channel_id,
@@ -286,6 +478,8 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             secondary_needs_categories=secondary_categories,
             rights_basis=rights_basis,
             domain_hint=llm_result.domain_hint or original_params.domain_hint,
+            proposed_amendment=proposed_amendment,
+            m1_justification=m1_justification,
         )
         # ActionSelectionDMAResult.resource_usage is JSONDict; LLMBus returns
         # a ResourceUsage Pydantic object. Convert via model_dump or pass
@@ -305,11 +499,13 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             resource_usage=resource_usage_dict,
         )
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_deferral_action(
         self,
         aspdma_result: ActionSelectionDMAResult,
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Evaluate a DEFER action and classify it against the rights taxonomy."""
 
@@ -320,15 +516,18 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if not isinstance(current_params, DeferParams):
             raise TypeError(f"DSASPDMA expects DeferParams, got {type(current_params)}")
 
-        messages = self.compose_messages(original_thought, aspdma_result, context=context)
-        llm_result, resource_usage = await self.call_llm_structured(
-            messages=messages,
-            response_model=DSASPDMALLMResult,
-            max_tokens=8192,
-            temperature=0.0,
-            thought_id=original_thought.thought_id,
-            task_id=original_thought.source_task_id,
+        messages, manifest = self.compose_prompt(
+            original_thought, aspdma_result, context=context, conscience_feedback=conscience_feedback
         )
+        with prompt_manifest_scope(manifest):
+            llm_result, resource_usage = await self.call_llm_structured(
+                messages=messages,
+                response_model=DSASPDMALLMResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=original_thought.thought_id,
+                task_id=original_thought.source_task_id,
+            )
 
         sent_source = llm_result
         if llm_result.domain_hint and not llm_result.rights_basis:
@@ -341,6 +540,8 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
                 rights_basis=get_rights_basis_for_need_category(llm_result.primary_need_category or inferred_need),
                 domain_hint=llm_result.domain_hint,
                 defer_until=llm_result.defer_until,
+                proposed_amendment=llm_result.proposed_amendment,
+                m1_justification=llm_result.m1_justification,
             )
 
         result = self._convert_result(llm_result, current_params, resource_usage=resource_usage)

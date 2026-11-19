@@ -177,3 +177,7 @@ closing_reminder: 'QUAN TRỌNG: Vai trò của bạn là phát hiện các vấ
   Khi chọn TOOL, hãy thừa nhận: "Tiến hành với nhận thức về lưu ý X"
 
   '
+pipeline_position: |-
+  VỊ TRÍ TRONG ĐƯỜNG ỐNG: ASPDMA chỉ chọn tên công cụ và không cung cấp tham số nào.
+  Bạn điền vào mọi tham số công cụ, dựa trên tài liệu và yêu cầu.
+  Sau đó các lương tâm xem xét lệnh gọi trước khi nó chạy.

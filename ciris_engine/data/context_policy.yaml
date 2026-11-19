@@ -1,0 +1,150 @@
+# Context policy: the single source of truth (FSD_PROMPT_CONTEXT_PROVENANCE.md §5, §5a).
+# Closed vocabulary: every name below must be one of the enums in gen_contract_policy.py; the generator rejects anything else.
+version: 1
+ablated_stages: [entropy, optveto]
+
+# Static properties of each kind (FSD §4.1, §4.4, §4.6). trust: untrusted | verified | system.
+kinds:
+  stage_instruction:  {trust: system,    lifecycle: standing}
+  accord:             {trust: system,    lifecycle: standing}
+  identity_base:      {trust: system,    lifecycle: standing}
+  amendment:          {trust: verified,  lifecycle: standing,    authz: required}
+  rule:               {lifecycle: per-message}      # trust comes from provenance
+  request:            {trust: untrusted, lifecycle: per-message}
+  history:            {trust: untrusted, lifecycle: per-message}
+  sender_identity:    {trust: verified,  lifecycle: per-message, authn: required}
+  display_name:       {trust: untrusted, lifecycle: per-message, render: labelled}
+  action_record:      {trust: system,    lifecycle: per-task}   # factual only: derived_from must be empty
+  draft:              {trust: untrusted, lifecycle: per-thought, residual: true}
+  conscience_feedback: {trust: untrusted, lifecycle: retry-only, acct: required}
+  pipeline_position:  {trust: system,    lifecycle: standing}
+  dma_output:         {trust: untrusted, lifecycle: per-thought}   # llm_output
+  tool_output:        {trust: untrusted, lifecycle: per-thought}
+  schema_instruction: {trust: system,    lifecycle: per-call, source: provider_lib, residual: true}
+
+# Trust of a rule by provenance (FSD §4.2).
+rule_provenance:
+  user_chat:        untrusted
+  wa_chat:          untrusted      # advisory until signed (decision 2026-11-18): even with a verified WA role
+  signed_guidance:  verified
+  amendment:        verified
+
+# Ablation stubs (FSD §6a). At an ablated stage an untrusted segment may be given in form `stub`: none of its bytes,
+# only these engine-computed properties. Closed set; every value is an enum, a bucket or an id, never free text.
+stub_fields:
+  - kind            # the segment's kind
+  - provenance      # for rule: user_chat | wa_chat (structural provenance only)
+  - source          # user_input | tool_output | llm_output ...
+  - trust           # always untrusted here
+  - author_role     # verified role of the author from authn: OBSERVER|ADMIN|AUTHORITY|SYSTEM_ADMIN|unauthenticated
+  - authority       # none | advisory | signed   (signed only with a verified authz grant)
+  - scope           # this_turn | this_task | standing
+  - disposition     # per-kind engine state, e.g. request: open|answered|deferred|refused; rule: advisory_unsigned|awaiting_signature|refused; tool_output: success|failure
+  - transforms      # engine-applied: sanitized | truncated | normalized | redacted | coalesced
+  - draft_relation  # none | responds_to | quotes, plus quote_share bucket: 0 | <10% | 10-50% | >50%
+  - size            # short | medium | long
+  - position        # current | prior_<n>
+  - digest          # sha256 prefix: correlates the stub with the manifest
+
+# stage -> kind[.provenance] -> predicate, or {when: predicate, form: full|stub}. Anything not listed is "never".
+# Predicates (closed set): always | never | trusted_rule_in_force | id_scoped | signed_guidance_in_force |
+#   amendment_in_force | advisory_rule | retry
+# trusted_rule_in_force: a SIGNED rule is in force (signed guidance or amendment).
+# Decision 2026-11-18 (Eric): only signed rules count. A rule stated in chat (by a user or the WA) has no segment of its
+# own: nothing structural can mark chat text as a rule without a classifier, which stubs forbid. It stays in request /
+# history. The agent offers to defer so a WA can sign a standing rule. advisory_rule is kept in the vocabulary, unused.
+# WA guidance is one kind: rule.signed_guidance (the former wa_guidance kind is merged into it).
+stages:
+  coherence: &nonablated_judge
+    stage_instruction: always
+    schema_instruction: always   # residual: provider-appended output schema (kernel review 2026-11-18)
+    tool_output: always          # a tool's result, for the follow-up thought (untrusted)
+    accord: always
+    identity_base: always
+    amendment: amendment_in_force
+    rule.signed_guidance: signed_guidance_in_force
+    rule.amendment: amendment_in_force
+    request: always
+    history: always
+    sender_identity: always
+    display_name: always
+    action_record: always
+    draft: always
+    pipeline_position: always
+  epistemic: *nonablated_judge
+  entropy: &ablated_judge
+    stage_instruction: always
+    schema_instruction: always   # residual
+    accord: always
+    identity_base: always
+    amendment: amendment_in_force
+    rule.signed_guidance: signed_guidance_in_force
+    rule.amendment: amendment_in_force
+    sender_identity: trusted_rule_in_force   # 2026-11-18: verified data; a deterministic predicate, not an id scan
+    action_record: always
+    draft: always            # residual (FSD §10)
+    pipeline_position: always
+    # Ablation stubs: the judge knows these exist and what they are, never what they say.
+    request:        {when: always,        form: stub}
+    history:        {when: always,        form: stub}
+    tool_output:    {when: always,        form: stub}
+  optveto: *ablated_judge
+  aspdma: &drafter
+    stage_instruction: always
+    schema_instruction: always   # residual
+    tool_output: always
+    accord: always
+    identity_base: always
+    amendment: amendment_in_force
+    rule.signed_guidance: signed_guidance_in_force
+    rule.amendment: amendment_in_force
+    request: always
+    history: always
+    sender_identity: always
+    display_name: always
+    action_record: always
+    conscience_feedback: retry
+    dma_output: always
+    pipeline_position: always
+  tsaspdma: *drafter
+  # The other verb second passes re-decide ASPDMA's action exactly as TSASPDMA does (#1366 item 1).
+  dsaspdma: *drafter
+  fsaspdma: *drafter
+  msaspdma: *drafter
+  rsaspdma: *drafter
+  # IDMA (Eric, 2026-11-18, FSD §15.2): signed rule and amendment segments with provenance, NOT identity_base. The
+  # advisory chat-rule row is withdrawn with the "only signed rules count" decision (nothing structural produces it).
+  idma:
+    stage_instruction: always
+    schema_instruction: always   # residual
+    pipeline_position: always    # #1366 item 12: every stage
+    accord: always
+    amendment: amendment_in_force
+    rule.signed_guidance: signed_guidance_in_force
+    rule.amendment: amendment_in_force
+    request: always
+    history: always
+    sender_identity: always
+    display_name: always
+    action_record: always
+    draft: always
+  # The evaluators read the thought with the agent's identity and the trusted rules in force. dma_output: a bounce
+  # re-run reads its own earlier result.
+  csdma: &evaluator
+    stage_instruction: always
+    schema_instruction: always   # residual
+    tool_output: always
+    accord: always
+    identity_base: always
+    amendment: amendment_in_force
+    rule.signed_guidance: signed_guidance_in_force
+    rule.amendment: amendment_in_force
+    request: always
+    history: always
+    sender_identity: always
+    display_name: always
+    action_record: always
+    dma_output: always
+    pipeline_position: always
+  dsdma: *evaluator
+  pdma: *evaluator

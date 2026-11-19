@@ -100,7 +100,11 @@ async def test_the_rule_is_rendered_in_the_thought_language() -> None:
     from ciris_engine.logic.dma.pdma import EthicalPDMAEvaluator
     from unittest.mock import Mock
 
+    from ciris_engine.logic.utils.localization import thought_language_scope
+
     dma = EthicalPDMAEvaluator(service_registry=Mock())
-    dma._explicit_language = "am"
-    messages = dma.compose_messages("thought", "context")
+    from ciris_engine.logic.prompt_assembly.segmenting import block, history
+
+    with thought_language_scope("am"):
+        messages = dma.compose_messages("thought", block(history("ctx", "context")))
     assert am_rule in _plain(messages)

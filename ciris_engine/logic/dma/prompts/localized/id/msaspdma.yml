@@ -156,3 +156,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Mendapatkan alamat yang benar adalah seluruh poin langkah ini.
+pipeline_position: |-
+  POSISI PIPA: pemilihan tindakan hanya memilih kata kerja; langkah ini memeriksa
+  ke mana penulisan akan dilakukan. Para nurani kemudian meninjau tindakan tersebut sebelum dijalankan.

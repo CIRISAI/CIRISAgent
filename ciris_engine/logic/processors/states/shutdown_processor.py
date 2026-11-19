@@ -38,7 +38,7 @@ from ciris_engine.schemas.processors.base import ProcessorServices
 from ciris_engine.schemas.processors.context import ProcessorContext
 from ciris_engine.schemas.processors.results import ShutdownResult
 from ciris_engine.schemas.processors.states import AgentState
-from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskOrigin, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.extended import ShutdownContext
 from ciris_engine.schemas.runtime.models import Task, TaskContext
 
@@ -589,6 +589,10 @@ class ShutdownProcessor(BaseProcessor):
             correlation_id=f"shutdown_{uuid.uuid4().hex[:8]}",
             parent_task_id=None,
             agent_occurrence_id=self.agent_occurrence_id,
+            # Keep the envelope the shared task was created with (#1366 item 19):
+            # replacing the context must not strip the task's authorization.
+            envelope=claimed_task.context.envelope if claimed_task.context is not None else None,
+            origin=TaskOrigin.ENGINE_SHUTDOWN,
         )
         claimed_task.context = shutdown_context
 

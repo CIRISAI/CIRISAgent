@@ -88,3 +88,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  Posisi pipa: Anda berjalan pertama, bersama PDMA dan CSDMA. IDMA kemudian meninjau
+  ketiganya, pemilihan tindakan memilih tindakan, dan para nurani
+  meninjaunya.

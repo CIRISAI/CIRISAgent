@@ -102,6 +102,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
@@ -109,12 +110,33 @@ import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Dict, List, Sequence, Set, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from check_localization_sync import PRIMARY_BUNDLE, manifest_languages  # noqa: E402
+
+def _load_sibling_sync() -> ModuleType:
+    """``tools/dev/check_localization_sync.py``, loaded by path under its own module name.
+
+    A bare ``import check_localization_sync`` resolves through ``sys.modules``
+    first, and ``localization/check_localization_sync.py`` (the vendored lane
+    copy, a different module with no ``PRIMARY_BUNDLE``) registers that same
+    name. Whichever loaded first in a process won, so this import broke in any
+    test worker that had already imported the lane copy.
+    """
+    path = Path(__file__).resolve().parent / "check_localization_sync.py"
+    spec = importlib.util.spec_from_file_location("tools_dev_check_localization_sync", path)
+    assert spec is not None and spec.loader is not None, path
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_sync = _load_sibling_sync()
+PRIMARY_BUNDLE = _sync.PRIMARY_BUNDLE
+manifest_languages = _sync.manifest_languages
 
 # Unicode blocks spanning the 29 supported languages. Used only to *name* the
 # script a codepoint belongs to; membership is derived per file, never declared.

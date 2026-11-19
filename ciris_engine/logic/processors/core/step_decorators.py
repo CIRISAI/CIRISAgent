@@ -604,6 +604,23 @@ def _create_conscience_execution_data(
 
     # Build conscience result using helper
     conscience_result = _build_conscience_result_from_check(conscience_check_result, override_reason)
+    from ciris_engine.schemas.runtime.veto_record import VetoChange
+
+    # The decision contract rides the trace (#1366 items 7-9): each typed veto,
+    # each system discharge, and what changed on a pass after a veto.
+    if conscience_result.details is not None:
+        vetoes = getattr(result, "vetoes", None)
+        if isinstance(vetoes, list) and vetoes:
+            conscience_result.details["vetoes"] = [v.model_dump(mode="json") for v in vetoes]
+        discharges = getattr(result, "veto_discharges", None)
+        if isinstance(discharges, list) and discharges:
+            conscience_result.details["veto_discharges"] = [d.model_dump(mode="json") for d in discharges]
+        repeated = getattr(result, "repeated_veto_id", None)
+        if isinstance(repeated, str) and repeated:
+            conscience_result.details["repeated_veto_id"] = repeated
+        change = getattr(result, "pass_after_veto", None)
+        if isinstance(change, VetoChange):
+            conscience_result.details["pass_after_veto"] = [change.model_dump(mode="json")]
 
     return ConscienceExecutionStepData(
         **_base_data_dict(base_data),

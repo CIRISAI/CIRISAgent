@@ -1107,6 +1107,10 @@ class StreamingVerificationModule:
                                         # event that issued the call. Persistence enforces presence.
                                         "parent_event_type",
                                         "parent_attempt_index",
+                                        # #1366: the per-call prompt-context manifest (typed segments,
+                                        # trust, AAA carriers, spans, derived_from). Optional; a sidecar,
+                                        # never in the prompt. FSD/PROMPT_CONTEXT_PROVENANCE.md §8.
+                                        "context_manifest",
                                     },
                                 }
 

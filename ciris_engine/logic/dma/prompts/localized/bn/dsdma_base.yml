@@ -77,3 +77,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "পাইপলাইন অবস্থান: আপনি PDMA এবং CSDMA-এর পাশাপাশি প্রথমে চলেন। এরপর IDMA তিনটি পর্যালোচনা করে, কর্ম নির্বাচন কর্মটি বেছে নেয়, এবং বিবেকগুলো তা পর্যালোচনা করে।"

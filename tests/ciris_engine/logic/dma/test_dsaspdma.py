@@ -1,5 +1,6 @@
 """Tests for the DSASPDMA (Deferral-Specific Action Selection PDMA) evaluator."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,6 +30,15 @@ def reset_dma_prompt_language() -> None:
     _loader_cache.clear()
     yield
     _loader_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def stored_agent_identity() -> Any:
+    """DSASPDMA carries the agent's identity on every call; these contexts carry none, so the stored one is used."""
+    from tests.ciris_engine.logic.dma.compose_golden import stored_identity_environment
+
+    with stored_identity_environment():
+        yield
 
 
 @pytest.fixture
@@ -321,7 +331,15 @@ class TestDSASPDMAEvaluator:
             == "LEGAL"
         )
 
-    def test_sync_language_from_context_accepts_object_snapshot(
+    @staticmethod
+    def _language_for(evaluator: DSASPDMAEvaluator, context: Any) -> str:
+        """The loader language the evaluator uses for a thought with this context."""
+        from ciris_engine.logic.utils.localization import resolve_thought_language, thought_language_scope
+
+        with thought_language_scope(resolve_thought_language(None, context)):
+            return evaluator.prompt_loader.language
+
+    def test_language_resolves_from_an_object_snapshot(
         self,
         mock_service_registry: MagicMock,
         mock_sink: MagicMock,
@@ -331,55 +349,28 @@ class TestDSASPDMAEvaluator:
         system_snapshot = MagicMock(user_profiles=[profile])
         context = MagicMock(system_snapshot=system_snapshot)
 
-        evaluator._sync_language_from_context(context)
+        assert self._language_for(evaluator, context) == "fr"
 
-        assert evaluator.prompt_loader.language == "fr"
-
-    def test_sync_language_clears_when_subsequent_thought_lacks_profile(
+    def test_language_does_not_carry_to_a_thought_without_a_profile(
         self,
         mock_service_registry: MagicMock,
         mock_sink: MagicMock,
     ) -> None:
         """Regression: a reused evaluator must not inherit the previous
         thought's language when the next thought arrives without profile
-        data. Without this clear, an `am` thought followed by a
-        no-profile thought would silently keep loading Amharic prompts.
-
-        Under the v3.2 sync-from-context behaviour, "no thought / no
-        profile" doesn't go to None — it walks the canonical chain to
-        ``CIRIS_PREFERRED_LANGUAGE`` (``"en"`` when unset). The "no bleed"
-        property is preserved: the previous thought's language never
-        carries through; the next call resolves the deployment default.
+        data. The language is the thought's scope, never instance state, so
+        "no thought / no profile" resolves the deployment default
+        (``CIRIS_PREFERRED_LANGUAGE``, ``"en"`` when unset).
         """
         from ciris_engine.logic.utils.localization import get_preferred_language
 
         env_default = get_preferred_language()  # respects CIRIS_PREFERRED_LANGUAGE if set
         evaluator = DSASPDMAEvaluator(service_registry=mock_service_registry, sink=mock_sink)
 
-        # First thought: am profile
         am_profile = MagicMock(preferred_language="am")
         am_context = MagicMock(system_snapshot=MagicMock(user_profiles=[am_profile]))
-        evaluator._sync_language_from_context(am_context)
-        assert evaluator._explicit_language == "am"
-
-        # Second thought: no context at all → falls back to env default, not "am"
-        evaluator._sync_language_from_context(None)
-        assert evaluator._explicit_language == env_default, (
-            "stale language bled across thoughts"
-        )
-
-        # Third thought: context but no user_profiles
         empty_context = MagicMock(system_snapshot=MagicMock(user_profiles=None))
-        evaluator._sync_language_from_context(am_context)  # set back to am
-        assert evaluator._explicit_language == "am"
-        evaluator._sync_language_from_context(empty_context)
-        assert evaluator._explicit_language == env_default, (
-            "stale language bled across thoughts when context had no profiles"
-        )
-
-        # Fourth thought: dict-shaped context with no system_snapshot
-        evaluator._sync_language_from_context(am_context)  # set back to am
-        evaluator._sync_language_from_context({})
-        assert evaluator._explicit_language == env_default, (
-            "stale language bled across thoughts when context dict was empty"
-        )
+        for context in (None, empty_context, {}):
+            assert self._language_for(evaluator, am_context) == "am"
+            assert self._language_for(evaluator, context) == env_default, "stale language bled across thoughts"
+        assert evaluator.prompt_loader.language == env_default

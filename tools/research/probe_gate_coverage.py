@@ -145,9 +145,23 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     # 45 -> 55 (#1027): RSASPDMA and FSASPDMA, the recall and forget second
     # passes, five model-facing fields each.
-    "dma_prompt": 55,
-    "string": 143,
-    "conscience_prompt": 12,
+    # 55 -> 56 (#1366): `action_selection_pdma.stage_contract`, the engine
+    # contract split out of the template-replaceable `system_header`.
+    # 56 -> 75 (#1366 item 12): `<template>.pipeline_position` at all ten DMA
+    # templates and `<template>.system_guidance_header_tail` at the nine whose
+    # header the paragraph was split out of.
+    "dma_prompt": 75,
+    # 143 -> 155 (#1366): the verified-WA governance block (4) and the
+    # verified-sender block (8).
+    # 155 -> 166 (#1366 items 7-9, 14): the typed-veto retry wording (9) and
+    # the task's veto record block (2 status words).
+    # 166 -> 167 (#1366, 694f04dc1): ``prompts.identity_amendment_unverified``,
+    # rendered only when the identity carries an unverified amendment. No golden
+    # fixture does, so it is dark -- a FIXTURE gap; the floor does not move.
+    "string": 167,
+    # 12 -> 20 (#1366 item 12): `<conscience>.pipeline_position` and
+    # `<conscience>.system_prompt_tail` at all four.
+    "conscience_prompt": 20,
     "template": 3,
 }
 
@@ -212,7 +226,9 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:   a ``domain``, so the field reaches no prompt at runtime.
 GATED_FLOOR: Dict[str, int] = {
     "corpus": 4,
-    "dma_prompt": 44,
+    # 44 -> 45 (#1366): `action_selection_pdma.stage_contract` composes into
+    # every ASPDMA step and the probe sees it move.
+    "dma_prompt": 45,
     # 71/75 -> 76/132 in 2.9.10. The count went UP and the FRACTION went down,
     # and that is the honest number: #991 wired 57 `prompts.formatters.*` keys
     # that had 1,653 translations and no reader, and the probe fixture cannot

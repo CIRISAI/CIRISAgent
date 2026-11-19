@@ -32,7 +32,7 @@ from ciris_engine.schemas.processors.core import ConscienceApplicationResult
 from ciris_engine.schemas.processors.results import DreamResult
 from ciris_engine.schemas.processors.states import AgentState
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
-from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskStatus, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.enums import HandlerActionType, TaskOrigin, TaskStatus, ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, TaskContext, Thought
 
 if TYPE_CHECKING:
@@ -233,6 +233,7 @@ class MinimalDreamProcessor(BaseProcessor):
                 correlation_id=session_id,
                 parent_task_id=None,
                 agent_occurrence_id=self.agent_occurrence_id,
+                origin=TaskOrigin.ENGINE_DREAM,
             ),
             priority=10,
             status=TaskStatus.ACTIVE,
@@ -240,6 +241,11 @@ class MinimalDreamProcessor(BaseProcessor):
             updated_at=now_iso,
             agent_occurrence_id=self.agent_occurrence_id,
         )
+        # The dream task's deployment envelope (#1366 item 19): the tool gate
+        # denies an envelope-less task.
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_task_envelope_best_effort
+
+        issue_task_envelope_best_effort(task, time_service=self.time_service)
         persistence.add_task(task)
         self.current_session.task_id = task.task_id
 

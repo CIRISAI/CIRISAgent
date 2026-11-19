@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from ciris_engine.schemas.platform import PlatformRequirement
+from ciris_engine.schemas.runtime.unit_admission import UnitCapability
 from ciris_engine.schemas.types import JSONDict
 
 
@@ -239,6 +240,14 @@ class ToolInfo(BaseModel):
 
     # Tool version
     version: Optional[str] = Field(None, description="Tool version string")
+
+    # Code admission (rc21 CC 2.7.11): what this tool does, in the admission:unit
+    # closed set. Read only for a unit loaded beyond the attested build; a call
+    # runs only if every capability here is admitted. None: undeclared, treated
+    # as every effect capability.
+    unit_capabilities: Optional[List[UnitCapability]] = Field(
+        None, description="admission:unit capabilities this tool exercises (None: every effect)"
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 

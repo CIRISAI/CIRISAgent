@@ -17,7 +17,10 @@ import pytest
 import ciris_engine.logic.conscience.core as conscience_core
 from ciris_adapters.mock_llm.responses import _RESPONSE_MAP, create_response
 
-_REQUESTED = sorted(set(re.findall(r"response_model=([A-Za-z_]\w*)", Path(conscience_core.__file__).read_text())))
+# A requested model is a class passed by name (``response_model=EntropyResult,``).
+# ``response_model=response_model.__name__`` (a trace field naming whichever
+# model a helper was handed) is not a request and must not be collected.
+_REQUESTED = sorted(set(re.findall(r"response_model=([A-Z]\w*)\s*[,)]", Path(conscience_core.__file__).read_text())))
 
 
 def test_the_shards_request_something():

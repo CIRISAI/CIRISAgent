@@ -85,3 +85,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  ตำแหน่งในไปป์ไลน์: คุณทำงานก่อน ร่วมกับ PDMA และ CSDMA จากนั้นตรวจสอบสัญชาตญาณจะตรวจสอบ
+  ทั้งสาม การเลือกการกระทำจะเลือกการกระทำ และมโนธรรม
+  จะตรวจสอบมัน

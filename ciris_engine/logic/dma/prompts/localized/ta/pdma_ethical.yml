@@ -160,3 +160,4 @@ context_integration: |
   மதிப்பீடு செய்ய வேண்டிய எண்ணம்: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "குழாய்வழி நிலை: CSDMA மற்றும் DSDMA உடன் சேர்ந்து நீங்கள் முதலில் இயங்குகிறீர்கள். பின்னர் IDMA உங்கள் பகுத்தறிவை மதிப்பாய்வு செய்கிறது, செயல் தேர்வு செயலைத் தேர்ந்தெடுக்கிறது, மற்றும் மனசாட்சிகள் அதை மதிப்பாய்வு செய்கின்றன. நீங்கள் பரிந்துரைக்கிறீர்கள்; இறுதி செயலை நீங்கள் தேர்ந்தெடுக்கவில்லை."

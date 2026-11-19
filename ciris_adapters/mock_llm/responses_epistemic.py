@@ -45,3 +45,24 @@ def entropy_raw(context: Optional[Any] = None) -> EntropyResult:
 def coherence_raw(context: Optional[Any] = None) -> CoherenceResult:
     """Mock IRIS-C output: the reply is coherent with CIRIS principles."""
     return CoherenceResult(coherence=0.9)
+
+
+# Forced verdicts for the `$veto` directive (directives.py). Fixed strings only:
+# no user or prompt text rides in a result field (#1244).
+
+
+def entropy_vetoed(evaluation: int, budget: int) -> EntropyResult:
+    """IRIS-E output that fails the entropy threshold (a `$veto entropy` evaluation)."""
+    return EntropyResult(
+        alternative_1="Decline and explain the limits of the request.",
+        alternative_2="Ask a clarifying question before answering.",
+        alternative_3="Redirect to a different, safer framing.",
+        actual_is_representative=False,
+        entropy=0.9,
+        reason=f"[MOCK LLM] Forced entropy veto ({evaluation} of {budget}).",
+    )
+
+
+def coherence_vetoed(evaluation: int, budget: int) -> CoherenceResult:
+    """IRIS-C output below the coherence threshold (a `$veto coherence` evaluation)."""
+    return CoherenceResult(coherence=0.1, reason=f"[MOCK LLM] Forced coherence veto ({evaluation} of {budget}).")

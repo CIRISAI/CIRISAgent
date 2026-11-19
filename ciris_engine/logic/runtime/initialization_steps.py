@@ -724,6 +724,33 @@ async def initialize_maintenance_service(runtime: Any) -> None:
     await runtime._perform_startup_maintenance()
 
 
+async def prime_tool_envelope_grant(runtime: Any) -> None:
+    """Resolve the enabled-tool set every task envelope enumerates, or fail startup.
+
+    FSD/TASK_ENVELOPE.md §8 "cold-cache issuance": a task issued before the
+    tool registry was observed carries an EMPTY grant, and with the dispatch
+    gate enforcing (CIRISAgent#1366 item 19) that task can run no tool. Runs
+    after every adapter has registered its tool services and before the
+    processors can create a task. An empty sweep here means the registry is
+    not wired, never "this deployment enabled nothing" (the core secrets tool
+    is always registered): startup fails rather than issue empty envelopes.
+    """
+    if _first_run_this_boot(runtime):
+        logger.info("First-run mode: tool envelope grant not primed (no tasks run before setup)")
+        return
+    from ciris_engine.logic.infrastructure.authorization.enabled_tools import prime_enabled_tools
+
+    bus_manager = getattr(runtime, "bus_manager", None)
+    tool_bus = getattr(bus_manager, "tool", None) if bus_manager is not None else None
+    granted = await prime_enabled_tools(tool_bus, force=True)
+    if not granted:
+        raise RuntimeError(
+            "Tool envelope grant could not be resolved (empty tool registry): every task would be "
+            "issued an empty grant and the dispatch gate would deny all tools. Refusing to start."
+        )
+    logger.info("Tool envelope grant primed: %d tools", len(granted))
+
+
 async def populate_context_enrichment_cache(runtime: Any) -> None:
     """Populate the context enrichment cache at startup.
 

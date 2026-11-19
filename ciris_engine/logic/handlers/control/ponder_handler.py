@@ -80,12 +80,35 @@ class PonderHandler(BaseActionHandler):
 
         # Use centralized method to complete thought and create follow-up
         follow_up_id = self.complete_thought_and_create_followup(
-            thought=thought, follow_up_content=follow_up_content, action_result=result
+            thought=thought,
+            follow_up_content=follow_up_content,
+            action_result=result,
+            outcome=self._ponder_outcome(thought, new_thought_depth, len(questions_list)),
         )
 
         # NOTE: Audit logging removed - action_dispatcher handles centralized audit logging
 
         return follow_up_id
+
+    @staticmethod
+    def _ponder_outcome(thought: Thought, round_number: int, question_count: int) -> str:
+        """What a PONDER did, as a fact: its round and how many questions (CIRISAgent#1366 item 4).
+
+        Without it the action record took the follow-up's first paragraph,
+        "=== PREVIOUS CONTEXT ===" followed by the parent thought, which on a
+        seed thought is "You observed @... say: <user text>": the user's raw
+        message rode the record into every later round. No question text
+        either: conscience feedback can quote the draft or the user.
+        """
+        from ciris_engine.logic.utils.localization import get_preferred_language, get_string
+
+        lang = getattr(thought, "preferred_language", None)
+        return get_string(
+            lang if isinstance(lang, str) and lang else get_preferred_language(),
+            "handlers.ponder_outcome",
+            round=round_number,
+            count=question_count,
+        )
 
     def _generate_ponder_follow_up_content(
         self, task_context: str, questions_list: List[str], thought_depth: int, thought: Thought

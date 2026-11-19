@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Translate the DMA prompt templates with the vendored localization pipeline.
+"""Translate the DMA and conscience prompt templates with the vendored localization pipeline.
 
 AGENT-OWNED adapter (see ``localization/VENDORED.md``). Not vendored.
 
 The agent reads its DMA prompts from
 ``ciris_engine/logic/dma/prompts/<template>.yml`` in English and from
 ``.../prompts/localized/<lang>/<template>.yml`` in each of the 28 other locales.
+Its conscience prompts have the same layout under
+``ciris_engine/logic/conscience/prompts``. Both roots are one target
+(``PROMPT_ROOTS``): template names are distinct across them, so a key stays
+``<template>.<field>`` (a name in both roots is refused, not merged). The
+optimization veto is POLYGLOT -- one universal prompt for every locale, its
+per-locale mirrors deliberately removed (0c6a962f1) -- and is never staged
+(``POLYGLOT_TEMPLATES``).
 The pipeline (``localize.py``, vendored byte-identical from CIRISClient)
 translates a JSON key bundle: ``en.json`` plus one ``<lang>.json``. This module
 is the bridge, in the shape ``accord_localize.py`` already has for the Accord:
@@ -51,7 +58,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 try:  # PyYAML is not on a bare CI runner. lane_shards imports this module for
     # every target (it only needs template_names), so the import must not fail
@@ -69,10 +76,25 @@ import lane_backoff  # noqa: E402
 
 PROMPTS_REL = "ciris_engine/logic/dma/prompts"
 PROMPTS = REPO_ROOT / PROMPTS_REL
+CONSCIENCE_PROMPTS_REL = "ciris_engine/logic/conscience/prompts"
+CONSCIENCE_PROMPTS = REPO_ROOT / CONSCIENCE_PROMPTS_REL
+#: Every prompt root the ``prompts`` target covers. Each has ``<template>.yml``
+#: in English and ``localized/<lang>/<template>.yml`` per locale.
+PROMPT_ROOTS: Tuple[Path, ...] = (PROMPTS, CONSCIENCE_PROMPTS)
+PROMPT_ROOT_RELS: Tuple[str, ...] = (PROMPTS_REL, CONSCIENCE_PROMPTS_REL)
+
+#: One prompt root, or several (the default: all of ``PROMPT_ROOTS``).
+Roots = Union[Path, Sequence[Path]]
+
+#: Templates that are polyglot by design: one universal prompt read in every
+#: locale, with no per-locale copy (a copy would shadow the polyglot base; see
+#: ``ciris_engine/data/localized/polyglot/CLAUDE.md`` and
+#: ``tests/test_conscience_prompt_coverage.py``). Never staged, never required.
+POLYGLOT_TEMPLATES = frozenset({"optimization_veto_conscience"})
 UI_MANIFEST = REPO_ROOT / "ciris_engine" / "data" / "localized" / "manifest.json"
 
 #: Top-level fields that are identifiers or settings, not prose.
-NOT_TRANSLATED = frozenset({"component_name", "version", "accord_mode"})
+NOT_TRANSLATED = frozenset({"component_name", "version", "accord_mode", "language"})
 
 #: Fields that are English in every locale by decision, not by omission. #974
 #: moved them out of inline Python literals, where they had always been English
@@ -86,6 +108,32 @@ ENGLISH_BY_DESIGN = frozenset(
         "dsdma_base.context_integration",
     }
 )
+
+#: #1366 item 12 split each stage's header around its pipeline-position paragraph:
+#: ``system_guidance_header`` (before it), ``pipeline_position`` (the paragraph,
+#: a structural field) and ``system_guidance_header_tail`` (the rest). The
+#: consciences split ``system_prompt`` the same way (``system_prompt_tail``).
+#:
+#: ``pipeline_position`` IS translatable and is staged like any other field: no
+#: locale carries it yet, and each falls back to the English one until the lane
+#: writes it. Nothing parses its heading, so translating it is safe.
+#:
+#: A TAIL (any field ending ``_tail``) is not staged yet. Every locale's header
+#: (``system_guidance_header``, a conscience's ``system_prompt``) is the
+#: translation of the whole pre-split header, the tail's text included, so
+#: translating the tail would put that text in the prompt twice. It joins the
+#: lane once a locale's header is split at the same place (a native-language
+#: pass: where the paragraph would sit in the translated prose). The conscience
+#: loader agrees: a locale file without ``system_prompt_tail`` renders it empty,
+#: and one without ``pipeline_position`` gets the English paragraph.
+SPLIT_PENDING_SUFFIX = "_tail"
+
+#: The conscience fields the loader passes through ``str.format``
+#: (``ConsciencePromptLoader.get_user_prompt``). Its system prompt, pipeline
+#: position and tail are joined as plain text, so a lone ``{`` in them (the
+#: pre-split locale system prompts carry a JSON example) is not a break and is
+#: not held against them. DMA fields are all treated as format strings.
+CONSCIENCE_FORMATTED_FIELDS = frozenset({"user_prompt_template", "user_prompt_with_image_template"})
 
 #: The marker a hand-committed English copy carries at the top of the file. It
 #: is removed when the last English field in that file is translated.
@@ -143,14 +191,51 @@ def languages() -> List[str]:
     return ["en"] + sorted(c for c in codes if c != "en")
 
 
-def template_names(prompts: Path = PROMPTS) -> List[str]:
-    return sorted(p.stem for p in prompts.glob("*.yml"))
+def _roots(prompts: Roots) -> Tuple[Path, ...]:
+    return (prompts,) if isinstance(prompts, Path) else tuple(prompts)
 
 
-def locale_path(prompts: Path, lang: str, template: str) -> Path:
+def templates(prompts: Roots = PROMPT_ROOTS) -> Dict[str, Path]:
+    """``template -> the root it lives in``, sorted by name, polyglot templates left out.
+
+    A key is ``<template>.<field>`` with no root in it, so a template name that
+    exists in two roots would be ambiguous; it is refused.
+    """
+    out: Dict[str, Path] = {}
+    for root in _roots(prompts):
+        for path in root.glob("*.yml"):
+            if path.stem in POLYGLOT_TEMPLATES:
+                continue
+            if path.stem in out:
+                raise SystemExit(f"[refuse] template {path.stem!r} exists in both {out[path.stem]} and {root}")
+            out[path.stem] = root
+    return dict(sorted(out.items()))
+
+
+def template_names(prompts: Roots = PROMPT_ROOTS) -> List[str]:
+    return list(templates(prompts))
+
+
+def locale_path(prompts: Roots, lang: str, template: str) -> Path:
+    roots = _roots(prompts)
+    root = roots[0] if len(roots) == 1 else templates(roots)[template]
     if lang == "en":
-        return prompts / f"{template}.yml"
-    return prompts / "localized" / lang / f"{template}.yml"
+        return root / f"{template}.yml"
+    return root / "localized" / lang / f"{template}.yml"
+
+
+def is_format_string(prompts: Roots, template: str, field: str) -> bool:
+    """Whether the agent runs ``str.format`` over this field at load time."""
+    roots = _roots(prompts)
+    root = roots[0] if len(roots) == 1 else templates(roots).get(template)
+    if root is not None and root.resolve() == CONSCIENCE_PROMPTS.resolve():
+        return field in CONSCIENCE_FORMATTED_FIELDS
+    return True
+
+
+def locale_rel_paths(lang: str, prompts: Roots = PROMPT_ROOTS) -> List[str]:
+    """Repo-relative paths of ``lang``'s copy of every staged template (what a lane run may write)."""
+    return [locale_path(prompts, lang, t).relative_to(REPO_ROOT).as_posix() for t in template_names(prompts)]
 
 
 def read_template(path: Path) -> Dict[str, Any]:
@@ -170,15 +255,16 @@ def translatable(template: str, doc: Dict[str, Any]) -> Dict[str, str]:
         if isinstance(value, str)
         and value.strip()
         and field not in NOT_TRANSLATED
+        and not field.endswith(SPLIT_PENDING_SUFFIX)
         and f"{template}.{field}" not in ENGLISH_BY_DESIGN
     }
 
 
-def english_bundle(prompts: Path = PROMPTS) -> Dict[str, Dict[str, str]]:
+def english_bundle(prompts: Roots = PROMPT_ROOTS) -> Dict[str, Dict[str, str]]:
     return {t: translatable(t, read_template(locale_path(prompts, "en", t))) for t in template_names(prompts)}
 
 
-def locale_bundle(lang: str, en: Dict[str, Dict[str, str]], prompts: Path = PROMPTS) -> Dict[str, Dict[str, str]]:
+def locale_bundle(lang: str, en: Dict[str, Dict[str, str]], prompts: Roots = PROMPT_ROOTS) -> Dict[str, Dict[str, str]]:
     """What ``lang`` has actually translated. A value equal to the English one is absent."""
     out: Dict[str, Dict[str, str]] = {}
     for template, fields in en.items():
@@ -193,7 +279,7 @@ def locale_bundle(lang: str, en: Dict[str, Dict[str, str]], prompts: Path = PROM
     return out
 
 
-def build_stage(stage: Path, prompts: Path = PROMPTS) -> Dict[str, Dict[str, str]]:
+def build_stage(stage: Path, prompts: Roots = PROMPT_ROOTS) -> Dict[str, Dict[str, str]]:
     """Write the key bundle ``localize.py`` works on. Returns the English bundle."""
     stage.mkdir(parents=True, exist_ok=True)
     en = english_bundle(prompts)
@@ -233,7 +319,7 @@ def _count(text: str, token: str) -> int:
     return len(re.findall(rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])", text))
 
 
-def prompt_problems(english: str, value: str) -> List[str]:
+def prompt_problems(english: str, value: str, *, formatted: bool = True) -> List[str]:
     """Why ``value`` may not replace ``english`` in a prompt. Empty = acceptable.
 
     Every check is a way the agent breaks at runtime rather than a matter of
@@ -252,7 +338,7 @@ def prompt_problems(english: str, value: str) -> List[str]:
     for brace in ("{{", "}}"):
         if english.count(brace) != value.count(brace):
             problems.append(f"{brace!r} appears {value.count(brace)}x, source {english.count(brace)}x")
-    if _formats(english) is None:
+    if formatted and _formats(english) is None:
         broken = _formats(value)
         if broken:
             problems.append(f"str.format() fails: {broken}")
@@ -346,7 +432,9 @@ def strip_english_marker(text: str) -> str:
     return "\n".join(lines[i:])
 
 
-def write_back(stage: Path, langs: Sequence[str], prompts: Path = PROMPTS) -> Tuple[List[str], Dict[str, List[str]]]:
+def write_back(
+    stage: Path, langs: Sequence[str], prompts: Roots = PROMPT_ROOTS
+) -> Tuple[List[str], Dict[str, List[str]]]:
     """Copy every newly staged value into its locale YAML.
 
     Returns ``(written keys as lang:key, {lang:key -> problems})``. A value
@@ -371,11 +459,22 @@ def write_back(stage: Path, langs: Sequence[str], prompts: Path = PROMPTS) -> Tu
                 continue
             text = original = path.read_text(encoding="utf-8")
             current = read_template(path)
+            english_doc = read_template(locale_path(prompts, "en", template))
             for field, english in fields.items():
                 value = (staged.get(template) or {}).get(field)
                 if not isinstance(value, str) or value == current.get(field):
                     continue
-                problems = prompt_problems(english, value)
+                tail = field + SPLIT_PENDING_SUFFIX
+                if tail in english_doc and tail not in current:
+                    # A pre-split locale: its header still holds the tail's
+                    # translation, and the loader renders a missing tail empty.
+                    # A translation of the split English head would drop it.
+                    rejected[f"{lang}:{template}.{field}"] = [
+                        f"localized/{lang}/{template}.yml is not split at {tail}; writing {field} "
+                        "would drop the tail's text from the prompt"
+                    ]
+                    continue
+                problems = prompt_problems(english, value, formatted=is_format_string(prompts, template, field))
                 if problems:
                     rejected[f"{lang}:{template}.{field}"] = problems
                     continue
@@ -414,7 +513,7 @@ def _committed(path: Path) -> Dict[str, Any]:
     return doc if isinstance(doc, dict) else {}
 
 
-def verify(prompts: Path = PROMPTS, *, changed_only: bool = False) -> Tuple[List[str], List[str]]:
+def verify(prompts: Roots = PROMPT_ROOTS, *, changed_only: bool = False) -> Tuple[List[str], List[str]]:
     """Structural problems in the locale prompts: ``(blocking, standing)``.
 
     Checks what breaks the agent, on every TRANSLATED value: the file parses,
@@ -467,7 +566,7 @@ def verify(prompts: Path = PROMPTS, *, changed_only: bool = False) -> Tuple[List
                 have = Counter(_SINGLE_PLACEHOLDER.findall(value))
                 if want != have:
                     file(f"{name}.{field}: placeholders {dict(have)} != source {dict(want)}", field)
-                elif _formats(english) is None and _formats(value):
+                elif is_format_string(prompts, template, field) and _formats(english) is None and _formats(value):
                     file(f"{name}.{field}: str.format() fails: {_formats(value)}", field)
     return blocking, standing
 
@@ -572,7 +671,7 @@ def make_anchors(
                 continue
             if len(english) > PROMPT_MAX_ANCHOR_CHARS or len(shipped) > PROMPT_MAX_ANCHOR_CHARS:
                 continue
-            if prompt_problems(english, shipped):
+            if prompt_problems(english, shipped, formatted=is_format_string(PROMPT_ROOTS, *key.split(".", 1))):
                 continue
             same_field = key.split(".", 1)[1] in fields
             scored.append((not same_field, -_jaccard(want, frozenset(acc._tokens(english))), key, english, shipped))
@@ -698,7 +797,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"[verify] standing (not written by this run): {f}")
         for f in blocking:
             print(f"[verify] {f}")
-        where = f"{PROMPTS_REL}/localized"
+        where = " and ".join(f"{rel}/localized" for rel in PROMPT_ROOT_RELS)
         print(f"[verify] {'FAIL' if blocking else 'OK'}: {len(blocking)} blocking, {len(standing)} standing in {where}")
         return 1 if blocking else 0
 
@@ -728,7 +827,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return rc
         langs = args.lang or languages()[1:]
         written, rejected = write_back(stage, langs)
-        print(f"[prompts] wrote {len(written)} field(s) into {PROMPTS_REL}/localized")
+        print(f"[prompts] wrote {len(written)} field(s) into {' and '.join(PROMPT_ROOT_RELS)} (localized/)")
         for key, problems in sorted(rejected.items()):
             print(f"[prompts] NOT written {key}: {'; '.join(problems)}")
         if rejected:

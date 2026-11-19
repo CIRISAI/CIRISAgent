@@ -40,10 +40,17 @@ taxonomy_text: |
   - ethical_uncertainty: The system remains ethically uncertain and requires human judgment.
   - unknown: Fallback code when the operational reason remains unclear.
 
-system_guidance_header: |
+system_guidance_header: |-
   === DEFERRAL-SPECIFIC ACTION SELECTION (DSASPDMA) ===
-
-  ASPDMA already chose DEFER.
+# #1366 item 12 — where this stage sits and what it cannot see: a STRUCTURAL
+# field, emitted as its own `pipeline_position` segment between the field
+# above and `system_guidance_header_tail` (same bytes as when it sat inside it). Read from the
+# engine template only, so no agent-template override can replace it; a
+# locale without its own copy gets this English one.
+pipeline_position: |-
+  PIPELINE POSITION: ASPDMA already chose DEFER. You classify the deferral.
+  The consciences then review it before it reaches a Wise Authority.
+system_guidance_header_tail: |
   Your job is NOT to reopen the action choice.
   Your job is to classify the deferral so it becomes explainable, auditable, and routable.
 
@@ -94,6 +101,8 @@ response_format: |
   - "rights_basis": list of short rights-basis labels
   - "domain_hint": optional licensed domain enum when a specialized licensed handler is clearly needed
   - "defer_until": optional ISO 8601 timestamp (e.g. "2025-01-20T15:00:00Z") at which the task reactivates on its own. Set it only when the deferral is time-based; action selection does not set it, so this is where it is decided
+  - "proposed_amendment": optional. Only when this deferral asks a Wise Authority to change the agent's own identity: the proposed identity text, one short first-person statement, exactly as it would be approved. Otherwise omit it
+  - "m1_justification": required whenever proposed_amendment is set: one or two sentences on how this change serves Meta-Goal M-1, Adaptive Coherence: sustainable conditions under which diverse sentient beings can pursue their own flourishing, without suppressing autonomy, justice, or ecological resilience. The Wise Authority reads it beside the exact text, and the change is applied only through your consciences. Otherwise omit it
 
   Example:
   {{"reason_summary": "Licensed legal review is required before giving procedural guidance.", "operational_reason": "licensed_domain_required", "primary_need_category": "justice_and_legal_agency", "secondary_need_categories": ["identity_and_civic_participation"], "rights_basis": ["fair_trial", "access_to_justice", "legal_aid_and_effective_remedy"], "domain_hint": "LEGAL"}}

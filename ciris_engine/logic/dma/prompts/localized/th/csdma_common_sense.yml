@@ -52,3 +52,4 @@ context_integration: |
   ความคิดต้นฉบับ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**ตำแหน่งในไปป์ไลน์**: คุณทำงานก่อน ร่วมกับ PDMA และ DSDMA จากนั้นตรวจสอบสัญชาตญาณจะตรวจสอบทั้งสาม การเลือกการกระทำจะเลือกการกระทำ และมโนธรรมจะตรวจสอบมัน"

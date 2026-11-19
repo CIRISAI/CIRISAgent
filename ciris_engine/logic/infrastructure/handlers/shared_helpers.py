@@ -230,6 +230,7 @@ _AMENDMENT_BOOKKEEPING = frozenset(
         "updated_by",
         "tags",
         "wa_amendment",
+        "m1_justification",
         "proposed_node_id",
         "memory_type",
         "node_class",
@@ -269,36 +270,334 @@ def amendment_text(attributes: Any) -> str:
     return "; ".join(f"{key}: {authored[key]}" for key in sorted(authored))
 
 
-def as_identity_amendment(node: GraphNode, authorization: "WAAuthorization") -> GraphNode:
-    """``node`` as a WA-approved identity amendment, carrying the approval's provenance.
+def approved_amendment_text(authorization: "WAAuthorization") -> Optional[str]:
+    """The exact amendment text a verified approval approved, or None when it approved none (#1366 F1).
 
-    The node type is what the identity loader selects on, and the provenance is
-    what makes each amendment individually auditable and revocable. The id is
-    derived from the approval, not taken from the write: a live second pass
-    invents ids (``identity/agent``), and two approvals addressed alike would
-    otherwise overwrite one another instead of standing side by side.
+    None also when the text does not hash to the digest the signed resolution
+    committed to: bytes that are not the approved bytes are not approved.
     """
     import hashlib
 
-    attributes = serialize_attributes_to_json(node.attributes)
-    text = amendment_text(attributes)
-    if text:
-        attributes["content"] = text
-    attributes["proposed_node_id"] = node.id
-    attributes["wa_amendment"] = {
-        "wa_id": authorization.wa_id,
-        "deferral_id": authorization.deferral_id,
-        "granted_at": authorization.granted_at,
+    text = authorization.amendment_text
+    digest = authorization.amendment_sha256
+    if not text or not digest:
+        return None
+    if hashlib.sha256(text.encode("utf-8")).hexdigest() != digest:
+        return None
+    return text
+
+
+def has_model_supplied_amendment_provenance(node: GraphNode) -> bool:
+    """True when a MEMORIZE draft names amendment provenance itself (#1366 F2).
+
+    An ``identity_amendment`` node, or an identity-scope node carrying a
+    ``wa_amendment`` attribute, is the engine's record of an approval. A model that writes one
+    is forging that record, whatever its task is authorized for.
+    """
+    if node.type == NodeType.IDENTITY_AMENDMENT:
+        return True
+    if node.scope != GraphScope.IDENTITY:
+        return False
+    attributes = node.attributes
+    if hasattr(attributes, "model_dump"):
+        attributes = attributes.model_dump()
+    return isinstance(attributes, dict) and "wa_amendment" in attributes
+
+
+#: The attribute an identity-scope MEMORIZE carries its M-1 (Adaptive Coherence) justification in (#1366).
+M1_JUSTIFICATION_ATTRIBUTE = "m1_justification"
+
+
+def _attributes_dict(node: GraphNode) -> Dict[str, Any]:
+    attributes = node.attributes
+    if hasattr(attributes, "model_dump"):
+        attributes = attributes.model_dump()
+    return attributes if isinstance(attributes, dict) else {}
+
+
+def reviewed_justification(node: GraphNode) -> Optional[str]:
+    """The M-1 justification an identity-scope write carries, stripped; None when it carries none."""
+    value = _attributes_dict(node).get(M1_JUSTIFICATION_ATTRIBUTE)
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def is_reviewed_amendment_write(node: GraphNode, approved_text: str) -> bool:
+    """True when an identity-scope write is the one the engine bound for conscience review (#1366).
+
+    Its ``content`` is exactly the approved text and it carries an M-1
+    justification: what :func:`bind_approved_amendment` builds before the
+    consciences run. Anything else reached the handler without that review.
+    """
+    content = _attributes_dict(node).get("content")
+    return content == approved_text and reviewed_justification(node) is not None
+
+
+def as_identity_amendment(node: GraphNode, authorization: "WAAuthorization", approved_text: str) -> GraphNode:
+    """The WA-approved identity amendment an identity-scope write in a guidance task lands as.
+
+    EVERYTHING here comes from the verified approval, nothing from the draft
+    (#1366 F1/F2, Eric 2026-11-18: "WA approves exact bytes"):
+
+    - ``content`` is ``approved_text``, the exact bytes the WA approved. The
+      model's wording is not stored; the caller logs it when it differs.
+    - ``wa_amendment`` (who approved, which deferral, when, the approved digest)
+      is set from the authorization.
+    - the id is derived from the approval: one approval, one amendment.
+
+    ``proposed_node_id`` keeps the id the draft addressed, as an audit hint only;
+    no reader treats it as provenance.
+    """
+    import hashlib
+
+    digest = hashlib.sha256(approved_text.encode("utf-8")).hexdigest()
+    attributes: Dict[str, Any] = {
+        "content": approved_text,
+        # The M-1 justification the consciences reviewed the write with (#1366).
+        M1_JUSTIFICATION_ATTRIBUTE: reviewed_justification(node) or "",
+        "proposed_node_id": node.id,
+        "wa_amendment": {
+            "wa_id": authorization.wa_id,
+            "deferral_id": authorization.deferral_id,
+            "granted_at": authorization.granted_at,
+            "approved_sha256": digest,
+        },
     }
-    digest = hashlib.sha256(node.id.encode("utf-8")).hexdigest()[:8]
     return GraphNode(
-        id=f"{CORE_IDENTITY_NODE_ID}/amendment/{authorization.deferral_id}/{digest}",
+        id=f"{CORE_IDENTITY_NODE_ID}/amendment/{authorization.deferral_id}/{digest[:8]}",
         type=NodeType.IDENTITY_AMENDMENT,
         scope=GraphScope.IDENTITY,
         attributes=attributes,
         version=node.version,
         updated_by=authorization.wa_id,
         updated_at=node.updated_at,
+    )
+
+
+# ------------------------------------------------- identity change review (#1366)
+#
+# Eric, 2026-11-18: "Any identity change initiates a deferral, once a WA approves
+# it applies, until then it does not" and every edit goes "through the agents
+# conscience so they include the justification under M1". The approved text is
+# applied as an ordinary MEMORIZE the consciences review: the engine builds it
+# (approved bytes + justification) BEFORE they run, the handler writes only that
+# reviewed draft, and an objection goes back to the WA as a new deferral.
+
+
+def _justification_for(authorization: "WAAuthorization", approved: str, draft: GraphNode) -> Optional[str]:
+    """The M-1 justification the approved text is reviewed with, or None when there is none to give.
+
+    The proposal's own justification covers it only when the WA approved the
+    proposed text unchanged. Text the WA edited needs the agent's justification
+    of the EDIT, which the draft states in its ``m1_justification`` attribute.
+    """
+    proposal_covers = authorization.proposed_amendment is not None and authorization.proposed_amendment == approved
+    if proposal_covers and authorization.m1_justification:
+        return authorization.m1_justification.strip() or None
+    return reviewed_justification(draft)
+
+
+def bind_approved_amendment(action: Any, authorization: Optional["WAAuthorization"]) -> Any:
+    """The identity-scope MEMORIZE the consciences review: the WA's approved bytes with their M-1 justification.
+
+    Applied to the drafted action BEFORE conscience execution, so the write the
+    consciences pass is the write the handler makes. Unchanged when the action
+    is not an identity amendment candidate, there is no verified approval, or
+    the approval names no exact text (the handler refuses those). When there is
+    no justification to review it with (the WA edited the text and the agent
+    stated none for the edit), the result is a DEFER back to the WA saying so,
+    with the same text: nothing is written without its justification.
+    """
+    from ciris_engine.schemas.actions.parameters import MemorizeParams
+    from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+
+    if authorization is None or not isinstance(action, ActionSelectionDMAResult):
+        return action
+    params = action.action_parameters
+    if action.selected_action != HandlerActionType.MEMORIZE or not isinstance(params, MemorizeParams):
+        return action
+    draft = params.node
+    if not is_identity_amendment_candidate(draft) or has_model_supplied_amendment_provenance(draft):
+        return action
+    approved = approved_amendment_text(authorization)
+    if approved is None:
+        return action
+    justification = _justification_for(authorization, approved, draft)
+    if justification is None:
+        logger.warning(
+            "Approved identity amendment of deferral %s: the WA edited the text and no M-1 justification was "
+            "stated for the edit; deferring back to the Wise Authority instead of writing it.",
+            authorization.deferral_id,
+        )
+        return identity_redeferral(
+            authorization,
+            approved,
+            None,
+            reason=(
+                "No M-1 (Adaptive Coherence) justification was stated for the Wise Authority's edited identity "
+                "text, so it was not applied. The same text is offered back for review."
+            ),
+            channel_id=params.channel_id,
+        )
+    attributes: Dict[str, Any] = {"content": approved, M1_JUSTIFICATION_ATTRIBUTE: justification}
+    bound = draft.model_copy(update={"attributes": attributes})
+    return action.model_copy(
+        update={
+            "action_parameters": params.model_copy(update={"node": bound}),
+            "rationale": (
+                f"Apply the identity amendment Wise Authority {authorization.wa_id} approved "
+                f"(deferral {authorization.deferral_id}), exactly as approved. "
+                f"M-1 (Adaptive Coherence) justification: {justification}"
+            ),
+        }
+    )
+
+
+def is_bound_amendment(action: Any, authorization: Optional["WAAuthorization"]) -> bool:
+    """True for the MEMORIZE :func:`bind_approved_amendment` built under this approval."""
+    from ciris_engine.schemas.actions.parameters import MemorizeParams
+
+    if authorization is None or getattr(action, "selected_action", None) != HandlerActionType.MEMORIZE:
+        return False
+    params = getattr(action, "action_parameters", None)
+    approved = approved_amendment_text(authorization)
+    return isinstance(params, MemorizeParams) and approved is not None and is_reviewed_amendment_write(params.node, approved)
+
+
+def identity_redeferral(
+    authorization: "WAAuthorization",
+    text: str,
+    justification: Optional[str],
+    *,
+    reason: str,
+    objection: Optional[Any] = None,
+    channel_id: Optional[str] = None,
+) -> Any:
+    """A DEFER back to the Wise Authority for an approved identity change that was NOT applied (#1366).
+
+    Carries the same text (the WA's approved, possibly edited, bytes) as the
+    new proposal, its M-1 justification (or none), and the conscience's typed
+    objection when one is why: the WA sees what was proposed and why it was
+    not written. Approving it again runs the same review.
+    """
+    from ciris_engine.schemas.actions.parameters import (
+        IDENTITY_CHANGE_CONTEXT_KEY,
+        M1_JUSTIFICATION_CONTEXT_KEY,
+        PROPOSED_AMENDMENT_CONTEXT_KEY,
+        DeferParams,
+    )
+    from ciris_engine.schemas.api.wa import IdentityChangeKind, IdentityChangeProposal
+    from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
+    from ciris_engine.schemas.services.deferral_taxonomy import DeferralNeedCategory, DeferralOperationalReason
+
+    kind = (
+        IdentityChangeKind.REAPPROVAL
+        if authorization.identity_change_kind == IdentityChangeKind.REAPPROVAL.value
+        else IdentityChangeKind.AMENDMENT
+    )
+    wa_edited = authorization.proposed_amendment is not None and authorization.proposed_amendment != text
+    proposal = IdentityChangeProposal(
+        kind=kind,
+        summary=f"Identity change approved in deferral {authorization.deferral_id} was not applied: {reason}",
+        proposed_text=text,
+        m1_justification=justification,
+        wa_edited=wa_edited,
+        objection=objection,
+    )
+    context: Dict[str, Any] = {
+        PROPOSED_AMENDMENT_CONTEXT_KEY: text,
+        IDENTITY_CHANGE_CONTEXT_KEY: proposal.model_dump_json(),
+        "resolved_deferral_id": authorization.deferral_id,
+    }
+    if justification is not None:
+        context[M1_JUSTIFICATION_CONTEXT_KEY] = justification
+    if objection is not None:
+        context["conscience_objection"] = objection.reason
+        context["conscience_objection_type"] = objection.objection_type.value
+        context["conscience"] = objection.conscience
+    return ActionSelectionDMAResult(
+        selected_action=HandlerActionType.DEFER,
+        action_parameters=DeferParams(
+            channel_id=channel_id,
+            reason=proposal.summary,
+            context=context,
+            reason_code=DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED,
+            needs_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
+            proposed_amendment=text,
+            m1_justification=justification,
+        ),
+        rationale=f"IDENTITY-CHANGE-REVIEW: {reason}",
+    )
+
+
+def identity_objection_of(conscience_result: Any) -> Optional[Any]:
+    """The typed objection that overrode a conscience pass, as the WA is shown it; None when there was none.
+
+    The first veto in priority order; for a repeated (banned) draft, the
+    record entry it repeats; for a shard that could not judge, its reason as a
+    substantive objection (fail closed: the write is not applied either way).
+    A pass overridden only because a new message arrived is not an objection.
+    """
+    from ciris_engine.schemas.api.wa import IdentityChangeObjection
+    from ciris_engine.schemas.runtime.veto_record import ObjectionType
+
+    if conscience_result is None or not getattr(conscience_result, "overridden", False):
+        return None
+    veto = next(iter(getattr(conscience_result, "vetoes", None) or []), None)
+    if veto is not None:
+        return IdentityChangeObjection(conscience=veto.conscience, objection_type=veto.objection_type, reason=veto.reason)
+    repeated = getattr(conscience_result, "repeated_veto_id", None)
+    for entry in getattr(conscience_result, "veto_record", None) or []:
+        if repeated and entry.veto_id == repeated:
+            return IdentityChangeObjection(
+                conscience=entry.conscience, objection_type=entry.objection_type, reason=entry.reason
+            )
+    if getattr(conscience_result, "updated_status_detected", None):
+        return None
+    return IdentityChangeObjection(
+        conscience="conscience",
+        objection_type=ObjectionType.SUBSTANTIVE,
+        reason=str(getattr(conscience_result, "override_reason", "") or "the consciences did not pass the write"),
+    )
+
+
+def redefer_objected_amendment(
+    reviewed_draft: Any, conscience_result: Any, authorization: Optional["WAAuthorization"]
+) -> Any:
+    """The conscience result with a DEFER to the WA in place of an approved amendment the consciences objected to.
+
+    ``reviewed_draft`` is the action the consciences reviewed. Unchanged unless
+    it is a bound amendment MEMORIZE (:func:`bind_approved_amendment`) and a
+    conscience objected: then nothing is written and nothing is dropped
+    silently; the WA gets the same text, its justification and the typed
+    objection. No retry: the objection is to applying an approved identity
+    change, which only the WA can answer.
+    """
+    if conscience_result is None or not is_bound_amendment(reviewed_draft, authorization):
+        return conscience_result
+    assert authorization is not None  # is_bound_amendment checked it
+    objection = identity_objection_of(conscience_result)
+    if objection is None:
+        return conscience_result
+    node = reviewed_draft.action_parameters.node
+    text = str(_attributes_dict(node).get("content"))
+    logger.warning(
+        "Approved identity amendment of deferral %s NOT written: %s objected (%s): %s. Deferring back to the "
+        "Wise Authority.",
+        authorization.deferral_id,
+        objection.conscience,
+        objection.objection_type.value,
+        objection.reason,
+    )
+    defer = identity_redeferral(
+        authorization,
+        text,
+        reviewed_justification(node),
+        reason=f"{objection.conscience} objected ({objection.objection_type.value}): {objection.reason}",
+        objection=objection,
+        channel_id=reviewed_draft.action_parameters.channel_id,
+    )
+    return conscience_result.model_copy(
+        update={"final_action": defer, "overridden": True, "override_reason": defer.rationale}
     )
 
 

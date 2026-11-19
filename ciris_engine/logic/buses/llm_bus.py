@@ -9,10 +9,11 @@ import logging
 import os
 import random
 import re
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, cast
 
-from ciris_engine.logic.utils import error_emitter
+from ciris_engine.logic.utils import error_emitter, hedging
 from ciris_engine.logic.utils.jsondict_helpers import get_float, get_int
 from ciris_engine.schemas.types import JSONDict
 
@@ -28,6 +29,14 @@ from enum import Enum
 from pydantic import BaseModel
 
 from ciris_engine.logic.config.llm_budget import MIN_USEFUL_ATTEMPT_S, current_call_deadline
+from ciris_engine.logic.services.runtime.llm_service.provider_limits import (
+    IN_FLIGHT_RELEASE_SPREAD_S,
+    IN_FLIGHT_TOTAL_WAIT_S,
+    ProviderLimitFault,
+    ProviderLimitFaultCode,
+    in_flight_backoff_s,
+    provider_limit_fault,
+)
 from ciris_engine.logic.registries.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -39,6 +48,7 @@ from ciris_engine.protocols.services import LLMService
 from ciris_engine.protocols.services.graph.telemetry import TelemetryServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.protocols.services.runtime.llm import MessageDict
+from ciris_engine.schemas.context.prompt_provenance import PromptManifest
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
@@ -171,6 +181,30 @@ def _resolve_status_and_error_class(success: bool, error: Optional[BaseException
     return _classify_error(error), error.__class__.__name__
 
 
+def _context_manifest_for(ctx: LLMCallEventContext, max_tokens_sent: Optional[int]) -> Optional[PromptManifest]:
+    """The prompt manifest bound to this call (FSD/PROMPT_CONTEXT_PROVENANCE.md §8), finished with what the bus
+    sent; None outside prompt_manifest_scope. Never raises: the trace must not break the call."""
+    try:
+        from ciris_engine.logic.prompt_assembly.manifest_scope import (
+            current_prompt_manifest,
+            finalize_manifest_for_call,
+        )
+
+        manifest = current_prompt_manifest()
+        if manifest is None:
+            return None
+        return finalize_manifest_for_call(
+            manifest,
+            messages=ctx.messages,
+            response_model=ctx.response_model,
+            selected_service=ctx.selected_service,
+            max_tokens_sent=max_tokens_sent,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"[LLM_CALL manifest] failed: {exc!r}", exc_info=False)
+        return None
+
+
 async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
     """Emit one ReasoningEvent.LLM_CALL per provider invocation.
 
@@ -212,6 +246,7 @@ async def _broadcast_llm_call_event(ctx: LLMCallEventContext) -> None:
 
         event = create_reasoning_event(
             event_type=ReasoningEvent.LLM_CALL,
+            context_manifest=_context_manifest_for(ctx, sent.max_tokens if sent else None),
             thought_id=ctx.thought_id,
             task_id=ctx.task_id,
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -298,6 +333,20 @@ class LLMBusMessage(BusMessage):
     future: Optional[asyncio.Future[Any]] = None
 
 
+#: Hard stop on in-flight-budget retries for one call, beside the time bounds:
+#: full jitter can draw near-zero waits, and a budget that never frees must not
+#: become a tight loop.
+_IN_FLIGHT_MAX_RETRIES = 12
+
+#: Whose in-flight budget a call spends: (base URL, key digest) from the
+#: service's ``budget_identity()``, or ("service", name) when it has none.
+BudgetKey = Tuple[str, str]
+
+
+class _InFlightQueueTimeout(Exception):
+    """An in-flight retry could not get a concurrency slot within its deadline."""
+
+
 class LLMBus(BaseBus[LLMService]):
     """
     Message bus for all LLM operations with redundancy and distribution.
@@ -348,6 +397,21 @@ class LLMBus(BaseBus[LLMService]):
         # This prevents hammering a rate-limited provider with immediate retries
         self._rate_limited_until: dict[str, float] = {}
         self._rate_limit_cooldown_seconds = 60.0  # Default cooldown when rate limit exhausted
+
+        # Provider-wide PAUSE after an in-flight-budget refusal (#1366 item 20),
+        # monotonic time per provider. OpenRouter's in-flight budget is the
+        # ACCOUNT's: when one call is refused, the ~8 parallel calls of the same
+        # thought would be refused too, and retrying them all on the same beat
+        # refills the budget in lockstep. So the first refusal holds every NEW
+        # call to that provider until its Retry-After / backoff has passed, and
+        # releases them spread out (see _wait_out_provider_pause).
+        # Keyed by BUDGET (base URL + key digest), not service name: replicas and
+        # differently-named services on one key share one account budget.
+        self._provider_paused_until: dict[BudgetKey, float] = {}
+        # Consecutive in-flight refusals per budget, reset by any success on
+        # it: the backoff exponent, so sustained pressure backs off for every
+        # caller instead of each new call starting at attempt 0.
+        self._in_flight_streak: dict[BudgetKey, int] = defaultdict(int)
 
         # Per-service FIFO concurrency gate. asyncio.Semaphore is fair — waiters
         # are released in the order they called acquire() — so excess callers
@@ -839,6 +903,24 @@ class LLMBus(BaseBus[LLMService]):
         provider that started together are one breaker failure, not N.
         """
         self._last_provider_error[service_name] = service_last_error
+        limit = provider_limit_fault(service_last_error)
+        if limit is not None and limit.retryable:
+            # The account's in-flight budget stayed full for as long as this
+            # call could wait. The provider answered correctly: not a breaker
+            # failure, and no cooldown -- the shared pause already spaces calls.
+            logger.warning(
+                f"LLM service {service_name}: in-flight budget still full after waiting "
+                f"(NOT counting as CB failure): {service_last_error}"
+            )
+            return
+        if limit is not None and limit.code is ProviderLimitFaultCode.REQUEST_TOO_LARGE:
+            # One request too large for the budget: a fact about that request,
+            # like a context-length 400, not about the provider.
+            logger.warning(
+                f"LLM service {service_name}: request too large for the in-flight budget "
+                f"(NOT counting as CB failure): {service_last_error}"
+            )
+            return
         if last_was_rate_limit:
             logger.warning(f"LLM service {service_name} exhausted rate limit retries (NOT counting as CB failure)")
             # Set global cooldown so subsequent requests don't immediately hit rate limit again
@@ -885,6 +967,9 @@ class LLMBus(BaseBus[LLMService]):
         rate_limit_start_time: Optional[float] = None
         service_last_error: Optional[Exception] = None
         last_was_rate_limit = False
+        in_flight_attempt = 0
+        in_flight_started: Optional[float] = None
+        budget_key = self._budget_key(selected_service, service_name)
 
         while retry_count < max_retries:
             # Capture per-attempt start so duration_ms on the LLM_CALL event
@@ -905,9 +990,16 @@ class LLMBus(BaseBus[LLMService]):
                     handler_name,
                     start_time,
                     attempt_start_time,
-                    retry_count,
+                    retry_count + in_flight_attempt,
+                    budget_key=budget_key,
+                    in_flight_retry=in_flight_attempt,
                 )
                 return result, usage, None, False
+
+            except _InFlightQueueTimeout:
+                # The retry could not reach the provider within the deadline:
+                # surface the in-flight refusal it was retrying, not a timeout.
+                break
 
             except BillingServiceError:
                 logger.error(f"LLM billing error (not retrying): {service_last_error}")
@@ -954,10 +1046,27 @@ class LLMBus(BaseBus[LLMService]):
                         duration_ms=attempt_duration_ms,
                         thought_id=thought_id,
                         task_id=task_id,
-                        retry_count=retry_count,
+                        retry_count=retry_count + in_flight_attempt,
                         error=e,
                     )
                 )
+
+                # A provider spending-limit refusal is decided by its
+                # structure (#1366 item 20): only the in-flight budget is worth
+                # waiting for; every other limit surfaces now, unretried.
+                limit = provider_limit_fault(e)
+                if limit is not None:
+                    last_was_rate_limit = False
+                    if not limit.retryable:
+                        break
+                    if in_flight_started is None:
+                        in_flight_started = time.monotonic()
+                    if not self._pause_for_in_flight_budget(
+                        service_name, handler_name, limit, in_flight_attempt, in_flight_started, budget_key
+                    ):
+                        break
+                    in_flight_attempt += 1
+                    continue
 
                 retry_count += 1
 
@@ -981,6 +1090,160 @@ class LLMBus(BaseBus[LLMService]):
 
         return None, None, service_last_error, last_was_rate_limit
 
+    @staticmethod
+    def _budget_key(selected_service: Any, service_name: str) -> BudgetKey:
+        """The in-flight budget a service spends (#1366 item 20 F2).
+
+        From the service's ``budget_identity()`` -- (base URL, truncated key
+        digest), never the key -- so every replica and every service on the
+        same account pauses together. A service with no identity (mocks,
+        adapters) falls back to its own name.
+        """
+        reader = getattr(selected_service, "budget_identity", None)
+        if callable(reader):
+            try:
+                ident = reader()
+            except Exception:  # noqa: BLE001 - a broken identity must not fail the call
+                ident = None
+            if (
+                isinstance(ident, tuple)
+                and len(ident) == 2
+                and all(isinstance(part, str) for part in ident)
+                and any(ident)
+            ):
+                return (ident[0], ident[1])
+        return ("service", service_name)
+
+    def _pause_for_in_flight_budget(
+        self,
+        service_name: str,
+        handler_name: str,
+        limit: ProviderLimitFault,
+        attempt: int,
+        started: float,
+        budget_key: Optional[BudgetKey] = None,
+    ) -> bool:
+        """Schedule the retry of an in-flight-budget refusal; False when it cannot be afforded.
+
+        The wait is max(Retry-After, jittered backoff). Retry-After is honoured
+        in full -- even past the 60 s per-wait cap -- or, when it does not fit,
+        the refusal is surfaced now rather than resent early. Without one, the
+        backoff has a floor of a few seconds, and its exponent is the larger of
+        this call's attempt and the account's consecutive refusals.
+
+        It is bounded twice: by IN_FLIGHT_TOTAL_WAIT_S across this call's
+        refusals, and by the enclosing stage's deadline minus one useful attempt
+        -- so waiting never turns into a DMA timeout. The wait is published as
+        the budget's pause; the retry sleeps through it at the gate in
+        _execute_llm_call, like every other new call on this budget.
+        """
+        key = budget_key or ("service", service_name)
+        now = time.monotonic()
+        allowed = IN_FLIGHT_TOTAL_WAIT_S - (now - started)
+        deadline = current_call_deadline()
+        if deadline is not None:
+            allowed = min(allowed, deadline.remaining() - MIN_USEFUL_ATTEMPT_S)
+        already_paused = max(0.0, self._provider_paused_until.get(key, 0.0) - now)
+        if already_paused <= 0:
+            # A refusal after the last pause ended is a NEW episode of pressure;
+            # refusals of calls that were in flight together are one episode.
+            self._in_flight_streak[key] += 1
+        exponent = max(attempt, self._in_flight_streak[key] - 1)
+        wait = in_flight_backoff_s(exponent, limit.retry_after_s)
+        if attempt >= _IN_FLIGHT_MAX_RETRIES or max(wait, already_paused) > allowed:
+            logger.warning(
+                f"[LLM_IN_FLIGHT_BUDGET] {service_name} for {handler_name}: budget still full, "
+                f"a {max(wait, already_paused):.1f}s wait does not fit the {max(allowed, 0.0):.1f}s left "
+                f"(in-flight retry {attempt + 1}/{_IN_FLIGHT_MAX_RETRIES}, retry_after={limit.retry_after_s}) "
+                f"-- surfacing"
+            )
+            return False
+        until = max(self._provider_paused_until.get(key, 0.0), now + wait)
+        self._provider_paused_until[key] = until
+        hedging.pause_hedging_until(until)
+        logger.warning(
+            f"[LLM_IN_FLIGHT_BUDGET] {service_name} refused {handler_name} (in-flight budget full, "
+            f"retry_after={limit.retry_after_s}); pausing the provider {wait:.1f}s, "
+            f"in-flight retry {attempt + 1}/{_IN_FLIGHT_MAX_RETRIES}"
+        )
+        return True
+
+    @staticmethod
+    def _deadline_cap() -> Optional[float]:
+        """Seconds a call may still wait before its last useful attempt; None without a deadline."""
+        deadline = current_call_deadline()
+        if deadline is None:
+            return None
+        return max(0.0, deadline.remaining() - MIN_USEFUL_ATTEMPT_S)
+
+    async def _wait_out_provider_pause(self, budget_key: BudgetKey, service_name: str, handler_name: str) -> None:
+        """Hold a call while its budget is paused for an in-flight-budget refusal.
+
+        The pause is RE-READ after every sleep (F1): calls already in flight
+        when the first refusal came back are refused moments later and push
+        the pause further out, and a caller that read only the first value
+        would wake inside the new pause. Once the pause has really ended the
+        released callers are spread over up to IN_FLIGHT_RELEASE_SPREAD_S, and
+        the pause is checked once more. Never waits past the enclosing
+        deadline's last useful attempt: a call that cannot wait goes out and
+        meets the provider's own answer.
+        """
+        waited = 0.0
+        spread_done = False
+        while True:
+            pause = self._provider_paused_until.get(budget_key, 0.0) - time.monotonic()
+            cap = self._deadline_cap()
+            if cap is not None and cap <= 0:
+                return
+            if pause > 0:
+                wait = pause if cap is None else min(pause, cap)
+                logger.info(
+                    f"[LLM_IN_FLIGHT_BUDGET] {service_name} paused, {handler_name} waits {wait:.1f}s"
+                )
+                await asyncio.sleep(wait)
+                waited += wait
+                spread_done = False
+                continue
+            if waited > 0 and not spread_done:
+                spread = random.uniform(0.0, min(IN_FLIGHT_RELEASE_SPREAD_S, waited))
+                if cap is not None:
+                    spread = min(spread, cap)
+                spread_done = True
+                if spread > 0:
+                    await asyncio.sleep(spread)
+                continue
+            return
+
+    async def _acquire_slot(
+        self, semaphore: asyncio.Semaphore, in_flight_retry: int, service_name: str, handler_name: str
+    ) -> None:
+        """Take a concurrency slot. An in-flight RETRY counts its queue time against the deadline (F4).
+
+        A refused call gives up its slot and queues again behind every call
+        that arrived during the pause. For a first attempt that queue is the
+        ordinary contract of the gate; for an in-flight retry it would turn a
+        budget wait into a DMA timeout, which this retry path promises never to
+        do. So a retry waits for a slot only as long as its deadline leaves a
+        useful attempt, and otherwise surfaces the refusal it was retrying.
+
+        Chosen over giving retries priority: FIFO stays fair (a priority lane
+        could starve first attempts under sustained pressure), and a priority
+        slot still cannot bound the wait -- every slot may be held by calls that
+        are themselves seconds from answering.
+        """
+        cap = self._deadline_cap() if in_flight_retry > 0 else None
+        if cap is None:
+            await semaphore.acquire()
+            return
+        try:
+            await asyncio.wait_for(semaphore.acquire(), timeout=cap)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[LLM_IN_FLIGHT_BUDGET] {service_name} for {handler_name}: in-flight retry {in_flight_retry} "
+                f"found no free slot within its deadline ({cap:.1f}s) -- surfacing the refusal"
+            )
+            raise _InFlightQueueTimeout() from None
+
     async def _execute_llm_call(
         self,
         selected_service: Any,
@@ -995,6 +1258,8 @@ class LLMBus(BaseBus[LLMService]):
         start_time: float,
         attempt_start_time: float,
         retry_count: int,
+        budget_key: Optional[BudgetKey] = None,
+        in_flight_retry: int = 0,
     ) -> Tuple[BaseModel, Optional[ResourceUsage]]:
         """Execute the actual LLM call and record metrics on success.
 
@@ -1007,15 +1272,27 @@ class LLMBus(BaseBus[LLMService]):
         event's per-attempt duration_ms — without this distinction, retries
         report cumulative time and tail-latency analysis breaks).
         """
+        key = budget_key or ("service", service_name)
         semaphore = self._get_service_semaphore(service_name)
+        # Wait out a budget pause BEFORE queueing for a slot, so paused callers
+        # do not hold slots while they sleep (F4) ...
+        await self._wait_out_provider_pause(key, service_name, handler_name)
         # Log when we actually have to wait so saturation is visible.
         if semaphore.locked():
             logger.info(
                 f"[LLM-GATE] {service_name} saturated (max {self._max_in_flight_per_service} "
                 f"in-flight), {handler_name} queued"
             )
-        async with semaphore:
-            logger.debug(f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1})")
+        await self._acquire_slot(semaphore, in_flight_retry, service_name, handler_name)
+        try:
+            # ... and once more after it: a refusal may have paused the budget
+            # while this call was queued.
+            await self._wait_out_provider_pause(key, service_name, handler_name)
+            logger.debug(
+                f"Calling LLM service {service_name} for {handler_name} (attempt {retry_count + 1}"
+                + (f", in-flight retry {in_flight_retry}/{_IN_FLIGHT_MAX_RETRIES}" if in_flight_retry else "")
+                + ")"
+            )
 
             raw_holder = open_raw_completion_holder() if os.environ.get("CIRIS_LLM_CAPTURE_HANDLER") else None
             result, usage = await selected_service.call_llm_structured(
@@ -1049,7 +1326,11 @@ class LLMBus(BaseBus[LLMService]):
             )
             if raw_holder is not None:
                 close_raw_completion_holder()
+        finally:
+            semaphore.release()
 
+        # The budget took a request: sustained pressure is over for now.
+        self._in_flight_streak.pop(key, None)
         latency_ms = (self._time_service.timestamp() - start_time) * 1000
         self._record_success(service_name, latency_ms)
         # Extract api_base from service config if available

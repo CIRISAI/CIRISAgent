@@ -122,3 +122,4 @@ response_format: |
 # DEONTIC — closing categorical۔
 closing_reminder: |
   Address کو درست پانا اس step کا پورا مقصد ہے۔
+pipeline_position: "پائپ لائن پوزیشن: عمل کے انتخاب نے صرف فعل منتخب کیا ہے؛ یہ مرحلہ یہ چیک کرتا ہے کہ write کہاں جاتا ہے۔ اس کے بعد ضمائر عمل چلنے سے پہلے اس کا جائزہ لیتے ہیں۔"

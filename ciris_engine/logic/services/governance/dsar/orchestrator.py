@@ -32,6 +32,7 @@ from ciris_engine.schemas.consent.core import (
     ConsentStream,
     DSARExportFormat,
 )
+from ciris_engine.schemas.runtime.reviewed_action_admission import DSAR_COMPONENT, SYSTEM_CALLERS
 from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolCapability, ToolInvocationSubject
 
 from .schemas import (
@@ -45,17 +46,13 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
-_DSAR_COMPONENT = "DSARModificationOrchestrator"
+_DSAR_COMPONENT = DSAR_COMPONENT
 
-# The exact SQL tools this orchestrator's code calls. Written out here rather
-# than inherited from the deployment grant, so DSAR runs *narrower* than a
-# reasoning task, not as an exemption from authorization (CIRISAgent#938).
-_DSAR_TOOLS = (
-    "sql_anonymize_user",
-    "sql_export_user",
-    "sql_delete_user",
-    "sql_verify_deletion",
-)
+# The exact SQL tools this orchestrator's code calls, from the gate's enumeration
+# of unreviewed system callers (reviewed_action_admission.SYSTEM_CALLERS), so the
+# grant and the gate's declaration cannot drift. Narrower than a reasoning task,
+# not an exemption from authorization (CIRISAgent#938, #1366 item 19).
+_DSAR_TOOLS = tuple(sorted(SYSTEM_CALLERS[DSAR_COMPONENT].tools or ()))
 
 
 def _dsar_subject(request_id: Optional[str]) -> ToolInvocationSubject:

@@ -349,12 +349,18 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     "pdma_ethical.system_guidance_header": BlockAnnotation(
         _C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.STRUCTURAL)
     ),
+    # #1366 item 12 — the rest of the same header, after the pipeline-position
+    # paragraph that was split out of it: the same bytes, the same mixture.
+    "pdma_ethical.system_guidance_header_tail": BlockAnnotation(
+        _C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.STRUCTURAL)
+    ),
     # "Thought to Evaluate: " — an authored label around the thought.
     "pdma_ethical.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
     # ---- csdma_common_sense -------------------------------------------------
     # Scope statement + the two-step "draft the response, then rate THAT" method.
     # Names no value and forbids nothing: it is how to run the check.
     "csdma_common_sense.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "csdma_common_sense.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     # The seven-step realism checklist — a measurement procedure.
     "csdma_common_sense.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # JSON contract (structural) wrapped around LANGUAGE RULES — which language
@@ -368,6 +374,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # model: a law-like relation the reasoning is asked to accept — the §10.2
     # nomological worked example [T-5c].
     "idma.system_guidance_header": BlockAnnotation(_C.NOMOLOGICAL, None),
+    "idma.system_guidance_header_tail": BlockAnnotation(_C.NOMOLOGICAL, None),
     # "WORK IN THIS ORDER: 1..6" — the procedure that applies the law.
     "idma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # JSON key contract + LANGUAGE RULES — pragmatic, same reasoning as CSDMA's.
@@ -386,6 +393,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # The four action options and the choose-SPEAK/PONDER/TOOL criteria: a
     # decision procedure over an already-selected tool.
     "tsaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "tsaspdma.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     "tsaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # FLAT-JSON contract + LANGUAGE RULES — pragmatic, as above.
     "tsaspdma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
@@ -402,6 +410,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # "ASPDMA already chose DEFER. Your job is NOT to reopen the action choice."
     # plus the five-step classification method.
     "dsaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "dsaspdma.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     "dsaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # JSON contract + LANGUAGE RULES — pragmatic, as above.
     "dsaspdma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
@@ -419,6 +428,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # + deontic) and the gate refused it, correctly — a regime varying one class
     # could not move it without dragging the others along.
     "msaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "msaspdma.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     "msaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # What the graph IS: nodes hold facts, edges are relationships woven in
     # DREAM, a memorize writes exactly one node. Description, not instruction.
@@ -462,6 +472,33 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # Names the evaluator's job and its inputs, and instructs the pivot on a
     # conscience override ("treat those as concrete pivot targets"): PROCEDURAL.
     "action_selection_pdma.system_header": BlockAnnotation(_C.PROCEDURAL, None),
+    # #1366 — the engine-owned contract split out of `system_header` so a
+    # template header override cannot drop it. Its operative content is
+    # deontic: who may set a standing rule, that a chat rule is advisory until
+    # signed, that a "wa-" id confers nothing, and the MUST on a re-selected
+    # SPEAK after a veto. The pipeline-position paragraph that opened it is
+    # now a field of its own (`pipeline_position`, below).
+    "action_selection_pdma.stage_contract": BlockAnnotation(_C.DEONTIC, None),
+    # #1366 item 12 — each stage's `<template>.pipeline_position`: where the
+    # step sits in the pipeline and what it does not see. It names the step's
+    # place and job — what the step is — and ranks nothing, forbids nothing:
+    # procedural, like the headers it was split out of. A structural field
+    # since item 12, so it is its own block in every language rather than
+    # bytes found by an English heading. (DSDMA renders its header with a bare
+    # `.format()` and the consciences' system prompt is one routed block, so
+    # theirs stay inside those blocks here; the manifest still segments them.)
+    **{
+        f"{template}.pipeline_position": BlockAnnotation(_C.PROCEDURAL, None)
+        for template in (
+            "action_selection_pdma",
+            "pdma_ethical",
+            "csdma_common_sense",
+            "idma",
+            "tsaspdma",
+            "dsaspdma",
+            "msaspdma",
+        )
+    },
     # The JSON contract — flat fields, the action enum, which key each action
     # takes. Replacing it breaks parsing, which is the structural test verbatim.
     "action_selection_pdma.decision_format": BlockAnnotation(_C.STRUCTURAL, None),
@@ -741,6 +778,24 @@ class _MessagePiece(NamedTuple):
 _PART_SOURCE_RE = re.compile(r"^(?P<key>.+)\[(?P<lang>[^\[\]]*)\]$")
 
 
+def _is_splitter_probe() -> bool:
+    """True while ``segmenting.split_template`` renders its sentinel probe (#1366).
+
+    ``split_template`` renders every template twice: once with the real slot
+    values (the bytes the model receives) and once with sentinel markers, to
+    find where the slots sit. The probe never reaches a message. Recording it
+    queued a second, never-matching copy of each field behind the real one, so
+    the strictly-in-order cover stalled on it and the NEXT message (each DMA's
+    user message) fell back to one undivided ``mixed`` block. Asked of the
+    splitter rather than inferred from the render: a slotless field renders
+    identically under the probe, and a field whose kwargs carry no slot (DSDMA's
+    ``response_format``) has no sentinel to find.
+    """
+    from ciris_engine.logic.prompt_assembly.segmenting import in_probe_render
+
+    return in_probe_render()
+
+
 def _part_key(source: str) -> str:
     """Strip the locale tag off a composer source; the key is the template field.
 
@@ -966,6 +1021,10 @@ class _RoutedRecorder:
         from ciris_engine.logic.dma.msaspdma import MSASPDMAEvaluator
 
         self._real_msaspdma_prompt: Callable[..., Optional[str]] = MSASPDMAEvaluator._get_prompt_value
+        from ciris_engine.logic.dma.base_dma import BaseDMA
+
+        #: Bound from the BASE class: both subclasses inherit it, and each is patched separately.
+        self._real_position_fallback: Callable[..., Optional[str]] = BaseDMA._pipeline_position_fallback
         #: Parts recorded since the last ``take_parts()``. INSTANCE state, never
         #: a module global: one recorder is constructed per dump run
         #: (``compose_dump_rows``) and dies with it.
@@ -1060,6 +1119,8 @@ class _RoutedRecorder:
         strips it into different bytes never matches and stays ``inline``.
         """
         value = self._real_user_message(loader, template_data, **kwargs)
+        if _is_splitter_probe():
+            return value
         component = str(getattr(template_data, "component_name", "unknown"))
         return self._register(value, "user", f"dma_prompt:{component}.context_integration")
 
@@ -1112,7 +1173,7 @@ class _RoutedRecorder:
         one level down.
         """
         value = self._real_dsaspdma_prompt(evaluator, key)
-        if isinstance(value, str) and value:
+        if isinstance(value, str) and value and not _is_splitter_probe():
             self._parts.append(
                 _RecordedPart(
                     key=f"dsaspdma.{key}",
@@ -1135,11 +1196,32 @@ class _RoutedRecorder:
         one level down.
         """
         value = self._real_msaspdma_prompt(evaluator, key)
-        if isinstance(value, str) and value:
+        if isinstance(value, str) and value and not _is_splitter_probe():
             self._parts.append(
                 _RecordedPart(
                     key=f"msaspdma.{key}",
                     label=f"dma_prompt:msaspdma.{key}",
+                    text=value,
+                    frame=None,
+                    payload=None,
+                )
+            )
+        return value
+
+    def position_fallback(self, evaluator: object, prefix: str) -> Optional[str]:
+        """Recording pass-through around ``BaseDMA._pipeline_position_fallback`` (#1366 item 12).
+
+        DSASPDMA / MSASPDMA render the ENGINE ``pipeline_position``; a locale copy lacking it gets the English
+        paragraph from this read, not from ``_get_prompt_value``. Unrecorded, those bytes reached the prompt as an
+        unattributed ``<parent>.gap1`` (a ``mixed`` block §10.2.1 refuses). Recorded under the same key as the
+        locale's own field: it IS that field, in its English copy.
+        """
+        value = self._real_position_fallback(evaluator)
+        if isinstance(value, str) and value and not _is_splitter_probe():
+            self._parts.append(
+                _RecordedPart(
+                    key=f"{prefix}.pipeline_position",
+                    label=f"dma_prompt:{prefix}.pipeline_position",
                     text=value,
                     frame=None,
                     payload=None,
@@ -1158,6 +1240,8 @@ class _RoutedRecorder:
         credit coverage to a key that did not compose.
         """
         value = self._real_conscience_user(loader, conscience_type, image_context=image_context, **kwargs)
+        if _is_splitter_probe():
+            return value
         field = "user_prompt_with_image_template" if image_context else "user_prompt_template"
         # #997: the loader renders that template through ``safe_format`` (lazy
         # import, conscience/prompt_loader.py:223), so ``format_part`` has
@@ -1182,6 +1266,8 @@ class _RoutedRecorder:
         ``routed`` follows one level up.
         """
         rendered = self._real_safe_format(template, source=source, **kwargs)
+        if _is_splitter_probe():
+            return rendered
         key = _part_key(source)
         segmented = _segment_template(template, kwargs, rendered)
         self._parts.append(
@@ -1486,6 +1572,14 @@ def compose_dump_rows(
         """Plain function, same descriptor-binding reason as above."""
         return recorder.msaspdma_prompt_value(evaluator, key)
 
+    def _dsaspdma_position_seam(evaluator: object) -> Optional[str]:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.position_fallback(evaluator, "dsaspdma")
+
+    def _msaspdma_position_seam(evaluator: object) -> Optional[str]:
+        """Plain function, same descriptor-binding reason as above."""
+        return recorder.position_fallback(evaluator, "msaspdma")
+
     for locale in locales:
         env = golden.prompt_content_environment(  # type: ignore[attr-defined]
             language=locale,
@@ -1501,6 +1595,8 @@ def compose_dump_rows(
             aspdma_system_message=_aspdma_system_seam,
             dsaspdma_prompt_value=_dsaspdma_prompt_seam,
             msaspdma_prompt_value=_msaspdma_prompt_seam,
+            dsaspdma_position_fallback=_dsaspdma_position_seam,
+            msaspdma_position_fallback=_msaspdma_position_seam,
         )
         with env:
             for step in step_names:

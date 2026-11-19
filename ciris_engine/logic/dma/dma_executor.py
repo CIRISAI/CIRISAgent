@@ -85,6 +85,7 @@ from .tsaspdma import TSASPDMAEvaluator
 if TYPE_CHECKING:
     from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
     from ciris_engine.schemas.adapters.tools import ToolInfo
+    from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
 
 logger = logging.getLogger(__name__)
 
@@ -864,8 +865,13 @@ async def run_dsaspdma(
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    conscience_feedback: Optional["ConscienceFeedback"] = None,
 ) -> ActionSelectionDMAResult:
-    """Run the Deferral-Specific Action Selection PDMA (DSASPDMA)."""
+    """Run the Deferral-Specific Action Selection PDMA (DSASPDMA).
+
+    ``conscience_feedback`` is the veto from a conscience retry (#1366 item 1);
+    None on a first pass.
+    """
 
     if not time_service:
         raise RuntimeError("TimeService is required for DMA execution")
@@ -922,6 +928,7 @@ async def run_dsaspdma(
             aspdma_result=aspdma_result,
             original_thought=original_thought,
             context=context,
+            conscience_feedback=conscience_feedback,
         )
 
         end_time = time_service.now()
@@ -965,6 +972,7 @@ async def _run_memory_second_pass(
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    conscience_feedback: Optional["ConscienceFeedback"] = None,
 ) -> ActionSelectionDMAResult:
     """Run one memory verb's second pass under a trace span.
 
@@ -1025,7 +1033,12 @@ async def _run_memory_second_pass(
     persistence.add_correlation(correlation, time_service)
 
     try:
-        result = await evaluate(aspdma_result=aspdma_result, original_thought=original_thought, context=context)
+        result = await evaluate(
+            aspdma_result=aspdma_result,
+            original_thought=original_thought,
+            context=context,
+            conscience_feedback=conscience_feedback,
+        )
 
         end_time = time_service.now()
         update_req = CorrelationUpdateRequest(
@@ -1067,10 +1080,17 @@ async def run_msaspdma(
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    conscience_feedback: Optional["ConscienceFeedback"] = None,
 ) -> ActionSelectionDMAResult:
     """Run the Memorize-Specific Action Selection PDMA (MSASPDMA)."""
     return await _run_memory_second_pass(
-        "msaspdma", evaluator.evaluate_memorize_action, aspdma_result, original_thought, context, time_service
+        "msaspdma",
+        evaluator.evaluate_memorize_action,
+        aspdma_result,
+        original_thought,
+        context,
+        time_service,
+        conscience_feedback,
     )
 
 
@@ -1080,10 +1100,17 @@ async def run_rsaspdma(
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    conscience_feedback: Optional["ConscienceFeedback"] = None,
 ) -> ActionSelectionDMAResult:
     """Run the Recall-Specific Action Selection PDMA (RSASPDMA)."""
     return await _run_memory_second_pass(
-        "rsaspdma", evaluator.evaluate_recall_action, aspdma_result, original_thought, context, time_service
+        "rsaspdma",
+        evaluator.evaluate_recall_action,
+        aspdma_result,
+        original_thought,
+        context,
+        time_service,
+        conscience_feedback,
     )
 
 
@@ -1093,10 +1120,17 @@ async def run_fsaspdma(
     original_thought: ProcessingQueueItem,
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
+    conscience_feedback: Optional["ConscienceFeedback"] = None,
 ) -> ActionSelectionDMAResult:
     """Run the Forget-Specific Action Selection PDMA (FSASPDMA)."""
     return await _run_memory_second_pass(
-        "fsaspdma", evaluator.evaluate_forget_action, aspdma_result, original_thought, context, time_service
+        "fsaspdma",
+        evaluator.evaluate_forget_action,
+        aspdma_result,
+        original_thought,
+        context,
+        time_service,
+        conscience_feedback,
     )
 
 
@@ -1109,6 +1143,7 @@ async def run_tsaspdma(
     context: Optional[Any] = None,
     time_service: Optional["TimeServiceProtocol"] = None,
     context_enrichment: Optional[Dict[str, Any]] = None,
+    conscience_feedback: Optional["ConscienceFeedback"] = None,
 ) -> ActionSelectionDMAResult:
     """Run the Tool-Specific Action Selection PDMA (TSASPDMA).
 
@@ -1188,6 +1223,7 @@ async def run_tsaspdma(
             original_thought=original_thought,
             context=context,
             context_enrichment=context_enrichment,
+            conscience_feedback=conscience_feedback,
         )
 
         # Update correlation with success

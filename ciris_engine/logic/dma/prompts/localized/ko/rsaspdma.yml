@@ -75,3 +75,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   올바른 곳을 찾아보는 것이 이 단계의 전체 목적입니다.
+pipeline_position: "파이프라인 위치: 작업 선택은 동사만을 선택했습니다; 이 단계는 무엇을 읽을지 말합니다. RECALL은 오직 읽기만 하므로, 양심 검토 없이 실행됩니다."

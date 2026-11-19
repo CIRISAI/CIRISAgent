@@ -138,3 +138,4 @@ user_prompt_with_image_template: |-
 
   TUTARLILIK İÇİN DEĞERLENDİRİLECEK CIRIS Ajan YANITI:
   {text}
+pipeline_position: "HAT KONUMU: eylem seçiminden sonra, diğer vicdanların yanında, herhangi bir şey çalışmadan önce ajanın taslak eylemini incelersiniz. İsteği ve yürürlükteki doğrulanmış yönetişimi görürsünüz."

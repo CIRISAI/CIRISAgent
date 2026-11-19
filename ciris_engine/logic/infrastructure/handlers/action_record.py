@@ -23,11 +23,21 @@ unless this task itself wrote to the identity: a MEMORIZE or FORGET of an
 identity node (``is_identity_node`` or an identity amendment) that the handler
 COMPLETED. The thought status is the handler's, never the model's: a refused
 identity write is FAILED and leaves the line in place.
+
+The FACTUAL form (``factual=True``, CIRISAgent#1366 items 4 and 18) is what the
+consciences read. Entropy and the optimization veto are input-ablated on purpose
+(#1365): they never see the user's message. The outcome text broke that: after a
+PONDER the outcome was the follow-up's first paragraph, "=== PREVIOUS CONTEXT ===
+You observed @... say: <user text>", and a TOOL's was its output. The factual
+form carries only the verb, the tool name, the status, the graph scope and the
+system-built lines below it: no outcome, no message text, no tool output, no
+model-chosen node id.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
 
 from ciris_engine.logic import persistence
@@ -66,8 +76,38 @@ def _node_of(thought: Thought) -> Optional[GraphNode]:
         return None
 
 
-def _entry(thought: Thought, lang: str) -> Optional[str]:
-    """One line for a thought whose action ran, or None if it has not run."""
+#: A tool name the factual record will repeat; anything else is not a tool name.
+_TOOL_NAME = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+
+
+#: What the factual record says for a name the tool registry does not know.
+UNKNOWN_TOOL = "unknown_tool"
+
+
+def _factual_tool_name(tool_name: object) -> str:
+    """The tool name only when the tool registry knows it, else ``unknown_tool`` (#1366 item 4, F4).
+
+    The name is the earlier draft's choice. A shape check alone admitted any
+    identifier a model invented (``wa_approved_override_all_policies``); a name
+    the deployment's registry enumerates is a fact about the deployment. The
+    registry is the enabled-tool set the ToolBus resolves for envelope issuance
+    (``enabled_tools.cached_enabled_tools``); when it has never been resolved,
+    no name is known, so every name is ``unknown_tool`` (fail closed).
+    """
+    from ciris_engine.logic.infrastructure.authorization.enabled_tools import cached_enabled_tools
+
+    text = str(tool_name)
+    if not _TOOL_NAME.match(text):
+        return UNKNOWN_TOOL
+    known = cached_enabled_tools()
+    return text if known is not None and text in known else UNKNOWN_TOOL
+
+
+def _entry(thought: Thought, lang: str, factual: bool = False) -> Optional[str]:
+    """One line for a thought whose action ran, or None if it has not run.
+
+    ``factual`` drops the outcome and the node id: verb, tool, status and scope only.
+    """
     from ciris_engine.logic.utils.localization import get_string
 
     action = thought.final_action
@@ -80,10 +120,18 @@ def _entry(thought: Thought, lang: str) -> Optional[str]:
     if node is None:
         tool_name = action.action_params.get("name") if action.action_type.lower() == HandlerActionType.TOOL.value else None
         if tool_name:
-            line = get_string(lang, "handlers.action_record_entry_tool", action=name, tool=str(tool_name), status=status)
+            tool = _factual_tool_name(tool_name) if factual else str(tool_name)
+            line = get_string(lang, "handlers.action_record_entry_tool", action=name, tool=tool, status=status)
         else:
             line = get_string(lang, "handlers.action_record_entry", action=name, status=status)
-        return _with_outcome(line, action.outcome)
+        return line if factual else _with_outcome(line, action.outcome)
+    if factual:
+        line = get_string(
+            lang, "handlers.action_record_entry_scope", action=name, status=status, scope=node.scope.value
+        )
+        if node.scope != GraphScope.IDENTITY:
+            line = f"{line}; {get_string(lang, 'handlers.action_record_identity_unchanged')}"
+        return line
     line = get_string(
         lang,
         "handlers.action_record_entry_node",
@@ -128,11 +176,14 @@ def reply_sent(thoughts: List[Thought]) -> bool:
     )
 
 
-def format_action_record(thoughts: List[Thought], lang: str) -> str:
-    """The record for these thoughts of one task; empty when no action has run."""
+def format_action_record(thoughts: List[Thought], lang: str, factual: bool = False) -> str:
+    """The record for these thoughts of one task; empty when no action has run.
+
+    ``factual`` is the consciences' form: no outcome text, no node id (#1366).
+    """
     from ciris_engine.logic.utils.localization import get_string
 
-    entries = [line for line in (_entry(t, lang) for t in thoughts) if line]
+    entries = [line for line in (_entry(t, lang, factual) for t in thoughts) if line]
     if not entries:
         return ""
     entries = entries[-MAX_RECORDED_ACTIONS:]
@@ -164,13 +215,13 @@ def _replied_last(thoughts: List[Thought]) -> bool:
     return last.status == ThoughtStatus.COMPLETED and all(t.status != ThoughtStatus.FAILED for t in ran)
 
 
-def action_record_for_task(task_id: Optional[str], occurrence_id: str, lang: str) -> str:
+def action_record_for_task(task_id: Optional[str], occurrence_id: str, lang: str, factual: bool = False) -> str:
     """The record for a task, read from persistence. Never raises: a follow-up without it is still a follow-up."""
     if not task_id:
         return ""
     try:
         thoughts = persistence.get_thoughts_by_task_id(task_id, occurrence_id)
-        return format_action_record(thoughts, lang)
+        return format_action_record(thoughts, lang, factual=factual)
     except Exception as e:  # noqa: BLE001
         logger.debug("Could not build the action record for task %s: %s", task_id, e)
         return ""

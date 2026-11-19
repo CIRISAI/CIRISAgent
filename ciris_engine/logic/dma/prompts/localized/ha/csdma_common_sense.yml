@@ -52,3 +52,4 @@ context_integration: |
   Tunani Na Asali: {original_thought_content}
 
 accord_header: true  # Yi amfani da ACCORD_TEXT a matsayin saƙon tsari
+pipeline_position: "**Matsayi a bututun sarrafa**: kana gudana da farko, tare da PDMA da DSDMA. Sannan IDMA tana bitar su ukun, Zaɓin Aiki yana zaɓar aikin, kuma Lamirori suna bitar sa."

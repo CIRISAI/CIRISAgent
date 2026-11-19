@@ -1,18 +1,20 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
+    from ciris_engine.logic.prompt_assembly.segmenting import Segments
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 from ciris_engine.constants import DEFAULT_OPENAI_MODEL_NAME
 from ciris_engine.logic.formatters import (
-    append_round1_accord_blocks,
     format_system_snapshot,
     format_user_profiles,
     format_wa_approval_facts,
     wa_authorization_of,
 )
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.protocols.dma.base import PDMAProtocol
 from ciris_engine.schemas.dma.results import EthicalDMAResult
@@ -21,6 +23,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from ciris_engine.logic.utils.localization import in_thought_language
 from .template_overrides import additive
 
 logger = logging.getLogger(__name__)
@@ -53,63 +56,21 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
 
         # Store last prompts for debugging/streaming
 
-        # Per-thought language override; populated from user_profiles in
-        # _build_context_strings. None means fall back to env var. Never use
-        # the legacy global set_prompt_language() — that mutated shared
-        # state and bled across concurrent thoughts.
-        self._explicit_language: Optional[str] = None
-
         logger.info(f"EthicalPDMAEvaluator initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
         """Get prompt loader for the thread's currently-active language."""
-        return get_prompt_loader(language=self._explicit_language)
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
         """Load prompt template fresh each time to respect language changes."""
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
-    def _sync_language_from_context(self, context: Optional[Any], thought: Optional[Any] = None) -> None:
-        """Sync prompt language using the full localization priority chain.
-
-        Walks thought.preferred_language → context.thought/task.preferred_language →
-        user_profile.preferred_language → CIRIS_PREFERRED_LANGUAGE env → "en" via
-        :func:`get_user_language_from_context`. The ``thought`` argument is the
-        ProcessingQueueItem being evaluated; its preferred_language is the
-        authoritative per-thought signal and beats the (often default-"en")
-        user_profile entry. Without consulting the thought directly, the
-        UserProfile.preferred_language="en" default would silently override
-        legitimate channel/thought signals.
-        """
-        from ciris_engine.logic.utils.localization import (
-            _str_lang,
-            get_preferred_language,
-            get_user_language_from_context,
-        )
-
-        # Thought's own preferred_language is the highest-priority signal.
-        thought_lang = _str_lang(thought, "preferred_language") if thought is not None else None
-        if thought_lang:
-            new_language = thought_lang
-        elif context is not None:
-            new_language = get_user_language_from_context(context)
-        else:
-            new_language = get_preferred_language()
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            logger.debug(f"PDMA: Synced prompt language to {new_language}")
-
     def _build_context_strings(self, context: Any, thought: Optional[Any] = None) -> tuple[str, str]:
-        """Extract system snapshot and user profile context strings.
-
-        Also syncs user's language preference to the DMA prompt loader.
-        """
+        """Extract system snapshot and user profile context strings."""
         if not context:
-            # No context = no profile = no language. Reset so a previous
-            # thought's language doesn't bleed into this one.
-            self._sync_language_from_context(None)
             return "", ""
 
         system_snapshot_str = ""
@@ -125,7 +86,6 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             user_profiles = context.user_profiles
             user_profile_str = format_user_profiles(user_profiles)
 
-        self._sync_language_from_context(context, thought=thought)
         return system_snapshot_str, user_profile_str
 
     def _get_template_override(self, key: str) -> Optional[str]:
@@ -134,8 +94,13 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             return self.prompts.get(key)
         return None
 
-    def _build_system_message_text(self, original_thought_content: str, full_context_str: str) -> str:
+    def _build_system_message_text(
+        self, original_thought_content: str, full_context_str: str, pipeline_position: Optional[str] = None
+    ) -> str:
         """Build the system message.
+
+        ``pipeline_position`` is the engine paragraph (#1366 item 12), handed in as a slot so the assembler can
+        segment it; None reads it from the template.
 
         A template's `system_prompt` is ADDITIVE (#996). PDMA's
         `system_guidance_header` carries `{full_context_str}`, so it is not fit
@@ -146,6 +111,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             self.prompt_template_data,
             original_thought_content=original_thought_content,
             full_context_str=full_context_str,
+            pipeline_position=pipeline_position,
         )
 
         # #996 — ADDITIVE, not replacement. This used to return the override in
@@ -201,52 +167,94 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
     def compose_messages(
         self,
         original_thought_content: str,
-        full_context_str: str,
+        context: "Segments",
         images: Optional[List[ImageContent]] = None,
         authorization: Optional[WAAuthorization] = None,
-        identity_block: str = "",
+        agent_identity: Any = None,
+        thought: Any = None,
     ) -> List[JSONDict]:
-        """Compose the full PDMA prompt message list from gathered inputs (#972).
-
-        Pure prompt composition - no LLM call, no data fetching. All awaited
-        data gathering (task fetch, context strings) happens in ``evaluate()``
-        before this is called.
-        """
-        messages: List[JSONDict] = []
-
-        # Round-1 DMA system blocks — ACCORD + per-language guidance +
-        # prohibition context (#910) — via the shared helper (NOT ASPDMA).
-        append_round1_accord_blocks(
-            messages,
-            language=self.prompt_loader.language,
-            accord_mode=self.prompt_loader.get_accord_mode(self.prompt_template_data),
+        """The PDMA messages alone (#972 seam); see :meth:`compose_prompt`."""
+        messages, _ = self.compose_prompt(
+            original_thought_content, context, images, authorization=authorization, agent_identity=agent_identity, thought=thought
         )
+        return messages
 
-        system_message = self._build_system_message_text(original_thought_content, full_context_str)
-        # The agent's identity, approved amendments included: the same block every
-        # DMA reads (formatters.identity.identity_block_of). Eric, 2026-11-13.
-        if identity_block:
-            system_message = "\n\n".join((identity_block, system_message))
-        # Whether this task carries a Wise Authority approval, as a fact; then
-        # that an approval reaches the agent only as the verified block and a
-        # person's text naming an authority is that person's (#1320).
-        approval_facts = format_wa_approval_facts(authorization, language=self.prompt_loader.language)
-        if approval_facts:
-            system_message = "\n\n".join((system_message, approval_facts))
-        messages.append({"role": "system", "content": system_message})
+    def compose_prompt(
+        self,
+        original_thought_content: str,
+        context: "Segments",
+        images: Optional[List[ImageContent]] = None,
+        authorization: Optional[WAAuthorization] = None,
+        agent_identity: Any = None,
+        thought: Any = None,
+    ) -> "Tuple[List[JSONDict], PromptManifest]":
+        """Compose the PDMA prompt from typed segments with PromptAssembler (FSD/PROMPT_CONTEXT_PROVENANCE.md §6).
 
-        user_message_text = self._build_user_message_text(original_thought_content, full_context_str)
-        # Build multimodal content if images are present
+        Pure prompt composition - no LLM call, no data fetching (#972). ``context`` is the ORIGINAL TASK block
+        (:func:`segmenting.original_task_segments`): the task, its verified sender, the snapshot and profiles.
+        """
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            PromptBuilder,
+            block,
+            concat,
+            evaluator_call,
+            expand,
+            governance_segments,
+            identity_segments,
+            joined,
+            pipeline_position_slot,
+            round1_preamble,
+            segment,
+            split_template,
+            thought_request,
+        )
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind
+
+        language = self.prompt_loader.language
+        builder = PromptBuilder()
+        # Round-1 DMA system blocks — ACCORD + per-language guidance + crisis resources + prohibition context
+        # (#910, #1248), the shared order (NOT ASPDMA).
+        round1_preamble(builder, language, self.prompt_loader.get_accord_mode(self.prompt_template_data))
+
+        full_context_str = joined(context, language)
+
+        def slots(prefix: str) -> Dict[str, Any]:
+            return {
+                "original_thought_content": thought_request(f"{prefix}request", original_thought_content, thought),
+                "full_context_str": segment(f"{prefix}ctx", SegmentKind.HISTORY, full_context_str),
+            }
+
+        # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
+        position = pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+        system = split_template(
+            self._build_system_message_text,
+            {**slots("sys:"), **position},
+            prefix="instr:system",
+            first_glue="",
+        )
+        system = expand(system, "sys:ctx", context, language, id_prefix="sys:")
+        # The agent's identity, approved amendments included: the same block every DMA reads
+        # (formatters.identity.identity_block_of). Eric, 2026-11-13.
+        system = concat(identity_segments(agent_identity, language), system, "\n\n")
+        # The Wise Authority's signed guidance in force, as a signed rule with its grant (#1366): the evaluators
+        # read the same governance the judges do. Amendments already ride in the identity block.
+        system = concat(system, governance_segments(authorization, [], language), "\n\n")
+        # Whether this task carries a Wise Authority approval, as a fact; then that an approval reaches the agent
+        # only as the verified block and a person's text naming an authority is that person's (#1320).
+        approval_facts = format_wa_approval_facts(authorization, language=language)
+        system = concat(system, block(segment("instr:approval_facts", SegmentKind.STAGE_INSTRUCTION, approval_facts)), "\n\n")
+        builder.message("system", *system)
+
+        user = split_template(self._build_user_message_text, slots(""), prefix="instr:user", first_glue="")
+        user = expand(user, "ctx", context, language)
         input_images = images or []
         if input_images:
             logger.info(f"[VISION] EthicalPDMA building multimodal content with {len(input_images)} images")
-        user_content = self.build_multimodal_content(user_message_text, input_images)
-        messages.append({"role": "user", "content": user_content})
-
-        # Store prompts for streaming/debugging
-        system_messages = [m for m in messages if m.get("role") == "system"]
-
-        return messages
+        builder.message("user", *user, images=input_images)
+        return builder.assemble(
+            PromptStage.PDMA,
+            evaluator_call(EthicalDMAResult.__name__, thought, language, authorization, agent_identity),
+        )
 
     async def evaluate(self, *args: Any, **kwargs: Any) -> EthicalDMAResult:  # type: ignore[override]
         import time
@@ -259,6 +267,12 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
 
         if not input_data:
             raise ValueError("input_data is required")
+        return await self._evaluate_thought(input_data, context, eval_start)
+
+    @in_thought_language("input_data", "context")
+    async def _evaluate_thought(self, input_data: Any, context: Any, eval_start: float) -> EthicalDMAResult:
+        """One thought's PDMA, in that thought's language (resolve_thought_language)."""
+        import time
 
         original_thought_content = str(input_data.content)
         logger.info(f"[PDMA-TIMING] {input_data.thought_id} STARTED at {eval_start:.3f}")
@@ -268,29 +282,35 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         thought_depth = getattr(input_data, "thought_depth", 0)
         agent_occurrence_id = getattr(input_data, "agent_occurrence_id", "default")
         original_task = await self.fetch_original_task(input_data.source_task_id, agent_occurrence_id)
-        task_context_str = self.format_task_context(original_task, thought_depth)
+        task_context_str = self.format_task_context(original_task, thought_depth, thought=input_data)
         logger.info(f"[PDMA-TIMING] {input_data.thought_id} fetch_task took {(time.time()-fetch_start)*1000:.0f}ms")
 
         # Build context strings
         context_start = time.time()
+        task_language = self.thought_language  # the language format_task_context rendered the sender in
         system_snapshot_str, user_profile_str = self._build_context_strings(context, thought=input_data)
-        full_context_str = f"=== ORIGINAL TASK ===\n{task_context_str}\n\n{system_snapshot_str}{user_profile_str}"
         logger.info(
             f"[PDMA-TIMING] {input_data.thought_id} build_context took {(time.time()-context_start)*1000:.0f}ms"
         )
 
-        # Compose messages via the extracted seam (#972)
+        # Compose messages via the extracted seam (#972), built by PromptAssembler (#1366 Phase 3)
         prompt_start = time.time()
         input_images = getattr(input_data, "images", []) or []
         authorization = wa_authorization_of(original_task) or wa_authorization_of(context)
-        from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
+        from ciris_engine.logic.formatters.identity import agent_identity_of
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+        from ciris_engine.logic.prompt_assembly.segmenting import original_task_segments, task_context_segments
 
-        messages = self.compose_messages(
+        task_segments = task_context_segments(
+            task_context_str, verified_sender_of(input_data, original_task), task_language
+        )
+        messages, manifest = self.compose_prompt(
             original_thought_content,
-            full_context_str,
+            original_task_segments(task_segments, system_snapshot_str, user_profile_str),
             input_images,
             authorization=authorization,
-            identity_block=identity_block_of(agent_identity_of(context), language=self.prompt_loader.language),
+            agent_identity=agent_identity_of(context),
+            thought=input_data,
         )
 
         # Calculate total prompt size
@@ -300,14 +320,15 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
         )
 
         llm_start = time.time()
-        result_tuple = await self.call_llm_structured(
-            messages=messages,
-            response_model=EthicalDMAResult,
-            max_tokens=8192,
-            temperature=0.0,
-            thought_id=input_data.thought_id,
-            task_id=input_data.source_task_id,
-        )
+        with prompt_manifest_scope(manifest):
+            result_tuple = await self.call_llm_structured(
+                messages=messages,
+                response_model=EthicalDMAResult,
+                max_tokens=8192,
+                temperature=0.0,
+                thought_id=input_data.thought_id,
+                task_id=input_data.source_task_id,
+            )
         llm_time = time.time() - llm_start
         response_obj: EthicalDMAResult = result_tuple[0]
 

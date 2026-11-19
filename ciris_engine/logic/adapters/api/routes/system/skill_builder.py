@@ -305,11 +305,17 @@ async def build_adapter(
         adapter_path = _builder.build_adapter(draft)
         module_name = adapter_path.name
 
+        # Code admission (rc21 CC 2.7.11): a built skill is beyond the attested
+        # build and loads only under a live admission:unit row for its digest.
+        from ciris_engine.logic.adapters.api.routes.system.skill_import import unit_admission_refusal
+
+        refusal = await unit_admission_refusal(adapter_path, module_name)
+
         # Try auto-load
         auto_loaded = False
         try:
             adapter_manager = getattr(request.app.state, "adapter_manager", None)
-            if adapter_manager:
+            if adapter_manager and refusal is None:
                 result = await adapter_manager.load_adapter(
                     adapter_type=module_name,
                     adapter_id=f"{module_name}_skill",
@@ -318,7 +324,10 @@ async def build_adapter(
         except Exception as e:
             logger.warning(f"Auto-load failed: {e}")
 
-        load_msg = " and loaded" if auto_loaded else " (restart to activate)"
+        if refusal is not None:
+            load_msg = f"; not loaded: {refusal}"
+        else:
+            load_msg = " and loaded" if auto_loaded else " (restart to activate)"
         return BuildResult(
             success=True,
             adapter_path=str(adapter_path),

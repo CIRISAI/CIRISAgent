@@ -447,7 +447,21 @@ class TestBackwardCompatibility:
 
 
 class TestContextBasedRouting:
-    """Test context-based routing for tool execution."""
+    """Test context-based routing for tool execution.
+
+    These pin PROVIDER SELECTION only. Authorization is the dispatch gate's,
+    pinned in tests/ciris_engine/logic/infrastructure/authorization/
+    test_dispatch_gate.py, so here the gate is replaced by an allow-all.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _gate_allows(self, monkeypatch):
+        from ciris_engine.logic.infrastructure.authorization import dispatch_gate
+
+        async def allow(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setattr(dispatch_gate, "authorize_dispatch", allow)
 
     @pytest.mark.asyncio
     async def test_routes_to_discord_service_with_channel_id(self, mock_service_registry, mock_time_service):

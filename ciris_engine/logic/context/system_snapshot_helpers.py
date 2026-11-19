@@ -37,7 +37,7 @@ from ciris_engine.schemas.services.lifecycle.time import LocalizedTimeData
 from ciris_engine.schemas.services.operations import MemoryQuery
 from ciris_engine.schemas.types import JSONDict
 
-from .identity_amendments import load_identity_amendments
+from .identity_profile import IdentityBase, load_identity_profile
 from .secrets_snapshot import ERROR_KEY, build_secrets_snapshot
 
 logger = logging.getLogger(__name__)
@@ -566,13 +566,20 @@ async def _extract_agent_identity(
             return default_identity_data, default_identity_summary
 
         # Create typed identity data
+        base = IdentityBase(
+            agent_id=str(attrs_dict.get("agent_id", "unknown")),
+            description=str(attrs_dict.get("description", "No description available")),
+            role=str(attrs_dict.get("role_description", "Unknown")),
+        )
+        amendments, profile = await load_identity_profile(memory_service, base)
         identity_data = IdentityData(
-            agent_id=attrs_dict.get("agent_id", "unknown"),
-            description=attrs_dict.get("description", "No description available"),
-            role=attrs_dict.get("role_description", "Unknown"),
+            agent_id=base.agent_id,
+            description=base.description,
+            role=base.role,
             trust_level=attrs_dict.get("trust_level", 0.5),
             stewardship=attrs_dict.get("stewardship"),
-            approved_amendments=await load_identity_amendments(memory_service),
+            approved_amendments=amendments,
+            profile=profile,
         )
 
         # Create typed identity summary
@@ -1294,20 +1301,28 @@ async def _execute_enrichment_tool(
     # tool path, so a gate placed only in ToolBus.execute_tool would miss it.
     # Provider resolution stays here (adapter-scoped, via _find_tool_service),
     # so routing behaviour is unchanged; only the dispatch seam moves.
-    if tool_bus is not None and _is_tool_bus(tool_bus):
-        result = await tool_bus.dispatch_to_provider(
-            tool_service,
-            tool.name,
-            params,
-            handler_name="context_enrichment",
-            subject=subject,
+    if tool_bus is None or not _is_tool_bus(tool_bus):
+        # No bus, no execution (CIRISAgent#1366 item 19). This used to invoke
+        # the provider directly — the one ungated path left after the seam
+        # moved. The bus manager is built with the core services, before any
+        # adapter or this cache, so a missing bus is a wiring defect: refuse.
+        logger.error(
+            "[CONTEXT_ENRICHMENT] No ToolBus for %s: NOT executed (the provider is never invoked "
+            "outside the dispatch gate)",
+            tool_key,
         )
-    else:
-        # No bus available — startup cache population and adapter load both run
-        # before/outside the bus manager. Direct invocation, logged as such
-        # rather than silently taking the ungated path.
-        logger.debug("[CONTEXT_ENRICHMENT] No ToolBus available for %s; invoking provider directly", tool_key)
-        result = await _call_async_or_sync_method(tool_service, "execute_tool", tool.name, params)
+        return tool_key, None
+    result = await tool_bus.dispatch_to_provider(
+        tool_service,
+        tool.name,
+        params,
+        handler_name="context_enrichment",
+        subject=subject,
+    )
+    if getattr(result, "success", None) is False:
+        # A refusal or a provider failure the bus caught: an error, as a raised
+        # provider exception always was here, so callers never cache it.
+        raise RuntimeError(getattr(result, "error", None) or f"{tool_key} failed")
     if result:
         return tool_key, _process_tool_result(result, tool_key)
     return tool_key, None
@@ -1393,6 +1408,45 @@ async def _run_context_enrichment_tools(
     return enrichment_results
 
 
+def enrichment_cache_subject(
+    available_tools: Dict[str, List[ToolInfo]], work_unit: str, agent_occurrence_id: str = "default"
+) -> Optional[Any]:
+    """The SYSTEM subject for enrichment run outside any task (CIRISAgent#1366 item 19).
+
+    The cache warm (startup, after an adapter loads, operator refresh) has no
+    task. It must not borrow a user task's identity, and the gate denies an
+    identity-less call, so it carries its own subject: the enumerated
+    ``context_enrichment_cache`` component, SYSTEM_ENRICHMENT origin, and a
+    SYSTEM_COMPONENT envelope granting exactly the context_enrichment tools
+    currently offered (the gate re-checks the provider's declaration).
+    ``None`` when issuance fails: the gate then denies, never bypasses.
+    """
+    from ciris_engine.schemas.runtime.reviewed_action_admission import ENRICHMENT_CACHE_COMPONENT
+    from ciris_engine.schemas.runtime.task_envelope import ToolCallOrigin, ToolCapability, ToolInvocationSubject
+
+    tool_names = sorted({tool.name for _, tool in _collect_enrichment_tools(available_tools)})
+    try:
+        from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_system_component_envelope
+
+        envelope = issue_system_component_envelope(
+            component=ENRICHMENT_CACHE_COMPONENT,
+            work_unit_id=f"enrichment-cache:{work_unit}",
+            granted_tools=tool_names,
+            capabilities=(ToolCapability.OBSERVE_LOCAL,),
+            agent_occurrence_id=agent_occurrence_id,
+        )
+        return ToolInvocationSubject.for_component(
+            origin=ToolCallOrigin.SYSTEM_ENRICHMENT,
+            component=ENRICHMENT_CACHE_COMPONENT,
+            handler_name="context_enrichment",
+            agent_occurrence_id=agent_occurrence_id,
+            envelope=envelope,
+        )
+    except Exception as exc:
+        logger.warning("[ENRICHMENT_CACHE] Could not issue the cache-warm subject: %s (calls will be denied)", exc)
+        return None
+
+
 async def populate_enrichment_cache_at_startup(runtime: Any, available_tools: Dict[str, List[ToolInfo]]) -> None:
     """Populate the context enrichment cache at startup.
 
@@ -1406,8 +1460,9 @@ async def populate_enrichment_cache_at_startup(runtime: Any, available_tools: Di
 
     logger.info("[ENRICHMENT_CACHE] Starting startup population...")
 
-    # Run enrichment tools to populate cache
-    results = await _run_context_enrichment_tools(runtime, available_tools)
+    # Run enrichment tools to populate cache, as the system (no task).
+    subject = enrichment_cache_subject(available_tools, "startup")
+    results = await _run_context_enrichment_tools(runtime, available_tools, subject=subject)
 
     cache.mark_startup_populated()
     logger.info(f"[ENRICHMENT_CACHE] Startup population complete: {len(results)} tools cached, stats: {cache.stats}")
@@ -1435,8 +1490,9 @@ async def refresh_enrichment_cache(runtime: Any) -> Dict[str, Any]:
         logger.warning("[ENRICHMENT_CACHE] No tools available for refresh")
         return {}
 
-    # Run enrichment tools (this will update the cache)
-    results = await _run_context_enrichment_tools(runtime, available_tools)
+    # Run enrichment tools (this will update the cache), as the system (no task).
+    subject = enrichment_cache_subject(available_tools, "operator-refresh")
+    results = await _run_context_enrichment_tools(runtime, available_tools, subject=subject)
 
     logger.info(f"[ENRICHMENT_CACHE] API refresh complete: {len(results)} tools, stats: {cache.stats}")
     return results

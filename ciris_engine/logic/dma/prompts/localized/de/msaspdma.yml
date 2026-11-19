@@ -165,3 +165,6 @@ response_format: |
 # DEONTISCH — die abschließende Kategorische.
 closing_reminder: |
   Die Adresse richtig zu machen, ist der Sinn dieses Schritts.
+pipeline_position: |-
+  PIPELINE-POSITION: Die Aktionsauswahl hat nur das Verb gewählt; dieser Schritt prüft,
+  wohin der Schreibvorgang geht. Die Gewissen überprüfen die Aktion anschließend, bevor sie ausgeführt wird.

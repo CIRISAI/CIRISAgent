@@ -172,3 +172,7 @@ closing_reminder: 'IMPORTANTE: Seu papel é detectar problemas que o ASPDMA não
   Ao escolher TOOL, reconheça: "Prosseguindo com consciência da armadilha X"
 
   '
+pipeline_position: |-
+  POSIÇÃO NO PIPELINE: o ASPDMA escolheu apenas o nome da ferramenta e não fornece parâmetros.
+  Você preenche cada parâmetro da ferramenta, a partir da documentação e do pedido.
+  As consciências então revisam a chamada antes que ela seja executada.

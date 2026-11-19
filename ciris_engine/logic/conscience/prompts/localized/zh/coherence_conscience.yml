@@ -111,3 +111,4 @@ user_prompt_with_image_template: |-
 
   要评估连贯性的 CIRIS 代理回复：
   {text}
+pipeline_position: "流水线位置：您在动作选择之后、任何操作运行之前，与其他良知一起审查智能体已起草的动作。您能看到该请求，以及当前生效的已验证治理。"

@@ -40,6 +40,12 @@ named in :data:`REPLACEABLE_FIELDS` and re-verified static on every test run.
 A field that does not qualify takes an *additive* override, which cannot
 disable anything by construction.
 
+**Engine-owned text never lives in a replaceable field (#1366).** Every
+shipped template replaces ASPDMA ``system_header``, so the stage contract
+(pipeline position, roles and authority, conscience-override rule) is the
+separate engine field ``stage_contract``, read from the engine template and
+never from an override.
+
 Enforced by ``tests/ciris_engine/logic/dma/test_template_override_policy_996.py``.
 """
 

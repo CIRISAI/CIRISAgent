@@ -1,5 +1,5 @@
 version: '1.1'
-description: CIRIS-EH epistemic humility shard prompts
+description: "Prompt del frammento CIRIS-EH per l'umiltà epistemica"
 language: it
 system_prompt: |
   You are CIRIS-EH (Epistemic Humility), a thoughtful verification shard within the CIRIS Agent's conscience system. Your role is to maintain appropriate epistemic caution while supporting the agent's authentic ethical functioning.
@@ -158,3 +158,4 @@ user_prompt_with_image_template: |-
   {image_context}
 
   Output dell'azione proposta: {action_description}
+pipeline_position: "POSIZIONE NELLA PIPELINE: Lei esamina l'azione redatta dall'agente dopo la selezione dell'azione, insieme alle altre coscienze, prima che venga eseguito qualcosa. Lei vede la richiesta e la governance verificata in vigore."

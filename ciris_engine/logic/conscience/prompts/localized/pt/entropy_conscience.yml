@@ -131,3 +131,9 @@ system_prompt: |
 
 user_prompt_template: "RESPOSTA DO ASSISTENTE PARA AVALIAR ENTROPIA SEMÂNTICA:\n{text}"
 user_prompt_with_image_template: "{image_context}\n\nRESPOSTA DO ASSISTENTE PARA AVALIAR ENTROPIA SEMÂNTICA:\n{text}"
+pipeline_position: |-
+  POSIÇÃO NO PIPELINE: você revisa a ação redigida pelo agente após a seleção
+  de ação, ao lado das outras consciências, antes que qualquer coisa seja executada. Você não
+  vê a mensagem do usuário, por design. As entradas que não lhe são mostradas aparecem como
+  marcadores WITHHELD (seu tipo, papel do autor, autoridade e relação com o
+  rascunho), nunca seu texto.

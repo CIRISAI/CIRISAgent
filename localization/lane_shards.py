@@ -20,8 +20,8 @@ Ownership is a closed list of paths per locale (``owned_files``): for
 ``TARGET=ui`` the agent bundle ``ciris_engine/data/localized/<lang>.json``; for
 ``TARGET=accord`` the staged segment bundle ``localization/accord/<stage>/<lang>.json``
 and the reassembled ``ciris_engine/data/localized/<stem>_<version>_<lang>.txt``.
-For ``TARGET=prompts`` it is the locale's DMA prompt templates,
-``ciris_engine/logic/dma/prompts/localized/<lang>/<template>.yml``.
+For ``TARGET=prompts`` it is the locale's DMA and conscience prompt templates,
+``ciris_engine/logic/{dma,conscience}/prompts/localized/<lang>/<template>.yml``.
 A shard's checkout also rewrites other locales' files (the stage seeds all 28),
 which is exactly why only owned paths travel.
 """
@@ -126,11 +126,10 @@ def owned_files(target: str, langs: Sequence[str], *, version: str = "", stem: s
             out.append(f"{stage}/{lang}.json")
             out.append(acc.accord_path(LOCALIZED, version, lang, stem).relative_to(REPO_ROOT).as_posix())
         elif target == "prompts":
-            # One file per English template; the stage is temporary and never shipped.
-            out.extend(
-                f"{prompt_localize.PROMPTS_REL}/localized/{lang}/{name}.yml"
-                for name in prompt_localize.template_names()
-            )
+            # One file per English template, DMA and conscience roots alike (the
+            # polyglot optimization veto has no per-locale file); the stage is
+            # temporary and never shipped.
+            out.extend(prompt_localize.locale_rel_paths(lang))
         else:
             raise SystemExit(f"[refuse] TARGET must be accord, ui or prompts, got {target!r}")
     return out

@@ -87,3 +87,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  Posição no pipeline: você executa primeiro, ao lado de PDMA e CSDMA. O IDMA então revisa
+  os três, a seleção de ação escolhe a ação, e as consciências
+  a revisam.

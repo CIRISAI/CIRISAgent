@@ -70,3 +70,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   올바른 노드, 오직 그 노드만을 제거하는 것이 이 단계의 전체 목적입니다.
+pipeline_position: "파이프라인 위치: 작업 선택은 동사만을 선택했습니다; 이 단계는 노드를 지정합니다. 이후 양심들이 작업이 실행되기 전에 그것을 검토합니다."

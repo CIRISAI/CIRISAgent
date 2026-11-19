@@ -185,10 +185,16 @@ def test_committed_arms_round_trip_the_english_veto_conscience() -> None:
     base = yaml.safe_load(
         (REPO / "ciris_engine/logic/conscience/prompts/optimization_veto_conscience.yml").read_text(encoding="utf-8")
     )
+    # #1366 item 12: production renders system_prompt, pipeline_position and system_prompt_tail as one system
+    # message; an arm that replaces system_prompt empties the other two, so it must carry all three joined.
+    rendered = dict(base)
+    rendered["system_prompt"] = "\n\n".join(
+        p for p in (base["system_prompt"], base.get("pipeline_position") or "", base.get("system_prompt_tail", "")) if p
+    )
     for arm in ("ethics-text-1.2b-control.json", "ethics-text-1.3-candidate.json"):
         cp = json.loads(_read(MANIFESTS / arm))["overrides"]["conscience_prompt"]
         for key, value in cp.items():
-            assert value == base[key.split(".", 1)[1]], f"{arm}: {key} drifted from the base yml"
+            assert value == rendered[key.split(".", 1)[1]], f"{arm}: {key} drifted from the base yml"
 
 
 # ---------------------------------------------------------------------------

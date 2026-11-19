@@ -2,7 +2,7 @@
 # Semantic implementation of Coherence Collapse Analysis (CCA) principles
 
 component_name: idma
-description: "Intuition DMA - applies CCA k_eff formula and phase classification"
+description: "অন্তর্দৃষ্টি DMA - CCA k_eff সূত্র এবং ফেজ শ্রেণিবিভাগ প্রয়োগ করে"
 version: "1.1"
 
 # Include the CIRIS Accord as context
@@ -227,3 +227,4 @@ closing_reminder: |
   মনে রাখবেন: প্রচারণা উৎসগুলিকে নির্মূল করে আপাত ঐক্যমত অর্জন করে,
   সংশ্লেষণের মাধ্যমে নয়। IDMA-এর কাজ হল এই জ্ঞানতাত্ত্বিক দখলকে সনাক্ত করা এবং
   বিবেক পর্যালোচনার জন্য চিহ্নিত করা। সন্দেহ হলে, চিহ্নিত করুন।
+pipeline_position: "পাইপলাইন অবস্থান: আপনি PDMA, CSDMA এবং DSDMA-এর পরে চলেন এবং তাদের যুক্তি পর্যালোচনা করেন। এরপর কর্ম নির্বাচন আপনার ফলাফল পড়ে, তারপর বিবেকগুলো নির্বাচিত কর্মটি পর্যালোচনা করে। আপনাকে এজেন্টের পরিচয় টেমপ্লেট দেখানো হয় না; আপনাকে বলবৎ যাচাইকৃত শাসন দেখানো হয়।"

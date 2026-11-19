@@ -133,6 +133,33 @@ def _provider_fault_code(service_provider: object) -> str:
     return str(getattr(service, "last_fault_code", "") or "").strip().lower()
 
 
+#: Spending-limit fault slug -> (warning code == status string key, severity).
+_LIMIT_FAULT_WARNINGS: dict[str, tuple[str, str]] = {
+    "in_flight_budget": ("llm_in_flight_budget", "warning"),
+    "request_too_large": ("llm_request_too_large", "error"),
+    "key_limit": ("llm_key_limit", "error"),
+    "budget_limit": ("llm_budget_limit", "error"),
+}
+
+#: Faults that clear themselves: once the provider has answered since, they are
+#: history, not a live problem, and health stops reporting them.
+_TRANSIENT_FAULTS = frozenset({"in_flight_budget"})
+
+
+def _fault_has_cleared(service_provider: object, fault_code: str) -> bool:
+    """A transient fault the provider has since answered past (``live_fault_code`` is empty)."""
+    if fault_code not in _TRANSIENT_FAULTS:
+        return False
+    service = getattr(service_provider, "instance", service_provider)
+    reader = getattr(service, "live_fault_code", None)
+    if not callable(reader):
+        return False
+    try:
+        return not reader()
+    except Exception:  # pragma: no cover - never fail health on this
+        return False
+
+
 # "HTTP 401", "http/401", "status 401", "code: 401" — a status, not a token count.
 _HTTP_401 = re.compile(r"\b(?:http|https|status|code|error)\b[^0-9a-z]{0,4}401\b")
 
@@ -205,7 +232,7 @@ def _fault_warning(
     than inventing an instruction that might send the reader somewhere wrong.
     """
 
-    def _warn(code: str, key: str) -> SystemWarning:
+    def _warn(code: str, key: str, severity: str = "error") -> SystemWarning:
         return SystemWarning(
             code=code,
             message=get_string(
@@ -214,7 +241,7 @@ def _fault_warning(
                 provider=name,
                 model=model,
             ),
-            severity="error",
+            severity=severity,
             action_url="/settings/llm" if can_manage else None,
         )
 
@@ -227,6 +254,14 @@ def _fault_warning(
         return _warn("llm_model_not_found", "llm_model_not_found")
     if fault == "invalid_api_key":
         return _warn("llm_key_rejected", "llm_key_rejected")
+    # Provider spending limits (#1366 item 20), named by OpenRouter's own
+    # limit_source. Four different remedies: the in-flight budget is transient
+    # (the agent waits and retries); a request too large for it needs a smaller
+    # request or more credit; a KEY limit is the key's own cap, which account
+    # credit does not lift; a budget limit is a guardrail/workspace budget.
+    if fault in _LIMIT_FAULT_WARNINGS:
+        code, severity = _LIMIT_FAULT_WARNINGS[fault]
+        return _warn(code, code, severity)
     if fault:
         # Structured, but not one we have an instruction for. Say nothing
         # specific rather than guess — the generic line still fires.
@@ -279,6 +314,10 @@ def _llm_breaker_warnings(providers: Sequence[object], can_manage: bool = True) 
 
         # The actionable fault, if we can name the remedy with confidence.
         fault_code = _provider_fault_code(sp)
+        if _fault_has_cleared(sp, fault_code):
+            # A retried in-flight refusal the provider has since answered past:
+            # nothing to report, not even as a generic "provider failed".
+            fault_code, err = "", ""
         fault = _fault_warning(lang, role, name, model, err, fault_code, can_manage) if (err or fault_code) else None
         if fault:
             warnings.append(fault)

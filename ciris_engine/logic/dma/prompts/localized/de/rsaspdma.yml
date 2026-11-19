@@ -88,3 +88,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Das Suchen am richtigen Ort ist der ganze Sinn dieses Schritts.
+pipeline_position: |-
+  PIPELINE-POSITION: Die Aktionsauswahl hat nur das Verb gewählt; dieser Schritt legt fest, was
+  gelesen werden soll. Ein RECALL liest nur, daher läuft es ohne Gewissensprüfung.

@@ -9,10 +9,14 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.types import JSONDict
 
-from .enums import TaskStatus, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.services.authority_core import WARole
+
+from .enums import TaskOrigin, TaskStatus, ThoughtStatus, ThoughtType
 from .task_envelope import TaskEnvelope
+from .veto_record import VetoRecordEntry
 
 
 class ImageContent(BaseModel):
@@ -70,12 +74,84 @@ class WAAuthorization(BaseModel):
             "so the node can check the approval answers THIS agent's deferral. None where response_attestation_id is."
         ),
     )
+    amendment_text: Optional[str] = Field(
+        None,
+        description=(
+            "The exact identity amendment the Wise Authority approved (CIRISAgent#1366 F1). An identity-scope "
+            "MEMORIZE in this task writes these bytes, never the model's wording. None: the approval approves no "
+            "identity change, and no amendment lands (Eric, 2026-11-18: no legacy grace)."
+        ),
+    )
+    amendment_sha256: Optional[str] = Field(
+        None, description="sha256 (lowercase hex) of amendment_text, as the signed resolution committed to it"
+    )
+    proposed_amendment: Optional[str] = Field(
+        None,
+        description=(
+            "The text the agent's deferral proposed (#1366). Differs from amendment_text when the Wise Authority "
+            "edited it; the edited text is what the consciences review, and it needs its own M-1 justification."
+        ),
+    )
+    m1_justification: Optional[str] = Field(
+        None,
+        description="The deferral's M-1 (Adaptive Coherence) justification of proposed_amendment, as the WA saw it",
+    )
+    identity_change_kind: Optional[str] = Field(
+        None, description="amendment | reapproval: what the deferral proposed (schemas.api.wa.IdentityChangeKind)"
+    )
+    wa_role: Optional[WARole] = Field(
+        None,
+        description=(
+            "The resolving Wise Authority's role, read from its certificate when the approval was applied. None "
+            "when the certificate was not found: the role is then not verified."
+        ),
+    )
     verification: Literal["verified"] = Field(
         "verified",
         description="Only a verified approval can be represented; unsigned or failed ones grant nothing",
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
+
+
+class VerifiedSender(BaseModel):
+    """Who sent the message that created a task, as the adapter verified it (#1366 item 5, #1365).
+
+    Built by the observer from the adapter's own fields, never from message
+    text. The model used to see the sender only as ``@display-name (ID: …,
+    role: …)`` inside the observation text, and on v2.21.0 two consciences
+    read the display name as the identity and overturned a correct
+    ID-mismatch refusal. This record keeps the three apart:
+
+    - ``user_id``: the id the adapter's authentication (or platform) attached.
+    - ``role``: the role the adapter's authentication verified (the API's
+      ``AuthContext.role``); None where the adapter does not verify roles.
+      Never inferred: the ``wa-`` prefix every minted user id carries is not
+      a role.
+    - ``self_chosen_display_name``: the name the sender chose. Kept only so it
+      can be labelled as not identity.
+
+    Not :class:`RequesterAuthorization`: that record floors an unknown role to
+    OBSERVER for the envelope, and a prompt has to be able to say "not
+    verified" instead.
+    """
+
+    user_id: Optional[str] = Field(None, description="Sender id as the adapter verified it")
+    role: Optional[UserRole] = Field(
+        None, description="Sender role from the adapter's authentication; None when the adapter does not verify roles"
+    )
+    source: str = Field(
+        "unverified",
+        description=(
+            "What vouches for the id and role: '<adapter>_auth' (e.g. 'api_auth') when the role came from "
+            "authentication, the adapter name when only the platform id is known, 'unverified' otherwise"
+        ),
+    )
+    self_chosen_display_name: Optional[str] = Field(
+        None, description="The sender's self-chosen display name. Not identity."
+    )
+
+    model_config = ConfigDict(extra="forbid", frozen=True, defer_build=True)
 
 
 class TaskContext(BaseModel):
@@ -113,6 +189,20 @@ class TaskContext(BaseModel):
             "means no WA authorization."
         ),
     )
+    verified_sender: Optional[VerifiedSender] = Field(
+        None,
+        description=(
+            "The sender of the message that created this task, as the adapter verified it "
+            "(#1366 item 5). None for tasks not created from a message."
+        ),
+    )
+    origin: Optional[TaskOrigin] = Field(
+        None,
+        description=(
+            "Who created the task, set by the creating code (#1366). None on records written before the field "
+            "existed, and never read as an engine origin."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
 
@@ -145,6 +235,15 @@ class ThoughtContext(BaseModel):
             "ISO 639-1 language code for the agent's working language on this "
             "thought. Inherited from the parent task's preferred_language at "
             "thought creation time. Top of the localization chain."
+        ),
+    )
+    verified_sender: Optional[VerifiedSender] = Field(
+        None,
+        description=(
+            "The sender of the message THIS thought answers, as the adapter verified it (#1366 item 5). "
+            "Per message, not per task: a message coalesced onto a channel's active task carries its own "
+            "sender here, so it is never rendered under the task creator's verified identity. None means "
+            "the thought answers the message that created its task (TaskContext.verified_sender applies)."
         ),
     )
 
@@ -211,9 +310,22 @@ class Task(BaseModel):
     updated_info_content: Optional[str] = Field(
         None, description="New observation content that arrived after task creation"
     )
+    updated_info_sender: Optional[VerifiedSender] = Field(
+        None,
+        description=(
+            "The verified sender of updated_info_content (#1366 item 5): the coalesced message's own "
+            "sender, never the task creator's. The thought that answers the update renders this one."
+        ),
+    )
     # Native multimodal support - images attached to task flow through to LLM
     images: List[ImageContent] = Field(
         default_factory=list, description="Images attached to this task for multimodal processing"
+    )
+    # The conscience vetoes raised on this task's drafts (CIRISAgent#1366 item
+    # 8). Each conscience call is stateless, so without this a vetoed action
+    # could pass on a later roll; every retry and follow-up thought reads it.
+    veto_record: List[VetoRecordEntry] = Field(
+        default_factory=list, description="Typed conscience vetoes raised on this task's drafts"
     )
 
     model_config = ConfigDict(extra="forbid", defer_build=True)
@@ -260,6 +372,7 @@ __all__ = [
     "Task",
     "Thought",
     "TaskContext",
+    "VerifiedSender",
     "TaskOutcome",
     "ThoughtContext",
     "FinalAction",

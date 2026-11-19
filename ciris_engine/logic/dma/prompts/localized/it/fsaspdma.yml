@@ -80,3 +80,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Rimuovere il nodo giusto, e solo quello, è l'intero scopo di questo passo.
+pipeline_position: "POSIZIONE NELLA PIPELINE: la selezione dell'azione ha scelto solo il verbo; questo passaggio indica il nodo. Le coscienze esaminano poi l'azione prima che venga eseguita."

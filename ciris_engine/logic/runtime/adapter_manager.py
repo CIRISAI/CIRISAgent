@@ -1125,6 +1125,7 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                 _collect_enrichment_tools,
                 _execute_enrichment_tool,
                 _get_tool_providers,
+                enrichment_cache_subject,
                 get_enrichment_cache,
             )
 
@@ -1147,6 +1148,10 @@ class RuntimeAdapterManager(AdapterManagerInterface):
             cache = get_enrichment_cache()
             # Use _get_tool_providers to get (instance, adapter_name) tuples
             tool_providers = _get_tool_providers(self.runtime.service_registry)
+            # Through the dispatch gate, as the system: no task owns this warm (#1366 item 19).
+            bus_manager = getattr(self.runtime, "bus_manager", None)
+            tool_bus = getattr(bus_manager, "tool", None) if bus_manager is not None else None
+            subject = enrichment_cache_subject(available_tools, f"adapter-load:{instance.adapter_id}")
 
             for adapter_type, tool in enrichment_tools:
                 tool_key = f"{adapter_type}:{tool.name}"
@@ -1155,7 +1160,9 @@ class RuntimeAdapterManager(AdapterManagerInterface):
                     if cache.get(tool_key) is not None:
                         continue
 
-                    _, result = await _execute_enrichment_tool(tool_providers, adapter_type, tool)
+                    _, result = await _execute_enrichment_tool(
+                        tool_providers, adapter_type, tool, tool_bus=tool_bus, subject=subject
+                    )
                     if result is not None:
                         params = tool.context_enrichment_params or {}
                         ttl_raw = params.get("_cache_ttl")

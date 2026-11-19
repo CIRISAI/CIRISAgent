@@ -478,6 +478,48 @@ task-bound subject to masquerade as a component subject or vice versa.
   design — `get_tool_result(correlation_id)` consumers depend on the format).
   The subject, not the correlation id, is now the identity carrier.
 
+### Phase 2 as built (CIRISAgent#1366 item 19)
+
+The gate is `logic/infrastructure/authorization/dispatch_gate.py`, called by
+`ToolBus.dispatch_to_provider` after the halt backstop. It ENFORCES; every
+refusal is typed (`schemas/runtime/reviewed_action_admission.py`), logged at
+ERROR (incident log) and returned as `UNAUTHORIZED` with the reason id.
+
+- No subject / no envelope: `ciris.tool_gate.no_subject` / `no_envelope`.
+- Tool not in `granted_tools` (an approval envelope is unioned with the
+  deployment grant on this axis, per `tool_approval.py` §2): `tool_not_granted`.
+- REASONING calls (rc21 §4): the handler carries the reviewed call (secret
+  references); the gate recomputes `SHA-256(CDE(["CEG-call/2", verb, tool,
+  arguments, channel]))` with the tool it is running and requires a `passed`
+  review record for that fingerprint in this thought with all four faculties
+  (`action_not_reviewed`, `action_review_incomplete`), no undischarged
+  objection on the same fingerprint (`action_objection_undischarged`), the
+  approval's `call_fingerprint` when the call rests on a WA approval
+  (`action_approval_mismatch`), a declared untrusted derivation and no claimed
+  authority without its trusted row (`effect_untrusted_unacknowledged`), and
+  dispatch arguments equal to the reviewed ones plus only `channel_id` /
+  `task_id`. One review admits one execution.
+- Unreviewed by design, enumerated in `SYSTEM_CALLERS` and nowhere else:
+  DSAR (`governance_service`, the four SQL tools), operator connector setup
+  (`adapter_lifecycle`, `initialize_sql_connector` / `sql_query`), and the
+  enrichment cache warm (`system_enrichment`: startup, adapter load, operator
+  refresh; only tools whose provider declares `context_enrichment=True`). Each
+  carries its own SYSTEM_COMPONENT envelope. Task-bound enrichment
+  (`CONTEXT_ENRICHMENT`) runs unreviewed under the task's own envelope, again
+  only for declared enrichment tools.
+- Writes into an adapter discovery root are refused for every origin
+  (`adapter_path_write`).
+
+Blockers cleared: the grant is primed by the critical init step "Prime Tool
+Envelope Grant" (startup fails on an empty registry); dream, partnership,
+shared WAKEUP/SHUTDOWN, `add_system_task` and WA guidance tasks are issued
+envelopes; the no-bus enrichment fallback is removed; `DiscordAdapter.execute_tool`
+refuses any call that did not arrive through a gated dispatch; the discovery
+service refuses cwd-relative adapter roots the desktop host tools write.
+Still open: `shell_command` can write `~/ciris/adapters` (needs Phase 5's
+provider-set filter or signed adapter manifests), and denial is not yet routed
+to WBD deferral (rule 5) or attested (rule 6) beyond the review record.
+
 ---
 
 ## 9. Deferred / open

@@ -80,3 +80,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   ትክክለኛውን ኖድ ብቻ ማስወገድ የዚህ ደረጃ ዋና ነጥብ ነው።
+pipeline_position: "የፓይፕላይን አቀማመጥ፦ የተግባር ምርጫ ግሱን ብቻ መርጧል፤ ይህ ደረጃ ኖዱን ይሰይማል። ከዚያ ህሊናዎቹ ተግባሩ ከመፈጸሙ በፊት ይገመግሙታል።"

@@ -82,3 +82,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  Позиция в конвейере: вы выполняетесь первым, наряду с PDMA и CSDMA. IDMA затем рассматривает
+  все три, выбор действия выбирает действие, а совести
+  проверяют его.

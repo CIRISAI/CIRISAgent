@@ -80,3 +80,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Remover o nó certo, e apenas esse nó, é o propósito inteiro desta etapa.
+pipeline_position: |-
+  POSIÇÃO NO PIPELINE: a seleção de ação escolheu apenas o verbo; esta etapa nomeia o
+  nó. As consciências então revisam a ação antes que ela seja executada.

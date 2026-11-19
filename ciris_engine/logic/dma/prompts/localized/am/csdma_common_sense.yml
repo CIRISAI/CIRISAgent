@@ -52,3 +52,4 @@ context_integration: |
   ዋና ሀሳብ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**የፓይፕላይን አቀማመጥ**፦ ከPDMA እና DSDMA ጎን መጀመሪያ ትሮጣላችሁ። ከዚያ የማሰብ ፍተሻ ሦስቱንም ይገመግማል፣ የተግባር ምርጫ ተግባሩን ይመርጣል፣ እና ህሊናዎቹ ይገመግሙታል።"

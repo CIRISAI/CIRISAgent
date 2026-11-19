@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 from ciris_engine.logic import persistence
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.logic.utils.halt_latch import accord_pause_notice
-from ciris_engine.logic.context.identity_amendments import load_identity_amendments
+from ciris_engine.logic.context.identity_profile import IdentityBase, load_identity_profile
 from ciris_engine.schemas.infrastructure.identity_variance import IdentityData
 from ciris_engine.schemas.runtime.models import Task
 from ciris_engine.schemas.runtime.system_context import ContinuitySummary, SystemSnapshot, TaskSummary, TelemetrySummary
@@ -275,8 +275,16 @@ async def prefetch_batch_context(
                             "trust_level": attrs.get("trust_level", 0.5),
                             "stewardship": attrs.get("stewardship"),
                         }
+                        amendments, profile = await load_identity_profile(
+                            memory_service,
+                            IdentityBase(
+                                agent_id=str(identity_dict["agent_id"]),
+                                description=str(identity_dict["description"] or ""),
+                                role=str(identity_dict["role"] or ""),
+                            ),
+                        )
                         batch_data.agent_identity = IdentityData(
-                            **identity_dict, approved_amendments=await load_identity_amendments(memory_service)
+                            **identity_dict, approved_amendments=amendments, profile=profile
                         )
                     except Exception as e:
                         logger.warning(f"Failed to create IdentityData from attributes: {e}")

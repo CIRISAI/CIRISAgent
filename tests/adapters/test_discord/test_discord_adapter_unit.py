@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 
 from ciris_engine.logic.adapters.discord.discord_adapter import DiscordAdapter
+from ciris_engine.logic.infrastructure.authorization.dispatch_gate import gated_dispatch
 from ciris_engine.logic.persistence import initialize_database
 from ciris_engine.logic.services.lifecycle.time import TimeService
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus, ToolInfo, ToolParameterSchema
@@ -233,7 +234,9 @@ class TestDiscordAdapter:
         )
 
         with patch.object(adapter._tool_handler, "execute_tool", return_value=expected_result) as mock_execute:
-            result = await adapter.execute_tool(tool_name="test_tool", parameters={"input": "test"})
+            # The adapter runs tools only inside a gated ToolBus dispatch (#1366 item 19).
+            with gated_dispatch("test_tool"):
+                result = await adapter.execute_tool(tool_name="test_tool", parameters={"input": "test"})
 
             assert result.status == ToolExecutionStatus.COMPLETED
             assert result.success is True

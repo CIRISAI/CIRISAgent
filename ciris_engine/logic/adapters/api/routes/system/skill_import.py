@@ -7,6 +7,7 @@ Supports importing from:
 - Local file path (for CLI/desktop use)
 """
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -431,8 +432,25 @@ def _build_preview(skill: ParsedSkill, module_name: str) -> SkillPreviewResponse
     )
 
 
-async def _try_auto_load(request: Request, module_name: str) -> bool:
-    """Attempt to load the imported adapter into the running runtime."""
+async def unit_admission_refusal(adapter_path: Path, module_name: str) -> Optional[str]:
+    """Code admission for an imported or built skill (rc21 CC 2.7.11).
+
+    A skill is a unit beyond the attested build: it loads only under a live
+    admission:unit row naming the digest of the files just written. Returns the
+    refusal (token and the operator notice) or None when admitted.
+    """
+    from ciris_engine.logic.infrastructure.authorization.unit_admission import check_unit_load_sync
+
+    decision = await asyncio.to_thread(check_unit_load_sync, adapter_path, module_name)
+    if decision is None or decision.admitted:
+        return None
+    return f"{decision.message()} (unit {decision.unit_digest}). {decision.operator_notice or ''}".strip()
+
+
+async def _try_auto_load(request: Request, module_name: str, adapter_path: Optional[Path] = None) -> bool:
+    """Attempt to load the imported adapter into the running runtime (only if admitted)."""
+    if adapter_path is not None and await unit_admission_refusal(adapter_path, module_name) is not None:
+        return False
     try:
         adapter_manager = getattr(request.app.state, "adapter_manager", None)
         if not adapter_manager:
@@ -665,12 +683,16 @@ async def import_skill(
 
     # Auto-load if requested
     auto_loaded = False
-    if body.auto_load:
-        auto_loaded = await _try_auto_load(request, module_name)
+    refusal = await unit_admission_refusal(adapter_path, module_name)
+    if body.auto_load and refusal is None:
+        auto_loaded = await _try_auto_load(request, module_name, adapter_path)
 
     preview = _build_preview(skill, module_name)
 
-    load_msg = " and loaded into runtime" if auto_loaded else " (restart to activate)"
+    if refusal is not None:
+        load_msg = f"; not loaded: {refusal}"
+    else:
+        load_msg = " and loaded into runtime" if auto_loaded else " (restart to activate)"
     return SkillImportResponse(
         success=True,
         module_name=module_name,

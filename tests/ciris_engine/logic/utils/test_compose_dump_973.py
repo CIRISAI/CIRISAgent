@@ -117,9 +117,14 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
             "system.head",
             "csdma_common_sense.system_guidance_header",
             "system.join1",
+            # #1366 item 12: the pipeline position, then the rest of the header.
+            "csdma_common_sense.pipeline_position",
+            "system.join2",
+            "csdma_common_sense.system_guidance_header_tail",
+            "system.join3",
             "csdma_common_sense.evaluation_steps",
             "csdma_common_sense.evaluation_steps.slots",
-            "system.join2",
+            "system.join4",
             "csdma_common_sense.response_format",
             "system.tail",
             "csdma_common_sense.context_integration",
@@ -133,6 +138,11 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "system.head",  # 2.22.0: the identity block, amendments included
         "pdma_ethical.system_guidance_header",
         "pdma_ethical.system_guidance_header.slots",
+        "system.join1",
+        # #1366 item 12: the pipeline position, then the rest of the header.
+        "pdma_ethical.pipeline_position",
+        "system.join2",
+        "pdma_ethical.system_guidance_header_tail",
         # #1320: `prompts.wa_approval.only_verified` follows the composed system
         # message, joined by the composer, so it reports as named residue.
         "system.tail",
@@ -145,10 +155,15 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "crisis",  # #1248: crisis block directly after language guidance
         "idma.system_guidance_header",
         "system.join1",
-        "idma.evaluation_steps",
+        # #1366 item 12: the pipeline position, then the rest of the header.
+        "idma.pipeline_position",
         "system.join2",
-        "idma.response_format",
+        "idma.system_guidance_header_tail",
         "system.join3",
+        "idma.evaluation_steps",
+        "system.join4",
+        "idma.response_format",
+        "system.join5",
         "idma.closing_reminder",
         "system.tail",
         "idma.context_integration",
@@ -185,8 +200,14 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
             "system.head",
             "action_selection_pdma.system_header",
             "system.join1",
-            "action_selection_pdma.decision_format",
+            # #1366 item 12 — the pipeline position, a field of its own.
+            "action_selection_pdma.pipeline_position",
             "system.join2",
+            # #1366 — the engine contract, outside the template-replaceable header.
+            "action_selection_pdma.stage_contract",
+            "system.join3",
+            "action_selection_pdma.decision_format",
+            "system.join4",
             "action_selection_pdma.closing_reminder",
             "system.tail",
             "action_selection_pdma.context_integration",
@@ -202,12 +223,18 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "accord",
         *LANGUAGE_GUIDANCE_BLOCKS,
         "crisis",  # #1248: crisis block directly after language guidance
+        "system.head",  # #1366: the agent identity block opens every DSASPDMA guide
         "dsaspdma.system_guidance_header",
         "system.join1",
-        "dsaspdma.evaluation_steps",
+        # #1366 item 12 — the pipeline position, then the rest of the header.
+        "dsaspdma.pipeline_position",
         "system.join2",
-        "dsaspdma.response_format",
+        "dsaspdma.system_guidance_header_tail",
         "system.join3",
+        "dsaspdma.evaluation_steps",
+        "system.join4",
+        "dsaspdma.response_format",
+        "system.join5",
         "dsaspdma.closing_reminder",
         "user.head",
         "dsaspdma.taxonomy_text",
@@ -219,10 +246,15 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "crisis",  # #1248: crisis block directly after language guidance
         "tsaspdma.system_guidance_header",
         "system.join1",
-        "tsaspdma.evaluation_steps",
+        # #1366 item 12: the pipeline position, then the rest of the header.
+        "tsaspdma.pipeline_position",
         "system.join2",
-        "tsaspdma.response_format",
+        "tsaspdma.system_guidance_header_tail",
         "system.join3",
+        "tsaspdma.evaluation_steps",
+        "system.join4",
+        "tsaspdma.response_format",
+        "system.join5",
         "tsaspdma.closing_reminder",
         "tsaspdma.context_integration",
         "tsaspdma.context_integration.slots",
@@ -233,10 +265,15 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
         "crisis",  # #1248: crisis block directly after language guidance
         "tsaspdma.system_guidance_header",
         "system.join1",
-        "tsaspdma.evaluation_steps",
+        # #1366 item 12: the pipeline position, then the rest of the header.
+        "tsaspdma.pipeline_position",
         "system.join2",
-        "tsaspdma.response_format",
+        "tsaspdma.system_guidance_header_tail",
         "system.join3",
+        "tsaspdma.evaluation_steps",
+        "system.join4",
+        "tsaspdma.response_format",
+        "system.join5",
         "tsaspdma.closing_reminder",
         "user.head",
         "tsaspdma.tool_correction_section",
@@ -485,6 +522,7 @@ blocks:
   language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
   universal_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
+  pdma_ethical.system_guidance_header_tail: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.closing_reminder: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
   coherence_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
@@ -523,6 +561,7 @@ blocks:
   language_guidance.23_ratification_templates: {disposition: hold, confound_accepted: [axiotic]}
   universal_guidance.25_exemplar_cross_cluster: {disposition: hold, confound_accepted: [axiotic]}
   pdma_ethical.system_guidance_header: {disposition: hold, confound_accepted: [axiotic]}
+  pdma_ethical.system_guidance_header_tail: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.closing_reminder: {disposition: hold, confound_accepted: [axiotic]}
   action_selection_pdma.context_integration.slots: {disposition: hold, confound_accepted: [axiotic]}
   coherence_conscience.system_prompt: {disposition: hold, confound_accepted: [axiotic]}
@@ -546,3 +585,30 @@ def test_residue_fragments_are_normalized_and_bounded() -> None:
         assert "::" in fragment_id
         assert "\n" not in text  # whitespace-normalized
         assert len(text) >= 40
+
+
+@pytest.mark.parametrize("step", ["dsaspdma", "msaspdma"])
+def test_an_english_fallback_position_is_attributed_not_a_gap(step: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1366 item 12: a locale copy lacking ``pipeline_position`` renders the English paragraph.
+
+    DSASPDMA / MSASPDMA read that fallback outside ``_get_prompt_value``; unrecorded, its bytes were an
+    unattributed ``<step>.system.gap1`` (``mixed``, refused by §10.2.1 — the am compose gate before am
+    translated the field). It must report as the field it is. Synthetic: ``am`` with the field removed.
+    """
+    from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+
+    real_load = DMAPromptLoader.load_prompt_template
+
+    def without_position(self: DMAPromptLoader, template_name: str):  # type: ignore[no-untyped-def]
+        collection = real_load(self, template_name)
+        if self.language == "am" and template_name == step:
+            return collection.model_copy(update={"pipeline_position": None})
+        return collection
+
+    monkeypatch.setattr(DMAPromptLoader, "load_prompt_template", without_position)
+    _, rows = compose_dump_rows(arm="h3ere-ciris", locales=["am"], steps=[step])
+    system = [r for r in rows if r.parent_block_id == f"{step}.system"]
+    assert system, "premise: the step composed a system guide"
+    assert not [r.block_id for r in system if ".gap" in r.block_id]
+    position = [r for r in system if r.block_id == f"{step}.{step}.pipeline_position"]
+    assert len(position) == 1 and position[0].block_class is BlockClass.PROCEDURAL

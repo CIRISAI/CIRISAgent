@@ -39,6 +39,9 @@ class TestIDMAEvaluator:
         mock_collection.get_user_message = Mock(return_value="Prior DMA context to analyze")
 
         mock_loader.load_prompt_template = Mock(return_value=mock_collection)
+        # The prompt is built by PromptAssembler (#1366): the language and accord mode are real values.
+        mock_loader.language = "en"
+        mock_loader.get_accord_mode = Mock(return_value="default")
         mock_loader.uses_accord_header = Mock(return_value=True)
         mock_loader.get_system_message = Mock(return_value="Evaluate epistemic diversity.")
         mock_loader.get_user_message = Mock(return_value="Prior DMA context to analyze")

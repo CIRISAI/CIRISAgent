@@ -72,7 +72,7 @@ async def test_the_record_leads_the_user_prompt(cls, result):
 
     with patch(_RECORD_FN, return_value=RECORD) as record_fn:
         await conscience.check(action, _context())
-    record_fn.assert_called_once_with("task1", "default", "en")
+    record_fn.assert_called_once_with("task1", "default", "en", factual=True)
     assert seen["messages"][-1].role == "user"
     assert seen["messages"][-1].content.startswith(RECORD)
 

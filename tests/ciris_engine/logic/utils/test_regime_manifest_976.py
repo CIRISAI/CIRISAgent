@@ -112,6 +112,11 @@ def _baseline_blocks() -> Dict[str, dict]:
             **held,
             "contaminant": ["procedural", "axiotic", "structural"],
         },
+        # #1366 item 12: the rest of the same scalar, after its pipeline position.
+        "pdma_ethical.system_guidance_header_tail": {
+            **held,
+            "contaminant": ["procedural", "axiotic", "structural"],
+        },
         "action_selection_pdma.closing_reminder": {
             **held,
             "contaminant": ["ontological", "axiotic", "procedural", "pragmatic", "contingent"],

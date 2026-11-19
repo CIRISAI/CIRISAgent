@@ -159,3 +159,4 @@ response_format: |
 # DEONTICO — il categoico di chiusura.
 closing_reminder: |
   Fare bene l'indirizzo è tutto il punto di questo passaggio.
+pipeline_position: "POSIZIONE NELLA PIPELINE: la selezione dell'azione ha scelto solo il verbo; questo passaggio verifica dove viene diretta la scrittura. Le coscienze esaminano poi l'azione prima che venga eseguita."

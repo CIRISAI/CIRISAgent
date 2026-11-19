@@ -168,3 +168,7 @@ closing_reminder: 'ÖNEMLİ: Rolünüz, ASPDMA''nın tam dokümantasyon olmadan 
   TOOL seçerken, kabul edin: "X dikkat edilmesi gerekeninin farkındalığıyla devam ediyorum"
 
   '
+pipeline_position: |-
+  HAT KONUMU: ASPDMA yalnızca araç adını seçti ve hiçbir parametre
+  sağlamadı. Dokümantasyondan ve istekten yararlanarak her araç parametresini
+  siz doldurursunuz. Vicdanlar daha sonra çağrı çalışmadan önce onu inceler.

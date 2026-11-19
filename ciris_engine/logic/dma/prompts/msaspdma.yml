@@ -99,14 +99,19 @@ memory_prohibitions: |
   wants it retained, ask rather than store.
 
 # PROCEDURAL — what this step is.
-system_guidance_header: |
+system_guidance_header: |-
   You have selected MEMORIZE. Before it executes you are shown the graph's
   conventions and the nodes that already exist, so you can check the write is
   addressed correctly.
-
+# #1366 item 12 — where this stage sits and what it cannot see: a STRUCTURAL
+# field, emitted as its own `pipeline_position` segment between the field
+# above and `system_guidance_header_tail` (same bytes as when it sat inside it). Read from the
+# engine template only, so no agent-template override can replace it; a
+# locale without its own copy gets this English one.
+pipeline_position: |-
   PIPELINE POSITION: action selection chose the verb only; this step checks
   where the write goes. The consciences then review the action before it runs.
-
+system_guidance_header_tail: |
   This is a second look, not a correction: nothing has been changed for you. If
   the node you chose is wrong, say what it should be. If you should not be
   storing this at all, switch action.

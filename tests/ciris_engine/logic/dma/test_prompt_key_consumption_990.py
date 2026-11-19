@@ -201,6 +201,14 @@ def _calls_shared_composer(path: pathlib.Path) -> bool:
     return False
 
 
+def _calls(path: pathlib.Path, method: str) -> bool:
+    """True if the module calls ``<obj>.<method>(...)`` (an AST call check, not a grep)."""
+    return any(
+        isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == method
+        for node in ast.walk(_parse(path))
+    )
+
+
 def _template_owners() -> Dict[str, pathlib.Path]:
     """template name -> owning DMA module, derived from the source.
 
@@ -250,6 +258,10 @@ def test_every_populated_key_is_consumed(template: str) -> None:
         reachable |= _module_names(collaborator)
     if _calls_shared_composer(owner):
         reachable |= _shared_composer_fields()
+    # #1366 item 12: the inherited guide composer that reads the header's pipeline position and tail
+    # (BaseDMA._position_entries), counted the same way as the shared composer: only if actually CALLED.
+    if any(_calls(path, "_position_entries") for path in {owner, *_collaborators(owner)}):
+        reachable |= {"pipeline_position", "system_guidance_header_tail"}
 
     known = {k.split(".", 1)[1] for k in KNOWN_UNWIRED if k.startswith(f"{template}.")}
     unconsumed = sorted(_populated_keys(PROMPTS_DIR / f"{template}.yml") - reachable - set(INERT_BY_DESIGN) - known)

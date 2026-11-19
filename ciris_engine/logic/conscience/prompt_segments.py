@@ -26,9 +26,11 @@ from ciris_engine.logic.prompt_assembly.segmenting import (
     governed_amendments,
     identity_segments,
     items,
+    pipeline_position_segment,
     policy_facts,
     authn_sender_block_segments,
     sender_authn,
+    SegmentationError,
     sender_block_segments,
     split_template,
 )
@@ -127,13 +129,33 @@ def assemble_conscience_prompt(
 
     accord = PromptSegment(segment_id="accord", kind=SegmentKind.ACCORD, source=SegmentSource.ENGINE, text=accord_text)
     message("system", [accord], items([accord], ""))
-    instr = PromptSegment(
-        segment_id="instr:system",
-        kind=SegmentKind.STAGE_INSTRUCTION,
-        source=SegmentSource.ENGINE,
-        text=loader.get_system_prompt(conscience_type),
-    )
-    message("system", [instr], items([instr], ""))
+    # The stage instruction, its pipeline position as its own segment (from its own prompt field, #1366 item 12),
+    # then the rest of the instruction: blank-line joined, the bytes of ``get_system_prompt`` (still called: it is
+    # the render seam the compose dump records).
+    system_prompt = loader.get_system_prompt(conscience_type)
+    head, position, tail = loader.get_system_prompt_parts(conscience_type)
+    if "\n\n".join(part for part in (head, position, tail) if part) != system_prompt:
+        raise SegmentationError(f"{conscience_type}: system prompt parts do not rejoin to the system prompt")
+    instr = [
+        seg
+        for seg in (
+            PromptSegment(
+                segment_id="instr:system",
+                kind=SegmentKind.STAGE_INSTRUCTION,
+                source=SegmentSource.ENGINE,
+                text=head,
+            ),
+            pipeline_position_segment(position),
+            PromptSegment(
+                segment_id="instr:system:after_position",
+                kind=SegmentKind.STAGE_INSTRUCTION,
+                source=SegmentSource.ENGINE,
+                text=tail,
+            ),
+        )
+        if seg.text
+    ]
+    message("system", instr, items(instr, "\n\n", ""))
     message("system", *identity_segments(identity, language, verified_only=ablated))
 
     # The user message, block by block.

@@ -30,16 +30,26 @@ def _dma(name: str) -> Dict[str, Any]:
     return data
 
 
+def _header(name: str) -> str:
+    """The stage's header as it renders: ``system_guidance_header``, its ``pipeline_position`` (a field of its own
+    since #1366 item 12) and ``system_guidance_header_tail``, blank-line joined."""
+    data = _dma(name)
+    parts = (data.get("system_guidance_header"), data.get("pipeline_position"), data.get("system_guidance_header_tail"))
+    return "\n\n".join(p for p in parts if p)
+
+
 def _conscience(name: str) -> str:
     data = yaml.safe_load((CONSCIENCE / f"{name}_conscience.yml").read_text(encoding="utf-8"))
-    return _flat(data["system_prompt"])
+    parts = (data.get("system_prompt"), data.get("pipeline_position"), data.get("system_prompt_tail"))
+    return _flat("\n\n".join(p for p in parts if p))
 
 
 def _aspdma_contract() -> str:
     """ASPDMA's engine contract. It lives in `stage_contract`, not `system_header`: every shipped agent template
     replaces `system_header`, so text there never reached a real agent (#1366)."""
-    text: str = _dma("action_selection_pdma")["stage_contract"]
-    return text
+    data = _dma("action_selection_pdma")
+    # #1366 item 12: the position renders right before the contract, from a field of its own.
+    return str(data["pipeline_position"]) + "\n\n" + str(data["stage_contract"])
 
 
 def _en() -> Dict[str, Any]:
@@ -49,9 +59,9 @@ def _en() -> Dict[str, Any]:
 
 ROLE_TEXTS = {
     "aspdma": _aspdma_contract,
-    "tsaspdma": lambda: _dma("tsaspdma")["system_guidance_header"],
-    "pdma": lambda: _dma("pdma_ethical")["system_guidance_header"],
-    "idma": lambda: _dma("idma")["system_guidance_header"],
+    "tsaspdma": lambda: _header("tsaspdma"),
+    "pdma": lambda: _header("pdma_ethical"),
+    "idma": lambda: _header("idma"),
     **{c: (lambda c=c: _conscience(c)) for c in CONSCIENCES},
 }
 
@@ -76,11 +86,11 @@ def test_item11_aspdma_offers_to_defer_for_signing() -> None:
 
 PIPELINE_TEXTS = {
     "aspdma": _aspdma_contract,
-    "tsaspdma": lambda: _dma("tsaspdma")["system_guidance_header"],
-    "pdma": lambda: _dma("pdma_ethical")["system_guidance_header"],
-    "csdma": lambda: _dma("csdma_common_sense")["system_guidance_header"],
-    "dsdma": lambda: _dma("dsdma_base")["system_guidance_header"],
-    "idma": lambda: _dma("idma")["system_guidance_header"],
+    "tsaspdma": lambda: _header("tsaspdma"),
+    "pdma": lambda: _header("pdma_ethical"),
+    "csdma": lambda: _header("csdma_common_sense"),
+    "dsdma": lambda: _header("dsdma_base"),
+    "idma": lambda: _header("idma"),
     **{c: (lambda c=c: _conscience(c)) for c in CONSCIENCES},
 }
 
@@ -123,7 +133,7 @@ def test_item13_policy_is_not_capability() -> None:
     aspdma = _dma("action_selection_pdma")
     assert "It does not take away an ability or change who you are" in _flat(aspdma["stage_contract"])
     assert "it does not mean the ability is missing" in _flat(aspdma["tool_selection_guidance"])
-    tsaspdma = _flat(_dma("tsaspdma")["system_guidance_header"])
+    tsaspdma = _flat(_header("tsaspdma"))
     assert "a deployment rule that restricts this use is not one" in tsaspdma
     assert "Policy is not capability" in _dma("csdma_common_sense")["evaluation_steps"]
     veto = _conscience("optimization_veto")
@@ -147,7 +157,7 @@ def test_item14_veto_feedback_names_conscience_type_and_rule_visibility() -> Non
 
 def test_item15_governance_is_not_an_epistemic_source() -> None:
     idma = _dma("idma")
-    header = _flat(idma["system_guidance_header"])
+    header = _flat(_header("idma"))
     assert "Governance is not an epistemic source" in header
     assert "is not single-source dependence, rigidity or an echo chamber" in header
     assert "A verified governance rule is not a source" in idma["evaluation_steps"]
@@ -155,7 +165,7 @@ def test_item15_governance_is_not_an_epistemic_source() -> None:
 
 
 def test_item15_idma_fragility_is_one_rule_not_judgment() -> None:
-    header = _dma("idma")["system_guidance_header"]
+    header = _header("idma")
     assert "Use your judgment" not in header
     assert 'TRUE when k_eff < 2, phase = "rigidity", correlation_risk > 0.7' in _flat(header)
 
@@ -201,7 +211,7 @@ def test_item16_aspdma_is_consistent_with_itself() -> None:
 
 def test_item16_tsaspdma_fills_the_parameters() -> None:
     tsaspdma = _dma("tsaspdma")
-    header = _flat(tsaspdma["system_guidance_header"])
+    header = _flat(_header("tsaspdma"))
     assert "ASPDMA chose the tool name only and provides no parameters" in header
     assert "You fill in every tool parameter" in header
     assert "refine" not in header and "refine" not in tsaspdma["evaluation_steps"]
@@ -221,7 +231,7 @@ def test_item16_the_stale_format_retry_block_is_gone() -> None:
     "text",
     [
         _aspdma_contract,
-        lambda: _dma("tsaspdma")["system_guidance_header"],
+        lambda: _header("tsaspdma"),
     ],
     ids=["aspdma", "tsaspdma"],
 )

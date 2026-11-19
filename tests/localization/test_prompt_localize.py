@@ -107,6 +107,16 @@ def test_fields_that_are_english_by_design_are_never_offered_for_translation() -
             assert PL.read_template(PL.locale_path(PL.PROMPTS, lang, template))[field] == english, (lang, key)
 
 
+def test_the_pipeline_position_is_translatable_and_the_pre_split_tail_is_not() -> None:
+    """#1366 item 12: the paragraph is a field the lane translates; the rest of the header waits for the
+    locale headers to be split (each still holds the whole pre-split translation)."""
+    en = PL.english_bundle()
+    with_position = sorted(t for t, fields in en.items() if "pipeline_position" in fields)
+    assert len(with_position) == 10, with_position
+    assert not any("system_guidance_header_tail" in fields for fields in en.values())
+    assert not any(f"{t}.pipeline_position" in PL.ENGLISH_BY_DESIGN for t in en)
+
+
 def test_the_real_stage_is_a_bundle_the_vendored_pipeline_can_read(tmp_path: Path) -> None:
     en = PL.build_stage(tmp_path)
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))

@@ -182,6 +182,8 @@ def _get_value(obj: Any, key: str, default: Any = None) -> Any:
 
 DEFAULT_TEMPLATE = """{system_header}
 
+{pipeline_position}
+
 {stage_contract}
 
 {decision_format}
@@ -207,6 +209,12 @@ def _stage_contract() -> str:
     if not text and loader.language != DEFAULT_LANGUAGE:
         text = DMAPromptLoader(language=DEFAULT_LANGUAGE).load_prompt_template("action_selection_pdma").stage_contract
     return text or ""
+
+
+def _pipeline_position() -> str:
+    """The ASPDMA pipeline-position paragraph (#1366 item 12): engine-read like :func:`_stage_contract`, with the
+    same English fallback. It opened ``stage_contract`` until it became a structural field of its own."""
+    return get_prompt_loader().pipeline_position("action_selection_pdma")
 
 
 class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMAResult], ActionSelectionDMAProtocol):
@@ -691,7 +699,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
 
     def _system_segments(self, input_data: EnhancedDMAInputs) -> "Segments":
         """The system message as typed segments: identity, the WA approval, guidance, snapshot, profiles."""
-        from ciris_engine.logic.prompt_assembly.segmenting import items, stripped_ends
+        from ciris_engine.logic.prompt_assembly.segmenting import items, pipeline_position_segment, stripped_ends
 
         processing_context = input_data.processing_context
 
@@ -760,6 +768,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # #1366 — engine-owned, rendered right after the (possibly replaced)
         # header; see `_stage_contract` for why it is not read from self.prompts.
         stage_contract = _stage_contract()
+        pipeline_position = _pipeline_position()
 
         # #1007 — render each field through `safe_format` so the composer's
         # per-field seam exists here too.
@@ -772,31 +781,50 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # regime varying axiotic on the `default` template: the shipped persona
         # could not be a campaign arm.
         #
-        # DEFAULT_TEMPLATE is "{system_header}\n\n{stage_contract}\n\n
-        # {decision_format}\n\n{closing_reminder}", so joining the renders on
-        # "\n\n" is the same bytes — proven by the goldens, which is why they
-        # are the gate for this change rather than a formality. #1366 split
-        # `stage_contract` out of `system_header` at a blank line, so with no
-        # override the message bytes are unchanged.
+        # DEFAULT_TEMPLATE is "{system_header}\n\n{pipeline_position}\n\n
+        # {stage_contract}\n\n{decision_format}\n\n{closing_reminder}", so
+        # joining the renders on "\n\n" is the same bytes — proven by the
+        # goldens, which is why they are the gate for this change rather than a
+        # formality. #1366 split `stage_contract` out of `system_header` at a
+        # blank line, and `pipeline_position` out of `stage_contract` (item 12),
+        # so with no override the message bytes are unchanged.
         from ciris_engine.logic.dma.prompt_loader import safe_format
 
         _lang = get_prompt_loader().language
-        system_guidance = "\n\n".join(
-            safe_format(_text, source=f"action_selection_pdma.{_field}[{_lang}]")
+        rendered = [
+            (_field, safe_format(_text, source=f"action_selection_pdma.{_field}[{_lang}]"))
             for _field, _text in (
                 ("system_header", system_header),
+                ("pipeline_position", pipeline_position),
                 ("stage_contract", stage_contract),
                 ("decision_format", decision_format),
                 ("closing_reminder", closing_reminder),
             )
-            if _field != "stage_contract" or _text
-        )
+            if _field not in ("stage_contract", "pipeline_position") or _text
+        ]
+        system_guidance = "\n\n".join(_text for _, _text in rendered)
 
         # format_system_prompt_blocks: identity, guidance, snapshot, profiles; blank-line joined, stripped.
-        guidance = _segment("instr:system", "stage_instruction", system_guidance)
+        # The guidance is the instruction before the pipeline position, the position itself (its own segment,
+        # from its own field: #1366 item 12), and the instruction after it, joined by the same blank lines.
+        names = [_field for _field, _ in rendered]
+        at = names.index("pipeline_position") if "pipeline_position" in names else len(names)
+        guidance_parts = [
+            _segment("instr:system", "stage_instruction", "\n\n".join(_text for _, _text in rendered[:at])),
+        ]
+        if at < len(names):
+            guidance_parts.append(pipeline_position_segment(rendered[at][1]))
+            if rendered[at + 1 :]:
+                guidance_parts.append(
+                    _segment(
+                        "instr:system:after_position",
+                        "stage_instruction",
+                        "\n\n".join(_text for _, _text in rendered[at + 1 :]),
+                    )
+                )
         blocks: List[Any] = [(identity, identity_layout)]
         if system_guidance:
-            blocks.append(([guidance], items([guidance], "")))
+            blocks.append((guidance_parts, items(guidance_parts, "\n\n")))
         if system_snapshot_block:
             snap = _segment("system_snapshot", "history", system_snapshot_block)
             blocks.append(([snap], items([snap], "")))

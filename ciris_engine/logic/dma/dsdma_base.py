@@ -474,6 +474,25 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             "in the YAML with the {full_snapshot_and_profile_context_str} slot."
         )
 
+    def _header_tail(self) -> str:
+        """``system_guidance_header_tail``: the rest of the engine header after its pipeline-position paragraph.
+
+        Empty under a custom (domain-config) template, which replaces the whole header as before.
+        """
+        if self._custom_prompt_template is not None:
+            return ""
+        tail = getattr(self.prompt_template_data, "system_guidance_header_tail", None)
+        # isinstance, not truthiness: tests substitute a Mock for `prompt_template_data`.
+        return tail if isinstance(tail, str) else ""
+
+    def _pipeline_position(self) -> str:
+        """The engine template's pipeline-position paragraph (#1366 item 12); a custom template cannot replace it."""
+        try:
+            text = self.prompt_loader.pipeline_position(self._prompt_template_name)
+        except FileNotFoundError:
+            return ""
+        return text if isinstance(text, str) else ""
+
     def _system_body(
         self,
         identity_block: str,
@@ -481,9 +500,16 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
         user_profiles_block: str,
         context_str: str,
         rules_summary_str: str,
+        pipeline_position: Optional[str] = None,
     ) -> str:
         """The system message before the identity prepend: the domain template, then response_format /
-        closing_reminder (#990)."""
+        closing_reminder (#990).
+
+        The engine header is ``system_guidance_header``, the pipeline position (#1366 item 12), then
+        ``system_guidance_header_tail``, joined by blank lines: the bytes the one header field rendered. A custom
+        template replaces both header fields, never the paragraph, which follows it.
+        ``pipeline_position`` None reads it from the engine template (the assembler passes a slot value)."""
+        position = self._pipeline_position() if pipeline_position is None else pipeline_position
         escalation_guidance_block = get_escalation_guidance(0)
 
         # The crisis block is NOT rendered into the template any more (#1248):
@@ -496,8 +522,10 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         task_history_block = ""
 
+        head = self.prompt_template
+        tail = self._header_tail()
         template_has_blocks = any(
-            placeholder in self.prompt_template
+            placeholder in head + tail
             for placeholder in [
                 "{identity_block}",
                 "{task_history_block}",
@@ -508,32 +536,42 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             ]
         )
 
+        def placed(rendered_head: str, rendered_tail: str) -> str:
+            return "\n\n".join(part for part in (rendered_head, position, rendered_tail) if part)
+
         if template_has_blocks:
             try:
-                system_message_content = self.prompt_template.format(
-                    identity_block=identity_block,
-                    task_history_block=task_history_block,
-                    escalation_guidance_block=escalation_guidance_block,
-                    system_snapshot_block=system_snapshot_block,
-                    user_profiles_block=user_profiles_block,
-                    crisis_resources_block=crisis_resources_block,
-                    domain_name=self.domain_name,
-                    rules_summary_str=rules_summary_str,
-                    context_str=context_str,
-                )
+                rendered = [
+                    template.format(
+                        identity_block=identity_block,
+                        task_history_block=task_history_block,
+                        escalation_guidance_block=escalation_guidance_block,
+                        system_snapshot_block=system_snapshot_block,
+                        user_profiles_block=user_profiles_block,
+                        crisis_resources_block=crisis_resources_block,
+                        domain_name=self.domain_name,
+                        rules_summary_str=rules_summary_str,
+                        context_str=context_str,
+                    )
+                    for template in (head, tail)
+                ]
+                system_message_content = placed(rendered[0], rendered[1])
             except KeyError as e:
                 logger.error(f"Missing template variable in DSDMA template: {e}")
-                system_message_content = format_system_prompt_blocks(
-                    identity_block,  # Now guaranteed to be non-empty when we have current_context
-                    task_history_block,
-                    system_snapshot_block,
-                    user_profiles_block,
-                    escalation_guidance_block,
-                    f"You are a domain-specific evaluator for the '{self.domain_name}' domain. "
-                    f"Consider the domain rules: '{rules_summary_str}' and context: '{context_str}'.",
+                system_message_content = placed(
+                    format_system_prompt_blocks(
+                        identity_block,  # Now guaranteed to be non-empty when we have current_context
+                        task_history_block,
+                        system_snapshot_block,
+                        user_profiles_block,
+                        escalation_guidance_block,
+                        f"You are a domain-specific evaluator for the '{self.domain_name}' domain. "
+                        f"Consider the domain rules: '{rules_summary_str}' and context: '{context_str}'.",
+                    ),
+                    "",
                 )
         else:
-            system_message_template = self.prompt_template
+            system_message_template = head
             if not system_message_template:
                 system_message_template = (
                     "You are a domain-specific evaluator for the '{domain_name}' domain. "
@@ -544,8 +582,13 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                     "Focus your evaluation on domain alignment."
                 )
 
-            system_message_content = system_message_template.format(
-                domain_name=self.domain_name, rules_summary_str=rules_summary_str, context_str=context_str
+            system_message_content = placed(
+                *(
+                    template.format(
+                        domain_name=self.domain_name, rules_summary_str=rules_summary_str, context_str=context_str
+                    )
+                    for template in (system_message_template, tail)
+                )
             )
 
         # Append response_format / closing_reminder — #990.
@@ -655,6 +698,7 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
             governance_segments,
             history,
             original_task_segments,
+            pipeline_position_slot,
             round1_preamble,
             segment,
             split_template,
@@ -670,8 +714,15 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
 
         identity = self._identity_segments(agent_identity, identity_block) if identity_block else ([], [])
 
-        def system_render(identity_block: str, system_snapshot_block: str, user_profiles_block: str) -> str:
-            return self._system_body(identity_block, system_snapshot_block, user_profiles_block, context_str, rules_summary_str)
+        def system_render(
+            identity_block: str,
+            system_snapshot_block: str,
+            user_profiles_block: str,
+            pipeline_position: Optional[str] = None,
+        ) -> str:
+            return self._system_body(
+                identity_block, system_snapshot_block, user_profiles_block, context_str, rules_summary_str, pipeline_position
+            )
 
         system = split_template(
             system_render,
@@ -679,6 +730,8 @@ class BaseDSDMA(BaseDMA[DMAInputData, DSDMAResult], DSDMAProtocol):
                 "identity_block": segment("sys:identity", SegmentKind.IDENTITY_BASE, identity_block),
                 "system_snapshot_block": history("sys:system_snapshot", system_snapshot_block),
                 "user_profiles_block": history("sys:user_profiles", user_profiles_block),
+                # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
+                **pipeline_position_slot(self._pipeline_position()),
             },
             prefix="instr:system",
             first_glue="",

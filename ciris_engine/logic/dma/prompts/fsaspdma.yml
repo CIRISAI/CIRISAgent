@@ -15,12 +15,17 @@ accord_header: true
 # ---------------------------------------------------------------------------
 
 # PROCEDURAL — what this step is.
-system_guidance_header: |
+system_guidance_header: |-
   You have selected FORGET.
-
+# #1366 item 12 — where this stage sits and what it cannot see: a STRUCTURAL
+# field, emitted as its own `pipeline_position` segment between the field
+# above and `system_guidance_header_tail` (same bytes as when it sat inside it). Read from the
+# engine template only, so no agent-template override can replace it; a
+# locale without its own copy gets this English one.
+pipeline_position: |-
   PIPELINE POSITION: action selection chose the verb only; this step names the
   node. The consciences then review the action before it runs.
-
+system_guidance_header_tail: |
   You are shown how the graph is addressed and the nodes that already exist, so
   the node removed is the one you mean.
 

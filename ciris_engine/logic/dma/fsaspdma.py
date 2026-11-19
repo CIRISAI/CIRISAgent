@@ -101,6 +101,7 @@ class FSASPDMAEvaluator(MSASPDMAEvaluator):
         system = self._guide_segments(
             [
                 ("system_guidance_header", self._require_prompt_value("system_guidance_header")),
+                *self._position_entries(),
                 ("memory_model", self._graph_block("memory_model")),
                 ("addressing_convention", self._graph_block("addressing_convention")),
                 ("scope_convention", self._graph_block("scope_convention")),

@@ -21,10 +21,10 @@ the call's manifest. In order:
    whose delimiters are neutralised in every untrusted segment, so no input can open or close one. The guard
    also probes every other non-residual segment for the withheld bytes (``UNTRUSTED_BYTES``): a call site that
    interpolated the request into, say, its instruction text is caught, not stubbed around.
-5. **Pipeline position** (#1366 item 12): the "where this stage sits / what it cannot see" paragraph each English
-   stage template carries is carved out of its ``stage_instruction`` into a ``pipeline_position`` segment of its
-   own (system trust, standing, engine source), with no byte changed: the pieces rejoin with empty glue. The
-   paragraph is found by its fixed engine-authored heading in engine-sourced instruction text only.
+5. **Pipeline position** (#1366 item 12): the "where this stage sits / what it cannot see" paragraph is a template
+   FIELD of its own (``pipeline_position``), which each call site hands in as a ``pipeline_position`` segment
+   (system trust, standing, engine source). Nothing here finds it in text: its heading is translatable, so a
+   segmentation that matched the English heading described no translated call.
 
 A call site that must keep its legacy message layout passes ``layout``: which messages exist, their roles, the
 order of segments in each and the glue between them. Ordering is then the call site's (deterministic per stage),
@@ -33,7 +33,6 @@ and the assembler still guards, stubs, neutralises, renders and records every se
 
 import hashlib
 import logging
-import re
 from collections import defaultdict
 from typing import Dict, List, Literal, Optional, Sequence, Set, Tuple, Union
 
@@ -433,7 +432,6 @@ class PromptAssembler:
         mode = mode if mode is not None else current_guard_mode()
         if layout is not None:
             _check_layout(segments, layout)
-            segments, layout = carve_pipeline_position(segments, layout)
         kept, violations, trust = self._guard(stage, segments, call, mode)
         if violations and mode == AssemblyMode.FAIL_CLOSED:
             raise ContextPolicyViolation(stage, violations)
@@ -689,70 +687,6 @@ def _check_layout(segments: Sequence[PromptSegment], layout: Sequence[LayoutMess
         raise ValueError(f"layout must name each segment once (missing {missing}, unknown {unknown})")
 
 
-#: The heading of the pipeline-position paragraph in the engine's stage templates (#1366 item 12). The paragraph
-#: runs from the heading to the next blank line or the end of the text.
-PIPELINE_POSITION_RE = re.compile(
-    r"^[ \t]*((?:\*\*)?(?:PIPELINE POSITION|Pipeline position)(?:\*\*)?:.*?)(?=\n[ \t]*\n|\Z)",
-    re.MULTILINE | re.DOTALL,
-)
-PIPELINE_POSITION_SUFFIX = ":pipeline_position"
-_AFTER_POSITION_SUFFIX = ":after_position"
-
-
-def carve_pipeline_position(
-    segments: Sequence[PromptSegment], layout: Sequence[LayoutMessage]
-) -> Tuple[List[PromptSegment], List[LayoutMessage]]:
-    """Split each engine instruction that carries the pipeline-position paragraph into three segments.
-
-    ``stage_instruction`` (before) + ``pipeline_position`` + ``stage_instruction`` (after), laid out where the
-    instruction was: the first piece keeps its glue, the others take none, so the message bytes are unchanged.
-    Only engine-sourced ``stage_instruction`` text is read: the heading is the engine's own, never user text.
-    """
-    pieces: Dict[str, List[PromptSegment]] = {}
-    out: List[PromptSegment] = []
-    for seg in segments:
-        match = None
-        if seg.kind == SegmentKind.STAGE_INSTRUCTION and seg.source == SegmentSource.ENGINE:
-            match = PIPELINE_POSITION_RE.search(seg.text)
-        if match is None:
-            out.append(seg)
-            continue
-        start, end = match.span(1)
-        split = [
-            seg.model_copy(update={"text": seg.text[:start]}) if start > 0 else None,
-            PromptSegment(
-                segment_id=seg.segment_id + PIPELINE_POSITION_SUFFIX,
-                kind=SegmentKind.PIPELINE_POSITION,
-                source=SegmentSource.ENGINE,
-                text=seg.text[start:end],
-                order_key=seg.order_key,
-            ),
-            (
-                seg.model_copy(update={"segment_id": seg.segment_id + _AFTER_POSITION_SUFFIX, "text": seg.text[end:]})
-                if end < len(seg.text)
-                else None
-            ),
-        ]
-        kept = [p for p in split if p is not None]
-        pieces[seg.segment_id] = kept
-        out.extend(kept)
-    if not pieces:
-        return list(segments), list(layout)
-    new_layout: List[LayoutMessage] = []
-    for msg in layout:
-        new_items: List[LayoutItem] = []
-        for item in msg.items:
-            parts = pieces.get(item.segment_id)
-            if parts is None:
-                new_items.append(item)
-                continue
-            new_items.extend(
-                LayoutItem(segment_id=p.segment_id, glue=item.glue if i == 0 else "") for i, p in enumerate(parts)
-            )
-        new_layout.append(msg.model_copy(update={"items": new_items}))
-    return out, new_layout
-
-
 def _join(
     items: Sequence[Tuple[PromptSegment, str]], rendered: Dict[str, str], withheld: Set[str]
 ) -> Tuple[str, List[Tuple[PromptSegment, Tuple[int, int]]]]:
@@ -797,8 +731,6 @@ __all__ = [
     "PromptAssembler",
     "STUB_BLOCK_CLOSE",
     "STUB_BLOCK_OPEN",
-    "PIPELINE_POSITION_RE",
-    "carve_pipeline_position",
     "neutralise",
     "quote_share",
     "wire_message",

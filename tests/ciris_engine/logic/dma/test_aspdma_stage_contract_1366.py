@@ -59,7 +59,9 @@ def test_the_header_carries_only_the_role() -> None:
     header = data["system_header"]
     for engine_text in ("PIPELINE POSITION", "ROLES AND AUTHORITY", "wa-", "CONSCIENCE OVERRIDE GUIDANCE"):
         assert engine_text not in header, engine_text
-    assert "PIPELINE POSITION" in data["stage_contract"]
+    # #1366 item 12: the position is a structural field of its own, rendered right before the contract.
+    assert "PIPELINE POSITION" in data["pipeline_position"]
+    assert "PIPELINE POSITION" not in data["stage_contract"]
 
 
 @pytest.mark.parametrize("template", TEMPLATES_WITH_OVERRIDES)
@@ -95,10 +97,12 @@ def test_an_override_naming_the_contract_cannot_replace_it() -> None:
 
 
 def test_no_override_bytes_are_the_header_then_the_contract() -> None:
-    """With no override the system guidance is header + blank line + contract, as before the split."""
+    """With no override the system guidance is header + position + contract, blank-line joined, as before the split."""
     data = yaml.safe_load(ASPDMA_YML.read_text(encoding="utf-8"))
     messages, _ = _compose({})
-    expected = data["system_header"] + "\n\n" + data["stage_contract"] + "\n\n" + data["decision_format"]
+    expected = "\n\n".join(
+        data[f] for f in ("system_header", "pipeline_position", "stage_contract", "decision_format")
+    )
     assert any(isinstance(m["content"], str) and expected in m["content"] for m in messages)
 
 

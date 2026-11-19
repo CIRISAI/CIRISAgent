@@ -349,12 +349,18 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     "pdma_ethical.system_guidance_header": BlockAnnotation(
         _C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.STRUCTURAL)
     ),
+    # #1366 item 12 — the rest of the same header, after the pipeline-position
+    # paragraph that was split out of it: the same bytes, the same mixture.
+    "pdma_ethical.system_guidance_header_tail": BlockAnnotation(
+        _C.MIXED, (_C.PROCEDURAL, _C.AXIOTIC, _C.STRUCTURAL)
+    ),
     # "Thought to Evaluate: " — an authored label around the thought.
     "pdma_ethical.context_integration": BlockAnnotation(_C.PROCEDURAL, None),
     # ---- csdma_common_sense -------------------------------------------------
     # Scope statement + the two-step "draft the response, then rate THAT" method.
     # Names no value and forbids nothing: it is how to run the check.
     "csdma_common_sense.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "csdma_common_sense.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     # The seven-step realism checklist — a measurement procedure.
     "csdma_common_sense.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # JSON contract (structural) wrapped around LANGUAGE RULES — which language
@@ -368,6 +374,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # model: a law-like relation the reasoning is asked to accept — the §10.2
     # nomological worked example [T-5c].
     "idma.system_guidance_header": BlockAnnotation(_C.NOMOLOGICAL, None),
+    "idma.system_guidance_header_tail": BlockAnnotation(_C.NOMOLOGICAL, None),
     # "WORK IN THIS ORDER: 1..6" — the procedure that applies the law.
     "idma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # JSON key contract + LANGUAGE RULES — pragmatic, same reasoning as CSDMA's.
@@ -386,6 +393,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # The four action options and the choose-SPEAK/PONDER/TOOL criteria: a
     # decision procedure over an already-selected tool.
     "tsaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "tsaspdma.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     "tsaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # FLAT-JSON contract + LANGUAGE RULES — pragmatic, as above.
     "tsaspdma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
@@ -402,6 +410,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # "ASPDMA already chose DEFER. Your job is NOT to reopen the action choice."
     # plus the five-step classification method.
     "dsaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "dsaspdma.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     "dsaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # JSON contract + LANGUAGE RULES — pragmatic, as above.
     "dsaspdma.response_format": BlockAnnotation(_C.PRAGMATIC, None),
@@ -419,6 +428,7 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # + deontic) and the gate refused it, correctly — a regime varying one class
     # could not move it without dragging the others along.
     "msaspdma.system_guidance_header": BlockAnnotation(_C.PROCEDURAL, None),
+    "msaspdma.system_guidance_header_tail": BlockAnnotation(_C.PROCEDURAL, None),
     "msaspdma.evaluation_steps": BlockAnnotation(_C.PROCEDURAL, None),
     # What the graph IS: nodes hold facts, edges are relationships woven in
     # DREAM, a memorize writes exactly one node. Description, not instruction.
@@ -466,9 +476,29 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # template header override cannot drop it. Its operative content is
     # deontic: who may set a standing rule, that a chat rule is advisory until
     # signed, that a "wa-" id confers nothing, and the MUST on a re-selected
-    # SPEAK after a veto. The pipeline-position paragraph is carved into its
-    # own `pipeline_position` segment by the assembler.
+    # SPEAK after a veto. The pipeline-position paragraph that opened it is
+    # now a field of its own (`pipeline_position`, below).
     "action_selection_pdma.stage_contract": BlockAnnotation(_C.DEONTIC, None),
+    # #1366 item 12 — each stage's `<template>.pipeline_position`: where the
+    # step sits in the pipeline and what it does not see. It names the step's
+    # place and job — what the step is — and ranks nothing, forbids nothing:
+    # procedural, like the headers it was split out of. A structural field
+    # since item 12, so it is its own block in every language rather than
+    # bytes found by an English heading. (DSDMA renders its header with a bare
+    # `.format()` and the consciences' system prompt is one routed block, so
+    # theirs stay inside those blocks here; the manifest still segments them.)
+    **{
+        f"{template}.pipeline_position": BlockAnnotation(_C.PROCEDURAL, None)
+        for template in (
+            "action_selection_pdma",
+            "pdma_ethical",
+            "csdma_common_sense",
+            "idma",
+            "tsaspdma",
+            "dsaspdma",
+            "msaspdma",
+        )
+    },
     # The JSON contract — flat fields, the action enum, which key each action
     # takes. Replacing it breaks parsing, which is the structural test verbatim.
     "action_selection_pdma.decision_format": BlockAnnotation(_C.STRUCTURAL, None),

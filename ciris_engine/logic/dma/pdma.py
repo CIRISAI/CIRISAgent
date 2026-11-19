@@ -136,8 +136,13 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             return self.prompts.get(key)
         return None
 
-    def _build_system_message_text(self, original_thought_content: str, full_context_str: str) -> str:
+    def _build_system_message_text(
+        self, original_thought_content: str, full_context_str: str, pipeline_position: Optional[str] = None
+    ) -> str:
         """Build the system message.
+
+        ``pipeline_position`` is the engine paragraph (#1366 item 12), handed in as a slot so the assembler can
+        segment it; None reads it from the template.
 
         A template's `system_prompt` is ADDITIVE (#996). PDMA's
         `system_guidance_header` carries `{full_context_str}`, so it is not fit
@@ -148,6 +153,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             self.prompt_template_data,
             original_thought_content=original_thought_content,
             full_context_str=full_context_str,
+            pipeline_position=pipeline_position,
         )
 
         # #996 — ADDITIVE, not replacement. This used to return the override in
@@ -238,6 +244,7 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
             governance_segments,
             identity_segments,
             joined,
+            pipeline_position_slot,
             round1_preamble,
             segment,
             split_template,
@@ -259,7 +266,14 @@ class EthicalPDMAEvaluator(BaseDMA[ProcessingQueueItem, EthicalDMAResult], PDMAP
                 "full_context_str": segment(f"{prefix}ctx", SegmentKind.HISTORY, full_context_str),
             }
 
-        system = split_template(self._build_system_message_text, slots("sys:"), prefix="instr:system", first_glue="")
+        # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
+        position = pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+        system = split_template(
+            self._build_system_message_text,
+            {**slots("sys:"), **position},
+            prefix="instr:system",
+            first_glue="",
+        )
         system = expand(system, "sys:ctx", context, language, id_prefix="sys:")
         # The agent's identity, approved amendments included: the same block every DMA reads
         # (formatters.identity.identity_block_of). Eric, 2026-11-13.

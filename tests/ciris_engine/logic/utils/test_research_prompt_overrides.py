@@ -260,6 +260,32 @@ class TestGateOnApplies:
         )
         assert ConsciencePromptLoader().get_system_prompt("entropy_conscience") == "RESEARCH ENTROPY"
 
+    @pytest.mark.parametrize("language", ["en", "am"])
+    def test_a_host_override_also_replaces_the_fields_split_out_of_it(self, monkeypatch, tmp_path, language):
+        """#1366 item 12: naming the header (or a conscience's system_prompt) replaces what that field held before
+        the pipeline-position paragraph and the rest of the header were split out of it. An arm gets exactly
+        its own text: no CIRIS paragraph (no English fallback in a locale), no CIRIS header tail."""
+        from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+        from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+
+        _activate(
+            monkeypatch,
+            _valid_manifest(
+                tmp_path,
+                dma_prompt={"csdma_common_sense.system_guidance_header": "RESEARCH CSDMA HEADER"},
+                conscience_prompt={"entropy_conscience.system_prompt": "RESEARCH ENTROPY"},
+            ),
+        )
+        loader = DMAPromptLoader(language=language)
+        collection = loader.load_prompt_template("csdma_common_sense")
+        assert collection.pipeline_position == "" and collection.system_guidance_header_tail == ""
+        assert loader.pipeline_position("csdma_common_sense") == ""
+        message = loader.get_system_message(collection, context_summary="s", original_thought_content="t")
+        assert message.startswith("RESEARCH CSDMA HEADER\n\n") and "ipeline position" not in message
+        conscience = ConsciencePromptLoader(language=language)
+        assert conscience.get_system_prompt("entropy_conscience") == "RESEARCH ENTROPY"
+        assert conscience.get_system_prompt_parts("entropy_conscience") == ("RESEARCH ENTROPY", "", "")
+
     def test_corpus_override_replaces_both_accord_surfaces(self, monkeypatch, tmp_path):
         """R5 forces all three accord keys together; this proves both accessors
         actually honour them. The bug this guards is FSD §7.1: replacing the
@@ -864,7 +890,10 @@ class TestDriftGuard:
         # the label an unverified amendment carries in the identity block.
         # 241 -> 242 (#1366): action_selection_pdma.stage_contract, the engine
         # contract split out of the template-replaceable system_header.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 242
+        # 242 -> 269 (#1366 item 12): the pipeline-position paragraph as a field
+        # of its own at every stage (10 dma_prompt + 4 conscience_prompt) and
+        # the rest of the header it was split out of (9 + 4 `*_tail` keys).
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 269
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

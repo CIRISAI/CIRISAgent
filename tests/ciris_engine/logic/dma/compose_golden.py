@@ -186,6 +186,8 @@ def prompt_content_environment(
     aspdma_system_message: Callable[..., str] | None = None,
     dsaspdma_prompt_value: Callable[..., Any] | None = None,
     msaspdma_prompt_value: Callable[..., Any] | None = None,
+    dsaspdma_position_fallback: Callable[..., Any] | None = None,
+    msaspdma_position_fallback: Callable[..., Any] | None = None,
     crisis_resources: Callable[..., str] | None = None,
 ) -> Iterator[None]:
     """Pin language + prompt-content loaders for byte-reproducible composition.
@@ -316,6 +318,22 @@ def prompt_content_environment(
                         msaspdma_prompt_value,
                     )
                 )
+        # #1366 item 12: the English pipeline_position a locale copy lacks is a field read of its own
+        # (BaseDMA._pipeline_position_fallback), recorded beside _get_prompt_value.
+        if dsaspdma_position_fallback is not None:
+            stack.enter_context(
+                patch(
+                    "ciris_engine.logic.dma.dsaspdma.DSASPDMAEvaluator._pipeline_position_fallback",
+                    dsaspdma_position_fallback,
+                )
+            )
+        if msaspdma_position_fallback is not None:
+            stack.enter_context(
+                patch(
+                    "ciris_engine.logic.dma.msaspdma.MSASPDMAEvaluator._pipeline_position_fallback",
+                    msaspdma_position_fallback,
+                )
+            )
         yield
 
 

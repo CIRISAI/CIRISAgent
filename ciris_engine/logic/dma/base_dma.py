@@ -88,18 +88,27 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         copy lacks the paragraph gets the English one; a missing tail adds nothing. Call it right after reading
         the header: the reads are the compose dump's field seam, and it records them in call order.
         """
-        position = self._get_prompt_value("pipeline_position")
-        if not position:
-            loader = getattr(self, "prompt_loader", None)
-            name = getattr(self, "_prompt_template_name", None)
-            if loader is not None and isinstance(name, str):
-                position = loader.pipeline_position(name)
+        position = self._get_prompt_value("pipeline_position") or self._pipeline_position_fallback()
         tail = self._get_prompt_value("system_guidance_header_tail")
         entries: List[Tuple[str, str]] = []
         for key, value in (("pipeline_position", position), ("system_guidance_header_tail", tail)):
             if value:
                 entries.append((key, value))
         return entries
+
+    def _pipeline_position_fallback(self) -> Optional[str]:
+        """The English ``pipeline_position`` a locale copy lacking the field renders (#1366 item 12).
+
+        A field read of its own, beside ``_get_prompt_value``, so the compose dump records it at a named seam: read
+        inline, the fallback paragraph reached the prompt unrecorded and the dump reported it as an unattributed
+        ``gap`` between the header and the next field (the am DSASPDMA/MSASPDMA refusal before am translated it).
+        """
+        loader = getattr(self, "prompt_loader", None)
+        name = getattr(self, "_prompt_template_name", None)
+        if loader is not None and isinstance(name, str):
+            text = loader.pipeline_position(name)
+            return str(text) if text else None
+        return None
 
     def __init__(
         self,

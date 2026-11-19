@@ -17,6 +17,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Tuple
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader, ConsciencePrompts
 from ciris_engine.logic.dma.base_dma import BaseDMA
@@ -37,6 +38,7 @@ from tests.ciris_engine.logic.dma import aspdma_golden as ag
 from tests.ciris_engine.logic.dma import evaluator_golden as eg
 from tests.ciris_engine.logic.dma import msaspdma_golden as mg
 from tests.ciris_engine.logic.dma import tsaspdma_golden as tg
+from tests.fixtures.synthetic_locale import CONSCIENCE_PROMPTS, DMA_PROMPTS, prompts_dir_without_field
 
 _HEADING = re.compile(r"pipeline position", re.IGNORECASE)
 
@@ -223,16 +225,58 @@ def test_the_csdma_header_override_replaces_the_header_never_the_position() -> N
     assert str(english.system_guidance_header_tail) not in text
 
 
-@pytest.mark.parametrize("language", ["es", "am", "ar", "zh", "yo"])
-@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
-def test_a_locale_without_the_field_gets_the_english_paragraph(stage: PromptStage, language: str) -> None:
-    """No locale file translates the field yet: each falls back to the English one, field by field."""
+LANGUAGES = ["es", "am", "ar", "zh", "yo"]
+
+
+def _position(stage: PromptStage, language: str, prompts_dir: Any = None) -> str:
     family, name = TEMPLATES[stage]
+    root = None if prompts_dir is None else str(prompts_dir)
     if family == "dma":
-        loader = DMAPromptLoader(language=language)
-        assert loader.load_prompt_template(name).pipeline_position is None
-        assert loader.pipeline_position(name) == _english_field(stage)
-    else:
-        conscience = ConsciencePromptLoader(language=language)
-        _, position, _ = conscience.get_system_prompt_parts(name)
-        assert position == _english_field(stage)
+        return DMAPromptLoader(prompts_dir=root, language=language).pipeline_position(name)
+    _, position, _ = ConsciencePromptLoader(prompts_dir=root, language=language).get_system_prompt_parts(name)
+    return position
+
+
+def _shipped_locale_field(stage: PromptStage, language: str) -> Any:
+    """The field as the shipped locale file carries it (None: no file, or no such field)."""
+    family, name = TEMPLATES[stage]
+    source = DMA_PROMPTS if family == "dma" else CONSCIENCE_PROMPTS
+    path = source / "localized" / language / f"{name}.yml"
+    if not path.exists():
+        return None
+    return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("pipeline_position")
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
+def test_a_locale_without_the_field_gets_the_english_paragraph(stage: PromptStage, language: str, tmp_path: Any) -> None:
+    """A locale copy lacking the field falls back to the English one, field by field.
+
+    Synthetic: the shipped translation with ``pipeline_position`` removed, so the fallback is exercised however
+    far the i18n lane has translated the field.
+    """
+    family, name = TEMPLATES[stage]
+    source = DMA_PROMPTS if family == "dma" else CONSCIENCE_PROMPTS
+    synthetic = prompts_dir_without_field(source, tmp_path / "prompts", language, "pipeline_position")
+    if (synthetic / "localized" / language / f"{name}.yml").exists():
+        # The premise: the locale's own copy is loaded, and it lacks the field.
+        if family == "dma":
+            loaded = DMAPromptLoader(prompts_dir=str(synthetic), language=language).load_prompt_template(name)
+        else:
+            loaded = ConsciencePromptLoader(prompts_dir=str(synthetic), language=language).load_prompts(name)
+        assert loaded.pipeline_position is None
+    # Else no localized copy of this template ships: the English template loads whole, field included.
+    assert _position(stage, language, synthetic) == _english_field(stage)
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
+def test_a_locale_that_translates_the_field_renders_its_own(stage: PromptStage, language: str) -> None:
+    """Where the shipped locale carries a translated paragraph, that is what renders, not the English one."""
+    own = _shipped_locale_field(stage, language)
+    if own is None:
+        # No translation shipped (e.g. a conscience with no localized copy): English is the correct answer.
+        assert _position(stage, language) == _english_field(stage)
+        return
+    assert own != _english_field(stage), f"{language}/{TEMPLATES[stage][1]}: the 'translation' is the English text"
+    assert _position(stage, language) == own

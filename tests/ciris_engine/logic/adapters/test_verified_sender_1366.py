@@ -281,9 +281,32 @@ def test_a_display_name_cannot_break_out_of_the_block() -> None:
     assert block.count("=== END VERIFIED SENDER ===") == 1
 
 
-def test_a_locale_without_the_keys_falls_back_to_english() -> None:
-    block = format_verified_sender_block(VerifiedSender(user_id="u", role=UserRole.OBSERVER), language="am")
+def test_a_locale_without_the_keys_falls_back_to_english(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """A synthetic locale: the real ``am`` strings minus every verified-sender key (shipped ``am`` has them)."""
+    from ciris_engine.logic.formatters.verified_sender import VERIFIED_SENDER_KEYS
+    from ciris_engine.logic.utils.localization import clear_cache
+    from tests.fixtures.synthetic_locale import strings_dir_without_keys
+
+    monkeypatch.setenv("CIRIS_LOCALIZATION_DIR", str(strings_dir_without_keys(tmp_path, "am", VERIFIED_SENDER_KEYS)))
+    clear_cache()
+    try:
+        block = format_verified_sender_block(VerifiedSender(user_id="u", role=UserRole.OBSERVER), language="am")
+    finally:
+        monkeypatch.delenv("CIRIS_LOCALIZATION_DIR")
+        clear_cache()
     assert block.startswith(HEADER)
+    assert block.endswith("=== END VERIFIED SENDER ===")
+    assert "{" not in block
+
+
+@pytest.mark.parametrize("language", ["am", "es", "zh"])
+def test_a_translated_locale_renders_its_own_block(language: str) -> None:
+    from ciris_engine.logic.utils.localization import get_string
+
+    block = format_verified_sender_block(VerifiedSender(user_id="u", role=UserRole.OBSERVER), language=language)
+    own_header = get_string(language, "prompts.verified_sender.header")
+    assert own_header != HEADER, f"{language} does not translate the header"
+    assert block.startswith(own_header)
     assert "{" not in block
 
 

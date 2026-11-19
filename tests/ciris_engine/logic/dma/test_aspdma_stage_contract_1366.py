@@ -106,12 +106,35 @@ def test_no_override_bytes_are_the_header_then_the_contract() -> None:
     assert any(isinstance(m["content"], str) and expected in m["content"] for m in messages)
 
 
-def test_a_locale_without_the_field_falls_back_to_english(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_locale_without_the_field_falls_back_to_english(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Synthetic: the shipped ``am`` translation with ``stage_contract`` removed (shipped ``am`` translates it)."""
+    from ciris_engine.logic.dma import action_selection_pdma
+    from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+    from tests.fixtures.synthetic_locale import DMA_PROMPTS, prompts_dir_without_field
+
+    english = yaml.safe_load(ASPDMA_YML.read_text(encoding="utf-8"))["stage_contract"]
+    synthetic = prompts_dir_without_field(DMA_PROMPTS, tmp_path / "prompts", "am", "stage_contract")
+    loader = DMAPromptLoader(prompts_dir=str(synthetic), language="am")
+    assert loader.load_prompt_template("action_selection_pdma").stage_contract is None
+    monkeypatch.setattr(action_selection_pdma, "get_prompt_loader", lambda *a, **k: loader)
+    assert action_selection_pdma._stage_contract() == english
+
+
+_LOCALIZED_ASPDMA = sorted((ASPDMA_YML.parent / "localized").glob("*/action_selection_pdma.yml"))
+
+
+@pytest.mark.parametrize("path", _LOCALIZED_ASPDMA, ids=lambda p: p.parent.name)
+def test_a_locale_that_translates_the_field_renders_its_own(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
+    """A shipped translation of the contract is what renders; a locale without one gets the English contract."""
     from ciris_engine.logic.dma import action_selection_pdma
     from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
 
     english = yaml.safe_load(ASPDMA_YML.read_text(encoding="utf-8"))["stage_contract"]
-    loader = DMAPromptLoader(language="am")
-    assert loader.load_prompt_template("action_selection_pdma").stage_contract is None  # until the i18n lane
+    own = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("stage_contract")
+    loader = DMAPromptLoader(language=path.parent.name)
     monkeypatch.setattr(action_selection_pdma, "get_prompt_loader", lambda *a, **k: loader)
-    assert action_selection_pdma._stage_contract() == english
+    if own is None:
+        assert action_selection_pdma._stage_contract() == english
+        return
+    assert own != english, f"{path.parent.name}: the 'translation' is the English contract"
+    assert action_selection_pdma._stage_contract() == own

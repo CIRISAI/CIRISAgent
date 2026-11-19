@@ -46,7 +46,7 @@ case "${TARGET:-accord}" in
     if [ "${OVERWRITE:-false}" = "true" ]; then cmd+=(--overwrite); fi
     ;;
   prompts)
-    # The DMA prompt templates (ciris_engine/logic/dma/prompts/localized/<lang>/*.yml),
+    # The DMA and conscience prompt templates (ciris_engine/logic/{dma,conscience}/prompts/localized/<lang>/*.yml),
     # staged as a key bundle by prompt_localize.py. A field still byte-identical
     # to English counts as missing, so empty KEYS = "whatever is untranslated".
     python3 -c 'import yaml' 2>/dev/null || pip install --quiet pyyaml

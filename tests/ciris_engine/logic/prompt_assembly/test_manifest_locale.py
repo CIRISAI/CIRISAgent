@@ -149,16 +149,26 @@ def test_a_locale_copy_without_the_pipeline_position_serves_it_in_english(tmp_pa
     assert manifest.locale_fallbacks == ["pos"]
 
 
-def test_aspdma_stage_contract_in_ta_is_served_in_english_and_marks_its_piece():
-    from ciris_engine.logic.dma.action_selection_pdma import _merged_locale, _stage_contract_served
-    from ciris_engine.logic.utils import localization
+def test_aspdma_stage_contract_missing_from_a_locale_is_served_in_english_and_marks_its_piece(tmp_path, monkeypatch):
+    """Independent of the shipped corpus: a ta copy WITHOUT stage_contract, in a temporary locale directory."""
+    import yaml
 
-    token = localization._THOUGHT_LANGUAGE.set("ta")
-    try:
+    from ciris_engine.logic.dma.action_selection_pdma import _merged_locale, _stage_contract_served
+    from ciris_engine.logic.dma.prompt_loader import get_prompt_loader
+    from ciris_engine.logic.utils.localization import thought_language_scope
+
+    loader = get_prompt_loader(language="ta")
+    source = loader.localized_dir / "action_selection_pdma.yml"
+    if not source.exists():
+        source = loader.prompts_dir / "action_selection_pdma.yml"
+    data = yaml.safe_load(source.read_text(encoding="utf-8"))
+    data.pop("stage_contract", None)
+    (tmp_path / "action_selection_pdma.yml").write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    monkeypatch.setattr(loader, "localized_dir", tmp_path)
+
+    with thought_language_scope("ta"):
         text, locale = _stage_contract_served()
-    finally:
-        localization._THOUGHT_LANGUAGE.reset(token)
-    assert text and locale == "en"  # ta has no stage_contract yet (translation lane)
+    assert text and locale == "en"
     # after_position joins stage_contract (en) with decision_format and closing_reminder (ta): the piece is a fallback.
     assert _merged_locale(["en", "ta", "ta"], "ta") == "en"
     assert _merged_locale(["ta", "ta"], "ta") == "ta"

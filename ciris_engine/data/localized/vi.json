@@ -171,7 +171,7 @@
     "ponder_concern_memorize_scope": "LƯƠNG TÂM LO NGẠI: GHI NHỚ {scope} - đảm bảo điều này là phù hợp",
     "ponder_concern_forget_scope": "LƯƠNG TÂM LO NGẠI: QUÊN {scope} - hành động này không thể hoàn tác",
     "ponder_concern_high_stakes": "LƯƠNG TÂM LO NGẠI: Tình huống có mức độ cao phát hiện - cần xem xét cẩn thận",
-    "retry_header": "**HƯỚNG DẪN GỠRIDDEN LƯƠNG TÂM:**",
+    "retry_header": "**HƯỚNG DẪN GHI ĐÈ LƯƠNG TÂM:**",
     "retry_intro": "Nỗ lực trước đó của bạn để {action} đã bị từ chối vì: {reason}",
     "retry_alternatives_header": "Các lựa chọn thay thế mà IRIS-E liệt kê (sử dụng làm mục tiêu tựa nếu bạn re-SPEAK):",
     "retry_uncertainties_label": "những không chắc chắn",

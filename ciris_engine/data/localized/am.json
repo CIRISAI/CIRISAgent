@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "የህሊና ስጋት፡ MEMORIZE {scope} — ይህ ተገቢ መሆኑን ያረጋግጡ",
     "ponder_concern_forget_scope": "የህሊና ስጋት፡ FORGET {scope} — ይህ ድርጊት የማይቀለበስ ነው",
     "ponder_concern_high_stakes": "የህሊና ስጋት፡ ከፍተኛ ትኩረት የሚፈልግ ሁኔታ ተገኝቷል — ጥንቃቄ ያስፈልጋል",
-    "retry_header": "**የህሊና መሻር መመሪያ፡**",
+    "retry_header": "**ከህሊና ክልከላ በኋላ የሚሰጥ መመሪያ፡**",
     "retry_intro": "{action} ለማድረግ ያደረግሽ ቀዳሚ ሙከራ ውድቅ ሆኗል ምክንያቱም: {reason}",
     "retry_alternatives_header": "IRIS-E ያቀረባቸው አማራጮች (እንደገና ለመናገር ከመረጥክ እንደ አቅጣጫ ተጠቀምባቸው):",
     "retry_uncertainties_label": "እርግጠኛነት የሌላቸው ጉዳዮች",

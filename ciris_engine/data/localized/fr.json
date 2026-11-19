@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "PRÉOCCUPATION DE CONSCIENCE : MÉMORISER {scope} — vérifiez que c'est approprié",
     "ponder_concern_forget_scope": "PRÉOCCUPATION DE CONSCIENCE : OUBLIER {scope} — cette action est irréversible",
     "ponder_concern_high_stakes": "PRÉOCCUPATION DE CONSCIENCE : Situation à enjeux élevés détectée — une réflexion approfondie est requise",
-    "retry_header": "**DIRECTIVES DE REMPLACEMENT DE LA CONSCIENCE :**",
+    "retry_header": "**GUIDANCE APRÈS UN VÉTO DE CONSCIENCE :**",
     "retry_intro": "Votre tentative précédente de {action} a été rejetée parce que: {reason}",
     "retry_alternatives_header": "Alternatives énumérées par IRIS-E (utilisez-les comme cibles pivot si vous re-PARLEZ):",
     "retry_objection_justification": "Il s'agit d'une objection de JUSTIFICATION : la conscience {conscience} a jugé insuffisante la justification fournie. Vous pouvez conserver l'action si vous donnez une meilleure justification fondée sur ce que vous pouvez vérifier ; elle sera examinée à nouveau.",

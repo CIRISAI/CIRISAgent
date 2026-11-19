@@ -469,11 +469,16 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             # action list therefore appear twice — once in the persona framing,
             # once in the structured composition; that duplication is accepted
             # deliberately over losing either the voice or the integration layer.
+            from ciris_engine.schemas.context.prompt_provenance import SegmentSource
+
+            # The framing's words are the agent template's (FSD §4.3); the thought it quotes stays the request. (The
+            # permitted-action list it may name is plain text inside it: an enum list, not free text.)
             framing, framing_layout = split_template(
                 lambda **values: template_user_override.format(**values),
                 {"thought_content": _segment("request:framing", "request", thought_content, "user_input")},
                 prefix="instr:framing",
                 plain={"available_actions": available_actions},
+                instruction_source=SegmentSource.AGENT_PROFILE,
             )
             if framing and segments:
                 logger.debug(
@@ -850,9 +855,18 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # from its own field: #1366 item 12), and the instruction after it, joined by the same blank lines.
         names = [_field for _field, _ in rendered]
         at = names.index("pipeline_position") if "pipeline_position" in names else len(names)
-        guidance_parts = [
-            _segment("instr:system", "stage_instruction", "\n\n".join(_text for _, _text in rendered[:at])),
-        ]
+        # The header is the agent template's when it supplies one (`system_header`, or a `system_prompt` in its
+        # place): the agent's own text, so it carries the agent-profile source (FSD §4.3), never `engine`.
+        header_source = (
+            "agent_profile"
+            if template_system_override or "system_header" in getattr(self, "_caller_overrides", {})
+            else "engine"
+        )
+        guidance_parts = [_segment("instr:system", "stage_instruction", rendered[0][1], header_source)]
+        if at > 1:  # no pipeline position (a research manifest emptied it): the engine fields after the header
+            guidance_parts.append(
+                _segment("instr:system:after_header", "stage_instruction", "\n\n".join(t for _, t in rendered[1:at]))
+            )
         if at < len(names):
             guidance_parts.append(pipeline_position_segment(rendered[at][1]))
             if rendered[at + 1 :]:

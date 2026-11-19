@@ -30,6 +30,7 @@ tokens (kept at 8192 by ruling; the retry and pause below absorb the refusals).
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import random
 from email.utils import parsedate_to_datetime
@@ -236,12 +237,17 @@ def budget_identity(base_url: Optional[str], api_key: Optional[str]) -> tuple[st
     OpenRouter's in-flight budget belongs to the account/key, not to one
     registered service: replicas and differently-named services with the same
     key share it. The key itself is never returned, logged or stored -- only
-    16 hex digits of its digest, enough to tell keys apart.
+    16 hex digits of a salted PBKDF2 digest, enough to tell keys apart.
     """
     url = (base_url or "").strip().rstrip("/").lower()
     key = (api_key or "").strip()
-    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] if key else ""
-    return (url, digest)
+    return (url, _key_fingerprint(key) if key else "")
+
+
+@functools.lru_cache(maxsize=64)
+def _key_fingerprint(key: str) -> str:
+    """16 hex digits of PBKDF2-HMAC-SHA256 over the key (slow and salted); computed once per key."""
+    return hashlib.pbkdf2_hmac("sha256", key.encode("utf-8"), b"ciris-llm-budget-identity", 10_000).hex()[:16]
 
 
 def in_flight_backoff_s(attempt: int, retry_after_s: Optional[float]) -> float:

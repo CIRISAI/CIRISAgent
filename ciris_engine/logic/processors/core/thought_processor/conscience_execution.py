@@ -721,9 +721,10 @@ class ConscienceExecutionPhase:
             if not new_ids:
                 continue
             logger.info(
-                "[VETO_CONTRACT] %s raised an evidence objection without %s; attaching it for one re-review",
+                "[VETO_CONTRACT] %s raised an evidence objection without %d trusted evidence item(s); "
+                "attaching them for one re-review",
                 objection.conscience,
-                new_ids,
+                len(new_ids),
             )
             attached = context.model_copy(update={"attached_evidence": True})
             check_results[index] = await self._run_single_conscience(entries[index], action_result, attached)

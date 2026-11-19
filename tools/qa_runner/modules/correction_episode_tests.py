@@ -1076,6 +1076,11 @@ class CorrectionEpisodeTests:
         payload: Dict[str, Any] = {"message": message}
         if channel_id:
             payload["context"] = {"channel_id": channel_id}
+        # M4_PROBE_LANGUAGE: the per-message language the interact route takes from context.metadata.language; it
+        # outranks the deployment default (CIRIS_PREFERRED_LANGUAGE), so a non-English context map sets it per message.
+        lang = os.environ.get("M4_PROBE_LANGUAGE", "").strip()
+        if lang:
+            payload.setdefault("context", {}).setdefault("metadata", {})["language"] = lang
         status, body = await self._req(
             "POST", "/v1/agent/interact", token, json_body=payload, timeout=INTERACT_TIMEOUT_S
         )

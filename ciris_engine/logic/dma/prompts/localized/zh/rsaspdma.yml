@@ -80,3 +80,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   在正确的地方查找，正是这一步的全部要点。
+pipeline_position: "流水线位置：动作选择仅选定了动词；本步骤负责说明要读取的内容。RECALL 仅执行读取操作，因此无需经过良知审查即可运行。"

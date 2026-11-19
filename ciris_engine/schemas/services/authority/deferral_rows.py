@@ -44,6 +44,19 @@ REASON_NO_RESPONSE_ROW = "deferral.no_response_row"
 REASON_UNPARSED = "unparsed"
 #: Set by the agent: the node did not answer within the call's timeout (an outage).
 REASON_TIMEOUT = "deferral.timeout"
+#: The node (0.5.250+): the cited response row commits to no amendment digest, or to another one.
+#: One identifier across server, persist and CC rc21.
+REASON_AMENDMENT_DIGEST_MISMATCH = "amendment_digest_mismatch"
+#: The node (0.5.250+): a digest was offered on a rejection.
+REASON_DIGEST_ON_REJECTION = "deferral.digest_on_rejection"
+#: Set by the agent: the approval names no exact amendment text, so it lands no amendment (#1366 F1).
+REASON_NO_APPROVED_TEXT = "identity_amendment.no_approved_text"
+#: Set by the agent: the node cannot sign an amendment digest into the response row (< 0.5.250).
+REASON_AMENDMENT_DIGEST_UNSUPPORTED = "deferral.amendment_digest_unsupported"
+#: Set by the agent: this node has no deferral rows, so an amendment cannot be signed and is not written.
+REASON_ROWS_UNAVAILABLE = "deferral.rows_unavailable"
+#: Set by the agent: the model wrote an identity_amendment node or its provenance itself (#1366 F2).
+REASON_MODEL_PROVENANCE = "identity_amendment.model_supplied_provenance"
 
 
 class DeferralRowRefusalKind(str, Enum):
@@ -102,6 +115,13 @@ class DeferralRowView(BaseModel):
     authorized_by: Optional[str] = Field(None, description="On an amendment: the approved response")
     evidence_refs: List[str] = Field(default_factory=list)
     room_id: Optional[str] = Field(None, description="The envelope's community_key_id, when the row has a room")
+    prev: Optional[str] = Field(
+        None,
+        description=(
+            "On an identity_amendment (rc21, refs.prev): the row id of the amendment it follows. None on the base "
+            "link, whose amendment_digest is the base template's digest, and on rows from before rc21."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -112,10 +132,16 @@ __all__ = [
     "DEFERRAL_REQUEST_DIMENSION",
     "DEFERRAL_ROW_DIMENSIONS",
     "IDENTITY_AMENDMENT_DIMENSION",
+    "REASON_AMENDMENT_DIGEST_UNSUPPORTED",
     "REASON_AMENDMENT_UNAUTHORIZED",
+    "REASON_DIGEST_ON_REJECTION",
+    "REASON_MODEL_PROVENANCE",
+    "REASON_NO_APPROVED_TEXT",
+    "REASON_AMENDMENT_DIGEST_MISMATCH",
     "REASON_NO_REQUEST_ROW",
     "REASON_NO_RESPONSE_ROW",
     "REASON_RESPONSE_ALREADY_USED",
+    "REASON_ROWS_UNAVAILABLE",
     "REASON_TIMEOUT",
     "REASON_UNKNOWN_REQUEST",
     "REASON_UNPARSED",

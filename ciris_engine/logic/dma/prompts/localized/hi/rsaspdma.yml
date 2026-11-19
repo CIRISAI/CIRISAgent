@@ -73,3 +73,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   सही जगह पर देखना ही इस step का पूरा उद्देश्य है।
+pipeline_position: |-
+  पाइपलाइन स्थिति: क्रिया चयन ने केवल क्रिया चुनी है; यह चरण बताता है कि
+  क्या read करना है। एक RECALL केवल read करता है, इसलिए यह बिना विवेक समीक्षा के चलता है।

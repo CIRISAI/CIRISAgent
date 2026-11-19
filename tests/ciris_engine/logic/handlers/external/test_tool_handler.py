@@ -31,6 +31,14 @@ from ciris_engine.schemas.runtime.system_context import ChannelContext
 
 
 # Test fixtures and helpers
+
+def _reviewed(result: ActionSelectionDMAResult) -> ActionSelectionDMAResult:
+    """Stamp the result as the thought processor does when the consciences pass
+    it (#1366 item 10). ToolHandler refuses an unreviewed TOOL."""
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import reviewed_action_fingerprint
+
+    return result.model_copy(update={"reviewed_action_hash": reviewed_action_fingerprint(result)})
+
 def create_channel_context(channel_id: str = "test_channel") -> ChannelContext:
     """Helper to create a valid ChannelContext for tests."""
     return ChannelContext(
@@ -187,6 +195,7 @@ async def test_tool_execution_success(mock_dependencies, monkeypatch):
         reasoning="User requested math operation",
         evaluation_time_ms=100,
     )
+    result = _reviewed(result)
 
     # Create thought and context
     thought = create_test_thought()
@@ -239,6 +248,7 @@ async def test_tool_execution_failure(mock_dependencies):
         reasoning="This should fail",
         evaluation_time_ms=50,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -274,6 +284,7 @@ async def test_tool_parameter_validation_error(mock_dependencies):
         reasoning="Testing parameter validation",
         evaluation_time_ms=75,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -318,6 +329,7 @@ async def test_tool_execution_timeout(mock_dependencies):
         reasoning="Long running tool",
         evaluation_time_ms=100,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -362,6 +374,7 @@ async def test_tool_with_complex_parameters(mock_dependencies):
         reasoning="Testing nested parameters",
         evaluation_time_ms=150,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -398,6 +411,7 @@ async def test_tool_execution_exception(mock_dependencies):
         reasoning="This will crash",
         evaluation_time_ms=80,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -434,6 +448,7 @@ async def test_tool_with_empty_parameters(mock_dependencies):
         reasoning="No parameters needed",
         evaluation_time_ms=60,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -472,6 +487,7 @@ async def test_follow_up_creation_failure(mock_dependencies):
         reasoning="Testing error handling",
         evaluation_time_ms=70,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -509,6 +525,7 @@ async def test_tool_unauthorized_access(mock_dependencies):
         reasoning="Attempting restricted access",
         evaluation_time_ms=90,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -549,6 +566,7 @@ async def test_secrets_decapsulation(mock_dependencies):
             reasoning="Testing secret handling",
             evaluation_time_ms=110,
         )
+        result = _reviewed(result)
 
         thought = create_test_thought()
         dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -590,6 +608,7 @@ async def test_tool_result_formatting(mock_dependencies):
         reasoning="Running analysis tool",
         evaluation_time_ms=120,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -632,6 +651,7 @@ async def test_correlation_id_generation(mock_dependencies):
                 reasoning=f"Testing correlation {i}",
                 evaluation_time_ms=50 + i * 10,
             )
+            result = _reviewed(result)
 
             thought = create_test_thought(thought_id=f"thought_{i}")
             dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)
@@ -667,6 +687,7 @@ async def test_audit_logging(mock_dependencies):
         reasoning="Testing audit logging",
         evaluation_time_ms=65,
     )
+    result = _reviewed(result)
 
     thought = create_test_thought()
     dispatch_context = create_dispatch_context(thought.thought_id, thought.source_task_id)

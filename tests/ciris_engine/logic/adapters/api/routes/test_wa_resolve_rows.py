@@ -63,11 +63,18 @@ class _Harness:
         )
         self.auth = SimpleNamespace(user_id="wa-2026-10-22-OWNER1")
 
-    async def resolve(self, resolution: str = "approve") -> Any:
+    async def resolve(
+        self, resolution: str = "approve", amendment_text: Optional[str] = None, call_fingerprint: Optional[str] = None
+    ) -> Any:
         return await wa.resolve_deferral(
             self.request,  # type: ignore[arg-type]
             DEFERRAL_ID,
-            ResolveDeferralRequest(resolution=resolution, guidance="$memorize x CONCEPT IDENTITY"),
+            ResolveDeferralRequest(
+                resolution=resolution,
+                guidance="$memorize x CONCEPT IDENTITY",
+                amendment_text=amendment_text,
+                call_fingerprint=call_fingerprint,
+            ),
             self.auth,  # type: ignore[arg-type]
         )
 
@@ -84,15 +91,15 @@ async def test_an_approval_is_signed_by_the_resolver_before_it_is_recorded(monke
     h = _Harness(_pending("att-req"))
     original_emit = wa.emit_deferral_response
 
-    async def emit(*args: Any) -> str:
+    async def emit(*args: Any, **kwargs: Any) -> str:
         h.order.append("emit_response")
-        return await original_emit(*args)
+        return await original_emit(*args, **kwargs)
 
     monkeypatch.setattr(wa, "emit_deferral_response", emit)
 
     result = await h.resolve()
 
-    assert node.calls_to("emit_deferral_response") == [("att-req", True, SESSION)], "the resolver's raw sess: token"
+    assert node.calls_to("emit_deferral_response") == [("att-req", True, SESSION, None)], "the resolver's raw sess: token"
     assert h.order == ["sign", "emit_response", "resolve_deferral"]
     response_row = node.rows[-1]
     assert response_row.attestation_type == "deferral:response:approved:v1"
@@ -135,7 +142,7 @@ async def test_a_service_token_is_never_handed_to_the_pen(monkeypatch: pytest.Mo
     node = install_fake_node(monkeypatch, _node_with_request())
     h = _Harness(_pending("att-req"), authorization="Bearer service:abc123")
     await h.resolve()
-    assert node.calls_to("emit_deferral_response") == [("att-req", True, None)]
+    assert node.calls_to("emit_deferral_response") == [("att-req", True, None, None)]
 
 
 @pytest.mark.asyncio
@@ -143,7 +150,7 @@ async def test_modify_is_signed_as_not_approved(monkeypatch: pytest.MonkeyPatch)
     node = install_fake_node(monkeypatch, _node_with_request())
     h = _Harness(_pending("att-req"))
     await h.resolve("modify")
-    assert node.calls_to("emit_deferral_response") == [("att-req", False, SESSION)]
+    assert node.calls_to("emit_deferral_response") == [("att-req", False, SESSION, None)]
     assert node.rows[-1].attestation_type == "deferral:response:rejected:v1"
     assert h.resolved[0].approved is False
 
@@ -213,3 +220,107 @@ async def test_a_server_without_read_back_is_503(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(HTTPException) as caught:
         await wa.get_deferral_row("att-req", SimpleNamespace(user_id="x"))  # type: ignore[arg-type]
     assert caught.value.status_code == 503
+
+
+# ============================================================================
+# Exact-bytes approval (#1366 F1, Eric 2026-11-18: "WA approves exact bytes")
+# ============================================================================
+
+AMENDMENT_TEXT = "I mentor new moderators"
+
+
+def _sha(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+@pytest.mark.asyncio
+async def test_an_approved_amendment_text_is_signed_into_the_response_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    node = install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+
+    await h.resolve(amendment_text=AMENDMENT_TEXT)
+
+    assert node.calls_to("emit_deferral_response") == [("att-req", True, SESSION, _sha(AMENDMENT_TEXT))]
+    assert node.rows[-1].envelope["amendment_digest"] == _sha(AMENDMENT_TEXT), "inside the WA-signed row"
+    (resolved,) = h.resolved
+    assert resolved.amendment_text == AMENDMENT_TEXT
+    assert resolved.amendment_sha256 == _sha(AMENDMENT_TEXT)
+
+
+@pytest.mark.asyncio
+async def test_the_node_signature_commits_to_the_amendment_digest() -> None:
+    from ciris_engine.schemas.services.authority_core import deferral_resolution_payload
+
+    base = DeferralResponse(approved=True, reason="ok", wa_id="wa", signature="")
+    assert "amendment_sha256" not in deferral_resolution_payload("d", base, "t"), "legacy payloads unchanged"
+    with_text = base.model_copy(update={"amendment_text": "x", "amendment_sha256": _sha("x")})
+    assert deferral_resolution_payload("d", with_text, "t")["amendment_sha256"] == _sha("x")
+
+
+@pytest.mark.parametrize("resolution", ["reject", "modify"])
+@pytest.mark.asyncio
+async def test_amendment_text_on_a_non_approval_is_refused(monkeypatch: pytest.MonkeyPatch, resolution: str) -> None:
+    node = install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+    with pytest.raises(HTTPException) as refused:
+        await h.resolve(resolution, amendment_text=AMENDMENT_TEXT)
+    assert refused.value.status_code == 400
+    assert refused.value.detail["error"]["details"]["reason_id"] == "wa.amendment_text_requires_approve"
+    assert h.resolved == [] and node.calls_to("emit_deferral_response") == []
+
+
+@pytest.mark.asyncio
+async def test_a_node_without_exact_bytes_support_records_no_amendment_approval(monkeypatch: pytest.MonkeyPatch) -> None:
+    """< 0.5.250 cannot sign the digest: refused, never recorded with the digest silently dropped."""
+    node = _node_with_request()
+    node.exact_bytes = False
+    install_fake_node(monkeypatch, node)
+    h = _Harness(_pending("att-req"))
+    with pytest.raises(HTTPException) as refused:
+        await h.resolve(amendment_text=AMENDMENT_TEXT)
+    assert refused.value.status_code == 503
+    assert h.resolved == []
+    assert node.calls_to("emit_deferral_response") == []
+
+
+@pytest.mark.parametrize("bad", [" leading", "trailing ", "   "])
+def test_amendment_text_must_be_the_exact_bytes(bad: str) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ResolveDeferralRequest(resolution="approve", guidance="g", amendment_text=bad)
+
+
+@pytest.mark.parametrize("resolution", ["reject", "modify"])
+@pytest.mark.asyncio
+async def test_call_fingerprint_on_a_non_approval_is_refused(monkeypatch: pytest.MonkeyPatch, resolution: str) -> None:
+    node = install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+    with pytest.raises(HTTPException) as refused:
+        await h.resolve(resolution, call_fingerprint="sha256:call")
+    assert refused.value.status_code == 400
+    assert refused.value.detail["error"]["details"]["reason_id"] == "wa.call_fingerprint_requires_approve"
+    assert h.resolved == [] and node.calls_to("emit_deferral_response") == []
+
+
+@pytest.mark.asyncio
+async def test_a_resolution_names_one_subject(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A deferral is either a call approval or an identity change, never both."""
+    node = install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+    with pytest.raises(HTTPException) as refused:
+        await h.resolve(amendment_text=AMENDMENT_TEXT, call_fingerprint="sha256:call")
+    assert refused.value.status_code == 400
+    assert refused.value.detail["error"]["details"]["reason_id"] == "wa.resolve_one_subject"
+    assert h.resolved == [] and node.calls_to("emit_deferral_response") == []
+
+
+@pytest.mark.asyncio
+async def test_an_approved_call_fingerprint_is_carried_to_the_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    install_fake_node(monkeypatch, _node_with_request())
+    h = _Harness(_pending("att-req"))
+    await h.resolve(call_fingerprint="sha256:call")
+    (resolved,) = h.resolved
+    assert resolved.call_fingerprint == "sha256:call" and resolved.amendment_text is None

@@ -177,3 +177,4 @@ closing_reminder: 'IMPORTANT : Votre rôle est de détecter les problèmes qu''A
   Lors du choix de TOOL, reconnaissez : "Procédure avec conscience du piège X"
 
   '
+pipeline_position: "POSITION DANS LE PIPELINE : ASPDMA a choisi uniquement le nom de l'outil et ne fournit aucun paramètre. Vous renseignez chaque paramètre de l'outil, à partir de la documentation et de la demande. Les consciences examinent ensuite l'appel avant qu'il ne s'exécute."

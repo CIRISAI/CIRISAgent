@@ -25,13 +25,16 @@ relaxed in place.
 Three properties worth stating explicitly, because each one is a place where a
 reader could reasonably assume something stronger than what is implemented:
 
-1. **The grant is per-tool, per-task — NOT per-invocation.** An approval envelope
-   authorizes *the tool* for *that one guidance task*. The task re-reasons from
-   scratch, so it may well call the tool with different arguments than the ones
-   that triggered the deferral, and it may call it more than once. This is the
-   same bound as the budget envelope: a ceiling, not a transaction. If you need a
-   human to review the literal argument list of a literal call, this is not that,
-   and nothing in this repo is that today.
+1. **The grant binds the call, not just the tool (CIRISAgent#1366 item 10).**
+   An approval envelope names the tool AND carries the
+   :func:`~ciris_engine.logic.infrastructure.authorization.reviewed_action.tool_call_fingerprint`
+   (tool + arguments) of the call the human was shown. The guidance task
+   re-reasons from scratch; if it calls the approved tool with different
+   arguments, the fingerprint differs and the gate defers again, so that call
+   gets its own approval. The same call may still run more than once in that
+   task. An approval envelope that carries no call fingerprint (issued before
+   this binding existed) is LEGACY: it approves nothing, and the call is
+   deferred for re-approval — we cannot know which arguments it approved.
 
 2. **This gate consults the envelope for approval-requiring tools ONLY.** It is
    deliberately not #938 Phase 2 (gating every tool at ``ToolBus.execute_tool``).
@@ -62,6 +65,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, FrozenSet, List, Optional, Union
 
+from ciris_engine.schemas.runtime.reviewed_action_admission import PROPOSED_CALL_KEY
 from ciris_engine.schemas.runtime.task_envelope import EnvelopeIssuerKind, TaskEnvelope
 from ciris_engine.schemas.types import JSONDict
 
@@ -110,6 +114,16 @@ once here and imported by both ends rather than spelled twice:
 ``DeferralContext.metadata`` -> ``WiseBus.send_deferral`` ->
 ``DeferralRequest.context`` -> the task row's ``context["deferral"]["context"]``
 -> ``WiseAuthorityService.resolve_deferral``.
+"""
+
+
+PENDING_TOOL_CALL_FINGERPRINT_KEY = "pending_tool_call_fingerprint"
+"""Key under which the fingerprint of the call awaiting approval travels.
+
+Same route as :data:`PENDING_TOOL_APPROVAL_KEY`. ``resolve_deferral`` copies it
+into the approval envelope's ``approved_calls``, so the grant is bound to the
+arguments the human saw (CIRISAgent#1366 item 10). Kept out of the
+``TOOL_APPROVAL_DETAIL_KEY`` JSON so the approval screen's contract is unchanged.
 """
 
 
@@ -179,6 +193,19 @@ def envelope_approves_tool(envelope: Optional[TaskEnvelope], tool_name: str) -> 
     return envelope.permits_tool(tool_name)
 
 
+def envelope_approves_call(envelope: Optional[TaskEnvelope], tool_name: str, call_fingerprint: str) -> bool:
+    """True iff ``envelope`` is a human approval of exactly this call.
+
+    :func:`envelope_approves_tool` AND ``call_fingerprint`` is one of the calls
+    the approval was issued for. A legacy tool-only approval (empty
+    ``approved_calls``) approves nothing here: re-approval is required, because
+    nothing records which arguments it approved.
+    """
+    if envelope is None or not envelope_approves_tool(envelope, tool_name):
+        return False
+    return call_fingerprint in envelope.approved_calls
+
+
 def encode_tool_approval_detail(
     tool_info: Optional["ToolInfo"],
     tool_name: str,
@@ -197,8 +224,8 @@ def encode_tool_approval_detail(
     ``parameters`` is the extra thing an approval needs that a consent disclosure
     does not: the arguments the agent intends to pass *on this call*. Values are
     stringified and truncated — this is a human-readable summary for a decision,
-    not a re-executable record, and the grant it leads to is per-tool-per-task
-    rather than bound to these specific arguments.
+    not a re-executable record. The grant it leads to is bound to the exact
+    arguments by :data:`PENDING_TOOL_CALL_FINGERPRINT_KEY`, not by this summary.
     """
     import json
 
@@ -232,6 +259,7 @@ def build_approval_deferral(
     tool_info: Optional["ToolInfo"] = None,
     intended_parameters: Optional[ToolArgumentMap] = None,
     channel_id: Optional[str] = None,
+    call_fingerprint: Optional[str] = None,
 ) -> "ActionSelectionDMAResult":
     """Rewrite a tool selection into a DEFER that asks a human to approve the tool.
 
@@ -244,6 +272,11 @@ def build_approval_deferral(
     :data:`TOOL_APPROVAL_DETAIL_KEY` carries the structured description the
     approval UI renders, so the human sees the tool, its capability flags and the
     intended arguments rather than only a sentence.
+
+    ``call_fingerprint`` (tool + exact arguments) rides under
+    :data:`PENDING_TOOL_CALL_FINGERPRINT_KEY`; the approval it leads to is bound
+    to that call. Without it the approval would be tool-only, which the gate
+    treats as legacy and does not honour.
     """
     from ciris_engine.schemas.actions.parameters import DeferParams
     from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
@@ -256,14 +289,23 @@ def build_approval_deferral(
         f"'{tool_name}' for the follow-up task."
     )
 
+    context: Dict[str, str] = {
+        PENDING_TOOL_APPROVAL_KEY: tool_name,
+        TOOL_APPROVAL_DETAIL_KEY: encode_tool_approval_detail(tool_info, tool_name, intended_parameters),
+        "original_rationale": (original_action.rationale or "")[:500],
+    }
+    if call_fingerprint:
+        context[PENDING_TOOL_CALL_FINGERPRINT_KEY] = call_fingerprint
+        # rc21 §4: the call the Wise Authority is asked to approve, whole, so
+        # the client can show it and send back its call_fingerprint.
+        context[PROPOSED_CALL_KEY] = encode_proposed_call(
+            tool_name, dict(intended_parameters or {}), channel_id, call_fingerprint
+        )
+
     defer_params = DeferParams(
         channel_id=channel_id,
         reason=reason,
-        context={
-            PENDING_TOOL_APPROVAL_KEY: tool_name,
-            TOOL_APPROVAL_DETAIL_KEY: encode_tool_approval_detail(tool_info, tool_name, intended_parameters),
-            "original_rationale": (original_action.rationale or "")[:500],
-        },
+        context=context,
         defer_until=None,
         reason_code=DeferralOperationalReason.CONSENT_OR_AUTHORITY_REQUIRED,
         needs_category=DeferralNeedCategory.GENERAL_HUMAN_OVERSIGHT,
@@ -316,6 +358,82 @@ def pending_tool_from_deferral_context(deferral_context: object) -> Optional[str
     return value
 
 
+def encode_proposed_call(
+    tool_name: str, arguments: ToolArgumentMap, channel_id: Optional[str], call_fingerprint: str
+) -> str:
+    """``proposed_call`` as the deferral context carries it: JSON text (the context is a string map)."""
+    import json
+
+    return json.dumps(
+        {"tool": tool_name, "arguments": arguments, "channel": channel_id or "", "call_fingerprint": call_fingerprint},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def proposed_call_fingerprint(deferral_context: object) -> Optional[str]:
+    """The ``call_fingerprint`` of the deferral's ``proposed_call``, verified, or ``None``.
+
+    ``DeferParams.context`` is model-authorable, so the fingerprint is
+    RECOMPUTED from the proposed tool, arguments and channel and must match the
+    one stated; anything else is ``None`` (no binding, fail closed). The JSON
+    text is parsed with exact decimals (``cde.loads_exact``), so a number goes
+    into the fingerprint by its exact value, never through a binary64 round.
+    """
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import tool_call_fingerprint
+    from ciris_engine.logic.utils.cde import loads_exact
+
+    if not isinstance(deferral_context, dict):
+        return None
+    raw = deferral_context.get(PROPOSED_CALL_KEY)
+    if not isinstance(raw, str):
+        return None
+    try:
+        call = loads_exact(raw)
+        stated = call["call_fingerprint"]
+        recomputed = tool_call_fingerprint(call["tool"], call["arguments"], call.get("channel") or None)
+    except (ValueError, KeyError, TypeError):
+        return None
+    return stated if isinstance(stated, str) and stated == recomputed else None
+
+
+def pending_call_fingerprint_from_deferral_context(deferral_context: object) -> Optional[str]:
+    """The fingerprint of the call awaiting approval, or ``None`` (legacy / absent).
+
+    The verified ``proposed_call`` first (rc21 §4), then the bare key. ``None``
+    means the envelope minted from this deferral carries no ``approved_calls``
+    and so approves nothing at the gate — fail-closed.
+    """
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import FINGERPRINT_PREFIX
+
+    if not isinstance(deferral_context, dict):
+        return None
+    proposed = proposed_call_fingerprint(deferral_context)
+    if proposed is not None:
+        return proposed
+    value = deferral_context.get(PENDING_TOOL_CALL_FINGERPRINT_KEY)
+    if not isinstance(value, str) or not value.startswith(FINGERPRINT_PREFIX):
+        return None
+    return value
+
+
+def approved_call_fingerprint(deferral_context: object, response: object) -> Optional[str]:
+    """The call a Wise Authority's approval binds (rc21 §4), or ``None``.
+
+    The approval's own ``call_fingerprint`` (``DeferralResponse`` /
+    ``WAAuthorization``; the WA approved exactly that call) wins; without one
+    (a client that predates exact-call approval) the deferral's verified
+    proposed call -- what the WA was shown. A malformed approval fingerprint
+    binds nothing.
+    """
+    from ciris_engine.logic.infrastructure.authorization.reviewed_action import FINGERPRINT_PREFIX
+
+    stated = getattr(response, "call_fingerprint", None)
+    if stated is not None:
+        return stated if isinstance(stated, str) and stated.startswith(FINGERPRINT_PREFIX) else None
+    return pending_call_fingerprint_from_deferral_context(deferral_context)
+
+
 def _detail_names_tool(detail: object, tool_name: str) -> bool:
     """True when ``detail`` is an encoded approval detail for exactly ``tool_name``."""
     import json
@@ -332,11 +450,17 @@ def _detail_names_tool(detail: object, tool_name: str) -> bool:
 __all__ = [
     "APPROVAL_ISSUER_KINDS",
     "PENDING_TOOL_APPROVAL_KEY",
+    "PENDING_TOOL_CALL_FINGERPRINT_KEY",
     "TOOL_APPROVAL_DETAIL_KEY",
     "TOOL_APPROVAL_DETAIL_MAX_CHARS",
+    "approved_call_fingerprint",
     "build_approval_deferral",
+    "encode_proposed_call",
     "encode_tool_approval_detail",
+    "envelope_approves_call",
     "envelope_approves_tool",
+    "pending_call_fingerprint_from_deferral_context",
     "pending_tool_from_deferral_context",
+    "proposed_call_fingerprint",
     "tool_requires_approval",
 ]

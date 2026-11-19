@@ -133,6 +133,13 @@ def _apply_research_overrides(template_name: str, collection: PromptCollection) 
             # scanned key space, so a genuinely bogus key is refused at load.
             collection.custom_prompts[field] = value
         applied.append(field)
+    # #1366 item 12: a replaced host also replaces the fields split out of it (rendered empty, never CIRIS text).
+    from ciris_engine.logic.utils.research_overrides import implied_blank_fields
+
+    for field in sorted(implied_blank_fields("dma_prompt", template_name, set(applied))):
+        # Unconditionally: a locale copy without the field (None) would otherwise fall back to the English one.
+        setattr(collection, field, "")
+        applied.append(field)
 
     if applied:
         logger.warning(
@@ -174,6 +181,13 @@ def apply_research_overrides_to_mapping(template_name: str, prompts: Dict[str, A
         # unknown key would be the same lie in the other direction.
         prompts[field] = value
         applied.append(field)
+    # #1366 item 12: a replaced host also replaces the fields split out of it (rendered empty, never CIRIS text).
+    from ciris_engine.logic.utils.research_overrides import implied_blank_fields
+
+    for field in sorted(implied_blank_fields("dma_prompt", template_name, set(applied))):
+        if field in prompts:
+            prompts[field] = ""
+            applied.append(field)
 
     if applied:
         logger.warning(
@@ -430,9 +444,38 @@ class DMAPromptLoader:
             logger.error(f"Failed to load template {template_path}: {e}")
             raise
 
+    def pipeline_position(self, template_name: str) -> str:
+        """The stage's pipeline-position paragraph (#1366 item 12), read from the ENGINE template.
+
+        Never from an agent template's overrides: callers pass the loader's own collection, which no
+        ``*_overrides`` key reaches (a research manifest still can: ``load_prompt_template`` applies it). A
+        locale whose copy lacks the field gets the English one, so the segment is present in every language.
+        """
+        text = self.load_prompt_template(template_name).pipeline_position
+        # None: the locale's copy has no such field. "" (a research manifest replaced the field it was split out
+        # of) is an answer, not an absence: no fallback.
+        if text is None and self.language != DEFAULT_LANGUAGE:
+            english = DMAPromptLoader(prompts_dir=str(self.prompts_dir), language=DEFAULT_LANGUAGE)
+            text = english.load_prompt_template(template_name).pipeline_position
+        return text or ""
+
+    def _position_of(self, template_data: PromptCollection) -> str:
+        """``template_data``'s own paragraph, else the engine one for its component (English fallback)."""
+        if template_data.pipeline_position is not None:
+            return template_data.pipeline_position
+        try:
+            return self.pipeline_position(template_data.component_name)
+        except FileNotFoundError:
+            return ""
+
     def get_system_message(self, template_data: PromptCollection, **kwargs: Any) -> str:
         """
         Build a system message from template data and variables.
+
+        ``pipeline_position`` (#1366 item 12), when passed, is the paragraph's text (the assembler hands a
+        sentinel here to locate its segment); otherwise it is read from the template. It is placed right after
+        ``system_guidance_header`` and followed by ``system_guidance_header_tail``: a structural slot, so the
+        segment never depends on the paragraph's (translatable) wording.
 
         Args:
             template_data: The loaded template data
@@ -444,6 +487,9 @@ class DMAPromptLoader:
         system_parts = []
         component = getattr(template_data, "component_name", "unknown")
         lang = self.language
+        position = kwargs.pop("pipeline_position", None)
+        if position is None:
+            position = self._position_of(template_data)
 
         # Add main system guidance header
         if template_data.system_guidance_header:
@@ -451,6 +497,20 @@ class DMAPromptLoader:
                 safe_format(
                     template_data.system_guidance_header,
                     source=f"{component}.system_guidance_header[{lang}]",
+                    **kwargs,
+                )
+            )
+
+        # The pipeline position, then the rest of the header (#1366 item 12). The paragraph has no slots, so it
+        # takes none of the caller's values; it goes through safe_format for its own provenance tag (the
+        # compose dump's block boundary).
+        if position:
+            system_parts.append(safe_format(position, source=f"{component}.pipeline_position[{lang}]"))
+        if template_data.system_guidance_header_tail:
+            system_parts.append(
+                safe_format(
+                    template_data.system_guidance_header_tail,
+                    source=f"{component}.system_guidance_header_tail[{lang}]",
                     **kwargs,
                 )
             )

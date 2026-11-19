@@ -156,6 +156,8 @@ setup(
             # Signed accord manifest + root key: the integrity check fails
             # closed without them, so every install must ship them.
             "seed/*.json",
+            # Prompt context policy (FSD/PROMPT_CONTEXT_PROVENANCE.md §5): the assembler's guard reads it.
+            "context_policy.yaml",
         ],
         "ciris_engine.config": [
             "*.json",  # Pricing and configuration data

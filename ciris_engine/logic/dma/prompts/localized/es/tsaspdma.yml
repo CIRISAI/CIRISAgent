@@ -186,3 +186,7 @@ closing_reminder: 'IMPORTANTE: Tu rol es detectar problemas que ASPDMA no pudo v
   Al elegir TOOL, reconoce: "Procediendo con conciencia de la advertencia X"
 
   '
+pipeline_position: |-
+  POSICIÓN EN EL PIPELINE: ASPDMA eligió solo el nombre de la herramienta y no proporciona parámetros.
+  Usted completa cada parámetro de la herramienta, a partir de la documentación y la solicitud.
+  Las conciencias luego revisan la llamada antes de que se ejecute.

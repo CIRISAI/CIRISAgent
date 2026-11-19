@@ -140,3 +140,7 @@ context_integration: |
   ความคิดที่ต้องประเมิน: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  ตำแหน่งในไปป์ไลน์: คุณทำงานก่อน ร่วมกับ CSDMA และ DSDMA จากนั้นตรวจสอบสัญชาตญาณจะตรวจสอบ
+  เหตุผลของคุณ การเลือกการกระทำจะเลือกการกระทำ และมโนธรรม
+  จะตรวจสอบมัน คุณเป็นผู้เสนอแนะ คุณไม่ใช่ผู้เลือกการกระทำสุดท้าย

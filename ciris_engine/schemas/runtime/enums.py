@@ -82,6 +82,30 @@ class TaskStatus(CaseInsensitiveEnum):
     REJECTED = "rejected"
 
 
+class TaskOrigin(CaseInsensitiveEnum):
+    """Who created a task, set structurally by the code that creates it (#1366).
+
+    Never inferred: in particular, a task with no verified sender is not thereby an engine task (an adapter can
+    fail to attach one). ``USER`` and ``WISE_AUTHORITY`` are tasks created from a person's message; every
+    ``ENGINE_*`` value is a task the engine created for itself.
+    """
+
+    USER = "user"
+    #: A task created from a Wise Authority's own message on its deferral channel (a person, not the engine).
+    WISE_AUTHORITY = "wise_authority"
+    ENGINE_WAKEUP = "engine_wakeup"
+    ENGINE_SHUTDOWN = "engine_shutdown"
+    ENGINE_DREAM = "engine_dream"
+    ENGINE_SYSTEM = "engine_system"
+    #: The task a Wise Authority's resolution of a deferral creates.
+    ENGINE_GUIDANCE = "engine_guidance"
+    ENGINE_PARTNERSHIP = "engine_partnership"
+
+    @property
+    def is_engine(self) -> bool:
+        return self not in (TaskOrigin.USER, TaskOrigin.WISE_AUTHORITY)
+
+
 class ThoughtStatus(CaseInsensitiveEnum):
     """Status of a thought being processed."""
 
@@ -160,6 +184,7 @@ __all__ = [
     "ServiceType",
     "HandlerActionType",
     "TaskStatus",
+    "TaskOrigin",
     "ThoughtStatus",
     "ThoughtType",
     "SensitivityLevel",

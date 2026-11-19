@@ -122,3 +122,4 @@ response_format: |
 # DEONTIC — closing categorical।
 closing_reminder: |
   Address ਨੂੰ ਸਹੀ ਪਾਉਣਾ ਇਸ step ਦਾ ਪੂਰਾ point ਹੈ।
+pipeline_position: "ਪਾਈਪਲਾਈਨ ਸਥਿਤੀ: ਕਾਰਵਾਈ ਦੀ ਚੋਣ ਨੇ ਸਿਰਫ਼ ਕਿਰਿਆ ਚੁਣੀ ਹੈ; ਇਹ ਕਦਮ ਜਾਂਚਦਾ ਹੈ ਕਿ write ਕਿੱਥੇ ਜਾਂਦੀ ਹੈ। ਫਿਰ ਚੱਲਣ ਤੋਂ ਪਹਿਲਾਂ ਜ਼ਮੀਰਾਂ ਕਾਰਵਾਈ ਦੀ ਸਮੀਖਿਆ ਕਰਦੀਆਂ ਹਨ।"

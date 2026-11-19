@@ -153,3 +153,7 @@ context_integration: |
   Мысль для оценки: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  ПОЗИЦИЯ В КОНВЕЙЕРЕ: вы выполняетесь первым, наряду с CSDMA и DSDMA. Затем IDMA рассматривает
+  ваши рассуждения, выбор действия выбирает действие, а совести
+  проверяют его. Вы рекомендуете; вы не выбираете итоговое действие.

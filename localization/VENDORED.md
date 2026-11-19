@@ -102,8 +102,12 @@ attribute that the vendored functions look up at call time.
   agent UI's translated strings as extra terminology anchors (ranked after
   the accord TM, bounded per key and per request, never written as values).
   That is a replacement `anchors_for` hook, not an edit to `localize.py`.
-- `localization/prompt_localize.py` is the `prompts` target: the DMA prompt
-  templates (`ciris_engine/logic/dma/prompts/localized/<lang>/*.yml`). It
+- `localization/prompt_localize.py` is the `prompts` target: the DMA and the
+  conscience prompt templates
+  (`ciris_engine/logic/{dma,conscience}/prompts/localized/<lang>/*.yml`;
+  `PROMPT_ROOTS`, template names are unique across both, a clash is refused).
+  The polyglot optimization veto has no per-locale copy and is never staged
+  (`POLYGLOT_TEMPLATES`). It
   stages every translatable top-level field as one key, `<template>.<field>`,
   in a temporary bundle; runs `localize.py`'s own CLI over it with the backoff
   wrapper and a rule block appended to the three system prompts (these are
@@ -115,7 +119,12 @@ attribute that the vendored functions look up at call time.
     folders (the completeness test requires the files) and dispatching the
     translate lane; the chain-localization tests fail until it has run.
   - `ENGLISH_BY_DESIGN` lists the three fields #974 left in English for every
-    locale. They are never staged.
+    locale. They are never staged. Nor is any `*_tail` field (#1366 item 12):
+    the locale headers are still the pre-split translation, so a tail would
+    repeat their text, and a header is not written into a locale that lacks
+    its tail (the translation would drop the tail's text).
+  - Only the conscience `user_prompt_*` templates are `str.format`ted at load
+    time; the `str.format` check skips the other conscience fields.
   - A value is written only if it still renders (`prompt_problems`): same
     placeholders, same doubled braces, `str.format` succeeds, same JSON field
     names, no lost action verb or backticked identifier. A rejected value is

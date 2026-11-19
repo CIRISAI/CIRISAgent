@@ -31,7 +31,21 @@ IDENTITY = {
     "agent_id": "ally",
     "description": "A helpful assistant.",
     "role": "Assistant",
-    "approved_amendments": [{"content": AMENDMENT}],
+    # Verified: the input-ablated pair reads only verified amendments (#1366, rc21
+    # profile; test_ablated_identity_verified_only.py).
+    # Full provenance: a verified amendment is a rule in force, and the judges must read it as a signed rule
+    # entry too (the context policy requires it, #1366 Phase 3).
+    "approved_amendments": [
+        {
+            "content": AMENDMENT,
+            "verified": True,
+            "node_id": "identity_amendment/d1",
+            "wa_id": "wa-1",
+            "deferral_id": "d1",
+            "granted_at": "2026-11-13T00:00:00+00:00",
+            "approved_sha256": __import__("hashlib").sha256(AMENDMENT.encode("utf-8")).hexdigest(),
+        }
+    ],
 }
 
 
@@ -52,7 +66,11 @@ def test_identity_is_read_from_the_processing_context_snapshot():
     [core.EntropyConscience, core.CoherenceConscience, core.OptimizationVetoConscience, core.EpistemicHumilityConscience],
 )
 def test_every_conscience_adds_the_identity(cls):
-    assert "self._with_identity(messages, context" in inspect.getsource(cls.check)
+    """Each check assembles its prompt through the one builder, which lays the identity segments out first."""
+    from ciris_engine.logic.conscience import prompt_segments
+
+    assert "self._assemble(" in inspect.getsource(cls.check)
+    assert "identity_segments(identity, language" in inspect.getsource(prompt_segments.assemble_conscience_prompt)
 
 
 @pytest.mark.asyncio
@@ -96,14 +114,17 @@ def test_the_tool_step_reads_the_amended_identity():
     context = SimpleNamespace(system_snapshot=SimpleNamespace(agent_identity=IDENTITY))
     with patch.object(TSASPDMAEvaluator, "prompt_loader", new_callable=PropertyMock) as loader:
         loader.return_value = SimpleNamespace(language="en")
-        assert AMENDMENT in dma._identity_block(context)
-        assert dma._identity_block(None) == ""
+        assert dma._agent_identity(context) is IDENTITY
+        assert dma._agent_identity(None) is None
+        # ...and the identity, amendment included, is what the assembled prompt carries.
+        system, _ = dma._system_segments("instr", IDENTITY, None, "t")
+        assert AMENDMENT in "".join(s.text for s in system)
 
 
 @pytest.mark.parametrize("module, needle", [
-    ("ciris_engine.logic.dma.pdma", "identity_block=identity_block_of(agent_identity_of(context)"),
-    ("ciris_engine.logic.dma.csdma", "identity_block=identity_block_of(agent_identity_of(context)"),
-    ("ciris_engine.logic.dma.tsaspdma", "identity_block=self._identity_block(context)"),
+    ("ciris_engine.logic.dma.pdma", "identity_segments(agent_identity, language)"),  # assembler path (#1366 Phase 3)
+    ("ciris_engine.logic.dma.csdma", "identity_segments(agent_identity, language)"),  # assembler path (#1366 Phase 3)
+    ("ciris_engine.logic.dma.tsaspdma", "agent_identity = self._agent_identity(context)"),
 ])
 def test_every_judging_dma_passes_the_shared_identity(module, needle):
     import importlib

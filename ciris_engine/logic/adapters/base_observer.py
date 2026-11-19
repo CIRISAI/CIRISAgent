@@ -35,9 +35,10 @@ from ciris_engine.protocols.services.infrastructure.resource_monitor import Reso
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.accord_halt import AgentSendSurface
-from ciris_engine.schemas.runtime.enums import ThoughtType
+from ciris_engine.schemas.runtime.enums import TaskOrigin, ThoughtType
 from ciris_engine.schemas.runtime.messages import MessageHandlingResult, MessageHandlingStatus, PassiveObservationResult
-from ciris_engine.schemas.runtime.models import TaskContext
+from ciris_engine.logic.formatters.verified_sender import sanitize_display_text
+from ciris_engine.schemas.runtime.models import TaskContext, VerifiedSender
 from ciris_engine.schemas.services.credit_gate import CreditAccount, CreditContext, CreditSpendRequest
 from ciris_engine.schemas.services.filters_core import FilterPriority, FilterResult
 from ciris_engine.schemas.types import JSONDict
@@ -136,10 +137,21 @@ AUTHORITY_HEADER_KEYS: Tuple[str, ...] = (
     "prompts.wa_approval.grant",
     "prompts.identity_block",
     "prompts.language_guidance.01_preamble",
+    # The system-built sender and governance blocks (#1366 items 3 and 5). A
+    # user who types one is forging verified identity or a WA's signed rule
+    # (RATCHET review F3: both passed the filter unchanged).
+    "prompts.verified_sender.header",
+    "prompts.verified_sender.footer",
+    "prompts.wa_governance.header",
+    "prompts.wa_governance.footer",
 )
 _FALLBACK_AUTHORITY_HEADERS: Tuple[str, ...] = (
     "WISE AUTHORITY APPROVAL",
     "CORE IDENTITY - THIS IS WHO YOU ARE!",
+    "VERIFIED SENDER",
+    "END VERIFIED SENDER",
+    "VERIFIED WISE AUTHORITY GOVERNANCE",
+    "END VERIFIED WISE AUTHORITY GOVERNANCE",
 )
 
 # Characters that may frame a header on its own line: "=== X ===", "## X",
@@ -260,6 +272,18 @@ def detect_and_replace_spoofed_markers(content: str) -> str:
             logger.warning(f"Detected spoofed CIRIS marker in message content: {pattern.pattern}")
 
     return modified_content
+
+
+def safe_display_name(name: Any) -> str:
+    """A self-chosen display name as it may appear in prompt text (RATCHET review F2/F3).
+
+    Spoofed markers neutralised first, then reduced by the verified-sender
+    allowlist: no newline, control, format character, quote or "=" survives,
+    so the name cannot draw a block of its own. Empty becomes ``unknown``.
+    """
+    if not name:
+        return "unknown"
+    return sanitize_display_text(detect_and_replace_spoofed_markers(str(name))) or "unknown"
 
 
 def format_discord_mentions(content: str, user_lookup: Optional[Dict[str, str]] = None) -> str:
@@ -478,10 +502,46 @@ class BaseObserver(Generic[MessageT], ABC):
         API's AuthContext.role), rendered as its plain enum value. An adapter
         that does not know the role leaves it None and none is shown: never a
         guess.
+
+        The name is the sender's self-chosen display name and is never rendered
+        raw (RATCHET review F2): a name holding newlines and a fake
+        ``=== VERIFIED SENDER ===`` block rode the task description, seed
+        thought and coalesced updates ahead of the real block. It is reduced to
+        single-line, frame-free text (``safe_display_name``); the id and role
+        come only from the adapter.
         """
         role = getattr(msg, "author_role", None)
         role_part = f", role: {role.value}" if isinstance(role, UserRole) else ""
-        return f"@{msg.author_name} (ID: {msg.author_id}{role_part})"
+        author_id = sanitize_display_text(getattr(msg, "author_id", ""), max_len=128) or "unknown"
+        return f"@{safe_display_name(getattr(msg, 'author_name', None))} (ID: {author_id}{role_part})"
+
+    def _verified_sender(self, msg: Any) -> VerifiedSender:
+        """The sender as this adapter verified it, for TaskContext.verified_sender (#1366 item 5).
+
+        Built only from the adapter's own message fields: ``author_id`` (from
+        the platform or the API's authentication) and ``author_role`` (the
+        API's AuthContext.role). Nothing is read from the message text, and the
+        ``wa-`` id prefix is never taken as a role. ``author_name`` is kept as
+        the self-chosen display name, so a prompt can say it is not identity.
+        """
+        role = getattr(msg, "author_role", None)
+        role = role if isinstance(role, UserRole) else None
+        origin = (self.origin_service or "").strip()
+        known_origin = bool(origin) and origin != "unknown"
+        if role is not None and known_origin:
+            source = f"{origin}_auth"
+        elif known_origin and getattr(msg, "author_id", None):
+            source = origin
+        else:
+            source = "unverified"
+        author_id = getattr(msg, "author_id", None)
+        author_name = getattr(msg, "author_name", None)
+        return VerifiedSender(
+            user_id=str(author_id) if author_id is not None else None,
+            role=role,
+            source=source,
+            self_chosen_display_name=str(author_name) if author_name else None,
+        )
 
     @staticmethod
     def _anonymous_role_suffix(msg: Any) -> str:
@@ -498,11 +558,27 @@ class BaseObserver(Generic[MessageT], ABC):
             f"CIRIS_CHANNEL_HISTORY_MESSAGE_{message_number}_OF_{total_messages}_END"
         )
 
+    @staticmethod
+    def _history_role_of(msg: Any) -> Optional[str]:
+        """A history message's verified role as its enum value, or None when unknown or not a role."""
+        role = getattr(msg, "author_role", None)
+        if isinstance(role, UserRole):
+            return role.value
+        if isinstance(role, str):
+            try:
+                return UserRole(role).value
+            except ValueError:
+                return None
+        return None
+
     def _create_history_entry(self, msg: MessageT, protected_content: str, is_agent_message: bool) -> JSONDict:
         """Create a history entry from a message."""
         return {
             "author": "CIRIS" if is_agent_message else (getattr(msg, "author_name", None) or "User"),
             "author_id": getattr(msg, "author_id", None) or ("ciris" if is_agent_message else "unknown"),
+            # The role the adapter recorded from authentication when the
+            # message arrived (#1366 item 5); None where it was not verified.
+            "author_role": self._history_role_of(msg),
             "content": protected_content,
             "timestamp": getattr(msg, "timestamp", None),
             "is_agent": is_agent_message,
@@ -720,8 +796,14 @@ class BaseObserver(Generic[MessageT], ABC):
             from ciris_engine.schemas.runtime.task_envelope import RequesterAuthorization
 
             ctx = getattr(task, "context", None)
+            # The requester's role is the one the adapter verified (#1366 item
+            # 5). Without it the envelope floored every requester to OBSERVER,
+            # even when the API had authenticated an ADMIN or AUTHORITY.
+            sender = getattr(ctx, "verified_sender", None)
+            role = getattr(sender, "role", None)
             requester = RequesterAuthorization(
                 user_id=getattr(ctx, "user_id", None),
+                role=role if isinstance(role, UserRole) else UserRole.OBSERVER,
                 channel_id=getattr(task, "channel_id", None),
                 source_ref=getattr(ctx, "correlation_id", None),
                 is_wise_authority=bool(self.observer_wa_id and task.signed_by == self.observer_wa_id),
@@ -768,11 +850,11 @@ class BaseObserver(Generic[MessageT], ABC):
             aid = hist_msg.get("author_id")
             aname = hist_msg.get("author")
             if aid and aname and isinstance(aname, str):
-                user_lookup[str(aid)] = aname
+                user_lookup[str(aid)] = safe_display_name(aname)
 
         # Add current message author
         if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-            user_lookup[str(msg.author_id)] = msg.author_name
+            user_lookup[str(msg.author_id)] = safe_display_name(msg.author_name)
 
         return user_lookup
 
@@ -787,7 +869,12 @@ class BaseObserver(Generic[MessageT], ABC):
 
             # Format mentions in content to include usernames
             content = format_discord_mentions(content, user_lookup)
-            lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
+            # The verified role, as the current message's tag shows it (#1366 item 5).
+            role = hist_msg.get("author_role")
+            role_part = f", role: {role}" if isinstance(role, str) and role else ""
+            # Never the raw display name or id (RATCHET review F2).
+            safe_id = sanitize_display_text(author_id, max_len=128) or "unknown"
+            lines.append(f"{i}. @{safe_display_name(author)} (ID: {safe_id}{role_part}): {content}")
 
         return lines
 
@@ -892,7 +979,7 @@ class BaseObserver(Generic[MessageT], ABC):
             # Format mentions for task description
             passive_task_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                passive_task_lookup[str(msg.author_id)] = msg.author_name
+                passive_task_lookup[str(msg.author_id)] = safe_display_name(msg.author_name)
             formatted_passive_content = format_discord_mentions(str(msg.content), passive_task_lookup)  # type: ignore[attr-defined]
 
             # TASK_UPDATED_INFO_AVAILABLE: Check if there's an active task for this channel.
@@ -922,6 +1009,10 @@ class BaseObserver(Generic[MessageT], ABC):
                     self.agent_occurrence_id,
                     self.time_service,
                     images=update_images,
+                    # The coalesced message's OWN verified sender (#1366 item 5).
+                    # Without it the update was answered under the task
+                    # creator's verified identity.
+                    sender=self._verified_sender(msg),
                 )
                 if success:
                     logger.info(
@@ -961,6 +1052,8 @@ class BaseObserver(Generic[MessageT], ABC):
                 status=TaskStatus.ACTIVE,
                 priority=priority,
                 user_id=msg.author_id,  # type: ignore[attr-defined]
+                verified_sender=self._verified_sender(msg),
+                origin=TaskOrigin.USER,
                 images=msg_images,
                 # Use the centralized resolver so the locale chain is uniform
                 # across every task-creating site (base_observer, discord_observer,
@@ -979,7 +1072,7 @@ class BaseObserver(Generic[MessageT], ABC):
             # Build user lookup for the current message
             initial_user_lookup = {}
             if hasattr(msg, "author_id") and hasattr(msg, "author_name"):
-                initial_user_lookup[str(msg.author_id)] = msg.author_name
+                initial_user_lookup[str(msg.author_id)] = safe_display_name(msg.author_name)
             formatted_msg_content = self._fence_current_message(
                 format_discord_mentions(str(msg.content), initial_user_lookup)  # type: ignore[attr-defined]
             )

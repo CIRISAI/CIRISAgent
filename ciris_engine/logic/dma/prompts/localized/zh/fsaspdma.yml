@@ -73,3 +73,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   移除正确的节点，且仅移除那个节点，正是这一步的全部要点。
+pipeline_position: "流水线位置：动作选择仅选定了动词；本步骤负责指明具体节点。随后，各良知会在该动作运行之前对其进行审查。"

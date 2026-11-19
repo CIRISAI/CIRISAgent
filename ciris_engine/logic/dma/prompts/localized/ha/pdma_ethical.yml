@@ -154,3 +154,4 @@ context_integration: |
   Tunanin da za a Tantance: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "MATSAYI A BUTUTUN SARRAFA: kana gudana da farko, tare da CSDMA da DSDMA. Sannan IDMA tana bitar tunaninka, Zaɓin Aiki yana zaɓar aikin, kuma Lamirori suna bitar sa. Kai mai bayar da shawara ne; ba kai ne ke zaɓar aikin ƙarshe ba."

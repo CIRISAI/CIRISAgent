@@ -140,3 +140,7 @@ user_prompt_with_image_template: |-
 
   CIRIS-Agent-ANTWORT ZUR KOHÄRENZBEWERTUNG:
   {text}
+pipeline_position: |-
+  PIPELINE-POSITION: Sie überprüfen die vom Agenten entworfene Aktion nach der
+  Aktionsauswahl, neben den anderen Gewissen, bevor etwas ausgeführt wird. Sie sehen die
+  Anfrage und die geltende verifizierte Governance.

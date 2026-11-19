@@ -19,13 +19,17 @@ Usage:
     text = loc("prompts.dma.pdma_header")
 """
 
+import functools
+import inspect
 import json
 import logging
 import os
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional, Tuple, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -736,6 +740,55 @@ def get_preferred_language() -> str:
     return os.getenv("CIRIS_PREFERRED_LANGUAGE", DEFAULT_LANGUAGE)
 
 
+_SUPPORTED_LOCALES: Optional[frozenset[str]] = None
+
+
+def supported_locales() -> frozenset[str]:
+    """The closed set of locale codes CIRIS supports: the ``languages`` of the bundled manifest.
+
+    Read from the PACKAGE's ``data/localized/manifest.json`` (the source of
+    truth the CLAUDE.md names), not from an overridable directory, so the set
+    cannot be widened by a file someone drops beside it. Falls back to the
+    bundles on disk, then to the default language.
+    """
+    global _SUPPORTED_LOCALES
+    if _SUPPORTED_LOCALES is None:
+        codes: set[str] = set()
+        manifest = Path(__file__).resolve().parents[2] / "data" / "localized" / "manifest.json"
+        try:
+            languages = json.loads(manifest.read_text(encoding="utf-8")).get("languages")
+            if isinstance(languages, dict):
+                codes = {str(code) for code in languages}
+        except (OSError, ValueError, AttributeError) as e:
+            logger.warning(f"[LOCALIZATION] could not read the locale manifest {manifest}: {e}")
+        if not codes:
+            codes = set(get_available_languages())
+        codes.add(DEFAULT_LANGUAGE)
+        _SUPPORTED_LOCALES = frozenset(codes)
+    return _SUPPORTED_LOCALES
+
+
+def validate_locale(value: Any) -> Optional[str]:
+    """``value`` as a supported locale code, or None when it is not one (#1366 F3).
+
+    A caller-declared locale is user input: it is interpolated into prompts
+    (the optimization veto's ``{user_locale}``), keys the prompt-loader cache
+    and names a prompts directory. Only a code from :func:`supported_locales`
+    passes. A BCP 47 tag whose primary subtag is supported (``es-MX``,
+    ``pt_BR``) passes as that subtag; anything else is None.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > 35:
+        return None
+    supported = supported_locales()
+    if text in supported:
+        return text
+    primary = text.replace("_", "-").split("-", 1)[0].lower()
+    return primary if primary in supported else None
+
+
 def resolve_language_for_new_task(
     user_lang: Optional[str] = None,
     channel_lang: Optional[str] = None,
@@ -763,8 +816,11 @@ def resolve_language_for_new_task(
     Returns the resolved ISO 639-1 language code (always a non-empty str).
     """
     for candidate in (explicit_lang, user_lang, channel_lang):
+        locale = validate_locale(candidate)
+        if locale:
+            return locale
         if isinstance(candidate, str) and candidate.strip():
-            return candidate.strip()
+            logger.warning("[LOCALIZATION] unsupported locale %r ignored for a new task", candidate[:40])
     return get_preferred_language()
 
 
@@ -836,7 +892,16 @@ def _lang_from_thought_or_task(context: Any) -> Optional[str]:
     thought_lang = _lang_from_obj_or_inner_context(thought)
     if thought_lang:
         return thought_lang
-    return _lang_from_obj_or_inner_context(task)
+    task_lang = _lang_from_obj_or_inner_context(task)
+    if task_lang:
+        return task_lang
+    # ProcessingThoughtContext (what the thought processor hands every DMA)
+    # carries the task's context as `initial_task_context`, not `task`.
+    if isinstance(context, dict):
+        initial_task_context = context.get("initial_task_context")
+    else:
+        initial_task_context = getattr(context, "initial_task_context", None)
+    return _str_lang(initial_task_context, "preferred_language") if initial_task_context is not None else None
 
 
 def _lang_from_user_profiles(context: Any) -> Optional[str]:
@@ -863,43 +928,138 @@ def _lang_from_user_profiles(context: Any) -> Optional[str]:
     return None
 
 
+# The language of the thought being evaluated, for the stage running now.
+# Task-local (asyncio copies it into every task), opened by
+# thought_language_scope() around one stage's work and reset on exit, so two
+# thoughts evaluated concurrently by the same shared DMA instance can never
+# read each other's language. Never set it any other way.
+_THOUGHT_LANGUAGE: ContextVar[Optional[str]] = ContextVar("ciris_thought_language", default=None)
+
+
+def resolve_thought_language(thought: Any = None, context: Any = None) -> str:
+    """The ONE resolver for the language a thought is evaluated in.
+
+    Every DMA (PDMA, CSDMA, DSDMA, IDMA, ASPDMA and the second-pass
+    *ASPDMAs) and every conscience resolves through here, so a thought is
+    never read in one language by one stage and another by the next.
+    Priority, each layer validated against the supported locales (#1366 F3):
+
+      1. The thought itself: ``thought.preferred_language``, then its
+         ``context`` / ``initial_context`` (a ProcessingQueueItem keeps the
+         inherited ThoughtContext on ``initial_context``).
+      2. The context's thought / task: ``context.thought``,
+         ``context.task`` / ``context.current_task`` (and their inner
+         contexts), then ``context.initial_task_context``. The task's
+         language is the per-message choice the adapter recorded (the API's
+         ``context.metadata.language``), so it outranks the stored profile:
+         it is the user's latest word.
+      3. The enclosing stage's language, when this call runs inside a
+         :func:`thought_language_scope` already resolved for the thought.
+      4. The user's profile: ``system_snapshot.user_profiles[*].preferred_language``.
+      5. The deployment default, ``CIRIS_PREFERRED_LANGUAGE``, then English.
+    """
+    try:
+        lang = validate_locale(_lang_from_obj_or_inner_context(thought))
+        if lang:
+            return lang
+        if context is not None:
+            lang = validate_locale(_lang_from_thought_or_task(context))
+            if lang:
+                return lang
+        lang = validate_locale(_THOUGHT_LANGUAGE.get())
+        if lang:
+            return lang
+        if context is not None:
+            lang = validate_locale(_lang_from_user_profiles(context))
+            if lang:
+                return lang
+    except Exception as e:
+        logger.debug(f"resolve_thought_language: error walking chain: {e}")
+    return get_preferred_language()
+
+
+def current_thought_language() -> str:
+    """The language of the stage running now: the open scope's, else the deployment default."""
+    return validate_locale(_THOUGHT_LANGUAGE.get()) or get_preferred_language()
+
+
+@contextmanager
+def thought_language_scope(language: str) -> Iterator[str]:
+    """Evaluate one stage of one thought in ``language``; restored on exit."""
+    token = _THOUGHT_LANGUAGE.set(language)
+    try:
+        yield language
+    finally:
+        _THOUGHT_LANGUAGE.reset(token)
+
+
+_F = TypeVar("_F", bound=Callable[..., Any])
+
+
+def _arg_path(bound: Dict[str, Any], path: Optional[str]) -> Any:
+    """``"input_data.original_thought"`` -> bound["input_data"].original_thought (None if absent)."""
+    if not path:
+        return None
+    head, *rest = path.split(".")
+    value = bound.get(head)
+    for attr in rest:
+        if value is None:
+            return None
+        value = value.get(attr) if isinstance(value, dict) else getattr(value, attr, None)
+    return value
+
+
+def in_thought_language(thought: str, *contexts: str) -> Callable[[_F], _F]:
+    """Run the decorated stage method in its thought's language.
+
+    ``thought`` / ``contexts`` name the method's parameters (dotted paths reach
+    into one, e.g. ``"input_data.original_thought"``). With several context
+    paths the first that is present is the context: DSDMA is handed no
+    processing context, so it names the one the queue item carries
+    (``thought_item.initial_context``) before its optional DMA inputs. The language is
+    resolved by :func:`resolve_thought_language` from the call's own
+    arguments and held in a task-local scope for the call's duration, so the
+    stage's prompt loader, guidance and every block it renders agree, and a
+    concurrent thought on the same evaluator instance is untouched.
+    """
+
+    def decorate(fn: _F) -> _F:
+        signature = inspect.signature(fn)
+
+        def _language(args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> str:
+            try:
+                bound: Dict[str, Any] = dict(signature.bind_partial(*args, **kwargs).arguments)
+            except TypeError:
+                bound = {}
+            context = next((c for c in (_arg_path(bound, path) for path in contexts) if c is not None), None)
+            return resolve_thought_language(_arg_path(bound, thought), context)
+
+        if inspect.iscoroutinefunction(fn):
+
+            @functools.wraps(fn)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                with thought_language_scope(_language(args, kwargs)):
+                    return await fn(*args, **kwargs)
+
+            return cast(_F, async_wrapper)
+
+        @functools.wraps(fn)
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            with thought_language_scope(_language(args, kwargs)):
+                return fn(*args, **kwargs)
+
+        return cast(_F, sync_wrapper)
+
+    return decorate
+
+
 def get_user_language_from_context(context: Any) -> str:
-    """Resolve the agent's working language for THIS thought.
+    """Resolve the agent's working language from a context object alone.
 
-    Walks the canonical localization chain in priority order:
-      1. Task / thought specific (set by the originating channel/adapter):
-         a. `context.thought.preferred_language`
-         b. `context.thought.context.preferred_language`
-         c. `context.task.preferred_language`
-         d. `context.task.context.preferred_language`
-      2. Channel / user preference: first matching
-         `system_snapshot.user_profiles[*].preferred_language`
-         (or `.language` legacy alias)
-      3. System setting: `CIRIS_PREFERRED_LANGUAGE` env var
-      4. English default
-
-    Adapters and the QA runner set the language at task/thought creation
-    time by populating the appropriate `preferred_language` field. This
-    helper does NOT do script-based language detection — language is an
-    explicit input, not something we infer from the bytes.
+    Same chain as :func:`resolve_thought_language` (thought / task, then the
+    enclosing stage, then profile, then env); kept for callers holding only a
+    context (consciences, handlers).
     """
     if context is None:
-        logger.debug("get_user_language_from_context: context is None, using env fallback")
-        return get_preferred_language()
-
-    try:
-        lang = _lang_from_thought_or_task(context)
-        if lang:
-            logger.debug(f"get_user_language_from_context: thought/task lang='{lang}'")
-            return lang
-
-        lang = _lang_from_user_profiles(context)
-        if lang:
-            logger.debug(f"get_user_language_from_context: profile lang='{lang}'")
-            return lang
-
-        logger.debug("get_user_language_from_context: no thought/task/profile signal — env fallback")
-    except Exception as e:
-        logger.debug(f"get_user_language_from_context: error walking chain: {e}")
-
-    return get_preferred_language()
+        logger.debug("get_user_language_from_context: context is None, using scope/env fallback")
+    return resolve_thought_language(None, context)

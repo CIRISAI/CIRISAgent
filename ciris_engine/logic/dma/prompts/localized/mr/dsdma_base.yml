@@ -79,3 +79,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  पाइपलाइन स्थिती: तुम्ही PDMA आणि CSDMA सोबत प्रथम चालता. त्यानंतर अंतर्ज्ञान तपासणी तिन्हींचे
+  पुनरावलोकन करते, कृती निवड कृती निवडते, आणि विवेक तिचे
+  पुनरावलोकन करतात.

@@ -43,7 +43,7 @@ def wa_client(monkeypatch):
     # covered in test_wa_resolve_rows.py, so here it just answers.
     from ciris_engine.logic.adapters.api.routes import wa as wa_routes
 
-    async def _answer_row(request, deferral_id, pending, approved):
+    async def _answer_row(request, deferral_id, pending, approved, amendment_sha256=None):
         return "att-response-1"
 
     monkeypatch.setattr(wa_routes, "_sign_response_row", _answer_row)

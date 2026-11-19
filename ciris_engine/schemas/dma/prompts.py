@@ -44,7 +44,18 @@ class PromptCollection(BaseModel):
 
     # Core prompt sections
     system_header: Optional[str] = Field(None, description="System message header")
+    # #1366 — engine-owned ASPDMA contract rendered right after `system_header`;
+    # a template override of `system_header` cannot replace it.
+    stage_contract: Optional[str] = Field(None, description="Engine-owned stage contract (not template-overridable)")
     system_guidance_header: Optional[str] = Field(None, description="System guidance header")
+    # #1366 item 12 — where the stage sits and what it cannot see. A STRUCTURAL field: the composer emits it as
+    # its own `pipeline_position` segment right after `system_guidance_header` (ASPDMA: right before
+    # `stage_contract`), then `system_guidance_header_tail`, the rest of the header. It used to sit inside the
+    # header and was found by its English heading, which a translated template does not carry.
+    pipeline_position: Optional[str] = Field(None, description="Engine-owned pipeline-position paragraph")
+    system_guidance_header_tail: Optional[str] = Field(
+        None, description="System guidance header, after the pipeline-position paragraph"
+    )
 
     # Domain-specific prompts
     domain_principles: Optional[str] = Field(None, description="Domain principles template")

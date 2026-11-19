@@ -154,3 +154,7 @@ context_integration: |
   Pensamiento a Evaluar: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  POSICIÓN EN EL PIPELINE: usted se ejecuta primero, junto a CSDMA y DSDMA. IDMA luego revisa
+  su razonamiento, la selección de acción elige la acción, y las conciencias
+  la revisan. Usted recomienda; usted no elige la acción final.

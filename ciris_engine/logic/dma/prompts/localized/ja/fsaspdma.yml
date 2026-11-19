@@ -80,3 +80,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   正しいノード、そしてそのノードだけを削除することが、このステップの要点です。
+pipeline_position: "パイプラインにおける位置：アクション選択は動詞のみを選択しました。このステップはノードを指定します。その後、良心がアクションの実行前にそれを確認します。"

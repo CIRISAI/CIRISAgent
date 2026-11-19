@@ -1,7 +1,8 @@
-"""Task-scoped authorization primitives (CIRISAgent#938, Phase 1).
+"""Task-scoped authorization (CIRISAgent#938 Phase 1, #1366 item 19 Phase 2).
 
-Phase 1 builds the *subject* a tool gate would authorize; it does not build the
-gate. Nothing in this package denies anything. See ``FSD/TASK_ENVELOPE.md``.
+Phase 1 built the *subject* a tool gate authorizes. Phase 2's gate is
+:mod:`.dispatch_gate`, called by ``ToolBus.dispatch_to_provider``, and it
+ENFORCES: fail-closed, typed refusals. See ``FSD/TASK_ENVELOPE.md`` §8.
 
 Import boundary: modules under ``ciris_engine/logic/dma/``,
 ``ciris_engine/logic/conscience/`` and ``ciris_engine/logic/handlers/`` must not

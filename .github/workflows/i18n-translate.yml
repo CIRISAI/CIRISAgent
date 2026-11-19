@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: "accord = the Accord segments (localization/accord_localize.py); ui = ciris_engine/data/localized/{lang}.json; prompts = the DMA prompt templates, ciris_engine/logic/dma/prompts/localized/{lang}/*.yml (a field still in English counts as missing)"
+        description: "accord = the Accord segments (localization/accord_localize.py); ui = ciris_engine/data/localized/{lang}.json; prompts = the DMA and conscience prompt templates, ciris_engine/logic/{dma,conscience}/prompts/localized/{lang}/*.yml (a field still in English counts as missing)"
         required: false
         default: "accord"
         type: choice

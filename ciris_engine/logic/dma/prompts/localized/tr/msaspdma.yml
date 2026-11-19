@@ -158,3 +158,7 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Adresi doğru almak bu adımın tamamının amacıdır.
+pipeline_position: |-
+  HAT KONUMU: eylem seçimi yalnızca fiili seçti; bu adım yazmanın nereye
+  gideceğini kontrol eder. Vicdanlar daha sonra eylem çalışmadan önce onu
+  inceler.

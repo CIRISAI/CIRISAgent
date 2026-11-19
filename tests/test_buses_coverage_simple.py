@@ -21,6 +21,7 @@ from ciris_engine.logic.buses.wise_bus import WiseBus
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.schemas.infrastructure.base import BusMetrics
 from ciris_engine.schemas.runtime.enums import ServiceType
+from tests.fixtures.tool_gate import admitted_tool_subject
 
 
 @pytest.fixture
@@ -296,7 +297,8 @@ class TestToolBusCoverage:
         # Also mock the internal _services attribute that ToolBus checks
         mock_registry._services = {ServiceType.TOOL: [MagicMock(instance=tool_service)]}
 
-        result = await bus.execute_tool("test_tool", {"param": "value"})
+        args = {"param": "value"}
+        result = await bus.execute_tool("test_tool", args, subject=admitted_tool_subject("test_tool", args))
 
         tool_service.execute_tool.assert_called_once()
         assert bus._executions_count > 0

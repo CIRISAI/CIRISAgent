@@ -112,6 +112,73 @@ class IdentityAmendment(BaseModel):
     amendment_attestation_id: Optional[str] = Field(
         None, description="The signed identity_amendment:v1 row for this change (CIRISAgent#1316), if any"
     )
+    approved_sha256: Optional[str] = Field(
+        None, description="sha256 of the exact text the Wise Authority approved, as the approval recorded it (#1366 F1)"
+    )
+    verified: bool = Field(
+        False,
+        description=(
+            "True only when sha256(content) equals the digest inside the WA's signed response row AND the node's "
+            "signed identity_amendment:v1 row (#1366 F1). Only verified amendments reach the governance block the "
+            "input-ablated consciences read. Set by the loader, never stored."
+        ),
+    )
+    amendment_row_prev: Optional[str] = Field(
+        None,
+        description=(
+            "The ``refs.prev`` of this amendment's signed identity_amendment row (rc21): the row it follows in the "
+            "profile chain. Read from the signed row by the loader, never from local provenance."
+        ),
+    )
+    base: bool = Field(
+        False,
+        description=(
+            "The profile's BASE link (rc21): its approved digest is the base template's digest, not text; it has no "
+            "content and never renders in the identity block."
+        ),
+    )
+
+
+class IdentityProfileStatus(str, Enum):
+    """The rc21 whole-profile check at load (wire.md section 3)."""
+
+    VERIFIED = "verified"  # the held profile equals the signed chain's derived digest
+    CONTESTED = "contested"  # two links name one prev: neither counts; the chain before them does
+    UNANCHORED = "unanchored"  # no base link: the shipped template runs, no amendment is authoritative
+    MISMATCH = "mismatch"  # the held profile differs from the chain's derived digest: load refused
+
+
+class IdentityProfile(BaseModel):
+    """The whole-profile digest of the identity the agent holds, and its check at load.
+
+    ``profile_digest`` is SHA-256(CDE(["CEG-profile/2", d0, d1..dn])) over the
+    bytes the agent loads: d0 the held base template, d1..dn the amendments of
+    the signed chain. ``expected_profile_digest`` is the same over the chain's
+    signed digests. Only when they are equal (``verified``, or ``contested``
+    for the chain before the contested slot) do the chain's amendments count
+    as verified; otherwise none does, and the agent keeps its base identity.
+    """
+
+    profile_digest: str = Field(..., description="sha256 hex of the held profile's CDE encoding")
+    expected_profile_digest: Optional[str] = Field(
+        None, description="sha256 hex derived from the signed chain; None when there is no base link"
+    )
+    status: IdentityProfileStatus = Field(..., description="Result of the load-time check")
+    reason: str = Field(..., description="The rc21 token: profile_match, profile_contested, profile_unanchored, profile_digest_mismatch")
+    template: Optional[str] = Field(None, description="The shipped template the held base is, if any")
+    template_verified: bool = Field(
+        False, description="The shipped template's bytes are in the template manifest under a verified root-WA signature"
+    )
+    base_digest: str = Field(..., description="sha256 hex of the held identity base")
+    base_row_id: Optional[str] = Field(None, description="The base link's identity_amendment row id")
+    chain_row_ids: List[str] = Field(default_factory=list, description="The counted chain after the base, in order")
+    amendment_digests: List[str] = Field(default_factory=list, description="sha256 hex of each counted amendment, in order")
+    contested_row_ids: List[str] = Field(default_factory=list, description="Links that name one prev (profile_contested)")
+    waiting_row_ids: List[str] = Field(default_factory=list, description="Links whose prev is not held: they wait")
+
+    @property
+    def authoritative(self) -> bool:
+        return self.status in (IdentityProfileStatus.VERIFIED, IdentityProfileStatus.CONTESTED)
 
 
 class IdentityData(BaseModel):
@@ -127,6 +194,13 @@ class IdentityData(BaseModel):
     approved_amendments: List[IdentityAmendment] = Field(
         default_factory=list,
         description="Wise Authority-approved identity amendments, oldest first, rendered with the core identity",
+    )
+    profile: Optional[IdentityProfile] = Field(
+        None,
+        description=(
+            "The whole-profile digest and its load-time check; rides the system snapshot into the trace. None when "
+            "the identity was not loaded through the profile check."
+        ),
     )
 
 

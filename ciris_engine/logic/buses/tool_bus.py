@@ -52,6 +52,7 @@ class ToolBus(BaseBus[ToolService]):
         # Metrics tracking
         self._executions_count = 0
         self._errors_count = 0
+        self._denials_count = 0  # Phase 2 gate refusals (CIRISAgent#1366 item 19)
         self._cached_tools_count = 0  # Updated by collect_telemetry when available
 
         # Tool aliases: maps alias -> canonical tool name
@@ -98,11 +99,9 @@ class ToolBus(BaseBus[ToolService]):
         """Record who is asking, and complain loudly when nobody says.
 
         CIRISAgent#938: the enforcement point could not previously see the
-        subject it would need to authorize. ``subject`` is that subject. Phase 1
-        only observes it — the gate is Phase 2 (#905 Ask 1). An identity-less
-        call is not blocked here (blocking is not this phase's job) but it is
-        named, because a silent permissive path is the exact anti-pattern this
-        work exists to remove.
+        subject it would need to authorize. ``subject`` is that subject. The
+        gate (``dispatch_gate``) denies an identity-less call; this names the
+        caller once so the denial is attributable.
         """
         if subject is not None:
             logger.debug("[TOOL_BUS] execute_tool '%s' subject: %s", tool_name, subject.describe())
@@ -111,8 +110,7 @@ class ToolBus(BaseBus[ToolService]):
             self._identityless_callers.add(handler_name)
             logger.warning(
                 "[TOOL_BUS] execute_tool('%s') called by %r with NO ToolInvocationSubject. "
-                "Task identity is unavailable at the enforcement point for this caller "
-                "(CIRISAgent#938); a Phase 2 tool gate would have to deny or exempt it. "
+                "The Phase 2 tool gate DENIES it (CIRISAgent#938, #1366 item 19). "
                 "Pass ToolInvocationSubject.for_task(...) or .for_component(...).",
                 tool_name,
                 handler_name,
@@ -267,8 +265,40 @@ class ToolBus(BaseBus[ToolService]):
 
         It is a dispatch point, not a resolver: provider selection stays with
         the caller, so adapter-scoped enrichment routing is preserved exactly.
+
+        **The Phase 2 gate is ENFORCING here** (CIRISAgent#1366 item 19):
+        ``dispatch_gate.authorize_dispatch`` denies, fail-closed and typed, a
+        call with no subject or envelope, a tool outside the grant, or a
+        model-selected call that is not an admitted reviewed fingerprint. A
+        denial never reaches the provider; it returns UNAUTHORIZED with the
+        refusal reason id.
         """
+        from ciris_engine.logic.infrastructure.authorization.dispatch_gate import authorize_dispatch, gated_dispatch
+
         self._note_subject(tool_name, handler_name, subject)
+        # Code admission (rc21 CC 2.7.11): a tool served by a unit loaded beyond the
+        # attested build runs only if every capability it exercises is admitted by
+        # a live admission:unit row, held by the unit that started it, and (for an
+        # effect) not under a latched halt. Built-in providers return None here.
+        from ciris_engine.logic.infrastructure.authorization.unit_admission import (
+            check_unit_tool_call,
+            held_for,
+            unit_scope,
+        )
+
+        unit_decision = await check_unit_tool_call(service, tool_name)
+        if unit_decision is not None and not unit_decision.admitted:
+            self._executions_count += 1
+            self._errors_count += 1
+            self._denials_count += 1
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.UNAUTHORIZED,
+                success=False,
+                data=None,
+                error=unit_decision.message(),
+                correlation_id=str(uuid.uuid4()),
+            )
         # CC 4.2.1.1 backstop, here so both paths inherit it: no tool runs for
         # the reasoning loop under a halt — the enrichment tools included.
         halt = await bus_backstop(BusBackstopCall.TOOL_EXECUTE)
@@ -281,14 +311,34 @@ class ToolBus(BaseBus[ToolService]):
                 error=halt.refusal_reason(),
                 correlation_id=str(uuid.uuid4()),
             )
+        refusal = await authorize_dispatch(service, tool_name, parameters, subject)
+        if refusal is not None:
+            self._executions_count += 1
+            self._errors_count += 1
+            self._denials_count += 1
+            return ToolExecutionResult(
+                tool_name=tool_name,
+                status=ToolExecutionStatus.UNAUTHORIZED,
+                success=False,
+                data=None,
+                error=refusal.message(),
+                correlation_id=str(uuid.uuid4()),
+            )
         try:
             logger.debug(f"Executing tool '{tool_name}' with {type(service).__name__}")
             # Providers are async per ToolServiceProtocol, but the
             # context-enrichment path historically tolerated sync ones
             # (_call_async_or_sync_method). Keep tolerating them: routing that
             # path through here must not break a provider it used to accept.
-            raw = service.execute_tool(tool_name, parameters)
-            result: ToolExecutionResult = await raw if inspect.isawaitable(raw) else raw
+            with gated_dispatch(tool_name):
+                if unit_decision is not None:
+                    # Units this one starts hold at most what it holds (attenuation).
+                    with unit_scope(held_for(unit_decision)):
+                        raw = service.execute_tool(tool_name, parameters)
+                        result: ToolExecutionResult = await raw if inspect.isawaitable(raw) else raw
+                else:
+                    raw = service.execute_tool(tool_name, parameters)
+                    result = await raw if inspect.isawaitable(raw) else raw
 
             # Track metrics
             self._executions_count += 1
@@ -576,6 +626,7 @@ class ToolBus(BaseBus[ToolService]):
         return {
             "tool_executions_total": float(self._executions_count),
             "tool_execution_errors": float(self._errors_count),
+            "tool_gate_denials": float(getattr(self, "_denials_count", 0)),
             "tools_available": float(self._cached_tools_count),
             "tool_uptime_seconds": uptime_seconds,
         }

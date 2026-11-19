@@ -186,6 +186,8 @@ def prompt_content_environment(
     aspdma_system_message: Callable[..., str] | None = None,
     dsaspdma_prompt_value: Callable[..., Any] | None = None,
     msaspdma_prompt_value: Callable[..., Any] | None = None,
+    dsaspdma_position_fallback: Callable[..., Any] | None = None,
+    msaspdma_position_fallback: Callable[..., Any] | None = None,
     crisis_resources: Callable[..., str] | None = None,
 ) -> Iterator[None]:
     """Pin language + prompt-content loaders for byte-reproducible composition.
@@ -316,12 +318,29 @@ def prompt_content_environment(
                         msaspdma_prompt_value,
                     )
                 )
+        # #1366 item 12: the English pipeline_position a locale copy lacks is a field read of its own
+        # (BaseDMA._pipeline_position_fallback), recorded beside _get_prompt_value.
+        if dsaspdma_position_fallback is not None:
+            stack.enter_context(
+                patch(
+                    "ciris_engine.logic.dma.dsaspdma.DSASPDMAEvaluator._pipeline_position_fallback",
+                    dsaspdma_position_fallback,
+                )
+            )
+        if msaspdma_position_fallback is not None:
+            stack.enter_context(
+                patch(
+                    "ciris_engine.logic.dma.msaspdma.MSASPDMAEvaluator._pipeline_position_fallback",
+                    msaspdma_position_fallback,
+                )
+            )
         yield
 
 
 @contextmanager
 def deterministic_prompt_environment() -> Iterator[None]:
-    """The #972 golden environment: language pinned to en, loaders to sentinels."""
+    """The #972 golden environment: language pinned to en, loaders to sentinels, and the stored agent identity
+    (DSASPDMA's fallback when a fixture's context carries none) pinned to the fixture identity."""
     with prompt_content_environment(
         language="en",
         accord=_sentinel_accord,
@@ -329,8 +348,25 @@ def deterministic_prompt_environment() -> Iterator[None]:
         language_guidance=_sentinel_language_guidance,
         prohibition_guidance=_sentinel_prohibition_guidance,
         crisis_resources=_sentinel_crisis_resources,
-    ):
+    ), stored_identity_environment():
         yield
+
+
+def stored_identity_environment() -> Any:
+    """Pin the stored agent identity (DSASPDMA's fallback when the context carries none) to the fixture's."""
+    return patch(
+        "ciris_engine.logic.persistence.models.identity.retrieve_agent_identity", side_effect=lambda: stored_identity()
+    )
+
+
+def stored_identity() -> Any:
+    """The fixture agent's stored identity node, shaped as ``retrieve_agent_identity`` returns it."""
+    identity = make_system_snapshot().agent_identity
+    get = (lambda k: identity.get(k)) if isinstance(identity, dict) else (lambda k: getattr(identity, k))
+    return SimpleNamespace(
+        agent_id=get("agent_id"),
+        core_profile=SimpleNamespace(description=get("description"), role_description=get("role")),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -617,7 +653,7 @@ async def capture_dsaspdma() -> List[JSONDict]:
             primary_need_category=list(DeferralNeedCategory)[0],
         ),
     )
-    await dma.evaluate(make_defer_aspdma_result(), make_queue_item(), context=None)
+    await dma.evaluate(make_defer_aspdma_result(), make_queue_item(), context=make_context())
     return captured["messages"]  # type: ignore[no-any-return]
 
 

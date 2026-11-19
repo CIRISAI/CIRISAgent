@@ -128,3 +128,4 @@ user_prompt_with_image_template: |-
 
   ASSISTANT REPLY TO ASSESS FOR SEMANTIC ENTROPY:
   {text}
+pipeline_position: "流水线位置：您在动作选择之后、任何操作运行之前，与其他良知一起审查智能体已起草的动作。按照设计，您不会看到用户的消息。您未被展示的输入会以 WITHHELD（隐去）占位形式出现（包括其类型、作者角色、权限以及与草稿的关系），但绝不会显示其文本内容。"

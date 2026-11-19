@@ -52,3 +52,4 @@ context_integration: |
   الفكرة الأصلية: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**جایگاه خط لوله**: شما نخست، در کنار PDMA و DSDMA، اجرا می‌شوید. سپس IDMA هر سه را بازبینی می‌کند، انتخاب عمل کنش را برمی‌گزیند، و وجدان‌ها آن را بازبینی می‌کنند."

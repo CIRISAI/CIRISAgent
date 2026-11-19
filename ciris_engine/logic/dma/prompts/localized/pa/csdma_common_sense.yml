@@ -52,3 +52,4 @@ context_integration: |
   ਮੂਲ ਵਿਚਾਰ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**ਪਾਈਪਲਾਈਨ ਸਥਿਤੀ**: ਤੁਸੀਂ PDMA ਅਤੇ DSDMA ਦੇ ਨਾਲ ਪਹਿਲਾਂ ਚੱਲਦੇ ਹੋ। ਫਿਰ IDMA ਤਿੰਨਾਂ ਦੀ ਸਮੀਖਿਆ ਕਰਦਾ ਹੈ, ਕਾਰਵਾਈ ਦੀ ਚੋਣ ਕਾਰਵਾਈ ਚੁਣਦੀ ਹੈ, ਅਤੇ ਜ਼ਮੀਰਾਂ ਇਸ ਦੀ ਸਮੀਖਿਆ ਕਰਦੀਆਂ ਹਨ।"

@@ -122,3 +122,6 @@ response_format: |
 # DEONTIC — closing categorical।
 closing_reminder: |
   Address ला सरिसृजपणे शोधणे या step चा पूर्ण मुद्दा आहे.
+pipeline_position: |-
+  पाइपलाइन स्थिती: कृती निवडीने फक्त क्रियापद निवडले आहे; हा टप्पा write कुठे जाते ते
+  तपासतो. त्यानंतर कृती चालण्यापूर्वी विवेक तिचे पुनरावलोकन करतात.

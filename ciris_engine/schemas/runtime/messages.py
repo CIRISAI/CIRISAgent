@@ -149,6 +149,10 @@ class FetchedMessage(BaseModel):
     timestamp: Optional[str] = None
     is_bot: Optional[bool] = False
     message_type: Optional[str] = Field(default="user", description="Type of message (user, agent, system, error)")
+    author_role: Optional[UserRole] = Field(
+        default=None,
+        description="The author's role as the adapter's authentication verified it when the message arrived (#1366)",
+    )
 
     model_config = ConfigDict(populate_by_name=True, extra="allow", defer_build=True)
 

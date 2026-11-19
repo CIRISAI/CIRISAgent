@@ -31,6 +31,7 @@ from ciris_engine.logic.registries.base import Priority, ServiceRegistry
 from ciris_engine.logic.utils.platform_detection import DESKTOP_PLATFORM_NAMES, get_platform_name, is_desktop
 from ciris_engine.schemas.adapters.tools import ToolExecutionStatus
 from ciris_engine.schemas.runtime.enums import ServiceType
+from tests.fixtures.tool_gate import admitted_tool_subject
 
 CLI_OWN_TOOLS = ("list_files", "read_file", "system_info")
 
@@ -257,7 +258,8 @@ class TestReachabilityThroughToolBus:
         bus = build_bus(adapter, time_service)
 
         with patch("ciris_engine.logic.adapters.cli.cli_adapter.persistence.add_correlation"):
-            result = await bus.execute_tool("shell_command", {"command": "echo ciris-941"})
+            args = {"command": "echo ciris-941"}
+            result = await bus.execute_tool("shell_command", args, subject=admitted_tool_subject("shell_command", args))
 
         assert result.status == ToolExecutionStatus.COMPLETED
         assert result.success is True
@@ -276,7 +278,8 @@ class TestReachabilityThroughToolBus:
         target = tmp_path / "written_by_agent.txt"  # type: ignore[operator]
 
         with patch("ciris_engine.logic.adapters.cli.cli_adapter.persistence.add_correlation"):
-            result = await bus.execute_tool("write_file", {"path": str(target), "content": "hello from #941"})
+            args = {"path": str(target), "content": "hello from #941"}
+            result = await bus.execute_tool("write_file", args, subject=admitted_tool_subject("write_file", args))
 
         assert result.status == ToolExecutionStatus.COMPLETED
         assert result.success is True
@@ -293,7 +296,8 @@ class TestReachabilityThroughToolBus:
         bus = build_bus(adapter, time_service)
 
         with patch("ciris_engine.logic.adapters.cli.cli_adapter.persistence.add_correlation"):
-            result = await bus.execute_tool("write_file", {"path": "/nonexistent-dir-941/x.txt", "content": "x"})
+            args = {"path": "/nonexistent-dir-941/x.txt", "content": "x"}
+            result = await bus.execute_tool("write_file", args, subject=admitted_tool_subject("write_file", args))
 
         assert result.success is False
         assert result.status == ToolExecutionStatus.FAILED

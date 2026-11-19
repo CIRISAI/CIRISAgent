@@ -84,3 +84,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   በትክክለኛው ቦታ መፈለግ የዚህ ደረጃ ዋና ነጥብ ነው።
+pipeline_position: "የፓይፕላይን አቀማመጥ፦ የተግባር ምርጫ ግሱን ብቻ መርጧል፤ ይህ ደረጃ ምን እንደሚነበብ ይገልጻል። RECALL ማንበብ ብቻ ስለሚያደርግ ያለ ህሊና ግምገማ ይሮጣል።"

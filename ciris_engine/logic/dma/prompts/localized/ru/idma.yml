@@ -2,7 +2,7 @@
 # Semantic implementation of Coherence Collapse Analysis (CCA) principles
 
 component_name: idma
-description: "Intuition DMA - applies CCA k_eff formula and phase classification"
+description: "Интуиция DMA — применяет формулу CCA k_eff и классификацию фазы"
 version: "1.1"
 
 # Include the CIRIS Accord as context
@@ -229,3 +229,8 @@ closing_reminder: |
   Помните: Пропаганда достигает видимого консенсуса через УСТРАНЕНИЕ источников,
   а не через синтез. Задача IDMA — выявить этот эпистемический захват и
   отметить его для рассмотрения совестью. Когда сомневаетесь, отмечайте.
+pipeline_position: |-
+  ПОЗИЦИЯ В КОНВЕЙЕРЕ: вы выполняетесь после PDMA, CSDMA и DSDMA и рассматриваете их
+  рассуждения. Затем выбор действия считывает ваш результат, после чего совести
+  проверяют выбранное действие. Вам не показывают шаблон идентичности агента;
+  вам показывают действующее проверенное управление.

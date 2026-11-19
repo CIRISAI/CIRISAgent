@@ -52,3 +52,4 @@ context_integration: |
   الفكرة الأصلية: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**موقع خط الأنابيب**: تعمل أولاً، إلى جانب PDMA وDSDMA. ثم تراجع IDMA نواتج الثلاثة، ويختار اختيار الإجراء الإجراء، وتراجعه الضمائر."

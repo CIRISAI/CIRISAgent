@@ -71,3 +71,4 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "குழாய்வழி நிலை: PDMA மற்றும் CSDMA உடன் சேர்ந்து நீங்கள் முதலில் இயங்குகிறீர்கள். பின்னர் IDMA மூன்றையும் மதிப்பாய்வு செய்கிறது, செயல் தேர்வு செயலைத் தேர்ந்தெடுக்கிறது, மற்றும் மனசாட்சிகள் அதை மதிப்பாய்வு செய்கின்றன."

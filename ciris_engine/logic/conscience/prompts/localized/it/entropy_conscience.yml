@@ -141,3 +141,4 @@ user_prompt_with_image_template: |-
 
   RISPOSTA DELL'ASSISTENTE DA VALUTARE PER L'ENTROPIA SEMANTICO:
   {text}
+pipeline_position: "POSIZIONE NELLA PIPELINE: Lei esamina l'azione redatta dall'agente dopo la selezione dell'azione, insieme alle altre coscienze, prima che venga eseguito qualcosa. Per progettazione, Lei non vede il messaggio dell'utente. Gli input che non Le vengono mostrati appaiono come segnaposto WITHHELD (il loro tipo, il ruolo dell'autore, l'autorità e la relazione con la bozza), mai il loro testo."

@@ -18,6 +18,7 @@ converted to a full CIRIS adapter at any time.
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -434,7 +435,14 @@ class SkillBuilder:
             # unescaped (CWE-117).
             logger.warning("Rejected a draft id that is not a uuid4")
             return None
-        return self.drafts_dir / f"{draft_id}.json"
+        # Belt to the uuid4 check, in the form static analysis recognises: the
+        # normalised path must sit directly inside the drafts directory.
+        root = os.path.normpath(os.path.abspath(self.drafts_dir))
+        candidate = os.path.normpath(os.path.join(root, f"{draft_id}.json"))
+        if not candidate.startswith(root + os.sep):
+            logger.warning("Rejected a draft path outside the drafts directory")
+            return None
+        return Path(candidate)
 
     def save_draft(self, draft: SkillDraft) -> Path:
         """Save a draft to disk as JSON."""

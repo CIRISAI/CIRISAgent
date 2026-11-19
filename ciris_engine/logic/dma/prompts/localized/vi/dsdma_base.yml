@@ -89,3 +89,7 @@ context_integration: |-
   Evaluate this thought for the '{domain_name}' domain: "{thought_content_str}"
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: |-
+  Vị trí trong đường ống: bạn chạy đầu tiên, bên cạnh PDMA và CSDMA. IDMA sau đó xem xét
+  cả ba, lựa chọn hành động sẽ chọn ra hành động, và các lương tâm
+  xem xét nó.

@@ -11,13 +11,25 @@ from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tu
 from ciris_engine.logic import persistence
 from ciris_engine.logic.config import ConfigAccessor
 from ciris_engine.logic.config.llm_budget import Deadline, active_budget, attempt_timeout, llm_call_deadline
+from ciris_engine.logic.conscience.veto_contract import (
+    VETO_RECORD_FEEDBACK_KEY,
+    format_prior_vetoes_block,
+    veto_entries_of_task,
+)
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
 from ciris_engine.logic.dma.exceptions import DMAFailure
 from ciris_engine.logic.handlers.control.ponder_handler import PonderHandler
 from ciris_engine.logic.infrastructure.authorization.envelope_reader import resolve_envelope_for_task_id
 from ciris_engine.logic.infrastructure.authorization.reasoning_scope import reasoning_scope
+from ciris_engine.logic.infrastructure.authorization.reviewed_action import (
+    admit_reviewed_action,
+    resolve_tool_name_via_bus,
+    reviewed_action_fingerprint,
+    tool_call_fingerprint,
+)
 from ciris_engine.logic.infrastructure.authorization.tool_approval import (
     build_approval_deferral,
-    envelope_approves_tool,
+    envelope_approves_call,
     tool_requires_approval,
 )
 from ciris_engine.logic.infrastructure.handlers.base_handler import ActionHandlerDependencies
@@ -47,6 +59,8 @@ from ciris_engine.schemas.processors.core import (
 )
 from ciris_engine.schemas.runtime.enums import HandlerActionType
 from ciris_engine.schemas.runtime.models import Thought
+from ciris_engine.schemas.runtime.reviewed_action_admission import ReviewEntry
+from ciris_engine.schemas.runtime.veto_record import ObjectionType, VetoObjection
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -286,6 +300,11 @@ class ThoughtProcessor(
         conscience_result: Optional[ConscienceApplicationResult] = (
             conscience_result_raw if isinstance(conscience_result_raw, ConscienceApplicationResult) else None
         )
+        # Phase 4.8: review integrity (#1366 item 10). Fingerprint the action the
+        # consciences just passed, so dispatch can refuse anything else.
+        conscience_result = self._stamp_reviewed_action(
+            action_result_dict.get("action_result"), conscience_result, thought=thought
+        )
         action_from_conscience = self._handle_special_cases(conscience_result)
 
         # Phase 4.9: approval gate (CIRISAgent#942). Deliberately the LAST thing
@@ -306,6 +325,11 @@ class ThoughtProcessor(
         self, thought_item: ProcessingQueueItem, thought: Thought, thought_context: Any, dma_results: Any
     ) -> JSONDict:
         """Execute action selection and conscience validation phases."""
+        # Veto continuity across thoughts (#1366 item 8): a follow-up thought's
+        # drafters read the task's earlier vetoes through the same conscience
+        # feedback a retry uses.
+        self._carry_task_vetoes(thought_item, thought, thought_context)
+
         # Phase 4: PERFORM_ASPDMA - LLM-powered action selection
         with timed_phase(RoundPhase.ASPDMA):
             action_result = await self._perform_aspdma_step(thought_item, thought_context, dma_results)
@@ -319,12 +343,22 @@ class ThoughtProcessor(
         # - Switch to SPEAK for user clarification
         # - Switch to PONDER to reconsider approach
         with timed_phase(RoundPhase.ASPDMA):
-            action_result = await self._run_verb_second_pass(thought_item, action_result, thought_context)
+            # Both drafting passes read the same feedback (#1366 item 8).
+            action_result = await self._run_verb_second_pass(
+                thought_item,
+                action_result,
+                thought_context,
+                conscience_feedback=getattr(thought_item, "conscience_feedback", None),
+            )
 
         # Phase 5: CONSCIENCE_EXECUTION - Apply ethical safety validation
         with timed_phase(RoundPhase.CONSCIENCE):
             conscience_result = await self._conscience_execution_step(
                 thought_item, action_result, thought, dma_results, thought_context
+            )
+            # An approved identity change a conscience objected to goes back to the WA, not to a retry (#1366).
+            conscience_result = self._redefer_objected_identity_amendment(
+                thought_item, action_result, conscience_result, thought_context
             )
 
             # Phase 6: Handle conscience overrides (retry logic)
@@ -332,10 +366,89 @@ class ThoughtProcessor(
                 action_result, conscience_result = await self._handle_conscience_retry(
                     thought_item, thought, thought_context, dma_results, conscience_result, profile_name
                 )
+                conscience_result = self._redefer_objected_identity_amendment(
+                    thought_item, action_result, conscience_result, thought_context
+                )
 
         self._log_final_action_results(action_result, conscience_result, thought)
 
         return {"action_result": action_result, "conscience_result": conscience_result}
+
+    @staticmethod
+    def _stamp_reviewed_action(
+        reviewed_draft: Any,
+        conscience_result: Optional[ConscienceApplicationResult],
+        thought: Any = None,
+    ) -> Optional[ConscienceApplicationResult]:
+        """Bind the final action to the draft the consciences reviewed (#1366 item 10).
+
+        ``reviewed_draft`` is the action handed to the (last) conscience pass —
+        first pass or retry. A TOOL final action is stamped with its
+        :func:`reviewed_action_fingerprint` only when the consciences passed it
+        (not overridden) AND it fingerprints identically to that draft; in every
+        other case the stamp is CLEARED, so a value set by any other producer
+        never survives. ``ToolHandler`` refuses an unstamped or mismatched TOOL.
+
+        Runs before the approval gate: the gate may only narrow (TOOL -> DEFER),
+        and the stamp is meaningless on the DEFER it produces.
+
+        Admission (#1366 item 19): a stamped TOOL is also offered to
+        ``admit_reviewed_action`` with the consciences that passed THIS
+        fingerprint in this pass; the dispatch gate executes only an admitted
+        fingerprint, and admission needs all four LLM consciences (fail closed).
+        """
+        if conscience_result is None or conscience_result.final_action is None:
+            return conscience_result
+        final_action = conscience_result.final_action
+        stamp: Optional[str] = None
+        if final_action.selected_action == HandlerActionType.TOOL and not conscience_result.overridden:
+            final_fp = reviewed_action_fingerprint(final_action)
+            draft_fp = (
+                reviewed_action_fingerprint(reviewed_draft)
+                if isinstance(reviewed_draft, ActionSelectionDMAResult)
+                else None
+            )
+            if final_fp is not None and final_fp == draft_fp:
+                stamp = final_fp
+            else:
+                logger.error(
+                    "REVIEW-INTEGRITY: TOOL final action does not match the draft the consciences reviewed "
+                    "(final=%s reviewed=%s); leaving it unstamped so dispatch refuses it.",
+                    final_fp,
+                    draft_fp,
+                )
+        admission = ThoughtProcessor._admit_stamp(stamp, conscience_result, thought)
+        if final_action.reviewed_action_hash == stamp and admission is None:
+            return conscience_result
+        return conscience_result.model_copy(
+            update={
+                "final_action": final_action.model_copy(update={"reviewed_action_hash": stamp}),
+                "reviewed_admission": admission,
+            }
+        )
+
+    @staticmethod
+    def _admit_stamp(
+        stamp: Optional[str], conscience_result: ConscienceApplicationResult, thought: Any
+    ) -> Optional[ReviewEntry]:
+        """Stamp the rc21 ``passed`` record for the action that will dispatch; ``None`` if none.
+
+        Only a candidate built over the SAME fingerprint, with all four
+        faculties, is admitted; anything else admits nothing (fail closed).
+        """
+        candidate = conscience_result.review_candidate
+        thought_id = getattr(thought, "thought_id", None)
+        if stamp is None or candidate is None or not isinstance(thought_id, str):
+            return None
+        if candidate.record.fingerprint != stamp or candidate.record.thought != thought_id:
+            logger.error(
+                "REVIEW-INTEGRITY: the passed review was over %s (thought %s), not the stamped %s; not admitted",
+                candidate.record.fingerprint,
+                candidate.record.thought,
+                stamp,
+            )
+            return None
+        return admit_reviewed_action(candidate)
 
     async def _enforce_tool_approval(
         self,
@@ -357,11 +470,12 @@ class ThoughtProcessor(
         follow-up task. That follow-up re-runs this pipeline, reaches this method
         again, and passes.
 
-        **The grant is per-tool, per-task, not per-invocation.** The follow-up task
-        re-reasons from scratch and may call the approved tool with different
-        arguments than the ones that triggered the deferral. This mirrors the
-        budget envelope — a ceiling, not a transaction. Do not read it as
-        human review of a specific call.
+        **The grant binds the call (#1366 item 10).** The envelope carries the
+        rc21 call fingerprint (tool + exact arguments + channel) the human was shown.
+        The follow-up task re-reasons from scratch; if it calls the approved
+        tool with different arguments, the fingerprint differs and this gate
+        defers again, so that call gets its own approval. A legacy tool-only
+        approval envelope approves nothing here.
 
         Everything that is not a ``TOOL`` action, and every tool that does not
         declare ``requires_approval``, returns unchanged: this is the #942 approval
@@ -391,8 +505,9 @@ class ThoughtProcessor(
         if not tool_requires_approval(tool_info):
             return conscience_result
 
+        call_fingerprint = tool_call_fingerprint(tool_name, tool_params.parameters, tool_params.channel_id)
         envelope = resolve_envelope_for_task_id(thought.source_task_id, thought.agent_occurrence_id)
-        if envelope_approves_tool(envelope, tool_name):
+        if envelope_approves_call(envelope, tool_name, call_fingerprint):
             logger.info(
                 "APPROVAL-GATE: '%s' authorized for task %s by %s envelope %s (issuer %s)",
                 tool_name,
@@ -404,9 +519,10 @@ class ThoughtProcessor(
             return conscience_result
 
         logger.warning(
-            "APPROVAL-GATE: DENIED '%s' for task %s — tool declares requires_approval=True and the "
-            "task envelope (%s) does not grant it. Deferring to Wise Authority.",
+            "APPROVAL-GATE: DENIED '%s' (call %s) for task %s — tool declares requires_approval=True "
+            "and the task envelope (%s) does not grant this call. Deferring to Wise Authority.",
             tool_name,
+            call_fingerprint,
             thought.source_task_id,
             (
                 f"issuer={envelope.issuer.kind.value} id={envelope.envelope_id}"
@@ -423,6 +539,7 @@ class ThoughtProcessor(
             tool_info=tool_info,
             intended_parameters=tool_params.parameters,
             channel_id=getattr(tool_params, "channel_id", None),
+            call_fingerprint=call_fingerprint,
         )
         return conscience_result.model_copy(
             update={
@@ -453,6 +570,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Dispatch the second-pass evaluator registered for the selected verb.
 
@@ -472,12 +590,28 @@ class ThoughtProcessor(
         tests/.../test_verb_second_pass_registry.py, which fails if a verb is
         neither registered nor explicitly listed as not needing one — so a gap
         shows up in CI rather than in a production PONDER loop (#1027).
+
+        ``conscience_feedback`` is the veto a conscience retry carries (#1366
+        item 1). The second pass re-decides the action, so it gets the same
+        GUIDANCE AFTER A CONSCIENCE VETO ASPDMA got; without it TSASPDMA saw the
+        veto reason in 0 of 162 retry calls and re-proposed the vetoed call.
+        None on a first pass.
         """
         handler = self._VERB_SECOND_PASS.get(action_result.selected_action)
         if handler is None:
             return action_result
-        result: ActionSelectionDMAResult = await handler(self, thought_item, action_result, thought_context)
+        # Resolve tool aliases on both sides of the second pass (#1366 item 10):
+        # before, so TSASPDMA documents the real tool; after, so whatever name it
+        # settles on is the real tool by the time the consciences review the draft.
+        action_result = self._resolve_tool_alias(action_result)
+        result: ActionSelectionDMAResult = await handler(
+            self, thought_item, action_result, thought_context, conscience_feedback=conscience_feedback
+        )
+        result = self._resolve_tool_alias(result)
         result = self._ponder_if_second_pass_left_it_unfilled(thought_item, result)
+        # An approved identity change is reviewed as the write it will be (#1366): the WA's
+        # approved bytes with their M-1 justification, bound HERE, before the consciences run.
+        result = self._bind_approved_identity_amendment(thought_item, result, thought_context)
         # A second pass returns a NEW result that never saw the action-selection
         # prompts, and ASPDMA_RESULT is built from whatever result comes out of
         # here. Carry them across, or the trace loses the prompt on exactly the
@@ -489,11 +623,33 @@ class ThoughtProcessor(
             update={"user_prompt": action_result.user_prompt, "system_prompt": action_result.system_prompt}
         )
 
+    def _resolve_tool_alias(self, action_result: ActionSelectionDMAResult) -> ActionSelectionDMAResult:
+        """Rewrite a TOOL draft's alias to the tool the bus will actually run (#1366 item 10).
+
+        ``ToolBus.execute_tool`` resolves aliases at dispatch. Left there, the
+        consciences reviewed ``todoist`` and ``skill:todoist-cli`` ran. Resolving
+        here — on every path into the consciences, since first pass and retry
+        both go through ``_run_verb_second_pass`` — makes the reviewed name the
+        executed name; the dispatch-side fingerprint check catches any alias
+        registered after review.
+        """
+        if action_result.selected_action != HandlerActionType.TOOL:
+            return action_result
+        params = action_result.action_parameters
+        if not isinstance(params, ToolParams):
+            return action_result
+        resolved = resolve_tool_name_via_bus(self.dependencies.bus_manager, params.name)
+        if resolved == params.name:
+            return action_result
+        logger.info("REVIEW-INTEGRITY: resolved tool alias '%s' -> '%s' before review", params.name, resolved)
+        return action_result.model_copy(update={"action_parameters": params.model_copy(update={"name": resolved})})
+
     async def _maybe_run_tsaspdma(
         self,
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run TSASPDMA if action is TOOL and tool has documentation.
 
@@ -691,6 +847,7 @@ class ThoughtProcessor(
                     context=thought_context,
                     time_service=self._time_service,
                     context_enrichment=context_enrichment,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
 
@@ -743,6 +900,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run DSASPDMA when ASPDMA selected DEFER."""
 
@@ -772,6 +930,7 @@ class ThoughtProcessor(
                     original_thought=thought_item,
                     context=thought_context,
                     time_service=self._time_service,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
 
@@ -799,6 +958,7 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run MSASPDMA when ASPDMA selected MEMORIZE.
 
@@ -838,6 +998,7 @@ class ThoughtProcessor(
                     original_thought=thought_item,
                     context=thought_context,
                     time_service=self._time_service,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
 
@@ -912,12 +1073,19 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run RSASPDMA when ASPDMA selected RECALL: the step that says what to read."""
         from ciris_engine.logic.dma.dma_executor import run_rsaspdma
 
         return await self._run_addressing_second_pass(
-            thought_item, action_result, thought_context, HandlerActionType.RECALL, "rsaspdma_evaluator", run_rsaspdma
+            thought_item,
+            action_result,
+            thought_context,
+            HandlerActionType.RECALL,
+            "rsaspdma_evaluator",
+            run_rsaspdma,
+            conscience_feedback=conscience_feedback,
         )
 
     async def _maybe_run_fsaspdma(
@@ -925,12 +1093,19 @@ class ThoughtProcessor(
         thought_item: ProcessingQueueItem,
         action_result: ActionSelectionDMAResult,
         thought_context: Optional[Any] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Run FSASPDMA when ASPDMA selected FORGET: the step that names the node."""
         from ciris_engine.logic.dma.dma_executor import run_fsaspdma
 
         return await self._run_addressing_second_pass(
-            thought_item, action_result, thought_context, HandlerActionType.FORGET, "fsaspdma_evaluator", run_fsaspdma
+            thought_item,
+            action_result,
+            thought_context,
+            HandlerActionType.FORGET,
+            "fsaspdma_evaluator",
+            run_fsaspdma,
+            conscience_feedback=conscience_feedback,
         )
 
     async def _run_addressing_second_pass(
@@ -941,6 +1116,7 @@ class ThoughtProcessor(
         verb: HandlerActionType,
         evaluator_attr: str,
         runner: Callable[..., Coroutine[Any, Any, ActionSelectionDMAResult]],
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Shared body of the RECALL and FORGET second passes.
 
@@ -964,6 +1140,7 @@ class ThoughtProcessor(
                     original_thought=thought_item,
                     context=thought_context,
                     time_service=self._time_service,
+                    conscience_feedback=conscience_feedback,
                 ),
             )
             params = result.action_parameters
@@ -983,6 +1160,59 @@ class ThoughtProcessor(
         except Exception as e:
             logger.error("%s: Failed for thought %s: %s", name, thought_item.thought_id, e, exc_info=True)
             return action_result
+
+    @staticmethod
+    def _task_wa_authorization(thought_item: ProcessingQueueItem, thought_context: Optional[Any]) -> Optional[Any]:
+        """The task's verified WA approval: from the thought's context or, where it does not carry it, the task."""
+        from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+
+        authorization = wa_authorization_of(thought_context)
+        if authorization is not None:
+            return authorization
+        try:
+            task = persistence.get_task_by_id_any_occurrence(thought_item.source_task_id)
+        except Exception as e:  # noqa: BLE001 - no task found is no approval found
+            logger.debug("IDENTITY-CHANGE: could not read task %s: %s", thought_item.source_task_id, e)
+            return None
+        return wa_authorization_of(task)
+
+    def _bind_approved_identity_amendment(
+        self, thought_item: ProcessingQueueItem, action_result: ActionSelectionDMAResult, thought_context: Optional[Any]
+    ) -> ActionSelectionDMAResult:
+        """Bind an identity-scope MEMORIZE to the WA's approved text and its M-1 justification (#1366).
+
+        Eric, 2026-11-18: an approved identity change applies through the
+        agent's consciences, with its justification under M-1. The write the
+        consciences review is therefore built here, before they run, from the
+        approval: the handler writes only that reviewed draft.
+        """
+        if action_result.selected_action != HandlerActionType.MEMORIZE:
+            return action_result
+        from ciris_engine.logic.infrastructure.handlers.shared_helpers import bind_approved_amendment
+
+        bound: ActionSelectionDMAResult = bind_approved_amendment(
+            action_result, self._task_wa_authorization(thought_item, thought_context)
+        )
+        return bound
+
+    def _redefer_objected_identity_amendment(
+        self,
+        thought_item: ProcessingQueueItem,
+        reviewed_draft: Any,
+        conscience_result: ConscienceApplicationResult,
+        thought_context: Optional[Any],
+    ) -> ConscienceApplicationResult:
+        """A DEFER to the WA, naming the objection, in place of an approved amendment a conscience objected to."""
+        if conscience_result is None or not conscience_result.overridden:
+            return conscience_result
+        if getattr(reviewed_draft, "selected_action", None) != HandlerActionType.MEMORIZE:
+            return conscience_result
+        from ciris_engine.logic.infrastructure.handlers.shared_helpers import redefer_objected_amendment
+
+        redeferred: ConscienceApplicationResult = redefer_objected_amendment(
+            reviewed_draft, conscience_result, self._task_wa_authorization(thought_item, thought_context)
+        )
+        return redeferred
 
     async def _refuse_unapproved_identity_memorize(
         self,
@@ -1269,6 +1499,51 @@ class ThoughtProcessor(
         except Exception as e:
             logger.warning(f"VERB_SECOND_PASS: Failed to emit reasoning event ({verb}): {e}")
 
+    @staticmethod
+    def _retry_language(thought_item: Any, thought: Any, thought_context: Any) -> str:
+        """The agent's locale for retry and veto feedback (thought, then queue item, then context)."""
+        from ciris_engine.logic.utils.localization import (
+            _lang_from_obj_or_inner_context,
+            get_preferred_language,
+            get_user_language_from_context,
+        )
+
+        return (
+            _lang_from_obj_or_inner_context(thought)
+            or _lang_from_obj_or_inner_context(thought_item)
+            or get_user_language_from_context(thought_context)
+            or get_preferred_language()
+        )
+
+    def _carry_task_vetoes(self, thought_item: ProcessingQueueItem, thought: Any, thought_context: Any) -> None:
+        """Put the task's veto record in a fresh thought's conscience feedback (#1366 item 8).
+
+        A PONDER follow-up used to carry an earlier veto only as question text,
+        so the next draft could re-propose the vetoed action. The record reaches
+        ASPDMA and the verb second pass through ``conscience_feedback``, which
+        both already render; the conscience fold reads the same record and
+        vetoes an identical banned draft again. A retry's own feedback (already
+        set) is left alone: it carries the record too. Never raises.
+        """
+        if getattr(thought_item, "conscience_feedback", None):
+            return
+        task_id = getattr(thought, "source_task_id", None) or getattr(thought_item, "source_task_id", None)
+        if not isinstance(task_id, str) or not task_id:
+            return
+        try:
+            record = veto_entries_of_task(persistence.get_task_by_id_any_occurrence(task_id))
+        except Exception as e:  # noqa: BLE001 - no record is what the thought had before
+            logger.debug("Could not read the veto record of task %s: %s", task_id, e)
+            return
+        if not record:
+            return
+        language = self._retry_language(thought_item, thought, thought_context)
+        thought_item.conscience_feedback = {
+            VETO_RECORD_FEEDBACK_KEY: [e.model_dump(mode="json") for e in record],
+            "retry_guidance": format_prior_vetoes_block(record, language),
+        }
+        logger.info("[VETO_CONTRACT] Thought %s carries %d earlier veto(es) of its task", thought_item.thought_id, len(record))
+
     def _should_retry_with_conscience_guidance(self, conscience_result: Optional[ConscienceApplicationResult]) -> bool:
         """Check if we should retry action selection with conscience guidance.
 
@@ -1334,7 +1609,14 @@ class ThoughtProcessor(
                 # TOOL with parameters {} (RATCHET Market 4 run 43453725789: all 7
                 # failed create_ticket calls) and a retried MEMORIZE unaddressed.
                 # The recursive path got this in 2.21.0 (#1027); this one did not.
-                retry_result = await self._run_verb_second_pass(thought_item, retry_result, retry_context)
+                # ...and with the veto that sent it back: the second pass re-decides
+                # the action, so it sees the same guidance ASPDMA just saw (#1366).
+                retry_result = await self._run_verb_second_pass(
+                    thought_item,
+                    retry_result,
+                    retry_context,
+                    conscience_feedback=thought_item.conscience_feedback,
+                )
                 return await self._process_conscience_retry_result(
                     thought_item, thought, dma_results, retry_context, retry_result, conscience_result
                 )
@@ -1493,21 +1775,30 @@ class ThoughtProcessor(
             self._build_structured_shard_detail(conscience_result, language=language) if conscience_result else ""
         )
 
-        header = get_string(language, "conscience.retry_header", default="**CONSCIENCE OVERRIDE GUIDANCE:**")
-        intro = get_string(
-            language,
-            "conscience.retry_intro",
-            default="Your previous attempt to {action} was rejected because: {reason}",
-            action=attempted_action,
-            reason=override_reason,
-        )
+        header = get_string(language, "conscience.retry_header", default="**GUIDANCE AFTER A CONSCIENCE VETO:**")
+        if conscience_result is not None and conscience_result.vetoes:
+            intro = self._typed_veto_intro(attempted_action, conscience_result.vetoes[0], conscience_result, language)
+        else:
+            # Not a typed veto (a guardrail redirect, a forced retry PONDER):
+            # the generic line, unchanged.
+            intro = get_string(
+                language,
+                "conscience.retry_intro",
+                default="Your previous attempt to {action} was rejected because: {reason}",
+                action=attempted_action,
+                reason=override_reason,
+            )
         intro = f"{header}\n{intro}"
+        if conscience_result is not None and len(conscience_result.veto_record) > 1:
+            # Earlier vetoes in this task, so the retry does not walk back into one.
+            intro = f"{intro}\n\n{format_prior_vetoes_block(conscience_result.veto_record, language)}"
         materially_different_rule = get_string(
             language,
             "conscience.retry_must_be_different",
             default=(
-                "If you re-select SPEAK, your speak_content MUST be MATERIALLY DIFFERENT "
-                "from the previous attempt — not a paraphrase. Use the IRIS-E alternatives "
+                "Unless the objection above lets you keep the action with a better "
+                "justification: if you re-select SPEAK, your speak_content MUST be "
+                "MATERIALLY DIFFERENT from the previous attempt — not a paraphrase. Use the IRIS-E alternatives "
                 "above as pivot directions if provided. CRITICAL: respond in the same "
                 "language you were responding in before — do not switch the user's "
                 "language. If the conscience flagged propaganda/defensive-mimicry patterns "
@@ -1551,6 +1842,57 @@ class ThoughtProcessor(
         )
         return f"{base_guidance}{materially_different_rule}\n{general_outro}"
 
+    @staticmethod
+    def _typed_veto_intro(
+        attempted_action: str,
+        veto: VetoObjection,
+        conscience_result: ConscienceApplicationResult,
+        language: str,
+    ) -> str:
+        """Name the objecting conscience, its objection type and whether it could see the rule (#1366 item 14).
+
+        The retry used to read every veto as "rejected because: <reason>", a
+        fact. On v2.21.0 "I cannot see this rule" was read as "the rule is a
+        hallucination" and a correct refusal became a filed ticket. An evidence
+        objection now says what it is: the conscience could not see a verified
+        rule, and only a signed rule changes that, never the drafter's argument.
+        """
+        from ciris_engine.logic.utils.localization import get_string
+
+        lines = [
+            get_string(
+                language,
+                "conscience.retry_veto_intro",
+                action=attempted_action,
+                conscience=veto.conscience,
+                objection_type=veto.objection_type.value,
+                # Last: free text, never re-read as a placeholder.
+                reason=veto.reason or "-",
+            )
+        ]
+        if conscience_result.repeated_veto_id:
+            lines.append(
+                get_string(
+                    language,
+                    "conscience.retry_repeated_veto",
+                    conscience=veto.conscience,
+                    veto_id=conscience_result.repeated_veto_id,
+                    objection_type=veto.objection_type.value,
+                )
+            )
+        # Literal keys, one call each, so the research override facility sees every one.
+        if veto.held_trusted_rule:
+            lines.append(get_string(language, "conscience.retry_saw_rule", conscience=veto.conscience))
+        else:
+            lines.append(get_string(language, "conscience.retry_no_rule", conscience=veto.conscience))
+        if veto.objection_type == ObjectionType.EVIDENCE:
+            lines.append(get_string(language, "conscience.retry_objection_evidence", conscience=veto.conscience))
+        elif veto.objection_type == ObjectionType.JUSTIFICATION:
+            lines.append(get_string(language, "conscience.retry_objection_justification", conscience=veto.conscience))
+        else:
+            lines.append(get_string(language, "conscience.retry_objection_substantive", conscience=veto.conscience))
+        return "\n".join(lines)
+
     def _prepare_conscience_retry_context(
         self,
         thought_item: ProcessingQueueItem,
@@ -1567,6 +1909,14 @@ class ThoughtProcessor(
         logger.info(f"[CONSCIENCE_RETRY] Original action was: {attempted_action}")
 
         updated_observation = self._extract_updated_observation(conscience_result)
+        if updated_observation and thought is not None:
+            # UpdatedStatusConscience moved the thought onto the coalesced
+            # message's sender; the queue item the second pass reads follows (#1366 item 5).
+            from ciris_engine.logic.formatters.verified_sender import adopt_verified_sender, verified_sender_of
+
+            update_sender = verified_sender_of(thought)
+            if update_sender is not None:
+                adopt_verified_sender(thought_item, update_sender)
 
         # Log PONDER questions if present
         if conscience_result.final_action and hasattr(conscience_result.final_action, "action_parameters"):
@@ -1583,18 +1933,7 @@ class ThoughtProcessor(
         # `.thought` / `.task` pointers (the OPT_VETO_DEBUG run on
         # 2026-04-26 confirmed retry was falling through to env="en" while
         # opt-veto resolved correctly off the Thought).
-        from ciris_engine.logic.utils.localization import (
-            _lang_from_obj_or_inner_context,
-            get_preferred_language,
-            get_user_language_from_context,
-        )
-
-        retry_language = (
-            _lang_from_obj_or_inner_context(thought)
-            or _lang_from_obj_or_inner_context(thought_item)
-            or get_user_language_from_context(thought_context)
-            or get_preferred_language()
-        )
+        retry_language = self._retry_language(thought_item, thought, thought_context)
         logger.info(f"[CONSCIENCE_RETRY] Retry guidance language: {retry_language}")
         retry_guidance = self._build_retry_guidance(
             attempted_action,
@@ -1604,11 +1943,18 @@ class ThoughtProcessor(
             language=retry_language,
         )
 
-        conscience_feedback = {
+        conscience_feedback: JSONDict = {
             "failed_action": attempted_action,
             "failure_reason": override_reason,
             "retry_guidance": retry_guidance,
         }
+        if conscience_result.veto_record:
+            # The task's veto record rides with the retry (#1366 item 8): the
+            # retry's conscience fold re-vetoes a banned draft from it even if
+            # the task write failed.
+            conscience_feedback[VETO_RECORD_FEEDBACK_KEY] = [
+                e.model_dump(mode="json") for e in conscience_result.veto_record
+            ]
         if updated_observation:
             conscience_feedback["new_observation"] = updated_observation
             conscience_feedback["updated_status_detected"] = "true"
@@ -1643,8 +1989,18 @@ class ThoughtProcessor(
         )
 
         if not retry_conscience_result.overridden:
-            logger.info(f"ThoughtProcessor: Retry action {retry_result.selected_action} passed consciences")
+            # The earlier veto is not dropped: the fold recorded on this result
+            # what changed since (pass_after_veto: new evidence or a changed
+            # action), and the record keeps the veto (#1366 item 9).
+            logger.info(
+                "ThoughtProcessor: Retry action %s passed consciences (change since veto: %s)",
+                retry_result.selected_action,
+                retry_conscience_result.pass_after_veto.change if retry_conscience_result.pass_after_veto else "-",
+            )
             return retry_result, retry_conscience_result
+
+        # Keep the retry's vetoes with the result the thought ends on.
+        original_conscience_result.veto_record = retry_conscience_result.veto_record or original_conscience_result.veto_record
 
         # Check for benchmark mode bouncing
         from ciris_engine.logic.config.env_utils import get_env_var
@@ -1680,6 +2036,15 @@ class ThoughtProcessor(
                     )
 
                     if new_retry_result:
+                        # The verb second pass, with the veto, as on the normal
+                        # retry (#1027 shape, #1366 item 1): skipping it sent a
+                        # retried TOOL unfilled and left TSASPDMA without feedback.
+                        new_retry_result = await self._run_verb_second_pass(
+                            thought_item,
+                            new_retry_result,
+                            new_retry_context,
+                            conscience_feedback=thought_item.conscience_feedback,
+                        )
                         # Recursively process the new result
                         return await self._process_conscience_retry_result(
                             thought_item,
@@ -1890,7 +2255,7 @@ class ThoughtProcessor(
 
         descriptions: Dict[HandlerActionType, Callable[[Any], str]] = {
             HandlerActionType.SPEAK: lambda p: self._format_speak_description(p),
-            HandlerActionType.TOOL: lambda p: f"use tool '{p.tool_name}'" if hasattr(p, "tool_name") else "use a tool",
+            HandlerActionType.TOOL: lambda p: self._format_tool_description(p),
             HandlerActionType.OBSERVE: lambda p: (
                 f"observe channel '{p.channel_id}'" if hasattr(p, "channel_id") else "observe"
             ),
@@ -1929,8 +2294,15 @@ class ThoughtProcessor(
 
         from ciris_engine.logic.formatters.identity import agent_identity_of
 
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+
+        conscience_task = self._task_for_conscience(thought)
         context = ConscienceCheckContext(
             thought=thought,
+            # The real user message for coherence / epistemic humility (#1366 item 18).
+            task=conscience_task,
+            # The sender of the message this thought answers (#1366 item 5).
+            verified_sender=verified_sender_of(thought, conscience_task),
             idma_result=idma_result,
             wa_authorization=wa_authorization_of(processing_context),
             agent_identity=agent_identity_of(processing_context),
@@ -2199,6 +2571,23 @@ class ThoughtProcessor(
             thought_depth_triggered=conscience_result.thought_depth_triggered,
             updated_status_detected=conscience_result.updated_status_detected,
         )
+
+    @staticmethod
+    def _format_tool_description(params: Any) -> str:
+        """Name the vetoed tool call in retry guidance (#1366).
+
+        ToolParams carries the tool as ``name``; this read ``tool_name`` and so
+        always said "use a tool", leaving the retry unable to tell which call
+        the conscience refused. Argument NAMES only, never values: a value can
+        hold a secret, and the name is what distinguishes one call from another.
+        """
+        tool_name = getattr(params, "name", None)
+        if not isinstance(tool_name, str) or not tool_name:
+            return "use a tool"
+        arguments = getattr(params, "parameters", None)
+        if isinstance(arguments, dict) and arguments:
+            return f"use tool '{tool_name}' with arguments: {', '.join(sorted(str(k) for k in arguments))}"
+        return f"use tool '{tool_name}'"
 
     def _format_speak_description(self, params: Any) -> str:
         """Format description for SPEAK action parameters."""

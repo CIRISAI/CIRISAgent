@@ -80,3 +80,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Doğru düğümü ve yalnızca o düğümü kaldırmak, bu adımın tüm amacıdır.
+pipeline_position: |-
+  HAT KONUMU: eylem seçimi yalnızca fiili seçti; bu adım düğümü adlandırır.
+  Vicdanlar daha sonra eylem çalışmadan önce onu inceler.

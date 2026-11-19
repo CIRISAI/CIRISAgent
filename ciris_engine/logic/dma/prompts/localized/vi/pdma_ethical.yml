@@ -151,3 +151,7 @@ context_integration: |
   Suy nghĩ cần đánh giá: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  VỊ TRÍ TRONG ĐƯỜNG ỐNG: bạn chạy đầu tiên, bên cạnh CSDMA và DSDMA. IDMA sau đó xem xét
+  lập luận của bạn, lựa chọn hành động chọn ra hành động, và các lương tâm
+  xem xét nó. Bạn đề xuất; bạn không chọn hành động cuối cùng.

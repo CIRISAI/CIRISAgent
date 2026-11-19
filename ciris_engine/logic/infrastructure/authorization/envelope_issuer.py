@@ -106,8 +106,8 @@ def _warn_cold_cache(task_id: str, path: str) -> None:
     global _COLD_CACHE_WARNED
     message = (
         "TaskEnvelope: issuing envelope for task %s with an EMPTY tool grant — "
-        "the tool registry has not been observed yet (%s). Inert in Phase 1; "
-        "under Phase 2 enforcement this would deny every tool call for this task."
+        "the tool registry has not been observed yet (%s). The dispatch gate denies "
+        "every tool call for this task (startup primes the grant; see FSD/TASK_ENVELOPE.md §8)."
     )
     if _COLD_CACHE_WARNED:
         logger.debug(message, task_id, path)
@@ -218,6 +218,7 @@ def issue_authority_envelope(
     target_roots: Tuple[TargetRoot, ...] = (),
     credentials: Tuple[IssuedCredential, ...] = (),
     time_service: Optional["TimeServiceProtocol"] = None,
+    approved_calls: Iterable[str] = (),
 ) -> TaskEnvelope:
     """Mint an envelope from an explicit owner/WA grant.
 
@@ -246,6 +247,7 @@ def issue_authority_envelope(
         requester=requester or RequesterAuthorization(),
         granted_tools=frozenset(granted_tools),
         capabilities=frozenset(capabilities),
+        approved_calls=frozenset(approved_calls),
         target_roots=tuple(target_roots),
         credentials=tuple(credentials),
     )

@@ -25,9 +25,21 @@ from ciris_engine.logic.services.governance.wise_authority.deferral_rows import 
     emit_deferral_request,
 )
 from ciris_engine.logic.services.infrastructure.authentication import AuthenticationService
+from ciris_engine.logic.utils.deferral_text import clip_deferral_text
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import ServiceType, TaskStatus
+from ciris_engine.schemas.actions.parameters import (
+    IDENTITY_CHANGE_CONTEXT_KEY,
+    M1_JUSTIFICATION_CONTEXT_KEY,
+    PROPOSED_AMENDMENT_CONTEXT_KEY,
+)
+from ciris_engine.schemas.api.wa import (
+    PROPOSED_BASE_LINK_KEY,
+    IdentityChangeKind,
+    IdentityChangeProposal,
+    ProposedBaseLink,
+)
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskOrigin, TaskStatus
 from ciris_engine.schemas.runtime.models import TaskContext, WAAuthorization
 from ciris_engine.schemas.services.authority.deferral_rows import DeferralRequestRow, DeferralRowStatus
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
@@ -72,10 +84,100 @@ def request_row_of(deferral_info: Dict[str, object]) -> Optional[DeferralRequest
         return None
 
 
+def _amendment_matches_digest(response: DeferralResponse) -> bool:
+    """True when the response names no amendment, or its text hashes to its signed digest (#1366 F1).
+
+    A digest WITHOUT text is a base-link approval (rc21 section 3): it is checked
+    against the deferral's proposed base link once the deferral is loaded
+    (:func:`_proposed_base_link_of`), not here.
+    """
+    import hashlib
+
+    if response.amendment_text is None:
+        return True
+    if response.amendment_sha256 is None:
+        return False
+    return hashlib.sha256(response.amendment_text.encode("utf-8")).hexdigest() == response.amendment_sha256
+
+
 def _request_row_id(deferral_info: object) -> Optional[str]:
     """The signed request row's id from a stored deferral record, when it has one."""
     row = request_row_of(deferral_info) if isinstance(deferral_info, dict) else None
     return row.attestation_id if row is not None and row.status is DeferralRowStatus.EMITTED else None
+
+
+def _proposed_base_link_of(deferral_info: object) -> Optional[ProposedBaseLink]:
+    """The base link a stored deferral proposes (``context.proposed_base_link``), or ``None``."""
+    if not isinstance(deferral_info, dict):
+        return None
+    ctx = deferral_info.get("context")
+    raw = ctx.get(PROPOSED_BASE_LINK_KEY) if isinstance(ctx, dict) else None
+    if not isinstance(raw, str):
+        return None
+    try:
+        return ProposedBaseLink.model_validate_json(raw)
+    except ValueError:
+        return None
+
+
+#: Task id prefix of the base-link deferral's task (one per digest per day, shared across occurrences).
+BASE_LINK_TASK_PREFIX = "BASE_LINK"
+BASE_LINK_OCCURRENCE = "__shared__"
+#: Task id prefix of a re-approval deferral's task (one per held amendment, ever; shared across occurrences).
+REAPPROVAL_TASK_PREFIX = "REAPPROVAL"
+
+#: The base link's M-1 justification (engine-authored: the template is the agent's shipped self, not a proposal).
+BASE_LINK_M1_JUSTIFICATION = (
+    "Meta-Goal M-1 (Adaptive Coherence): anchoring the identity profile to the shipped template the agent already "
+    "runs gives every later amendment a verifiable starting point, so the agent can adapt while staying coherent "
+    "and accountable to its Wise Authority. It changes nothing the agent says or does today."
+)
+
+
+def identity_change_of(deferral_info: object) -> Optional[IdentityChangeProposal]:
+    """The identity change a stored deferral proposes (``context.identity_change``), or ``None``."""
+    if not isinstance(deferral_info, dict):
+        return None
+    ctx = deferral_info.get("context")
+    raw = ctx.get(IDENTITY_CHANGE_CONTEXT_KEY) if isinstance(ctx, dict) else None
+    if not isinstance(raw, str):
+        return None
+    try:
+        return IdentityChangeProposal.model_validate_json(raw)
+    except ValueError:
+        return None
+
+
+def _context_text(deferral_info: object, key: str) -> Optional[str]:
+    """One text value of a stored deferral's context, or ``None``."""
+    ctx = deferral_info.get("context") if isinstance(deferral_info, dict) else None
+    value = ctx.get(key) if isinstance(ctx, dict) else None
+    return value if isinstance(value, str) and value else None
+
+
+def identity_change_context(proposal: IdentityChangeProposal) -> Dict[str, str]:
+    """The deferral context an identity change carries to the WA: the proposal plus its flat keys."""
+    context = {IDENTITY_CHANGE_CONTEXT_KEY: proposal.model_dump_json()}
+    if proposal.proposed_text is not None:
+        context[PROPOSED_AMENDMENT_CONTEXT_KEY] = proposal.proposed_text
+    if proposal.m1_justification is not None:
+        context[M1_JUSTIFICATION_CONTEXT_KEY] = proposal.m1_justification
+    return context
+
+
+def _identity_change_guidance(change: IdentityChangeProposal, approved_text: str) -> str:
+    """The guidance task's note on applying an approved identity change (engine text, English like the prefix)."""
+    note = (
+        "\n\nApproved identity change: write it with MEMORIZE to IDENTITY scope. The engine writes exactly the "
+        "approved text, and your consciences review that write with its M-1 (Adaptive Coherence) justification."
+    )
+    if change.proposed_text is not None and change.proposed_text != approved_text:
+        note += (
+            " The Wise Authority edited the proposed text, so the earlier justification does not cover it: put your "
+            "own M-1 justification for the edited text in the node's m1_justification attribute, or the change is "
+            "deferred back to the Wise Authority."
+        )
+    return note
 
 
 class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
@@ -137,13 +239,22 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         """Custom startup logic for WA service."""
         # Bootstrap if needed
         await self.auth_service.bootstrap_if_needed()
+        # An unanchored identity profile asks for its base link through this service (rc21 section 3).
+        from ciris_engine.logic.context.identity_profile import set_base_link_opener, set_reapproval_opener
+
+        set_base_link_opener(self.open_base_link_deferral)
+        # A held amendment approved before exact-text binding asks for its re-approval the same way (#1366).
+        set_reapproval_opener(self.open_reapproval_deferral)
 
         # Deferrals are persisted in the thoughts table with status='deferred'
         # They can be queried via get_pending_deferrals()
 
     async def _on_stop(self) -> None:
         """Custom cleanup logic for WA service."""
-        pass
+        from ciris_engine.logic.context.identity_profile import set_base_link_opener, set_reapproval_opener
+
+        set_base_link_opener(None)
+        set_reapproval_opener(None)
 
     def _get_actions(self) -> List[str]:
         """Get list of actions this service provides."""
@@ -224,7 +335,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         )
 
         ui_context: Dict[str, str] = {
-            "task_description": (description[:500] if description else ""),
+            "task_description": clip_deferral_text(description or "", 500),
         }
         # Add deferral-specific context fields (converted to strings for UI)
         deferral_context = deferral_info.get("context", {})
@@ -237,12 +348,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 # it at the generic 200-char UI budget would truncate it into
                 # unparseable JSON, and the human would be back to approving a
                 # sentence. It has its own cap, applied where it is encoded.
-                limit = TOOL_APPROVAL_DETAIL_MAX_CHARS if key == TOOL_APPROVAL_DETAIL_KEY else 200
-                ui_context[key] = str(value)[:limit]
+                if key == TOOL_APPROVAL_DETAIL_KEY:
+                    ui_context[key] = str(value)[:TOOL_APPROVAL_DETAIL_MAX_CHARS]
+                    continue
+                # Everything else is what the WA reads to decide what was
+                # contested (the last draft, its rationale, the veto reasons --
+                # CIRISAgent#1366 item 6). Not clipped at a UI budget: only at
+                # a large safety cap, and a cut says so.
+                ui_context[key] = clip_deferral_text(str(value))
         # Include original message if available
         original_message = deferral_info.get("original_message")
         if original_message:
-            ui_context["original_message"] = str(original_message)[:500]
+            ui_context["original_message"] = clip_deferral_text(str(original_message), 500)
         return ui_context
 
     def _create_pending_deferral(
@@ -271,7 +388,10 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         """
         deferral_id = str(deferral_info.get("deferral_id", f"defer_{task_id}"))
         thought_id = str(deferral_info.get("thought_id", ""))
-        reason = str(deferral_info.get("reason", description or ""))[:200]
+        # The whole reason (CIRISAgent#1366 item 6): it used to be cut at 200
+        # characters, so the WA saw "Maximum action depth (5) reached" and not
+        # what to validate. Only a large safety cap remains, marked when hit.
+        reason = clip_deferral_text(str(deferral_info.get("reason", description or "")))
 
         deferral_context = deferral_info.get("context", {})
         user_id = deferral_context.get("user_id") if isinstance(deferral_context, dict) else None
@@ -748,6 +868,187 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         logger.info("Deferral %s: signed request row %s", deferral_id, attestation_id)
         return DeferralRequestRow(status=DeferralRowStatus.EMITTED, attestation_id=attestation_id, room_id=room_id)
 
+    async def open_base_link_deferral(self, proposal: ProposedBaseLink) -> Optional[str]:
+        """Open ONE deferral asking a Wise Authority to approve the profile's base link (rc21 section 3).
+
+        Idempotent: a pending deferral that already proposes a base link is
+        returned instead of opening another, and the task id is deterministic
+        (one per digest per day, in the shared occurrence), so concurrent
+        occurrences converge on one task. The task is written DEFERRED, so no
+        processor ever picks it up as work.
+        """
+        for pending in await self.get_pending_deferrals():
+            if PROPOSED_BASE_LINK_KEY in pending.context:
+                return pending.deferral_id
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.utils.task_thought_factory import create_task
+
+        engine = get_persist_engine()
+        if engine is None:
+            return None
+        now = self._now()
+        task_id = f"{BASE_LINK_TASK_PREFIX}_{proposal.manifest_digest[:16]}_{now.strftime('%Y%m%d')}"
+        if engine.task_get(task_id) is not None:
+            return None  # opened (and answered) today already: wait for tomorrow or a restart
+        description = (
+            f"Approve the base link of this agent's identity profile: template {proposal.template_name}"
+            f"{f' (manifest {proposal.template_version})' if proposal.template_version else ''}, "
+            f"digest {proposal.manifest_digest}. Until a Wise Authority approves it, no identity amendment "
+            "counts as authoritative (profile_unanchored)."
+        )
+        task = create_task(
+            description=description,
+            channel_id="system",
+            agent_occurrence_id=BASE_LINK_OCCURRENCE,
+            correlation_id=task_id,
+            time_service=self._time_service,
+            status=TaskStatus.DEFERRED,
+            priority=5,
+            task_id=task_id,
+            origin=TaskOrigin.ENGINE_SYSTEM,
+        )
+        from ciris_engine.logic.persistence.models.tasks import _task_to_persist_payload
+
+        engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        return await self.send_deferral(
+            DeferralRequest(
+                task_id=task_id,
+                thought_id="",
+                reason=description,
+                defer_until=now,
+                context={
+                    PROPOSED_BASE_LINK_KEY: proposal.model_dump_json(),
+                    **identity_change_context(
+                        IdentityChangeProposal(
+                            kind=IdentityChangeKind.BASE_LINK,
+                            summary=description,
+                            template=proposal,
+                            m1_justification=BASE_LINK_M1_JUSTIFICATION,
+                        )
+                    ),
+                },
+            )
+        )
+
+    async def open_reapproval_deferral(self, proposal: IdentityChangeProposal) -> Optional[str]:
+        """Open ONE deferral asking a Wise Authority to re-approve a held amendment by its exact text (#1366).
+
+        The held amendment was approved before exact-text binding, so it does
+        not count; it applies again only once a WA approves these exact bytes
+        (``amendment_text``) and the agent's consciences pass the write.
+        Idempotent like the base link: a pending re-approval of the same node
+        is returned, and the task id is deterministic per node (shared across
+        occurrences), so it is asked once, ever. Written DEFERRED: no processor
+        takes it up as work until a WA answers.
+        """
+        import hashlib
+
+        node_id = proposal.supersedes_node_id
+        if proposal.kind is not IdentityChangeKind.REAPPROVAL or not node_id or not proposal.proposed_text:
+            return None
+        for pending in await self.get_pending_deferrals():
+            raw = pending.context.get(IDENTITY_CHANGE_CONTEXT_KEY)
+            if not raw:
+                continue
+            try:
+                held = IdentityChangeProposal.model_validate_json(raw)
+            except ValueError:
+                continue
+            if held.kind is IdentityChangeKind.REAPPROVAL and held.supersedes_node_id == node_id:
+                return pending.deferral_id
+
+        from ciris_engine.logic.persistence.models.graph import get_persist_engine
+        from ciris_engine.logic.persistence.models.tasks import _task_to_persist_payload
+        from ciris_engine.logic.utils.task_thought_factory import create_task
+
+        engine = get_persist_engine()
+        if engine is None:
+            return None
+        task_id = f"{REAPPROVAL_TASK_PREFIX}_{hashlib.sha256(node_id.encode('utf-8')).hexdigest()[:16]}"
+        if engine.task_get(task_id) is not None:
+            return None  # asked (and answered) before: one re-approval per amendment
+        now = self._now()
+        task = create_task(
+            description=proposal.summary,
+            channel_id="system",
+            agent_occurrence_id=BASE_LINK_OCCURRENCE,
+            correlation_id=task_id,
+            time_service=self._time_service,
+            status=TaskStatus.DEFERRED,
+            priority=5,
+            task_id=task_id,
+            origin=TaskOrigin.ENGINE_SYSTEM,
+        )
+        engine.task_upsert(json.dumps(_task_to_persist_payload(task)))
+        return await self.send_deferral(
+            DeferralRequest(
+                task_id=task_id,
+                thought_id="",
+                reason=proposal.summary,
+                defer_until=now,
+                context=identity_change_context(proposal),
+            )
+        )
+
+    async def _record_base_link(
+        self, deferral_id: str, digest: str, response: DeferralResponse, deferral_info: object, granted_at: str
+    ) -> Dict[str, str]:
+        """Write the approved base link: the node's signed row (no ``prev``), then the local amendment node.
+
+        Returns the notice the guidance task carries. Records NOTHING when the
+        node cannot sign it (no rows, no ``prev`` support, refused): the profile
+        then stays unanchored, and the notice says why.
+        """
+        from ciris_engine.logic.persistence.models.graph import add_graph_node
+        from ciris_engine.logic.services.governance.wise_authority.deferral_rows import emit_base_link
+        from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+
+        request_id = _request_row_id(deferral_info)
+        response_id = response.response_attestation_id
+        if not request_id or not response_id:
+            reason = "deferral.base_link_no_signed_rows"
+            logger.warning("Base link of deferral %s NOT recorded: no signed request/response row (%s)", deferral_id, reason)
+            return {"status": "not_recorded", "reason_id": reason}
+        try:
+            row_id = await emit_base_link(digest, response_id, request_id)
+        except DeferralRowsUnavailable:
+            reason = "deferral.rows_unavailable"
+            logger.warning("Base link of deferral %s NOT recorded: this node has no deferral rows", deferral_id)
+            return {"status": "not_recorded", "reason_id": reason}
+        except DeferralRowRefused as refused:
+            logger.warning(
+                "Base link of deferral %s NOT recorded (%s): %s. The identity profile stays unanchored.",
+                deferral_id,
+                refused.refusal.reason_id,
+                refused.refusal.text,
+            )
+            return {"status": "not_recorded", "reason_id": refused.refusal.reason_id}
+        node = GraphNode(
+            id=f"agent/identity/base_link/{digest[:16]}/{deferral_id}",
+            type=NodeType.IDENTITY_AMENDMENT,
+            scope=GraphScope.IDENTITY,
+            attributes={
+                "content": "",
+                "wa_amendment": {
+                    "base": True,
+                    "wa_id": response.wa_id,
+                    "deferral_id": deferral_id,
+                    "granted_at": granted_at,
+                    "approved_sha256": digest,
+                    "response_attestation_id": response_id,
+                    "request_attestation_id": request_id,
+                    "amendment_attestation_id": row_id,
+                },
+            },
+            updated_by=response.wa_id,
+        )
+        time_service = self._time_service
+        assert time_service is not None  # injected at construction (required argument)
+        add_graph_node(node, time_service)
+        logger.info("Base link of deferral %s recorded: signed row %s, digest %s", deferral_id, row_id, digest)
+        return {"status": "recorded", "amendment_attestation_id": row_id}
+
     async def get_pending_deferrals(self, wa_id: Optional[str] = None) -> List[PendingDeferral]:
         """Get pending deferrals from the tasks table.
 
@@ -890,6 +1191,11 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         if verification is DeferralVerification.FAILED:
             logger.error("Refusing deferral %s: signature present but did not verify", deferral_id)
             return False
+        # The approved amendment's bytes must be the bytes the signature's digest
+        # commits to (#1366 F1): the payload signs the digest, not the text.
+        if not _amendment_matches_digest(response):
+            logger.error("Refusing deferral %s: amendment_text does not match the signed amendment_sha256", deferral_id)
+            return False
 
         try:
             # Routed through persist substrate (CIRISAgent#763).
@@ -978,6 +1284,18 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 except json.JSONDecodeError:
                     pass
 
+            # A digest without text approves the profile's BASE link (rc21 section 3):
+            # only the digest this deferral proposed. Checked before any mutation.
+            base_link_digest: Optional[str] = None
+            if response.amendment_text is None and response.amendment_sha256 is not None:
+                proposal = _proposed_base_link_of(context.get("deferral"))
+                if not response.approved or proposal is None or proposal.manifest_digest != response.amendment_sha256:
+                    logger.error(
+                        "Refusing deferral %s: base_link_digest does not equal the base link it proposes", deferral_id
+                    )
+                    return False
+                base_link_digest = response.amendment_sha256
+
             # Add resolution to deferral info in the original task. This now
             # carries the signature and the `signed_at` it commits to (#944):
             # without them stored, verifying an approval after the fact was not
@@ -988,6 +1306,25 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 deferral_info["resolution"] = deferral_resolution_record(
                     response, self._now().isoformat(), verification
                 )
+
+            # The approved BASE LINK (rc21 section 3) is written here, from the
+            # verified approval: the node's signed row first, then the local
+            # amendment node. Its notice stays on the deferral's own record; a
+            # base link asks nothing of the agent, so it opens no guidance task.
+            if base_link_digest is not None:
+                if verification is DeferralVerification.VERIFIED:
+                    notice = await self._record_base_link(
+                        deferral_id, base_link_digest, response, deferral_info, self._now().isoformat()
+                    )
+                else:
+                    logger.warning(
+                        "Base link of deferral %s NOT recorded: the approval is not verified (%s)",
+                        deferral_id,
+                        verification.value,
+                    )
+                    notice = {"status": "not_recorded", "reason_id": "deferral.base_link_unverified_approval"}
+                if isinstance(deferral_info, dict):
+                    deferral_info["base_link"] = notice
 
             # Mark original deferred task as COMPLETED with outcome
             # Use TaskOutcome schema: status, summary, actions_taken, memories_created, errors
@@ -1024,12 +1361,31 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             logger.info(f"Marked original deferred task {task_id} as COMPLETED with outcome")
 
             # If approved, create a NEW guidance task
-            if response.approved and response.reason:
+            if response.approved and response.reason and base_link_digest is None:
                 # Track guidance provided via deferral resolution
                 self._guidance_provided_count += 1
+                identity_change = identity_change_of(deferral_info)
+                # An identity change deferred on the shared occurrence (a re-approval) is applied by THIS
+                # occurrence: a guidance task left under __shared__ is never taken up as work.
+                if identity_change is not None and agent_occurrence_id == BASE_LINK_OCCURRENCE:
+                    from ciris_engine.logic.utils.occurrence_utils import get_current_occurrence_id
+
+                    agent_occurrence_id = get_current_occurrence_id()
 
                 # Create new context for guidance task - copy from original and add guidance
                 guidance_context_dict = context.copy()
+                # A grant belongs to the one task its resolution created (#1366 F5).
+                # The deferred task may itself be a guidance task carrying an older
+                # grant or WA-issued envelope; never let the copy pass it on. A grant
+                # for THIS resolution is set below only when it verified, and a
+                # tool-approval envelope only when this deferral names a tool.
+                guidance_context_dict.pop("wa_authorization", None)
+                _inherited_envelope = guidance_context_dict.get("envelope")
+                if (
+                    isinstance(_inherited_envelope, dict)
+                    and _inherited_envelope.get("issuer_kind") == "wise_authority"
+                ):
+                    guidance_context_dict.pop("envelope", None)
                 guidance_context_dict["wa_guidance"] = response.reason
                 guidance_context_dict["original_task_id"] = original_task_id
                 guidance_context_dict["resolved_deferral_id"] = deferral_id
@@ -1098,6 +1454,17 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                         response_attestation_id=response.response_attestation_id,
                         # The request the response answers, from this deferral's own record.
                         request_attestation_id=_request_row_id(deferral_info),
+                        # The exact amendment the WA approved, and its signed digest (#1366 F1).
+                        amendment_text=response.amendment_text,
+                        amendment_sha256=response.amendment_sha256,
+                        # What the agent proposed and its M-1 justification (#1366): the guidance
+                        # task's write is reviewed by the consciences with them attached.
+                        proposed_amendment=_context_text(deferral_info, PROPOSED_AMENDMENT_CONTEXT_KEY),
+                        m1_justification=_context_text(deferral_info, M1_JUSTIFICATION_CONTEXT_KEY),
+                        identity_change_kind=identity_change.kind.value if identity_change is not None else None,
+                        # The resolving WA's role, from its certificate: only then does a prompt name it as a
+                        # verified sender (#1366). Unknown certificate: None, and the task's sender is SYSTEM.
+                        wa_role=await self._wa_role(response.wa_id),
                     )
                     guidance_context_dict["wa_authorization"] = wa_authorization.model_dump(mode="json")
                 else:
@@ -1115,10 +1482,15 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     agent_occurrence_id=agent_occurrence_id,
                     preferred_language=resolved_language,
                     wa_authorization=wa_authorization,
+                    origin=TaskOrigin.ENGINE_GUIDANCE,
                 )
+                # The copied context carries the deferred task's origin; this task is the engine's (#1366).
+                guidance_context_dict["origin"] = TaskOrigin.ENGINE_GUIDANCE.value
 
                 # Create new task description incorporating WA guidance
                 new_description = f"[WA GUIDANCE] Original: {original_description}\n\nWA Response: {response.reason}"
+                if identity_change is not None and response.amendment_text is not None:
+                    new_description += _identity_change_guidance(identity_change, response.amendment_text)
 
                 # Use factory to create new guidance task
                 guidance_task = create_task(
@@ -1145,7 +1517,16 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                     guidance_task_id=guidance_task.task_id,
                     agent_occurrence_id=agent_occurrence_id,
                     wa_id=response.wa_id,
+                    response=response,
                 )
+                # Every other guidance task gets the deployment envelope
+                # (#1366 item 19): this path writes the row straight to the
+                # substrate, bypassing every issuance site, and the tool gate
+                # denies an envelope-less task.
+                if "envelope" not in guidance_context_dict:
+                    self._attach_deployment_envelope(
+                        guidance_context_dict, guidance_task.task_id, agent_occurrence_id, ctx_user_id_str, channel_id
+                    )
 
                 # Persist the new guidance task via the substrate.
                 guidance_payload = {
@@ -1174,6 +1555,44 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
             logger.error(f"Failed to resolve deferral: {e}")
             return False
 
+    async def _wa_role(self, wa_id: str) -> Optional[WARole]:
+        """The role on a Wise Authority's certificate; None when it is not found or cannot be read."""
+        try:
+            wa = await self.auth_service.get_wa(wa_id)
+        except Exception as exc:
+            logger.warning("Could not read the certificate of WA %s: %s", wa_id, exc)
+            return None
+        return wa.role if wa is not None else None
+
+    def _attach_deployment_envelope(
+        self,
+        guidance_context_dict: Dict[str, object],
+        task_id: str,
+        agent_occurrence_id: str,
+        user_id: Optional[str],
+        channel_id: Optional[str],
+    ) -> None:
+        """Bind the deployment-resolved envelope to a guidance task with no approval envelope.
+
+        Best-effort: on failure the task has no envelope, which the gate denies.
+        """
+        try:
+            from ciris_engine.logic.infrastructure.authorization.envelope_issuer import (
+                issue_deployment_envelope_from_cache,
+            )
+            from ciris_engine.schemas.runtime.task_envelope import RequesterAuthorization
+
+            envelope = issue_deployment_envelope_from_cache(
+                task_id=task_id,
+                agent_occurrence_id=agent_occurrence_id,
+                requester=RequesterAuthorization(user_id=user_id, channel_id=channel_id),
+                time_service=self._time_service,
+            )
+        except Exception as exc:
+            logger.warning("Guidance task %s: no envelope issued (%s); the tool gate will deny it", task_id, exc)
+            return
+        guidance_context_dict["envelope"] = envelope.model_dump(mode="json")
+
     # ========== Tool-Approval Envelope Issuance (CIRISAgent#942) ==========
 
     def _attach_tool_approval_envelope(
@@ -1184,6 +1603,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         guidance_task_id: str,
         agent_occurrence_id: str,
         wa_id: str,
+        response: object = None,
     ) -> None:
         """Mint the approval envelope for a ``[WA GUIDANCE]`` task and bind it.
 
@@ -1221,13 +1641,22 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         no approval envelope, so the gate denies again on the re-run. That is the
         fail-closed direction — a broken issuance can never turn into a grant.
         """
-        from ciris_engine.logic.infrastructure.authorization.tool_approval import pending_tool_from_deferral_context
+        from ciris_engine.logic.infrastructure.authorization.tool_approval import (
+            approved_call_fingerprint,
+            pending_tool_from_deferral_context,
+        )
 
         if not isinstance(deferral_info, dict):
             return
         approved_tool = pending_tool_from_deferral_context(deferral_info.get("context"))
         if approved_tool is None:
             return
+        # The call the human was shown (CIRISAgent#1366 item 10). Absent on a
+        # deferral raised before calls were bound: the envelope is then minted
+        # tool-only, which the gate treats as legacy and defers again for
+        # re-approval of a specific call.
+        # rc21 §4: the approval's own call_fingerprint, else the verified proposed call.
+        approved_call = approved_call_fingerprint(deferral_info.get("context"), response)
 
         try:
             from ciris_engine.logic.infrastructure.authorization.envelope_issuer import issue_authority_envelope
@@ -1239,6 +1668,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
                 issuer_id=wa_id,
                 granted_tools=frozenset({approved_tool}),
                 capabilities=frozenset(),
+                approved_calls=frozenset({approved_call}) if approved_call else frozenset(),
                 agent_occurrence_id=agent_occurrence_id,
                 time_service=self._time_service,
             )

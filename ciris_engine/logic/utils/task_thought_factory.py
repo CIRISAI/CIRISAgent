@@ -21,8 +21,8 @@ from typing import List, Optional
 
 from ciris_engine.logic.utils.thought_utils import generate_thought_id
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
-from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus, ThoughtType
-from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, Thought, ThoughtContext
+from ciris_engine.schemas.runtime.enums import TaskOrigin, TaskStatus, ThoughtStatus, ThoughtType
+from ciris_engine.schemas.runtime.models import ImageContent, Task, TaskContext, Thought, ThoughtContext, VerifiedSender
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,8 @@ def create_task(
     context: Optional[TaskContext] = None,
     images: Optional[List[ImageContent]] = None,
     preferred_language: Optional[str] = None,
+    verified_sender: Optional[VerifiedSender] = None,
+    origin: Optional[TaskOrigin] = None,
 ) -> Task:
     """
     Create a Task with proper occurrence_id handling.
@@ -59,6 +61,10 @@ def create_task(
         parent_task_id: Optional parent task ID
         context: Optional pre-built TaskContext (will be validated)
         images: Optional list of images for multimodal tasks
+        verified_sender: The sender of the originating message as the adapter
+            verified it (#1366 item 5); ignored when ``context`` is given
+        origin: Who created the task (#1366), set by the calling code; ignored
+            when ``context`` is given (the context's own origin is kept)
 
     Returns:
         Task with proper occurrence_id in both task and context
@@ -92,6 +98,8 @@ def create_task(
             parent_task_id=parent_task_id,
             agent_occurrence_id=agent_occurrence_id,
             preferred_language=preferred_language,
+            verified_sender=verified_sender,
+            origin=origin,
         )
     else:
         # Verify existing context has correct occurrence_id
@@ -114,6 +122,10 @@ def create_task(
                 envelope=context.envelope,
                 # Same for a guidance task's WA authorization.
                 wa_authorization=context.wa_authorization,
+                # And the verified sender (#1366 item 5).
+                verified_sender=context.verified_sender,
+                # And who created it (#1366).
+                origin=context.origin,
             )
 
     # Task is the record of truth for preferred_language. Mirror the value
@@ -239,6 +251,8 @@ def create_thought(
                 parent_thought_id=context.parent_thought_id,
                 correlation_id=context.correlation_id,
                 agent_occurrence_id=agent_occurrence_id,  # Override with correct one
+                preferred_language=context.preferred_language,
+                verified_sender=context.verified_sender,
             )
 
     # Mirror preferred_language onto the Thought's top-level field so the
@@ -331,6 +345,8 @@ def create_seed_thought_for_task(
         correlation_id=correlation_id,
         agent_occurrence_id=task.agent_occurrence_id,  # Inherit from task
         preferred_language=inherited_language,
+        # A seed thought answers the message that created its task (#1366 item 5).
+        verified_sender=task.context.verified_sender if task.context else None,
     )
 
     return create_thought(
@@ -408,6 +424,8 @@ def create_follow_up_thought(
             correlation_id=correlation_id,
             agent_occurrence_id=parent_thought.agent_occurrence_id,  # Inherit from parent
             preferred_language=parent_lang,
+            # Still answering the parent's message (#1366 item 5).
+            verified_sender=getattr(parent_thought.context, "verified_sender", None),
         )
 
     # Extract correlation_id from parent

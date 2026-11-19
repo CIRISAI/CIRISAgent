@@ -6,11 +6,38 @@ Provides schemas for conscience validation results and epistemic safety checks.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ciris_engine.schemas.runtime.veto_record import (
+    ObjectionType,
+    VetoChange,
+    VetoDischarge,
+    VetoObjection,
+    coerce_objection_type,
+)
 from ciris_engine.schemas.types import JSONDict
+
+#: The output-contract field every LLM-backed conscience answers with when it
+#: objects (CIRISAgent#1366 item 7). Not a required field and never a reask: an
+#: unknown or missing answer is SUBSTANTIVE, the type the drafter cannot argue
+#: away (fail safe). Ignored when the conscience passes.
+_OBJECTION_TYPE_DESCRIPTION = (
+    "When you object: 'evidence' if the action relies on a rule or authority you cannot see "
+    "in your input; 'justification' if the action may be acceptable but its stated "
+    "justification is insufficient; 'substantive' for an ethical, safety or coherence "
+    "problem with the action itself. 'substantive' when unsure or when you do not object."
+)
+
+
+#: A flat string enum in the LLM-facing schema (no $ref/$defs: nested schema
+#: types degrade structured output on several backends, see EntropyResult).
+ObjectionTypeAnswer = Literal["evidence", "justification", "substantive"]
+
+
+def _objection_type_field() -> Any:
+    return Field(default=ObjectionType.SUBSTANTIVE.value, description=_OBJECTION_TYPE_DESCRIPTION)
 
 
 class ConscienceStatus(str, Enum):
@@ -104,6 +131,12 @@ class EntropyResult(BaseModel):
             "unanchored, so the agent can fix it on its retry. Empty otherwise."
         ),
     )
+    objection_type: ObjectionTypeAnswer = _objection_type_field()
+
+    @field_validator("objection_type", mode="before")
+    @classmethod
+    def _coerce_objection_type(cls, v: object) -> str:
+        return coerce_objection_type(v).value
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
@@ -133,6 +166,12 @@ class CoherenceResult(BaseModel):
             "fix that phrase on its retry. Empty when the reply passes."
         ),
     )
+    objection_type: ObjectionTypeAnswer = _objection_type_field()
+
+    @field_validator("objection_type", mode="before")
+    @classmethod
+    def _coerce_objection_type(cls, v: object) -> str:
+        return coerce_objection_type(v).value
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
@@ -248,6 +287,12 @@ class OptimizationVetoResult(BaseModel):
         validation_alias="entropy_reduction",  # Accept common LLM variation
     )
     affected_values: List[str] = Field(default_factory=list, description="Values that would be affected")
+    objection_type: ObjectionTypeAnswer = _objection_type_field()
+
+    @field_validator("objection_type", mode="before")
+    @classmethod
+    def _coerce_objection_type(cls, v: object) -> str:
+        return coerce_objection_type(v).value
 
     model_config = ConfigDict(defer_build=True, extra="forbid", populate_by_name=True)
 
@@ -287,6 +332,13 @@ class EpistemicHumilityResult(BaseModel):
         # constructs it; it is deliberately NOT in `offered`, so a reask never
         # invites the model to veto by naming the option.
         return normalize_gate_verb(v, allowed=("proceed", "ponder", "defer", "abort"), offered=("proceed", "ponder", "defer"))
+
+    objection_type: ObjectionTypeAnswer = _objection_type_field()
+
+    @field_validator("objection_type", mode="before")
+    @classmethod
+    def _coerce_objection_type(cls, v: object) -> str:
+        return coerce_objection_type(v).value
 
     model_config = ConfigDict(defer_build=True, extra="forbid")
 
@@ -346,6 +398,21 @@ class ConscienceCheckResult(BaseModel):
     )
     epistemic_data: Optional[EpistemicData] = Field(
         default=None, description="Epistemic safety metadata (provided by epistemic consciences)"
+    )
+
+    # The decision contract (CIRISAgent#1366 items 7-9). A conscience that
+    # objects says what KIND of objection it is and whether it held trusted
+    # Wise Authority governance; the fold adds the veto id and the conscience
+    # name (VetoObjection). None when the check passed or did not run; a
+    # failing judgement with no type is read as SUBSTANTIVE (fail safe).
+    objection_type: Optional[ObjectionType] = Field(
+        default=None, description="evidence / justification / substantive, when the check objected"
+    )
+    held_trusted_rule: Optional[bool] = Field(
+        default=None, description="Whether this conscience held trusted WA governance (signed guidance, amendments)"
+    )
+    held_evidence_ids: List[str] = Field(
+        default_factory=list, description="Ids of the trusted governance entries this conscience held"
     )
 
     # Detailed check results (each conscience provides its own check)
@@ -411,6 +478,10 @@ class ConscienceCheckResult(BaseModel):
 
 
 __all__ = [
+    "ObjectionType",
+    "VetoChange",
+    "VetoDischarge",
+    "VetoObjection",
     "ConscienceStatus",
     "EntropyCheckResult",
     "CoherenceCheckResult",

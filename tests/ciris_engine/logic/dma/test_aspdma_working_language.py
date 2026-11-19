@@ -44,6 +44,6 @@ def test_with_nothing_on_the_thought_or_profile_the_deployment_decides() -> None
 
 
 def test_compose_messages_does_not_read_the_deployment_language() -> None:
-    source = inspect.getsource(ActionSelectionPDMAEvaluator.compose_messages)
+    source = inspect.getsource(ActionSelectionPDMAEvaluator.compose_prompt)  # composition lives here since #1366 Phase 3
     assert "get_preferred_language" not in source
     assert "_working_language" in source

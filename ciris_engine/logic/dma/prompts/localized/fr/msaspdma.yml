@@ -161,3 +161,4 @@ response_format: |
 # DÉONTIQUE — la catégorique de fermeture.
 closing_reminder: |
   Bien faire l'adresse est tout l'intérêt de cette étape.
+pipeline_position: "POSITION DANS LE PIPELINE : la sélection d'action a choisi uniquement le verbe ; cette étape vérifie où va l'écriture. Les consciences examinent ensuite l'action avant qu'elle ne s'exécute."

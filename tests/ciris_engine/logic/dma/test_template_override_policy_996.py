@@ -131,6 +131,37 @@ def test_a_replaceable_field_is_static(template: str, field: str) -> None:
     )
 
 
+def test_the_aspdma_stage_contract_is_never_replaceable() -> None:
+    """#1366: every shipped template replaces ASPDMA `system_header`, so the engine contract lives in
+    `stage_contract`, which the evaluator reads from the engine template — never from an override."""
+    import inspect
+
+    from ciris_engine.logic.dma import action_selection_pdma
+
+    assert "stage_contract" not in REPLACEABLE_FIELDS.values()
+    # A module function with no arguments: it cannot see the evaluator's override-merged prompts.
+    assert not inspect.signature(action_selection_pdma._stage_contract).parameters
+    assert "load_prompt_template" in inspect.getsource(action_selection_pdma._stage_contract)
+
+
+def test_the_pipeline_position_is_never_replaceable() -> None:
+    """#1366 item 12: every stage's `pipeline_position` is engine-owned. No replaceable field holds it (it is
+    a field of its own, outside each header), and the ASPDMA read, like `_stage_contract`, takes no arguments
+    so it cannot see the override-merged prompts. Every stage is exercised end to end, under overrides that
+    name the field, in tests/ciris_engine/logic/prompt_assembly/test_pipeline_position_segment.py."""
+    import inspect
+
+    from ciris_engine.logic.dma import action_selection_pdma
+
+    assert "pipeline_position" not in REPLACEABLE_FIELDS.values()
+    for template, field in REPLACEABLE_FIELDS.items():
+        data = yaml.safe_load((PROMPTS / f"{template}.yml").read_text(encoding="utf-8")) or {}
+        assert "pipeline position" not in str(data.get(field)).lower(), f"{template}.{field}"
+        assert data.get("pipeline_position"), f"{template}.yml has no pipeline_position field"
+    assert not inspect.signature(action_selection_pdma._pipeline_position).parameters
+    assert "pipeline_position(" in inspect.getsource(action_selection_pdma._pipeline_position)
+
+
 def test_no_context_integration_is_ever_declared_replaceable() -> None:
     """All three carry live slots — ASPDMA's has 22, including every prior-DMA
     summary. Replacing one is #996."""

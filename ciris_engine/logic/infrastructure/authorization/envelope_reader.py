@@ -40,7 +40,12 @@ def resolve_envelope_for_task_id(task_id: str, agent_occurrence_id: str = "defau
     try:
         from ciris_engine.logic.persistence import get_task_by_id
 
-        return resolve_task_envelope(get_task_by_id(task_id, agent_occurrence_id))
+        task = get_task_by_id(task_id, agent_occurrence_id)
+        if task is None and agent_occurrence_id != "__shared__":
+            # A shared coordination task (WAKEUP_SHARED_*, SHUTDOWN_SHARED_*)
+            # lives in the __shared__ namespace whichever occurrence runs it.
+            task = get_task_by_id(task_id, "__shared__")
+        return resolve_task_envelope(task)
     except Exception as exc:
         logger.warning("TaskEnvelope: could not resolve envelope for task %s: %s", task_id, exc)
         return None

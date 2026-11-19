@@ -159,3 +159,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Lấy địa chỉ đúng là toàn bộ ý tưởng của bước này.
+pipeline_position: |-
+  VỊ TRÍ TRONG ĐƯỜNG ỐNG: lựa chọn hành động chỉ chọn động từ; bước này kiểm tra
+  nơi việc ghi sẽ đi đến. Sau đó các lương tâm xem xét hành động trước khi nó chạy.

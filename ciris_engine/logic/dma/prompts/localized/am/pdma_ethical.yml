@@ -142,3 +142,4 @@ context_integration: |
   የሚገመገም ሐሳብ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "የፓይፕላይን አቀማመጥ፦ ከCSDMA እና DSDMA ጎን መጀመሪያ ትሮጣላችሁ። ከዚያ የማሰብ ፍተሻ ምክንያታችሁን ይገመግማል፣ የተግባር ምርጫ ተግባሩን ይመርጣል፣ እና ህሊናዎቹ ይገመግሙታል። እናንተ ትመክራላችሁ፤ የመጨረሻውን ተግባር አትመርጡም።"

@@ -156,3 +156,7 @@ context_integration: |
   Pemikiran untuk Dievaluasi: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  POSISI PIPA: Anda berjalan pertama, bersama CSDMA dan DSDMA. IDMA kemudian meninjau
+  penalaran Anda, pemilihan tindakan memilih tindakan, dan para nurani
+  meninjaunya. Anda merekomendasikan; Anda tidak memilih tindakan akhir.

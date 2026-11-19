@@ -119,7 +119,7 @@ async def test_a_verb_second_pass_keeps_the_action_selection_prompts_and_its_own
     )
     own = SentPrompts(system="msaspdma system", user="msaspdma user")
 
-    async def second_pass(_self: Any, _item: Any, _result: Any, _ctx: Any) -> ActionSelectionDMAResult:
+    async def second_pass(_self: Any, _item: Any, _result: Any, _ctx: Any, **_: Any) -> ActionSelectionDMAResult:
         fresh = cg.make_memorize_aspdma_result().model_copy(update={"user_prompt": "msaspdma user"})
         return attach_sent_prompts(fresh, own)
 

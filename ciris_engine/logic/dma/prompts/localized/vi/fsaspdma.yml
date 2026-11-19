@@ -80,3 +80,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Việc loại bỏ đúng node, và chỉ node đó, là mục đích duy nhất của bước này.
+pipeline_position: |-
+  VỊ TRÍ TRONG ĐƯỜNG ỐNG: lựa chọn hành động chỉ chọn động từ; bước này đặt tên
+  node. Sau đó các lương tâm xem xét hành động trước khi nó chạy.

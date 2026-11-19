@@ -147,3 +147,6 @@ context_integration: |
   Думка для оцінки: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  ПОЗИЦІЯ В КОНВЕЄРІ: ви запускаєтесь першим, поряд з CSDMA та DSDMA. Перевірка Інтуїції потім переглядає
+  ваші міркування, Вибір Дії обирає дію, а совісті переглядають її. Ви рекомендуєте; ви не обираєте остаточну дію.

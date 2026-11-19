@@ -67,6 +67,11 @@ blocks:
   pdma_ethical.system_guidance_header:
     disposition: hold
     contaminant: [procedural, axiotic, structural]
+  # #1366 item 12: the same scalar after its pipeline-position paragraph, now a
+  # field of its own. No new mixed bytes: the header's bytes in two blocks.
+  pdma_ethical.system_guidance_header_tail:
+    disposition: hold
+    contaminant: [procedural, axiotic, structural]
   action_selection_pdma.closing_reminder:
     disposition: hold
     contaminant: [ontological, axiotic, procedural, pragmatic, contingent]

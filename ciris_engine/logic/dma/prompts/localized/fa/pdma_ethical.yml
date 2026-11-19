@@ -138,3 +138,4 @@ context_integration: |
   اندیشه برای ارزیابی: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: "جایگاه خط لوله: شما نخست، در کنار CSDMA و DSDMA، اجرا می‌شوید. سپس IDMA استدلال شما را بازبینی می‌کند، انتخاب عمل کنش را برمی‌گزیند، و وجدان‌ها آن را بازبینی می‌کنند. شما توصیه می‌کنید؛ شما کنشِ نهایی را انتخاب نمی‌کنید."

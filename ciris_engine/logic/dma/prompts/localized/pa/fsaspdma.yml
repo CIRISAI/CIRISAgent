@@ -70,3 +70,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   ਸਹੀ node ਨੂੰ ਹਟਾਉਣਾ, ਅਤੇ ਸਿਰਫ਼ ਉਸ node ਨੂੰ, ਇਸ ਕਦਮ ਦਾ ਪੂਰਾ ਮਕਸਦ ਹੈ।
+pipeline_position: "ਪਾਈਪਲਾਈਨ ਸਥਿਤੀ: ਕਾਰਵਾਈ ਦੀ ਚੋਣ ਨੇ ਸਿਰਫ਼ ਕਿਰਿਆ ਚੁਣੀ ਹੈ; ਇਹ ਕਦਮ node ਨੂੰ ਨਾਮਜ਼ਦ ਕਰਦਾ ਹੈ। ਫਿਰ ਚੱਲਣ ਤੋਂ ਪਹਿਲਾਂ ਜ਼ਮੀਰਾਂ ਕਾਰਵਾਈ ਦੀ ਸਮੀਖਿਆ ਕਰਦੀਆਂ ਹਨ।"

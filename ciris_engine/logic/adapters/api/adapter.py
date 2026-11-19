@@ -22,6 +22,7 @@ from ciris_engine.logic.registries.base import Priority
 from ciris_engine.logic.services.runtime.adapter_configuration import AdapterConfigurationService
 from ciris_engine.logic.utils.platform_detection import is_ios
 from ciris_engine.schemas.adapters import AdapterServiceRegistration
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.messages import IncomingMessage, MessageHandlingResult
 from ciris_engine.schemas.runtime.system_context import ChannelContext
@@ -489,6 +490,9 @@ class ApiPlatform(Service):
                     "author_id": msg.author_id,
                     "author_name": msg.author_name,
                     "message_id": msg.message_id,
+                    # The role the API authenticated, recorded so a history
+                    # line can show it (#1366 item 5). Empty when not verified.
+                    "author_role": msg.author_role.value if isinstance(getattr(msg, "author_role", None), UserRole) else "",
                 },
                 request_timestamp=now,
             ),

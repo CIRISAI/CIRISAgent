@@ -13,12 +13,18 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
+    from ciris_engine.logic.prompt_assembly import AssemblyCall
+    from ciris_engine.logic.prompt_assembly.segmenting import PromptBuilder, Segments
+    from ciris_engine.schemas.context.prompt_provenance import PromptManifest
+    from ciris_engine.schemas.runtime.models import VerifiedSender
     from ciris_engine.schemas.dma.prompts import PromptCollection
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ciris_engine.logic.dma.conscience_feedback import ConscienceFeedback
+from ciris_engine.logic.prompt_assembly import prompt_manifest_scope
+from ciris_engine.logic.prompt_assembly.assembler import LayoutItem
 from ciris_engine.schemas.dma.sent_prompts import PromptCarrier, carry_sent_prompts, sent_prompts_of
-from ciris_engine.logic.formatters import format_system_prompt_blocks
 from ciris_engine.logic.processors.support.processing_queue import ProcessingQueueItem
 from ciris_engine.logic.registries.base import ServiceRegistry
 from ciris_engine.logic.utils import get_localized_accord_text
@@ -31,6 +37,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader, safe_format
+from ciris_engine.logic.utils.localization import in_thought_language
 
 
 class TSASPDMALLMResult(PromptCarrier):
@@ -109,47 +116,124 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         # Store last user prompt for debugging/streaming
 
-        # Per-thought language override populated from user_profiles. None
-        # falls back to env var. Avoids the legacy global set_prompt_language
-        # path which mutated shared state.
-        self._explicit_language: Optional[str] = None
-
         logger.info(f"TSASPDMAEvaluator initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
         """Get prompt loader for the thread's currently-active language."""
-        return get_prompt_loader(language=self._explicit_language)
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
         """Load prompt template fresh each time to respect language changes."""
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
-    def _identity_block(self, context: Optional[Any]) -> str:
-        """The agent's identity block, approved amendments included, from the thought's context."""
-        from ciris_engine.logic.formatters.identity import agent_identity_of, identity_block_of
+    @staticmethod
+    def _agent_identity(context: Optional[Any]) -> Any:
+        """The agent's identity, approved amendments included, from the thought's context."""
+        from ciris_engine.logic.formatters.identity import agent_identity_of
 
-        return identity_block_of(agent_identity_of(context), language=self.prompt_loader.language)
+        return agent_identity_of(context)
 
-    def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync prompt language using the full localization priority chain.
+    @staticmethod
+    def _sender(context: Optional[Any], original_thought: Optional[Any] = None) -> Optional["VerifiedSender"]:
+        """The verified sender, rendered beside the identity block (#1366 item 5).
 
-        Walks thought/task preferred_language → user_profile.preferred_language →
-        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
-        Accepts dataclass-style or dict-style contexts.
+        TSASPDMA re-decides the tool call, including who it is for. In sh-un-08
+        it called an OBSERVER "a designated Wise Authority" (the ``wa-`` id
+        prefix) and once filed under the authorized person's id: it had only
+        the ``@display (ID: …)`` line. The sender is the thought's own (a
+        coalesced message's) when it has one, else the task creator's.
         """
-        from ciris_engine.logic.utils.localization import (
-            get_preferred_language,
-            get_user_language_from_context,
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_of
+
+        return verified_sender_of(original_thought, context)
+
+    def _assembly_call(
+        self, original_thought: Optional[Any], context: Optional[Any], agent_identity: Any, retry: bool
+    ) -> "AssemblyCall":
+        """The manifest's call facts, from trusted state only (the verified grant, verified amendments)."""
+        from ciris_engine.logic.formatters.wa_approval import wa_authorization_of
+        from ciris_engine.logic.prompt_assembly import AssemblyCall
+        from ciris_engine.logic.prompt_assembly.segmenting import policy_facts
+        from ciris_engine.schemas.context.prompt_provenance import ManifestThoughtKind
+
+        authorization = wa_authorization_of(context)
+        depth = getattr(original_thought, "thought_depth", 0)
+        kind = (
+            ManifestThoughtKind.GUIDANCE
+            if authorization is not None
+            else ManifestThoughtKind.FOLLOWUP if isinstance(depth, int) and depth > 0 else ManifestThoughtKind.SEED
+        )
+        task_id = getattr(original_thought, "source_task_id", None)
+        thought_id = getattr(original_thought, "thought_id", None)
+        return AssemblyCall(
+            task_id=task_id if isinstance(task_id, str) else None,
+            thought_id=thought_id if isinstance(thought_id, str) else None,
+            thought_kind=kind,
+            retry_index=1 if retry else 0,
+            response_model=TSASPDMALLMResult.__name__,
+            facts=policy_facts(authorization, agent_identity, id_scoped=False),
+            language=self.prompt_loader.language,
         )
 
-        new_language = (
-            get_user_language_from_context(context) if context is not None else get_preferred_language()
+    def _system_segments(
+        self, system_message: Any, agent_identity: Any, sender: Optional["VerifiedSender"], prefix: str
+    ) -> "Segments":
+        """The system message: identity (+ amendments), the VERIFIED SENDER block, the stage's own instruction.
+
+        The bytes of ``format_system_prompt_blocks(identity + sender, "", "", "", None, system_message)``.
+        ``system_message`` is the instruction's text (one segment) or its segments, joined with no glue (the
+        instruction split around its pipeline-position segment, #1366 item 12).
+        """
+        from ciris_engine.logic.prompt_assembly.segmenting import (
+            identity_segments,
+            items,
+            segment,
+            sender_block_segments,
+            stripped_ends,
         )
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            logger.debug(f"TSASPDMA: Synced prompt language to {new_language}")
+        from ciris_engine.schemas.context.prompt_provenance import SegmentKind
+
+        language = self.prompt_loader.language
+        segs, _ = identity_segments(agent_identity, language)
+        parts = [segs]
+        if sender is not None:
+            parts.append(sender_block_segments(sender, include_display_name=True, language=language)[0])
+        if isinstance(system_message, str):
+            parts.append([segment(f"{prefix}:system", SegmentKind.STAGE_INSTRUCTION, system_message)])
+        else:
+            parts.append(list(system_message))
+        segments: List[Any] = []
+        layout: List[Any] = []
+        for block in parts:
+            block = [s for s in block if s.text or s.kind == SegmentKind.SENDER_IDENTITY]
+            if not block:
+                continue
+            glue = "\n" if block[0].kind == SegmentKind.SENDER_IDENTITY else ""
+            segments.extend(block)
+            layout.extend(items(block, glue, "\n\n"))
+        segments = stripped_ends(segments)
+        kept = {s.segment_id for s in segments}
+        return segments, [i for i in layout if i.segment_id in kept]
+
+    def _preamble(self, builder: "PromptBuilder") -> None:
+        """Accord (localized, single language), language guidance, crisis resources: one system message each."""
+        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        from ciris_engine.logic.prompt_assembly.segmenting import segment
+        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.schemas.context.prompt_provenance import SegmentKind
+
+        language = self.prompt_loader.language
+        # TSASPDMA uses localized accord (single language) for clearer action selection guidance
+        builder.single("system", segment("accord", SegmentKind.ACCORD, get_localized_accord_text(language) or ""))
+        # Per-language guidance — empty for most languages, populated for locales where systematic terminology
+        # gaps were observed (am as of 2.7.6).
+        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or ""))
+        # Crisis resources ride directly after language guidance (#1248).
+        builder.single(
+            "system", segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or "")
+        )
 
     def _convert_tsaspdma_result(
         self,
@@ -337,9 +421,37 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         aspdma_reasoning: str,
         original_thought_content: str,
         context_enrichment: Optional[Dict[str, Any]] = None,
-        identity_block: str = "",
+        agent_identity: Any = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
+        sender: Optional["VerifiedSender"] = None,
     ) -> List[JSONDict]:
-        """Assemble prompt messages for TSASPDMA evaluation.
+        """The TSASPDMA messages alone (the composition seam); see :meth:`_compose_tsaspdma`."""
+        messages, _ = self._compose_tsaspdma(
+            tool_name,
+            tool_info,
+            aspdma_reasoning,
+            original_thought_content,
+            context_enrichment=context_enrichment,
+            agent_identity=agent_identity,
+            conscience_feedback=conscience_feedback,
+            sender=sender,
+        )
+        return messages
+
+    def _compose_tsaspdma(
+        self,
+        tool_name: str,
+        tool_info: ToolInfo,
+        aspdma_reasoning: str,
+        original_thought_content: str,
+        context_enrichment: Optional[Dict[str, Any]] = None,
+        agent_identity: Any = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
+        sender: Optional["VerifiedSender"] = None,
+        original_thought: Optional[Any] = None,
+        context: Optional[Any] = None,
+    ) -> "tuple[List[JSONDict], PromptManifest]":
+        """Assemble TSASPDMA's prompt from typed segments (PromptAssembler, FSD/PROMPT_CONTEXT_PROVENANCE.md §6).
 
         NOTE: Parameters are NOT passed from ASPDMA - TSASPDMA extracts them
         from the original_thought_content which contains the user's request.
@@ -348,45 +460,23 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             context_enrichment: Pre-run tool results (e.g., ha_list_entities)
                                containing available resources for parameter selection.
         """
-        messages: List[JSONDict] = []
+        from ciris_engine.logic.dma.conscience_feedback import conscience_feedback_segment
+        from ciris_engine.logic.prompt_assembly.segmenting import PromptBuilder, segment, split_template
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
-        # TSASPDMA uses localized accord (single language) for clearer action selection guidance
-        # Uses the prompt_loader's language which was synced from user context
-        accord_text = get_localized_accord_text(self.prompt_loader.language)
-        if accord_text:
-            messages.append({"role": "system", "content": accord_text})
-        # Per-language guidance — empty for most languages, populated for
-        # locales where systematic terminology gaps were observed (am as
-        # of 2.7.6). See ciris_engine.logic.utils.localization.get_language_guidance.
-        from ciris_engine.logic.utils.localization import get_language_guidance
-        _lang_guidance = get_language_guidance(self.prompt_loader.language)
-        if _lang_guidance:
-            messages.append({"role": "system", "content": _lang_guidance})
-        # Crisis resources ride directly after language guidance (#1248) — the
-        # locale's verified numbers, from the one composer every DMA shares.
-        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
+        builder = PromptBuilder()
+        self._preamble(builder)
 
-        _crisis_block = get_crisis_resources_system_block(self.prompt_loader.language)
-        if _crisis_block:
-            messages.append({"role": "system", "content": _crisis_block})
-
-        # Get system message from prompt template
-        system_message = self.prompt_loader.get_system_message(
-            self.prompt_template_data,
-            tool_name=tool_name,
+        # The agent's identity, approved amendments included: the same block every DMA reads
+        # (formatters.identity.identity_block_of). Eric, 2026-11-13. The verified sender beside it (#1366 item 5).
+        # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
+        instruction, _ = split_template(
+            lambda **values: self.prompt_loader.get_system_message(self.prompt_template_data, **values),
+            self._position_slot(),
+            prefix="instr:system",
+            plain={"tool_name": tool_name},
         )
-
-        # The agent's identity, approved amendments included: the same block
-        # every DMA reads (formatters.identity.identity_block_of). Eric, 2026-11-13.
-        formatted_system = format_system_prompt_blocks(
-            identity_block,
-            "",  # additional context
-            "",  # system snapshot
-            "",  # user profiles
-            None,
-            system_message,
-        )
-        messages.append({"role": "system", "content": formatted_system})
+        builder.message("system", *self._system_segments(instruction, agent_identity, sender, "instr"))
 
         # Format tool documentation
         tool_documentation = self._format_tool_documentation(tool_info)
@@ -402,21 +492,49 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
                 f"Do NOT use friendly names directly - map them to entity_id first."
             )
 
-        # Get user message from template
-        # NOTE: No tool_parameters - TSASPDMA extracts them from original thought
-        user_message_text = self.prompt_loader.get_user_message(
-            self.prompt_template_data,
-            tool_name=tool_name,
-            aspdma_reasoning=aspdma_reasoning,
-            original_thought_content=original_thought_content,
-            tool_documentation=tool_documentation,
-            context_enrichment_section=context_enrichment_section,
+        # The user message from its template. NOTE: No tool_parameters - TSASPDMA extracts them from the
+        # original thought.
+        depth = getattr(original_thought, "thought_depth", 0)
+        follow_up = isinstance(depth, int) and depth > 0
+        slots = {
+            "aspdma_reasoning": segment("aspdma_reasoning", SegmentKind.DMA_OUTPUT, aspdma_reasoning, SegmentSource.LLM_OUTPUT),
+            "original_thought_content": segment(
+                "request",
+                SegmentKind.REQUEST,
+                original_thought_content,
+                SegmentSource.LLM_OUTPUT if follow_up else SegmentSource.USER_INPUT,
+            ),
+            "tool_documentation": segment(
+                "instr:tool_documentation", SegmentKind.STAGE_INSTRUCTION, tool_documentation, SegmentSource.ADAPTER_METADATA
+            ),
+        }
+        plain = {"tool_name": tool_name}
+        if context_enrichment_section:
+            slots["context_enrichment_section"] = segment(
+                "tool_output", SegmentKind.TOOL_OUTPUT, context_enrichment_section, SegmentSource.TOOL_OUTPUT
+            )
+        else:
+            plain["context_enrichment_section"] = ""
+        user_segments, user_items = split_template(
+            lambda **values: self.prompt_loader.get_user_message(self.prompt_template_data, **values),
+            slots,
+            prefix="instr:user",
+            plain=plain,
+        )
+        # On a conscience retry, the veto ASPDMA saw (#1366 item 1): without it
+        # this pass re-proposed the vetoed call (0 of 162 retries carried it).
+        feedback = conscience_feedback_segment(conscience_feedback)
+        if feedback is not None:
+            user_segments.append(feedback)
+            user_items.append(LayoutItem(segment_id=feedback.segment_id))
+        builder.message("user", user_segments, user_items)
+
+        return builder.assemble(
+            PromptStage.TSASPDMA,
+            self._assembly_call(original_thought, context, agent_identity, retry=feedback is not None),
         )
 
-        messages.append({"role": "user", "content": user_message_text})
-
-        return messages
-
+    @in_thought_language("original_thought", "context")
     async def evaluate_tool_action(
         self,
         tool_name: str,
@@ -425,6 +543,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         original_thought: ProcessingQueueItem,
         context: Optional[Any] = None,
         context_enrichment: Optional[Dict[str, Any]] = None,
+        conscience_feedback: Optional[ConscienceFeedback] = None,
     ) -> ActionSelectionDMAResult:
         """Evaluate a TOOL action with full documentation.
 
@@ -449,9 +568,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             f"[TSASPDMA] Context enrichment received: {list(context_enrichment.keys()) if context_enrichment else 'None'}"
         )
 
-        # Sync user's language preference before building prompts
-        self._sync_language_from_context(context)
-
         # Access the text content directly from ThoughtContent, not str() which gives repr
         thought_content_str = (
             original_thought.content.text
@@ -460,13 +576,18 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         )
         logger.info(f"[TSASPDMA] Original thought: {thought_content_str[:100]}...")
 
-        messages = self._create_tsaspdma_messages(
+        agent_identity = self._agent_identity(context)
+        messages, manifest = self._compose_tsaspdma(
             tool_name=tool_name,
             tool_info=tool_info,
             aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
             context_enrichment=context_enrichment,
-            identity_block=self._identity_block(context),
+            agent_identity=agent_identity,
+            sender=self._sender(context, original_thought),
+            conscience_feedback=conscience_feedback,
+            original_thought=original_thought,
+            context=context,
         )
 
         # Store user prompt for debugging
@@ -481,14 +602,15 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         try:
             # Use Gemini-compatible flat schema (no Union types)
-            result_tuple = await self.call_llm_structured(
-                messages=messages,
-                response_model=TSASPDMALLMResult,
-                max_tokens=8192,
-                temperature=0.0,
-                thought_id=original_thought.thought_id,
-                task_id=original_thought.source_task_id,
-            )
+            with prompt_manifest_scope(manifest):
+                result_tuple = await self.call_llm_structured(
+                    messages=messages,
+                    response_model=TSASPDMALLMResult,
+                    max_tokens=8192,
+                    temperature=0.0,
+                    thought_id=original_thought.thought_id,
+                    task_id=original_thought.source_task_id,
+                )
             llm_result: TSASPDMALLMResult = result_tuple[0]
 
             # Convert flat LLM result to typed ActionSelectionDMAResult
@@ -525,6 +647,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
             # NO FALLBACK - re-raise to trigger proper deferral/ponder behavior
             raise
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_tool_correction(
         self,
         requested_tool_name: str,
@@ -541,8 +664,6 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         - Asks for clarification (returns SPEAK)
         - Reconsiders approach (returns PONDER)
         """
-        # Sync user's language preference before building prompts
-        self._sync_language_from_context(context)
 
         thought_content_str = (
             original_thought.content.text
@@ -553,12 +674,16 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         # Format available tools list for prompt
         tools_list_text = self._format_available_tools_for_correction(available_tools)
 
-        messages = self._create_correction_mode_messages(
+        agent_identity = self._agent_identity(context)
+        messages, manifest = self._compose_correction_mode(
             requested_tool=requested_tool_name,
             available_tools_list=tools_list_text,
             aspdma_reasoning=aspdma_reasoning,
             original_thought_content=thought_content_str,
-            identity_block=self._identity_block(context),
+            agent_identity=agent_identity,
+            sender=self._sender(context, original_thought),
+            original_thought=original_thought,
+            context=context,
         )
 
         logger.info(
@@ -567,14 +692,15 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         )
 
         try:
-            result_tuple = await self.call_llm_structured(
-                messages=messages,
-                response_model=TSASPDMALLMResult,
-                max_tokens=8192,
-                temperature=0.0,
-                thought_id=original_thought.thought_id,
-                task_id=original_thought.source_task_id,
-            )
+            with prompt_manifest_scope(manifest):
+                result_tuple = await self.call_llm_structured(
+                    messages=messages,
+                    response_model=TSASPDMALLMResult,
+                    max_tokens=8192,
+                    temperature=0.0,
+                    thought_id=original_thought.thought_id,
+                    task_id=original_thought.source_task_id,
+                )
             llm_result: TSASPDMALLMResult = result_tuple[0]
 
             # Validate corrected tool name if TOOL action
@@ -644,38 +770,51 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         available_tools_list: str,
         aspdma_reasoning: str,
         original_thought_content: str,
-        identity_block: str = "",
+        agent_identity: Any = None,
+        sender: Optional["VerifiedSender"] = None,
     ) -> List[JSONDict]:
-        """Create prompt messages for TSASPDMA correction mode."""
-        messages: List[JSONDict] = []
-
-        # TSASPDMA uses localized accord (single language) for clearer action selection guidance
-        accord_text = get_localized_accord_text(self.prompt_loader.language)
-        if accord_text:
-            messages.append({"role": "system", "content": accord_text})
-        # Per-language guidance — empty for most languages, populated for
-        # locales where systematic terminology gaps were observed (am as
-        # of 2.7.6). See ciris_engine.logic.utils.localization.get_language_guidance.
-        from ciris_engine.logic.utils.localization import get_language_guidance
-        _lang_guidance = get_language_guidance(self.prompt_loader.language)
-        if _lang_guidance:
-            messages.append({"role": "system", "content": _lang_guidance})
-        # Crisis resources ride directly after language guidance (#1248) — the
-        # locale's verified numbers, from the one composer every DMA shares.
-        from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
-
-        _crisis_block = get_crisis_resources_system_block(self.prompt_loader.language)
-        if _crisis_block:
-            messages.append({"role": "system", "content": _crisis_block})
-
-        # System message for correction mode
-        system_message = self.prompt_loader.get_system_message(
-            self.prompt_template_data,
-            tool_name=requested_tool,
+        """The correction-mode messages alone (the composition seam); see :meth:`_compose_correction_mode`."""
+        messages, _ = self._compose_correction_mode(
+            requested_tool, available_tools_list, aspdma_reasoning, original_thought_content, agent_identity, sender
         )
-        if identity_block:
-            system_message = "\n\n".join((identity_block, system_message))
-        messages.append({"role": "system", "content": system_message})
+        return messages
+
+    def _compose_correction_mode(
+        self,
+        requested_tool: str,
+        available_tools_list: str,
+        aspdma_reasoning: str,
+        original_thought_content: str,
+        agent_identity: Any = None,
+        sender: Optional["VerifiedSender"] = None,
+        original_thought: Optional[Any] = None,
+        context: Optional[Any] = None,
+    ) -> "tuple[List[JSONDict], PromptManifest]":
+        """Assemble TSASPDMA's correction-mode prompt from typed segments (PromptAssembler).
+
+        The requested tool name is ASPDMA's output (a name that does not exist), so wherever it is interpolated it
+        is a ``dma_output`` segment, never instruction text.
+        """
+        from ciris_engine.logic.prompt_assembly.segmenting import PromptBuilder, segment, split_template
+        from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
+
+        builder = PromptBuilder()
+        self._preamble(builder)
+
+        # System message for correction mode: identity, the verified sender, the stage's instruction.
+        def requested(n: int) -> Any:
+            return segment(f"requested_tool:{n}", SegmentKind.DMA_OUTPUT, requested_tool, SegmentSource.LLM_OUTPUT)
+
+        system_segments, system_items = split_template(
+            lambda **values: self.prompt_loader.get_system_message(self.prompt_template_data, **values),
+            {"tool_name": requested(0), **self._position_slot()},
+            prefix="instr:system",
+        )
+        segs, its = self._identity_and_sender(agent_identity, sender)
+        if segs:
+            system_items = its + [system_items[0].model_copy(update={"glue": "\n\n"})] + system_items[1:]
+            system_segments = segs + system_segments
+        builder.message("system", system_segments, system_items)
 
         # Get the correction section template (stored in custom_prompts by loader)
         correction_template = self.prompt_template_data.get_prompt("tool_correction_section") or ""
@@ -686,26 +825,27 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         # correction doctrine are indistinguishable from the English f-string
         # scaffold around them, and the whole user message reports as one
         # unmeasurable `mixed` block.
-        correction_section = safe_format(
-            correction_template,
-            source=f"tsaspdma.tool_correction_section[{self.prompt_loader.language}]",
-            requested_tool=requested_tool,
-            available_tools_list=available_tools_list,
-        )
+        def correction_section(**values: str) -> str:
+            return safe_format(
+                correction_template,
+                source=f"tsaspdma.tool_correction_section[{self.prompt_loader.language}]",
+                **values,
+            )
 
         # User message with correction context
-        user_message = f"""=== TOOL CORRECTION MODE ===
+        def user_message(**values: str) -> str:
+            return f"""=== TOOL CORRECTION MODE ===
 
-ASPDMA selected tool '{requested_tool}' but this tool does NOT exist.
+ASPDMA selected tool '{values["requested_tool"]}' but this tool does NOT exist.
 
-{correction_section}
+{values["correction_section"]}
 
 === ASPDMA'S ORIGINAL SELECTION ===
-Tool: {requested_tool}
-Rationale: {aspdma_reasoning}
+Tool: {values["requested_tool"]}
+Rationale: {values["aspdma_reasoning"]}
 
 === ORIGINAL THOUGHT (user's intent) ===
-{original_thought_content}
+{values["original_thought_content"]}
 
 === YOUR TASK ===
 1. Find the correct tool from the available list that matches the user's intent
@@ -715,8 +855,65 @@ Rationale: {aspdma_reasoning}
 
 Return your response as a FLAT JSON object."""
 
-        messages.append({"role": "user", "content": user_message})
-        return messages
+        depth = getattr(original_thought, "thought_depth", 0)
+        follow_up = isinstance(depth, int) and depth > 0
+        section_segments, _ = split_template(
+            correction_section,
+            {
+                "requested_tool": requested(1),
+                "available_tools_list": segment(
+                    "instr:available_tools", SegmentKind.STAGE_INSTRUCTION, available_tools_list, SegmentSource.ADAPTER_METADATA
+                ),
+            },
+            prefix="instr:correction",
+        )
+        section = "".join(s.text for s in section_segments)
+        user_segments, user_items = split_template(
+            user_message,
+            {
+                "requested_tool": requested(2),
+                "aspdma_reasoning": segment("aspdma_reasoning", SegmentKind.DMA_OUTPUT, aspdma_reasoning, SegmentSource.LLM_OUTPUT),
+                "original_thought_content": segment(
+                    "request",
+                    SegmentKind.REQUEST,
+                    original_thought_content,
+                    SegmentSource.LLM_OUTPUT if follow_up else SegmentSource.USER_INPUT,
+                ),
+                "correction_section": segment("instr:correction_section", SegmentKind.STAGE_INSTRUCTION, section),
+            },
+            prefix="instr:user",
+        )
+        # The correction section's own pieces replace its placeholder segment, in place.
+        at = next(i for i, s in enumerate(user_segments) if s.segment_id == "instr:correction_section")
+        user_segments[at : at + 1] = section_segments
+        user_items[at : at + 1] = [
+            LayoutItem(segment_id=s.segment_id, glue="") for s in section_segments
+        ]
+        builder.message("user", user_segments, user_items)
+
+        return builder.assemble(
+            PromptStage.TSASPDMA, self._assembly_call(original_thought, context, agent_identity, retry=False)
+        )
+
+    def _position_slot(self) -> Dict[str, Any]:
+        """The engine template's pipeline-position paragraph as its own segment (#1366 item 12), as a slot."""
+        from ciris_engine.logic.prompt_assembly.segmenting import pipeline_position_slot
+
+        return pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+
+    def _identity_and_sender(self, agent_identity: Any, sender: Optional["VerifiedSender"]) -> "Segments":
+        """Identity (+ amendments) then the VERIFIED SENDER block, joined by a blank line ("" when neither)."""
+        from ciris_engine.logic.prompt_assembly.segmenting import identity_segments, items, sender_block_segments
+
+        language = self.prompt_loader.language
+        segments, layout = identity_segments(agent_identity, language)
+        if sender is not None:
+            s_segs, s_items = sender_block_segments(sender, include_display_name=True, language=language)
+            if not segments:
+                s_items = [s_items[0].model_copy(update={"glue": ""})] + s_items[1:]
+            segments = segments + s_segs
+            layout = layout + s_items
+        return segments, layout
 
     async def evaluate(self, *args: Any, **kwargs: Any) -> ActionSelectionDMAResult:
         """Evaluate tool action (generic interface)."""
@@ -736,6 +933,7 @@ Return your response as a FLAT JSON object."""
             aspdma_reasoning=aspdma_reasoning,
             original_thought=original_thought,
             context=context,
+            conscience_feedback=kwargs.get("conscience_feedback"),
         )
 
     def __repr__(self) -> str:

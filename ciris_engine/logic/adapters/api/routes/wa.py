@@ -7,7 +7,7 @@ Manages human-in-the-loop deferrals and permissions.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, NoReturn, Optional, TypeVar, cast
+from typing import Annotated, List, NoReturn, Optional, TypeVar, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
@@ -15,7 +15,11 @@ from pydantic import BaseModel
 from ciris_engine.protocols.services.governance.wise_authority import WiseAuthorityServiceProtocol
 from ciris_engine.schemas.api.responses import ErrorCode, ErrorDetail, ErrorResponse, ResponseMetadata, SuccessResponse
 from ciris_engine.schemas.api.wa import (
+    PROPOSED_BASE_LINK_KEY,
+    DeferralListProfile,
     DeferralListResponse,
+    ProfileAnchorStatus,
+    ProposedBaseLink,
     PermissionsListResponse,
     ResolveDeferralRequest,
     ResolveDeferralResponse,
@@ -29,6 +33,7 @@ from ciris_engine.logic.services.governance.wise_authority.deferral_rows import 
     emit_deferral_response,
     read_deferral_row,
     rows_available,
+    sha256_hex,
 )
 from ciris_engine.schemas.services.authority.deferral_rows import (
     REASON_UNKNOWN_REQUEST,
@@ -143,7 +148,55 @@ def create_wa_success_response(data: _T) -> SuccessResponse[_T]:
     )
 
 
-def raise_wa_error(message: str, status_code: int = 500) -> NoReturn:
+#: Reason ids of the resolve 400s (error.details.reason_id).
+REASON_AMENDMENT_TEXT_REQUIRES_APPROVE = "wa.amendment_text_requires_approve"
+REASON_CALL_FINGERPRINT_REQUIRES_APPROVE = "wa.call_fingerprint_requires_approve"
+REASON_RESOLVE_ONE_SUBJECT = "wa.resolve_one_subject"
+REASON_BASE_LINK_DIGEST_REQUIRES_APPROVE = "wa.base_link_digest_requires_approve"
+REASON_BASE_LINK_DIGEST_MISMATCH = "wa.base_link_digest_mismatch"
+
+
+def _proposed_base_link(pending: Optional[PendingDeferral]) -> Optional[ProposedBaseLink]:
+    """The base link a pending deferral proposes (``context.proposed_base_link``), or ``None``."""
+    raw = pending.context.get(PROPOSED_BASE_LINK_KEY) if pending is not None else None
+    if not raw:
+        return None
+    try:
+        return ProposedBaseLink.model_validate_json(raw)
+    except ValueError:
+        return None
+
+
+_PROFILE_STATUS = {
+    "verified": ProfileAnchorStatus.ANCHORED,
+    "unanchored": ProfileAnchorStatus.UNANCHORED,
+    "mismatch": ProfileAnchorStatus.MISMATCH,
+    "contested": ProfileAnchorStatus.CONTESTED,
+}
+
+
+def deferral_list_profile(deferrals: List[PendingDeferral]) -> DeferralListProfile:
+    """The identity profile beside the deferral list (rc21 section 3).
+
+    The status and digest are the newest whole-profile check this process made
+    (unanchored, digest null, before the first identity load: no base link is
+    known yet). The proposed base link is the one a PENDING deferral asks
+    approval of: what resolve's ``base_link_digest`` can approve.
+    """
+    from ciris_engine.logic.context.identity_profile import latest_identity_profile
+
+    profile = latest_identity_profile()
+    proposal = next((p for p in (_proposed_base_link(d) for d in deferrals) if p is not None), None)
+    return DeferralListProfile(
+        status=_PROFILE_STATUS.get(profile.status.value, ProfileAnchorStatus.UNANCHORED)
+        if profile is not None
+        else ProfileAnchorStatus.UNANCHORED,
+        profile_digest=profile.profile_digest if profile is not None else None,
+        proposed_base_link=proposal,
+    )
+
+
+def raise_wa_error(message: str, status_code: int = 500, reason_id: Optional[str] = None) -> NoReturn:
     """Raise a standardized WA error response.
 
     Consolidates the repeated error response pattern.
@@ -151,6 +204,8 @@ def raise_wa_error(message: str, status_code: int = 500) -> NoReturn:
     Args:
         message: Error message
         status_code: HTTP status code (default 500)
+        reason_id: Stable machine-readable reason, carried as ``error.details.reason_id``
+            (the same place a node refusal carries its own)
 
     Raises:
         HTTPException: Always raises with the specified error
@@ -161,6 +216,7 @@ def raise_wa_error(message: str, status_code: int = 500) -> NoReturn:
             error=ErrorDetail(
                 code=ErrorCode.INTERNAL_ERROR if status_code == 500 else ErrorCode.VALIDATION_ERROR,
                 message=message,
+                details={"reason_id": reason_id} if reason_id else None,
             )
         ).model_dump(mode="json"),
     )
@@ -198,7 +254,9 @@ async def get_deferrals(
 
     try:
         deferrals = await wa_service.get_pending_deferrals(wa_id=wa_id)
-        response = DeferralListResponse(deferrals=deferrals, total=len(deferrals))
+        response = DeferralListResponse(
+            deferrals=deferrals, total=len(deferrals), profile=deferral_list_profile(deferrals)
+        )
         return create_wa_success_response(response)
 
     except Exception as e:
@@ -236,7 +294,11 @@ def _row_refusal_status(refusal: DeferralRowRefusal) -> tuple[int, str]:
 
 
 async def _sign_response_row(
-    request: Request, deferral_id: str, pending: Optional[PendingDeferral], approved: bool
+    request: Request,
+    deferral_id: str,
+    pending: Optional[PendingDeferral],
+    approved: bool,
+    amendment_sha256: Optional[str] = None,
 ) -> str:
     """Have the node sign the Wise Authority's answer with their own key (#1316); its attestation_id.
 
@@ -264,7 +326,9 @@ async def _sign_response_row(
             status_code=409,
         )
     try:
-        return await emit_deferral_response(request_id, approved, _presented_session_token(request))
+        return await emit_deferral_response(
+            request_id, approved, _presented_session_token(request), amendment_sha256=amendment_sha256
+        )
     except DeferralRowsUnavailable:
         raise_wa_error(
             "Cannot resolve deferral: this node has no deferral rows, so the Wise Authority's answer "
@@ -470,6 +534,64 @@ async def resolve_deferral(
         # row is therefore deferral:response:rejected:v1. Signing it "approved"
         # would let an identity amendment cite it for the unmodified request.
         approved = resolve_request.resolution == "approve"
+        # THE EXACT BYTES (#1366 F1, Eric 2026-11-18: "WA approves exact bytes").
+        # An identity amendment is the text the WA approves here, verbatim; its
+        # digest is in this signature's payload and in the WA's own response
+        # row. Only an approval approves text: a reject or a modify that named
+        # amendment text would be signed as approving nothing, so it is refused.
+        amendment_text = resolve_request.amendment_text
+        call_fingerprint = resolve_request.call_fingerprint
+        # A deferral is either a call approval or an identity change, never both.
+        if amendment_text is not None and call_fingerprint is not None:
+            raise_wa_error(
+                "amendment_text and call_fingerprint cannot be resolved together: a deferral approves either one "
+                "tool call or one identity change",
+                status_code=400,
+                reason_id=REASON_RESOLVE_ONE_SUBJECT,
+            )
+        if call_fingerprint is not None and not approved:
+            raise_wa_error(
+                "call_fingerprint is only accepted with resolution='approve': a rejection or modification "
+                "approves no tool call",
+                status_code=400,
+                reason_id=REASON_CALL_FINGERPRINT_REQUIRES_APPROVE,
+            )
+        if amendment_text is not None and not approved:
+            raise_wa_error(
+                "amendment_text is only accepted with resolution='approve': a rejection or modification "
+                "approves no identity text",
+                status_code=400,
+                reason_id=REASON_AMENDMENT_TEXT_REQUIRES_APPROVE,
+            )
+        # THE BASE LINK (rc21 section 3): the WA approves the template digest the
+        # deferral proposes; the node signs it as the response row's
+        # amendment_digest. One subject per resolution, approve only, and only
+        # the proposed digest.
+        base_link_digest = resolve_request.base_link_digest
+        if base_link_digest is not None:
+            if amendment_text is not None or call_fingerprint is not None:
+                raise_wa_error(
+                    "base_link_digest cannot be resolved together with amendment_text or call_fingerprint: a "
+                    "deferral approves one subject",
+                    status_code=400,
+                    reason_id=REASON_RESOLVE_ONE_SUBJECT,
+                )
+            if not approved:
+                raise_wa_error(
+                    "base_link_digest is only accepted with resolution='approve': a rejection or modification "
+                    "approves no base link",
+                    status_code=400,
+                    reason_id=REASON_BASE_LINK_DIGEST_REQUIRES_APPROVE,
+                )
+            proposal = _proposed_base_link(_pending)
+            if proposal is None or proposal.manifest_digest != base_link_digest:
+                raise_wa_error(
+                    "base_link_digest must equal the manifest_digest this deferral proposes "
+                    "(context.proposed_base_link)",
+                    status_code=400,
+                    reason_id=REASON_BASE_LINK_DIGEST_MISMATCH,
+                )
+        amendment_sha256 = sha256_hex(amendment_text) if amendment_text is not None else base_link_digest
         signed_at = datetime.now(timezone.utc).isoformat()
         deferral_response = DeferralResponse(
             approved=approved,
@@ -477,6 +599,9 @@ async def resolve_deferral(
             modified_time=None,
             wa_id=auth.user_id,
             signature="",
+            amendment_text=amendment_text,
+            call_fingerprint=call_fingerprint,
+            amendment_sha256=amendment_sha256,
         )
         auth_service = getattr(request.app.state, "authentication_service", None)
         if auth_service is None:
@@ -492,7 +617,7 @@ async def resolve_deferral(
 
         # THE WA'S OWN SIGNED ANSWER (#1316), before anything is recorded: if the
         # node refuses it, the resolution is not recorded at all.
-        response_row = await _sign_response_row(request, deferral_id, _pending, approved)
+        response_row = await _sign_response_row(request, deferral_id, _pending, approved, amendment_sha256)
         deferral_response = deferral_response.model_copy(update={"response_attestation_id": response_row})
 
         success = await wa_service.resolve_deferral(deferral_id, deferral_response)

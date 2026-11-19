@@ -29,6 +29,7 @@ from ciris_engine.protocols.services import CommunicationService
 from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.resources import ResourceUsage
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphScope, NodeType
+from tests.fixtures.tool_gate import admitted_tool_subject
 
 # =============================================================================
 # FIXTURES
@@ -643,7 +644,8 @@ class TestToolBus:
         mock_registry.get_services_by_type.return_value = [mock_tool_service]
         mock_registry._services = {ServiceType.TOOL: [MagicMock(instance=mock_tool_service)]}
 
-        result = await tool_bus.execute_tool("test_tool", {"param": "value"})
+        args = {"param": "value"}
+        result = await tool_bus.execute_tool("test_tool", args, subject=admitted_tool_subject("test_tool", args))
 
         assert result is not None
         assert result.success is True

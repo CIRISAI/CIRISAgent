@@ -8,11 +8,148 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from ciris_engine.schemas.actions.parameters import IDENTITY_CHANGE_CONTEXT_KEY
+from ciris_engine.schemas.runtime.veto_record import ObjectionType
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import WAPermission
 from ciris_engine.schemas.types import JSONDict
+
+
+#: Deferral-context key carrying the base link the agent asks a Wise Authority to approve (rc21 section 3):
+#: JSON text of :class:`ProposedBaseLink`.
+PROPOSED_BASE_LINK_KEY = "proposed_base_link"
+#: Deferral-context key carrying the whole identity change as JSON text of :class:`IdentityChangeProposal`.
+IDENTITY_CHANGE_KEY = IDENTITY_CHANGE_CONTEXT_KEY
+
+_HEX64 = "^[0-9a-f]{64}$"
+
+
+class ProposedBaseLink(BaseModel):
+    """The base link of the identity profile the agent asks a Wise Authority to approve (rc21 section 3).
+
+    The base link names no ``prev``; its ``amendment_digest`` is ``manifest_digest``: the digest of the agent's
+    shipped template as the root-WA-signed template manifest records it.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    template_name: str = Field(..., min_length=1, description="The shipped template the agent runs")
+    template_version: Optional[str] = Field(None, description="The template manifest's version, when it states one")
+    manifest_digest: str = Field(
+        ..., pattern=_HEX64, description="sha256 (lowercase hex) of the template, as the template manifest records it"
+    )
+
+
+class IdentityChangeKind(str, Enum):
+    """What an identity-change deferral asks a Wise Authority to approve (#1366)."""
+
+    AMENDMENT = "amendment"  # a new identity amendment: approve its exact text (amendment_text)
+    BASE_LINK = "base_link"  # the profile's base link: approve the template digest (base_link_digest)
+    REAPPROVAL = "reapproval"  # an amendment held from before exact-text binding: re-approve its exact text
+
+
+class IdentityChangeObjection(BaseModel):
+    """A conscience's typed objection to applying the approved text, carried back to the WA."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    conscience: str = Field(..., description="Registry name of the objecting conscience")
+    objection_type: ObjectionType = Field(..., description="evidence | justification | substantive")
+    reason: str = Field("", description="The conscience's stated reason")
+
+
+class IdentityChangeProposal(BaseModel):
+    """The identity change a deferral proposes, as the WA reviews it (deferral context ``identity_change``).
+
+    Eric, 2026-11-18: any identity change initiates a deferral; once a WA approves it applies, until then it does
+    not; every edit carries its M-1 (Adaptive Coherence) justification and goes through the agent's consciences.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: IdentityChangeKind = Field(..., description="amendment | base_link | reapproval")
+    summary: str = Field(..., description="What changes, in one line")
+    proposed_text: Optional[str] = Field(
+        None, description="amendment / reapproval: the exact text to approve (resolve with amendment_text)"
+    )
+    template: Optional[ProposedBaseLink] = Field(
+        None, description="base_link: the template to approve (resolve with base_link_digest)"
+    )
+    m1_justification: Optional[str] = Field(
+        None, description="Why the change serves ACCORD Meta-Goal M-1 (Adaptive Coherence); null when none was stated"
+    )
+    supersedes_node_id: Optional[str] = Field(
+        None, description="reapproval: the held amendment node this re-approves"
+    )
+    wa_edited: bool = Field(
+        False, description="True when the text is a WA's edit of the agent's proposal (re-deferred after review)"
+    )
+    objection: Optional[IdentityChangeObjection] = Field(
+        None, description="Set when the agent's consciences objected to applying the approved text"
+    )
+
+
+class ProfileAnchorStatus(str, Enum):
+    """The identity profile's standing (rc21 section 3), as the deferral list reports it."""
+
+    ANCHORED = "anchored"  # the held profile equals the signed chain's derived digest
+    UNANCHORED = "unanchored"  # no base link: the shipped template runs, no amendment is authoritative
+    MISMATCH = "mismatch"  # the held profile differs from the chain's digest
+    CONTESTED = "contested"  # two links name one prev
+
+
+class DeferralListProfile(BaseModel):
+    """The identity profile beside the deferral list, so a WA sees whether a base link is awaited."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    status: ProfileAnchorStatus = Field(..., description="anchored | unanchored | mismatch | contested")
+    profile_digest: Optional[str] = Field(
+        None, description="sha256 (hex) of CDE([CEG-profile/2, d0..dn]) over the held profile; null before the first check"
+    )
+    proposed_base_link: Optional[ProposedBaseLink] = Field(
+        None, description="The base link a pending deferral asks approval of (resolve with base_link_digest), if any"
+    )
+
+
+class DeferralListCapabilities(BaseModel):
+    """What this agent's deferral API supports, so a client can tell before it acts."""
+
+    model_config = ConfigDict(defer_build=True)
+
+    exact_amendment_text: bool = Field(
+        True,
+        description=(
+            "Resolve accepts amendment_text with resolution='approve': the WA approves those exact bytes, and only "
+            "they can become a verified identity amendment (CIRISAgent#1366 F1). A deferral that proposes one "
+            "carries it as context.proposed_amendment."
+        ),
+    )
+    exact_call_approval: bool = Field(
+        True,
+        description=(
+            "Resolve accepts call_fingerprint with resolution='approve': the approval binds that one call "
+            "(rc21 section 4). A deferral that asks approval of a call carries it as context.proposed_call."
+        ),
+    )
+    base_link_approval: bool = Field(
+        True,
+        description=(
+            "Resolve accepts base_link_digest with resolution='approve': the WA approves the profile's base link "
+            "(rc21 section 3). A deferral that proposes one carries it as context.proposed_base_link."
+        ),
+    )
+    identity_change_review: bool = Field(
+        True,
+        description=(
+            "Every identity-change deferral carries context.identity_change (JSON IdentityChangeProposal: kind "
+            "amendment | base_link | reapproval, what changes, the exact text or template, the M-1 justification, "
+            "and any conscience objection). An approved change is applied only after the agent's consciences "
+            "review it; an objection comes back as a new deferral naming it."
+        ),
+    )
 
 
 class DeferralListResponse(BaseModel):
@@ -22,6 +159,14 @@ class DeferralListResponse(BaseModel):
 
     deferrals: List[PendingDeferral] = Field(..., description="List of pending deferrals")
     total: int = Field(..., description="Total number of pending deferrals")
+    capabilities: DeferralListCapabilities = Field(
+        default_factory=DeferralListCapabilities, description="What this agent's deferral API supports"
+    )
+    profile: DeferralListProfile = Field(..., description="The identity profile's standing (rc21 section 3)")
+
+
+#: The longest identity amendment a Wise Authority can approve in one resolution.
+MAX_AMENDMENT_TEXT_CHARS = 4000
 
 
 class ResolveDeferralRequest(BaseModel):
@@ -31,6 +176,49 @@ class ResolveDeferralRequest(BaseModel):
 
     resolution: str = Field(..., pattern="^(approve|reject|modify)$", description="Resolution type")
     guidance: str = Field(..., description="WA wisdom guidance integrated with the decision")
+    amendment_text: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=MAX_AMENDMENT_TEXT_CHARS,
+        description=(
+            "The EXACT identity amendment text the Wise Authority approves (CIRISAgent#1366 F1). Only with "
+            "resolution='approve'. The API computes its sha256; the node signs that digest into the WA's response "
+            "row, and the guidance task writes these bytes as the amendment. Without it an approval lands no "
+            "identity amendment."
+        ),
+    )
+
+    call_fingerprint: Optional[str] = Field(
+        None,
+        min_length=1,
+        description=(
+            "For a deferral that asks approval of one tool call: the tool_call_fingerprint (tool + exact arguments) "
+            "the Wise Authority approves. Only with resolution='approve' (400, reason id "
+            "wa.call_fingerprint_requires_approve), and never together with amendment_text (400, reason id "
+            "wa.resolve_one_subject): a deferral is either a call approval or an identity change."
+        ),
+    )
+
+    base_link_digest: Optional[str] = Field(
+        None,
+        pattern=_HEX64,
+        description=(
+            "For a deferral that proposes the profile's base link (context.proposed_base_link): its manifest_digest, "
+            "which the Wise Authority approves. Only with resolution='approve' (400, reason id "
+            "wa.base_link_digest_requires_approve); never with amendment_text or call_fingerprint (400, reason id "
+            "wa.resolve_one_subject); must equal the proposed manifest_digest (400, reason id "
+            "wa.base_link_digest_mismatch). The node signs it as the response row's amendment_digest."
+        ),
+    )
+
+    @field_validator("amendment_text")
+    @classmethod
+    def _exact_text_has_no_outer_whitespace(cls, value: Optional[str]) -> Optional[str]:
+        """The exact bytes, so no outer whitespace: the stored amendment is read back stripped,
+        and a digest over bytes that cannot round-trip could never verify."""
+        if value is not None and (not value.strip() or value != value.strip()):
+            raise ValueError("amendment_text must be non-empty and carry no leading or trailing whitespace")
+        return value
 
 
 class ResolveDeferralResponse(BaseModel):

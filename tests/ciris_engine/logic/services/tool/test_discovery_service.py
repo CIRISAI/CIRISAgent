@@ -26,6 +26,18 @@ from ciris_engine.schemas.runtime.enums import ServiceType
 from ciris_engine.schemas.runtime.manifest import ModuleInfo, ServiceDeclaration, ServiceManifest
 
 
+
+@pytest.fixture(autouse=True)
+def _mocked_loaders_are_built_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests stand a MagicMock loader in for a root; treat it as the attested build.
+
+    Code admission for units beyond the build is tested in
+    tests/ciris_engine/logic/infrastructure/authorization/test_unit_admission.py.
+    """
+    from ciris_engine.logic.infrastructure.authorization import unit_admission
+
+    monkeypatch.setattr(unit_admission, "check_unit_load_sync", lambda unit_dir, name: None)
+
 def create_mock_manifest(
     name: str,
     services: Optional[List[str]] = None,

@@ -81,3 +81,9 @@ user_prompt_with_image_template: |-
 
   ASSISTANT-ANTWORT ZUR BEWERTUNG FÜR SEMANTISCHE ENTROPIE:
   {text}
+pipeline_position: |-
+  PIPELINE-POSITION: Sie überprüfen die vom Agenten entworfene Aktion nach der
+  Aktionsauswahl, neben den anderen Gewissen, bevor etwas ausgeführt wird. Sie sehen
+  die Nachricht des Benutzers absichtlich nicht. Eingaben, die Ihnen nicht gezeigt werden,
+  erscheinen als WITHHELD-Platzhalter (ihre Art, Autorenrolle, Befugnis und Beziehung
+  zum Entwurf), niemals ihr Text.

@@ -52,3 +52,4 @@ context_integration: |
   Исходная мысль: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**Позиция в конвейере**: вы выполняетесь первым, наряду с PDMA и DSDMA. IDMA затем рассматривает все три, выбор действия выбирает действие, а совести проверяют его."

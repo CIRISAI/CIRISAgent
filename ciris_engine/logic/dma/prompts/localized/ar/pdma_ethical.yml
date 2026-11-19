@@ -131,3 +131,7 @@ context_integration: |
   الفكرة المراد تقييمها: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  موقع خط الأنابيب: تعمل أولاً، إلى جانب CSDMA وDSDMA. ثم تراجع IDMA
+  استدلالك، ويختار اختيار الإجراء الإجراء، وتراجعه
+  الضمائر. أنت توصي؛ ولا تختار الإجراء النهائي.

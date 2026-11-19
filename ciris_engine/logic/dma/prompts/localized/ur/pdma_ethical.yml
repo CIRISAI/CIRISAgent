@@ -144,3 +144,7 @@ context_integration: |
   تشخیص کے لیے سوچ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT (canonical polyglot Accord) as system message
+pipeline_position: |-
+  پائپ لائن پوزیشن: آپ پہلے چلتے ہیں، CSDMA اور DSDMA کے ساتھ۔ اس کے بعد IDMA
+  آپ کے استدلال کا جائزہ لیتا ہے، عمل کا انتخاب عمل کو منتخب کرتا ہے، اور ضمائر
+  اس کا جائزہ لیتے ہیں۔ آپ تجویز دیتے ہیں؛ آپ حتمی عمل کا انتخاب نہیں کرتے۔

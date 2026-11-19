@@ -175,3 +175,4 @@ closing_reminder: '중요: 귀하의 역할은 ASPDMA 가 전체 문서 없이 �
   - Example: {{"selected_action": "SPEAK", "speak_content": "안녕하세요!", "reasoning": "사용자가 한국어로 인사했습니다"}} - Korean content, English keys.
 
   '
+pipeline_position: "파이프라인 위치: ASPDMA는 도구 이름만을 선택했으며 매개변수는 제공하지 않습니다. 당신은 문서와 요청으로부터 모든 도구 매개변수를 채웁니다. 이후 양심들이 호출이 실행되기 전에 그것을 검토합니다."

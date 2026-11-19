@@ -6,6 +6,7 @@ This shows how we could modify generate_seed_thought to use correlations.
 import uuid
 from typing import Any, Optional
 
+from ciris_engine.schemas.api.auth import UserRole
 from ciris_engine.schemas.runtime.enums import ThoughtStatus, ThoughtType
 from ciris_engine.schemas.runtime.models import Task, Thought
 
@@ -63,7 +64,10 @@ def generate_seed_thought_enhanced(self: Any, task: Task, round_number: int = 0)
                     author = params.get("author_name", "User")
                     author_id = params.get("author_id", "unknown")
                     content = params.get("content", "")
-                    history_lines.append(f"{i}. @{author} (ID: {author_id}): {content}")
+                    # The role recorded from authentication, when there is one (#1366 item 5).
+                    role = params.get("author_role")
+                    role_part = f", role: {role}" if role in {r.value for r in UserRole} else ""
+                    history_lines.append(f"{i}. @{author} (ID: {author_id}{role_part}): {content}")
 
             # Build the thought content in the format you suggested
             adapter_type = task.channel_id.split("_")[0] if "_" in task.channel_id else "unknown"

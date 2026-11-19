@@ -86,3 +86,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Tìm đúng nơi là mục đích duy nhất của bước này.
+pipeline_position: |-
+  VỊ TRÍ TRONG ĐƯỜNG ỐNG: lựa chọn hành động chỉ chọn động từ; bước này nói rõ
+  điều cần đọc. Một RECALL chỉ đọc, vì vậy nó chạy mà không cần lương tâm xem xét.

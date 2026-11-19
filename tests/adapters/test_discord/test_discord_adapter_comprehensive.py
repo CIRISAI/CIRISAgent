@@ -12,6 +12,7 @@ import pytest
 from ciris_engine.logic.adapters.discord.config import DiscordAdapterConfig
 from ciris_engine.logic.adapters.discord.discord_adapter import DiscordAdapter
 from ciris_engine.logic.adapters.discord.discord_reaction_handler import ApprovalStatus
+from ciris_engine.logic.infrastructure.authorization.dispatch_gate import gated_dispatch
 from ciris_engine.logic.persistence import initialize_database
 from ciris_engine.schemas.adapters.tools import ToolExecutionResult, ToolExecutionStatus
 from ciris_engine.schemas.services.authority_core import DeferralApprovalContext
@@ -375,7 +376,9 @@ class TestDiscordToolExecution:
         discord_adapter._tool_handler.execute_tool = AsyncMock(return_value=mock_result)
 
         # Execute tool
-        result = await discord_adapter.execute_tool("test_tool", {"param": "value"})
+        # The adapter runs tools only inside a gated ToolBus dispatch (#1366 item 19).
+        with gated_dispatch("test_tool"):
+            result = await discord_adapter.execute_tool("test_tool", {"param": "value"})
 
         assert result.status == ToolExecutionStatus.COMPLETED
         assert result.success is True

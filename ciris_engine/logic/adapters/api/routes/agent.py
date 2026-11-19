@@ -439,8 +439,12 @@ async def _create_interaction_message(
     preferred_language: Optional[str] = None
     if body.context and body.context.metadata:
         meta_lang = body.context.metadata.get("language") or body.context.metadata.get("preferred_language")
-        if isinstance(meta_lang, str) and meta_lang.strip():
-            preferred_language = meta_lang.strip()
+        # Only a supported locale (#1366 F3): this string reaches prompts and
+        # names a prompts directory. Unknown -> None, so the chain falls
+        # through to the user/channel/deployment default.
+        from ciris_engine.logic.utils.localization import validate_locale
+
+        preferred_language = validate_locale(meta_lang)
 
     msg = IncomingMessage(
         message_id=message_id,

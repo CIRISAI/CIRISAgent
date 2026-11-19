@@ -65,6 +65,51 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             raise ValueError(f"{type(self).__name__} prompt template missing required key: {key}")
         return value
 
+    @property
+    def thought_language(self) -> str:
+        """The language of the thought this evaluator is evaluating right now.
+
+        Never instance state: one evaluator serves every concurrent thought.
+        It is the task-local scope its stage method opened with
+        :func:`~ciris_engine.logic.utils.localization.in_thought_language`
+        (resolved by ``resolve_thought_language``); outside one, the
+        deployment default.
+        """
+        from ciris_engine.logic.utils.localization import current_thought_language
+
+        return current_thought_language()
+
+    def _position_entries(self) -> List[Tuple[str, str]]:
+        """The guide entries that follow ``system_guidance_header``: its pipeline position, then the rest of it.
+
+        #1366 item 12: ``pipeline_position`` is a structural field of the ENGINE template (``prompt_template_data``
+        is the loader's collection, which no agent-template override reaches), followed by
+        ``system_guidance_header_tail``, so the three render the bytes the one header field did. A locale whose
+        copy lacks the paragraph gets the English one; a missing tail adds nothing. Call it right after reading
+        the header: the reads are the compose dump's field seam, and it records them in call order.
+        """
+        position = self._get_prompt_value("pipeline_position") or self._pipeline_position_fallback()
+        tail = self._get_prompt_value("system_guidance_header_tail")
+        entries: List[Tuple[str, str]] = []
+        for key, value in (("pipeline_position", position), ("system_guidance_header_tail", tail)):
+            if value:
+                entries.append((key, value))
+        return entries
+
+    def _pipeline_position_fallback(self) -> Optional[str]:
+        """The English ``pipeline_position`` a locale copy lacking the field renders (#1366 item 12).
+
+        A field read of its own, beside ``_get_prompt_value``, so the compose dump records it at a named seam: read
+        inline, the fallback paragraph reached the prompt unrecorded and the dump reported it as an unattributed
+        ``gap`` between the header and the next field (the am DSASPDMA/MSASPDMA refusal before am translated it).
+        """
+        loader = getattr(self, "prompt_loader", None)
+        name = getattr(self, "_prompt_template_name", None)
+        if loader is not None and isinstance(name, str):
+            text = loader.pipeline_position(name)
+            return str(text) if text else None
+        return None
+
     def __init__(
         self,
         service_registry: ServiceRegistry,
@@ -319,7 +364,19 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             logger.error(f"[DMA] Failed to fetch task {source_task_id}: {e}")
             return None
 
-    def format_task_context(self, task: Optional[Task], thought_depth: int = 0) -> str:
+    def _verified_sender_block(self, task: Optional[Task], thought: Any = None) -> str:
+        """The VERIFIED SENDER block in this DMA's language; "" when there is none (#1366 item 5).
+
+        The sender of the message the THOUGHT answers when it carries one (a
+        message coalesced onto the task), else the task creator's.
+        """
+        from ciris_engine.logic.formatters.verified_sender import verified_sender_block_of
+
+        loader = getattr(self, "prompt_loader", None)
+        language = getattr(loader, "language", None)
+        return verified_sender_block_of(thought, task, language=language if isinstance(language, str) else None)
+
+    def format_task_context(self, task: Optional[Task], thought_depth: int = 0, thought: Any = None) -> str:
         """Format task context for inclusion in DMA prompts.
 
         Args:
@@ -342,6 +399,13 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
         # Include parent task context if available (for subtasks)
         if task.context and task.context.parent_task_id:
             parts.append(f"Parent Task ID: {task.context.parent_task_id}")
+
+        # The sender as authentication verified it, apart from the message
+        # text (#1366 item 5). Empty when the task carries no verified sender.
+        sender_block = self._verified_sender_block(task, thought)
+        if sender_block:
+            parts.append("")
+            parts.append(sender_block)
 
         # Add follow-through guidance for non-initial thoughts
         if thought_depth > 0:

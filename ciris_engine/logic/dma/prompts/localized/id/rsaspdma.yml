@@ -87,3 +87,6 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   Mencari di tempat yang benar adalah keseluruhan tujuan dari langkah ini.
+pipeline_position: |-
+  POSISI PIPA: pemilihan tindakan hanya memilih kata kerja; langkah ini menentukan apa
+  yang harus dibaca. RECALL hanya membaca, jadi ia berjalan tanpa tinjauan nurani.

@@ -54,7 +54,7 @@ The mock_llm adapter now supports interactive configuration via the Configurable
    - Environment variable: `MOCK_LLM_DELAY_MS`
 
 2. **Response Mode** - Control mock behavior
-   - Options: deterministic, random, echo
+   - Options: deterministic, random, echo (echo: see "Echo mode" below)
    - Default: deterministic
    - Environment variable: `MOCK_LLM_RESPONSE_MODE`
 
@@ -98,6 +98,58 @@ from ciris_adapters.mock_llm import MockLLMAdapter
 adapter = MockLLMAdapter(runtime, context)
 await adapter.start()
 ```
+
+## RATCHET context-flow controls (CIRISAgent#1366)
+
+Deterministic controls for measuring which context items reach each pipeline
+stage. Prompts under the mock match a live run except where text is
+model-generated; no control adds user text to any prompt.
+
+### Directives (in the user message, anywhere, repeatable)
+
+| Directive | Effect |
+|---|---|
+| `$veto entropy[:n]` | the first n (default 1) entropy evaluations in this task fail (entropy 0.9), later ones pass |
+| `$veto coherence[:n]` | coherence 0.1 for the first n evaluations |
+| `$veto optveto[:n]` | optimization veto `decision="abort"` for the first n evaluations |
+| `$veto epistemic[:n]` | epistemic humility `recommended_action="ponder"` for the first n evaluations |
+| `$ponder_loop` | every action selection in this task chooses PONDER (the `$ponder` questions on the first round, then a fixed question) until the thought-depth guardrail defers the task |
+
+Directives are removed from the message before its `$command` is parsed, so
+`$speak Good morning $veto entropy:2` speaks "Good morning" and the draft the
+consciences judge carries no directive. A plain sentence works too:
+`What is the roster? $veto coherence`.
+
+**How a veto reaches entropy and the optimization veto**, which never see the
+user's message: the LLM bus passes every provider the `task_id` (the thought's
+`source_task_id`) and `thought_id` of the call. Action selection runs first and
+does see the message, so the mock records the directives there, keyed by
+`task_id` (`directives.py`). Each conscience call arrives with the same
+`task_id`; the mock counts it and answers from the registry. The count is per
+task and per conscience; a conscience retry that re-reads the message does not
+reset it, so the same message reproduces the same verdict sequence every run.
+
+### Scenario recipes
+
+- **Conscience veto + retry**: `$speak Hello $veto entropy:1` - entropy fails
+  once, the retry passes.
+- **Depth limit / auto-deferral**: `$ponder What is asked?; What is safe? $ponder_loop`.
+- **TOOL / TSASPDMA**: `$tool create_ticket goal_description="Lobby display is frozen" priority=3`.
+  ASPDMA names the tool; TSASPDMA reads the parameters from the fenced message
+  in its ORIGINAL THOUGHT section and confirms TOOL with them.
+- **Identity change (S5)**: correction message `$defer <paragraph>` makes the
+  agent DEFER with the paragraph as its reason. The WA resolves it with
+  guidance `$memorize <node_id> CONCEPT IDENTITY [<paragraph>]` (one line); in
+  the guidance task the mock chooses MEMORIZE at IDENTITY scope, and MSASPDMA
+  stores `statement=<paragraph>` (or the node id when no paragraph is given).
+
+### Echo mode
+
+`MOCK_LLM_RESPONSE_MODE=echo` (read per call): SPEAK drafts become
+`[MOCK LLM ECHO] You said: "<request>"` and PONDER questions gain
+`[MOCK LLM ECHO] What is meant by "<request>"?`, so taint (`derived_from`) on
+drafts and ponder questions has request text to track. Follow-up reports are
+unchanged. Off unless set.
 
 ## Creating Your Own Modular Service
 

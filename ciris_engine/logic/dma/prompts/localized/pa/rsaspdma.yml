@@ -73,3 +73,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   ਸਹੀ ਜਗ੍ਹਾ 'ਤੇ ਦੇਖਣਾ ਇਸ ਕਦਮ ਦਾ ਪੂਰਾ ਮਕਸਦ ਹੈ।
+pipeline_position: "ਪਾਈਪਲਾਈਨ ਸਥਿਤੀ: ਕਾਰਵਾਈ ਦੀ ਚੋਣ ਨੇ ਸਿਰਫ਼ ਕਿਰਿਆ ਚੁਣੀ ਹੈ; ਇਹ ਕਦਮ ਦੱਸਦਾ ਹੈ ਕੀ ਪੜ੍ਹਨਾ ਹੈ। ਇੱਕ RECALL ਸਿਰਫ਼ ਪੜ੍ਹਦਾ ਹੈ, ਇਸ ਲਈ ਇਹ ਜ਼ਮੀਰ ਸਮੀਖਿਆ ਤੋਂ ਬਿਨਾ ਚੱਲਦਾ ਹੈ।"

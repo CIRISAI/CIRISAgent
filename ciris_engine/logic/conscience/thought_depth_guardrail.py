@@ -6,17 +6,20 @@ overrides the action to DEFER, ensuring proper escalation to humans.
 """
 
 import logging
-from typing import Optional
+from typing import Dict, List, Optional, Union
 
 from ciris_engine.logic import persistence
 from ciris_engine.logic.conscience.interface import ConscienceInterface
+from ciris_engine.logic.utils.deferral_text import clip_deferral_text, redacted_json
 from ciris_engine.protocols.services.lifecycle.time import TimeServiceProtocol
 from ciris_engine.schemas.actions import DeferParams
+from ciris_engine.schemas.actions.parameters import SpeakParams, ToolParams
 from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.persistence.core import CorrelationUpdateRequest
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.runtime.models import Thought
 from ciris_engine.schemas.telemetry.core import (
     CorrelationType,
     ServiceCorrelation,
@@ -25,6 +28,102 @@ from ciris_engine.schemas.telemetry.core import (
 )
 
 logger = logging.getLogger(__name__)
+
+# A veto line per earlier thought; each is clipped so one long rationale cannot
+# crowd the others out of the deferral.
+_VETO_LINE_MAX_CHARS = 800
+
+
+def _verb(selected_action: object) -> str:
+    """The action verb as a plain string ("speak"), whether given as enum or str."""
+    return str(getattr(selected_action, "value", selected_action))
+
+
+def _last_draft_context(action: ActionSelectionDMAResult) -> Dict[str, Union[str, List[str]]]:
+    """The draft the depth limit stopped, as the WA should read it.
+
+    A SPEAK is its content; a TOOL is its name and its arguments with secrets
+    redacted; anything else is its parameters, redacted the same way.
+    """
+    draft: Dict[str, Union[str, List[str]]] = {"last_draft_action": _verb(action.selected_action)}
+    params = action.action_parameters
+    if isinstance(params, SpeakParams):
+        draft["last_draft"] = clip_deferral_text(params.content)
+    elif isinstance(params, ToolParams):
+        draft["last_draft_tool"] = params.name
+        draft["last_draft"] = clip_deferral_text(f"{params.name}({redacted_json(params.parameters)})")
+    elif params is not None and hasattr(params, "model_dump"):
+        draft["last_draft"] = clip_deferral_text(redacted_json(params.model_dump(mode="json", exclude_none=True)))
+    if action.rationale:
+        draft["last_draft_rationale"] = clip_deferral_text(action.rationale)
+    return draft
+
+
+def _veto_line(depth: object, reasoning: str, questions: List[str]) -> str:
+    text = reasoning.strip()
+    detail = " | ".join(q.strip() for q in questions if q and q.strip())
+    if detail:
+        text = f"{text}: {detail}" if text else detail
+    return clip_deferral_text(f"[depth {depth}] {text}", _VETO_LINE_MAX_CHARS)
+
+
+def _current_feedback_reason(thought: object) -> Optional[str]:
+    """The veto behind this pass's conscience retry, if the thought item carries one."""
+    feedback = getattr(thought, "conscience_feedback", None)
+    if isinstance(feedback, dict):
+        reason = feedback.get("failure_reason")
+    else:
+        reason = getattr(feedback, "failure_reason", None) or getattr(feedback, "override_reason", None)
+    return str(reason) if reason else None
+
+
+def _prior_veto_reasons(thought: object) -> List[str]:
+    """Why each earlier thought in this chain was sent back, oldest first.
+
+    A conscience veto ends a thought in a PONDER whose questions carry the
+    veto reason and whose rationale names the conscience
+    (conscience_execution); the ponder handler then opens the next thought one
+    depth deeper. So the reasons are the PONDER final actions recorded on this
+    thought's ancestors, read from the store by ``parent_thought_id``. A
+    drafter's own PONDER is recorded the same way and listed too: it is also
+    part of what the WA needs to see. Ponder notes and an in-pass conscience
+    retry are added when present. Never raises: a deferral without the
+    history is still a deferral.
+    """
+    lines: List[str] = []
+    try:
+        occurrence = str(getattr(thought, "agent_occurrence_id", "default") or "default")
+        start: object = thought
+        if not isinstance(start, Thought):
+            # A ProcessingQueueItem carries no parent link; read the stored row.
+            thought_id = getattr(thought, "thought_id", None)
+            start = persistence.get_thought_by_id(thought_id, occurrence) if isinstance(thought_id, str) else None
+        ancestors: List[Thought] = []
+        parent_id = start.parent_thought_id if isinstance(start, Thought) else None
+        seen: set[str] = set()
+        while isinstance(parent_id, str) and parent_id and parent_id not in seen and len(ancestors) < 16:
+            seen.add(parent_id)
+            parent = persistence.get_thought_by_id(parent_id, occurrence)
+            if not isinstance(parent, Thought):
+                break
+            ancestors.append(parent)
+            parent_id = parent.parent_thought_id
+        for ancestor in reversed(ancestors):
+            final = ancestor.final_action
+            if final is None or final.action_type.lower() != HandlerActionType.PONDER.value:
+                continue
+            raw_questions = final.action_params.get("questions")
+            questions = [str(q) for q in raw_questions] if isinstance(raw_questions, list) else []
+            lines.append(_veto_line(ancestor.thought_depth, final.reasoning, questions))
+        notes = getattr(thought, "ponder_notes", None) or (start.ponder_notes if isinstance(start, Thought) else None)
+        if isinstance(notes, list):
+            lines.extend(clip_deferral_text(f"[ponder note] {note}", _VETO_LINE_MAX_CHARS) for note in notes if note)
+    except Exception as e:  # noqa: BLE001 - the deferral must still happen
+        logger.warning(f"ThoughtDepthGuardrail: could not read prior veto reasons: {e}")
+    current = _current_feedback_reason(thought)
+    if current:
+        lines.append(clip_deferral_text(f"[this thought] {current}", _VETO_LINE_MAX_CHARS))
+    return lines
 
 
 class ThoughtDepthGuardrail(ConscienceInterface):
@@ -164,15 +263,24 @@ class ThoughtDepthGuardrail(ConscienceInterface):
                 f"exceeds max depth {self.max_depth}. Forcing DEFER."
             )
 
-            # Create defer parameters
+            # Create defer parameters. The context carries what was contested
+            # (CIRISAgent#1366 item 6): the draft the depth limit stopped, why
+            # the drafter chose it, and the conscience reasons that kept
+            # sending it back. Without them the WA reads only "Maximum action
+            # depth reached" and cannot tell what to validate.
+            defer_context: Dict[str, Union[str, List[str]]] = {
+                "thought_depth": str(current_depth),
+                "original_action": _verb(action.selected_action),
+                "auto_deferred": "true",
+            }
+            defer_context.update(_last_draft_context(action))
+            veto_reasons = _prior_veto_reasons(thought)
+            if veto_reasons:
+                defer_context["prior_veto_reasons"] = clip_deferral_text("\n".join(veto_reasons))
             _defer_params = DeferParams(
                 reason=f"Maximum action depth ({self.max_depth}) reached. "
                 "This task requires human guidance to proceed further.",
-                context={
-                    "thought_depth": str(current_depth),
-                    "original_action": action.selected_action,  # It's already a string
-                    "auto_deferred": "true",
-                },
+                context=defer_context,
                 defer_until=None,  # No specific time, defer indefinitely
             )
 

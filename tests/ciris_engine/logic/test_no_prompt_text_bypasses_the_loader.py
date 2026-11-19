@@ -73,7 +73,7 @@ NON_REASONING_PATHS = ("logic/adapters/api/routes/setup/",)
 #: Sites that still bypass a loader, each with the issue that closes it.
 #: A ratchet: it may shrink, never grow. A new bypass is a failure.
 KNOWN_BYPASSES: Dict[str, str] = {
-    "logic/dma/tsaspdma.py:_create_correction_mode_messages": (
+    "logic/dma/tsaspdma.py:_compose_correction_mode": (
         "CIRISAgent#995 P1-4 — the 523 B correction scaffold is an inline f-string that never "
         "passes through get_user_message; the equivalent literal in ActionSelectionContextBuilder "
         "was routed out by #974 step 1 and this one was missed. Pinned in RESIDUE_SITES so it "
@@ -123,9 +123,31 @@ def _literal_assignments(tree: ast.Module) -> Dict[Tuple[str, str], ast.AST]:
     return found
 
 
-def _content_expressions(tree: ast.Module) -> List[Tuple[ast.AST, ast.AST]]:
-    """Every expression used as the `content` of an LLM message."""
+def _template_renders(tree: ast.Module) -> List[Tuple[ast.AST, ast.AST]]:
+    """Text a PromptAssembler call site renders: what a local render function passed to ``split_template`` returns.
+
+    Since #1366 Phase 3 the migrated sites build no message dicts; ``split_template(render, ...)`` cuts the render
+    into segments. A render that returns a Python f-string or literal is that site's message text.
+    """
     out: List[Tuple[ast.AST, ast.AST]] = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        local = {n.name: n for n in ast.walk(fn) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n is not fn}
+        for call in ast.walk(fn):
+            if not (isinstance(call, ast.Call) and getattr(call.func, "id", getattr(call.func, "attr", "")) == "split_template"):
+                continue
+            if not call.args or not isinstance(call.args[0], ast.Name) or call.args[0].id not in local:
+                continue
+            for ret in ast.walk(local[call.args[0].id]):
+                if isinstance(ret, ast.Return) and ret.value is not None:
+                    out.append((call, ret.value))
+    return out
+
+
+def _content_expressions(tree: ast.Module) -> List[Tuple[ast.AST, ast.AST]]:
+    """Every expression used as the `content` of an LLM message (or rendered into one by the assembler)."""
+    out: List[Tuple[ast.AST, ast.AST]] = _template_renders(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func

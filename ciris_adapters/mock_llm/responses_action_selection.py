@@ -32,6 +32,7 @@ from ciris_engine.schemas.services.deferral_taxonomy import (
 )
 from ciris_engine.schemas.services.graph_core import GraphNode, GraphNodeAttributes, GraphScope, NodeType
 
+from .directives import strip_directives
 from .response_packaging import (
     defer_success,
     forget_success,
@@ -65,6 +66,27 @@ def unfence_current_message(text: str) -> str:
     return _CURRENT_MESSAGE_FENCE.sub(lambda m: m.group(1), text)
 
 
+
+
+#: ``MOCK_LLM_RESPONSE_MODE`` value that makes drafts quote the request text.
+ECHO_MODE = "echo"
+
+
+def echo_mode() -> bool:
+    """Whether ``MOCK_LLM_RESPONSE_MODE=echo`` is set (read per call, so a harness can flip it)."""
+    import os
+
+    return os.environ.get("MOCK_LLM_RESPONSE_MODE", "").strip().lower() == ECHO_MODE
+
+
+def echo_text(request: str) -> str:
+    """An echo-mode SPEAK draft: the request, quoted verbatim."""
+    return f'[MOCK LLM ECHO] You said: "{request}"'
+
+
+def echo_question(request: str) -> str:
+    """An echo-mode PONDER question quoting the request."""
+    return f'[MOCK LLM ECHO] What is meant by "{request}"?'
 
 
 def _memorize_command_id(args: str) -> str:
@@ -1225,15 +1247,23 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
             node_id = _memorize_command_id(content)
             node_type = NodeType.CONCEPT
             node_scope = GraphScope.LOCAL
+            memorize_attributes: Dict[str, Any] = {
+                "created_by": "mock_llm",
+                "tags": [f"content:{content[:50]}", "source:mock_llm"],
+            }
             if len(words) >= 3 and words[1].upper() in NodeType.__members__ and words[2].upper() in GraphScope.__members__:
                 node_scope = GraphScope[words[2].upper()]
+                # "$memorize <id> <TYPE> <SCOPE> <statement...>": the statement
+                # is what gets stored (S5: the identity paragraph a WA approved).
+                if len(words) > 3:
+                    memorize_attributes["statement"] = " ".join(words[3:])
 
             params = MemorizeParams(
                 node=GraphNode(
                     id=node_id,
                     type=node_type,
                     scope=node_scope,
-                    attributes={"created_by": "mock_llm", "tags": [f"content:{content[:50]}", "source:mock_llm"]},
+                    attributes=memorize_attributes,
                 )
             )
             action = HandlerActionType.MEMORIZE
@@ -1869,6 +1899,15 @@ The mock LLM provides deterministic responses for testing CIRIS functionality of
                     params = SpeakParams(content=speak_content)
                     rationale = "[MOCK LLM] Default speak action for new task"
 
+    # MOCK_LLM_RESPONSE_MODE=echo: drafts quote the request, the way a live
+    # reply quoting its user does, so taint (derived_from) on SPEAK drafts and
+    # PONDER questions has something to track (#1366). Off by default.
+    if echo_mode() and user_input and not is_followup_early:
+        if action == HandlerActionType.SPEAK and isinstance(params, SpeakParams):
+            params = params.model_copy(update={"content": echo_text(user_input)})
+        elif action == HandlerActionType.PONDER and isinstance(params, PonderParams):
+            params = params.model_copy(update={"questions": [*params.questions, echo_question(user_input)]})
+
     # Use custom rationale if provided, otherwise use the generated rationale
     final_rationale = custom_rationale if custom_rationale else rationale
 
@@ -1985,16 +2024,17 @@ def aspdma_llm_result(
         # write or its WA gate (#1303). The scope is the one MEMORIZE field
         # ASPDMA still carries, because that gate reads it.
         scope = _enum_value(node.get("scope"), "local")
+        handed_over: Dict[str, Any] = {
+            "node_type": _enum_value(node.get("type") or node.get("node_type"), "observation"),
+            "scope": scope,
+            "content": _node_content(node),
+        }
+        node_attributes = node.get("attributes")
+        if isinstance(node_attributes, dict) and node_attributes.get("statement"):
+            handed_over["statement"] = str(node_attributes["statement"])
         flat_result = ASPDMALLMResult(
             selected_action=action,
-            reasoning=_with_mock_params(
-                rationale,
-                {
-                    "node_type": _enum_value(node.get("type") or node.get("node_type"), "observation"),
-                    "scope": scope,
-                    "content": _node_content(node),
-                },
-            ),
+            reasoning=_with_mock_params(rationale, handed_over),
             memorize_scope=scope,
         )
     elif action == HandlerActionType.FORGET:
@@ -2109,12 +2149,15 @@ def tsaspdma_llm_result(
         # NOSONAR - non-greedy (.+?) with explicit terminator, mock LLM testing only
         thought_match = re.search(r"=== ORIGINAL THOUGHT[^=]*===\s*(.+?)(?:===|$)", content, re.DOTALL)
         if thought_match:
-            thought_content = thought_match.group(1).strip()
+            # The observer fences the current message on its own lines (#1320);
+            # lift the fence and the test directives so the command line is bare.
+            thought_content = strip_directives(unfence_current_message(thought_match.group(1)))[0].strip()
             logger.info(f"[MOCK_LLM] TSASPDMA found thought: {thought_content[:100]}...")
 
             # Parse $tool command from thought
             # NOSONAR - non-greedy (.*?) with explicit terminator
-            tool_cmd_match = re.search(r"\$tool\s+(\S+)\s*(.*?)(?:\||$)", thought_content)
+            # One line: the command never runs on into the history below it.
+            tool_cmd_match = re.search(r"\$tool[ \t]+(\S+)[ \t]*([^\n|]*)", thought_content)
             if tool_cmd_match:
                 tool_name = tool_cmd_match.group(1)
                 params_str = tool_cmd_match.group(2).strip()
@@ -2257,6 +2300,8 @@ def msaspdma_llm_result(
     node_id = str(uuid.uuid4())
     command = re.search(r"\$memorize\s+([^\n\"']+)", text.split(_MOCK_PARAMS_TAG)[0])
     content = _memorize_command_id(command.group(1)) if command else str(handed_over.get("content") or node_id)
+    if handed_over.get("statement"):
+        content = str(handed_over["statement"])
     # An IDENTITY write comes back without a `content` key, the way a live
     # model's second pass names its attributes (RATCHET run 39788730490), so
     # wa_identity_approval exercises the shape that broke uptake. Other scopes

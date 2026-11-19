@@ -57,6 +57,63 @@ class AdapterDiscoveryService:
         Path(".ciris") / "adapters",  # Workspace
     ]
 
+    #: The adapters shipped inside this installation. Never agent-written.
+    BUNDLED_ROOT = Path(__file__).parent.parent.parent.parent / "ciris_adapters"
+
+    @classmethod
+    def standard_and_env_paths(cls) -> List[Path]:
+        """Every root this service would scan (standard + CIRIS_EXTRA_ADAPTERS), for the dispatch gate."""
+        paths = list(cls.DISCOVERY_PATHS)
+        for path_str in os.environ.get("CIRIS_EXTRA_ADAPTERS", "").split(":"):
+            if path_str.strip():
+                paths.append(Path(path_str.strip()))
+        return paths
+
+    @classmethod
+    def bundled_roots(cls) -> List[Path]:
+        """The adapter package directories shipped with this installation (resolved)."""
+        roots: List[Path] = []
+        candidates: List[Path] = [cls.BUNDLED_ROOT]
+        try:
+            import importlib.util
+
+            spec = importlib.util.find_spec("ciris_adapters")
+            if spec is not None and spec.submodule_search_locations:
+                candidates.extend(Path(p) for p in spec.submodule_search_locations)
+        except (ImportError, ValueError):
+            pass
+        for candidate in candidates:
+            try:
+                roots.append(candidate.resolve())
+            except OSError:
+                continue
+        return roots
+
+    @classmethod
+    def refuses_agent_writable_root(cls, path: Path) -> bool:
+        """True for a root the agent's own tools write by default (CIRISAgent#1366 item 19).
+
+        Write-then-load: an adapter is code that runs with the agent's full
+        privileges, so a root the agent can write is a root the agent can grant
+        itself tools from. The cwd-relative roots (``ciris_adapters``,
+        ``.ciris/adapters``) are where the host tools (``write_file`` with a
+        relative path, ``shell_command``'s working directory) land; on a
+        platform where those tools are enabled they are refused unless they
+        ARE an installed adapter package directory (a source checkout run from
+        the repo root). The dispatch gate separately refuses a typed write into any
+        discovery root (``dispatch_gate.ADAPTER_PATH_WRITE``).
+        """
+        if path.is_absolute() or path == cls.BUNDLED_ROOT:
+            return False
+        from ciris_engine.logic.utils.platform_detection import is_desktop
+
+        if not is_desktop():
+            return False
+        try:
+            return path.resolve() not in cls.bundled_roots()
+        except OSError:
+            return True
+
     def __init__(
         self,
         eligibility_checker: Optional[ToolEligibilityChecker] = None,
@@ -91,6 +148,14 @@ class AdapterDiscoveryService:
         self._loaders: List[AdapterLoader] = []
         self._manifest_loaders: Dict[str, AdapterLoader] = {}  # manifest_name -> loader
         for path in self._get_all_paths():
+            if self.refuses_agent_writable_root(path):
+                if path.exists():
+                    logger.warning(
+                        "AdapterDiscoveryService: REFUSING %s: the agent's own host tools can write it "
+                        "(write-then-load, CIRISAgent#1366 item 19)",
+                        path,
+                    )
+                continue
             if path.exists() and path.is_dir():
                 self._loaders.append(AdapterLoader(services_dir=path))
                 logger.info(f"AdapterDiscoveryService: scanning {path}")
@@ -214,7 +279,7 @@ class AdapterDiscoveryService:
             # Try each loader to find one that can load this manifest
             for candidate_loader in self._loaders:
                 try:
-                    cls = candidate_loader.load_service_class(manifest, class_path)
+                    cls = self._admitted_load(candidate_loader, manifest, class_path)
                     if cls:
                         self._manifest_loaders[manifest.module.name] = candidate_loader
                         return cls
@@ -229,7 +294,43 @@ class AdapterDiscoveryService:
 
             return None
 
-        return loader.load_service_class(manifest, class_path)
+        return self._admitted_load(loader, manifest, class_path)
+
+    @staticmethod
+    def unit_dir_for(loader: AdapterLoader, manifest: ServiceManifest) -> Path:
+        """The directory a discovered adapter loads from (its unit, for admission)."""
+        path = getattr(manifest, "_path", None)
+        return Path(path) if path is not None else loader.services_dir / manifest.module.name
+
+    def _admitted_load(self, loader: AdapterLoader, manifest: ServiceManifest, class_path: str) -> Optional[Type[Any]]:
+        """Load through code admission (rc21 CC 2.7.11).
+
+        An adapter under an installed package root is in the attested build and
+        loads as before. Any other root (user, workspace, CIRIS_EXTRA_ADAPTERS,
+        imported and built skills) loads only under a live admission:unit row
+        for the digest of its bytes, and its service class is tagged so each tool
+        call it serves is checked against what that row admits.
+        """
+        from ciris_engine.logic.infrastructure.authorization.unit_admission import (
+            admitted_unit_record,
+            check_unit_load_sync,
+            tag_unit_class,
+        )
+
+        unit_dir = self.unit_dir_for(loader, manifest)
+        decision = check_unit_load_sync(unit_dir, manifest.module.name)
+        if decision is None:  # inside the attested build
+            return loader.load_service_class(manifest, class_path)
+        if not decision.admitted:
+            self._record_enumeration_failure(
+                manifest.module.name, f"it is not admitted on this host ({decision.message()})"
+            )
+            return None
+        cls = loader.load_service_class(manifest, class_path)
+        if cls is not None:
+            declared = frozenset(manifest.unit_capabilities) if manifest.unit_capabilities is not None else None
+            tag_unit_class(cls, admitted_unit_record(decision, unit_dir, manifest.module.name, declared))
+        return cast(Optional[Type[Any]], cls)
 
     def _load_class_via_importlib(self, _adapter_name: str, class_path: str) -> Optional[Type[Any]]:
         """Load a service class via importlib (for Android/Chaquopy).

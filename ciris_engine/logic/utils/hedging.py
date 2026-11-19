@@ -11,7 +11,11 @@ load on the thing that is slow: the 2.18.0 bn battery hedged 111 times on a
 DeepInfra p50 of 45 s and tripped the breaker. So hedging is load-aware:
 - no hedge without history: a kind hedges only once its own p95 exists;
 - a budget: hedges are at most HEDGE_BUDGET of recent attempts, process-wide.
-  When most calls are slow together, the budget runs out and hedging stops.
+  When most calls are slow together, the budget runs out and hedging stops;
+- no hedge while a provider is PAUSED for a full in-flight spending budget
+  (#1366 item 20): the attempt is slow because the bus is holding it, and a
+  hedge would wait at the same gate and then put a second ``input + max_tokens``
+  hold on a budget that is already full. The LLM bus reports its pauses here.
 
 One book for every retry loop that hedges (the DMA executor and the
 consciences), keyed by the loop's own name for the call (``run_pdma``,
@@ -20,6 +24,7 @@ consciences), keyed by the loop's own name for the call (``run_pdma``,
 
 from __future__ import annotations
 
+import time
 from collections import deque
 from typing import Deque, Dict, Optional
 
@@ -37,6 +42,8 @@ HEDGE_FLOOR_S = 10.0
 _WINDOW = 50
 
 _latencies: Dict[str, Deque[float]] = {}
+#: Monotonic time until which some LLM provider is paused (see pause_hedging_until).
+_paused_until: float = 0.0
 #: One entry per attempt started: True when it was a hedge.
 _attempts: Deque[bool] = deque(maxlen=_BUDGET_WINDOW)
 
@@ -59,8 +66,25 @@ def note_attempt() -> None:
     _attempts.append(False)
 
 
+def pause_hedging_until(monotonic_deadline: float) -> None:
+    """No hedge starts before ``monotonic_deadline``: an LLM provider is paused until then.
+
+    Process-wide on purpose: the hedging loop does not know which provider its
+    attempt is waiting on, and holding back a hedge costs nothing but latency.
+    """
+    global _paused_until
+    _paused_until = max(_paused_until, monotonic_deadline)
+
+
+def hedging_paused() -> bool:
+    """True while an LLM provider pause is in force."""
+    return time.monotonic() < _paused_until
+
+
 def try_hedge() -> bool:
-    """Spend one hedge from the budget, if the recent attempts afford it."""
+    """Spend one hedge from the budget, if the recent attempts afford it and no provider is paused."""
+    if hedging_paused():
+        return False
     if sum(_attempts) + 1 > HEDGE_BUDGET * max(len(_attempts), HEDGE_MIN_SAMPLES):
         return False
     _attempts.append(True)
@@ -69,5 +93,7 @@ def try_hedge() -> bool:
 
 def reset() -> None:
     """Forget every recorded latency and attempt (tests)."""
+    global _paused_until
     _latencies.clear()
     _attempts.clear()
+    _paused_until = 0.0

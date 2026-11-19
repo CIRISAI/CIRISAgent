@@ -87,3 +87,4 @@ response_format: |
 # DEONTIC — the closing categorical.
 closing_reminder: |
   正しい場所を探すことが、このステップの要点です。
+pipeline_position: "パイプラインにおける位置：アクション選択は動詞のみを選択しました。このステップは何を読み取るかを指定します。RECALL は読み取りのみを行うため、良心による確認なしで実行されます。"

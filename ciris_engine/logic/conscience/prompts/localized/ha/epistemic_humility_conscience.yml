@@ -158,3 +158,4 @@ user_prompt_with_image_template: |-
   {image_context}
 
   Sakamakon matakin da aka gabatar: {action_description}
+pipeline_position: "MATSAYI A BUTUTUN SARRAFA: kana bitar daftarin aikin Wakili bayan Zaɓin Aiki, tare da sauran Lamirori, kafin kowane abu ya gudana. Kana ganin buƙatar da kuma shugabancin da aka tabbatar yana aiki."

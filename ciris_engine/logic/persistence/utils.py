@@ -3,7 +3,7 @@ import logging
 import uuid
 from typing import Any, Optional
 
-from ciris_engine.schemas.runtime.enums import TaskStatus, ThoughtStatus
+from ciris_engine.schemas.runtime.enums import TaskOrigin, TaskStatus, ThoughtStatus
 from ciris_engine.schemas.runtime.models import (
     FinalAction,
     Task,
@@ -11,6 +11,7 @@ from ciris_engine.schemas.runtime.models import (
     TaskOutcome,
     Thought,
     ThoughtContext,
+    VerifiedSender,
     WAAuthorization,
 )
 from ciris_engine.schemas.runtime.task_envelope import TaskEnvelope
@@ -31,6 +32,30 @@ def decode_wa_authorization(raw: Any, task_id: Any) -> Optional[WAAuthorization]
         return WAAuthorization.model_validate(raw)
     except Exception as exc:
         logger.warning("Failed to decode WA authorization for task %s; treating as not authorized: %s", task_id, exc)
+        return None
+
+
+def decode_verified_sender(raw: Any, owner_id: Any) -> Optional[VerifiedSender]:
+    """Decode a persisted VerifiedSender; None (no verified sender) when absent or corrupt."""
+    if raw is None:
+        return None
+    if isinstance(raw, VerifiedSender):
+        return raw
+    try:
+        return VerifiedSender.model_validate(raw)
+    except Exception as e:
+        logger.warning("Dropping an undecodable verified sender on %s: %s", owner_id, e)
+        return None
+
+
+def decode_task_origin(raw: Any, task_id: Any) -> Optional[TaskOrigin]:
+    """Decode a persisted task origin; None (origin not recorded) when absent or unknown, never an engine origin."""
+    if raw is None:
+        return None
+    try:
+        return TaskOrigin(raw)
+    except ValueError:
+        logger.warning("Dropping an unknown task origin %r on %s", raw, task_id)
         return None
 
 
@@ -81,6 +106,8 @@ def map_row_to_task(row: Any) -> Task:
                     # direction: absence is denial, never "unconstrained".
                     envelope=_decode_task_envelope(ctx_data.get("envelope"), row_dict.get("task_id")),
                     wa_authorization=decode_wa_authorization(ctx_data.get("wa_authorization"), row_dict.get("task_id")),
+                    verified_sender=decode_verified_sender(ctx_data.get("verified_sender"), row_dict.get("task_id")),
+                    origin=decode_task_origin(ctx_data.get("origin"), row_dict.get("task_id")),
                 )
                 # Mirror onto the Task's top-level field — Task is the record
                 # of truth for preferred_language. The schema field defaults
@@ -208,6 +235,10 @@ def map_row_to_thought(row: Any) -> Thought:
                         # CIRIS_PREFERRED_LANGUAGE regardless of the user's
                         # actual locale.
                         preferred_language=ctx_data.get("preferred_language"),
+                        # The sender of the message this thought answers (#1366 item 5).
+                        verified_sender=decode_verified_sender(
+                            ctx_data.get("verified_sender"), row_dict.get("thought_id")
+                        ),
                     )
                     # Mirror onto the Thought's top-level field — Task is the
                     # record of truth, Thought inherits at creation, persistence

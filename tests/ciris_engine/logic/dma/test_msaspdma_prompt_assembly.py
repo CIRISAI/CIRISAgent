@@ -1,0 +1,125 @@
+"""The memory second passes and DSASPDMA build their prompts with PromptAssembler (CIRISAgent#1366 Phase 3; FSD §6).
+
+Against goldens captured from the unmigrated tree (msaspdma_golden.py): MSASPDMA, RSASPDMA and FSASPDMA send the
+same bytes, now with a manifest naming every segment, except that MSASPDMA reads the agent's identity block (#1366
+item 2: ``<name>@policy``). The verified WA grant is a ``rule.signed_guidance`` segment with its authz; the conscience's veto on a retry is a ``conscience_feedback`` segment carrying its veto id; ASPDMA's
+reasoning and proposed node are its output, never instruction text; the candidate nodes (display names included)
+are untrusted history.
+"""
+
+import hashlib
+from typing import Any, Dict
+from unittest.mock import patch
+
+import pytest
+
+from ciris_engine.schemas.context.prompt_provenance import AssemblyMode, RuleProvenance, SegmentKind, TrustLevel
+from tests.ciris_engine.logic.dma import msaspdma_golden as mg
+
+SITES = ("msaspdma", "rsaspdma", "fsaspdma", "dsaspdma")
+#: Fixtures whose bytes the policy changes (MSASPDMA reads the identity block when the context carries one;
+#: DSASPDMA always, from the store when the context has none: RATCHET context map, S3).
+POLICY_CHANGED = {("msaspdma", "ms_full"), ("msaspdma", "ms_addressed_full")} | {
+    ("dsaspdma", name) for name in mg.NAMES["dsaspdma"]
+}
+ALL = [(site, name) for site in SITES for name in mg.NAMES[site]]
+
+
+def _mode(mode: AssemblyMode) -> Any:
+    return patch("ciris_engine.logic.prompt_assembly.assembler.current_guard_mode", return_value=mode)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("site,name", ALL)
+async def test_the_prompt_is_the_pre_migration_bytes_with_a_clean_manifest(site: str, name: str) -> None:
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        messages = await mg.capture(name, seen)
+    golden = mg.load_golden(site)
+    if (site, name) in POLICY_CHANGED:
+        # Recorded after the change; the identity block (and its glue) is the one addition to the pre-migration bytes.
+        assert messages == golden[f"{name}@policy"]
+        identity = [r for r in seen["manifest"].segments if r.kind == SegmentKind.IDENTITY_BASE]
+        assert identity
+        index, end = identity[0].message_index, max(r.span_end for r in identity)
+        assert identity[0].span_start == 0 and messages[index]["content"][end : end + 2] == "\n\n"
+        stripped = dict(messages[index], content=messages[index]["content"][end + 2 :])
+        assert messages[:index] + [stripped] + messages[index + 1 :] == golden[name]
+    else:
+        assert messages == golden[name]
+    manifest = seen["manifest"]
+    assert manifest is not None and manifest.guard_violations == [] and manifest.stage.value == site
+    for r in manifest.segments:  # spans point at the bytes sent
+        content = messages[r.message_index]["content"]
+        assert hashlib.sha256(content[r.span_start : r.span_end].encode()).hexdigest() == r.sha256
+    kinds = {r.kind for r in manifest.segments}
+    assert {SegmentKind.ACCORD, SegmentKind.STAGE_INSTRUCTION, SegmentKind.REQUEST, SegmentKind.DMA_OUTPUT} <= kinds
+    if name.endswith("full"):
+        assert {SegmentKind.SENDER_IDENTITY, SegmentKind.DISPLAY_NAME} <= kinds
+        assert (SegmentKind.HISTORY in kinds) == (site != "dsaspdma")  # DSASPDMA reads no candidate nodes
+        assert manifest.retry_index == 1
+        (fb,) = [r for r in manifest.segments if r.kind == SegmentKind.CONSCIENCE_FEEDBACK]
+        assert fb.acct is not None and fb.acct.veto_id == "veto-golden-1"
+    else:
+        assert manifest.retry_index == 0 and SegmentKind.CONSCIENCE_FEEDBACK not in kinds
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["ms_full", "fs_full"])
+async def test_the_verified_grant_is_a_signed_guidance_rule_with_its_authz(name: str) -> None:
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        await mg.capture(name, seen)
+    # One WA guidance kind, rule.signed_guidance: no wa_guidance segment at all (decision 2026-11-18).
+    assert not [r for r in seen["manifest"].segments if r.kind == SegmentKind.WA_GUIDANCE]
+    (grant,) = [r for r in seen["manifest"].segments if r.segment_id == "rule:wa_grant"]
+    assert grant.kind == SegmentKind.RULE and grant.provenance == RuleProvenance.SIGNED_GUIDANCE
+    assert grant.authz is not None and grant.authz.grant_id == mg.GRANT.deferral_id and grant.authz.signature_verified
+    assert grant.trust == TrustLevel.VERIFIED
+
+
+@pytest.mark.asyncio
+async def test_aspdma_output_and_candidates_are_never_instruction_text() -> None:
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        messages = await mg.capture("ms_addressed_full", seen)
+    manifest = seen["manifest"]
+    proposed = [r for r in manifest.segments if r.segment_id.startswith("slot:proposed_")]
+    assert proposed and all(r.kind == SegmentKind.DMA_OUTPUT and r.trust == TrustLevel.UNTRUSTED for r in proposed)
+    (candidates,) = [r for r in manifest.segments if r.segment_id == "candidate_nodes"]
+    assert candidates.kind == SegmentKind.HISTORY and candidates.trust == TrustLevel.UNTRUSTED
+    for r in manifest.segments:
+        if r.kind == SegmentKind.STAGE_INSTRUCTION:
+            text = messages[r.message_index]["content"][r.span_start : r.span_end]
+            assert "user/wa-user-0eve" not in text and "eve the admin" not in text
+
+
+@pytest.mark.asyncio
+async def test_dsaspdma_provisional_deferral_is_aspdma_output_never_instruction_text() -> None:
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        await mg.capture("ds_addressed_full", seen)
+    by_id = {r.segment_id: r for r in seen["manifest"].segments}
+    for sid in ("proposed_reason", "proposed_context", "proposed_defer_until", "aspdma_reasoning"):
+        assert by_id[sid].kind == SegmentKind.DMA_OUTPUT and by_id[sid].trust == TrustLevel.UNTRUSTED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", mg.NAMES["dsaspdma"])
+async def test_every_dsaspdma_call_carries_the_agents_identity(name: str) -> None:
+    """context_policy.yaml: identity_base at dsaspdma always, from the thought context or else the stored identity."""
+    seen: Dict[str, Any] = {}
+    with _mode(AssemblyMode.FAIL_CLOSED):
+        messages = await mg.capture(name, seen)
+    identity = [r for r in seen["manifest"].segments if r.kind == SegmentKind.IDENTITY_BASE]
+    assert identity and all(r.trust == TrustLevel.SYSTEM for r in identity)
+    body = messages[identity[0].message_index]["content"][identity[0].span_start : identity[-1].span_end]
+    assert "golden_agent" in body
+
+
+@pytest.mark.asyncio
+async def test_dsaspdma_without_any_identity_fails_closed_in_qa() -> None:
+    with _mode(AssemblyMode.FAIL_CLOSED), patch(
+        "tests.ciris_engine.logic.dma.compose_golden.stored_identity", return_value=None
+    ), pytest.raises(ValueError, match="no agent identity"):
+        await mg.capture("ds_plain")

@@ -52,3 +52,4 @@ context_integration: |
   Pemikiran Asli: {original_thought_content}
 
 accord_header: true  # Gunakan ACCORD_TEXT sebagai pesan sistem
+pipeline_position: "**Posisi pipa**: Anda berjalan pertama, bersama PDMA dan DSDMA. IDMA kemudian meninjau ketiganya, pemilihan tindakan memilih tindakan, dan para nurani meninjaunya."

@@ -2,7 +2,7 @@
 # Semantic implementation of Coherence Collapse Analysis (CCA) principles
 
 component_name: idma
-description: "Intuition DMA - applies CCA k_eff formula and phase classification"
+description: "Intuition DMA - hutumia fomula ya CCA k_eff na uainishaji wa awamu"
 version: "1.1"
 
 # Include the CIRIS Accord as context
@@ -229,3 +229,4 @@ closing_reminder: |
   Kumbuka: Propaganda inafikia uafikiano wa dhahiri kwa KUONDOA vyanzo,
   sio kwa usanisi. Kazi ya IDMA ni kugundua ukamataji huu wa epistemic na
   kuweka alama kwa ukaguzi wa dhamiri. Unaposhangaa, iweke alama.
+pipeline_position: "NAFASI YA BOMBA: unaendesha baada ya PDMA, CSDMA na DSDMA na kukagua hoja zao. Uchaguzi wa kitendo husoma matokeo yako baadaye, kisha dhamiri zinakagua kitendo kilichochaguliwa. Hauonyeshwi kiolezo cha utambulisho cha wakala; unaonyeshwa utawala ulioidhinishwa unaotumika."

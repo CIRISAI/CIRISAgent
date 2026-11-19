@@ -19,6 +19,7 @@ from ciris_engine.schemas.conscience.context import ConscienceCheckContext
 from ciris_engine.schemas.conscience.core import ConscienceCheckResult, ConscienceStatus
 from ciris_engine.schemas.dma.results import ActionSelectionDMAResult
 from ciris_engine.schemas.runtime.enums import HandlerActionType
+from ciris_engine.schemas.runtime.models import VerifiedSender
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,18 @@ class UpdatedStatusConscience(ConscienceInterface):
             time_service: Optional time service for timestamps
         """
         self._time_service = time_service
+
+    @staticmethod
+    def _adopt_update_sender(thought: Any, sender: Optional[VerifiedSender]) -> None:
+        """Make ``thought`` answer as the coalesced message's sender (unverified when none was recorded)."""
+        from ciris_engine.logic.formatters.verified_sender import adopt_verified_sender
+        from ciris_engine.logic.persistence.models.thoughts import set_thought_verified_sender
+
+        effective = sender or VerifiedSender(source="unverified")
+        adopt_verified_sender(thought, effective)
+        thought_id = getattr(thought, "thought_id", None)
+        if isinstance(thought_id, str) and not set_thought_verified_sender(thought_id, effective):
+            logger.warning(f"[UPDATED_STATUS_CONSCIENCE] Could not record the update's sender on {thought_id}")
 
     async def check(self, action: ActionSelectionDMAResult, context: ConscienceCheckContext) -> ConscienceCheckResult:
         """Check if the task has new information available.
@@ -160,6 +173,12 @@ class UpdatedStatusConscience(ConscienceInterface):
                         logger.info(f"Cleared updated_info_available flag for task {task_id}")
         except Exception as e:
             logger.error(f"Failed to clear updated_info_available flag for task {task_id}: {e}")
+
+        # From here this thought answers the coalesced message, so it carries
+        # THAT message's verified sender, not the task creator's (#1366 item 5).
+        # In memory for the retry in this pass, and persisted so the PONDER
+        # follow-up (dispatch re-reads the thought) and its descendants inherit it.
+        self._adopt_update_sender(thought, getattr(task, "updated_info_sender", None))
 
         # Note: The observation is stored in ConscienceCheckResult.CIRIS_OBSERVATION_UPDATED_STATUS
         # (top-level field below) so it can be accessed by downstream processing without modifying

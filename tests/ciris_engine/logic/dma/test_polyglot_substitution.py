@@ -10,6 +10,7 @@ See ciris_engine/data/localized/polyglot/CLAUDE.md for the polyglot doctrine.
 """
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,6 +19,13 @@ from ciris_engine.logic.dma.prompt_loader import (
     POLYGLOT_PATTERN,
     DMAPromptLoader,
 )
+
+
+def _whole_header(collection: Any) -> str:
+    """The header as it renders: ``system_guidance_header``, ``pipeline_position`` and ``system_guidance_header_tail``
+    (#1366 item 12 split the English header around its pipeline-position paragraph; locales are not split yet)."""
+    parts = (collection.system_guidance_header, collection.pipeline_position, collection.system_guidance_header_tail)
+    return "\n\n".join(p for p in parts if p)
 
 
 class TestPolyglotSubstitution:
@@ -53,7 +61,7 @@ class TestPolyglotSubstitution:
         """Loading pdma_ethical.yml expands the framing placeholder in-place."""
         loader = DMAPromptLoader(language="en")
         collection = loader.load_prompt_template("pdma_ethical")
-        header = collection.system_guidance_header
+        header = _whole_header(collection)
         assert header is not None
 
         # No unsubstituted placeholders survive
@@ -88,7 +96,7 @@ class TestPolyglotSubstitution:
     def test_local_tail_intact_post_substitution(self) -> None:
         """The LOCAL operational tail (walkthrough + §IX + §X) is untouched."""
         loader = DMAPromptLoader(language="en")
-        header = loader.load_prompt_template("pdma_ethical").system_guidance_header
+        header = _whole_header(loader.load_prompt_template("pdma_ethical"))
         assert header is not None
 
         for local_marker in (
@@ -104,7 +112,7 @@ class TestPolyglotSubstitution:
     def test_seam_polyglot_to_local_clean(self) -> None:
         """The boundary between §VIII (polyglot) and walkthrough (local) is clean."""
         loader = DMAPromptLoader(language="en")
-        header = loader.load_prompt_template("pdma_ethical").system_guidance_header
+        header = _whole_header(loader.load_prompt_template("pdma_ethical"))
         assert header is not None
 
         # §VIII closing aphorism flows directly into walkthrough start with one blank line
@@ -116,7 +124,7 @@ class TestPolyglotSubstitution:
     def test_seam_local_to_polyglot_clean(self) -> None:
         """The boundary between header opening (local) and §I (polyglot) is clean."""
         loader = DMAPromptLoader(language="en")
-        header = loader.load_prompt_template("pdma_ethical").system_guidance_header
+        header = _whole_header(loader.load_prompt_template("pdma_ethical"))
         assert header is not None
 
         assert (
@@ -127,7 +135,7 @@ class TestPolyglotSubstitution:
     def test_indent_preserved_through_yaml_block_scalar(self) -> None:
         """Polyglot lines re-indent to the placeholder's column, then YAML strips it."""
         loader = DMAPromptLoader(language="en")
-        header = loader.load_prompt_template("pdma_ethical").system_guidance_header
+        header = _whole_header(loader.load_prompt_template("pdma_ethical"))
         assert header is not None
 
         # Six Principles entries from §III: bullet-style strings whose leading
@@ -162,8 +170,8 @@ class TestPolyglotSubstitution:
     def test_substitution_idempotent_under_repeat_loads(self) -> None:
         """Loading the same template twice yields byte-identical resolved headers."""
         loader = DMAPromptLoader(language="en")
-        first = loader.load_prompt_template("pdma_ethical").system_guidance_header
-        second = loader.load_prompt_template("pdma_ethical").system_guidance_header
+        first = _whole_header(loader.load_prompt_template("pdma_ethical"))
+        second = _whole_header(loader.load_prompt_template("pdma_ethical"))
         assert first == second
 
     def test_spanish_locale_uses_same_polyglot_block(self) -> None:
@@ -189,8 +197,8 @@ class TestPolyglotSubstitution:
             "Bhagavad Gita 4.18",
             "Difficulty is not torque. Fluency is not torque.",
         ):
-            assert marker in en.system_guidance_header, f"missing in en: {marker!r}"
-            assert marker in es.system_guidance_header, f"missing in es: {marker!r}"
+            assert marker in _whole_header(en), f"missing in en: {marker!r}"
+            assert marker in _whole_header(es), f"missing in es: {marker!r}"
 
         # Spanish-specific LOCAL anchors that must NOT be in English
         for spanish_only in (
@@ -198,8 +206,8 @@ class TestPolyglotSubstitution:
             "=== IX. CONTRATO DE SALIDA · 4 CAMPOS ===",
             "**Responde solo en español.**",
         ):
-            assert spanish_only in es.system_guidance_header, f"missing es-local: {spanish_only!r}"
-            assert spanish_only not in en.system_guidance_header, (
+            assert spanish_only in _whole_header(es), f"missing es-local: {spanish_only!r}"
+            assert spanish_only not in _whole_header(en), (
                 f"Spanish text leaked into English locale: {spanish_only!r}"
             )
 
@@ -209,8 +217,8 @@ class TestPolyglotSubstitution:
             "=== IX. OUTPUT CONTRACT · 4 FIELDS ===",
             "**Respond in English only.**",
         ):
-            assert english_only in en.system_guidance_header, f"missing en-local: {english_only!r}"
-            assert english_only not in es.system_guidance_header, (
+            assert english_only in _whole_header(en), f"missing en-local: {english_only!r}"
+            assert english_only not in _whole_header(es), (
                 f"English text leaked into Spanish locale: {english_only!r}"
             )
 
@@ -228,14 +236,14 @@ class TestPolyglotSubstitution:
             '"ethical_alignment_score"',
             "HandlerActionType",
         ):
-            assert english_technical in en.system_guidance_header
-            assert english_technical in es.system_guidance_header, (
+            assert english_technical in _whole_header(en)
+            assert english_technical in _whole_header(es), (
                 f"English technical term lost in Spanish locale: {english_technical!r}"
             )
 
         # No unsubstituted placeholder leakage in either locale
-        assert "{{POLYGLOT" not in en.system_guidance_header
-        assert "{{POLYGLOT" not in es.system_guidance_header
+        assert "{{POLYGLOT" not in _whole_header(en)
+        assert "{{POLYGLOT" not in _whole_header(es)
 
 
 class TestCSDMARelationalRealismFanout:
@@ -283,6 +291,7 @@ class TestCSDMARelationalRealismFanout:
             str(getattr(collection, field, "") or "")
             for field in (
                 "system_guidance_header",
+                "system_guidance_header_tail",
                 "evaluation_steps",
                 "response_format",
                 "context_integration",

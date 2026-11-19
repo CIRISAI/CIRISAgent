@@ -87,13 +87,19 @@ def test_round1_dmas_inject_but_aspdma_does_not() -> None:
     """
     helper_src = (_DMA_DIR.parent / "formatters" / "prompt_blocks.py").read_text()
     assert "get_prohibition_guidance" in helper_src, "helper must inject the prohibition block"
+    # Since #1366 Phase 3 the round-1 DMAs build their prompts with PromptAssembler: the same four blocks, in the
+    # same order, as typed segments (prompt_assembly.segmenting.round1_preamble).
+    preamble_src = (_DMA_DIR.parent / "prompt_assembly" / "segmenting.py").read_text()
+    preamble = preamble_src[preamble_src.index("def round1_preamble") :]
+    assert "get_prohibition_guidance" in preamble.split("\ndef ", 1)[0], "round1_preamble must inject the prohibition block"
 
     for fn in ("pdma.py", "csdma.py", "dsdma_base.py"):
         src = (_DMA_DIR / fn).read_text()
-        assert "append_round1_accord_blocks" in src, f"round-1 {fn} should call the round-1 helper"
+        assert "round1_preamble" in src, f"round-1 {fn} should call the round-1 preamble"
     for fn in ("dsaspdma.py", "tsaspdma.py"):
         src = (_DMA_DIR / fn).read_text()
         assert "append_round1_accord_blocks" not in src, f"ASPDMA {fn} must NOT use the round-1 helper"
+        assert "round1_preamble" not in src, f"ASPDMA {fn} must NOT use the round-1 preamble"
         assert "get_prohibition_guidance" not in src, f"ASPDMA {fn} must NOT inject prohibitions"
 
 

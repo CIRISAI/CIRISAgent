@@ -228,9 +228,12 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         # Composing them as separate messages instead left them unmatched, and
         # the gate saw one mixed body it had no disposition for.
         guide = [
+            ("system_guidance_header", self._require_prompt_value("system_guidance_header")),
+            # #1366 item 12: the pipeline position, then the rest of the header.
+            *self._position_entries(),
+        ] + [
             (key, self._require_prompt_value(key))
             for key in (
-                "system_guidance_header",
                 "memory_model",
                 "addressing_convention",
                 "attribute_convention",
@@ -285,7 +288,18 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
     @staticmethod
     def _guide_segments(guide: "List[Tuple[str, str]]", keep_empty: bool = False) -> List[Any]:
         """The guide's blocks as stage instructions (``keep_empty``: the join did not filter empty blocks)."""
-        return [_seg(f"instr:{key}", "stage_instruction", text) for key, text in guide if text or keep_empty]
+        from ciris_engine.logic.prompt_assembly.segmenting import pipeline_position_segment
+
+        # The pipeline position is its own segment, from its own template field (#1366 item 12).
+        return [
+            (
+                pipeline_position_segment(text)
+                if key == "pipeline_position"
+                else _seg(f"instr:{key}", "stage_instruction", text)
+            )
+            for key, text in guide
+            if text or keep_empty
+        ]
 
     def _approval_segments(self, authorization: Any) -> List[Any]:
         """The WA approval (the grant as ``rule.signed_guidance`` with its authz, then its rule) and the facts."""

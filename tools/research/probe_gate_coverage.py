@@ -147,7 +147,10 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
     # passes, five model-facing fields each.
     # 55 -> 56 (#1366): `action_selection_pdma.stage_contract`, the engine
     # contract split out of the template-replaceable `system_header`.
-    "dma_prompt": 56,
+    # 56 -> 75 (#1366 item 12): `<template>.pipeline_position` at all ten DMA
+    # templates and `<template>.system_guidance_header_tail` at the nine whose
+    # header the paragraph was split out of.
+    "dma_prompt": 75,
     # 143 -> 155 (#1366): the verified-WA governance block (4) and the
     # verified-sender block (8).
     # 155 -> 166 (#1366 items 7-9, 14): the typed-veto retry wording (9) and
@@ -156,7 +159,9 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
     # rendered only when the identity carries an unverified amendment. No golden
     # fixture does, so it is dark -- a FIXTURE gap; the floor does not move.
     "string": 167,
-    "conscience_prompt": 12,
+    # 12 -> 20 (#1366 item 12): `<conscience>.pipeline_position` and
+    # `<conscience>.system_prompt_tail` at all four.
+    "conscience_prompt": 20,
     "template": 3,
 }
 

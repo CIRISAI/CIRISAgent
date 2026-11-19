@@ -87,6 +87,21 @@ ENGLISH_BY_DESIGN = frozenset(
     }
 )
 
+#: #1366 item 12 split each stage's header around its pipeline-position paragraph:
+#: ``system_guidance_header`` (before it), ``pipeline_position`` (the paragraph,
+#: a structural field) and ``system_guidance_header_tail`` (the rest).
+#:
+#: ``pipeline_position`` IS translatable and is staged like any other field: no
+#: locale carries it yet, and each falls back to the English one until the lane
+#: writes it. Nothing parses its heading, so translating it is safe.
+#:
+#: The TAIL is not staged yet. Every locale's ``system_guidance_header`` is the
+#: translation of the whole pre-split header, the tail's text included, so
+#: translating the tail would put that text in the prompt twice. It joins the
+#: lane once a locale's header is split at the same place (a native-language
+#: pass: where the paragraph would sit in the translated prose).
+SPLIT_PENDING = frozenset({"system_guidance_header_tail"})
+
 #: The marker a hand-committed English copy carries at the top of the file. It
 #: is removed when the last English field in that file is translated.
 ENGLISH_COPY_MARKER = "# --- English verbatim"
@@ -170,6 +185,7 @@ def translatable(template: str, doc: Dict[str, Any]) -> Dict[str, str]:
         if isinstance(value, str)
         and value.strip()
         and field not in NOT_TRANSLATED
+        and field not in SPLIT_PENDING
         and f"{template}.{field}" not in ENGLISH_BY_DESIGN
     }
 

@@ -1,19 +1,28 @@
-"""The pipeline-position paragraph is its own segment at every stage (CIRISAgent#1366 item 12; FSD §4.1, §8).
+"""The pipeline-position paragraph is its own segment at every stage, in every language (CIRISAgent#1366 item 12).
 
-Each English stage template says where the stage sits and what it cannot see. The assembler carves that paragraph
-out of the ``stage_instruction`` bytes into a ``pipeline_position`` segment (system trust, standing, engine source),
-so the per-call manifest describes the prompt it was sent with. The message bytes are unchanged (the goldens
-replay byte for byte); here every stage's manifest is checked to carry the segment over exactly that text.
+Each stage's English template carries a top-level ``pipeline_position`` field: where the stage sits and what it
+cannot see. The call site hands that field in as a ``pipeline_position`` segment (system trust, standing, engine
+source) between the field it used to sit inside and the rest of that field (``*_tail``), so the English bytes are
+unchanged (the goldens replay byte for byte).
+
+It used to be carved out of the rendered ``stage_instruction`` by matching its English heading, so a translated
+template (which translates the heading) got no segment and its manifest misdescribed the call. Here every stage is
+checked in English, under a template whose paragraph is translated, and against an agent-template override.
 """
 
 import hashlib
 import re
+from contextlib import ExitStack
 from typing import Any, Awaitable, Callable, Dict, List, Tuple
 from unittest.mock import patch
 
 import pytest
 
-from ciris_engine.logic.prompt_assembly.assembler import PIPELINE_POSITION_RE, PromptAssembler
+from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader, ConsciencePrompts
+from ciris_engine.logic.dma.base_dma import BaseDMA
+from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
+from ciris_engine.logic.prompt_assembly import assembler as assembler_module
+from ciris_engine.logic.prompt_assembly.assembler import PromptAssembler
 from ciris_engine.schemas.context.prompt_provenance import (
     AssemblyMode,
     Lifecycle,
@@ -22,6 +31,7 @@ from ciris_engine.schemas.context.prompt_provenance import (
     SegmentSource,
     TrustLevel,
 )
+from ciris_engine.schemas.dma.prompts import PromptCollection
 from tests.ciris_engine.logic.conscience import conscience_golden as kg
 from tests.ciris_engine.logic.dma import aspdma_golden as ag
 from tests.ciris_engine.logic.dma import evaluator_golden as eg
@@ -52,9 +62,43 @@ CAPTURES: Dict[PromptStage, Callable[[], Awaitable[Any]]] = {
     PromptStage.OPTVETO: lambda: _conscience("optveto"),
 }
 
+#: Each stage's template: (loader family, template name).
+TEMPLATES: Dict[PromptStage, Tuple[str, str]] = {
+    PromptStage.PDMA: ("dma", "pdma_ethical"),
+    PromptStage.CSDMA: ("dma", "csdma_common_sense"),
+    PromptStage.DSDMA: ("dma", "dsdma_base"),
+    PromptStage.IDMA: ("dma", "idma"),
+    PromptStage.ASPDMA: ("dma", "action_selection_pdma"),
+    PromptStage.TSASPDMA: ("dma", "tsaspdma"),
+    PromptStage.MSASPDMA: ("dma", "msaspdma"),
+    PromptStage.RSASPDMA: ("dma", "rsaspdma"),
+    PromptStage.FSASPDMA: ("dma", "fsaspdma"),
+    PromptStage.DSASPDMA: ("dma", "dsaspdma"),
+    PromptStage.COHERENCE: ("conscience", "coherence_conscience"),
+    PromptStage.EPISTEMIC: ("conscience", "epistemic_humility_conscience"),
+    PromptStage.ENTROPY: ("conscience", "entropy_conscience"),
+    PromptStage.OPTVETO: ("conscience", "optimization_veto_conscience"),
+}
+
+#: A translated paragraph, heading included: what a localized template will carry. Nothing parses it.
+TRANSLATED = "POSICIÓN EN LA CADENA ({name}): esta etapa corre en su sitio; no ve lo que no se le muestra."
+
+#: What an agent template's override would put under the field's name, if anything read it from there.
+OVERRIDE = "OVERRIDDEN POSITION — must never reach a prompt"
+
 
 def test_every_stage_is_covered() -> None:
-    assert set(CAPTURES) == set(PromptStage)
+    assert set(CAPTURES) == set(PromptStage) == set(TEMPLATES)
+
+
+def _english_field(stage: PromptStage) -> str:
+    family, name = TEMPLATES[stage]
+    if family == "dma":
+        text = DMAPromptLoader(language="en").load_prompt_template(name).pipeline_position
+    else:
+        text = ConsciencePromptLoader(language="en").load_prompts(name).pipeline_position
+    assert text, f"{name}: no pipeline_position field"
+    return text
 
 
 def _text(message: Any) -> str:
@@ -62,7 +106,7 @@ def _text(message: Any) -> str:
     return content if isinstance(content, str) else content[0].text
 
 
-async def _built(stage: PromptStage) -> List[Tuple[List[Any], Any]]:
+async def _built(stage: PromptStage, *patches: Any) -> List[Tuple[List[Any], Any]]:
     """Every (messages, manifest) the assembler built while the stage's call site ran."""
     built: List[Tuple[List[Any], Any]] = []
     original = PromptAssembler.build
@@ -72,17 +116,18 @@ async def _built(stage: PromptStage) -> List[Tuple[List[Any], Any]]:
         built.append(result)
         return result
 
-    with patch.object(PromptAssembler, "build", spy), patch(
-        "ciris_engine.logic.prompt_assembly.assembler.current_guard_mode", return_value=AssemblyMode.FAIL_CLOSED
-    ):
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(PromptAssembler, "build", spy))
+        stack.enter_context(
+            patch.object(assembler_module, "current_guard_mode", return_value=AssemblyMode.FAIL_CLOSED)
+        )
+        for p in patches:
+            stack.enter_context(p)
         await CAPTURES[stage]()
     return [b for b in built if b[1].stage == stage]
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
-async def test_the_manifest_carries_a_pipeline_position_segment_over_that_text(stage: PromptStage) -> None:
-    calls = await _built(stage)
+def _assert_one_position_over(calls: List[Tuple[List[Any], Any]], stage: PromptStage, expected: str) -> None:
     assert calls, f"no {stage.value} call was assembled"
     for messages, manifest in calls:
         assert manifest.guard_violations == []
@@ -94,9 +139,100 @@ async def test_the_manifest_carries_a_pipeline_position_segment_over_that_text(s
         assert record.lifecycle == Lifecycle.STANDING
         body = _text(messages[record.message_index])[record.span_start : record.span_end]
         assert hashlib.sha256(body.encode()).hexdigest() == record.sha256
-        assert PIPELINE_POSITION_RE.fullmatch(body), body
-        # The paragraph is no longer described as stage_instruction bytes.
+        # The span covers exactly the field's text.
+        assert body == expected
+        # ... and the paragraph is not (also) described as stage_instruction bytes.
         for r in manifest.segments:
             if r.kind == SegmentKind.STAGE_INSTRUCTION:
                 text = _text(messages[r.message_index])[r.span_start : r.span_end]
+                assert expected not in text, r.segment_id
                 assert not _HEADING.search(text), r.segment_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
+async def test_english_the_manifest_carries_one_pipeline_position_segment_over_the_field(stage: PromptStage) -> None:
+    _assert_one_position_over(await _built(stage), stage, _english_field(stage))
+
+
+def _translated_dma(real: Callable[..., PromptCollection]) -> Callable[..., PromptCollection]:
+    def load(self: DMAPromptLoader, template_name: str) -> PromptCollection:
+        collection = real(self, template_name)
+        if not collection.pipeline_position:
+            return collection
+        return collection.model_copy(update={"pipeline_position": TRANSLATED.format(name=template_name)})
+
+    return load
+
+
+def _translated_conscience(real: Callable[..., ConsciencePrompts]) -> Callable[..., ConsciencePrompts]:
+    def load(self: ConsciencePromptLoader, conscience_type: str) -> ConsciencePrompts:
+        prompts = real(self, conscience_type)
+        if not prompts.pipeline_position:
+            return prompts
+        return prompts.model_copy(update={"pipeline_position": TRANSLATED.format(name=conscience_type)})
+
+    return load
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
+async def test_a_translated_paragraph_is_still_one_segment_over_the_field(stage: PromptStage) -> None:
+    """A template whose paragraph (heading included) is translated: the segment is found by field, not by words."""
+    calls = await _built(
+        stage,
+        patch.object(DMAPromptLoader, "load_prompt_template", _translated_dma(DMAPromptLoader.load_prompt_template)),
+        patch.object(ConsciencePromptLoader, "load_prompts", _translated_conscience(ConsciencePromptLoader.load_prompts)),
+    )
+    _assert_one_position_over(calls, stage, TRANSLATED.format(name=TEMPLATES[stage][1]))
+
+
+def _overridden(real: Callable[..., None]) -> Callable[..., None]:
+    """Every DMA's agent-template overrides also name ``pipeline_position``."""
+
+    def load(self: BaseDMA, overrides: Any = None) -> None:
+        real(self, overrides)
+        if isinstance(self.prompts, PromptCollection):
+            self.prompts = self.prompts.model_copy(update={"pipeline_position": OVERRIDE})
+        else:
+            self.prompts = {**self.prompts, "pipeline_position": OVERRIDE}
+
+    return load
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
+async def test_no_template_override_can_replace_the_paragraph(stage: PromptStage) -> None:
+    """Read from the engine template, never from an agent template's overrides (the consciences take none)."""
+    calls = await _built(stage, patch.object(BaseDMA, "_load_prompts", _overridden(BaseDMA._load_prompts)))
+    _assert_one_position_over(calls, stage, _english_field(stage))
+    for messages, _ in calls:
+        assert not any(OVERRIDE in _text(m) for m in messages)
+
+
+def test_the_csdma_header_override_replaces_the_header_never_the_position() -> None:
+    """CSDMA's ``system_prompt`` replaces its header (both header fields), as before; the position stays."""
+    from unittest.mock import Mock
+
+    from ciris_engine.logic.dma.csdma import CSDMAEvaluator
+
+    dma = CSDMAEvaluator(service_registry=Mock(), prompt_overrides={"system_prompt": "PERSONA HEADER."})
+    english = DMAPromptLoader(language="en").load_prompt_template("csdma_common_sense")
+    text = dma._system_message_text("summary", "thought")
+    assert text.startswith("PERSONA HEADER.\n\n" + str(english.pipeline_position) + "\n\n")
+    assert str(english.system_guidance_header_tail) not in text
+
+
+@pytest.mark.parametrize("language", ["es", "am", "ar", "zh", "yo"])
+@pytest.mark.parametrize("stage", list(PromptStage), ids=lambda s: s.value)
+def test_a_locale_without_the_field_gets_the_english_paragraph(stage: PromptStage, language: str) -> None:
+    """No locale file translates the field yet: each falls back to the English one, field by field."""
+    family, name = TEMPLATES[stage]
+    if family == "dma":
+        loader = DMAPromptLoader(language=language)
+        assert loader.load_prompt_template(name).pipeline_position is None
+        assert loader.pipeline_position(name) == _english_field(stage)
+    else:
+        conscience = ConsciencePromptLoader(language=language)
+        _, position, _ = conscience.get_system_prompt_parts(name)
+        assert position == _english_field(stage)

@@ -65,6 +65,28 @@ class BaseDMA(ABC, Generic[InputT, DMAResultT]):
             raise ValueError(f"{type(self).__name__} prompt template missing required key: {key}")
         return value
 
+    def _position_entries(self) -> List[Tuple[str, str]]:
+        """The guide entries that follow ``system_guidance_header``: its pipeline position, then the rest of it.
+
+        #1366 item 12: ``pipeline_position`` is a structural field of the ENGINE template (``prompt_template_data``
+        is the loader's collection, which no agent-template override reaches), followed by
+        ``system_guidance_header_tail``, so the three render the bytes the one header field did. A locale whose
+        copy lacks the paragraph gets the English one; a missing tail adds nothing. Call it right after reading
+        the header: the reads are the compose dump's field seam, and it records them in call order.
+        """
+        position = self._get_prompt_value("pipeline_position")
+        if not position:
+            loader = getattr(self, "prompt_loader", None)
+            name = getattr(self, "_prompt_template_name", None)
+            if loader is not None and isinstance(name, str):
+                position = loader.pipeline_position(name)
+        tail = self._get_prompt_value("system_guidance_header_tail")
+        entries: List[Tuple[str, str]] = []
+        for key, value in (("pipeline_position", position), ("system_guidance_header_tail", tail)):
+            if value:
+                entries.append((key, value))
+        return entries
+
     def __init__(
         self,
         service_registry: ServiceRegistry,

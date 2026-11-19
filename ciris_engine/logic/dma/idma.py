@@ -140,6 +140,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             expand,
             governance_segments,
             governed_amendments,
+            pipeline_position_slot,
             segment,
             split_template,
             stripped_ends,
@@ -168,13 +169,18 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
                 ),
             }
 
-        def system_render(original_thought_content: str) -> str:
+        def system_render(original_thought_content: str, pipeline_position: Optional[str] = None) -> str:
             return self.prompt_loader.get_system_message(
-                self.prompt_template_data, context_summary=context_summary, original_thought_content=original_thought_content
+                self.prompt_template_data,
+                context_summary=context_summary,
+                original_thought_content=original_thought_content,
+                pipeline_position=pipeline_position,
             )
 
         sys_slots = slots("sys:")
         del sys_slots["prior_dma_context"]
+        # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
+        sys_slots.update(pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name)))
         guidance = split_template(system_render, sys_slots, prefix="instr:system", first_glue="")
         # format_system_prompt_blocks("", "", context, "", None, guidance): guidance, then the context; stripped.
         system = concat(guidance, context, "\n\n")

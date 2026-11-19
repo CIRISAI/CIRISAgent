@@ -95,7 +95,9 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         """
         return self.prompt_loader.load_prompt_template(self._prompt_template_name)
 
-    def _system_message_text(self, context_summary: str, original_thought_content: str) -> str:
+    def _system_message_text(
+        self, context_summary: str, original_thought_content: str, pipeline_position: Optional[str] = None
+    ) -> str:
         """The stage's system guidance.
 
         Template overrides (from the agent template's `csdma_overrides`) are FIELD-scoped — see
@@ -104,20 +106,29 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         unaffected. It used to return the override in place of get_system_message(), which composes six fields —
         so replacing the header also disabled domain_principles, evaluation_steps, evaluation_criteria,
         response_format and response_guidance.
+
+        The header is two fields around the engine's pipeline-position paragraph (#1366 item 12): the override
+        replaces both (``system_guidance_header`` and ``system_guidance_header_tail``, the one header it
+        replaced before), never the paragraph, which is read from the engine template.
         """
         template_system_override = None
         if isinstance(self.prompts, dict):
             template_system_override = self.prompts.get("system_prompt")
         template_data = self.prompt_template_data
         if template_system_override:
-            template_data = template_data.model_copy(update={"system_guidance_header": template_system_override})
+            template_data = template_data.model_copy(
+                update={"system_guidance_header": template_system_override, "system_guidance_header_tail": None}
+            )
             logger.debug(
                 "CSDMA template system_prompt override replaces system_guidance_header (%d chars); "
                 "the other composed fields are unaffected",
                 len(template_system_override),
             )
         return self.prompt_loader.get_system_message(
-            template_data, context_summary=context_summary, original_thought_content=original_thought_content
+            template_data,
+            context_summary=context_summary,
+            original_thought_content=original_thought_content,
+            pipeline_position=pipeline_position,
         )
 
     def _user_message_text(self, context_summary: str, original_thought_content: str) -> str:
@@ -189,6 +200,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             expand,
             governance_segments,
             identity_segments,
+            pipeline_position_slot,
             round1_preamble,
             segment,
             split_template,
@@ -212,7 +224,14 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
                 "original_thought_content": thought_request(f"{prefix}request", thought_content, thought),
             }
 
-        guidance = split_template(self._system_message_text, slots("sys:"), prefix="instr:system", first_glue="")
+        # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
+        position = pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
+        guidance = split_template(
+            self._system_message_text,
+            {**slots("sys:"), **position},
+            prefix="instr:system",
+            first_glue="",
+        )
         # The agent's identity, approved amendments included: the same block every DMA reads
         # (formatters.identity.identity_block_of). Eric, 2026-11-13.
         system = concat(identity_segments(agent_identity, language), guidance, "\n\n")

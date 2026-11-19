@@ -535,6 +535,31 @@ def segment(segment_id: str, kind: SegmentKind, text: str, source: SegmentSource
     return PromptSegment(segment_id=segment_id, kind=kind, source=source, text=text, **kw)
 
 
+#: The id every stage gives its pipeline-position segment (#1366 item 12).
+PIPELINE_POSITION_ID = "instr:system:pipeline_position"
+
+
+def pipeline_position_segment(text: str, segment_id: str = PIPELINE_POSITION_ID) -> PromptSegment:
+    """The stage's ``pipeline_position`` field as its own segment (system trust, standing, engine source).
+
+    Built from the template FIELD the caller read from the engine template, never found in rendered text: the
+    paragraph's heading is translatable, so segmentation cannot depend on its wording.
+    """
+    return PromptSegment(
+        segment_id=segment_id, kind=SegmentKind.PIPELINE_POSITION, source=SegmentSource.ENGINE, text=text
+    )
+
+
+def pipeline_position_slot(text: Any) -> Dict[str, PromptSegment]:
+    """``{"pipeline_position": segment}`` for :func:`split_template`, or ``{}`` when the paragraph is empty.
+
+    Empty only when a research manifest replaced the field it was split out of (the render then omits it, so a
+    sentinel for it would mark bytes the real render does not have).
+    """
+    # isinstance, not truthiness: tests substitute a Mock for the prompt loader.
+    return {"pipeline_position": pipeline_position_segment(text)} if isinstance(text, str) and text else {}
+
+
 def stripped_ends(segments: List[PromptSegment]) -> List[PromptSegment]:
     """``segments`` as ``str.strip()`` of their concatenation leaves them (``format_system_prompt_blocks`` strips)."""
     out = list(segments)
@@ -550,7 +575,10 @@ def stripped_ends(segments: List[PromptSegment]) -> List[PromptSegment]:
 
 
 __all__ = [
+    "PIPELINE_POSITION_ID",
     "PromptBuilder",
+    "pipeline_position_segment",
+    "pipeline_position_slot",
     "block",
     "evaluator_call",
     "thought_request",

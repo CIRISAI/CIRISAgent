@@ -274,6 +274,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             PromptBuilder,
             identity_segments,
             items,
+            pipeline_position_segment,
             segment,
             sender_block_segments,
             split_template,
@@ -298,9 +299,21 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         builder.single(
             "system", segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or "")
         )
+        # The pipeline position is its own segment, from its own template field (#1366 item 12).
         guide = [
-            segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, self._require_prompt_value(key))
-            for key in ("system_guidance_header", "evaluation_steps", "response_format", "closing_reminder")
+            (
+                pipeline_position_segment(text)
+                if key == "pipeline_position"
+                else segment(f"instr:{key}", SegmentKind.STAGE_INSTRUCTION, text)
+            )
+            for key, text in [
+                ("system_guidance_header", self._require_prompt_value("system_guidance_header")),
+                *self._position_entries(),
+                *[
+                    (key, self._require_prompt_value(key))
+                    for key in ("evaluation_steps", "response_format", "closing_reminder")
+                ],
+            ]
         ]
         system = stripped_ends([s for s in guide if s.text])
         layout = items(system, "\n\n", "")

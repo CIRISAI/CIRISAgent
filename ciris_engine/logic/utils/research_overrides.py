@@ -119,6 +119,10 @@ _DMA_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
         # #1366 — the ASPDMA engine contract split out of `system_header`.
         "stage_contract",
         "system_guidance_header",
+        # #1366 item 12 — the pipeline-position paragraph, a structural field of
+        # its own, and the rest of the header it was split out of.
+        "pipeline_position",
+        "system_guidance_header_tail",
         "domain_principles",
         "evaluation_steps",
         "evaluation_criteria",
@@ -159,7 +163,14 @@ _DMA_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
 
 #: ConsciencePrompts fields that carry prompt text.
 _CONSCIENCE_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
-    {"system_prompt", "user_prompt_template", "user_prompt_with_image_template"}
+    {
+        "system_prompt",
+        # #1366 item 12 — split out of `system_prompt`, which now ends where they begin.
+        "pipeline_position",
+        "system_prompt_tail",
+        "user_prompt_template",
+        "user_prompt_with_image_template",
+    }
 )
 
 #: AgentTemplate fields that reach a prompt as prose.
@@ -1252,6 +1263,35 @@ def override_conscience_prompt(conscience_type: str, field: str) -> Optional[str
     return m.overrides.conscience_prompt.get(f"{conscience_type}.{field}") if m else None
 
 
+#: #1366 item 12 — fields split out of a host field, which used to hold their text. Overriding the host replaces
+#: what it held before the split, so a manifest naming the host but not these renders them EMPTY: an arm gets the
+#: text it was written to send, never the CIRIS paragraph or the rest of the CIRIS header after its own text.
+_SPLIT_FIELDS: Dict[str, Tuple[str, ...]] = {
+    "dma_prompt": ("pipeline_position", "system_guidance_header_tail"),
+    "conscience_prompt": ("pipeline_position", "system_prompt_tail"),
+}
+
+
+def split_field_host(namespace: str, template: str, field: str) -> Optional[str]:
+    """The field ``template.field`` was split out of (#1366 item 12), or None for an ordinary field."""
+    if field not in _SPLIT_FIELDS.get(namespace, ()):
+        return None
+    if namespace == "conscience_prompt":
+        return "system_prompt"
+    if field == "pipeline_position" and template == "action_selection_pdma":
+        return "stage_contract"
+    return "system_guidance_header"
+
+
+def implied_blank_fields(namespace: str, template: str, named: Set[str]) -> Set[str]:
+    """Split fields a manifest replaces implicitly: their host is in ``named`` and they are not."""
+    return {
+        field
+        for field in _SPLIT_FIELDS.get(namespace, ())
+        if field not in named and split_field_host(namespace, template, field) in named
+    }
+
+
 def conscience_fully_overridden(conscience_type: str) -> bool:
     """True when the active manifest overrides EVERY text field the base
     ``<conscience_type>.yml`` defines, so nothing of the base file reaches a
@@ -1263,8 +1303,13 @@ def conscience_fully_overridden(conscience_type: str) -> bool:
     base = _CONSCIENCE_PROMPTS_DIR / f"{conscience_type}.yml"
     if not base.is_file():
         return False
-    needed = {f"{conscience_type}.{f}" for f in _yaml_present_fields(base, _CONSCIENCE_PROMPT_TEXT_FIELDS)}
-    return bool(needed) and needed <= set(m.overrides.conscience_prompt)
+    named = {
+        key.partition(".")[2] for key in m.overrides.conscience_prompt if key.partition(".")[0] == conscience_type
+    }
+    # A split field whose host is named is replaced with it (#1366 item 12).
+    covered = named | implied_blank_fields("conscience_prompt", conscience_type, named)
+    needed = _yaml_present_fields(base, _CONSCIENCE_PROMPT_TEXT_FIELDS)
+    return bool(needed) and needed <= covered
 
 
 def override_corpus(key: str) -> Optional[str]:

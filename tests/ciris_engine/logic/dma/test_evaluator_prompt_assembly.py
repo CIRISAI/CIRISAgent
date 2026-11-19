@@ -19,6 +19,8 @@ from tests.ciris_engine.logic.dma import evaluator_golden as eg
 #: PDMA, CSDMA and DSDMA read the WA's signed guidance on a guidance task (#1366 item 2).
 GOVERNED_EVALUATORS = ("pdma_full", "csdma_full", "dsdma_full", "dsdma_blocks")
 POLICY_CHANGED = {"idma_full", *GOVERNED_EVALUATORS}
+#: Fixtures whose custom (domain-config) template used to drop the engine's pipeline position (#1366 item 12).
+POSITION_ADDED = {"dsdma_blocks"}
 
 
 def _mode(mode: AssemblyMode) -> Any:
@@ -118,7 +120,16 @@ async def test_a_guidance_task_evaluator_reads_the_signed_guidance_and_nothing_e
     assert [m for i, m in enumerate(messages) if i != index] == [m for i, m in enumerate(golden) if i != index]
     system = _text(messages[index])
     end = max(r.span_end for r in manifest.segments if r.segment_id.startswith("governance:"))
-    assert system[: header.span_start - 2] + system[end:] == _text(golden[index])
+    cuts = [(header.span_start - 2, end)]
+    if name in POSITION_ADDED:
+        # #1366 item 12: a custom DSDMA template replaces the header fields, never the engine's pipeline position,
+        # which now follows it (before, the custom template silently dropped it). The one other addition.
+        (position,) = [r for r in manifest.segments if r.kind == SegmentKind.PIPELINE_POSITION]
+        assert position.message_index == index
+        cuts.append((position.span_start - 2, position.span_end))
+    for start, stop in sorted(cuts, reverse=True):
+        system = system[:start] + system[stop:]
+    assert system == _text(golden[index])
 
 
 @pytest.mark.asyncio

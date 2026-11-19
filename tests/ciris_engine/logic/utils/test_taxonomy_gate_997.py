@@ -98,6 +98,13 @@ EXPECTED_MIXED: Dict[str, str] = {
         "CIRISAgent#997 — one YAML field walking the PDMA stages while naming and "
         "ranking the Six Principles and M-1; needs the field cut in 29 locales"
     ),
+    # Not new mixed BYTES: #1366 item 12 moved the pipeline-position paragraph out
+    # of the header above into a field of its own (single-class), and the rest of
+    # that same scalar is this field. One mixed scalar, now two blocks.
+    "pdma_ethical.system_guidance_header_tail": (
+        "CIRISAgent#997 / #1366 item 12 — the rest of the PDMA header scalar after its "
+        "pipeline-position paragraph; same split as the header, same 29-locale cut"
+    ),
     "action_selection_pdma.closing_reminder": (
         "CIRISAgent#1007 — 'Recall CIRIS principles override personal preference' (axiotic) "
         "sits in the same YAML scalar as the LANGUAGE RULES register doctrine (pragmatic) and "
@@ -221,7 +228,9 @@ def test_no_mixed_blocks_beyond_the_ratchet() -> None:
 #: relabelled from one register to the other to make a bound look better,
 #: because moving it changes neither this number nor the disposition the gate
 #: applies.
-TOTAL_MIXED_CEILING = 13
+#:
+#: 13 -> 14 (#1366 item 12): a SPLIT, see MIXED_CEILING_SPLITS.
+TOTAL_MIXED_CEILING = 14
 
 #: What the surface measured BEFORE the per-field split, recorded so the ratchet
 #: has a baseline the repository can witness.
@@ -251,6 +260,18 @@ MIXED_CEILING_CORRECTIONS = {
     "system.head": "#997 — DEONTIC -> MIXED; merge-up merged the varied class into a held one",
 }
 
+#: A SPLIT IS NOT NEW DEBT EITHER — and is not a correction, so it is named apart.
+#:
+#: #1366 item 12 cut the pipeline-position paragraph out of the mixed
+#: ``pdma_ethical.system_guidance_header`` scalar into a field of its own (a
+#: single-class block). What is left of that ONE scalar now reports as two
+#: blocks, the header and its ``_tail``: the mixed key count went up by one
+#: while the mixed BYTES went down by the paragraph. Each entry names the parked
+#: key its bytes came from, and that key must still be parked.
+MIXED_CEILING_SPLITS = {
+    "pdma_ethical.system_guidance_header_tail": "pdma_ethical.system_guidance_header",
+}
+
 
 def test_the_mixed_ratchet_only_turns_one_way() -> None:
     """Bound the SUM, not each register — see TOTAL_MIXED_CEILING."""
@@ -260,10 +281,12 @@ def test_the_mixed_ratchet_only_turns_one_way() -> None:
         f"IRREDUCIBLE_EXEMPLARS={len(IRREDUCIBLE_EXEMPLARS)}) — split it, don't move it "
         f"between registers"
     )
-    assert len(EXPECTED_MIXED) <= 7 + len(MIXED_CEILING_CORRECTIONS), (
+    assert len(EXPECTED_MIXED) <= 7 + len(MIXED_CEILING_CORRECTIONS) + len(MIXED_CEILING_SPLITS), (
         f"EXPECTED_MIXED grew to {len(EXPECTED_MIXED)} — split it, don't park it "
-        f"(corrections allowed: {sorted(MIXED_CEILING_CORRECTIONS)})"
+        f"(corrections allowed: {sorted(MIXED_CEILING_CORRECTIONS)}; splits: {sorted(MIXED_CEILING_SPLITS)})"
     )
+    for split, parent in MIXED_CEILING_SPLITS.items():
+        assert split in EXPECTED_MIXED and parent in EXPECTED_MIXED, (split, parent)
     assert all(v.startswith("CIRISAgent#") for v in EXPECTED_MIXED.values())
 
 
@@ -272,7 +295,7 @@ def test_the_ratchet_records_where_it_started() -> None:
     travel against something other than a commit message."""
     assert MIXED_BEFORE_THE_SPLIT == 48
     # every ceiling raise is accounted for by a named correction
-    assert TOTAL_MIXED_CEILING == 12 + len(MIXED_CEILING_CORRECTIONS), (
+    assert TOTAL_MIXED_CEILING == 12 + len(MIXED_CEILING_CORRECTIONS) + len(MIXED_CEILING_SPLITS), (
         "the mixed ceiling moved without a named correction — new debt must shrink the "
         "surface or stay out of it, only a mislabel fix may raise the bound"
     )

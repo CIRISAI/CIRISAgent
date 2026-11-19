@@ -182,11 +182,13 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         )
 
     def _system_segments(
-        self, system_message: str, agent_identity: Any, sender: Optional["VerifiedSender"], prefix: str
+        self, system_message: Any, agent_identity: Any, sender: Optional["VerifiedSender"], prefix: str
     ) -> "Segments":
         """The system message: identity (+ amendments), the VERIFIED SENDER block, the stage's own instruction.
 
         The bytes of ``format_system_prompt_blocks(identity + sender, "", "", "", None, system_message)``.
+        ``system_message`` is the instruction's text (one segment) or its segments, joined with no glue (the
+        instruction split around its pipeline-position segment, #1366 item 12).
         """
         from ciris_engine.logic.prompt_assembly.segmenting import (
             identity_segments,
@@ -202,7 +204,10 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
         parts = [segs]
         if sender is not None:
             parts.append(sender_block_segments(sender, include_display_name=True, language=language)[0])
-        parts.append([segment(f"{prefix}:system", SegmentKind.STAGE_INSTRUCTION, system_message)])
+        if isinstance(system_message, str):
+            parts.append([segment(f"{prefix}:system", SegmentKind.STAGE_INSTRUCTION, system_message)])
+        else:
+            parts.append(list(system_message))
         segments: List[Any] = []
         layout: List[Any] = []
         for block in parts:
@@ -487,8 +492,14 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         # The agent's identity, approved amendments included: the same block every DMA reads
         # (formatters.identity.identity_block_of). Eric, 2026-11-13. The verified sender beside it (#1366 item 5).
-        system_message = self.prompt_loader.get_system_message(self.prompt_template_data, tool_name=tool_name)
-        builder.message("system", *self._system_segments(system_message, agent_identity, sender, "instr"))
+        # The pipeline position is its own segment, from the engine template's field (#1366 item 12).
+        instruction, _ = split_template(
+            lambda **values: self.prompt_loader.get_system_message(self.prompt_template_data, **values),
+            self._position_slot(),
+            prefix="instr:system",
+            plain={"tool_name": tool_name},
+        )
+        builder.message("system", *self._system_segments(instruction, agent_identity, sender, "instr"))
 
         # Format tool documentation
         tool_documentation = self._format_tool_documentation(tool_info)
@@ -822,7 +833,7 @@ class TSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult], 
 
         system_segments, system_items = split_template(
             lambda **values: self.prompt_loader.get_system_message(self.prompt_template_data, **values),
-            {"tool_name": requested(0)},
+            {"tool_name": requested(0), **self._position_slot()},
             prefix="instr:system",
         )
         segs, its = self._identity_and_sender(agent_identity, sender)
@@ -909,6 +920,12 @@ Return your response as a FLAT JSON object."""
         return builder.assemble(
             PromptStage.TSASPDMA, self._assembly_call(original_thought, context, agent_identity, retry=False)
         )
+
+    def _position_slot(self) -> Dict[str, Any]:
+        """The engine template's pipeline-position paragraph as its own segment (#1366 item 12), as a slot."""
+        from ciris_engine.logic.prompt_assembly.segmenting import pipeline_position_slot
+
+        return pipeline_position_slot(self.prompt_loader.pipeline_position(self._prompt_template_name))
 
     def _identity_and_sender(self, agent_identity: Any, sender: Optional["VerifiedSender"]) -> "Segments":
         """Identity (+ amendments) then the VERIFIED SENDER block, joined by a blank line ("" when neither)."""

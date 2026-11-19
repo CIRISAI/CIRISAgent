@@ -2,7 +2,7 @@
 # Semantic implementation of Coherence Collapse Analysis (CCA) principles
 
 component_name: idma
-description: "Intuition DMA - applies CCA k_eff formula and phase classification"
+description: "Intuition DMA - hutumia fomula ya CCA k_eff na uainishaji wa awamu"
 version: "1.1"
 
 # Include the CIRIS Accord as context

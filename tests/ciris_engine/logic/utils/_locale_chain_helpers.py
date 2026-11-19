@@ -525,8 +525,15 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
         data = json.loads(LOC_JSON.read_text(encoding="utf-8"))
         cons = data.get("conscience", {})
         retry_keys = [k for k in cons if k.startswith("retry_")]
-        assert len(retry_keys) == 9, (
-            f"expected 9 conscience.retry_* keys for {locale}, found {len(retry_keys)}"
+        # The set of retry strings is whatever English defines (#1366 added the
+        # objection-type and veto-record strings); every one must be present.
+        en_cons = json.loads(
+            (REPO_ROOT / "ciris_engine" / "data" / "localized" / "en.json").read_text(encoding="utf-8")
+        ).get("conscience", {})
+        en_retry = sorted(k for k in en_cons if k.startswith("retry_"))
+        assert sorted(retry_keys) == en_retry, (
+            f"conscience.retry_* keys for {locale} differ from English: "
+            f"missing {sorted(set(en_retry) - set(retry_keys))}, extra {sorted(set(retry_keys) - set(en_retry))}"
         )
         violations = []
         for key in retry_keys:
@@ -574,7 +581,14 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
             base = _base_file_for(fp)
             if base is None:
                 pytest.skip(f"no base file for {fp.name} (not in canonical prompt set)")
-            base_text = base.read_text(encoding="utf-8")
+            # Count the English verbs only in the fields this locale carries: a
+            # field the locale file lacks falls back to the English one at load
+            # time, verbs and all, so it cannot lose a verb. (#1366 added English
+            # fields such as stage_contract and pipeline_position before any
+            # locale translated them.)
+            base_doc = yaml.safe_load(base.read_text(encoding="utf-8")) or {}
+            loc_doc = yaml.safe_load(fp.read_text(encoding="utf-8")) or {}
+            base_text = "\n".join(str(v) for k, v in base_doc.items() if k in loc_doc)
             loc_text = fp.read_text(encoding="utf-8")
             violations = []
             for tok in ACTION_VERB_TOKENS:
@@ -604,7 +618,11 @@ def register_locale_tests(globals_dict: Dict[str, Any], locale: str) -> None:
             base = _base_file_for(fp)
             if base is None:
                 pytest.skip(f"no base file for {fp.name}")
-            base_text = base.read_text(encoding="utf-8")
+            # English fields the locale lacks fall back to English at load time,
+            # identifiers intact; count only the fields this locale carries.
+            base_doc = yaml.safe_load(base.read_text(encoding="utf-8")) or {}
+            loc_doc = yaml.safe_load(fp.read_text(encoding="utf-8")) or {}
+            base_text = "\n".join(str(v) for k, v in base_doc.items() if k in loc_doc)
             loc_text = fp.read_text(encoding="utf-8")
             violations = []
             for tok in SOFT_IDENTITY_TOKENS:

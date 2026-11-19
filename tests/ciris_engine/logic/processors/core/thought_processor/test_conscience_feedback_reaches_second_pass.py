@@ -137,11 +137,15 @@ VERBS = [
 async def _run(verb: HandlerActionType, feedback: Optional[Dict[str, Any]]) -> str:
     sent: List[List[Dict[str, Any]]] = []
     proc = _processor(sent)
+    # A real thought's context carries the agent identity; DSASPDMA requires it (#1366).
+    context = SimpleNamespace(
+        system_snapshot={"agent_identity": {"agent_id": "ally", "description": "Test agent", "role": "Assistant"}}
+    )
     with patch("ciris_engine.logic.dma.dma_executor.persistence"):
         if feedback is None:
-            await proc._run_verb_second_pass(_item(), _selected(verb), None)
+            await proc._run_verb_second_pass(_item(), _selected(verb), context)
         else:
-            await proc._run_verb_second_pass(_item(), _selected(verb), None, conscience_feedback=feedback)
+            await proc._run_verb_second_pass(_item(), _selected(verb), context, conscience_feedback=feedback)
     assert len(sent) == 1, f"{verb.value}: expected one second-pass LLM call, got {len(sent)}"
     return _user_prompt(sent[0])
 

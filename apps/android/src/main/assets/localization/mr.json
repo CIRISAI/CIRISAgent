@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "विवेक CONCERN: लक्षात ठेवा {scope} - ensure this is appropriate",
     "ponder_concern_forget_scope": "विवेक CONCERN: विसरा {scope} - this कृतीion is irreversible",
     "ponder_concern_high_stakes": "विवेक CONCERN: High-stakes situation detected - careful consideration required",
-    "retry_header": "**विवेक ओव्हरराईड मार्गदर्शन:**",
+    "retry_header": "**विवेक व्हेटोनंतरचे मार्गदर्शन:**",
     "retry_intro": "आपल्या पूर्वीच्या प्रयत्नाला {action} करण्यासाठी नाकारा दिला गेला कारण: {reason}",
     "retry_alternatives_header": "IRIS-E द्वारे मणिभूत केलेले पर्याय (पुन्हा SPEAK केल्यास धुरी लक्ष्य म्हणून वापरा):",
     "retry_uncertainties_label": "संशयितता",

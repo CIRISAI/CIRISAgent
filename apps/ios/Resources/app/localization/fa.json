@@ -194,7 +194,7 @@
     "ponder_concern_memorize_scope": "هشدار وجدان: به خاطر بسپارید {scope} — مطمئن شوید این مناسب است",
     "ponder_concern_forget_scope": "هشدار وجدان: فراموش کنید {scope} — این عمل برگشت‌ناپذیر است",
     "ponder_concern_high_stakes": "هشدار وجدان: موقعیت پُرخطر شناسایی شد — دقت و تأمل بیشتری لازم است",
-    "retry_header": "**راهنمایی دربارهٔ لغو توسط وجدان:**",
+    "retry_header": "**راهنمایی پس از وتوی وجدان:**",
     "retry_intro": "تلاش قبلی شما برای {action} رد شد زیرا: {reason}",
     "retry_alternatives_header": "گزینه‌های برشمارده شده توسط IRIS-E (اگر دوباره صحبت کنید، از آن‌ها به عنوان جهت محوری استفاده کنید):",
     "retry_uncertainties_label": "عدم‌قطعیت‌ها",

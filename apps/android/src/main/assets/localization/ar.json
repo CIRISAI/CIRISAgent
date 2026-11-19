@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "تنبيه الضمير: MEMORIZE {scope} — تأكد من ملاءمة هذا الإجراء",
     "ponder_concern_forget_scope": "تنبيه الضمير: FORGET {scope} — هذا الإجراء لا رجعة فيه",
     "ponder_concern_high_stakes": "تنبيه الضمير: رُصد موقف بالغ الأهمية — يستلزم تمعّناً دقيقاً",
-    "retry_header": "**توجيه تجاوز الضمير:**",
+    "retry_header": "**التوجيه بعد اعتراض الضمير:**",
     "retry_intro": "تم رفض محاولتك السابقة لـ {action} لأن: {reason}",
     "retry_alternatives_header": "البدائل التي عددتها IRIS-E (استخدمها كنقاط ارتكاز إذا أعدت SPEAK):",
     "retry_uncertainties_label": "عدم اليقين",

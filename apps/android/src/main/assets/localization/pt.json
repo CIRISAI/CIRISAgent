@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "PREOCUPAÇÃO DE CONSCIÊNCIA: MEMORIZAR {scope} — certifique-se de que isso é apropriado",
     "ponder_concern_forget_scope": "PREOCUPAÇÃO DE CONSCIÊNCIA: ESQUECER {scope} — esta ação é irreversível",
     "ponder_concern_high_stakes": "PREOCUPAÇÃO DE CONSCIÊNCIA: Situação de alto risco detectada — consideração cuidadosa necessária",
-    "retry_header": "**ORIENTAÇÃO DE SUBSTITUIÇÃO DA CONSCIÊNCIA:**",
+    "retry_header": "**ORIENTAÇÃO APÓS UM VETO DE CONSCIÊNCIA:**",
     "retry_intro": "Sua tentativa anterior de {action} foi rejeitada porque: {reason}",
     "retry_alternatives_header": "Alternativas enumeradas por IRIS-E (use como alvos de pivô se você re-FALAR):",
     "retry_uncertainties_label": "incertezas",

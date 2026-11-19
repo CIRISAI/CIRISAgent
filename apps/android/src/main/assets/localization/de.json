@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "GEWISSENSBEDENKEN: MERKEN {scope} – stellen Sie sicher, dass dies angemessen ist",
     "ponder_concern_forget_scope": "GEWISSENSBEDENKEN: VERGESSEN {scope} – diese Aktion ist unwiderruflich",
     "ponder_concern_high_stakes": "GEWISSENSBEDENKEN: Situation mit hohem Risiko erkannt – sorgfältige Abwägung erforderlich",
-    "retry_header": "**LEITLINIEN ZUR GEWISSENSÜBERSCHREIBUNG:**",
+    "retry_header": "**ANLEITUNG NACH EINEM GEWISSENS-VETO:**",
     "retry_intro": "Ihr früherer Versuch, {action} auszuführen, wurde abgelehnt, da: {reason}",
     "retry_alternatives_header": "Alternativen, die IRIS-E aufgezählt hat (nutzen Sie diese als Pivot-Ziele, wenn Sie erneut SPRECHEN):",
     "retry_objection_justification": "Dies ist ein JUSTIFICATION-Einwand: Das Gewissen {conscience} hat die angegebene Begründung als unzureichend eingestuft. Sie können die Aktion beibehalten, wenn Sie eine bessere, auf Verifizierbarem beruhende Begründung liefern; sie wird erneut überprüft.",

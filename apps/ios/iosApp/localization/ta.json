@@ -4195,7 +4195,7 @@
     "ponder_concern_memorize_scope": "CONSCIENCE CONCERN: நினைவில் வை {scope} - ensure இந்த is பொருத்தமான",
     "ponder_concern_forget_scope": "CONSCIENCE CONCERN: மற {scope} - இந்த செயல் is irreversible",
     "ponder_concern_high_stakes": "CONSCIENCE CONCERN: High-stakes situation detected - careful பரிசீலிக்கவும்ation தேவை",
-    "retry_header": "**மனசாட்சி மேலெழுதல் வழிகாட்டல்:**",
+    "retry_header": "**மனசாட்சி வீட்டோவுக்குப் பிறகு வழிகாட்டுதல்:**",
     "retry_intro": "உங்கள் முந்தைய {action} முயற்சி நிராகரிக்கப்பட்டது: {reason}",
     "retry_alternatives_header": "IRIS-E கணிக்கப்பட்ட மாற்றுகள் (நீங்கள் re-SPEAK செய்தால் மைய இலக்குகளாகப் பயன்படுத்தவும்):",
     "retry_uncertainties_label": "உறுதியற்றவை",

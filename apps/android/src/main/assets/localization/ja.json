@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "良心の懸念：MEMORIZE {scope} — この操作が適切かどうか確認してください",
     "ponder_concern_forget_scope": "良心の懸念：FORGET {scope} — この操作は取り消せません",
     "ponder_concern_high_stakes": "良心の懸念：重大な状況が検出されました — 慎重な検討が必要です",
-    "retry_header": "**良心による上書きガイダンス：**",
+    "retry_header": "**良心による拒否後のガイダンス：**",
     "retry_intro": "{action}の前回の試みが拒否されました。理由: {reason}",
     "retry_alternatives_header": "IRIS-Eが列挙した代替案(SPEAKを再度選択する場合はピボットターゲットとして使用):",
     "retry_uncertainties_label": "不確実性",

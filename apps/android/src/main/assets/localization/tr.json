@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "VİCDAN UYARISI: BELLEKLE {scope} — bunun uygun olduğundan emin olun",
     "ponder_concern_forget_scope": "VİCDAN UYARISI: UNUT {scope} — bu eylem geri alınamaz",
     "ponder_concern_high_stakes": "VİCDAN UYARISI: Yüksek riskli durum tespit edildi — dikkatli değerlendirme gerekli",
-    "retry_header": "**VİCDAN GEÇERSİZ KILMA REHBERLİĞİ:**",
+    "retry_header": "**VİCDAN VETOSUNDAN SONRA REHBERLİK:**",
     "retry_intro": "{action} için önceki denemeniz reddedildi çünkü: {reason}",
     "retry_alternatives_header": "IRIS-E tarafından sıralanan alternatifler (SPEAK'i yeniden seçerseniz dönüş noktası hedefi olarak kullanın):",
     "retry_uncertainties_label": "belirsizlikler",

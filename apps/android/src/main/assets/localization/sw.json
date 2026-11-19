@@ -188,7 +188,7 @@
     "ponder_concern_memorize_scope": "WASIWASI WA DHAMIRI: KUMBUKA {scope} - hakikisha hii ni sahihi",
     "ponder_concern_forget_scope": "WASIWASI WA DHAMIRI: SAHAU {scope} - kitendo hiki hakiwezi kutenduliwa",
     "ponder_concern_high_stakes": "WASIWASI WA DHAMIRI: Hali yenye hatari kubwa imegunduliwa - tafakuri ya makini inahitajika",
-    "retry_header": "**MWONGOZO WA KUBATILISHA DHAMIRI:**",
+    "retry_header": "**MWONGOZO BAADA YA MABATILISHO YA DHAMIRI:**",
     "retry_intro": "Jaribio lako la hapo linalotaka {action} lilibadilishwa kwa sababu: {reason}",
     "retry_alternatives_header": "Njia mbadala IRIS-E iliyoandika (tumia kama lengo la mvuto ikiwa unarudi SPEAK):",
     "retry_objection_justification": "Hii ni pingamizi la UHALALISHAJI: dhamiri ya {conscience} imeona sababu iliyotolewa haitoshi. Unaweza kuendelea na hatua hiyo ikiwa utatoa sababu bora zaidi inayotegemea kile unachoweza kuthibitisha; itapitiwa tena.",

@@ -52,3 +52,4 @@ context_integration: |
   اصل سوچ: {original_thought_content}
 
 accord_header: true  # Use ACCORD_TEXT as system message
+pipeline_position: "**پائپ لائن پوزیشن**: آپ پہلے چلتے ہیں، PDMA اور DSDMA کے ساتھ۔ اس کے بعد IDMA تینوں کا جائزہ لیتا ہے، عمل کا انتخاب عمل کو منتخب کرتا ہے، اور ضمائر اس کا جائزہ لیتے ہیں۔"

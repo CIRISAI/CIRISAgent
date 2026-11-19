@@ -270,3 +270,14 @@ def test_an_av_stream_fits_the_legs_frame_budget() -> None:
     half, calls = _av_half(budget=4096)
     half.av_call("c")
     assert calls[2][2]["frame_bytes"] == 256  # type: ignore[index]
+
+
+def test_av_summary_reads_the_leg_from_the_mid_call_sample() -> None:
+    """After the peer leaves its publisher's row reads leg "none"; the mid-call sample names the real leg."""
+    from tools.qa_runner.nat_peer import av_summary
+
+    at_stop = {"received": {"frames": 1800}, "call": {"streams": [{"leg": "none", "parent_changes": 0}]}}
+    mid = {"call": {"streams": [{"leg": "direct", "parent_changes": 0}]}}
+    assert "streams: direct(parent_changes=0)" in av_summary(at_stop, 1800, streams_from=mid)
+    assert "streams: none(parent_changes=0)" in av_summary(at_stop, 1800)
+    assert "streams: none(parent_changes=0)" in av_summary(at_stop, 1800, streams_from={})

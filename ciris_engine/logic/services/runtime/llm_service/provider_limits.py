@@ -30,10 +30,8 @@ tokens (kept at 8192 by ruling; the retry and pause below absorb the refusals).
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import random
-import secrets
+import threading
 from email.utils import parsedate_to_datetime
 from enum import Enum
 from typing import Mapping, Optional
@@ -233,27 +231,30 @@ def provider_limit_fault(error: BaseException) -> Optional[ProviderLimitFault]:
 
 
 def budget_identity(base_url: Optional[str], api_key: Optional[str]) -> tuple[str, str]:
-    """Who owns an in-flight budget: (base URL, per-process HMAC fingerprint of the API key).
+    """Who owns an in-flight budget: (base URL, per-process ordinal of the API key).
 
     OpenRouter's in-flight budget belongs to the account/key, not to one
     registered service: replicas and differently-named services with the same
     key share it. The key itself is never returned, logged or stored -- only
-    16 hex digits of a per-process HMAC, enough to tell keys apart.
+    16 hex digits of a per-process ordinal, enough to tell keys apart.
     """
     url = (base_url or "").strip().rstrip("/").lower()
     key = (api_key or "").strip()
     return (url, _key_fingerprint(key) if key else "")
 
 
-#: Per-process HMAC key. The fingerprint only has to tell keys apart inside this
-#: process (it keys the LLM bus's in-flight pause), so it never needs to be stable
-#: across processes, and nothing outside this process can recompute it.
-_FINGERPRINT_KEY = secrets.token_bytes(32)
+#: Per-process key registry. The fingerprint only has to tell keys apart inside
+#: this process (it keys the LLM bus's in-flight pause), so each distinct key gets
+#: the next ordinal: nothing derived from the key's bytes ever leaves this map.
+_KEY_ORDINALS: dict[str, int] = {}
+_KEY_ORDINALS_LOCK = threading.Lock()
 
 
 def _key_fingerprint(key: str) -> str:
-    """16 hex digits of HMAC-SHA256 over the API key under a per-process random key."""
-    return hmac.new(_FINGERPRINT_KEY, key.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+    """16 hex digits naming this API key's ordinal in this process."""
+    with _KEY_ORDINALS_LOCK:
+        ordinal = _KEY_ORDINALS.setdefault(key, len(_KEY_ORDINALS) + 1)
+    return f"{ordinal:016x}"
 
 
 def in_flight_backoff_s(attempt: int, retry_after_s: Optional[float]) -> float:

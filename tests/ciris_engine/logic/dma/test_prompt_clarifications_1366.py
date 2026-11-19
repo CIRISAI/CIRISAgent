@@ -35,13 +35,20 @@ def _conscience(name: str) -> str:
     return _flat(data["system_prompt"])
 
 
+def _aspdma_contract() -> str:
+    """ASPDMA's engine contract. It lives in `stage_contract`, not `system_header`: every shipped agent template
+    replaces `system_header`, so text there never reached a real agent (#1366)."""
+    text: str = _dma("action_selection_pdma")["stage_contract"]
+    return text
+
+
 def _en() -> Dict[str, Any]:
     data: Dict[str, Any] = json.loads((ROOT / "data" / "localized" / "en.json").read_text(encoding="utf-8"))
     return data
 
 
 ROLE_TEXTS = {
-    "aspdma": lambda: _dma("action_selection_pdma")["system_header"],
+    "aspdma": _aspdma_contract,
     "tsaspdma": lambda: _dma("tsaspdma")["system_guidance_header"],
     "pdma": lambda: _dma("pdma_ethical")["system_guidance_header"],
     "idma": lambda: _dma("idma")["system_guidance_header"],
@@ -62,13 +69,13 @@ def test_item11_roles_are_stated(stage: str) -> None:
 
 
 def test_item11_aspdma_offers_to_defer_for_signing() -> None:
-    assert "offer to DEFER so a Wise Authority can sign it" in _flat(_dma("action_selection_pdma")["system_header"])
+    assert "offer to DEFER so a Wise Authority can sign it" in _flat(_aspdma_contract())
 
 
 # ----------------------------------------------------------------- item 12: pipeline position
 
 PIPELINE_TEXTS = {
-    "aspdma": lambda: _dma("action_selection_pdma")["system_header"],
+    "aspdma": _aspdma_contract,
     "tsaspdma": lambda: _dma("tsaspdma")["system_guidance_header"],
     "pdma": lambda: _dma("pdma_ethical")["system_guidance_header"],
     "csdma": lambda: _dma("csdma_common_sense")["system_guidance_header"],
@@ -114,7 +121,7 @@ def test_item12_non_ablated_judges_are_not_told_they_are_blind(name: str) -> Non
 
 def test_item13_policy_is_not_capability() -> None:
     aspdma = _dma("action_selection_pdma")
-    assert "It does not take away an ability or change who you are" in _flat(aspdma["system_header"])
+    assert "It does not take away an ability or change who you are" in _flat(aspdma["stage_contract"])
     assert "it does not mean the ability is missing" in _flat(aspdma["tool_selection_guidance"])
     tsaspdma = _flat(_dma("tsaspdma")["system_guidance_header"])
     assert "a deployment rule that restricts this use is not one" in tsaspdma
@@ -187,7 +194,9 @@ def test_item16_aspdma_is_consistent_with_itself() -> None:
     assert "All fields specified in the schema for your response are MANDATORY" not in integration
     assert '"selected_action": "speak"' not in integration and '"selected_action": "SPEAK"' in integration
     assert "INFORMATIONAL CONTEXT" not in integration
-    assert "Unless the objection lets you keep the action with a better justification" in header
+    assert "Unless the objection lets you keep the action with a better justification" in _flat(
+        aspdma["stage_contract"]
+    )
 
 
 def test_item16_tsaspdma_fills_the_parameters() -> None:
@@ -211,7 +220,7 @@ def test_item16_the_stale_format_retry_block_is_gone() -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        lambda: _dma("action_selection_pdma")["system_header"],
+        _aspdma_contract,
         lambda: _dma("tsaspdma")["system_guidance_header"],
     ],
     ids=["aspdma", "tsaspdma"],

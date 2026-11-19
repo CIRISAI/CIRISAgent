@@ -192,12 +192,6 @@ DEFAULT_TEMPLATE = """{system_header}
 {closing_reminder}"""
 
 
-def _engine_locale() -> Optional[str]:
-    """Locale of the engine ASPDMA template served for this thought's language."""
-    served = get_prompt_loader(language=current_thought_language()).load_prompt_template("action_selection_pdma")
-    return served.served_language if isinstance(served.served_language, str) else None
-
-
 def _merged_locale(locales: List[Optional[str]], language: str) -> Optional[str]:
     """The locale of a piece joined from fields served in ``locales``: their one locale, or, when they differ, the
     one that is not the thought's language (so the piece is listed as a fallback), else unknown."""
@@ -325,6 +319,31 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         merged.update(self._caller_overrides)
         return merged
 
+    def _prompt_locale(self, key: str) -> Optional[str]:
+        """The locale ``self.prompts[key]`` was served in, by the same per-key merge (FSD §8.1).
+
+        A caller override is the agent's own text (unknown); in a non-English thought, the localized copy's
+        locale when it supplies the key, else ``en`` (the key kept the English root template's text).
+        """
+        if key in self._caller_overrides:
+            return None
+        base = self._file_prompts
+        if isinstance(base, PromptCollection):
+            return base.served_language
+        from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE
+
+        language = current_thought_language()
+        if language == DEFAULT_LANGUAGE:
+            return DEFAULT_LANGUAGE
+        try:
+            localized = get_prompt_loader(language=language).load_prompt_template("action_selection_pdma")
+        except (FileNotFoundError, ValueError):
+            return DEFAULT_LANGUAGE
+        value = localized.get_prompt(key)
+        if isinstance(value, str) and value:
+            return localized.served_language
+        return DEFAULT_LANGUAGE
+
     @prompts.setter
     def prompts(self, value: Union[Dict[str, str], PromptCollection]) -> None:
         self._file_prompts = value
@@ -448,7 +467,8 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             typed,
             prefix="instr:user",
             plain=plain,
-            locale=self.served_locale,
+            # The collection render_main_user reads (ASPDMA has no prompt_template_data of its own).
+            locale=parts.template_data.served_language if isinstance(parts.template_data, PromptCollection) else None,
         )
         segments, layout = _split_sender(segments, layout, parts.sender, current_thought_language())
 
@@ -626,7 +646,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         """The ASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
         from ciris_engine.logic.formatters.crisis_resources import get_crisis_resources_system_block
         from ciris_engine.logic.prompt_assembly.segmenting import PromptBuilder
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
         from ciris_engine.schemas.context.prompt_provenance import PromptStage
 
         # #1007 — SYSTEM FIRST, matching the order the messages are emitted in.
@@ -672,7 +692,7 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # English crisis numbers here while coherence judged the reply in bn
         # (2.18.0 bn battery, q04/q06/q07).
         _lang = self._working_language(input_data.original_thought, input_data.processing_context)
-        builder.single("system", _segment("instr:language", "stage_instruction", get_language_guidance(_lang) or ""))
+        builder.single("system", _segment("instr:language", "stage_instruction", get_language_guidance(_lang) or "").model_copy(update={"locale": language_guidance_locale(_lang)}))
         # Crisis resources ride directly after language guidance (#1248) — the
         # locale's verified numbers, from the one composer every DMA shares.
         builder.single("system", _segment("instr:crisis", "stage_instruction", get_crisis_resources_system_block(_lang) or ""))
@@ -847,13 +867,12 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # header; see `_stage_contract` for why it is not read from self.prompts.
         stage_contract, contract_locale = _stage_contract_served()
         pipeline_position, position_locale = _pipeline_position_served()
-        engine_locale = _engine_locale()
         field_locales = {
-            "system_header": engine_locale,
+            "system_header": self._prompt_locale("system_header"),
             "pipeline_position": position_locale,
             "stage_contract": contract_locale,
-            "decision_format": engine_locale,
-            "closing_reminder": engine_locale,
+            "decision_format": self._prompt_locale("decision_format"),
+            "closing_reminder": self._prompt_locale("closing_reminder"),
         }
 
         # #1007 — render each field through `safe_format` so the composer's

@@ -261,7 +261,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             split_template,
             stripped_ends,
         )
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
         from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
         current_params = aspdma_result.action_parameters
@@ -273,7 +273,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         builder.single("system", segment("accord", SegmentKind.ACCORD, get_localized_accord_text(language) or ""))
         # Per-language guidance — empty for most languages, populated for locales where systematic terminology
         # gaps were observed (am as of 2.7.6).
-        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or ""))
+        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or "", locale=language_guidance_locale(language)))
         # Crisis resources ride directly after language guidance (#1248).
         builder.single(
             "system", segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or "")

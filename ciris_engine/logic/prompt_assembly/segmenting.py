@@ -465,7 +465,16 @@ def round1_preamble(builder: "PromptBuilder", language: str, accord_mode: str) -
     from ciris_engine.logic.utils.localization import get_language_guidance, get_prohibition_guidance
 
     builder.single("system", segment("accord", SegmentKind.ACCORD, get_accord_text(accord_mode) or ""))
-    builder.single("system", _instruction("instr:language", get_language_guidance(language) or ""))
+    # Locale (FSD §8.1): the language guidance reports the locale it served; the crisis and prohibition blocks
+    # cannot (mixed registries and English framing defaults), so they stay unstated rather than claim one.
+    from ciris_engine.logic.utils.localization import language_guidance_locale
+
+    builder.single(
+        "system",
+        _instruction(
+            "instr:language", get_language_guidance(language) or "", locale=language_guidance_locale(language)
+        ),
+    )
     builder.single("system", _instruction("instr:crisis", get_crisis_resources_system_block(language) or ""))
     builder.single("system", _instruction("instr:prohibition", get_prohibition_guidance(language) or ""))
 

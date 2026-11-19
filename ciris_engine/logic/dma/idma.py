@@ -143,7 +143,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
             stripped_ends,
             thought_request,
         )
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
         from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
 
         language = self.prompt_loader.language
@@ -152,7 +152,7 @@ class IDMAEvaluator(BaseDMA[ProcessingQueueItem, IDMAResult], IDMAProtocol):
         # resources directly after it (#1248), from the one composer every DMA shares.
         accord_mode = self.prompt_loader.get_accord_mode(self.prompt_template_data)
         builder.single("system", segment("accord", SegmentKind.ACCORD, get_accord_text(accord_mode) or ""))
-        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or ""))
+        builder.single("system", segment("instr:language", SegmentKind.STAGE_INSTRUCTION, get_language_guidance(language) or "", locale=language_guidance_locale(language)))
         builder.single(
             "system",
             segment("instr:crisis", SegmentKind.STAGE_INSTRUCTION, get_crisis_resources_system_block(language) or ""),

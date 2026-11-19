@@ -393,13 +393,13 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             split_template,
             stripped_ends,
         )
-        from ciris_engine.logic.utils.localization import get_language_guidance
+        from ciris_engine.logic.utils.localization import get_language_guidance, language_guidance_locale
 
         language = self.prompt_loader.language
         builder = PromptBuilder()
         # The frame every memory second pass shares, so the three cannot drift apart on what precedes their guide.
         builder.single("system", _seg("accord", "accord", get_localized_accord_text(language) or ""))
-        builder.single("system", _seg("instr:language", "stage_instruction", get_language_guidance(language) or ""))
+        builder.single("system", _seg("instr:language", "stage_instruction", get_language_guidance(language) or "").model_copy(update={"locale": language_guidance_locale(language)}))
         # Crisis resources ride directly after language guidance (#1248) — the
         # locale's verified numbers, from the one composer every DMA shares.
         builder.single(

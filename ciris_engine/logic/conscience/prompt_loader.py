@@ -209,6 +209,11 @@ class ConsciencePromptLoader:
                     setattr(prompts, field, "")
                     applied.append(field)
                 if applied:
+                    # Replaced fields are not the file's text: no served locale, and a replaced system prompt is
+                    # no longer the polyglot one.
+                    prompts.served_language = None
+                    if "system_prompt" in applied:
+                        prompts.polyglot_system_prompt = False
                     logger.warning(
                         "[RESEARCH-OVERRIDES] conscience %s: replaced %s",
                         conscience_type,
@@ -244,13 +249,13 @@ class ConsciencePromptLoader:
             position = english.load_prompts(conscience_type).pipeline_position
         return prompts.system_prompt, position or "", prompts.system_prompt_tail
 
-    def prompt_locales(self, conscience_type: str) -> Tuple[str, str, str]:
+    def prompt_locales(self, conscience_type: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """Locales of ``(system prompt, pipeline position, user template)`` as served (``mul`` for a polyglot one).
 
         The pipeline position is English when the locale's copy lacks it (``get_system_prompt_parts``).
         """
         prompts = self.load_prompts(conscience_type)
-        served = prompts.served_language or DEFAULT_LANGUAGE
+        served = prompts.served_language  # None: a research manifest replaced fields, locale unknown
         system = "mul" if prompts.polyglot_system_prompt else served
         position = served if prompts.pipeline_position is not None else DEFAULT_LANGUAGE
         return system, position, served

@@ -173,3 +173,58 @@ def test_aspdma_stage_contract_missing_from_a_locale_is_served_in_english_and_ma
     assert _merged_locale(["en", "ta", "ta"], "ta") == "en"
     assert _merged_locale(["ta", "ta"], "ta") == "ta"
     assert _merged_locale(["ta", None], "ta") is None
+
+
+# ------------------------------------------------------------------------------------------------ Codex P2s on #1368
+
+
+def test_conscience_research_overrides_clear_the_locale_and_the_polyglot_mark(monkeypatch):
+    from types import SimpleNamespace
+
+    from ciris_engine.logic.utils import research_overrides
+
+    fake = SimpleNamespace(
+        overrides=SimpleNamespace(conscience_prompt={"optimization_veto_conscience.system_prompt": "X"})
+    )
+    monkeypatch.setattr(research_overrides, "get_active_overrides", lambda: fake)
+    loader = ConsciencePromptLoader(language="en")
+    prompts = loader.load_prompts("optimization_veto_conscience")
+    assert prompts.system_prompt == "X"
+    assert prompts.served_language is None and prompts.polyglot_system_prompt is False
+    system, _, user = loader.prompt_locales("optimization_veto_conscience")
+    assert system is None and user is None  # unknown, never "mul" or the requested language
+
+
+def test_language_guidance_reports_the_locale_it_served(monkeypatch):
+    from ciris_engine.logic.utils import localization
+
+    assert localization.language_guidance_locale("am") == "am"
+    assert localization.language_guidance_locale("en") == "en"
+    # A locale with no guidance of its own is served the English block, and says so.
+    monkeypatch.setattr(localization, "language_guidance_parts", lambda code: [] if code == "am" else ["x"])
+    monkeypatch.setattr(localization, "get_string", lambda code, key, default="": "")
+    assert localization.language_guidance_locale("am") == "en"
+
+
+def test_aspdma_per_key_locale_falls_back_to_english_for_a_key_the_locale_lacks(tmp_path, monkeypatch):
+    import yaml
+    from unittest.mock import Mock
+
+    from ciris_engine.logic.dma.action_selection_pdma import ActionSelectionPDMAEvaluator, _merged_locale
+    from ciris_engine.logic.dma.prompt_loader import get_prompt_loader
+    from ciris_engine.logic.utils.localization import thought_language_scope
+
+    loader = get_prompt_loader(language="am")
+    data = yaml.safe_load((loader.localized_dir / "action_selection_pdma.yml").read_text(encoding="utf-8"))
+    data.pop("closing_reminder", None)
+    (tmp_path / "action_selection_pdma.yml").write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    monkeypatch.setattr(loader, "localized_dir", tmp_path)
+
+    registry = Mock()
+    registry.get_services_by_type.return_value = []
+    dma = ActionSelectionPDMAEvaluator(service_registry=registry)
+    with thought_language_scope("am"):
+        closing, decision = dma._prompt_locale("closing_reminder"), dma._prompt_locale("decision_format")
+    assert (closing, decision) == ("en", "am")
+    # after_position = stage_contract + decision_format + closing_reminder: listed as a fallback.
+    assert _merged_locale(["am", decision, closing], "am") == "en"

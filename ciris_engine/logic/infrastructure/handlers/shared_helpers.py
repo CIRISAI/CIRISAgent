@@ -542,9 +542,8 @@ def identity_objection_of(conscience_result: Any) -> Optional[Any]:
 
     if conscience_result is None or not getattr(conscience_result, "overridden", False):
         return None
-    vetoes = list(getattr(conscience_result, "vetoes", None) or [])
-    if vetoes:
-        veto = vetoes[0]
+    veto = next(iter(getattr(conscience_result, "vetoes", None) or []), None)
+    if veto is not None:
         return IdentityChangeObjection(conscience=veto.conscience, objection_type=veto.objection_type, reason=veto.reason)
     repeated = getattr(conscience_result, "repeated_veto_id", None)
     for entry in getattr(conscience_result, "veto_record", None) or []:

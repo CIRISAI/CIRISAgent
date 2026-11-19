@@ -130,8 +130,10 @@ def test_a_stub_line_carries_only_closed_vocabulary(asm):
     ],
 )
 def test_quote_share_is_a_deterministic_ngram_bucket(draft, expected):
-    assert quote_share(REQUEST, [draft]) == expected
-    assert quote_share(REQUEST, [draft]) == quote_share(REQUEST, [draft])
+    first = quote_share(REQUEST, [draft])
+    second = quote_share(REQUEST, [draft])
+    assert first == expected
+    assert second == first
 
 
 def test_draft_relation_follows_thought_linkage_and_overlap(asm):

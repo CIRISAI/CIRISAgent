@@ -145,7 +145,9 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
     "corpus": 4,
     # 45 -> 55 (#1027): RSASPDMA and FSASPDMA, the recall and forget second
     # passes, five model-facing fields each.
-    "dma_prompt": 55,
+    # 55 -> 56 (#1366): `action_selection_pdma.stage_contract`, the engine
+    # contract split out of the template-replaceable `system_header`.
+    "dma_prompt": 56,
     # 143 -> 155 (#1366): the verified-WA governance block (4) and the
     # verified-sender block (8).
     # 155 -> 166 (#1366 items 7-9, 14): the typed-veto retry wording (9) and
@@ -219,7 +221,9 @@ EXPECTED_KEY_COUNTS: Dict[str, int] = {
 #:   a ``domain``, so the field reaches no prompt at runtime.
 GATED_FLOOR: Dict[str, int] = {
     "corpus": 4,
-    "dma_prompt": 44,
+    # 44 -> 45 (#1366): `action_selection_pdma.stage_contract` composes into
+    # every ASPDMA step and the probe sees it move.
+    "dma_prompt": 45,
     # 71/75 -> 76/132 in 2.9.10. The count went UP and the FRACTION went down,
     # and that is the honest number: #991 wired 57 `prompts.formatters.*` keys
     # that had 1,653 translations and no reader, and the probe fixture cannot

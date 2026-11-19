@@ -462,6 +462,13 @@ BLOCK_ANNOTATIONS: Dict[str, BlockAnnotation] = {
     # Names the evaluator's job and its inputs, and instructs the pivot on a
     # conscience override ("treat those as concrete pivot targets"): PROCEDURAL.
     "action_selection_pdma.system_header": BlockAnnotation(_C.PROCEDURAL, None),
+    # #1366 — the engine-owned contract split out of `system_header` so a
+    # template header override cannot drop it. Its operative content is
+    # deontic: who may set a standing rule, that a chat rule is advisory until
+    # signed, that a "wa-" id confers nothing, and the MUST on a re-selected
+    # SPEAK after a veto. The pipeline-position paragraph is carved into its
+    # own `pipeline_position` segment by the assembler.
+    "action_selection_pdma.stage_contract": BlockAnnotation(_C.DEONTIC, None),
     # The JSON contract — flat fields, the action enum, which key each action
     # takes. Replacing it breaks parsing, which is the structural test verbatim.
     "action_selection_pdma.decision_format": BlockAnnotation(_C.STRUCTURAL, None),

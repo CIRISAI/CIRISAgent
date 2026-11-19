@@ -862,7 +862,9 @@ class TestDriftGuard:
         # the task's veto record block, eleven conscience.* keys.
         # 240 -> 241 (#1366, rc21 profile): prompts.identity_amendment_unverified,
         # the label an unverified amendment carries in the identity block.
-        assert sum(len(v) for v in skeleton["overrides"].values()) == 241
+        # 241 -> 242 (#1366): action_selection_pdma.stage_contract, the engine
+        # contract split out of the template-replaceable system_header.
+        assert sum(len(v) for v in skeleton["overrides"].values()) == 242
 
     def test_skeleton_markers_are_visible_if_left_unedited(self):
         """An unedited entry must show up in the prompt, not pass for content."""

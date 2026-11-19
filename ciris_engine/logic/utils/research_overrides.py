@@ -116,6 +116,8 @@ _POLYGLOT_DIR = _ENGINE_ROOT / "data" / "localized" / "polyglot"
 _DMA_PROMPT_TEXT_FIELDS: FrozenSet[str] = frozenset(
     {
         "system_header",
+        # #1366 — the ASPDMA engine contract split out of `system_header`.
+        "stage_contract",
         "system_guidance_header",
         "domain_principles",
         "evaluation_steps",

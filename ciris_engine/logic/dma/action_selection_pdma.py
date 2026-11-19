@@ -182,9 +182,31 @@ def _get_value(obj: Any, key: str, default: Any = None) -> Any:
 
 DEFAULT_TEMPLATE = """{system_header}
 
+{stage_contract}
+
 {decision_format}
 
 {closing_reminder}"""
+
+
+def _stage_contract() -> str:
+    """The engine-owned ASPDMA contract (#1366): pipeline position, roles and authority, conscience override.
+
+    Read from the engine's prompt template, NEVER from ``self.prompts``: that mapping carries the agent
+    template's ``action_selection_pdma_overrides``, and every shipped template replaces ``system_header``
+    there. The contract used to live inside ``system_header``, so no real agent ever saw it. No override
+    key can reach this field; a research manifest still can (``load_prompt_template`` applies it).
+
+    A locale whose copy lacks the field falls back to the English one, field by field, until the
+    translation lane adds it.
+    """
+    from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE, DMAPromptLoader
+
+    loader = get_prompt_loader()
+    text = loader.load_prompt_template("action_selection_pdma").stage_contract
+    if not text and loader.language != DEFAULT_LANGUAGE:
+        text = DMAPromptLoader(language=DEFAULT_LANGUAGE).load_prompt_template("action_selection_pdma").stage_contract
+    return text or ""
 
 
 class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMAResult], ActionSelectionDMAProtocol):
@@ -735,6 +757,10 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             )
             system_header = template_system_override
 
+        # #1366 — engine-owned, rendered right after the (possibly replaced)
+        # header; see `_stage_contract` for why it is not read from self.prompts.
+        stage_contract = _stage_contract()
+
         # #1007 — render each field through `safe_format` so the composer's
         # per-field seam exists here too.
         #
@@ -746,10 +772,12 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
         # regime varying axiotic on the `default` template: the shipped persona
         # could not be a campaign arm.
         #
-        # DEFAULT_TEMPLATE is "{system_header}\n\n{decision_format}\n\n
-        # {closing_reminder}", so joining the three renders on "\n\n" is the
-        # same bytes — proven by the 12 goldens, which is why they are the gate
-        # for this change rather than a formality.
+        # DEFAULT_TEMPLATE is "{system_header}\n\n{stage_contract}\n\n
+        # {decision_format}\n\n{closing_reminder}", so joining the renders on
+        # "\n\n" is the same bytes — proven by the goldens, which is why they
+        # are the gate for this change rather than a formality. #1366 split
+        # `stage_contract` out of `system_header` at a blank line, so with no
+        # override the message bytes are unchanged.
         from ciris_engine.logic.dma.prompt_loader import safe_format
 
         _lang = get_prompt_loader().language
@@ -757,9 +785,11 @@ class ActionSelectionPDMAEvaluator(BaseDMA[EnhancedDMAInputs, ActionSelectionDMA
             safe_format(_text, source=f"action_selection_pdma.{_field}[{_lang}]")
             for _field, _text in (
                 ("system_header", system_header),
+                ("stage_contract", stage_contract),
                 ("decision_format", decision_format),
                 ("closing_reminder", closing_reminder),
             )
+            if _field != "stage_contract" or _text
         )
 
         # format_system_prompt_blocks: identity, guidance, snapshot, profiles; blank-line joined, stripped.

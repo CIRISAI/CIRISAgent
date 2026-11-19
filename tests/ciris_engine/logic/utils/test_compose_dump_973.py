@@ -185,8 +185,11 @@ def test_dump_covers_every_step_with_expected_blocks(en_dump: Dump) -> None:
             "system.head",
             "action_selection_pdma.system_header",
             "system.join1",
-            "action_selection_pdma.decision_format",
+            # #1366 — the engine contract, outside the template-replaceable header.
+            "action_selection_pdma.stage_contract",
             "system.join2",
+            "action_selection_pdma.decision_format",
+            "system.join3",
             "action_selection_pdma.closing_reminder",
             "system.tail",
             "action_selection_pdma.context_integration",

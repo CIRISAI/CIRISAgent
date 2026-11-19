@@ -44,6 +44,9 @@ class PromptCollection(BaseModel):
 
     # Core prompt sections
     system_header: Optional[str] = Field(None, description="System message header")
+    # #1366 — engine-owned ASPDMA contract rendered right after `system_header`;
+    # a template override of `system_header` cannot replace it.
+    stage_contract: Optional[str] = Field(None, description="Engine-owned stage contract (not template-overridable)")
     system_guidance_header: Optional[str] = Field(None, description="System guidance header")
 
     # Domain-specific prompts

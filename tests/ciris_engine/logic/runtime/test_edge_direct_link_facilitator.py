@@ -25,6 +25,11 @@ HINTS = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _no_bootstrap_peers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CIRIS_EDGE_BOOTSTRAP_PEERS", raising=False)
+
+
 def test_an_agent_node_proposes_through_the_canonicals_signed_ip_dial_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CIRIS_DIRECT_LINK_FACILITATOR", raising=False)
     assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) == "108.61.242.236:4242"
@@ -50,3 +55,25 @@ def test_the_env_can_name_another_facilitator(monkeypatch: pytest.MonkeyPatch) -
 def test_no_ip_hint_or_unreadable_hints_mean_no_facilitator(monkeypatch: pytest.MonkeyPatch, hints: object) -> None:
     monkeypatch.delenv("CIRIS_DIRECT_LINK_FACILITATOR", raising=False)
     assert edge_runtime._direct_link_facilitator(_Engine(hints)) is None
+
+
+def test_the_first_bootstrap_peer_is_the_facilitator_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A harness mesh's bootstrap peer is its own canonical; persist's hint may name another."""
+    monkeypatch.delenv("CIRIS_DIRECT_LINK_FACILITATOR", raising=False)
+    monkeypatch.setenv("CIRIS_EDGE_BOOTSTRAP_PEERS", " 172.20.0.2:4242 , 10.9.9.9:4242")
+    assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) == "172.20.0.2:4242"
+    monkeypatch.setenv("CIRIS_DIRECT_LINK_FACILITATOR", "bootstrap")
+    assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) == "172.20.0.2:4242"
+
+
+@pytest.mark.parametrize("raw", ["", " , "])
+def test_an_empty_bootstrap_list_falls_back_to_the_signed_hint(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+    monkeypatch.delenv("CIRIS_DIRECT_LINK_FACILITATOR", raising=False)
+    monkeypatch.setenv("CIRIS_EDGE_BOOTSTRAP_PEERS", raw)
+    assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) == "108.61.242.236:4242"
+
+
+def test_the_override_still_wins_over_a_bootstrap_peer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CIRIS_EDGE_BOOTSTRAP_PEERS", "172.20.0.2:4242")
+    monkeypatch.setenv("CIRIS_DIRECT_LINK_FACILITATOR", "off")
+    assert edge_runtime._direct_link_facilitator(_Engine(HINTS)) is None

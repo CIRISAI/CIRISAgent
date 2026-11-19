@@ -99,6 +99,13 @@ def _direct_link_facilitator(engine: Any) -> Optional[str]:
     (CIRISEdge#926). Before those, a punch that succeeded on one side moved that
     side to UDP while the other stayed relayed, and the link carried nothing.
 
+    When ``CIRIS_EDGE_BOOTSTRAP_PEERS`` is set, its first peer is the facilitator,
+    as the server's own compose does (``bootstrap.first()``). In production the
+    canonical IS the first bootstrap peer, so the two agree; in a harness the
+    mesh's bootstrap peer is the harness canonical, which persist's baked hint may
+    not name (fold legs stayed unformed until the harness passed it). The signed
+    ``ip`` hint is the fallback when no bootstrap peer is set.
+
     ``CIRIS_DIRECT_LINK_FACILITATOR`` overrides: ``off`` / ``0`` / empty proposes
     none, ``bootstrap`` is the default, and a ``host:port`` names another.
     """
@@ -109,6 +116,11 @@ def _direct_link_facilitator(engine: Any) -> Optional[str]:
             return None
         if value.lower() != "bootstrap":
             return value
+    first_peer = next(
+        (p.strip() for p in os.environ.get("CIRIS_EDGE_BOOTSTRAP_PEERS", "").split(",") if p.strip()), None
+    )
+    if first_peer:
+        return first_peer
     try:
         import json as _json
 

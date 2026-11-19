@@ -1,4 +1,4 @@
-"""The DMA-prompt target of the i18n lane (``localization/prompt_localize.py``).
+"""The prompts target of the i18n lane -- DMA and conscience templates (``localization/prompt_localize.py``).
 
 Offline: no model is called. What is asserted is the bridge around the vendored
 pipeline -- what gets staged as "missing", what a translated block must still do
@@ -112,8 +112,8 @@ def test_the_pipeline_position_is_translatable_and_the_pre_split_tail_is_not() -
     locale headers to be split (each still holds the whole pre-split translation)."""
     en = PL.english_bundle()
     with_position = sorted(t for t, fields in en.items() if "pipeline_position" in fields)
-    assert len(with_position) == 10, with_position
-    assert not any("system_guidance_header_tail" in fields for fields in en.values())
+    assert len(with_position) == 13, with_position  # 10 DMA stages + 3 localized consciences
+    assert not any(f.endswith("_tail") for fields in en.values() for f in fields)
     assert not any(f"{t}.pipeline_position" in PL.ENGLISH_BY_DESIGN for t in en)
 
 
@@ -222,11 +222,16 @@ def test_a_locale_file_that_does_not_exist_is_refused_not_created(prompts: Path,
 # ──────────────────────────────────────────────
 
 
+def _localized_snapshot() -> Dict[Path, bytes]:
+    return {p: p.read_bytes() for root in PL.PROMPT_ROOTS for p in sorted((root / "localized").rglob("*.yml"))}
+
+
 def test_check_and_dry_run_write_nothing(capsys: pytest.CaptureFixture[str]) -> None:
-    snapshot = {p: p.read_bytes() for p in sorted((PL.PROMPTS / "localized").rglob("*.yml"))}
+    snapshot = _localized_snapshot()
     PL.main(["--check"])
     PL.main(["--lane", "translate", "--keys", "msaspdma.*", "--lang", "es", "--dry-run"])
-    assert {p: p.read_bytes() for p in sorted((PL.PROMPTS / "localized").rglob("*.yml"))} == snapshot
+    PL.main(["--lane", "translate", "--keys", "*_conscience.*", "--lang", "es", "--dry-run"])
+    assert _localized_snapshot() == snapshot
     capsys.readouterr()
 
 
@@ -240,10 +245,153 @@ def test_a_shard_owns_its_locales_prompt_files_and_nothing_else() -> None:
     owned = LS.owned_files("prompts", ["es", "zh"])
     assert f"{PL.PROMPTS_REL}/localized/es/msaspdma.yml" in owned
     assert f"{PL.PROMPTS_REL}/localized/zh/rsaspdma.yml" in owned
+    assert f"{PL.CONSCIENCE_PROMPTS_REL}/localized/es/entropy_conscience.yml" in owned
+    assert f"{PL.CONSCIENCE_PROMPTS_REL}/localized/zh/coherence_conscience.yml" in owned
+    assert not any("optimization_veto" in p for p in owned)  # polyglot: no per-locale file to own
     assert all("/localized/es/" in p or "/localized/zh/" in p for p in owned)
     assert len(owned) == 2 * len(PL.template_names())
     with pytest.raises(SystemExit):
         LS.owned_files("nonsense", ["es"])
+
+
+# ──────────────────────────────────────────────
+# The conscience root
+# ──────────────────────────────────────────────
+
+CONSCIENCES = ("coherence_conscience", "entropy_conscience", "epistemic_humility_conscience")
+
+
+def test_the_target_covers_both_roots_and_skips_the_polyglot_veto() -> None:
+    found = PL.templates()
+    assert {found[t] for t in CONSCIENCES} == {PL.CONSCIENCE_PROMPTS}
+    assert found["msaspdma"] == PL.PROMPTS
+    assert "optimization_veto_conscience" not in found
+    assert (PL.CONSCIENCE_PROMPTS / "optimization_veto_conscience.yml").is_file()  # skipped, not absent
+    assert PL.locale_path(PL.PROMPT_ROOTS, "es", "entropy_conscience") == (
+        PL.CONSCIENCE_PROMPTS / "localized" / "es" / "entropy_conscience.yml"
+    )
+
+
+def test_a_template_name_in_two_roots_is_refused(tmp_path: Path) -> None:
+    for root in ("a", "b"):
+        (tmp_path / root).mkdir()
+        (tmp_path / root / "same.yml").write_text(ENGLISH, encoding="utf-8")
+    with pytest.raises(SystemExit, match="exists in both"):
+        PL.templates([tmp_path / "a", tmp_path / "b"])
+
+
+def test_conscience_fields_are_staged_and_settings_and_tails_are_not(tmp_path: Path) -> None:
+    en = PL.build_stage(tmp_path)
+    for t in CONSCIENCES:
+        assert {"system_prompt", "pipeline_position", "user_prompt_template"} <= set(en[t]), t
+        assert not {"version", "language", "system_prompt_tail"} & set(en[t]), t
+    es = json.loads((tmp_path / "es.json").read_text(encoding="utf-8"))
+    for t in CONSCIENCES:
+        assert "system_prompt" in es[t]  # translated: not offered again
+        assert "pipeline_position" not in es[t]  # no locale has it yet: missing, so the lane picks it up
+
+
+def test_the_dry_run_lists_the_conscience_positions_for_all_28_locales(capsys: pytest.CaptureFixture[str]) -> None:
+    PL.main(["--lane", "translate", "--keys", "*_conscience.pipeline_position", "--dry-run"])
+    out = capsys.readouterr().out
+    assert "lane=translate  84 key-value(s) across 28 language(s)" in out
+    for lang in PL.languages()[1:]:
+        assert f"    {lang}: 3 key(s)" in out, lang
+
+
+CONSCIENCE_EN = """version: "1.1"
+description: "IRIS-C coherence-sensing shard prompts"
+language: "en"
+
+system_prompt: |-
+  You are IRIS-C. Score coherence.
+
+pipeline_position: |-
+  You run after action selection. You do not see the user's message.
+
+system_prompt_tail: |
+  Respond with JSON: {"coherence": <0.0-1.0>}
+
+user_prompt_template: |
+  Action: {action_description}
+"""
+
+# A pre-split locale copy, the shape all 28 have: no position, no tail, the JSON example in the header.
+CONSCIENCE_ES = """version: '1.2'
+description: Prompts del fragmento IRIS-C
+language: es
+system_prompt: |
+  Eres IRIS-C. Puntúa la coherencia.
+  Responde con JSON: {"coherence": <0.0-1.0>}
+user_prompt_template: |-
+  Acción: {action_description}
+"""
+
+
+@pytest.fixture
+def two_roots(tmp_path: Path) -> list:
+    dma, conscience = tmp_path / "dma", tmp_path / "conscience"
+    for root, name, en, es in (
+        (dma, "demo", ENGLISH, ENGLISH),
+        (conscience, "coh_conscience", CONSCIENCE_EN, CONSCIENCE_ES),
+    ):
+        (root / "localized" / "es").mkdir(parents=True)
+        (root / f"{name}.yml").write_text(en, encoding="utf-8")
+        (root / "localized" / "es" / f"{name}.yml").write_text(es, encoding="utf-8")
+    return [dma, conscience]
+
+
+def test_a_conscience_position_is_written_back_and_the_loader_reads_it(
+    two_roots: list, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ciris_engine.logic.conscience.prompt_loader import ConsciencePromptLoader
+
+    position = "Actúas después de la selección de acción. No ves el mensaje del usuario."
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "es.json").write_text(
+        json.dumps({"demo": SPANISH, "coh_conscience": {"pipeline_position": position}}), encoding="utf-8"
+    )
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    before = path.read_text(encoding="utf-8")
+
+    written, rejected = PL.write_back(stage, ["es"], two_roots)
+
+    assert rejected == {}
+    assert "es:coh_conscience.pipeline_position" in written and "es:demo.description" in written
+    after = path.read_text(encoding="utf-8")
+    assert after.startswith(before.rstrip("\n"))  # appended; every existing byte kept
+    loader = ConsciencePromptLoader(prompts_dir=str(two_roots[1]), language="es")
+    head, got, tail = loader.get_system_prompt_parts("coh_conscience")
+    assert got == position and head.startswith("Eres IRIS-C") and tail == ""
+
+
+def test_a_header_is_not_written_into_a_locale_that_is_not_split(two_roots: list, tmp_path: Path) -> None:
+    """The locale's system_prompt still holds the tail's text; a translation of the split English head drops it."""
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    (stage / "es.json").write_text(
+        json.dumps({"coh_conscience": {"system_prompt": "Eres IRIS-C. Puntúa."}}), encoding="utf-8"
+    )
+    path = two_roots[1] / "localized" / "es" / "coh_conscience.yml"
+    before = path.read_text(encoding="utf-8")
+    written, rejected = PL.write_back(stage, ["es"], two_roots)
+    assert written == [] and "not split at system_prompt_tail" in rejected["es:coh_conscience.system_prompt"][0]
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_a_conscience_system_prompt_is_not_held_to_str_format() -> None:
+    """Only the user-prompt templates are formatted; the pre-split headers carry literal JSON braces."""
+    english = PL.read_template(PL.CONSCIENCE_PROMPTS / "epistemic_humility_conscience.yml")["system_prompt"]
+    shipped = PL.read_template(PL.CONSCIENCE_PROMPTS / "localized" / "es" / "epistemic_humility_conscience.yml")[
+        "system_prompt"
+    ]
+    assert PL._formats(shipped)  # a lone brace: would fail .format(), but nothing formats it
+    assert not PL.is_format_string(PL.PROMPT_ROOTS, "epistemic_humility_conscience", "system_prompt")
+    assert PL.is_format_string(PL.PROMPT_ROOTS, "epistemic_humility_conscience", "user_prompt_template")
+    assert not any("str.format" in p for p in PL.prompt_problems(english, shipped, formatted=False))
+    blocking, _ = PL.verify()
+    assert not [f for f in blocking if "_conscience" in f], blocking
 
 
 # ──────────────────────────────────────────────

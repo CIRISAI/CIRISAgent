@@ -27,11 +27,12 @@ python3 localization/accord_localize.py $E13 --units section0 --lane translate -
 python3 localization/accord_localize.py $E13 --extra-tm ~/ciris-website --extra-tm ~/CIRISClient --extra-tm . \
     --units section0 --lane translate --dry-run
 python3 localization/localize.py --check                                     # UI/prompt bundle (LOCALIZE_TARGET=ui)
-python3 localization/prompt_localize.py --check                              # DMA prompt templates still in English, per locale
+python3 localization/prompt_localize.py --check                              # DMA + conscience prompt templates still in English, per locale
 python3 localization/prompt_localize.py --lane translate --keys 'rsaspdma.*' --dry-run
 ```
 
-**A new DMA prompt** (`ciris_engine/logic/dma/prompts/<name>.yml`): commit an
+**A new DMA or conscience prompt** (`ciris_engine/logic/{dma,conscience}/prompts/<name>.yml`,
+unless it is polyglot like the optimization veto): commit an
 English copy in each `localized/<lang>/` folder, then dispatch `i18n translate`
 with `target: prompts` and `keys: <name>.*`. A field still byte-identical to
 English counts as missing, so the lane picks it up and the chain-localization
@@ -154,7 +155,7 @@ Consequences worth knowing:
 | Ethics text | `ciris_engine/data/localized/constitution_ethics_1.3_<lang>.txt` (`accord_1.2b_<lang>.txt` kept as the research control arm) | `accord_localize.py --verify`; hash pins |
 | Comprehensive guide | `ciris_engine/data/localized/CIRIS_COMPREHENSIVE_GUIDE_<lang>.txt` | completeness test |
 | DMA prompts | `ciris_engine/logic/dma/prompts/localized/<lang>/*.yml` (10 templates) | chain-localization tests; `test_prompt_formatting.py`; `prompt_localize.py --verify` |
-| Conscience prompts | `ciris_engine/logic/conscience/prompts/localized/<lang>/*.yml` (3; the optimization veto is polyglot and universal) | chain-localization tests |
+| Conscience prompts | `ciris_engine/logic/conscience/prompts/localized/<lang>/*.yml` (3; the optimization veto is polyglot and universal) | chain-localization tests; `test_conscience_prompt_coverage.py`; `prompt_localize.py --verify` (same `prompts` lane target as the DMAs) |
 | Crisis resources | `ciris_engine/data/localized/crisis_resources_<lang>.json` | `test_crisis_block_in_every_dma_1248.py` |
 | Glossary | `localization/glossaries/<lang>_glossary.md` (vendored from CIRISClient; what the pipeline reads). `docs/localization/glossaries/` is the older agent-side copy | vendoring check |
 | Safety battery | `tests/safety/<language>_mental_health/` | `safety-battery.yml` |

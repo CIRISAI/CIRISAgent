@@ -46,7 +46,6 @@ class _Captured(Exception):
 
 def _evaluator(cls: Any, template: str, sent: List[List[Dict[str, Any]]]) -> Any:
     evaluator = cls.__new__(cls)  # no service registry needed to compose a prompt
-    evaluator._explicit_language = "en"
     evaluator._prompt_template_name = template
     evaluator.prompt_overrides = {}
 

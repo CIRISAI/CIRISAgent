@@ -42,6 +42,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from ciris_engine.logic.utils.localization import in_thought_language
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ciris_engine.logic.prompt_assembly import AssemblyCall
@@ -95,11 +96,10 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             **kwargs,
         )
         self._prompt_template_name = "msaspdma"
-        self._explicit_language: Optional[str] = None
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
-        return get_prompt_loader(language=self._explicit_language)
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -194,6 +194,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
         return messages
 
+    @in_thought_language("original_thought", "context")
     def compose_prompt(
         self,
         original_thought: ProcessingQueueItem,
@@ -203,8 +204,6 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
     ) -> "Tuple[List[JSONDict], PromptManifest]":
         """The MSASPDMA messages and their manifest, built by PromptAssembler from typed segments (FSD §6)."""
         from ciris_engine.schemas.context.prompt_provenance import PromptStage
-
-        self._sync_language_from_context(context)
 
         params = aspdma_result.action_parameters
         if not isinstance(params, MemorizeParams):
@@ -466,15 +465,6 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             raise ValueError(f"msaspdma prompt template missing required key: {key}")
         return value
 
-    def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Adopt the thought's language so the guide renders localized."""
-        lang = None
-        if context is not None:
-            lang = getattr(context, "preferred_language", None)
-            if lang is None and isinstance(context, dict):
-                lang = context.get("preferred_language")
-        self._explicit_language = lang
-
     # ----------------------------------------------------------------- results
 
     def _convert_result(
@@ -541,6 +531,7 @@ class MSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
 
     # ---------------------------------------------------------------- evaluate
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_memorize_action(
         self,
         aspdma_result: ActionSelectionDMAResult,

@@ -26,6 +26,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from ciris_engine.logic.utils.localization import in_thought_language
 from .template_overrides import additive
 
 logger = logging.getLogger(__name__)
@@ -72,18 +73,13 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         self.env_kg = environmental_kg  # Placeholder for now
         self.task_kg = task_specific_kg  # Placeholder for now
 
-        # Per-thought language override populated from user_profiles. None
-        # falls back to env var. Avoids the legacy global set_prompt_language
-        # path which mutated shared state.
-        self._explicit_language: Optional[str] = None
-
         # Log the final client type being used
         logger.info(f"CSDMAEvaluator initialized with model: {self.model_name}")
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
         """Get prompt loader for the thread's currently-active language."""
-        return get_prompt_loader(language=self._explicit_language)
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -252,23 +248,8 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             evaluator_call(CSDMAResult.__name__, thought, language, authorization, agent_identity),
         )
 
-    def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync prompt language using the full localization priority chain.
-
-        Walks thought/task preferred_language → user_profile.preferred_language →
-        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
-        """
-        from ciris_engine.logic.utils.localization import get_preferred_language, get_user_language_from_context
-
-        new_language = get_user_language_from_context(context) if context is not None else get_preferred_language()
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            logger.debug(f"CSDMA: Synced prompt language to {new_language}")
-
     def _extract_context_data(self, context: Optional[Any]) -> tuple[str, str, str]:
         """Extract context strings from context object.
-
-        Also syncs user's language preference to the DMA prompt loader.
 
         Args:
             context: Context object with system_snapshot and/or user_profiles
@@ -283,7 +264,6 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         )
 
         if not context:
-            self._sync_language_from_context(None)
             return system_snapshot_str, user_profiles_str, context_summary
 
         user_profiles = None
@@ -300,7 +280,6 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             user_profiles = context.user_profiles
             user_profiles_str = format_user_profiles(user_profiles)
 
-        self._sync_language_from_context(context)
         return system_snapshot_str, user_profiles_str, context_summary
 
     def _build_context_summary(self, agent_identity: Any) -> str:
@@ -314,6 +293,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
             f"Operating via Discord, API, or CLI in digital/virtual environment."
         )
 
+    @in_thought_language("thought_item", "context")
     async def evaluate_thought(self, thought_item: ProcessingQueueItem, context: Optional[Any] = None) -> CSDMAResult:
         thought_content_str = str(thought_item.content)
 
@@ -324,7 +304,7 @@ class CSDMAEvaluator(BaseDMA[ProcessingQueueItem, CSDMAResult], CSDMAProtocol):
         task_context_str = self.format_task_context(original_task, thought_depth, thought=thought_item)
 
         # Extract context data from context object
-        task_language = self.prompt_loader.language  # the language format_task_context rendered the sender in
+        task_language = self.thought_language  # the language format_task_context rendered the sender in
         system_snapshot_str, user_profiles_str, context_summary = self._extract_context_data(context)
 
         # Get images from thought item for multimodal

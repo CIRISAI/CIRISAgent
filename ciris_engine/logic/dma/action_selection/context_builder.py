@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from ciris_engine.logic.dma.prompt_loader import DMAPromptLoader
@@ -48,13 +48,26 @@ class ActionSelectionContextBuilder:
         service_registry: Optional[Any] = None,
         bus_manager: Optional[Any] = None,
     ):
-        self.prompts = prompts
+        self._prompts = prompts
+        # Set by ActionSelectionPDMAEvaluator: the prompts in the language of
+        # the thought being evaluated (its localized template), read per call.
+        self.prompts_provider: Optional[Callable[[], Union[Dict[str, str], PromptCollection]]] = None
         self.service_registry = service_registry
         self.bus_manager = bus_manager
         self._instruction_generator: Optional[Any] = None
         self._tools_cached: bool = False
         self._cached_task: Optional[Task] = None
         self._cached_installable_tools: Optional[str] = None
+
+    @property
+    def prompts(self) -> Union[Dict[str, str], PromptCollection]:
+        """The prompts for the thought being evaluated (see ``prompts_provider``)."""
+        return self.prompts_provider() if self.prompts_provider is not None else self._prompts
+
+    @prompts.setter
+    def prompts(self, value: Union[Dict[str, str], PromptCollection]) -> None:
+        self._prompts = value
+        self.prompts_provider = None
 
     async def pre_cache_context(self, thought: Thought) -> int:
         """Pre-cache tools and task context before building prompt.
@@ -397,8 +410,9 @@ class ActionSelectionContextBuilder:
         before the routing, so composed bytes are unchanged.
         """
         from ciris_engine.logic.dma.prompt_loader import DEFAULT_LANGUAGE, get_prompt_loader
+        from ciris_engine.logic.utils.localization import current_thought_language
 
-        loader = get_prompt_loader()
+        loader = get_prompt_loader(language=current_thought_language())
         template_data = loader.load_prompt_template("action_selection_pdma")
         if not template_data.context_integration and loader.language != DEFAULT_LANGUAGE:
             loader = get_prompt_loader(DEFAULT_LANGUAGE)
@@ -900,12 +914,12 @@ class ActionSelectionContextBuilder:
 
         # The sender as authentication verified it, apart from the message
         # text (#1366 item 5). Empty when the task carries no verified sender.
-        from ciris_engine.logic.dma.prompt_loader import get_prompt_loader
+        from ciris_engine.logic.utils.localization import current_thought_language
         from ciris_engine.logic.formatters.verified_sender import verified_sender_block_of
 
         # The thought's own sender first: a message coalesced onto the task is
         # answered under ITS sender, never the task creator's.
-        sender_block = verified_sender_block_of(original_thought, task, language=get_prompt_loader().language)
+        sender_block = verified_sender_block_of(original_thought, task, language=current_thought_language())
         if sender_block:
             parts.append("")
             parts.append(sender_block)

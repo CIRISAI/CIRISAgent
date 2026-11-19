@@ -279,34 +279,23 @@ class TestDMALocalization:
 class TestCSDMALocalization:
     """Tests for CSDMA language handling."""
 
-    def test_csdma_extract_context_syncs_language(self, mock_context_with_language):
-        """Test that CSDMA._extract_context_data syncs user's language into
-        the per-instance _explicit_language field. (The legacy global
-        set_prompt_language() call was removed — see prompt_loader.py."""
-        with patch("ciris_engine.logic.dma.csdma.get_prompt_loader") as mock_loader, patch(
-            "ciris_engine.logic.dma.csdma.format_system_snapshot"
-        ) as mock_format_ss, patch("ciris_engine.logic.dma.csdma.format_user_profiles") as mock_format_up:
+    def test_csdma_reads_the_language_of_the_thought_in_scope(self, mock_context_with_language):
+        """CSDMA holds no language of its own: its loader follows the thought's
+        scope (resolve_thought_language), and outside one the deployment default."""
+        from ciris_engine.logic.dma.csdma import CSDMAEvaluator
+        from ciris_engine.logic.utils.localization import (
+            get_preferred_language,
+            resolve_thought_language,
+            thought_language_scope,
+        )
 
-            mock_loader_instance = MagicMock()
-            mock_loader_instance.language = "en"
-            mock_loader_instance.load_prompt_template.return_value = MagicMock()
-            mock_loader.return_value = mock_loader_instance
-
-            mock_format_ss.return_value = "snapshot"
-            mock_format_up.return_value = "profiles"
-
-            mock_registry = MagicMock()
-            from ciris_engine.logic.dma.csdma import CSDMAEvaluator
-
-            csdma = CSDMAEvaluator(service_registry=mock_registry)
-            assert csdma._explicit_language is None  # starts unset
-
-            csdma._extract_context_data(mock_context_with_language)
-
-            # The mock context's user has preferred_language="am" → CSDMA's
-            # _explicit_language must now be "am". Subsequent get_prompt_loader
-            # calls receive language="am" via the prompt_loader property.
-            assert csdma._explicit_language == "am"
+        csdma = CSDMAEvaluator(service_registry=MagicMock())
+        assert resolve_thought_language(None, mock_context_with_language) == "am"
+        with thought_language_scope(resolve_thought_language(None, mock_context_with_language)):
+            assert csdma.thought_language == "am"
+            assert csdma.prompt_loader.language == "am"
+        assert csdma.thought_language == get_preferred_language()
+        assert "_explicit_language" not in vars(csdma), "language must never be instance state"
 
 
 class TestPDMALocalization:
@@ -389,42 +378,28 @@ class TestTSASPDMALocalization:
         assert accord is not None
         assert "ACCORD" in accord or "PDMA" in accord
 
-    def test_tsaspdma_has_sync_language_method(self):
-        """Test that TSASPDMA has _sync_language_from_context method."""
-        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader"):
-            from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
+    def test_tsaspdma_entry_points_run_in_the_thought_language(self):
+        """TSASPDMA's entry points open the thought's language scope."""
+        from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
 
-            assert hasattr(TSASPDMAEvaluator, "_sync_language_from_context")
+        assert hasattr(TSASPDMAEvaluator.evaluate_tool_action, "__wrapped__")
+        assert hasattr(TSASPDMAEvaluator.evaluate_tool_correction, "__wrapped__")
 
-    def test_tsaspdma_sync_language_from_context(self, mock_context_with_language):
-        """Test that TSASPDMA syncs language from context into the per-instance
-        _explicit_language field. (Replaces the old set_prompt_language
-        assertion — the global mutator was removed in prompt_loader.py.)"""
-        with patch("ciris_engine.logic.dma.tsaspdma.get_prompt_loader") as mock_loader:
-            mock_loader_instance = MagicMock()
-            mock_loader_instance.language = "en"
-            mock_loader_instance.load_prompt_template.return_value = MagicMock()
-            mock_loader.return_value = mock_loader_instance
+    def test_tsaspdma_language_does_not_outlive_its_thought(self, mock_context_with_language):
+        """The scope closes with the thought: the next one never inherits "am"."""
+        from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
+        from ciris_engine.logic.utils.localization import (
+            get_preferred_language,
+            resolve_thought_language,
+            thought_language_scope,
+        )
 
-            mock_registry = MagicMock()
-            from ciris_engine.logic.dma.tsaspdma import TSASPDMAEvaluator
-
-            tsaspdma = TSASPDMAEvaluator(service_registry=mock_registry)
-            assert tsaspdma._explicit_language is None  # starts unset
-
-            tsaspdma._sync_language_from_context(mock_context_with_language)
-            assert tsaspdma._explicit_language == "am"
-
-            # Stale-bleed regression: a follow-up call with no context must
-            # clear the language so "am" doesn't inherit. Under the v3.2
-            # full-chain sync_language_from_context, "no thought / no profile"
-            # falls through to CIRIS_PREFERRED_LANGUAGE (default "en") rather
-            # than None — but the bleed-prevention property is preserved.
-            from ciris_engine.logic.utils.localization import get_preferred_language
-
-            tsaspdma._sync_language_from_context(None)
-            assert tsaspdma._explicit_language == get_preferred_language()
-            assert tsaspdma._explicit_language != "am", "stale language bled across thoughts"
+        tsaspdma = TSASPDMAEvaluator(service_registry=MagicMock())
+        with thought_language_scope(resolve_thought_language(None, mock_context_with_language)):
+            assert tsaspdma.thought_language == "am"
+        assert tsaspdma.thought_language == get_preferred_language()
+        if get_preferred_language() != "am":
+            assert tsaspdma.thought_language != "am", "stale language bled across thoughts"
 
 
 # ============================================================================

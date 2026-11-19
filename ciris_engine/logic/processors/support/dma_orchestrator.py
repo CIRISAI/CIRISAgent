@@ -463,9 +463,9 @@ class DMAOrchestrator:
 
         # Resolve agent working language so the bounce preamble matches the
         # locale of the rest of the LLM context. Falls back to env / English.
-        from ciris_engine.logic.utils.localization import get_user_language_from_context
+        from ciris_engine.logic.utils.localization import resolve_thought_language
 
-        lang = get_user_language_from_context(processing_context)
+        lang = resolve_thought_language(thought_item, processing_context)
         preamble = self._build_composite_preamble(triggers, lang=lang)
         bounce_item = self._make_bounce_thought_item(thought_item, preamble)
         logger.info(

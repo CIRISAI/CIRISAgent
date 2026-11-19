@@ -43,6 +43,7 @@ from ciris_engine.schemas.types import JSONDict
 
 from .base_dma import BaseDMA
 from .prompt_loader import DMAPromptLoader, get_prompt_loader
+from ciris_engine.logic.utils.localization import in_thought_language
 
 if TYPE_CHECKING:
     from ciris_engine.logic.prompt_assembly import AssemblyCall
@@ -164,15 +165,12 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             **kwargs,
         )
         self._prompt_template_name = "dsaspdma"
-        # Per-thought language override; populated by _sync_language_from_context.
-        # When None, the loader falls back to env var (CIRIS_PREFERRED_LANGUAGE).
-        self._explicit_language: Optional[str] = None
 
     @property
     def prompt_loader(self) -> DMAPromptLoader:
         """Get prompt loader for the thread's currently-active language."""
 
-        return get_prompt_loader(language=self._explicit_language)
+        return get_prompt_loader(language=self.thought_language)
 
     @property
     def prompt_template_data(self) -> "PromptCollection":
@@ -201,24 +199,6 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         if isinstance(profile, dict):
             return profile.get("preferred_language")
         return getattr(profile, "preferred_language", None)
-
-    def _sync_language_from_context(self, context: Optional[Any]) -> None:
-        """Sync prompt language using the full localization priority chain.
-
-        Walks thought/task preferred_language → user_profile.preferred_language →
-        CIRIS_PREFERRED_LANGUAGE env → "en" via :func:`get_user_language_from_context`.
-        """
-        from ciris_engine.logic.utils.localization import (
-            get_preferred_language,
-            get_user_language_from_context,
-        )
-
-        new_language = (
-            get_user_language_from_context(context) if context is not None else get_preferred_language()
-        )
-        if new_language != self._explicit_language:
-            self._explicit_language = new_language
-            logger.debug(f"DSASPDMA: Synced prompt language to {new_language}")
 
     def _format_original_context(self, params: DeferParams) -> str:
         """Render the provisional deferral context for prompt inclusion."""
@@ -253,6 +233,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         messages, _ = self.compose_prompt(original_thought, aspdma_result, context, conscience_feedback)
         return messages
 
+    @in_thought_language("original_thought", "context")
     def compose_prompt(
         self,
         original_thought: ProcessingQueueItem,
@@ -282,8 +263,6 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
         )
         from ciris_engine.logic.utils.localization import get_language_guidance
         from ciris_engine.schemas.context.prompt_provenance import PromptStage, SegmentKind, SegmentSource
-
-        self._sync_language_from_context(context)
 
         current_params = aspdma_result.action_parameters
         if not isinstance(current_params, DeferParams):
@@ -520,6 +499,7 @@ class DSASPDMAEvaluator(BaseDMA[ProcessingQueueItem, ActionSelectionDMAResult]):
             resource_usage=resource_usage_dict,
         )
 
+    @in_thought_language("original_thought", "context")
     async def evaluate_deferral_action(
         self,
         aspdma_result: ActionSelectionDMAResult,

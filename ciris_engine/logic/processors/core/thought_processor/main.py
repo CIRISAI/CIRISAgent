@@ -1214,6 +1214,51 @@ class ThoughtProcessor(
         )
         return redeferred
 
+    async def _draft_identity_node(
+        self,
+        thought_item: ProcessingQueueItem,
+        action_result: ActionSelectionDMAResult,
+        thought_context: Optional[Any],
+    ) -> Optional[Any]:
+        """The identity node MSASPDMA drafts for an unapproved write, as a proposal's source; None otherwise.
+
+        Used only to read the wording and M-1 justification the agent proposes. Anything but a MEMORIZE of an
+        identity node (a SPEAK, a PONDER, a non-identity write, a failure) yields None, and the caller falls back
+        to the code-written PONDER.
+        """
+        from ciris_engine.logic.infrastructure.handlers.shared_helpers import is_identity_node
+        from ciris_engine.schemas.services.graph_core import NodeType
+
+        evaluator = getattr(self.dma_orchestrator, "msaspdma_evaluator", None)
+        if not evaluator:
+            return None
+        try:
+            from ciris_engine.logic.dma.dma_executor import run_msaspdma
+
+            drafted = await _within_thought_deadline(
+                thought_item,
+                run_msaspdma(
+                    evaluator=evaluator,
+                    aspdma_result=action_result,
+                    original_thought=thought_item,
+                    context=thought_context,
+                    time_service=self._time_service,
+                    conscience_feedback=None,
+                ),
+            )
+        except Exception as e:  # noqa: BLE001 - no draft is no proposal; the PONDER stands
+            logger.warning("MSASPDMA-GATE: drafting the identity proposal failed for %s: %s", thought_item.thought_id, e)
+            return None
+        params = getattr(drafted, "action_parameters", None)
+        if getattr(drafted, "selected_action", None) != HandlerActionType.MEMORIZE or not isinstance(
+            params, MemorizeParams
+        ):
+            return None
+        node = params.node
+        if not (is_identity_node(node) or node.type == NodeType.IDENTITY_AMENDMENT):
+            return None
+        return node
+
     async def _refuse_unapproved_identity_memorize(
         self,
         thought_item: ProcessingQueueItem,
@@ -1267,7 +1312,15 @@ class ThoughtProcessor(
         # (Eric, 2026-11-20): a DEFER carrying the proposal, never the write. Only a write that states no
         # wording at all falls back to the PONDER, whose text comes from code (#1320).
         channel_id = getattr(getattr(thought_context, "system_snapshot", None), "channel_id", None)
-        proposal = identity_proposal_deferral(node, channel_id=channel_id if isinstance(channel_id, str) else None)
+        channel = channel_id if isinstance(channel_id, str) else None
+        proposal = identity_proposal_deferral(node, channel_id=channel)
+        if proposal is None:
+            # Action selection names no node (#1027), so the first pass carries no wording: the second pass
+            # drafts it. Its result is never returned or executed (a SPEAK claiming the change was applied is
+            # exactly what #1320 refused); only a drafted identity node's wording and M-1 are read.
+            drafted = await self._draft_identity_node(thought_item, action_result, thought_context)
+            if drafted is not None:
+                proposal = identity_proposal_deferral(drafted, channel_id=channel)
         if proposal is not None:
             logger.warning(
                 "MSASPDMA-GATE: identity-scope MEMORIZE of %s for thought %s carries no verified Wise Authority "

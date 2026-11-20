@@ -114,10 +114,15 @@ def _context(grant: Optional[WAAuthorization]) -> SimpleNamespace:
 async def test_no_approval_never_reaches_the_second_pass(node: GraphNode, second_pass: AsyncMock, persisted_task) -> None:
     out = await _processor()._run_verb_second_pass(cg.make_queue_item(), _memorize(node), _context(None))
 
-    second_pass.assert_not_awaited()
+    # The write never runs and the second pass's SPEAK ("applied") never comes out (#1320). The second pass
+    # runs only as a drafter, when the first pass names no wording (#1027), and its result is never returned.
     assert not isinstance(out.action_parameters, SpeakParams)
     attributes = node.attributes if isinstance(node.attributes, dict) else {}
     wording = attributes.get("statement") or attributes.get("content")
+    if wording:
+        second_pass.assert_not_awaited()
+    else:
+        second_pass.assert_awaited_once()
     if wording:
         # The agent's proposed wording goes to a Wise Authority for approval (Eric, 2026-11-20), never the write.
         assert out.selected_action == HandlerActionType.DEFER
@@ -128,6 +133,33 @@ async def test_no_approval_never_reaches_the_second_pass(node: GraphNode, second
         assert out.selected_action == HandlerActionType.PONDER
         assert isinstance(out.action_parameters, PonderParams)
         assert out.action_parameters.questions == [_english_refusal()], "the text comes from code, not a model"
+
+
+@pytest.mark.asyncio
+async def test_an_unaddressed_write_proposes_the_wording_the_second_pass_drafts(persisted_task, monkeypatch) -> None:
+    """RATCHET run 44782318149: the first pass's node is the #1027 placeholder, so the wording comes from MSASPDMA."""
+    from ciris_engine.logic.dma import dma_executor
+    from ciris_engine.schemas.dma.results import UNADDRESSED_NODE_ID
+
+    drafted = ActionSelectionDMAResult(
+        selected_action=HandlerActionType.MEMORIZE,
+        action_parameters=MemorizeParams(
+            node=GraphNode(
+                id="agent/identity",
+                type=NodeType.AGENT,
+                scope=GraphScope.IDENTITY,
+                attributes={"statement": "I answer to Dana Reyes.", "m1_justification": "coherent with my WA"},
+            )
+        ),
+        rationale="MSASPDMA drafted",
+    )
+    monkeypatch.setattr(dma_executor, "run_msaspdma", AsyncMock(return_value=drafted))
+    placeholder = GraphNode(id=UNADDRESSED_NODE_ID, type=NodeType.AGENT, scope=GraphScope.IDENTITY, attributes={})
+    out = await _processor()._run_verb_second_pass(cg.make_queue_item(), _memorize(placeholder), _context(None))
+
+    assert out.selected_action == HandlerActionType.DEFER, "proposed to a WA, never written"
+    assert out.action_parameters.proposed_amendment == "I answer to Dana Reyes."
+    assert out.action_parameters.m1_justification == "coherent with my WA"
 
 
 @pytest.mark.asyncio

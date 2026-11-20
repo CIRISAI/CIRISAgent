@@ -105,6 +105,7 @@ def pseudonymizer(tmp_path: Path) -> SubjectPseudonymizer:
         (pp.AcctCarrier, egress_schema._CM_ACCT),
         (pp.SegmentStub, egress_schema._CM_STUB),
         (pp.GuardViolation, egress_schema._CM_VIOLATION),
+        (pp.PolicyFacts, egress_schema._CM_FACTS),
     ],
 )
 def test_every_model_field_is_typed_in_the_egress_schema(model, schema) -> None:
@@ -447,3 +448,17 @@ def test_the_pinned_schema_refuses_an_unknown_member_or_a_missing_run_kind() -> 
         jsonschema.validate(
             _component("ACTION_RESULT", {"tokens_total": 3, "run_kind": "staging"}), component_schema
         )
+
+
+def test_the_manifest_carries_the_facts_the_guard_evaluated(pseudonymizer: SubjectPseudonymizer) -> None:
+    """A checker tests these facts against the scenario on their own: a wrong fact cannot hide its missing segment."""
+    manifest = real_manifest()  # built under PolicyFacts(amendment_in_force=True)
+    assert manifest.facts.amendment_in_force is True and manifest.facts.signed_guidance_in_force is False
+    cm = trace_context_manifest(manifest, detailed=True, full=False, pseudonymizer=pseudonymizer)
+    shipped = enforce_egress_schema("LLM_CALL", TraceLevel.DETAILED, {"context_manifest": cm}).data["context_manifest"]
+    assert shipped["facts"] == {
+        "signed_guidance_in_force": False,
+        "amendment_in_force": True,
+        "id_scoped": False,
+        "advisory_rule": False,
+    }

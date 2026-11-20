@@ -2421,7 +2421,10 @@ class CorrectionEpisodeTests:
         self._log("ctxmap_step", label="S4c", task_id=reply.get("task_id"), deferral_id=(deferral or {}).get("deferral_id"))
         if deferral:
             since = now_iso()
-            guidance = f"$memorize agent/identity CONCEPT IDENTITY [{para}] $veto coherence"
+            # The approved write runs the consciences. A forced coherence veto here blocks it (run 44786453629: "NOT
+            # written: coherence objected"), so S5/S6 would see no amendment; M4_CTXMAP_S4_VETO=1 keeps that variant.
+            veto = " $veto coherence" if os.environ.get("M4_CTXMAP_S4_VETO", "").strip() == "1" else ""
+            guidance = f"$memorize agent/identity CONCEPT IDENTITY [{para}]{veto}"
             res = await self._resolve(self.users["wa"]["token"], deferral["deferral_id"], guidance, who="wa",
                                       amendment_text=para, deferral=deferral)
             rs = getattr(self, "_recorder", None)

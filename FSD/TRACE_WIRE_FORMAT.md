@@ -1014,9 +1014,14 @@ server 0.6, and persist v62.0 adds it to the accepted list. The published schema
 `ContextManifest` definitions are generated from the enforced egress schema
 (`egress_schema.json_schema_for`), and a test compares them, so the document cannot drift from what ships.
 
-**Size.** 5.7–11.6 KB per call at `detailed` (measured on the compose-golden stages: 13–28 segments each), so
-about 90–120 KB per full-pipeline thought, more with conscience retries. That is well inside the 1 MiB inline
-bound (CC 2.6.1.6); a trace over it takes the `trace_manifest:v1` chunked path like any other.
+**Size** (measured through the real assembler at `detailed`, egress-filtered, 0 violations): evaluators and
+drafters 5.7–11.6 KB per call (pdma 7.6, csdma 8.3, dsdma 7.6, idma 7.2, aspdma 8.8, aspdma retry 9.7, tsaspdma
+5.7, dsaspdma 8.0, msaspdma 11.6; 13–28 segments); consciences about 4.5 KB per call (8–9 segments). Every
+attempt is its own LLM_CALL, so per thought: about 69 KB on a clean pass; about 360 KB in the worst case the
+production budget allows (REMOTE profile: 3 DMA attempts, 4 conscience attempts, one conscience-veto retry of
+ASPDMA, its second pass and the four consciences); about 540 KB at the budget schema's ceiling (5 attempts
+everywhere). All inside the 1 MiB inline bound (CC 2.6.1.6), with the trace's other members on top; a trace over
+it takes the `trace_manifest:v1` chunked path like any other.
 
 ## 6. `attempt_index` semantics
 

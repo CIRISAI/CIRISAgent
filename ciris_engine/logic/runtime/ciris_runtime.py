@@ -1067,6 +1067,28 @@ class CIRISRuntime(ServicePropertyMixin):
 
         logger.info(f"Services: {service_count} registered")
         logger.info("=" * 60)
+        await self._check_identity_profile_at_boot()
+
+    async def _check_identity_profile_at_boot(self) -> None:
+        """Run the identity-profile check once at boot, so an unanchored profile asks for its base link now.
+
+        The check otherwise first runs when the first thought builds its context, so the base-link deferral
+        only opened on the first message and every agent's first conversation ran unanchored (RATCHET run
+        44748258728: nothing pending 120 s after setup). Same load path as the context builders
+        (``_extract_agent_identity`` -> ``load_identity_profile`` -> ``maybe_open_base_link``), so it asks at most
+        once per digest. Best effort: a failure is logged and the first thought checks again.
+        """
+        try:
+            from ciris_engine.logic.context.system_snapshot_helpers import _extract_agent_identity
+
+            memory: Any = self.memory_service  # the runtime's protocol view of the LocalGraphMemoryService
+            identity, _summary = await _extract_agent_identity(memory)
+            if identity.profile is not None:
+                logger.info(
+                    "[IDENTITY-PROFILE] checked at boot: %s (%s)", identity.profile.status.value, identity.profile.reason
+                )
+        except Exception as exc:  # noqa: BLE001 - boot must not fail on it; the first thought re-checks
+            logger.warning("[IDENTITY-PROFILE] boot check failed (%s); the first thought checks it", type(exc).__name__)
 
     async def _perform_startup_maintenance(self) -> None:
         """Perform database cleanup at startup."""
@@ -1544,6 +1566,8 @@ class CIRISRuntime(ServicePropertyMixin):
         self._agent_task = asyncio.create_task(self._create_agent_processor_when_ready(), name="AgentProcessorTask")
         log_step(14, total_steps, "Waiting for critical services (timeout=10s)...")
         await self._wait_for_critical_services(timeout=10.0)
+        # Ask for the base link now, not on the first message (the boot path's _final_verification does the same).
+        await self._check_identity_profile_at_boot()
 
         elapsed = time.time() - start_time
         logger.warning("")

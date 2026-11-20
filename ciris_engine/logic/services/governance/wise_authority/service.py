@@ -39,8 +39,8 @@ from ciris_engine.schemas.api.wa import (
     IdentityChangeProposal,
     ProposedBaseLink,
 )
-from ciris_engine.schemas.runtime.enums import ServiceType, TaskOrigin, TaskStatus
-from ciris_engine.schemas.runtime.models import TaskContext, WAAuthorization
+from ciris_engine.schemas.runtime.enums import ServiceType, TaskOrigin, TaskStatus, ThoughtStatus
+from ciris_engine.schemas.runtime.models import Task, TaskContext, WAAuthorization
 from ciris_engine.schemas.services.authority.deferral_rows import DeferralRequestRow, DeferralRowStatus
 from ciris_engine.schemas.services.authority.wise_authority import PendingDeferral
 from ciris_engine.schemas.services.authority_core import (
@@ -868,6 +868,22 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         logger.info("Deferral %s: signed request row %s", deferral_id, attestation_id)
         return DeferralRequestRow(status=DeferralRowStatus.EMITTED, attestation_id=attestation_id, room_id=room_id)
 
+    def _deferred_seed_thought(self, task: Task) -> str:
+        """The thought an engine-opened deferral names: the task's seed thought, written DEFERRED.
+
+        The node's deferral:request:v1 refuses an empty thought_id (server 0.5.250: ``deferral.bad_input``), and
+        without that signed request row a Wise Authority's answer has nothing to answer (409), so a base link or
+        a re-approval could never be resolved and no profile could be anchored. The seed thought is DEFERRED like
+        its task, so no processor takes it up as work.
+        """
+        from ciris_engine.logic.persistence.models.thoughts import add_thought
+        from ciris_engine.logic.utils.task_thought_factory import create_seed_thought_for_task
+
+        seed = create_seed_thought_for_task(task=task, time_service=self._time_service)
+        seed = seed.model_copy(update={"status": ThoughtStatus.DEFERRED})
+        add_thought(seed)
+        return seed.thought_id
+
     async def open_base_link_deferral(self, proposal: ProposedBaseLink) -> Optional[str]:
         """Open ONE deferral asking a Wise Authority to approve the profile's base link (rc21 section 3).
 
@@ -914,7 +930,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         return await self.send_deferral(
             DeferralRequest(
                 task_id=task_id,
-                thought_id="",
+                thought_id=self._deferred_seed_thought(task),
                 reason=description,
                 defer_until=now,
                 context={
@@ -984,7 +1000,7 @@ class WiseAuthorityService(BaseService, WiseAuthorityServiceProtocol):
         return await self.send_deferral(
             DeferralRequest(
                 task_id=task_id,
-                thought_id="",
+                thought_id=self._deferred_seed_thought(task),
                 reason=proposal.summary,
                 defer_until=now,
                 context=identity_change_context(proposal),

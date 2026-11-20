@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.23.2-stable] - 2026-11-20
 
+### Changed
+
+- **A shipped template is pre-approved, so its identity is anchored at first boot with no Wise Authority step** (Eric, 2026-11-20).
+  - When the agent's template matches the accord-holder-signed template manifest (`pre-approved-templates.hybrid.json`), that template is the profile's anchored base. It is derived, not a row, and no base-link deferral opens.
+  - The first approved amendment names it as `prev = "template:<the template's sha256>"`, which needs ciris-server 0.5.252; later amendments chain by row id. The sentinel is the template's own checksum, not the manifest's, so a re-signed manifest doesn't break any chain and only a change to the template's bytes does.
+  - A custom or modified template, or an unsigned manifest, still asks a Wise Authority for its base link. A base row a Wise Authority already approved still takes precedence.
+  - `tools/dev/regen_template_manifest.py --sign-hybrid` is the release step: an accord holder signs the manifest through `ciris-server accord sign-bytes`, as for the accord manifest.
+
 ### Fixed
 
 - **An agent's own identity proposal reaches a Wise Authority.** An identity-scope MEMORIZE with no verified approval used to become a PONDER, so the agent's proposed wording never reached a WA (RATCHET run 44774304572). It still never runs the second pass and never stores anything (#1320). Instead it becomes a DEFER that carries the proposal: the exact proposed text and its M-1 justification, with a code-written summary. The WA approves those exact bytes. Action selection names no node (#1027), so the wording comes from the memorize second pass. It runs only as a drafter here: only a drafted identity node's text and M-1 are read, and its result is never returned or executed. A write the second pass drafts no identity wording for still PONDERs.
